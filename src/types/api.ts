@@ -71,16 +71,44 @@ export interface TaskResultItem {
 
 export interface HealthResponse {
   status: string;
+  models_initialized?: boolean;
+  llm_initialized?: boolean;
+  loaded_model?: string | null;
+  loaded_lm_model?: string | null;
 }
 
 export interface ModelEntry {
   name: string;
   is_default: boolean;
+  is_loaded: boolean;
+}
+
+export interface LmModelEntry {
+  name: string;
+  is_loaded: boolean;
 }
 
 export interface ModelsListResponse {
   models: ModelEntry[];
   default_model: string | null;
+  lm_models: LmModelEntry[];
+  loaded_lm_model?: string | null;
+  llm_initialized?: boolean;
+}
+
+export interface InitModelRequest {
+  model?: string;
+  init_llm?: boolean;
+  lm_model_path?: string;
+}
+
+export interface InitModelResponse {
+  message: string;
+  loaded_model?: string | null;
+  loaded_lm_model?: string | null;
+  models?: ModelEntry[];
+  lm_models?: LmModelEntry[];
+  llm_initialized?: boolean;
 }
 
 export interface JobStats {

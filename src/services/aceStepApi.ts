@@ -5,6 +5,8 @@ import type {
   TaskResultEntry,
   ModelsListResponse,
   StatsResponse,
+  InitModelRequest,
+  InitModelResponse,
 } from '../types/api';
 
 const BACKEND_URL_KEY = 'ace-step-daw-backend-url';
@@ -45,14 +47,59 @@ export async function healthCheck(): Promise<boolean> {
 
 export async function listModels(): Promise<ModelsListResponse> {
   const base = getApiBase();
-  const res = await fetch(`${base}/v1/models`);
+  let res = await fetch(`${base}/v1/model_inventory`);
+  if (!res.ok) {
+    // Backward compatibility: older backends only provide /v1/models.
+    res = await fetch(`${base}/v1/models`);
+  }
   if (!res.ok) throw new Error(`listModels failed: ${res.status}`);
   const json = await res.json();
-  const data = (json as ApiEnvelope<ModelsListResponse>).data;
+  const envelopeData = (json as ApiEnvelope<ModelsListResponse>).data;
+  const openRouterData = Array.isArray((json as { data?: unknown[] })?.data)
+    ? (json as { data: Array<{ id?: string }> }).data
+    : null;
+
+  if (openRouterData && !envelopeData?.models) {
+    const names = openRouterData
+      .map((m) => (m.id || '').trim())
+      .filter(Boolean);
+    const uniqueNames = Array.from(new Set(names));
+    return {
+      models: uniqueNames.map((name, index) => ({
+        name,
+        is_default: index === 0,
+        is_loaded: true,
+      })),
+      default_model: uniqueNames[0] ?? null,
+      lm_models: [],
+      loaded_lm_model: null,
+      llm_initialized: false,
+    };
+  }
+
+  const data = envelopeData;
   return {
     models: Array.isArray(data?.models) ? data.models : [],
     default_model: data?.default_model ?? null,
+    lm_models: Array.isArray(data?.lm_models) ? data.lm_models : [],
+    loaded_lm_model: data?.loaded_lm_model ?? null,
+    llm_initialized: Boolean(data?.llm_initialized),
   };
+}
+
+export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/init`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`initModel failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<InitModelResponse> = await res.json();
+  return envelope.data;
 }
 
 export async function getStats(): Promise<StatsResponse> {
@@ -69,6 +116,14 @@ export async function releaseLegoTask(
 ): Promise<ReleaseTaskResponse> {
   const base = getApiBase();
   const formData = new FormData();
+
+  console.log(
+    `[aceStepApi] releaseLegoTask: src_audio blob size=${srcAudioBlob.size}, type=${srcAudioBlob.type}`,
+    `task_type=${params.task_type}`,
+    `audio_duration=${params.audio_duration}`,
+    `repainting_start=${params.repainting_start}`,
+    `repainting_end=${params.repainting_end}`,
+  );
 
   formData.append('src_audio', srcAudioBlob, 'src_audio.wav');
 

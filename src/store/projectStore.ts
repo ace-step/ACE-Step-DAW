@@ -42,6 +42,8 @@ interface ProjectState {
   getTracksInGenerationOrder: () => Track[];
   /** Computed total duration: max(clip ends) + padding, minimum MIN_TIMELINE_DURATION */
   getTotalDuration: () => number;
+  /** Actual audio duration without timeline padding: max(clip ends) */
+  getAudioDuration: () => number;
 }
 
 function computeTotalDuration(tracks: Track[]): number {
@@ -299,6 +301,19 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return MIN_TIMELINE_DURATION;
     return project.totalDuration;
+  },
+
+  getAudioDuration: () => {
+    const project = get().project;
+    if (!project) return MIN_TIMELINE_DURATION;
+    let maxEnd = 0;
+    for (const track of project.tracks) {
+      for (const clip of track.clips) {
+        const end = clip.startTime + clip.duration;
+        if (end > maxEnd) maxEnd = end;
+      }
+    }
+    return Math.max(MIN_TIMELINE_DURATION, maxEnd);
   },
 }),
     {

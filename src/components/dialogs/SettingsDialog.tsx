@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
-import { listModels, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
+import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION } from '../../constants/defaults';
-import type { ModelEntry } from '../../types/api';
+import type { ModelEntry, LmModelEntry } from '../../types/api';
+
+function modelSupportsThinking(modelName: string): boolean {
+  return modelName.includes('turbo') || modelName.includes('sft');
+}
 
 export function SettingsDialog() {
   const show = useUIStore((s) => s.showSettingsDialog);
@@ -17,8 +21,65 @@ export function SettingsDialog() {
   const [model, setModel] = useState('');
   const [backendUrl, setBackendUrlLocal] = useState('');
   const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
+  const [availableLmModels, setAvailableLmModels] = useState<LmModelEntry[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [initLoading, setInitLoading] = useState(false);
+  const [llmInitialized, setLlmInitialized] = useState(false);
+  const [selectedLmModel, setSelectedLmModel] = useState('');
+  const [initMessage, setInitMessage] = useState('');
+  const [initError, setInitError] = useState('');
   const prevShow = useRef(false);
+
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel);
+    if (!modelSupportsThinking(newModel)) {
+      setThinking(false);
+    }
+  };
+
+  const refreshModels = async (preferredModel?: string, preferredLmModel?: string) => {
+    setModelsLoading(true);
+    try {
+      const resp = await listModels();
+      const models = resp?.models ?? [];
+      const lmModels = resp?.lm_models ?? [];
+      setAvailableModels(models);
+      setAvailableLmModels(lmModels);
+      setLlmInitialized(Boolean(resp?.llm_initialized));
+
+      let resolvedModel = preferredModel || '';
+      if (!resolvedModel && resp?.default_model) {
+        resolvedModel = resp.default_model;
+      }
+      if (!resolvedModel && models.length > 0) {
+        resolvedModel = models[0].name;
+      }
+      if (resolvedModel && !models.some((m) => m.name === resolvedModel)) {
+        resolvedModel = resp?.default_model ?? models[0]?.name ?? '';
+      }
+      if (resolvedModel) {
+        setModel(resolvedModel);
+        if (!modelSupportsThinking(resolvedModel)) {
+          setThinking(false);
+        }
+      }
+
+      let resolvedLm = preferredLmModel || '';
+      if (!resolvedLm && resp?.loaded_lm_model) {
+        resolvedLm = resp.loaded_lm_model;
+      }
+      if (!resolvedLm && lmModels.length > 0) {
+        resolvedLm = lmModels[0].name;
+      }
+      setSelectedLmModel(resolvedLm);
+    } catch {
+      setAvailableModels([]);
+      setAvailableLmModels([]);
+      setLlmInitialized(false);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (show && !prevShow.current) {
@@ -29,12 +90,10 @@ export function SettingsDialog() {
       setThinking(gen.thinking);
       setModel(gen.model);
       setBackendUrlLocal(getBackendUrl());
-
-      setModelsLoading(true);
-      listModels()
-        .then((resp) => setAvailableModels(resp?.models ?? []))
-        .catch(() => setAvailableModels([]))
-        .finally(() => setModelsLoading(false));
+      setInitMessage('');
+      setInitError('');
+      setSelectedLmModel('');
+      void refreshModels(gen.model);
     }
     prevShow.current = show;
   }, [show, project]);
@@ -61,6 +120,47 @@ export function SettingsDialog() {
     }
     setBackendUrl(backendUrl);
     setShow(false);
+  };
+
+  const selectedModelEntry = availableModels.find((m) => m.name === model);
+  const selectedLmEntry = availableLmModels.find((m) => m.name === selectedLmModel);
+
+  const handleInitSelectedModel = async () => {
+    if (!model) return;
+    setInitLoading(true);
+    setInitMessage('');
+    setInitError('');
+    try {
+      const resp = await initModel({ model });
+      setInitMessage(resp.message || `Initialized ${model}`);
+      await refreshModels(model, selectedLmModel);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to initialize model';
+      setInitError(msg);
+    } finally {
+      setInitLoading(false);
+    }
+  };
+
+  const handleInitSelectedLm = async () => {
+    if (!selectedLmModel) return;
+    setInitLoading(true);
+    setInitMessage('');
+    setInitError('');
+    try {
+      const resp = await initModel({
+        model,
+        init_llm: true,
+        lm_model_path: selectedLmModel,
+      });
+      setInitMessage(resp.message || `Initialized LLM ${selectedLmModel}`);
+      await refreshModels(model, selectedLmModel);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to initialize LLM';
+      setInitError(msg);
+    } finally {
+      setInitLoading(false);
+    }
   };
 
   return (
@@ -134,11 +234,12 @@ export function SettingsDialog() {
               />
             </div>
             <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 ${modelSupportsThinking(model) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                 <input
                   type="checkbox"
                   checked={thinking}
                   onChange={(e) => setThinking(e.target.checked)}
+                  disabled={!modelSupportsThinking(model)}
                   className="w-4 h-4 rounded border-daw-border bg-daw-bg accent-daw-accent"
                 />
                 <span className="text-xs text-zinc-400">Thinking mode</span>
@@ -150,18 +251,68 @@ export function SettingsDialog() {
             <label className="block text-xs text-zinc-400 mb-1">Model</label>
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={modelsLoading}
+              onChange={(e) => handleModelChange(e.target.value)}
+              disabled={modelsLoading || initLoading}
               className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
             >
-              <option value="">Server Default</option>
               {availableModels.map((m) => (
                 <option key={m.name} value={m.name}>
-                  {m.name}{m.is_default ? ' (default)' : ''}
+                  {m.name}{m.is_default ? ' (default)' : ''}{m.is_loaded ? ' (loaded)' : ''}
                 </option>
               ))}
             </select>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-zinc-500">
+                {selectedModelEntry?.is_loaded ? 'Model is loaded' : 'Model is not loaded'}
+              </span>
+              <button
+                type="button"
+                onClick={handleInitSelectedModel}
+                disabled={initLoading || !model}
+                className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-zinc-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {initLoading ? 'Initializing...' : (selectedModelEntry?.is_loaded ? 'Reinitialize' : 'Initialize')}
+              </button>
+            </div>
           </div>
+
+          {modelSupportsThinking(model) && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">LM Model</label>
+              <select
+                value={selectedLmModel}
+                onChange={(e) => setSelectedLmModel(e.target.value)}
+                disabled={modelsLoading || initLoading}
+                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+              >
+                {availableLmModels.map((m) => (
+                  <option key={m.name} value={m.name}>
+                    {m.name}{m.is_loaded ? ' (loaded)' : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-zinc-500">
+                  {llmInitialized ? 'LLM initialized' : 'LLM not initialized'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleInitSelectedLm}
+                  disabled={initLoading || !selectedLmModel}
+                  className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-zinc-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {initLoading ? 'Initializing...' : (selectedLmEntry?.is_loaded ? 'Reinitialize LLM' : 'Initialize LLM')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {initError && (
+            <p className="text-[10px] text-red-400">{initError}</p>
+          )}
+          {initMessage && !initError && (
+            <p className="text-[10px] text-emerald-400">{initMessage}</p>
+          )}
         </div>
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">

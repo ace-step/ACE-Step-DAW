@@ -155,9 +155,9 @@ export const useProjectStore = create<ProjectState>()(
       cumulativeMixKey: null,
       isolatedAudioKey: null,
       waveformPeaks: null,
-      bpm: 'auto',
-      keyScale: 'auto',
-      timeSignature: 'auto',
+      bpm: null,
+      keyScale: null,
+      timeSignature: null,
     };
 
     const newTracks = state.project.tracks.map((t) =>

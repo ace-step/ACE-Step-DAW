@@ -35,9 +35,9 @@ export function ClipPromptEditor() {
       setDuration(clip.duration);
       setSampleMode(clip.sampleMode ?? false);
       setAutoExpandPrompt(clip.autoExpandPrompt ?? true);
-      setOverrideBpm(clip.bpm === undefined ? 'auto' : clip.bpm);
-      setOverrideKey(clip.keyScale === undefined ? 'auto' : clip.keyScale);
-      setOverrideTimeSig(clip.timeSignature === undefined ? 'auto' : clip.timeSignature);
+      setOverrideBpm(clip.bpm === undefined ? null : clip.bpm);
+      setOverrideKey(clip.keyScale === undefined ? null : clip.keyScale);
+      setOverrideTimeSig(clip.timeSignature === undefined ? null : clip.timeSignature);
     }
   }, [editingClipId]);
 

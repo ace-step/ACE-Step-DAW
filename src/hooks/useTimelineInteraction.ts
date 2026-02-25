@@ -3,6 +3,7 @@ import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { snapToGrid } from '../utils/time';
+import { DEFAULT_DURATION } from '../constants/defaults';
 
 export function useTimelineInteraction() {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
@@ -25,12 +26,12 @@ export function useTimelineInteraction() {
 
       const rawTime = (clickX + scrollX) / pixelsPerSecond;
       const snappedTime = snapToGrid(rawTime, project.bpm, 1);
-      const beatDuration = 60 / project.bpm;
-      const defaultDuration = beatDuration * project.timeSignature * 2; // 2 bars
+      const remainingTime = project.totalDuration - snappedTime;
+      const defaultDuration = Math.min(DEFAULT_DURATION, Math.max(0.5, remainingTime));
 
       const clip = addClip(trackId, {
         startTime: Math.max(0, snappedTime),
-        duration: Math.min(defaultDuration, project.totalDuration - snappedTime),
+        duration: defaultDuration,
         prompt: '',
         lyrics: '',
       });

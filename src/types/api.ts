@@ -47,7 +47,7 @@ export interface TaskResultEntry {
 
 /** Individual item inside the result JSON array */
 export interface TaskResultItem {
-  file: string;       // audio file path on the server
+  file: string;       // audio download URL (e.g. /v1/audio?path=...)
   wave: string;
   status: number;
   create_time: number;
@@ -65,6 +65,8 @@ export interface TaskResultItem {
   generation_info?: string;
   lm_model?: string;
   dit_model?: string;
+  progress?: number;
+  stage?: string;
 }
 
 export interface HealthResponse {
@@ -81,7 +83,17 @@ export interface ModelsListResponse {
   default_model: string | null;
 }
 
+export interface JobStats {
+  total: number;
+  succeeded: number;
+  failed: number;
+  running: number;
+  queued: number;
+}
+
 export interface StatsResponse {
+  jobs: JobStats;
   queue_size: number;
-  running_tasks: number;
+  queue_maxsize: number;
+  avg_job_seconds: number;
 }

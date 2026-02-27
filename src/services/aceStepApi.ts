@@ -8,6 +8,7 @@ import type {
   InitModelRequest,
   InitModelResponse,
 } from '../types/api';
+import { downsampleWavBlob } from '../utils/audioDownsample';
 
 const BACKEND_URL_KEY = 'ace-step-daw-backend-url';
 
@@ -110,12 +111,14 @@ export async function getStats(): Promise<StatsResponse> {
   return envelope.data;
 }
 
+const RELEASE_TASK_TIMEOUT_MS = 3 * 60 * 1000;
+const RELEASE_TASK_MAX_RETRIES = 3;
+
 export async function releaseLegoTask(
   srcAudioBlob: Blob,
   params: LegoTaskParams,
 ): Promise<ReleaseTaskResponse> {
   const base = getApiBase();
-  const formData = new FormData();
 
   console.log(
     `[aceStepApi] releaseLegoTask: src_audio blob size=${srcAudioBlob.size}, type=${srcAudioBlob.type}`,
@@ -125,25 +128,64 @@ export async function releaseLegoTask(
     `repainting_end=${params.repainting_end}`,
   );
 
-  formData.append('src_audio', srcAudioBlob, 'src_audio.wav');
+  // Downsample to 16kHz mono to reduce upload size (~6x smaller).
+  // Server resamples internally, so this only affects upload transfer time.
+  const uploadBlob = await downsampleWavBlob(srcAudioBlob);
 
-  for (const [key, value] of Object.entries(params)) {
-    if (value === null || value === undefined) continue;
-    formData.append(key, String(value));
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= RELEASE_TASK_MAX_RETRIES; attempt++) {
+    const formData = new FormData();
+    formData.append('src_audio', uploadBlob, 'src_audio.wav');
+    for (const [key, value] of Object.entries(params)) {
+      if (value === null || value === undefined) continue;
+      formData.append(key, String(value));
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RELEASE_TASK_TIMEOUT_MS);
+
+    try {
+      if (attempt > 1) {
+        console.warn(`[aceStepApi] releaseLegoTask retry ${attempt}/${RELEASE_TASK_MAX_RETRIES}`);
+      }
+
+      const res = await fetch(`${base}/release_task`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`releaseLegoTask failed: ${res.status} - ${text}`);
+      }
+
+      const envelope: ApiEnvelope<ReleaseTaskResponse> = await res.json();
+      return envelope.data;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const isRetryable =
+        lastError.name === 'AbortError' ||
+        lastError.name === 'TypeError' ||
+        lastError.message.includes('Failed to fetch') ||
+        lastError.message.includes('network');
+
+      console.error(
+        `[aceStepApi] releaseLegoTask attempt ${attempt} failed:`,
+        lastError.message,
+      );
+
+      if (!isRetryable || attempt === RELEASE_TASK_MAX_RETRIES) break;
+
+      const delay = Math.min(2000 * attempt, 6000);
+      await new Promise((r) => setTimeout(r, delay));
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  const res = await fetch(`${base}/release_task`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`releaseLegoTask failed: ${res.status} - ${text}`);
-  }
-
-  const envelope: ApiEnvelope<ReleaseTaskResponse> = await res.json();
-  return envelope.data;
+  throw lastError ?? new Error('releaseLegoTask failed after retries');
 }
 
 export async function queryResult(taskIds: string[]): Promise<TaskResultEntry[]> {
@@ -159,18 +201,48 @@ export async function queryResult(taskIds: string[]): Promise<TaskResultEntry[]>
   return envelope.data;
 }
 
+const DOWNLOAD_AUDIO_TIMEOUT_MS = 3 * 60 * 1000;
+const DOWNLOAD_AUDIO_MAX_RETRIES = 3;
+
 export async function downloadAudio(audioPath: string): Promise<Blob> {
   const base = getApiBase();
-  // The file field from query_result is typically a URL like
-  // "/v1/audio?path=%2FUsers%2F..." — use it directly.
-  // Or it may be a bare filesystem path — construct the URL ourselves.
   let url: string;
   if (audioPath.startsWith('/v1/')) {
     url = `${base}${audioPath}`;
   } else {
     url = `${base}/v1/audio?path=${encodeURIComponent(audioPath)}`;
   }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`downloadAudio failed: ${res.status} ${res.statusText}`);
-  return res.blob();
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= DOWNLOAD_AUDIO_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DOWNLOAD_AUDIO_TIMEOUT_MS);
+
+    try {
+      if (attempt > 1) {
+        console.warn(`[aceStepApi] downloadAudio retry ${attempt}/${DOWNLOAD_AUDIO_MAX_RETRIES}`);
+      }
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`downloadAudio failed: ${res.status} ${res.statusText}`);
+      return await res.blob();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error(`[aceStepApi] downloadAudio attempt ${attempt} failed:`, lastError.message);
+
+      const isRetryable =
+        lastError.name === 'AbortError' ||
+        lastError.name === 'TypeError' ||
+        lastError.message.includes('Failed to fetch');
+
+      if (!isRetryable || attempt === DOWNLOAD_AUDIO_MAX_RETRIES) break;
+
+      const delay = Math.min(2000 * attempt, 6000);
+      await new Promise((r) => setTimeout(r, delay));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastError ?? new Error('downloadAudio failed after retries');
 }

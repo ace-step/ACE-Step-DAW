@@ -16,6 +16,7 @@ export function ClipPromptEditor() {
   const clip = editingClipId ? getClipById(editingClipId) : null;
 
   const [prompt, setPrompt] = useState('');
+  const [globalCaption, setGlobalCaption] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [startTime, setStartTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -30,6 +31,7 @@ export function ClipPromptEditor() {
   useEffect(() => {
     if (clip) {
       setPrompt(clip.prompt);
+      setGlobalCaption(clip.globalCaption || '');
       setLyrics(clip.lyrics);
       setStartTime(clip.startTime);
       setDuration(clip.duration);
@@ -46,6 +48,7 @@ export function ClipPromptEditor() {
   const handleSave = () => {
     updateClip(editingClipId, {
       prompt,
+      globalCaption,
       lyrics,
       startTime: Math.max(0, startTime),
       duration: Math.max(0.5, duration),
@@ -60,7 +63,7 @@ export function ClipPromptEditor() {
 
   const handleGenerate = () => {
     updateClip(editingClipId, {
-      prompt, lyrics, startTime, duration,
+      prompt, globalCaption, lyrics, startTime, duration,
       bpm: overrideBpm,
       keyScale: overrideKey,
       timeSignature: overrideTimeSig,
@@ -111,14 +114,30 @@ export function ClipPromptEditor() {
             </label>
           </div>
 
+          {!sampleMode && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Song description <span className="text-zinc-500">(global — full song context, optional)</span>
+              </label>
+              <textarea
+                value={globalCaption}
+                onChange={(e) => setGlobalCaption(e.target.value)}
+                placeholder="e.g. upbeat pop song with energetic drums and catchy melody..."
+                rows={2}
+                className="w-full px-3 py-2 text-sm bg-daw-bg border border-daw-border rounded resize-none focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs text-zinc-400 mb-1">
-              {sampleMode ? 'Description' : 'Prompt'}
+              {sampleMode ? 'Description' : 'Track description'}{' '}
+              {!sampleMode && <span className="text-zinc-500">(local — this stem only)</span>}
             </label>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={sampleMode ? 'Describe the sample you want...' : 'Describe the sound for this clip...'}
+              placeholder={sampleMode ? 'Describe the sample you want...' : 'Describe the sound for this track...'}
               rows={3}
               className="w-full px-3 py-2 text-sm bg-daw-bg border border-daw-border rounded resize-none focus:outline-none focus:border-daw-accent"
             />

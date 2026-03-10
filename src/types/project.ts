@@ -22,6 +22,7 @@ export interface Clip {
   startTime: number;
   duration: number;
   prompt: string;
+  globalCaption?: string;  // Global/full-song description for SFT-stems lego tasks
   lyrics: string;
   generationStatus: ClipGenerationStatus;
   generationJobId: string | null;

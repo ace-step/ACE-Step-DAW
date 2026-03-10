@@ -1,7 +1,8 @@
 export interface LegoTaskParams {
   task_type: 'lego';
   track_name: string;
-  prompt: string;
+  prompt: string;              // Local/per-track description
+  global_caption: string;      // Global/full-song description (for SFT-stems lego)
   lyrics: string;
   instruction: string;
   repainting_start: number;

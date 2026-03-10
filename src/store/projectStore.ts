@@ -151,6 +151,7 @@ export const useProjectStore = create<ProjectState>()(
       startTime: clipData.startTime,
       duration: clipData.duration,
       prompt: clipData.prompt,
+      globalCaption: clipData.globalCaption || '',
       lyrics: clipData.lyrics,
       generationStatus: 'empty',
       generationJobId: null,

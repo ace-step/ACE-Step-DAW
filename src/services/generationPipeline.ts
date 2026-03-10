@@ -181,6 +181,7 @@ async function generateClipInternal(
       task_type: 'lego',
       track_name: track.trackName,
       prompt: clip.prompt,
+      global_caption: clip.globalCaption || '',
       lyrics: clip.lyrics || '',
       instruction,
       repainting_start: clip.startTime,

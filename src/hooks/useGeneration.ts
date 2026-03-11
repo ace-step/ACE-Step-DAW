@@ -12,9 +12,9 @@ export function useGeneration() {
     await generateAllTracks();
   }, [project, isGenerating]);
 
-  const generateClip = useCallback(async (clipId: string) => {
+  const generateClip = useCallback(async (clipId: string, options?: { sharedSeed?: number }) => {
     if (!project || isGenerating) return;
-    await generateSingleClip(clipId);
+    await generateSingleClip(clipId, options);
   }, [project, isGenerating]);
 
   return { jobs, isGenerating, generateAll, generateClip };

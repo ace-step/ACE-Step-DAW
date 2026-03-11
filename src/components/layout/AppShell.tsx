@@ -11,16 +11,17 @@ import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { ProjectListDialog } from '../dialogs/ProjectListDialog';
+import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
+import { MixerPanel } from '../mixer/MixerPanel';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import { useTransport } from '../../hooks/useTransport';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
-  const { isPlaying, play, pause, stop } = useTransport();
 
   // Resume AudioContext on first user interaction
   const handleClick = useCallback(() => {
@@ -34,29 +35,8 @@ export function AppShell() {
     }
   }, []);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
-      ) {
-        return;
-      }
-
-      switch (e.code) {
-        case 'Space':
-          e.preventDefault();
-          if (isPlaying) pause();
-          else play();
-          break;
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isPlaying, play, pause, stop]);
+  // All keyboard shortcuts
+  useKeyboardShortcuts();
 
   return (
     <div className="flex flex-col h-screen" onClick={handleClick}>
@@ -68,6 +48,7 @@ export function AppShell() {
         <Timeline />
       </div>
 
+      {project && <MixerPanel />}
       {project && <GenerationPanel />}
       <StatusBar />
 
@@ -78,6 +59,7 @@ export function AppShell() {
       <ExportDialog />
       <SettingsDialog />
       <ProjectListDialog />
+      <KeyboardShortcutsDialog />
     </div>
   );
 }

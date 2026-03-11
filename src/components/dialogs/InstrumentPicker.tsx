@@ -11,7 +11,11 @@ export function InstrumentPicker() {
 
   if (!show || !project) return null;
 
-  const existingTrackNames = new Set(project.tracks.map((t) => t.trackName));
+  // Count existing tracks per name so we can show a badge
+  const trackCountByName: Partial<Record<TrackName, number>> = {};
+  for (const t of project.tracks) {
+    trackCountByName[t.trackName] = (trackCountByName[t.trackName] ?? 0) + 1;
+  }
 
   const handleSelect = (name: TrackName) => {
     addTrack(name);
@@ -34,21 +38,21 @@ export function InstrumentPicker() {
         <div className="p-4 grid grid-cols-3 gap-2">
           {TRACK_NAMES.map((name) => {
             const info = TRACK_CATALOG[name];
-            const exists = existingTrackNames.has(name);
+            const count = trackCountByName[name] ?? 0;
             return (
               <button
                 key={name}
                 onClick={() => handleSelect(name)}
-                disabled={exists}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded text-left transition-colors ${
-                  exists
-                    ? 'bg-daw-surface-2 opacity-40 cursor-not-allowed'
-                    : 'bg-daw-surface-2 hover:bg-zinc-600 cursor-pointer'
-                }`}
+                className="flex items-center gap-2 px-3 py-2.5 rounded text-left bg-daw-surface-2 hover:bg-zinc-600 cursor-pointer transition-colors relative"
                 style={{ borderLeft: `3px solid ${info.color}` }}
               >
                 <span className="text-lg">{info.emoji}</span>
                 <span className="text-xs font-medium">{info.displayName}</span>
+                {count > 0 && (
+                  <span className="absolute top-1 right-1.5 text-[9px] font-bold text-zinc-400">
+                    ×{count}
+                  </span>
+                )}
               </button>
             );
           })}

@@ -5,6 +5,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGeneration } from '../../hooks/useGeneration';
 import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
+import { AddLayerModal } from '../generation/AddLayerModal';
+import { regenerateClip } from '../../services/generationPipeline';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -21,11 +23,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
   const selectClip = useUIStore((s) => s.selectClip);
   const setEditingClip = useUIStore((s) => s.setEditingClip);
+  const contextWindow = useUIStore((s) => s.contextWindow);
   const updateClip = useProjectStore((s) => s.updateClip);
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
+  const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
+
+  // AddLayerModal trigger (from clip context menu "Add Layer here")
+  const [addLayerOpen, setAddLayerOpen] = useState(false);
+
+  // Version navigation
+  const versions = clip.versions ?? [];
+  const activeVersionIdx = clip.activeVersionIdx ?? (versions.length > 0 ? versions.length - 1 : -1);
+  const totalVersions = versions.length;
 
   const peaks = clip.waveformPeaks;
 
@@ -93,13 +105,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         const newDuration = origDuration + (origStart - newStart);
         updateClip(clip.id, { startTime: newStart, duration: newDuration, audioOffset: newAudioOffset });
       } else {
-        // Dragging right edge: crops from the end of the audio
+        // Dragging right edge: extends or crops the clip duration.
+        // No audio-buffer cap — if the clip exceeds the buffer, Web Audio pads
+        // with silence and the user can regenerate to fill the extra region.
         let newDuration = snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
-        // Can't extend past audio buffer end
-        const maxDuration = origAudioDuration - origAudioOffset;
-        newDuration = Math.min(newDuration, maxDuration);
         updateClip(clip.id, { duration: newDuration });
       }
     };
@@ -122,8 +133,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingClip(clip.id);
-  }, [clip.id, setEditingClip]);
+    if (dragRef.current) return;
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -182,6 +194,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           backgroundColor: hexToRgba(track.color, 0.3),
           borderLeft: `2px solid ${track.color}`,
         }}
+        data-clip-block
         onMouseDown={handleMouseDown}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
@@ -222,9 +235,40 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         )}
 
         {/* Label */}
-        <div className="absolute top-0 left-1.5 right-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm pointer-events-none">
+        <div className="absolute top-0 left-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm pointer-events-none"
+          style={{ right: totalVersions > 1 ? '52px' : '6px' }}
+        >
           {clip.prompt || '(no prompt)'}
         </div>
+
+        {/* Version navigation — only visible when multiple versions exist */}
+        {totalVersions > 1 && (
+          <div
+            className="absolute top-0 right-0.5 flex items-center gap-0.5 z-20"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); setActiveVersion(clip.id, activeVersionIdx - 1); }}
+              disabled={activeVersionIdx <= 0}
+              className="text-[8px] text-white/80 hover:text-white disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              title="Previous version"
+            >
+              ◀
+            </button>
+            <span className="text-[8px] text-white/70 font-mono leading-4">
+              {activeVersionIdx + 1}/{totalVersions}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setActiveVersion(clip.id, activeVersionIdx + 1); }}
+              disabled={activeVersionIdx >= totalVersions - 1}
+              className="text-[8px] text-white/80 hover:text-white disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              title="Next version"
+            >
+              ▶
+            </button>
+          </div>
+        )}
 
         {/* Status indicator */}
         {clip.generationStatus === 'generating' && (
@@ -254,10 +298,24 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           y={ctxMenu.y}
           onEdit={() => { closeCtxMenu(); setEditingClip(clip.id); }}
           onGenerate={() => { closeCtxMenu(); generateClip(clip.id); }}
+          onRegenerate={() => { closeCtxMenu(); regenerateClip(clip.id); }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
+          onAddLayer={() => { closeCtxMenu(); setAddLayerOpen(true); }}
           onClose={closeCtxMenu}
           hasPrompt={!!clip.prompt}
+          isReady={clip.generationStatus === 'ready'}
+        />
+      )}
+
+      {/* AddLayerModal — opened from clip context menu "Add Layer here" */}
+      {addLayerOpen && (
+        <AddLayerModal
+          trackId={track.id}
+          startTime={clip.startTime}
+          duration={clip.duration}
+          contextWindow={contextWindow}
+          onClose={() => setAddLayerOpen(false)}
         />
       )}
     </>
@@ -265,23 +323,29 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 }
 
 function ClipContextMenu({
-  x, y, onEdit, onGenerate, onDuplicate, onDelete, onClose, hasPrompt,
+  x, y, onEdit, onGenerate, onRegenerate, onDuplicate, onDelete, onAddLayer, onClose, hasPrompt, isReady,
 }: {
   x: number;
   y: number;
   onEdit: () => void;
   onGenerate: () => void;
+  onRegenerate: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onAddLayer: () => void;
   onClose: () => void;
   hasPrompt: boolean;
+  isReady: boolean;
 }) {
+  const clampedX = Math.min(x, window.innerWidth - 200);
+  const clampedY = Math.min(y, window.innerHeight - 240);
+
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <div
-        className="fixed z-50 bg-daw-surface border border-daw-border rounded shadow-xl py-1 min-w-[140px]"
-        style={{ left: x, top: y }}
+        className="fixed z-50 bg-daw-surface border border-daw-border rounded shadow-xl py-1 min-w-[180px]"
+        style={{ left: clampedX, top: clampedY }}
       >
         <button
           onClick={onEdit}
@@ -289,18 +353,35 @@ function ClipContextMenu({
         >
           Edit Clip
         </button>
-        <button
-          onClick={onGenerate}
-          disabled={!hasPrompt}
-          className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
-        >
-          Generate
-        </button>
+        {isReady ? (
+          <button
+            onClick={onRegenerate}
+            disabled={!hasPrompt}
+            className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
+          >
+            Re-generate
+          </button>
+        ) : (
+          <button
+            onClick={onGenerate}
+            disabled={!hasPrompt}
+            className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
+          >
+            Generate
+          </button>
+        )}
         <button
           onClick={onDuplicate}
           className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors"
         >
           Duplicate
+        </button>
+        <div className="my-1 border-t border-daw-border" />
+        <button
+          onClick={onAddLayer}
+          className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors"
+        >
+          Add Layer here…
         </button>
         <div className="my-1 border-t border-daw-border" />
         <button

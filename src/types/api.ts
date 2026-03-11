@@ -1,7 +1,8 @@
 export interface LegoTaskParams {
   task_type: 'lego';
   track_name: string;
-  prompt: string;
+  prompt: string;              // Local/per-track description
+  global_caption: string;      // Global/full-song description (for SFT-stems lego)
   lyrics: string;
   instruction: string;
   repainting_start: number;
@@ -21,6 +22,10 @@ export interface LegoTaskParams {
   sample_query?: string;
   use_format?: boolean;
   use_cot_caption?: boolean;
+  seed?: number;            // explicit seed value; omit for backend-random
+  use_random_seed?: boolean; // false = use seed field deterministically
+  src_audio_path?: string;  // server-side path; when set, skips blob upload
+  chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
 }
 
 /** All API responses are wrapped in this envelope */

@@ -120,23 +120,26 @@ export async function releaseLegoTask(
 ): Promise<ReleaseTaskResponse> {
   const base = getApiBase();
 
+  const usePath = Boolean(params.src_audio_path);
+
   console.log(
-    `[aceStepApi] releaseLegoTask: src_audio blob size=${srcAudioBlob.size}, type=${srcAudioBlob.type}`,
+    `[aceStepApi] releaseLegoTask: ${usePath ? `src_audio_path=${params.src_audio_path}` : `src_audio blob size=${srcAudioBlob.size}`}`,
     `task_type=${params.task_type}`,
     `audio_duration=${params.audio_duration}`,
     `repainting_start=${params.repainting_start}`,
     `repainting_end=${params.repainting_end}`,
   );
 
-  // Downsample to 16kHz mono to reduce upload size (~6x smaller).
-  // Server resamples internally, so this only affects upload transfer time.
-  const uploadBlob = await downsampleWavBlob(srcAudioBlob);
+  // Only downsample and upload the blob when no server-side path is provided.
+  const uploadBlob = usePath ? null : await downsampleWavBlob(srcAudioBlob);
 
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= RELEASE_TASK_MAX_RETRIES; attempt++) {
     const formData = new FormData();
-    formData.append('src_audio', uploadBlob, 'src_audio.wav');
+    if (uploadBlob) {
+      formData.append('src_audio', uploadBlob, 'src_audio.wav');
+    }
     for (const [key, value] of Object.entries(params)) {
       if (value === null || value === undefined) continue;
       formData.append(key, String(value));

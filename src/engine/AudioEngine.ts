@@ -36,10 +36,17 @@ export class AudioEngine {
   private _lastClips: ClipScheduleInfo[] = [];
   private _lastTotalDuration = 0;
 
+  // Metronome
+  private _metronomeGain: GainNode;
+  private _metronomeSources: OscillatorNode[] = [];
+
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     this.masterGain = this.ctx.createGain();
     this.masterGain.connect(this.ctx.destination);
+    this._metronomeGain = this.ctx.createGain();
+    this._metronomeGain.gain.value = 0.35;
+    this._metronomeGain.connect(this.ctx.destination);
   }
 
   async resume() {
@@ -72,6 +79,9 @@ export class AudioEngine {
       this.trackNodes.delete(trackId);
     }
   }
+
+  get masterVolume() { return this.masterGain.gain.value; }
+  set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
 
   updateSoloState() {
     const anySoloed = Array.from(this.trackNodes.values()).some((n) => n.soloed);
@@ -157,6 +167,7 @@ export class AudioEngine {
       this._rafId = null;
     }
     this.stopAllSources();
+    this.stopMetronome();
   }
 
   stopAllSources() {
@@ -172,6 +183,51 @@ export class AudioEngine {
   getCurrentTime(): number {
     if (!this._playing) return this._offset;
     return this._offset + (this.ctx.currentTime - this._startedAt);
+  }
+
+  /**
+   * Schedule metronome clicks at every beat from `fromTime` to `totalDuration`.
+   * Beat 1 of each bar gets a higher-pitched click (accent).
+   */
+  scheduleMetronome(bpm: number, timeSignature: number, fromTime: number, totalDuration: number) {
+    this.stopMetronome();
+    const beatDuration = 60 / bpm;
+    const contextNow = this.ctx.currentTime;
+    const firstBeatIdx = Math.ceil(fromTime / beatDuration);
+    const lastBeatIdx = Math.floor(totalDuration / beatDuration);
+
+    for (let i = firstBeatIdx; i <= lastBeatIdx; i++) {
+      const beatTime = i * beatDuration;
+      const delay = beatTime - fromTime;
+      if (delay < 0) continue;
+
+      const isAccent = (i % timeSignature) === 0;
+      const freq = isAccent ? 1200 : 800;
+      const clickDuration = 0.03;
+
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const env = this.ctx.createGain();
+      env.gain.setValueAtTime(1, contextNow + delay);
+      env.gain.exponentialRampToValueAtTime(0.001, contextNow + delay + clickDuration);
+
+      osc.connect(env);
+      env.connect(this._metronomeGain);
+
+      osc.start(contextNow + delay);
+      osc.stop(contextNow + delay + clickDuration + 0.01);
+      this._metronomeSources.push(osc);
+    }
+  }
+
+  stopMetronome() {
+    for (const osc of this._metronomeSources) {
+      try { osc.stop(); } catch { /* already stopped */ }
+      osc.disconnect();
+    }
+    this._metronomeSources = [];
   }
 
   async decodeAudioData(blob: Blob): Promise<AudioBuffer> {

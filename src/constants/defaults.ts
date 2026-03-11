@@ -3,6 +3,7 @@ import type { GenerationDefaults } from '../types/project';
 export const DEFAULT_BPM = 120;
 export const DEFAULT_KEY_SCALE = 'C major';
 export const DEFAULT_TIME_SIGNATURE = 4;
+export const DEFAULT_MEASURES = 64;
 export const DEFAULT_DURATION = 30;
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 

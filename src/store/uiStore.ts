@@ -11,6 +11,19 @@ interface UIState {
   showExportDialog: boolean;
   showSettingsDialog: boolean;
   showProjectListDialog: boolean;
+  /** Controls the BatchGenerateModal — lifted from GenerationPanel so keyboard shortcuts can open it. */
+  batchGenerateMode: 'silence' | 'context' | null;
+  /** Optional time range pre-filled into BatchGenerateModal when opened from a lane drag-select or context menu. */
+  batchGenerateInitialRange: { startTime: number; duration: number } | null;
+  showKeyboardShortcutsDialog: boolean;
+  showMixer: boolean;
+  mixerHeight: number;
+  /** Global context window set by Cmd+drag on the timeline. */
+  contextWindow: { startTime: number; endTime: number } | null;
+  /** Multi-track select window set by non-Cmd drag on the timeline. */
+  selectWindow: { startTime: number; endTime: number } | null;
+  /** Track whose inspector panel is currently expanded. */
+  expandedTrackId: string | null;
 
   setPixelsPerSecond: (pps: number) => void;
   zoomIn: () => void;
@@ -25,6 +38,14 @@ interface UIState {
   setShowExportDialog: (v: boolean) => void;
   setShowSettingsDialog: (v: boolean) => void;
   setShowProjectListDialog: (v: boolean) => void;
+  setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
+  setBatchGenerateInitialRange: (v: { startTime: number; duration: number } | null) => void;
+  setShowKeyboardShortcutsDialog: (v: boolean) => void;
+  setShowMixer: (v: boolean) => void;
+  setMixerHeight: (v: number) => void;
+  setContextWindow: (v: { startTime: number; endTime: number } | null) => void;
+  setSelectWindow: (v: { startTime: number; endTime: number } | null) => void;
+  setExpandedTrackId: (id: string | null) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -40,6 +61,14 @@ export const useUIStore = create<UIState>((set) => ({
   showExportDialog: false,
   showSettingsDialog: false,
   showProjectListDialog: false,
+  batchGenerateMode: null,
+  batchGenerateInitialRange: null,
+  showKeyboardShortcutsDialog: false,
+  showMixer: false,
+  mixerHeight: 260,
+  contextWindow: null,
+  selectWindow: null,
+  expandedTrackId: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
 
@@ -79,4 +108,14 @@ export const useUIStore = create<UIState>((set) => ({
   setShowExportDialog: (v) => set({ showExportDialog: v }),
   setShowSettingsDialog: (v) => set({ showSettingsDialog: v }),
   setShowProjectListDialog: (v) => set({ showProjectListDialog: v }),
+  setBatchGenerateMode: (mode) => set(mode === null
+    ? { batchGenerateMode: null, batchGenerateInitialRange: null }
+    : { batchGenerateMode: mode }),
+  setBatchGenerateInitialRange: (v) => set({ batchGenerateInitialRange: v }),
+  setShowKeyboardShortcutsDialog: (v) => set({ showKeyboardShortcutsDialog: v }),
+  setShowMixer: (v) => set({ showMixer: v }),
+  setMixerHeight: (v) => set({ mixerHeight: Math.min(450, Math.max(160, v)) }),
+  setContextWindow: (v) => set({ contextWindow: v }),
+  setSelectWindow: (v) => set({ selectWindow: v }),
+  setExpandedTrackId: (id) => set({ expandedTrackId: id }),
 }));

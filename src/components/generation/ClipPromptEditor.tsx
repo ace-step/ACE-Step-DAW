@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useGeneration } from '../../hooks/useGeneration';
-import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
 
 export function ClipPromptEditor() {
   const editingClipId = useUIStore((s) => s.editingClipId);
@@ -16,42 +15,42 @@ export function ClipPromptEditor() {
   const clip = editingClipId ? getClipById(editingClipId) : null;
 
   const [prompt, setPrompt] = useState('');
+  const [globalCaption, setGlobalCaption] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [startTime, setStartTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [sampleMode, setSampleMode] = useState(false);
   const [autoExpandPrompt, setAutoExpandPrompt] = useState(true);
-  // 'auto' = ACE-Step infers, null = use project default, number = manual override
-  const [overrideBpm, setOverrideBpm] = useState<number | 'auto' | null>('auto');
-  const [overrideKey, setOverrideKey] = useState<string | 'auto' | null>('auto');
-  const [overrideTimeSig, setOverrideTimeSig] = useState<number | 'auto' | null>('auto');
+  const [showSeed, setShowSeed] = useState(false);
+  const [seedValue, setSeedValue] = useState('');
 
   // Only reset form when switching to a different clip (not on every store update)
   useEffect(() => {
     if (clip) {
       setPrompt(clip.prompt);
+      // Pre-fill global caption from project if clip has none
+      setGlobalCaption(clip.globalCaption || project?.globalCaption || '');
       setLyrics(clip.lyrics);
       setStartTime(clip.startTime);
       setDuration(clip.duration);
       setSampleMode(clip.sampleMode ?? false);
       setAutoExpandPrompt(clip.autoExpandPrompt ?? true);
-      setOverrideBpm(clip.bpm === undefined ? null : clip.bpm);
-      setOverrideKey(clip.keyScale === undefined ? null : clip.keyScale);
-      setOverrideTimeSig(clip.timeSignature === undefined ? null : clip.timeSignature);
+      setShowSeed(false);
+      setSeedValue('');
     }
   }, [editingClipId]);
 
   if (!editingClipId || !clip || !project) return null;
 
+  const parsedSeed = seedValue.trim() ? parseInt(seedValue, 10) : undefined;
+
   const handleSave = () => {
     updateClip(editingClipId, {
       prompt,
+      globalCaption,
       lyrics,
       startTime: Math.max(0, startTime),
       duration: Math.max(0.5, duration),
-      bpm: overrideBpm,
-      keyScale: overrideKey,
-      timeSignature: overrideTimeSig,
       sampleMode,
       autoExpandPrompt,
     });
@@ -60,15 +59,12 @@ export function ClipPromptEditor() {
 
   const handleGenerate = () => {
     updateClip(editingClipId, {
-      prompt, lyrics, startTime, duration,
-      bpm: overrideBpm,
-      keyScale: overrideKey,
-      timeSignature: overrideTimeSig,
+      prompt, globalCaption, lyrics, startTime, duration,
       sampleMode,
       autoExpandPrompt,
     });
     setEditingClip(null);
-    generateClip(editingClipId);
+    generateClip(editingClipId, parsedSeed !== undefined ? { sharedSeed: parsedSeed } : undefined);
   };
 
   const handleDelete = () => {
@@ -111,14 +107,30 @@ export function ClipPromptEditor() {
             </label>
           </div>
 
+          {!sampleMode && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Song description <span className="text-zinc-500">(global — full song context, optional)</span>
+              </label>
+              <textarea
+                value={globalCaption}
+                onChange={(e) => setGlobalCaption(e.target.value)}
+                placeholder="e.g. upbeat pop song with energetic drums and catchy melody..."
+                rows={2}
+                className="w-full px-3 py-2 text-sm bg-daw-bg border border-daw-border rounded resize-none focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs text-zinc-400 mb-1">
-              {sampleMode ? 'Description' : 'Prompt'}
+              {sampleMode ? 'Description' : 'Track description'}{' '}
+              {!sampleMode && <span className="text-zinc-500">(local — this stem only)</span>}
             </label>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={sampleMode ? 'Describe the sample you want...' : 'Describe the sound for this clip...'}
+              placeholder={sampleMode ? 'Describe the sample you want...' : 'Describe the sound for this track...'}
               rows={3}
               className="w-full px-3 py-2 text-sm bg-daw-bg border border-daw-border rounded resize-none focus:outline-none focus:border-daw-accent"
             />
@@ -162,93 +174,29 @@ export function ClipPromptEditor() {
             </div>
           </div>
 
-          {/* Per-clip musical overrides */}
+          {/* Seed (optional, collapsed by default) */}
           <div className="border-t border-daw-border pt-3">
-            <p className="text-[10px] text-zinc-500 mb-2">
-              Auto = ACE-Step infers from audio context. Project = use project settings ({project.bpm} BPM, {project.keyScale}, {project.timeSignature}/4).
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">BPM</label>
-                <select
-                  value={overrideBpm === 'auto' ? 'auto' : overrideBpm === null ? 'project' : 'manual'}
-                  onChange={(e) => {
-                    if (e.target.value === 'auto') setOverrideBpm('auto');
-                    else if (e.target.value === 'project') setOverrideBpm(null);
-                    else setOverrideBpm(project.bpm);
-                  }}
-                  className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent mb-1"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="project">Project ({project.bpm})</option>
-                  <option value="manual">Manual</option>
-                </select>
-                {overrideBpm !== 'auto' && overrideBpm !== null && (
-                  <input
-                    type="number"
-                    value={overrideBpm}
-                    onChange={(e) => setOverrideBpm(e.target.value ? parseInt(e.target.value) : project.bpm)}
-                    min={30}
-                    max={300}
-                    className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
-                  />
-                )}
+            <button
+              type="button"
+              onClick={() => setShowSeed((v) => !v)}
+              className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {showSeed ? '▾' : '▸'} Seed (optional)
+            </button>
+            {showSeed && (
+              <div className="mt-2">
+                <input
+                  type="number"
+                  value={seedValue}
+                  onChange={(e) => setSeedValue(e.target.value)}
+                  placeholder="Leave empty for random"
+                  className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600"
+                />
+                <p className="mt-1 text-[10px] text-zinc-600">
+                  Project: {project.bpm} BPM · {project.keyScale} · {project.timeSignature}/4 (edit in Settings)
+                </p>
               </div>
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">Key</label>
-                <select
-                  value={overrideKey === 'auto' ? 'auto' : overrideKey === null ? 'project' : 'manual'}
-                  onChange={(e) => {
-                    if (e.target.value === 'auto') setOverrideKey('auto');
-                    else if (e.target.value === 'project') setOverrideKey(null);
-                    else setOverrideKey(project.keyScale);
-                  }}
-                  className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent mb-1"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="project">Project ({project.keyScale})</option>
-                  <option value="manual">Manual</option>
-                </select>
-                {overrideKey !== 'auto' && overrideKey !== null && (
-                  <select
-                    value={overrideKey}
-                    onChange={(e) => setOverrideKey(e.target.value)}
-                    className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
-                  >
-                    {KEY_SCALES.map((k) => (
-                      <option key={k} value={k}>{k}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">Time Sig</label>
-                <select
-                  value={overrideTimeSig === 'auto' ? 'auto' : overrideTimeSig === null ? 'project' : 'manual'}
-                  onChange={(e) => {
-                    if (e.target.value === 'auto') setOverrideTimeSig('auto');
-                    else if (e.target.value === 'project') setOverrideTimeSig(null);
-                    else setOverrideTimeSig(project.timeSignature);
-                  }}
-                  className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent mb-1"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="project">Project ({project.timeSignature}/4)</option>
-                  <option value="manual">Manual</option>
-                </select>
-                {overrideTimeSig !== 'auto' && overrideTimeSig !== null && (
-                  <select
-                    value={overrideTimeSig}
-                    onChange={(e) => setOverrideTimeSig(parseInt(e.target.value))}
-                    className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
-                  >
-                    {TIME_SIGNATURES.map((ts) => (
-                      <option key={ts} value={ts}>{ts}/4</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Inferred by ACE-Step */}

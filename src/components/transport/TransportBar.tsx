@@ -7,6 +7,8 @@ export function TransportBar() {
   const { isPlaying, play, pause, stop } = useTransport();
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
+  const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
+  const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
 
   return (
     <div className="flex items-center h-10 px-3 gap-3 bg-daw-surface border-b border-daw-border">
@@ -50,6 +52,19 @@ export function TransportBar() {
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
             <path d="M2 11h7a3 3 0 0 0 0-6" />
+          </svg>
+        </button>
+        <button
+          onClick={toggleMetronome}
+          className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+            metronomeEnabled ? 'bg-daw-accent text-white' : 'hover:bg-daw-surface-2 text-zinc-400'
+          }`}
+          title={metronomeEnabled ? 'Metronome On' : 'Metronome Off'}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 13L7 1l3 12" />
+            <path d="M3 13h8" />
+            <path d="M7 5l4-2" />
           </svg>
         </button>
       </div>

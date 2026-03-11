@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
-import { DEFAULT_GENERATION } from '../../constants/defaults';
+import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 
 function modelSupportsThinking(modelName: string): boolean {
@@ -14,6 +14,11 @@ export function SettingsDialog() {
   const setShow = useUIStore((s) => s.setShowSettingsDialog);
   const project = useProjectStore((s) => s.project);
 
+  const [bpm, setBpm] = useState(120);
+  const [keyScale, setKeyScale] = useState('');
+  const [timeSignature, setTimeSignature] = useState(4);
+  const [measures, setMeasures] = useState(DEFAULT_MEASURES);
+  const [globalCaption, setGlobalCaption] = useState('');
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
   const [guidance, setGuidance] = useState(DEFAULT_GENERATION.guidanceScale);
   const [shift, setShift] = useState(DEFAULT_GENERATION.shift);
@@ -84,6 +89,11 @@ export function SettingsDialog() {
   useEffect(() => {
     if (show && !prevShow.current) {
       const gen = project?.generationDefaults ?? DEFAULT_GENERATION;
+      setBpm(project?.bpm ?? 120);
+      setKeyScale(project?.keyScale ?? '');
+      setTimeSignature(project?.timeSignature ?? 4);
+      setMeasures(project?.measures ?? DEFAULT_MEASURES);
+      setGlobalCaption(project?.globalCaption ?? '');
       setSteps(gen.inferenceSteps);
       setGuidance(gen.guidanceScale);
       setShift(gen.shift);
@@ -103,9 +113,10 @@ export function SettingsDialog() {
   const handleSave = () => {
     const store = useProjectStore.getState();
     if (store.project) {
+      store.updateProject({ bpm, keyScale, timeSignature, measures, globalCaption });
       useProjectStore.setState({
         project: {
-          ...store.project,
+          ...useProjectStore.getState().project!,
           updatedAt: Date.now(),
           generationDefaults: {
             ...store.project.generationDefaults,
@@ -189,6 +200,68 @@ export function SettingsDialog() {
             />
             <p className="mt-1 text-[10px] text-zinc-600">
               Direct URL to acestep-api server, e.g. http://127.0.0.1:8001
+            </p>
+          </div>
+
+          <h3 className="text-xs font-medium text-zinc-300 pt-2">Project</h3>
+
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">BPM</label>
+              <input
+                type="number"
+                value={bpm}
+                onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
+                min={40}
+                max={300}
+                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">Key / Scale</label>
+              <input
+                type="text"
+                value={keyScale}
+                onChange={(e) => setKeyScale(e.target.value)}
+                placeholder="e.g. C major"
+                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">Time Sig</label>
+              <input
+                type="number"
+                value={timeSignature}
+                onChange={(e) => setTimeSignature(parseInt(e.target.value) || 4)}
+                min={1}
+                max={16}
+                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">Measures</label>
+              <input
+                type="number"
+                value={measures}
+                onChange={(e) => setMeasures(Math.max(4, parseInt(e.target.value) || DEFAULT_MEASURES))}
+                min={4}
+                max={512}
+                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">Global Song Description</label>
+            <textarea
+              value={globalCaption}
+              onChange={(e) => setGlobalCaption(e.target.value)}
+              rows={3}
+              placeholder="Describe the overall song style, mood, genre…"
+              className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600 resize-none"
+            />
+            <p className="mt-1 text-[10px] text-zinc-600">
+              Used as fallback when a clip's global caption is empty. Auto-filled from the first generation if left blank.
             </p>
           </div>
 

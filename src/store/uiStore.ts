@@ -19,9 +19,9 @@ interface UIState {
   showMixer: boolean;
   mixerHeight: number;
   /** Global context window set by Cmd+drag on the timeline. */
-  contextWindow: { startTime: number; endTime: number } | null;
+  contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Multi-track select window set by non-Cmd drag on the timeline. */
-  selectWindow: { startTime: number; endTime: number } | null;
+  selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Track whose inspector panel is currently expanded. */
   expandedTrackId: string | null;
 
@@ -43,8 +43,8 @@ interface UIState {
   setShowKeyboardShortcutsDialog: (v: boolean) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
-  setContextWindow: (v: { startTime: number; endTime: number } | null) => void;
-  setSelectWindow: (v: { startTime: number; endTime: number } | null) => void;
+  setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
+  setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setExpandedTrackId: (id: string | null) => void;
 }
 

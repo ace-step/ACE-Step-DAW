@@ -7,8 +7,8 @@ import { extractContextAudio } from '../../services/contextAudioExtractor';
 const VOCAL_TRACKS = new Set(['vocals', 'backing_vocals']);
 
 interface Props {
-  selectWindow: { startTime: number; endTime: number };
-  contextWindow: { startTime: number; endTime: number } | null;
+  selectWindow: { startTime: number; endTime: number; trackIds?: string[] };
+  contextWindow: { startTime: number; endTime: number; trackIds?: string[] } | null;
   onClose: () => void;
 }
 
@@ -64,18 +64,21 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
     if (rowsInitRef.current || !project) return;
     rowsInitRef.current = true;
     const sorted = [...project.tracks].sort((a, b) => a.order - b.order);
+    const preCheckedIds = selectWindow.trackIds && selectWindow.trackIds.length > 0
+      ? new Set(selectWindow.trackIds)
+      : null;
     setRows(
       sorted.map((t) => ({
         trackId: t.id,
         trackName: t.trackName,
         displayName: t.displayName,
-        checked: true,
+        checked: preCheckedIds ? preCheckedIds.has(t.id) : true,
         localDescription: t.localCaption ?? t.displayName,
         lyrics: '',
         isVocal: VOCAL_TRACKS.has(t.trackName),
       })),
     );
-  }, [project]);
+  }, [project, selectWindow.trackIds]);
 
   const [globalCaption, setGlobalCaption] = useState(() => project?.globalCaption ?? '');
   const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('auto');

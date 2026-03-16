@@ -50,8 +50,6 @@ function LaneContextMenu({ x, y, onAddLayer, onClose }: LaneContextMenuProps) {
 // TrackLane
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DRAG_THRESHOLD_PX = 6;
-
 export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
@@ -110,10 +108,6 @@ export function TrackLane({ track }: TrackLaneProps) {
     setAddLayerTarget(null);
   }, [pixelsPerSecond, project.bpm, project.totalDuration, hitsClip]);
 
-  // Drag-select is now handled globally by Timeline (capture phase) so that
-  // drags in any direction work across multiple track lanes. TrackLane no
-  // longer needs its own drag-select handler.
-
   const clearSel = useCallback(() => {
     setAddLayerTarget(null);
   }, []);
@@ -121,6 +115,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   return (
     <>
       <div
+        data-track-id={track.id}
         className="relative h-16 border-b border-daw-border"
         style={{ width: totalWidth }}
         onContextMenu={handleContextMenu}

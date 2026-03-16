@@ -7,6 +7,7 @@ import { Playhead } from './Playhead';
 import { GridOverlay } from './GridOverlay';
 import { snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
+import { useAudioImport } from '../../hooks/useAudioImport';
 
 export const TRACK_INSPECTOR_HEIGHT = 220; // px — must match TrackInspector height
 
@@ -64,6 +65,42 @@ export function Timeline() {
 
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+  const { importMultipleFiles } = useAudioImport();
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      dragCounterRef.current++;
+      setFileDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setFileDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setFileDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      await importMultipleFiles(files);
+    }
+  }, [importMultipleFiles]);
 
   const sortedTracks = project
     ? [...project.tracks].sort((a, b) => a.order - b.order)
@@ -218,11 +255,23 @@ export function Timeline() {
     <>
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto bg-daw-bg"
+        className="flex-1 overflow-auto bg-daw-bg relative"
         onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{ cursor: 'default' }}
       >
+        {fileDragOver && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-900/30 border-2 border-dashed border-blue-400/60 pointer-events-none">
+            <div className="bg-blue-950/80 border border-blue-500/50 rounded-lg px-6 py-4 text-center">
+              <p className="text-sm font-medium text-blue-200">Drop audio files here</p>
+              <p className="text-[10px] text-blue-400 mt-1">WAV, MP3, OGG, FLAC, AAC</p>
+            </div>
+          </div>
+        )}
         <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
           <TimeRuler />
 

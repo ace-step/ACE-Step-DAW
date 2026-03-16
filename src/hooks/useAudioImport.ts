@@ -65,27 +65,87 @@ export function useAudioImport() {
     // Compute waveform peaks
     const peaks = computeWaveformPeaks(trimmedBuffer, 200);
 
-    // Mark clip as ready
+    // Mark clip as ready with uploaded source
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
       waveformPeaks: peaks,
       audioDuration: clipDuration,
       audioOffset: 0,
+      source: 'uploaded',
     });
   }, [addTrack, addClip, updateClipStatus]);
+
+  const importAudioToTrack = useCallback(async (file: File, trackId: string, startTime: number) => {
+    const project = useProjectStore.getState().project;
+    if (!project) return;
+
+    const engine = getAudioEngine();
+    await engine.resume();
+
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
+    const duration = audioBuffer.duration;
+    const clipDuration = Math.min(duration, project.totalDuration - startTime);
+    if (clipDuration <= 0) return;
+
+    const clip = addClip(trackId, {
+      startTime,
+      duration: clipDuration,
+      prompt: `Imported: ${file.name}`,
+      lyrics: '',
+    });
+
+    const sampleRate = audioBuffer.sampleRate;
+    const trimmedLength = Math.min(
+      Math.floor(clipDuration * sampleRate),
+      audioBuffer.length,
+    );
+    const trimmedBuffer = engine.ctx.createBuffer(
+      audioBuffer.numberOfChannels,
+      trimmedLength,
+      sampleRate,
+    );
+    for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+      const src = audioBuffer.getChannelData(ch);
+      const dst = trimmedBuffer.getChannelData(ch);
+      for (let i = 0; i < trimmedLength; i++) {
+        dst[i] = src[i];
+      }
+    }
+
+    const wavBlob = audioBufferToWavBlob(trimmedBuffer);
+    const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
+    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+
+    updateClipStatus(clip.id, 'ready', {
+      isolatedAudioKey: isolatedKey,
+      waveformPeaks: peaks,
+      audioDuration: clipDuration,
+      audioOffset: 0,
+      source: 'uploaded',
+    });
+  }, [addClip, updateClipStatus]);
+
+  const importMultipleFiles = useCallback(async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
+        await importAudioFile(file);
+      }
+    }
+  }, [importAudioFile]);
 
   const openFilePicker = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'audio/*';
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (file) {
-        await importAudioFile(file);
+      if (input.files && input.files.length > 0) {
+        await importMultipleFiles(input.files);
       }
     };
     input.click();
-  }, [importAudioFile]);
+  }, [importMultipleFiles]);
 
-  return { importAudioFile, openFilePicker };
+  return { importAudioFile, importAudioToTrack, importMultipleFiles, openFilePicker };
 }

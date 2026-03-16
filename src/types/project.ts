@@ -60,6 +60,10 @@ export interface Clip {
   versions?: ClipVersion[];
   /** Currently displayed version index (0 = oldest). When undefined, live fields are used. */
   activeVersionIdx?: number;
+  /** Origin of this clip: AI-generated or user-uploaded audio. */
+  source?: 'generated' | 'uploaded';
+  /** User bookmark flag for quick access in the Assets panel. */
+  starred?: boolean;
 }
 
 export interface Track {
@@ -86,6 +90,8 @@ export interface Track {
   // Track Inspector
   /** Default prompt for clips on this track; falls back to track display name if empty. */
   localCaption?: string;
+  /** Per-track lane height in pixels (default 64, min 40, max 200). */
+  laneHeight?: number;
 }
 
 export interface GenerationDefaults {

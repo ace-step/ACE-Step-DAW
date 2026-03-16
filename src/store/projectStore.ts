@@ -52,7 +52,7 @@ interface ProjectState {
 
   addTrack: (trackName: TrackName) => Track;
   removeTrack: (trackId: string) => void;
-  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed'>>) => void;
+  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'laneHeight'>>) => void;
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
@@ -64,6 +64,9 @@ interface ProjectState {
   saveClipVersion: (clipId: string) => void;
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
+
+  toggleClipStar: (clipId: string) => void;
+  moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
@@ -498,6 +501,58 @@ export const useProjectStore = create<ProjectState>()(
               : c,
           ),
         })),
+      },
+    });
+  },
+
+  toggleClipStar: (clipId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === clipId ? { ...c, starred: !c.starred } : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  moveClipToTrack: (clipId, targetTrackId, startTime) => {
+    const state = get();
+    if (!state.project) return;
+    const srcTrack = state.project.tracks.find((t) => t.clips.some((c) => c.id === clipId));
+    if (!srcTrack) return;
+    if (srcTrack.id === targetTrackId && startTime === undefined) return;
+    const clip = srcTrack.clips.find((c) => c.id === clipId);
+    if (!clip) return;
+    _pushHistory(state.project);
+    const movedClip = {
+      ...clip,
+      trackId: targetTrackId,
+      ...(startTime !== undefined ? { startTime } : {}),
+    };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id === srcTrack.id && t.id !== targetTrackId) {
+            return { ...t, clips: t.clips.filter((c) => c.id !== clipId) };
+          }
+          if (t.id === targetTrackId && t.id !== srcTrack.id) {
+            return { ...t, clips: [...t.clips, movedClip] };
+          }
+          if (t.id === srcTrack.id && t.id === targetTrackId) {
+            return { ...t, clips: t.clips.map((c) => c.id === clipId ? movedClip : c) };
+          }
+          return t;
+        }),
       },
     });
   },

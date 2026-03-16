@@ -1,19 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ClipBlock } from './ClipBlock';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { snapToGrid } from '../../utils/time';
+import { useAudioImport } from '../../hooks/useAudioImport';
 
 interface TrackLaneProps {
   track: Track;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Lane context menu (right-click / double-click on empty area)
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface LaneContextMenuProps {
   x: number;
   y: number;
@@ -39,37 +37,61 @@ function LaneContextMenu({ x, y, onAddLayer, onClose }: LaneContextMenuProps) {
           onClick={() => { onClose(); onAddLayer(); }}
           className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors"
         >
-          Add Layer…
+          Add Layer...
         </button>
       </div>
     </>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TrackLane
-// ─────────────────────────────────────────────────────────────────────────────
+const MIN_LANE_HEIGHT = 40;
+const MAX_LANE_HEIGHT = 200;
 
 export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const project = useProjectStore((s) => s.project);
+  const updateTrack = useProjectStore((s) => s.updateTrack);
 
-  // ── Context menu ──────────────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; startTime: number; duration: number;
   } | null>(null);
 
-  // ── AddLayerModal state (opened via right-click / double-click context menu) ──
   const [addLayerTarget, setAddLayerTarget] = useState<{
     startTime: number; duration: number;
   } | null>(null);
+
+  const { importAudioToTrack } = useAudioImport();
+  const [fileDragOver, setFileDragOver] = useState(false);
+
+  // Lane height resize
+  const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
+  const laneHeight = track.laneHeight ?? 64;
+
+  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const delta = ev.clientY - resizeRef.current.startY;
+      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
+      updateTrack(track.id, { laneHeight: newH });
+    };
+    const onMouseUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [laneHeight, track.id, updateTrack]);
 
   if (!project) return null;
 
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
-  // Check if a time position is on or near an existing clip
   const hitsClip = useCallback((clickTime: number): boolean => {
     const GUARD = 8 / pixelsPerSecond;
     return track.clips.some(
@@ -77,7 +99,6 @@ export function TrackLane({ track }: TrackLaneProps) {
     );
   }, [track.clips, pixelsPerSecond]);
 
-  // ── Right-click → context menu ────────────────────────────────────────────
   const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
@@ -92,7 +113,6 @@ export function TrackLane({ track }: TrackLaneProps) {
     setAddLayerTarget(null);
   }, [pixelsPerSecond, project.bpm, project.totalDuration]);
 
-  // ── Double-click → context menu (Mac alternative) ────────────────────────
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     e.stopPropagation();
@@ -112,21 +132,58 @@ export function TrackLane({ track }: TrackLaneProps) {
     setAddLayerTarget(null);
   }, []);
 
+  const handleFileDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+      setFileDragOver(true);
+    }
+  }, []);
+
+  const handleFileDragLeave = useCallback(() => {
+    setFileDragOver(false);
+  }, []);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
+    const files = e.dataTransfer.files;
+    if (!files.length || !project) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const laneX = e.clientX - rect.left;
+    const rawTime = laneX / pixelsPerSecond;
+    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
+        await importAudioToTrack(file, track.id, startTime);
+      }
+    }
+  }, [project, pixelsPerSecond, track.id, importAudioToTrack]);
+
   return (
     <>
       <div
         data-track-id={track.id}
-        className="relative h-16 border-b border-daw-border"
-        style={{ width: totalWidth }}
-        onContextMenu={handleContextMenu}
-        onDoubleClick={handleDoubleClick}
+        className={`relative border-b border-daw-border ${fileDragOver ? 'bg-blue-900/20' : ''}`}
+        style={{ width: totalWidth, height: laneHeight }}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
       >
-        {/* Clips */}
+        {fileDragOver && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 border border-dashed border-blue-400/60 rounded-sm">
+            <span className="text-[10px] text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded">Drop audio here</span>
+          </div>
+        )}
+
         {track.clips.map((clip) => (
           <ClipBlock key={clip.id} clip={clip} track={track} />
         ))}
 
-        {/* Lane context menu */}
         {ctxMenu && (
           <LaneContextMenu
             x={ctxMenu.x}
@@ -135,9 +192,14 @@ export function TrackLane({ track }: TrackLaneProps) {
             onClose={() => setCtxMenu(null)}
           />
         )}
+
+        {/* Bottom-edge resize handle */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize bg-transparent hover:bg-indigo-500/40 transition-colors z-20"
+          onMouseDown={onResizeMouseDown}
+        />
       </div>
 
-      {/* AddLayerModal — rendered outside the lane div to avoid clipping */}
       {addLayerTarget && (
         <AddLayerModal
           trackId={track.id}

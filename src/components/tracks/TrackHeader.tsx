@@ -1,7 +1,11 @@
+import { useCallback, useRef } from 'react';
 import type { Track } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TRACK_CATALOG } from '../../constants/tracks';
+
+const MIN_LANE_HEIGHT = 40;
+const MAX_LANE_HEIGHT = 200;
 
 interface TrackHeaderProps {
   track: Track;
@@ -26,15 +30,38 @@ export function TrackHeader({
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
   const info = TRACK_CATALOG[track.trackName];
 
+  const laneHeight = track.laneHeight ?? 64;
+  const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  const onHeightResizeDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const delta = ev.clientY - resizeRef.current.startY;
+      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
+      updateTrack(track.id, { laneHeight: newH });
+    };
+    const onMouseUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [laneHeight, track.id, updateTrack]);
+
   const isExpanded = expandedTrackId === track.id;
   const toggleExpand = () => setExpandedTrackId(isExpanded ? null : track.id);
 
   return (
     <div
-      className={`relative flex flex-col justify-center gap-1 h-16 px-2 border-b border-daw-border group select-none ${
+      className={`relative flex flex-col justify-center gap-1 px-2 border-b border-daw-border group select-none ${
         isDragOver ? 'bg-daw-surface-2' : ''
       }`}
       style={{
+        height: track.laneHeight ?? 64,
         borderLeft: `3px solid ${track.color}`,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid #6366f1' : undefined,
         borderBottom: isDragOver && dragOverPosition === 'after' ? '2px solid #6366f1' : undefined,
@@ -113,6 +140,12 @@ export function TrackHeader({
           </button>
         </div>
       </div>
+
+      {/* Bottom-edge height resize handle */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize bg-transparent hover:bg-indigo-500/40 transition-colors z-10"
+        onMouseDown={onHeightResizeDown}
+      />
     </div>
   );
 }

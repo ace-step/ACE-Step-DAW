@@ -18,6 +18,15 @@ const MIN_CLIP_DURATION = 0.5;
 
 type DragMode = 'move' | 'resize-left' | 'resize-right';
 
+interface DragGhostInfo {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  targetTrackId: string | null;
+  targetLaneRect: { top: number; height: number } | null;
+}
+
 export function ClipBlock({ clip, track }: ClipBlockProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
@@ -31,9 +40,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
 
-  // AddLayerModal trigger (from clip context menu "Add Layer here" or "Edit Clip")
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
 
   // Listen for external "edit clip" signal (keyboard shortcut E)
   const editingClipId = useUIStore((s) => s.editingClipId);
@@ -68,6 +77,23 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     return 'move';
   }, []);
 
+  const moveClipToTrack = useProjectStore((s) => s.moveClipToTrack);
+  const clipBlockRef = useRef<HTMLDivElement>(null);
+
+  const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
+    const lanes = document.querySelectorAll<HTMLElement>('[data-track-id]');
+    let best: { trackId: string; rect: DOMRect; dist: number } | null = null;
+    for (const lane of lanes) {
+      const r = lane.getBoundingClientRect();
+      const centerY = r.top + r.height / 2;
+      const dist = Math.abs(clientY - centerY);
+      if (!best || dist < best.dist) {
+        best = { trackId: lane.dataset.trackId!, rect: r, dist };
+      }
+    }
+    return best ? { trackId: best.trackId, rect: best.rect } : null;
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -75,6 +101,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     const mode = getDragMode(e);
     const startX = e.clientX;
+    const startY = e.clientY;
     const origStart = clip.startTime;
     const origDuration = clip.duration;
     const origAudioOffset = clip.audioOffset ?? 0;
@@ -83,9 +110,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const totalDuration = project?.totalDuration ?? 600;
     dragRef.current = false;
 
+    const clipW = clip.duration * pixelsPerSecond;
+    const clipH = clipBlockRef.current?.offsetHeight ?? 48;
+
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
-      if (Math.abs(dx) < 3 && !dragRef.current) return;
+      const dy = ev.clientY - startY;
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
       dragRef.current = true;
 
       const deltaSec = dx / pixelsPerSecond;
@@ -94,15 +125,27 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
         newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
         updateClip(clip.id, { startTime: newStart });
+
+        const closest = findClosestLane(ev.clientY);
+        if (closest) {
+          setDragGhost({
+            x: ev.clientX - clipW / 2,
+            y: ev.clientY - clipH / 2,
+            width: clipW,
+            height: clipH,
+            targetTrackId: closest.trackId !== track.id ? closest.trackId : null,
+            targetLaneRect: closest.trackId !== track.id
+              ? { top: closest.rect.top, height: closest.rect.height }
+              : null,
+          });
+        }
       } else if (mode === 'resize-left') {
-        // Dragging left edge: crops from the start of the audio
         let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
         newStart = Math.max(0, newStart);
         const maxStart = origStart + origDuration - MIN_CLIP_DURATION;
         newStart = Math.min(newStart, maxStart);
 
         const shift = newStart - origStart;
-        // Constrain: can't crop past the audio buffer end
         let newAudioOffset = origAudioOffset + shift;
         if (newAudioOffset < 0) {
           newStart = origStart - origAudioOffset;
@@ -115,9 +158,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         const newDuration = origDuration + (origStart - newStart);
         updateClip(clip.id, { startTime: newStart, duration: newDuration, audioOffset: newAudioOffset });
       } else {
-        // Dragging right edge: extends or crops the clip duration.
-        // No audio-buffer cap — if the clip exceeds the buffer, Web Audio pads
-        // with silence and the user can regenerate to fill the extra region.
         let newDuration = snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
@@ -125,14 +165,22 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       }
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (ev: MouseEvent) => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      setDragGhost(null);
+
+      if (mode === 'move' && dragRef.current) {
+        const closest = findClosestLane(ev.clientY);
+        if (closest && closest.trackId !== track.id) {
+          moveClipToTrack(clip.id, closest.trackId);
+        }
+      }
     };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, findClosestLane]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -194,9 +242,11 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   return (
     <>
       <div
+        ref={clipBlockRef}
         className={`absolute top-1 bottom-1 rounded-sm select-none overflow-hidden
           ${statusStyles[clip.generationStatus] ?? ''}
           ${isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-transparent' : ''}
+          ${dragGhost ? 'opacity-40' : ''}
         `}
         style={{
           left,
@@ -339,6 +389,45 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           clipId={clip.id}
           onClose={() => setEditModalOpen(false)}
         />
+      )}
+
+      {/* Cross-track drag ghost + target lane highlight */}
+      {dragGhost && (
+        <>
+          {/* Ghost preview following the cursor */}
+          <div
+            className="fixed pointer-events-none z-[100] rounded-sm overflow-hidden"
+            style={{
+              left: dragGhost.x,
+              top: dragGhost.y,
+              width: Math.min(dragGhost.width, 400),
+              height: dragGhost.height,
+              backgroundColor: hexToRgba(track.color, 0.5),
+              borderLeft: `2px solid ${track.color}`,
+              boxShadow: `0 4px 20px ${hexToRgba(track.color, 0.3)}, 0 0 0 1px ${hexToRgba(track.color, 0.4)}`,
+            }}
+          >
+            <div className="px-1.5 py-0.5 text-[9px] font-medium text-white truncate drop-shadow-sm">
+              {clip.prompt || track.displayName}
+            </div>
+          </div>
+
+          {/* Target lane highlight */}
+          {dragGhost.targetLaneRect && (
+            <div
+              className="fixed pointer-events-none z-[99]"
+              style={{
+                left: 0,
+                top: dragGhost.targetLaneRect.top,
+                width: '100vw',
+                height: dragGhost.targetLaneRect.height,
+                backgroundColor: hexToRgba(track.color, 0.08),
+                borderTop: `1px solid ${hexToRgba(track.color, 0.4)}`,
+                borderBottom: `1px solid ${hexToRgba(track.color, 0.4)}`,
+              }}
+            />
+          )}
+        </>
       )}
     </>
   );

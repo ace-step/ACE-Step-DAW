@@ -18,6 +18,9 @@ interface UIState {
   showKeyboardShortcutsDialog: boolean;
   showMixer: boolean;
   mixerHeight: number;
+  showAssetsPanel: boolean;
+  assetsPanelWidth: number;
+  trackListWidth: number;
   /** Global context window set by Cmd+drag on the timeline. */
   contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Multi-track select window set by non-Cmd drag on the timeline. */
@@ -43,6 +46,9 @@ interface UIState {
   setShowKeyboardShortcutsDialog: (v: boolean) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
+  setShowAssetsPanel: (v: boolean) => void;
+  setAssetsPanelWidth: (v: number) => void;
+  setTrackListWidth: (v: number) => void;
   setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setExpandedTrackId: (id: string | null) => void;
@@ -65,7 +71,10 @@ export const useUIStore = create<UIState>((set) => ({
   batchGenerateInitialRange: null,
   showKeyboardShortcutsDialog: false,
   showMixer: false,
-  mixerHeight: 260,
+  mixerHeight: 420,
+  showAssetsPanel: false,
+  assetsPanelWidth: 240,
+  trackListWidth: 220,
   contextWindow: null,
   selectWindow: null,
   expandedTrackId: null,
@@ -114,7 +123,10 @@ export const useUIStore = create<UIState>((set) => ({
   setBatchGenerateInitialRange: (v) => set({ batchGenerateInitialRange: v }),
   setShowKeyboardShortcutsDialog: (v) => set({ showKeyboardShortcutsDialog: v }),
   setShowMixer: (v) => set({ showMixer: v }),
-  setMixerHeight: (v) => set({ mixerHeight: Math.min(450, Math.max(160, v)) }),
+  setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
+  setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
+  setAssetsPanelWidth: (v) => set({ assetsPanelWidth: Math.min(500, Math.max(160, v)) }),
+  setTrackListWidth: (v) => set({ trackListWidth: Math.min(400, Math.max(120, v)) }),
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),

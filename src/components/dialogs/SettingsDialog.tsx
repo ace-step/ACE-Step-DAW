@@ -388,7 +388,7 @@ export function SettingsDialog() {
           )}
         </div>
 
-        <div className="px-4 pt-3 pb-1">
+        <div className="px-4 pt-3 pb-1 space-y-2">
           <a
             href="http://acestudio.ai/"
             target="_blank"

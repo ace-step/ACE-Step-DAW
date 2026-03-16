@@ -11,7 +11,7 @@ export function TransportBar() {
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
 
   return (
-    <div className="flex items-center h-10 px-3 gap-3 bg-daw-surface border-b border-daw-border">
+    <div className="flex items-center gap-3">
       <div className="flex items-center gap-1">
         <button
           onClick={stop}

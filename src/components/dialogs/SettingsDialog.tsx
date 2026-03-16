@@ -388,6 +388,18 @@ export function SettingsDialog() {
           )}
         </div>
 
+        <div className="px-4 pt-3 pb-1">
+          <a
+            href="http://acestudio.ai/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full px-3 py-2 rounded bg-gradient-to-r from-violet-900/40 to-indigo-900/40 border border-violet-700/30 hover:border-violet-600/50 transition-colors text-center"
+          >
+            <span className="text-[11px] text-zinc-400">For the best experience, try </span>
+            <span className="text-[11px] font-medium text-violet-300 hover:text-violet-200">ACE Studio →</span>
+          </a>
+        </div>
+
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
           <button
             onClick={() => setShow(false)}

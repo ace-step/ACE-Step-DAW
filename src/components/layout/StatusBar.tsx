@@ -32,6 +32,15 @@ export function StatusBar() {
       {activeJobs.length > 0 && (
         <span>Queue: {activeJobs.length}</span>
       )}
+      <span className="flex-1" />
+      <a
+        href="http://acestudio.ai/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-zinc-500 hover:text-violet-400 transition-colors"
+      >
+        ACE Studio ↗
+      </a>
     </div>
   );
 }

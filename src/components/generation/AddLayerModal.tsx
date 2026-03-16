@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
-import { generateFromAddLayer } from '../../services/generationPipeline';
+import { generateFromAddLayer, generateSingleClip } from '../../services/generationPipeline';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
 import { extractContextAudio } from '../../services/contextAudioExtractor';
 
@@ -13,6 +13,8 @@ interface Props {
   duration: number;
   contextWindow: { startTime: number; endTime: number } | null;
   onClose: () => void;
+  /** When set, the modal operates in edit mode for the existing clip. */
+  clipId?: string;
 }
 
 function fmt(s: number) {
@@ -25,15 +27,20 @@ function fmtTime(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-export function AddLayerModal({ trackId, startTime, duration, contextWindow, onClose }: Props) {
+export function AddLayerModal({ trackId, startTime, duration, contextWindow, onClose, clipId }: Props) {
   const project = useProjectStore((s) => s.project);
   const setTrackLocalCaption = useProjectStore((s) => s.setTrackLocalCaption);
+  const getClipById = useProjectStore((s) => s.getClipById);
+  const updateClip = useProjectStore((s) => s.updateClip);
+  const removeClip = useProjectStore((s) => s.removeClip);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
+
+  const isEditMode = !!clipId;
+  const existingClip = clipId ? getClipById(clipId) : null;
 
   const track = project?.tracks.find((t) => t.id === trackId);
   const isVocal = track ? VOCAL_TRACKS.has(track.trackName) : false;
 
-  // Pre-fill local caption from track's localCaption (or fall back to display name)
   const defaultLocalCaption = track?.localCaption ?? track?.displayName ?? '';
 
   const [selStart, setSelStart] = useState(startTime);
@@ -42,6 +49,12 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
   const [globalCaption, setGlobalCaption] = useState(project?.globalCaption ?? '');
   const [lyrics, setLyrics] = useState('');
   const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('auto');
+
+  // Advanced options (collapsed by default)
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sampleMode, setSampleMode] = useState(false);
+  const [autoExpandPrompt, setAutoExpandPrompt] = useState(true);
+  const [seedValue, setSeedValue] = useState('');
 
   // ── Context audio preview ──────────────────────────────────────────────────
   type PreviewState = 'idle' | 'loading' | 'playing';
@@ -68,8 +81,16 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
     setPreviewDuration(0);
   }, []);
 
-  // Stop preview on unmount
   useEffect(() => stopPreview, [stopPreview]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); stopPreview(); onClose(); }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose, stopPreview]);
 
   const handlePreviewContext = useCallback(async () => {
     if (previewState === 'playing') { stopPreview(); return; }
@@ -101,12 +122,26 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
     setPreviewCurrentTime(t);
   }, []);
 
+  // Initialize / reset form when props change
   useEffect(() => {
-    setSelStart(startTime);
-    setSelEnd(startTime + duration);
-    setLocalCaption(track?.localCaption ?? track?.displayName ?? '');
-    setGlobalCaption(project?.globalCaption ?? '');
-  }, [trackId, startTime, duration]);
+    if (isEditMode && existingClip) {
+      setSelStart(existingClip.startTime);
+      setSelEnd(existingClip.startTime + existingClip.duration);
+      setLocalCaption(existingClip.prompt || defaultLocalCaption);
+      setGlobalCaption(existingClip.globalCaption || project?.globalCaption || '');
+      setLyrics(existingClip.lyrics || '');
+      setSampleMode(existingClip.sampleMode ?? false);
+      setAutoExpandPrompt(existingClip.autoExpandPrompt ?? true);
+      setSeedValue('');
+    } else {
+      setSelStart(startTime);
+      setSelEnd(startTime + duration);
+      setLocalCaption(defaultLocalCaption);
+      setGlobalCaption(project?.globalCaption ?? '');
+      setLyrics('');
+      setSeedValue('');
+    }
+  }, [clipId, trackId, startTime, duration]);
 
   const handleRangeChange = useCallback((s: number, e: number) => {
     setSelStart(s);
@@ -124,23 +159,63 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
   const totalDur = project.totalDuration || 1;
   function pct(t: number) { return `${(t / totalDur) * 100}%`; }
 
-  const handleGenerate = async () => {
+  const parsedSeed = seedValue.trim() ? parseInt(seedValue, 10) : undefined;
+
+  const handleSave = () => {
+    if (!isEditMode || !clipId) return;
     stopPreview();
-    // Persist local caption back to the track if the user changed it
-    if (track && localCaption !== (track.localCaption ?? '')) {
+    updateClip(clipId, {
+      prompt: localCaption,
+      globalCaption,
+      lyrics: isVocal ? lyrics : '',
+      startTime: Math.max(0, selStart),
+      duration: Math.max(0.5, selEnd - selStart),
+      sampleMode,
+      autoExpandPrompt,
+    });
+    if (localCaption !== (track.localCaption ?? '')) {
       setTrackLocalCaption(trackId, localCaption);
     }
     onClose();
-    await generateFromAddLayer({
-      trackId,
-      startTime: selStart,
-      duration: selEnd - selStart,
-      localDescription: localCaption,
-      globalCaption,
-      lyrics: isVocal ? lyrics : '',
-      contextWindow,
-      chunkMaskMode,
-    });
+  };
+
+  const handleGenerate = async () => {
+    stopPreview();
+    if (localCaption !== (track.localCaption ?? '')) {
+      setTrackLocalCaption(trackId, localCaption);
+    }
+    onClose();
+
+    if (isEditMode && clipId) {
+      updateClip(clipId, {
+        prompt: localCaption,
+        globalCaption,
+        lyrics: isVocal ? lyrics : '',
+        startTime: Math.max(0, selStart),
+        duration: Math.max(0.5, selEnd - selStart),
+        sampleMode,
+        autoExpandPrompt,
+      });
+      await generateSingleClip(clipId, parsedSeed !== undefined ? { sharedSeed: parsedSeed } : undefined);
+    } else {
+      await generateFromAddLayer({
+        trackId,
+        startTime: selStart,
+        duration: selEnd - selStart,
+        localDescription: localCaption,
+        globalCaption,
+        lyrics: isVocal ? lyrics : '',
+        contextWindow,
+        chunkMaskMode,
+      });
+    }
+  };
+
+  const handleDelete = () => {
+    if (!clipId) return;
+    stopPreview();
+    removeClip(clipId);
+    onClose();
   };
 
   return (
@@ -152,7 +227,9 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-white">Add Layer</span>
+            <span className="text-sm font-semibold text-white">
+              {isEditMode ? 'Edit Clip' : 'Add Layer'}
+            </span>
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${modeBadgeClass}`}>
               {modeLabel}
             </span>
@@ -180,7 +257,6 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
                 : 'The model generates audio from silence for the Select Window.'}
             </p>
             <div className="relative w-full" style={{ height: '52px' }}>
-              {/* Track labels on left */}
               {hasContext && (
                 <span className="absolute left-0 text-[8px] text-blue-300 leading-none" style={{ top: '4px' }}>
                   Context
@@ -189,11 +265,8 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
               <span className={`absolute left-0 text-[8px] leading-none ${hasContext ? 'text-teal-300' : 'text-violet-300'}`} style={{ top: hasContext ? '24px' : '14px' }}>
                 Select
               </span>
-              {/* Timeline area — inset to leave room for labels */}
               <div className="absolute right-0" style={{ left: '44px', top: '0', bottom: '12px' }}>
-                {/* Base bar */}
                 <div className="absolute inset-x-0 bg-zinc-700 rounded" style={{ top: '50%', height: '2px', transform: 'translateY(-50%)' }} />
-                {/* Context window (blue) */}
                 {hasContext && (
                   <div
                     className="absolute rounded bg-blue-600/50 border border-blue-500/70"
@@ -205,7 +278,6 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
                     }}
                   />
                 )}
-                {/* Select window (teal or violet) */}
                 <div
                   className={`absolute rounded border ${hasContext ? 'bg-teal-600/50 border-teal-500/70' : 'bg-violet-600/50 border-violet-500/70'}`}
                   style={{
@@ -216,11 +288,9 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
                   }}
                 />
               </div>
-              {/* Time axis labels */}
               <span className="absolute text-[8px] text-zinc-600 bottom-0" style={{ left: '44px' }}>0s</span>
               <span className="absolute right-0 text-[8px] text-zinc-600 bottom-0">{project.totalDuration.toFixed(0)}s</span>
             </div>
-            {/* Legend */}
             <div className="flex items-center gap-3 mt-1">
               {hasContext && (
                 <span className="flex items-center gap-1 text-[8px] text-blue-300">
@@ -280,37 +350,56 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
           </div>
 
           {/* Local caption */}
-          <div>
-            <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
-              Track description
-              <span className="ml-1 normal-case font-normal text-zinc-600">(local caption)</span>
-            </label>
-            <textarea
-              value={localCaption}
-              onChange={(e) => setLocalCaption(e.target.value)}
-              placeholder={`Describe the ${track.displayName} sound…`}
-              rows={3}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-daw-accent"
-            />
-          </div>
+          {!sampleMode && (
+            <div>
+              <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
+                Track description
+                <span className="ml-1 normal-case font-normal text-zinc-600">(local caption)</span>
+              </label>
+              <textarea
+                value={localCaption}
+                onChange={(e) => setLocalCaption(e.target.value)}
+                placeholder={`Describe the ${track.displayName} sound…`}
+                rows={3}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          )}
+
+          {sampleMode && (
+            <div>
+              <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
+                Description
+              </label>
+              <textarea
+                value={localCaption}
+                onChange={(e) => setLocalCaption(e.target.value)}
+                placeholder="Describe the sample you want…"
+                rows={3}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          )}
 
           {/* Global caption */}
-          <div>
-            <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
-              Global song description
-              <span className="ml-1 normal-case font-normal text-zinc-600">(optional)</span>
-            </label>
-            <textarea
-              value={globalCaption}
-              onChange={(e) => setGlobalCaption(e.target.value)}
-              placeholder="e.g. upbeat pop song with energetic drums…"
-              rows={2}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-daw-accent"
-            />
-          </div>
+          {!sampleMode && (
+            <div>
+              <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
+                Global song description
+                <span className="ml-1 normal-case font-normal text-zinc-600">(optional)</span>
+              </label>
+              <textarea
+                value={globalCaption}
+                onChange={(e) => setGlobalCaption(e.target.value)}
+                placeholder="e.g. upbeat pop song with energetic drums…"
+                rows={2}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-daw-accent"
+              />
+            </div>
+          )}
 
-          {/* Lyrics (vocals only) */}
-          {isVocal && (
+          {/* Lyrics (vocals only, hidden in sample mode) */}
+          {isVocal && !sampleMode && (
             <div>
               <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
                 Lyrics
@@ -339,29 +428,150 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
               {chunkMaskMode === 'auto' ? 'Auto (model decides)' : 'Explicit (select window only)'}
             </button>
           </div>
+
+          {/* Advanced options (collapsed) */}
+          <div className="border-t border-zinc-800 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {showAdvanced ? '▾' : '▸'} Advanced options
+            </button>
+            {showAdvanced && (
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sampleMode}
+                      onChange={(e) => setSampleMode(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-900 accent-daw-accent"
+                    />
+                    <span className="text-[10px] text-zinc-400">Sample Mode</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoExpandPrompt}
+                      onChange={(e) => setAutoExpandPrompt(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-900 accent-daw-accent"
+                    />
+                    <span className="text-[10px] text-zinc-400">Auto-expand prompt</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-500 mb-1">Seed (optional)</label>
+                  <input
+                    type="number"
+                    value={seedValue}
+                    onChange={(e) => setSeedValue(e.target.value)}
+                    placeholder="Leave empty for random"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-daw-accent"
+                  />
+                  <p className="mt-1 text-[9px] text-zinc-600">
+                    Project: {project.bpm} BPM · {project.keyScale} · {project.timeSignature}/4
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Inferred metadata (edit mode only, when clip has been generated) */}
+          {isEditMode && existingClip?.generationStatus === 'ready' && existingClip.inferredMetas && (
+            <div className="border-t border-zinc-800 pt-2">
+              <p className="text-[9px] text-zinc-500 mb-1.5">Inferred by ACE-Step</p>
+              <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                {existingClip.inferredMetas.bpm != null && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500">BPM</span>
+                    <p className="text-[10px] text-zinc-300">{existingClip.inferredMetas.bpm}</p>
+                  </div>
+                )}
+                {existingClip.inferredMetas.keyScale && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500">Key</span>
+                    <p className="text-[10px] text-zinc-300">{existingClip.inferredMetas.keyScale}</p>
+                  </div>
+                )}
+                {existingClip.inferredMetas.timeSignature && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500">Time Sig</span>
+                    <p className="text-[10px] text-zinc-300">{existingClip.inferredMetas.timeSignature}</p>
+                  </div>
+                )}
+                {existingClip.inferredMetas.genres && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500">Genres</span>
+                    <p className="text-[10px] text-zinc-300 truncate">{existingClip.inferredMetas.genres}</p>
+                  </div>
+                )}
+                {existingClip.inferredMetas.seed && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500">Seed</span>
+                    <p className="text-[10px] text-zinc-300 truncate">{existingClip.inferredMetas.seed}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-daw-border">
-          <button
-            onClick={() => { stopPreview(); onClose(); }}
-            className="px-3 py-1.5 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
-              isGenerating
-                ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
-                : hasContext
-                  ? 'bg-teal-600 hover:bg-teal-500 text-white'
-                  : 'bg-violet-600 hover:bg-violet-500 text-white'
-            }`}
-          >
-            {isGenerating ? 'Generating…' : 'Generate'}
-          </button>
+          {isEditMode ? (
+            <>
+              <button
+                onClick={handleDelete}
+                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
+              >
+                Delete Clip
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
+                    isGenerating
+                      ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                      : hasContext
+                        ? 'bg-teal-600 hover:bg-teal-500 text-white'
+                        : 'bg-violet-600 hover:bg-violet-500 text-white'
+                  }`}
+                >
+                  {isGenerating ? 'Generating…' : 'Generate'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => { stopPreview(); onClose(); }}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
+                  isGenerating
+                    ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                    : hasContext
+                      ? 'bg-teal-600 hover:bg-teal-500 text-white'
+                      : 'bg-violet-600 hover:bg-violet-500 text-white'
+                }`}
+              >
+                {isGenerating ? 'Generating…' : 'Generate'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

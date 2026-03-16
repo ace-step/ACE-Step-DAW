@@ -1,5 +1,7 @@
 # ACE-Step DAW
 
+> **Looking for a full-featured, production-ready experience?** Try [ACE Studio](http://acestudio.ai/) — our professional AI music creation platform.
+
 A browser-based Digital Audio Workstation that uses [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) for AI music generation. Tracks are generated sequentially in a "LEGO-style" pipeline — each new instrument layer is musically aware of everything generated before it.
 
 ## Requirements
@@ -106,6 +108,10 @@ proxy: {
   },
 },
 ```
+
+## ACE Studio
+
+ACE-Step DAW is an open-source research demo. For professional music production with higher quality models, real-time collaboration, and a polished workflow, visit **[ACE Studio](http://acestudio.ai/)**.
 
 ## Tech Stack
 

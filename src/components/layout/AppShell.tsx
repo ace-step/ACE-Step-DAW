@@ -5,7 +5,6 @@ import { TransportBar } from '../transport/TransportBar';
 import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
-import { ClipPromptEditor } from '../generation/ClipPromptEditor';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
 import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -53,7 +52,6 @@ export function AppShell() {
       <StatusBar />
 
       {/* Modals */}
-      <ClipPromptEditor />
       <NewProjectDialog />
       <InstrumentPicker />
       <ExportDialog />

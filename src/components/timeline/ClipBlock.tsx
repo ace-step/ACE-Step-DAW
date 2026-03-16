@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -31,8 +31,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
 
-  // AddLayerModal trigger (from clip context menu "Add Layer here")
+  // AddLayerModal trigger (from clip context menu "Add Layer here" or "Edit Clip")
   const [addLayerOpen, setAddLayerOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Listen for external "edit clip" signal (keyboard shortcut E)
+  const editingClipId = useUIStore((s) => s.editingClipId);
+  useEffect(() => {
+    if (editingClipId === clip.id) {
+      setEditModalOpen(true);
+      setEditingClip(null);
+    }
+  }, [editingClipId, clip.id, setEditingClip]);
 
   // Version navigation
   const versions = clip.versions ?? [];
@@ -296,7 +306,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <ClipContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          onEdit={() => { closeCtxMenu(); setEditingClip(clip.id); }}
+          onEdit={() => { closeCtxMenu(); setEditModalOpen(true); }}
           onGenerate={() => { closeCtxMenu(); generateClip(clip.id); }}
           onRegenerate={() => { closeCtxMenu(); regenerateClip(clip.id); }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
@@ -316,6 +326,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           duration={clip.duration}
           contextWindow={contextWindow}
           onClose={() => setAddLayerOpen(false)}
+        />
+      )}
+
+      {/* Edit Clip — unified modal in edit mode */}
+      {editModalOpen && (
+        <AddLayerModal
+          trackId={track.id}
+          startTime={clip.startTime}
+          duration={clip.duration}
+          contextWindow={contextWindow}
+          clipId={clip.id}
+          onClose={() => setEditModalOpen(false)}
         />
       )}
     </>

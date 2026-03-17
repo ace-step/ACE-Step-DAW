@@ -79,6 +79,7 @@ export interface SequencerRow {
   sampleKey: string;      // built-in sample id or IndexedDB key for user sample
   steps: SequencerStep[];
   volume: number;         // 0–1
+  pan: number;            // -1 (full left) to +1 (full right), default 0
   muted: boolean;
   color: string;
 }

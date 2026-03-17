@@ -7,6 +7,20 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { getSample, cacheUserSample } from '../../services/sampleManager';
 import { DEFAULT_DRUM_KIT } from '../../constants/tracks';
 
+const FL = {
+  bg: '#2a2a2a',
+  rowBg: '#303030',
+  rowBgAlt: '#2d2d2d',
+  stepOff: '#3c3c3c',
+  beatBg: '#353535',
+  border: '#222222',
+  borderLight: '#444444',
+  barBorder: '#555555',
+  text: '#c0c0c0',
+  textDim: '#808080',
+  accent: '#5a9a3c',
+};
+
 const STEP_H = 24;
 const ROW_LABEL_W = 90;
 const VELOCITY_LANE_H = 44;
@@ -52,18 +66,15 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
   const totalSteps = pattern.stepsPerBar * pattern.bars;
   const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
   const patternDuration = stepDuration * totalSteps;
-
-  // Compute step width from BPM and zoom so it aligns with the timeline grid
   const stepW = Math.max(MIN_STEP_W, stepDuration * pixelsPerSecond);
   const patternWidthPx = totalSteps * stepW;
   const totalTimelineWidth = project.totalDuration * pixelsPerSecond;
+  const stepsPerBeat = pattern.stepsPerBar / 4;
 
-  // How many times the pattern tiles across the timeline
   const tileCount = patternDuration > 0
     ? Math.ceil(totalTimelineWidth / patternWidthPx)
     : 1;
 
-  // Current step highlight during playback
   const currentStep = isPlaying && patternDuration > 0
     ? Math.floor((currentTime % patternDuration) / stepDuration)
     : -1;
@@ -144,86 +155,95 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
     <div
       className="flex flex-col select-none"
       data-sequencer-grid
-      style={{ width: totalTimelineWidth, height, minHeight: height }}
+      style={{ width: totalTimelineWidth, height, minHeight: height, background: FL.bg }}
       onMouseDownCapture={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
     >
-      {/* Toolbar — sticky to the left edge via position:sticky */}
+      {/* Toolbar */}
       <div
-        className="flex items-center gap-2 px-2 bg-zinc-900/90 border-b border-zinc-700/50 text-[10px] shrink-0 sticky left-0 z-20 backdrop-blur-sm"
-        style={{ height: TOOLBAR_H }}
+        className="flex items-center gap-2 px-2 shrink-0 sticky left-0 z-20"
+        style={{ height: TOOLBAR_H, background: FL.bg, borderBottom: `1px solid ${FL.border}` }}
       >
-        <span className="text-emerald-400 font-bold text-[11px]">SEQ</span>
-        <div className="flex items-center gap-1">
-          <span className="text-zinc-500">Steps:</span>
+        <span style={{ color: FL.accent, fontWeight: 700, fontSize: 11 }}>SEQ</span>
+        <div className="flex items-center gap-1" style={{ fontSize: 10 }}>
+          <span style={{ color: FL.textDim }}>Steps:</span>
           <select
             value={pattern.stepsPerBar}
             onChange={(e) => setStepsPerBar(track.id, Number(e.target.value))}
-            className="bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-zinc-300 text-[10px]"
+            style={{ background: FL.stepOff, border: `1px solid ${FL.borderLight}`, borderRadius: 2, padding: '0 4px', color: FL.text, fontSize: 10 }}
           >
             <option value={8}>8</option>
             <option value={16}>16</option>
             <option value={32}>32</option>
           </select>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-zinc-500">Bars:</span>
+        <div className="flex items-center gap-1" style={{ fontSize: 10 }}>
+          <span style={{ color: FL.textDim }}>Bars:</span>
           <select
             value={pattern.bars}
             onChange={(e) => setBars(track.id, Number(e.target.value))}
-            className="bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-zinc-300 text-[10px]"
+            style={{ background: FL.stepOff, border: `1px solid ${FL.borderLight}`, borderRadius: 2, padding: '0 4px', color: FL.text, fontSize: 10 }}
           >
             {[1, 2, 4, 8].map((b) => (
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-zinc-500">Swing:</span>
+        <div className="flex items-center gap-1" style={{ fontSize: 10 }}>
+          <span style={{ color: FL.textDim }}>Swing:</span>
           <input
-            type="range"
-            min={0}
-            max={100}
+            type="range" min={0} max={100}
             value={Math.round(pattern.swing * 100)}
             onChange={(e) => updateSwing(track.id, Number(e.target.value) / 100)}
             className="w-14 h-1"
           />
-          <span className="text-zinc-400 w-6 text-right">{Math.round(pattern.swing * 100)}%</span>
+          <span style={{ color: FL.text, width: 24, textAlign: 'right' }}>{Math.round(pattern.swing * 100)}%</span>
         </div>
         <button
           onClick={() => {
             const next = availableSamples[pattern.rows.length % availableSamples.length];
             addRow(track.id, next.id, next.name, next.color);
           }}
-          className="ml-auto px-2 py-0.5 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 rounded text-[10px] transition-colors"
+          style={{
+            marginLeft: 'auto', padding: '1px 8px', borderRadius: 3,
+            background: FL.accent + '60', border: 'none', color: FL.accent, fontSize: 10,
+            cursor: 'pointer', fontWeight: 600,
+          }}
         >
           + Row
         </button>
       </div>
 
-      {/* Grid body — scrolls with the timeline horizontally */}
+      {/* Grid body */}
       <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
         <div className="flex" style={{ width: totalTimelineWidth }}>
-          {/* Row labels — sticky to left */}
-          <div className="sticky left-0 z-10 bg-zinc-900/95 shrink-0" style={{ width: ROW_LABEL_W }}>
-            {pattern.rows.map((row) => (
+          {/* Row labels */}
+          <div className="sticky left-0 z-10 shrink-0" style={{ width: ROW_LABEL_W, background: FL.bg }}>
+            {pattern.rows.map((row, rowIdx) => (
               <div
                 key={row.id}
-                className={`flex items-center border-b border-zinc-800/50 cursor-pointer ${
-                  selectedRow === row.id ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/20'
-                }`}
-                style={{ height: STEP_H }}
+                className="flex items-center"
+                style={{
+                  height: STEP_H,
+                  background: selectedRow === row.id ? '#3a3a3a' : rowIdx % 2 === 0 ? FL.rowBg : FL.rowBgAlt,
+                  borderBottom: `1px solid ${FL.border}`,
+                  cursor: 'pointer',
+                }}
                 onClick={() => setSelectedRow(row.id === selectedRow ? null : row.id)}
                 onContextMenu={(e) => handleRowContextMenu(row.id, e)}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
                 onDrop={(e) => handleFileDrop(row.id, e)}
               >
-                <div className="w-1 h-full shrink-0" style={{ backgroundColor: row.color }} />
+                <div style={{ width: 2, height: '100%', background: row.color }} className="shrink-0" />
                 <button
-                  className="flex-1 text-left text-[10px] text-zinc-300 truncate px-1.5 hover:text-white transition-colors"
-                  title={`${row.name} — click to change, drag audio to replace`}
+                  className="flex-1 text-left truncate"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 10, color: FL.text, padding: '0 4px',
+                  }}
+                  title={`${row.name} — click to change`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSamplePickerRow(samplePickerRow === row.id ? null : row.id);
@@ -232,16 +252,22 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
                   {row.name}
                 </button>
                 <button
-                  className={`w-5 h-4 text-[8px] font-bold rounded mr-0.5 transition-colors ${
-                    row.muted ? 'bg-amber-600 text-white' : 'bg-zinc-800 text-zinc-600 hover:text-zinc-400'
-                  }`}
+                  style={{
+                    width: 16, height: 14, fontSize: 8, fontWeight: 700, borderRadius: 2,
+                    marginRight: 2, border: 'none', cursor: 'pointer',
+                    background: row.muted ? '#c0392b' : FL.stepOff,
+                    color: row.muted ? '#fff' : FL.textDim,
+                  }}
                   onClick={(e) => { e.stopPropagation(); toggleRowMute(track.id, row.id); }}
                   title={row.muted ? 'Unmute' : 'Mute'}
                 >
                   M
                 </button>
                 <div
-                  className="w-6 h-3 bg-zinc-800 rounded-sm mr-1 cursor-ew-resize overflow-hidden"
+                  style={{
+                    width: 20, height: 10, background: FL.stepOff, borderRadius: 2,
+                    marginRight: 2, cursor: 'ew-resize', overflow: 'hidden',
+                  }}
                   title={`Vol: ${Math.round(row.volume * 100)}%`}
                   onMouseDown={(e) => {
                     e.stopPropagation();
@@ -260,8 +286,7 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
                   }}
                 >
                   <div
-                    className="h-full rounded-sm"
-                    style={{ width: `${row.volume * 100}%`, backgroundColor: row.color + '80' }}
+                    style={{ height: '100%', borderRadius: 2, width: `${row.volume * 100}%`, background: row.color + '80' }}
                   />
                 </div>
               </div>
@@ -298,32 +323,32 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
             )}
           </div>
 
-          {/* Step grid — tiled across the full timeline width */}
+          {/* Step grid */}
           <div className="relative" style={{ width: totalTimelineWidth - ROW_LABEL_W }}>
-            {pattern.rows.map((row) => (
-              <div key={row.id} className="flex border-b border-zinc-800/30" style={{ height: STEP_H }}>
+            {pattern.rows.map((row, rowIdx) => (
+              <div key={row.id} className="flex" style={{ height: STEP_H, borderBottom: `1px solid ${FL.border}` }}>
                 {Array.from({ length: tileCount }).map((_, tileIdx) => (
                   <div key={tileIdx} className="flex shrink-0" style={{ width: patternWidthPx }}>
                     {row.steps.map((step, idx) => {
-                      const isBeatStart = idx % (pattern.stepsPerBar / 4) === 0;
+                      const isBeatStart = idx % stepsPerBeat === 0;
                       const isBarStart = idx % pattern.stepsPerBar === 0 && idx > 0;
                       const isCurrent = idx === currentStep && isPlaying;
+                      const beatIdx = Math.floor(idx / stepsPerBeat);
+                      const isOddBeat = beatIdx % 2 === 1;
                       return (
                         <div
                           key={idx}
-                          className={`relative shrink-0 cursor-pointer ${
-                            isBarStart
-                              ? 'border-l border-l-zinc-500/50'
-                              : isBeatStart
-                                ? 'border-l border-l-zinc-700/40'
-                                : 'border-l border-l-zinc-800/20'
-                          } ${isCurrent ? 'ring-1 ring-inset ring-white/25' : ''}`}
+                          className="relative shrink-0"
                           style={{
                             width: stepW,
                             height: STEP_H,
-                            backgroundColor: step.active
-                              ? `${row.color}${Math.round(step.velocity * 180 + 55).toString(16).padStart(2, '0')}`
-                              : isCurrent ? 'rgba(255,255,255,0.04)' : undefined,
+                            borderLeft: isBarStart
+                              ? `1px solid ${FL.barBorder}`
+                              : isBeatStart
+                                ? `1px solid ${FL.borderLight}`
+                                : `1px solid ${FL.border}`,
+                            background: step.active ? undefined : (isOddBeat ? FL.beatBg : FL.stepOff),
+                            cursor: 'pointer',
                           }}
                           onClick={(e) => handleStepClick(row.id, idx, e)}
                           onContextMenu={(e) => {
@@ -334,11 +359,21 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
                         >
                           {step.active && (
                             <div
-                              className="absolute bottom-0 left-0 right-0 pointer-events-none"
                               style={{
-                                height: `${step.velocity * 100}%`,
-                                backgroundColor: row.color,
-                                opacity: 0.25,
+                                position: 'absolute', left: 1, top: 1, right: 1, bottom: 1,
+                                borderRadius: 2,
+                                background: row.color,
+                                opacity: 0.3 + step.velocity * 0.7,
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+                              }}
+                            />
+                          )}
+                          {isCurrent && (
+                            <div
+                              style={{
+                                position: 'absolute', inset: 0,
+                                border: '1px solid rgba(255,255,255,0.25)',
+                                pointerEvents: 'none',
                               }}
                             />
                           )}
@@ -348,27 +383,25 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
                   </div>
                 ))}
 
-                {/* Pattern tile separator lines */}
                 {tileCount > 1 && Array.from({ length: tileCount - 1 }).map((_, i) => (
                   <div
                     key={`sep-${i}`}
-                    className="absolute top-0 bottom-0 w-px bg-emerald-500/30 pointer-events-none"
-                    style={{ left: (i + 1) * patternWidthPx }}
+                    className="absolute top-0 bottom-0 pointer-events-none"
+                    style={{ left: (i + 1) * patternWidthPx, width: 1, background: `${FL.accent}40` }}
                   />
                 ))}
               </div>
             ))}
 
-            {/* Playhead overlay */}
             {isPlaying && currentStep >= 0 && (() => {
               const playheadX = currentTime * pixelsPerSecond - ROW_LABEL_W;
               if (playheadX < 0) return null;
               return (
                 <div
-                  className="absolute top-0 w-0.5 bg-white/40 pointer-events-none z-20"
+                  className="absolute top-0 pointer-events-none z-20"
                   style={{
-                    left: playheadX,
-                    height: gridRowsHeight,
+                    left: playheadX, width: 2, height: gridRowsHeight,
+                    background: 'rgba(255,255,255,0.4)', borderRadius: 1,
                   }}
                 />
               );
@@ -377,7 +410,7 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
         </div>
       </div>
 
-      {/* Velocity lane for selected row */}
+      {/* Velocity lane */}
       {showVelocity && selectedRow && (
         <VelocityLane
           track={track}
@@ -398,25 +431,33 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setRowCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowCtxMenu(null); }} />
           <div
-            className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded shadow-xl py-1 min-w-[140px]"
-            style={{ left: Math.min(rowCtxMenu.x, window.innerWidth - 160), top: Math.min(rowCtxMenu.y, window.innerHeight - 100) }}
+            className="fixed z-50 py-1"
+            style={{
+              left: Math.min(rowCtxMenu.x, window.innerWidth - 160),
+              top: Math.min(rowCtxMenu.y, window.innerHeight - 100),
+              background: FL.bg,
+              border: `1px solid ${FL.borderLight}`,
+              borderRadius: 4,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+              minWidth: 140,
+            }}
           >
             <button
               onClick={() => { clearRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors"
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: FL.text }}
             >
               Clear Steps
             </button>
             <button
               onClick={() => { previewSample(pattern.rows.find(r => r.id === rowCtxMenu.rowId)?.sampleKey ?? '', 0.8); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors"
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: FL.text }}
             >
               Preview Sound
             </button>
-            <div className="my-0.5 border-t border-zinc-800" />
+            <div style={{ margin: '2px 8px', height: 1, background: FL.border }} />
             <button
               onClick={() => { removeRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); if (selectedRow === rowCtxMenu.rowId) setSelectedRow(null); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-900/30 transition-colors"
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: '#e74c3c' }}
             >
               Delete Row
             </button>
@@ -448,12 +489,15 @@ function VelocityLane({
 }: VelocityLaneProps) {
   const row = pattern.rows.find((r) => r.id === rowId);
   if (!row) return null;
+  const stepsPerBeat = pattern.stepsPerBar / 4;
+  const VELOCITY_LANE_H = 44;
+  const ROW_LABEL_W = 90;
 
   return (
-    <div className="flex shrink-0 border-t border-zinc-700/50 bg-zinc-900/60" style={{ height: VELOCITY_LANE_H }}>
+    <div className="flex shrink-0" style={{ height: VELOCITY_LANE_H, borderTop: `1px solid ${FL.border}`, background: '#252525' }}>
       <div
-        className="shrink-0 flex items-center px-2 text-[9px] text-zinc-500 font-medium sticky left-0 z-10 bg-zinc-900/95"
-        style={{ width: ROW_LABEL_W }}
+        className="shrink-0 flex items-center px-2 sticky left-0 z-10"
+        style={{ width: ROW_LABEL_W, fontSize: 9, color: FL.textDim, fontWeight: 500, background: '#252525' }}
       >
         VEL — {row.name}
       </div>
@@ -462,13 +506,16 @@ function VelocityLane({
           <div key={tileIdx} className="flex items-end shrink-0" style={{ width: patternWidthPx }}>
             {row.steps.map((step, idx) => {
               const isCurrent = idx === currentStep && isPlaying;
+              const isBeatStart = idx % stepsPerBeat === 0;
               return (
                 <div
                   key={idx}
-                  className={`shrink-0 flex items-end justify-center cursor-ns-resize ${
-                    isCurrent ? 'bg-white/5' : ''
-                  }`}
-                  style={{ width: stepW, height: VELOCITY_LANE_H }}
+                  className="shrink-0 flex items-end justify-center cursor-ns-resize"
+                  style={{
+                    width: stepW, height: VELOCITY_LANE_H,
+                    borderLeft: isBeatStart ? `1px solid #333` : undefined,
+                    background: isCurrent ? 'rgba(255,255,255,0.03)' : undefined,
+                  }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -488,12 +535,12 @@ function VelocityLane({
                 >
                   {step.active && (
                     <div
-                      className="rounded-t-sm"
                       style={{
                         width: Math.max(4, stepW * 0.5),
                         height: `${step.velocity * 100}%`,
-                        backgroundColor: row.color,
-                        opacity: 0.8,
+                        background: `linear-gradient(to top, ${row.color}, ${row.color}cc)`,
+                        borderRadius: '2px 2px 0 0',
+                        opacity: 0.85,
                       }}
                     />
                   )}
@@ -520,20 +567,34 @@ function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview }: Samp
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute left-0 z-50 mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 w-44">
-        <div className="px-2 py-1 text-[9px] text-zinc-500 font-medium uppercase">Built-in Samples</div>
+      <div
+        className="absolute left-0 z-50 mt-1 py-1"
+        style={{
+          background: FL.bg,
+          border: `1px solid ${FL.borderLight}`,
+          borderRadius: 4,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          width: 170,
+        }}
+      >
+        <div style={{ padding: '4px 8px', fontSize: 9, color: FL.textDim, fontWeight: 600, textTransform: 'uppercase' }}>
+          Built-in Samples
+        </div>
         {DEFAULT_DRUM_KIT.map((kit) => (
           <button
             key={kit.id}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 text-[10px] hover:bg-zinc-800 transition-colors text-left ${
-              currentKey === kit.id ? 'text-emerald-400' : 'text-zinc-300'
-            }`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              padding: '3px 8px', fontSize: 10, border: 'none', cursor: 'pointer',
+              background: 'transparent', textAlign: 'left',
+              color: currentKey === kit.id ? FL.accent : FL.text,
+            }}
             onClick={() => onSelect(kit.id, kit.name)}
             onMouseEnter={() => onPreview(kit.id)}
           >
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: kit.color }} />
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: kit.color }} />
             <span>{kit.name}</span>
-            {currentKey === kit.id && <span className="ml-auto text-emerald-400">✓</span>}
+            {currentKey === kit.id && <span style={{ marginLeft: 'auto', color: FL.accent }}>✓</span>}
           </button>
         ))}
       </div>

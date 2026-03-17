@@ -1,16 +1,51 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import type { Track } from '../../types/project';
+import type { SequencerRow } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { getSample, cacheUserSample } from '../../services/sampleManager';
 import { ALL_DRUM_SAMPLES } from '../../constants/tracks';
 import { bounceSequencerToAudio } from '../../services/sequencerBounce';
+import { MiniKnob } from './MiniKnob';
 
-const STEP_W = 36;
-const STEP_H = 40;
-const ROW_LABEL_W = 200;
-const VELOCITY_LANE_H = 56;
+/* ── FL Studio-inspired palette ─────────────────────────────────────── */
+const FL = {
+  bg: '#2a2a2a',
+  bgAlt: '#2d2d2d',
+  rowBg: '#303030',
+  rowBgAlt: '#2d2d2d',
+  headerBg: '#1e1e1e',
+  stepOff: '#3c3c3c',
+  stepOffHover: '#454545',
+  beatBg: '#353535',
+  border: '#222222',
+  borderLight: '#444444',
+  barBorder: '#555555',
+  text: '#c0c0c0',
+  textDim: '#808080',
+  textBright: '#e0e0e0',
+  accent: '#5a9a3c',
+  accentBright: '#7ec55a',
+  muteLed: '#2a2a2a',
+  muteActive: '#5a9a3c',
+  graphBg: '#252525',
+  graphGrid: '#333333',
+};
+
+type RowSize = 'compact' | 'normal' | 'expanded';
+const ROW_SIZES: Record<RowSize, { stepH: number; stepW: number }> = {
+  compact: { stepH: 20, stepW: 22 },
+  normal: { stepH: 28, stepW: 28 },
+  expanded: { stepH: 36, stepW: 34 },
+};
+
+const ROW_LABEL_W = 160;
+const GRAPH_H = 64;
+
+const ROW_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e',
+  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e',
+];
 
 export function SequencerEditor() {
   const trackId = useUIStore((s) => s.openSequencerTrackId);
@@ -29,6 +64,7 @@ export function SequencerEditor() {
   const batchSetSteps = useProjectStore((s) => s.batchSetSequencerSteps);
   const toggleRowMute = useProjectStore((s) => s.toggleSequencerRowMute);
   const setRowVolume = useProjectStore((s) => s.setSequencerRowVolume);
+  const setRowPan = useProjectStore((s) => s.setSequencerRowPan);
   const removeRow = useProjectStore((s) => s.removeSequencerRow);
   const clearRow = useProjectStore((s) => s.clearSequencerRow);
   const updateSwing = useProjectStore((s) => s.updateSequencerSwing);
@@ -37,11 +73,20 @@ export function SequencerEditor() {
   const addRow = useProjectStore((s) => s.addSequencerRow);
   const setRowSample = useProjectStore((s) => s.setSequencerRowSample);
   const initPattern = useProjectStore((s) => s.initSequencerPattern);
+  const reorderRows = useProjectStore((s) => s.reorderSequencerRows);
+  const cloneRow = useProjectStore((s) => s.cloneSequencerRow);
+  const renameRow = useProjectStore((s) => s.renameSequencerRow);
+  const setRowColor = useProjectStore((s) => s.setSequencerRowColor);
+  const fillRow = useProjectStore((s) => s.fillSequencerRow);
 
+  const [rowSize, setRowSize] = useState<RowSize>('normal');
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [samplePickerRow, setSamplePickerRow] = useState<string | null>(null);
   const [showAddInstrument, setShowAddInstrument] = useState(false);
-  const [rowCtxMenu, setRowCtxMenu] = useState<{ rowId: string; x: number; y: number } | null>(null);
+  const [rowCtxMenu, setRowCtxMenu] = useState<{
+    rowId: string; x: number; y: number;
+    showColorPicker?: boolean; renamingName?: string;
+  } | null>(null);
   const [isBouncing, setIsBouncing] = useState(false);
   const [soloRowId, setSoloRowId] = useState<string | null>(null);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -55,20 +100,27 @@ export function SequencerEditor() {
   const togglePreviewRef = useRef<() => void>(() => {});
   const paintStateRef = useRef<{ rowId: string; paintActive: boolean } | null>(null);
 
-  // Marquee selection state
   const [selection, setSelection] = useState<{
     rowStart: number; rowEnd: number; stepStart: number; stepEnd: number;
   } | null>(null);
   const marqueeRef = useRef<{
     anchorRowIdx: number; anchorStepIdx: number; active: boolean;
   } | null>(null);
-  // Shift-drag copy state
   const shiftDragRef = useRef<{
     origSelection: { rowStart: number; rowEnd: number; stepStart: number; stepEnd: number };
     anchorStepIdx: number;
     lastOffset: number;
   } | null>(null);
   const [copyGhostOffset, setCopyGhostOffset] = useState<number | null>(null);
+
+  // Row drag-reorder state
+  const [dragRowIdx, setDragRowIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  // Inline rename state
+  const [inlineRenameRowId, setInlineRenameRowId] = useState<string | null>(null);
+  const [inlineRenameValue, setInlineRenameValue] = useState('');
+  const inlineRenameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (track && !track.sequencerPattern) {
@@ -110,7 +162,6 @@ export function SequencerEditor() {
     [selection],
   );
 
-  // Keyboard shortcuts: Space = play/stop, Escape = close or clear selection
   useEffect(() => {
     if (!trackId) return;
     const handler = (e: KeyboardEvent) => {
@@ -163,17 +214,26 @@ export function SequencerEditor() {
     return () => window.removeEventListener('keydown', handler, true);
   }, [trackId, closeEditor, stopPreview]);
 
+  useEffect(() => {
+    if (inlineRenameRowId && inlineRenameInputRef.current) {
+      inlineRenameInputRef.current.focus();
+      inlineRenameInputRef.current.select();
+    }
+  }, [inlineRenameRowId]);
+
   if (!trackId || !track || !project) return null;
 
   const pattern = track.sequencerPattern;
   if (!pattern) return null;
 
+  const { stepH, stepW } = ROW_SIZES[rowSize];
   const bpm = project.bpm;
   const totalSteps = pattern.stepsPerBar * pattern.bars;
   const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
   const patternDuration = stepDuration * totalSteps;
   const currentStep = isPreviewPlaying ? previewStep : -1;
-  const gridWidth = totalSteps * STEP_W;
+  const gridWidth = totalSteps * stepW;
+  const stepsPerBeat = pattern.stepsPerBar / 4;
 
   function isRowAudible(rowId: string, muted: boolean): boolean {
     if (soloRowId) return rowId === soloRowId;
@@ -216,8 +276,11 @@ export function SequencerEditor() {
           source.buffer = buffer;
           const gain = ctx.createGain();
           gain.gain.value = step.velocity * row.volume;
+          const pan = ctx.createStereoPanner();
+          pan.pan.value = row.pan ?? 0;
           source.connect(gain);
-          gain.connect(ctx.destination);
+          gain.connect(pan);
+          pan.connect(ctx.destination);
           source.start(time);
           sources.push(source);
         }
@@ -248,7 +311,6 @@ export function SequencerEditor() {
     if (isPreviewPlaying) stopPreview();
     else startPreview();
   };
-
   togglePreviewRef.current = togglePreview;
 
   const previewSample = async (sampleKey: string, velocity: number) => {
@@ -267,6 +329,8 @@ export function SequencerEditor() {
 
   const getRowIdx = (rowId: string): number => pattern.rows.findIndex((r) => r.id === rowId);
 
+  /* ── Grid interaction handlers ──────────────────────────────────────── */
+
   const handleGridMouseDown = (rowId: string, stepIdx: number, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -275,7 +339,6 @@ export function SequencerEditor() {
     if (rowIdx < 0) return;
 
     if (e.shiftKey && selection) {
-      // Shift+drag on existing selection: start copy-drag
       const rMin = Math.min(selection.rowStart, selection.rowEnd);
       const rMax = Math.max(selection.rowStart, selection.rowEnd);
       const sMin = Math.min(selection.stepStart, selection.stepEnd);
@@ -339,7 +402,6 @@ export function SequencerEditor() {
       }
     }
 
-    // Not shift-drag-copy: prepare for marquee or single-click toggle
     marqueeRef.current = { anchorRowIdx: rowIdx, anchorStepIdx: stepIdx, active: false };
 
     const onMove = (ev: MouseEvent) => {
@@ -383,7 +445,6 @@ export function SequencerEditor() {
     e.preventDefault();
 
     if (e.shiftKey) {
-      // Shift+click: start paint mode — toggle this step and drag to paint same state
       const row = pattern.rows.find((r) => r.id === rowId);
       if (!row) return;
       const wasActive = row.steps[stepIdx]?.active ?? false;
@@ -416,7 +477,6 @@ export function SequencerEditor() {
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     } else {
-      // Normal click: toggle single step
       toggleStep(track.id, rowId, stepIdx);
       const row = pattern.rows.find((r) => r.id === rowId);
       if (row) {
@@ -485,119 +545,231 @@ export function SequencerEditor() {
     window.addEventListener('mouseup', onUp);
   };
 
-  const stepsPerBeat = pattern.stepsPerBar / 4;
+  const commitInlineRename = () => {
+    if (inlineRenameRowId && inlineRenameValue.trim()) {
+      renameRow(track.id, inlineRenameRowId, inlineRenameValue.trim());
+    }
+    setInlineRenameRowId(null);
+    setInlineRenameValue('');
+  };
+
+  /* ── Row drag-reorder ───────────────────────────────────────────────── */
+
+  const handleRowDragStart = (idx: number, e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    setDragRowIdx(idx);
+  };
+
+  const handleRowDragOver = (idx: number, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIdx(idx);
+  };
+
+  const handleRowDrop = (idx: number) => {
+    if (dragRowIdx !== null && dragRowIdx !== idx) {
+      reorderRows(track.id, dragRowIdx, idx);
+    }
+    setDragRowIdx(null);
+    setDragOverIdx(null);
+  };
+
+  /* ── Render ─────────────────────────────────────────────────────────── */
 
   return (
     <div
-      className="border-t border-zinc-700 bg-zinc-900 flex flex-col select-none"
-      style={{ height: editorHeight }}
+      className="flex flex-col select-none"
+      style={{ height: editorHeight, background: FL.bg }}
       tabIndex={-1}
     >
       {/* Resize handle */}
       <div
-        className="h-1 cursor-ns-resize bg-zinc-800 hover:bg-indigo-500/40 transition-colors shrink-0"
+        className="h-1 cursor-ns-resize shrink-0"
+        style={{ background: FL.headerBg }}
         onMouseDown={onResizeStart}
-      />
-
-      {/* Header bar */}
-      <div className="flex items-center gap-3 px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
-        <span className="text-emerald-400 font-bold text-xs">STEP SEQUENCER</span>
-        <span className="text-zinc-500 text-[10px]">{track.displayName}</span>
-
-        <div className="flex items-center gap-2 ml-4">
-          <label className="flex items-center gap-1 text-[10px] text-zinc-400">
-            Steps/Bar:
-            <select
-              value={pattern.stepsPerBar}
-              onChange={(e) => setStepsPerBar(track.id, Number(e.target.value))}
-              className="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-200 text-[10px]"
-            >
-              <option value={8}>8</option>
-              <option value={16}>16</option>
-              <option value={32}>32</option>
-            </select>
-          </label>
-          <div className="flex items-center gap-1 text-[10px] text-zinc-400">
-            Bars:
-            <button
-              onClick={() => { if (pattern.bars > 1) setBars(track.id, pattern.bars - 1); }}
-              disabled={pattern.bars <= 1}
-              className="w-5 h-5 flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-[10px] font-bold"
-            >
-              -
-            </button>
-            <span className="text-zinc-200 w-5 text-center font-medium">{pattern.bars}</span>
-            <button
-              onClick={() => setBars(track.id, pattern.bars + 1)}
-              className="w-5 h-5 flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 text-[10px] font-bold"
-            >
-              +
-            </button>
-          </div>
-          <label className="flex items-center gap-1 text-[10px] text-zinc-400">
-            Swing:
-            <input
-              type="range" min={0} max={100}
-              value={Math.round(pattern.swing * 100)}
-              onChange={(e) => updateSwing(track.id, Number(e.target.value) / 100)}
-              className="w-16 h-1"
-            />
-            <span className="text-zinc-300 w-8 text-right">{Math.round(pattern.swing * 100)}%</span>
-          </label>
-        </div>
-
-        <div className="flex items-center gap-1.5 ml-auto">
-          <button
-            onClick={togglePreview}
-            className={`px-3 py-1 rounded text-[10px] font-medium transition-colors ${
-              isPreviewPlaying
-                ? 'bg-amber-600/80 hover:bg-amber-600 text-white'
-                : 'bg-zinc-700/80 hover:bg-zinc-600 text-zinc-200'
-            }`}
-            title="Space to toggle"
-          >
-            {isPreviewPlaying ? '■ Stop' : '▶ Play'}
-          </button>
-          <button
-            onClick={handleBounce}
-            disabled={isBouncing}
-            className="px-3 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded text-[10px] font-medium transition-colors disabled:opacity-50 disabled:cursor-wait"
-          >
-            {isBouncing ? 'Bouncing...' : 'Bounce to Audio'}
-          </button>
-          <button
-            onClick={() => { stopPreview(); closeEditor(null); }}
-            className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded text-[10px] transition-colors"
-            title="Esc"
-          >
-            Close
-          </button>
-        </div>
+      >
+        <div className="mx-auto mt-px" style={{ width: 40, height: 2, borderRadius: 1, background: FL.borderLight }} />
       </div>
 
-      {/* Grid area */}
+      {/* ── Header toolbar ────────────────────────────────────────────── */}
+      <div
+        className="flex items-center gap-2 px-3 shrink-0"
+        style={{ height: 32, background: FL.headerBg, borderBottom: `1px solid ${FL.border}` }}
+      >
+        {/* Channel rack icon */}
+        <div className="flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="1" y="1" width="5" height="5" rx="1" fill={FL.accent} />
+            <rect x="8" y="1" width="5" height="5" rx="1" fill={FL.accent} opacity="0.5" />
+            <rect x="1" y="8" width="5" height="5" rx="1" fill={FL.accent} opacity="0.5" />
+            <rect x="8" y="8" width="5" height="5" rx="1" fill={FL.accent} opacity="0.3" />
+          </svg>
+          <span style={{ color: FL.accentBright, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
+            CHANNEL RACK
+          </span>
+        </div>
+
+        <span style={{ color: FL.textDim, fontSize: 10 }}>{track.displayName}</span>
+
+        {/* Steps/bar segmented control */}
+        <div className="flex items-center gap-1 ml-3" style={{ fontSize: 10 }}>
+          <span style={{ color: FL.textDim }}>Steps:</span>
+          <div className="flex" style={{ borderRadius: 3, overflow: 'hidden', border: `1px solid ${FL.borderLight}` }}>
+            {[8, 16, 32].map((v) => (
+              <button
+                key={v}
+                onClick={() => setStepsPerBar(track.id, v)}
+                style={{
+                  padding: '1px 6px',
+                  fontSize: 10,
+                  fontWeight: pattern.stepsPerBar === v ? 700 : 400,
+                  color: pattern.stepsPerBar === v ? FL.textBright : FL.textDim,
+                  background: pattern.stepsPerBar === v ? FL.accent : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bars +/- */}
+        <div className="flex items-center gap-1" style={{ fontSize: 10 }}>
+          <span style={{ color: FL.textDim }}>Bars:</span>
+          <button
+            onClick={() => { if (pattern.bars > 1) setBars(track.id, pattern.bars - 1); }}
+            disabled={pattern.bars <= 1}
+            style={{
+              width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: FL.stepOff, border: `1px solid ${FL.borderLight}`, borderRadius: 2,
+              color: pattern.bars <= 1 ? FL.border : FL.text, cursor: pattern.bars <= 1 ? 'not-allowed' : 'pointer',
+              fontSize: 12, fontWeight: 700, lineHeight: 1,
+            }}
+          >
+            -
+          </button>
+          <span style={{ color: FL.textBright, width: 18, textAlign: 'center', fontWeight: 600 }}>{pattern.bars}</span>
+          <button
+            onClick={() => setBars(track.id, pattern.bars + 1)}
+            style={{
+              width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: FL.stepOff, border: `1px solid ${FL.borderLight}`, borderRadius: 2,
+              color: FL.text, cursor: 'pointer', fontSize: 12, fontWeight: 700, lineHeight: 1,
+            }}
+          >
+            +
+          </button>
+        </div>
+
+        {/* Swing knob */}
+        <div className="flex items-center gap-1">
+          <MiniKnob
+            value={pattern.swing}
+            min={0}
+            max={1}
+            size={20}
+            color={FL.accentBright}
+            label="Swing"
+            onChange={(v) => updateSwing(track.id, v)}
+          />
+        </div>
+
+        {/* Row size toggle */}
+        <div className="flex items-center gap-0.5 ml-2" style={{ fontSize: 9 }}>
+          {(['compact', 'normal', 'expanded'] as RowSize[]).map((sz) => (
+            <button
+              key={sz}
+              onClick={() => setRowSize(sz)}
+              title={sz}
+              style={{
+                width: sz === 'compact' ? 12 : sz === 'normal' ? 14 : 16,
+                height: sz === 'compact' ? 8 : sz === 'normal' ? 10 : 12,
+                borderRadius: 2,
+                border: `1px solid ${rowSize === sz ? FL.accentBright : FL.borderLight}`,
+                background: rowSize === sz ? FL.accent + '60' : 'transparent',
+                cursor: 'pointer',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Play / Bounce / Close */}
+        <button
+          onClick={togglePreview}
+          style={{
+            padding: '2px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, border: 'none', cursor: 'pointer',
+            background: isPreviewPlaying ? '#c0392b' : FL.accent,
+            color: '#fff',
+          }}
+          title="Space to toggle"
+        >
+          {isPreviewPlaying ? '■ Stop' : '▶ Play'}
+        </button>
+        <button
+          onClick={handleBounce}
+          disabled={isBouncing}
+          style={{
+            padding: '2px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, border: 'none', cursor: 'pointer',
+            background: '#2980b9', color: '#fff', opacity: isBouncing ? 0.5 : 1,
+          }}
+        >
+          {isBouncing ? 'Bouncing...' : 'Bounce'}
+        </button>
+        <button
+          onClick={() => { stopPreview(); closeEditor(null); }}
+          style={{
+            padding: '2px 8px', borderRadius: 3, fontSize: 10, border: `1px solid ${FL.borderLight}`,
+            background: 'transparent', color: FL.textDim, cursor: 'pointer',
+          }}
+          title="Esc"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* ── Grid area ─────────────────────────────────────────────────── */}
       <div ref={gridScrollRef} className="flex-1 overflow-auto relative" style={{ minHeight: 0 }}>
         <div className="flex" style={{ minWidth: ROW_LABEL_W + gridWidth }}>
-          {/* Row labels (sticky left, Logic Pro-inspired layout) */}
-          <div className="sticky left-0 z-10 bg-zinc-900 shrink-0 border-r border-zinc-800/60" style={{ width: ROW_LABEL_W }}>
-            {/* Header spacer aligned with beat numbers */}
-            <div className="border-b border-zinc-700/40" style={{ height: 18 }} />
 
-            {pattern.rows.map((row) => {
+          {/* ── Row labels (sticky left) ──────────────────────────────── */}
+          <div
+            className="sticky left-0 z-10 shrink-0"
+            style={{ width: ROW_LABEL_W, background: FL.bg, borderRight: `1px solid ${FL.border}` }}
+          >
+            {/* Beat header spacer */}
+            <div style={{ height: 18, borderBottom: `1px solid ${FL.border}` }} />
+
+            {pattern.rows.map((row, rowIdx) => {
               const isSoloed = soloRowId === row.id;
               const audible = isRowAudible(row.id, row.muted);
+              const isSelected = selectedRow === row.id;
+              const isDragTarget = dragOverIdx === rowIdx && dragRowIdx !== rowIdx;
+
               return (
                 <div
                   key={row.id}
-                  className={`grid items-center border-b border-zinc-800/50 group ${
-                    selectedRow === row.id ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/20'
-                  }`}
+                  draggable
+                  onDragStart={(e) => handleRowDragStart(rowIdx, e)}
+                  onDragOver={(e) => handleRowDragOver(rowIdx, e)}
+                  onDragEnd={() => { setDragRowIdx(null); setDragOverIdx(null); }}
+                  onDrop={() => handleRowDrop(rowIdx)}
+                  className="flex items-center"
                   style={{
-                    height: STEP_H,
-                    gridTemplateColumns: '4px 24px 1fr 24px 24px',
-                    gap: '0 4px',
-                    paddingRight: 6,
-                    opacity: audible ? 1 : 0.4,
+                    height: stepH,
+                    background: isSelected ? '#3a3a3a' : rowIdx % 2 === 0 ? FL.rowBg : FL.rowBgAlt,
+                    borderBottom: `1px solid ${FL.border}`,
+                    borderTop: isDragTarget ? `2px solid ${FL.accentBright}` : '2px solid transparent',
+                    opacity: audible ? 1 : 0.35,
+                    cursor: 'default',
+                    gap: 2,
+                    paddingLeft: 2,
+                    paddingRight: 3,
                   }}
                   onClick={() => setSelectedRow(row.id === selectedRow ? null : row.id)}
                   onContextMenu={(e) => {
@@ -605,63 +777,100 @@ export function SequencerEditor() {
                     e.stopPropagation();
                     setRowCtxMenu({ rowId: row.id, x: e.clientX, y: e.clientY });
                   }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-                  onDrop={(e) => handleFileDrop(row.id, e)}
+                  onDragOverCapture={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+                  onDropCapture={(dontUse) => { /* handled by onDrop */ }}
                 >
-                  {/* Color indicator */}
-                  <div className="h-full rounded-r" style={{ backgroundColor: row.color }} />
+                  {/* Drag handle + color bar */}
+                  <div
+                    className="shrink-0 cursor-grab"
+                    style={{ width: 4, height: stepH - 4, borderRadius: 2, background: row.color }}
+                    title="Drag to reorder"
+                  />
 
-                  {/* Play preview button */}
-                  <button
-                    className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white rounded hover:bg-zinc-700/60 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); previewSample(row.sampleKey, 0.8); }}
-                    title="Preview sound"
-                  >
-                    <svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor">
-                      <path d="M0 0 L10 6 L0 12 Z" />
-                    </svg>
-                  </button>
-
-                  {/* Instrument name */}
-                  <button
-                    className="text-left text-xs text-zinc-200 truncate px-1 hover:text-white transition-colors font-medium cursor-pointer"
-                    title={`${row.name} — click to pick sample`}
+                  {/* LED mute indicator */}
+                  <div
+                    className="shrink-0 cursor-pointer"
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: row.muted ? FL.muteLed : isSoloed ? '#f1c40f' : FL.muteActive,
+                      border: `1px solid ${FL.borderLight}`,
+                      boxShadow: row.muted ? 'none' : isSoloed ? '0 0 4px #f1c40f80' : `0 0 4px ${FL.muteActive}80`,
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSamplePickerRow(samplePickerRow === row.id ? null : row.id);
+                      toggleRowMute(track.id, row.id);
                     }}
-                  >
-                    {row.name}
-                  </button>
-
-                  {/* Mute button */}
-                  <button
-                    className={`w-6 h-6 text-[10px] font-bold rounded flex items-center justify-center transition-colors ${
-                      row.muted
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700'
-                    }`}
-                    onClick={(e) => { e.stopPropagation(); toggleRowMute(track.id, row.id); }}
-                    title={row.muted ? 'Unmute' : 'Mute'}
-                  >
-                    M
-                  </button>
-
-                  {/* Solo button */}
-                  <button
-                    className={`w-6 h-6 text-[10px] font-bold rounded flex items-center justify-center transition-colors ${
-                      isSoloed
-                        ? 'bg-yellow-500 text-zinc-900'
-                        : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700'
-                    }`}
-                    onClick={(e) => {
+                    onContextMenu={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       setSoloRowId(isSoloed ? null : row.id);
                     }}
-                    title={isSoloed ? 'Unsolo' : 'Solo'}
-                  >
-                    S
-                  </button>
+                    title={row.muted ? 'Unmute (click) / Solo (right-click)' : isSoloed ? 'Unsolo (right-click)' : 'Mute (click) / Solo (right-click)'}
+                  />
+
+                  {/* Pan knob */}
+                  <MiniKnob
+                    value={row.pan ?? 0}
+                    min={-1}
+                    max={1}
+                    size={16}
+                    color="#3498db"
+                    onChange={(v) => setRowPan(track.id, row.id, v)}
+                    bipolar
+                  />
+
+                  {/* Volume knob */}
+                  <MiniKnob
+                    value={row.volume}
+                    min={0}
+                    max={1}
+                    size={16}
+                    color={FL.accentBright}
+                    onChange={(v) => setRowVolume(track.id, row.id, v)}
+                  />
+
+                  {/* Channel name button */}
+                  {inlineRenameRowId === row.id ? (
+                    <input
+                      ref={inlineRenameInputRef}
+                      value={inlineRenameValue}
+                      onChange={(e) => setInlineRenameValue(e.target.value)}
+                      onBlur={commitInlineRename}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitInlineRename();
+                        if (e.key === 'Escape') { setInlineRenameRowId(null); setInlineRenameValue(''); }
+                      }}
+                      className="flex-1 min-w-0"
+                      style={{
+                        background: FL.stepOff, border: `1px solid ${FL.accent}`, borderRadius: 3,
+                        color: FL.textBright, fontSize: 10, padding: '0 4px', outline: 'none',
+                        height: Math.min(stepH - 6, 20),
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <button
+                      className="flex-1 min-w-0 text-left truncate"
+                      style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        color: isSelected ? FL.textBright : FL.text,
+                        fontSize: 10, fontWeight: isSelected ? 600 : 400,
+                        padding: '0 3px', lineHeight: 1.2,
+                      }}
+                      title={`${row.name} — click to select, double-click to rename`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSamplePickerRow(samplePickerRow === row.id ? null : row.id);
+                      }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setInlineRenameRowId(row.id);
+                        setInlineRenameValue(row.name);
+                      }}
+                    >
+                      {row.name}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -669,13 +878,24 @@ export function SequencerEditor() {
             {/* Add instrument row */}
             <div className="relative">
               <button
-                className="flex items-center gap-2 w-full px-3 border-b border-zinc-800/50 text-zinc-500 hover:text-emerald-400 hover:bg-zinc-800/40 transition-colors"
-                style={{ height: STEP_H }}
+                className="flex items-center gap-2 w-full"
+                style={{
+                  height: stepH,
+                  padding: '0 8px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `1px solid ${FL.border}`,
+                  color: FL.textDim,
+                  fontSize: 10,
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = FL.accentBright; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = FL.textDim; }}
                 onClick={() => setShowAddInstrument(!showAddInstrument)}
                 title="Add instrument"
               >
-                <span className="text-sm font-bold">+</span>
-                <span className="text-[11px]">Add Instrument...</span>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>+</span>
+                <span>Add Channel...</span>
               </button>
               {showAddInstrument && (
                 <SamplePickerDropdown
@@ -691,7 +911,6 @@ export function SequencerEditor() {
               )}
             </div>
 
-            {/* Sample picker dropdown for existing rows */}
             {samplePickerRow && (
               <SamplePickerDropdown
                 currentKey={pattern.rows.find((r) => r.id === samplePickerRow)?.sampleKey ?? ''}
@@ -723,10 +942,10 @@ export function SequencerEditor() {
             )}
           </div>
 
-          {/* Step grid */}
+          {/* ── Step grid ─────────────────────────────────────────────── */}
           <div className="relative">
             {/* Beat/bar number header */}
-            <div className="flex border-b border-zinc-700/40" style={{ height: 18 }}>
+            <div className="flex" style={{ height: 18, borderBottom: `1px solid ${FL.border}` }}>
               {Array.from({ length: totalSteps }).map((_, idx) => {
                 const isBeatStart = idx % stepsPerBeat === 0;
                 const isBarStart = idx % pattern.stepsPerBar === 0;
@@ -735,25 +954,36 @@ export function SequencerEditor() {
                 return (
                   <div
                     key={idx}
-                    className="shrink-0 flex items-center justify-center text-[8px] font-medium border-l"
+                    className="shrink-0 flex items-center justify-center"
                     style={{
-                      width: STEP_W,
-                      borderColor: isBarStart ? 'rgba(161,161,170,0.4)' : isBeatStart ? 'rgba(113,113,122,0.25)' : 'rgba(63,63,70,0.15)',
-                      color: isBarStart ? '#a1a1aa' : isBeatStart ? '#71717a' : 'transparent',
+                      width: stepW,
+                      fontSize: 8,
+                      fontWeight: isBarStart ? 700 : 500,
+                      color: isBarStart ? FL.text : isBeatStart ? FL.textDim : 'transparent',
+                      borderLeft: isBarStart
+                        ? `1px solid ${FL.barBorder}`
+                        : isBeatStart
+                          ? `1px solid ${FL.borderLight}`
+                          : `1px solid ${FL.border}`,
                     }}
                   >
                     {isBarStart ? `${barNum}` : isBeatStart ? `${beatNum}` : ''}
                   </div>
                 );
               })}
-              {/* Extend button in header row */}
               <button
-                className="shrink-0 flex items-center justify-center text-zinc-600 hover:text-emerald-400 hover:bg-zinc-800/60 transition-colors border-l border-zinc-700/30"
-                style={{ width: STEP_W * 2, height: 18 }}
+                className="shrink-0 flex items-center justify-center"
+                style={{
+                  width: stepW * 2, height: 18,
+                  background: 'transparent', border: 'none', borderLeft: `1px solid ${FL.borderLight}`,
+                  color: FL.textDim, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = FL.accentBright; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = FL.textDim; }}
                 onClick={() => setBars(track.id, pattern.bars + 1)}
                 title="Add 1 bar"
               >
-                <span className="text-[10px] font-bold">+1</span>
+                +1
               </button>
             </div>
 
@@ -763,14 +993,20 @@ export function SequencerEditor() {
               return (
                 <div
                   key={row.id}
-                  className="flex border-b border-zinc-800/30"
-                  style={{ height: STEP_H, opacity: audible ? 1 : 0.35 }}
+                  className="flex"
+                  style={{
+                    height: stepH,
+                    opacity: audible ? 1 : 0.3,
+                    borderBottom: `1px solid ${FL.border}`,
+                  }}
                 >
                   {row.steps.map((step, idx) => {
                     const isBeatStart = idx % stepsPerBeat === 0;
                     const isBarStart = idx % pattern.stepsPerBar === 0;
                     const isCurrent = idx === currentStep && isPreviewPlaying;
                     const selected = isInSelection(rowIdx, idx);
+                    const beatIdx = Math.floor(idx / stepsPerBeat);
+                    const isOddBeat = beatIdx % 2 === 1;
 
                     let isGhost = false;
                     if (copyGhostOffset !== null && copyGhostOffset !== 0 && selection) {
@@ -789,24 +1025,26 @@ export function SequencerEditor() {
                       }
                     }
 
+                    const cellBg = step.active
+                      ? undefined
+                      : isOddBeat ? FL.beatBg : FL.stepOff;
+
                     return (
                       <div
                         key={idx}
                         data-seq-step={idx}
                         data-seq-row={row.id}
-                        className={`relative shrink-0 cursor-pointer transition-all duration-75 ${
-                          isBarStart
-                            ? 'border-l border-l-zinc-500/40'
-                            : isBeatStart
-                              ? 'border-l border-l-zinc-700/30'
-                              : 'border-l border-l-zinc-800/15'
-                        } ${isCurrent ? 'ring-1 ring-inset ring-white/30' : ''}`}
+                        className="shrink-0 relative"
                         style={{
-                          width: STEP_W,
-                          height: STEP_H,
-                          backgroundColor: step.active
-                            ? `${row.color}${Math.round(step.velocity * 180 + 55).toString(16).padStart(2, '0')}`
-                            : isCurrent ? 'rgba(255,255,255,0.03)' : undefined,
+                          width: stepW,
+                          height: stepH,
+                          borderLeft: isBarStart
+                            ? `1px solid ${FL.barBorder}`
+                            : isBeatStart
+                              ? `1px solid ${FL.borderLight}`
+                              : `1px solid ${FL.border}`,
+                          background: cellBg,
+                          cursor: 'pointer',
                         }}
                         onMouseDown={(e) => handleGridMouseDown(row.id, idx, e)}
                         onContextMenu={(e) => {
@@ -815,56 +1053,106 @@ export function SequencerEditor() {
                           handleVelocityMouseDown(row.id, idx, e);
                         }}
                       >
-                        {step.active && (
+                        {/* Step button (FL-style rounded pill) */}
+                        {step.active ? (
                           <div
-                            className="absolute inset-1 rounded-sm pointer-events-none"
                             style={{
-                              backgroundColor: row.color,
-                              opacity: 0.2 + step.velocity * 0.5,
+                              position: 'absolute',
+                              left: 2, top: 2,
+                              right: 2, bottom: 2,
+                              borderRadius: 3,
+                              background: row.color,
+                              opacity: 0.3 + step.velocity * 0.7,
+                              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.3)`,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 2, top: 2,
+                              right: 2, bottom: 2,
+                              borderRadius: 3,
+                              background: isOddBeat ? '#393939' : '#363636',
+                              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.4), inset 0 -1px 0 rgba(255,255,255,0.03)',
                             }}
                           />
                         )}
-                        {selected && (
+
+                        {/* Playhead highlight */}
+                        {isCurrent && (
                           <div
-                            className="absolute inset-0 pointer-events-none border-2 border-cyan-400/60"
-                            style={{ backgroundColor: 'rgba(34,211,238,0.08)' }}
+                            style={{
+                              position: 'absolute', inset: 0,
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              borderRadius: 3,
+                              pointerEvents: 'none',
+                            }}
                           />
                         )}
+
+                        {/* Selection overlay */}
+                        {selected && (
+                          <div
+                            style={{
+                              position: 'absolute', inset: 0,
+                              border: '2px solid #3498db80',
+                              background: 'rgba(52,152,219,0.1)',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                        )}
+
+                        {/* Copy ghost */}
                         {isGhost && !step.active && (
                           <div
-                            className="absolute inset-1 rounded-sm pointer-events-none"
                             style={{
-                              backgroundColor: row.color,
+                              position: 'absolute',
+                              left: 2, top: 2, right: 2, bottom: 2,
+                              borderRadius: 3,
+                              background: row.color,
                               opacity: 0.35,
-                              border: '1px dashed rgba(34,211,238,0.5)',
+                              border: '1px dashed rgba(52,152,219,0.6)',
                             }}
                           />
                         )}
                       </div>
                     );
                   })}
-                  {/* Extend button per row */}
+
+                  {/* Extend button */}
                   <div
-                    className="shrink-0 flex items-center justify-center text-zinc-700 hover:text-emerald-400 hover:bg-zinc-800/40 cursor-pointer transition-colors border-l border-zinc-700/30"
-                    style={{ width: STEP_W * 2, height: STEP_H }}
+                    className="shrink-0 flex items-center justify-center cursor-pointer"
+                    style={{
+                      width: stepW * 2, height: stepH,
+                      borderLeft: `1px solid ${FL.borderLight}`,
+                      color: FL.textDim, fontSize: 16,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = FL.accentBright; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = FL.textDim; }}
                     onClick={() => setBars(track.id, pattern.bars + 1)}
                     title="Add 1 bar"
                   >
-                    <span className="text-lg font-light">+</span>
+                    +
                   </div>
                 </div>
               );
             })}
 
-            {/* Playhead */}
+            {/* Playhead line */}
             {isPreviewPlaying && currentStep >= 0 && (
               <div
-                className="absolute w-0.5 bg-white/50 pointer-events-none z-20"
                 style={{
-                  left: currentStep * STEP_W + STEP_W / 2,
+                  position: 'absolute',
+                  left: currentStep * stepW + stepW / 2,
                   top: 18,
-                  height: pattern.rows.length * STEP_H,
+                  width: 2,
+                  height: pattern.rows.length * stepH,
+                  background: 'rgba(255,255,255,0.5)',
+                  pointerEvents: 'none',
+                  zIndex: 20,
                   transition: 'left 60ms linear',
+                  borderRadius: 1,
                 }}
               />
             )}
@@ -872,35 +1160,64 @@ export function SequencerEditor() {
         </div>
       </div>
 
-      {/* Velocity lane for selected row */}
+      {/* ── Graph Editor (velocity lane) ──────────────────────────────── */}
       {selectedRow && (() => {
         const row = pattern.rows.find((r) => r.id === selectedRow);
         if (!row) return null;
         return (
-          <div className="flex shrink-0 border-t border-zinc-700/50 bg-zinc-900/80" style={{ height: VELOCITY_LANE_H }}>
+          <div className="shrink-0 flex" style={{ height: GRAPH_H, borderTop: `1px solid ${FL.border}` }}>
+            {/* Label + tabs */}
             <div
-              className="shrink-0 flex items-center px-2 text-[9px] text-zinc-500 font-medium bg-zinc-900"
-              style={{ width: ROW_LABEL_W }}
+              className="shrink-0 flex flex-col justify-center px-2"
+              style={{ width: ROW_LABEL_W, background: FL.graphBg }}
             >
-              VEL — {row.name}
+              <div className="flex items-center gap-1.5">
+                <div style={{ width: 3, height: 12, borderRadius: 1, background: row.color }} />
+                <span style={{ fontSize: 9, color: FL.text, fontWeight: 600 }}>VELOCITY</span>
+              </div>
+              <span style={{ fontSize: 8, color: FL.textDim, marginTop: 2 }}>{row.name}</span>
             </div>
-            <div className="flex items-end overflow-hidden">
+
+            {/* Graph bars */}
+            <div
+              className="flex items-end overflow-hidden relative"
+              style={{ background: FL.graphBg, flex: 1 }}
+            >
+              {/* Horizontal grid lines */}
+              {[0.25, 0.5, 0.75].map((pct) => (
+                <div
+                  key={pct}
+                  style={{
+                    position: 'absolute',
+                    left: 0, right: 0,
+                    bottom: `${pct * 100}%`,
+                    height: 1,
+                    background: FL.graphGrid,
+                    pointerEvents: 'none',
+                  }}
+                />
+              ))}
+
               {row.steps.map((step, idx) => {
                 const isCurrent = idx === currentStep && isPreviewPlaying;
+                const isBeatStart = idx % stepsPerBeat === 0;
                 return (
                   <div
                     key={idx}
-                    className={`shrink-0 flex items-end justify-center cursor-ns-resize ${
-                      isCurrent ? 'bg-white/5' : ''
-                    }`}
-                    style={{ width: STEP_W, height: VELOCITY_LANE_H }}
+                    className="shrink-0 flex items-end justify-center cursor-ns-resize"
+                    style={{
+                      width: stepW,
+                      height: GRAPH_H,
+                      borderLeft: isBeatStart ? `1px solid ${FL.graphGrid}` : undefined,
+                      background: isCurrent ? 'rgba(255,255,255,0.03)' : undefined,
+                    }}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       const rect = e.currentTarget.getBoundingClientRect();
                       const update = (ev: MouseEvent) => {
                         const pct = 1 - Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-                        setStepVelocity(track.id, selectedRow, idx, Math.max(0.05, pct));
+                        setStepVelocity(track.id, selectedRow!, idx, Math.max(0.05, pct));
                       };
                       update(e.nativeEvent);
                       const onUp = () => {
@@ -913,12 +1230,13 @@ export function SequencerEditor() {
                   >
                     {step.active && (
                       <div
-                        className="rounded-t-sm"
                         style={{
-                          width: Math.max(6, STEP_W * 0.5),
+                          width: Math.max(4, stepW * 0.6),
                           height: `${step.velocity * 100}%`,
-                          backgroundColor: row.color,
-                          opacity: 0.85,
+                          background: `linear-gradient(to top, ${row.color}, ${row.color}cc)`,
+                          borderRadius: '2px 2px 0 0',
+                          opacity: 0.9,
+                          boxShadow: `0 0 4px ${row.color}40`,
                         }}
                       />
                     )}
@@ -930,43 +1248,127 @@ export function SequencerEditor() {
         );
       })()}
 
-      {/* Row context menu */}
+      {/* ── Context menu ──────────────────────────────────────────────── */}
       {rowCtxMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setRowCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowCtxMenu(null); }} />
           <div
-            className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded shadow-xl py-1 min-w-[150px]"
-            style={{ left: Math.min(rowCtxMenu.x, window.innerWidth - 170), top: Math.min(rowCtxMenu.y, window.innerHeight - 120) }}
+            className="fixed z-50 py-1"
+            style={{
+              left: Math.min(rowCtxMenu.x, window.innerWidth - 180),
+              top: Math.min(rowCtxMenu.y, window.innerHeight - 260),
+              background: FL.headerBg,
+              border: `1px solid ${FL.borderLight}`,
+              borderRadius: 4,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+              minWidth: 160,
+            }}
           >
-            <button
+            <CtxMenuItem
+              label="Rename / Color..."
+              onClick={() => {
+                setInlineRenameRowId(rowCtxMenu.rowId);
+                const r = pattern.rows.find((r) => r.id === rowCtxMenu.rowId);
+                setInlineRenameValue(r?.name ?? '');
+                setRowCtxMenu(null);
+              }}
+            />
+            <CtxMenuSep />
+
+            {/* Color swatches */}
+            <div style={{ padding: '4px 8px', display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+              {ROW_COLORS.map((c) => (
+                <div
+                  key={c}
+                  style={{
+                    width: 14, height: 14, borderRadius: 3, background: c, cursor: 'pointer',
+                    border: pattern.rows.find((r) => r.id === rowCtxMenu.rowId)?.color === c
+                      ? '2px solid #fff' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                  onClick={() => {
+                    setRowColor(track.id, rowCtxMenu.rowId, c);
+                    setRowCtxMenu(null);
+                  }}
+                />
+              ))}
+            </div>
+            <CtxMenuSep />
+
+            <CtxMenuItem
+              label="Clone Channel"
+              onClick={() => { cloneRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); }}
+            />
+            <CtxMenuSep />
+
+            <CtxMenuItem
+              label="Fill every 2 steps"
+              onClick={() => { fillRow(track.id, rowCtxMenu.rowId, 2); setRowCtxMenu(null); }}
+            />
+            <CtxMenuItem
+              label="Fill every 4 steps"
+              onClick={() => { fillRow(track.id, rowCtxMenu.rowId, 4); setRowCtxMenu(null); }}
+            />
+            <CtxMenuItem
+              label="Fill every 8 steps"
+              onClick={() => { fillRow(track.id, rowCtxMenu.rowId, 8); setRowCtxMenu(null); }}
+            />
+            <CtxMenuSep />
+
+            <CtxMenuItem
+              label="Clear Steps"
               onClick={() => { clearRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors"
-            >
-              Clear Steps
-            </button>
-            <button
-              onClick={() => { previewSample(pattern.rows.find(r => r.id === rowCtxMenu.rowId)?.sampleKey ?? '', 0.8); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors"
-            >
-              Preview Sound
-            </button>
-            <div className="my-0.5 border-t border-zinc-800" />
-            <button
+            />
+            <CtxMenuItem
+              label="Preview Sound"
+              onClick={() => {
+                previewSample(pattern.rows.find((r) => r.id === rowCtxMenu.rowId)?.sampleKey ?? '', 0.8);
+              }}
+            />
+            <CtxMenuSep />
+
+            <CtxMenuItem
+              label="Delete Channel"
+              danger
               onClick={() => {
                 if (soloRowId === rowCtxMenu.rowId) setSoloRowId(null);
                 removeRow(track.id, rowCtxMenu.rowId);
                 setRowCtxMenu(null);
                 if (selectedRow === rowCtxMenu.rowId) setSelectedRow(null);
               }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-900/30 transition-colors"
-            >
-              Delete Row
-            </button>
+            />
           </div>
         </>
       )}
     </div>
   );
+}
+
+/* ── Context Menu Item ────────────────────────────────────────────── */
+
+function CtxMenuItem({ label, onClick, danger }: { label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left',
+        padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer',
+        background: 'transparent',
+        color: danger ? '#e74c3c' : FL.text,
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.background = danger ? 'rgba(231,76,60,0.15)' : FL.stepOff;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.background = 'transparent';
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CtxMenuSep() {
+  return <div style={{ margin: '2px 8px', height: 1, background: FL.border }} />;
 }
 
 /* ── Sample Picker Dropdown ─────────────────────────────────────────── */
@@ -976,10 +1378,9 @@ interface SamplePickerDropdownProps {
   onSelect: (key: string, name: string) => void;
   onClose: () => void;
   onPreview: (key: string) => void;
-  onImportFile?: () => void;
 }
 
-function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview, onImportFile }: SamplePickerDropdownProps) {
+function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview }: SamplePickerDropdownProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -998,28 +1399,50 @@ function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview, onImpo
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute left-0 z-50 mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 w-48">
-        <div className="px-2 py-1 text-[9px] text-zinc-500 font-medium uppercase">Built-in Samples</div>
+      <div
+        className="absolute left-0 z-50 mt-1 py-1"
+        style={{
+          background: FL.headerBg,
+          border: `1px solid ${FL.borderLight}`,
+          borderRadius: 4,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          width: 180,
+        }}
+      >
+        <div style={{ padding: '4px 8px', fontSize: 9, color: FL.textDim, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Built-in Samples
+        </div>
         {ALL_DRUM_SAMPLES.map((kit) => (
           <button
             key={kit.id}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 text-[11px] hover:bg-zinc-800 transition-colors text-left ${
-              currentKey === kit.id ? 'text-emerald-400' : 'text-zinc-300'
-            }`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              padding: '4px 8px', fontSize: 11, border: 'none', cursor: 'pointer',
+              background: 'transparent', textAlign: 'left',
+              color: currentKey === kit.id ? FL.accentBright : FL.text,
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = FL.stepOff; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
             onClick={() => onSelect(kit.id, kit.name)}
-            onMouseEnter={() => onPreview(kit.id)}
+            onMouseDown={() => onPreview(kit.id)}
           >
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: kit.color }} />
-            <span>{kit.name}</span>
-            {currentKey === kit.id && <span className="ml-auto text-emerald-400">✓</span>}
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: kit.color }} />
+            <span style={{ flex: 1 }}>{kit.name}</span>
+            {currentKey === kit.id && <span style={{ color: FL.accentBright }}>✓</span>}
           </button>
         ))}
-        <div className="my-0.5 border-t border-zinc-800" />
+        <div style={{ margin: '2px 8px', height: 1, background: FL.border }} />
         <button
-          className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] text-amber-400 hover:bg-zinc-800 transition-colors text-left"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            padding: '4px 8px', fontSize: 11, border: 'none', cursor: 'pointer',
+            background: 'transparent', textAlign: 'left', color: '#f39c12',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = FL.stepOff; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
           onClick={() => fileInputRef.current?.click()}
         >
-          <span className="text-sm">📂</span>
+          <span style={{ fontSize: 12 }}>📂</span>
           <span>Import Audio...</span>
         </button>
         <input

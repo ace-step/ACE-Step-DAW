@@ -85,9 +85,15 @@ interface ProjectState {
   setSequencerStepsPerBar: (trackId: string, stepsPerBar: number) => void;
   setSequencerBars: (trackId: string, bars: number) => void;
   setSequencerRowVolume: (trackId: string, rowId: string, volume: number) => void;
+  setSequencerRowPan: (trackId: string, rowId: string, pan: number) => void;
   toggleSequencerRowMute: (trackId: string, rowId: string) => void;
   setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string) => void;
   clearSequencerRow: (trackId: string, rowId: string) => void;
+  reorderSequencerRows: (trackId: string, fromIndex: number, toIndex: number) => void;
+  cloneSequencerRow: (trackId: string, rowId: string) => void;
+  renameSequencerRow: (trackId: string, rowId: string, name: string) => void;
+  setSequencerRowColor: (trackId: string, rowId: string, color: string) => void;
+  fillSequencerRow: (trackId: string, rowId: string, every: number) => void;
   batchSetSequencerSteps: (trackId: string, ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[]) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
@@ -283,6 +289,7 @@ export const useProjectStore = create<ProjectState>()(
           sampleKey: kit.id,
           steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
           volume: 0.8,
+          pan: 0,
           muted: false,
           color: kit.color,
         })),
@@ -867,6 +874,7 @@ export const useProjectStore = create<ProjectState>()(
       sampleKey: kit.id,
       steps: Array.from({ length: totalSteps }, emptyStep),
       volume: 0.8,
+      pan: 0,
       muted: false,
       color: kit.color,
     }));
@@ -962,6 +970,7 @@ export const useProjectStore = create<ProjectState>()(
             sampleKey: sampleId,
             steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
             volume: 0.8,
+            pan: 0,
             muted: false,
             color,
           };
@@ -1099,6 +1108,29 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSequencerRowPan: (trackId, rowId, pan) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, pan: Math.max(-1, Math.min(1, pan)) } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
   toggleSequencerRowMute: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
@@ -1165,6 +1197,129 @@ export const useProjectStore = create<ProjectState>()(
                   ? { ...r, steps: r.steps.map((s) => ({ ...s, active: false })) }
                   : r,
               ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  reorderSequencerRows: (trackId, fromIndex, toIndex) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          const rows = [...t.sequencerPattern.rows];
+          const [moved] = rows.splice(fromIndex, 1);
+          if (!moved) return t;
+          rows.splice(toIndex, 0, moved);
+          return { ...t, sequencerPattern: { ...t.sequencerPattern, rows } };
+        }),
+      },
+    });
+  },
+
+  cloneSequencerRow: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          const idx = t.sequencerPattern.rows.findIndex((r) => r.id === rowId);
+          if (idx < 0) return t;
+          const orig = t.sequencerPattern.rows[idx];
+          const clone: SequencerRow = {
+            ...orig,
+            id: uuidv4(),
+            name: `${orig.name} copy`,
+            steps: orig.steps.map((s) => ({ ...s })),
+          };
+          const rows = [...t.sequencerPattern.rows];
+          rows.splice(idx + 1, 0, clone);
+          return { ...t, sequencerPattern: { ...t.sequencerPattern, rows } };
+        }),
+      },
+    });
+  },
+
+  renameSequencerRow: (trackId, rowId, name) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, name } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerRowColor: (trackId, rowId, color) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, color } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  fillSequencerRow: (trackId, rowId, every) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                return {
+                  ...r,
+                  steps: r.steps.map((s, i) =>
+                    i % every === 0 ? { ...s, active: true } : s,
+                  ),
+                };
+              }),
             },
           };
         }),

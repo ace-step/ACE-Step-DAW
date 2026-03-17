@@ -42,7 +42,8 @@ export async function bounceSequencerToAudio(
   const renderDuration = patternDuration + maxSampleDuration;
   const renderLength = Math.ceil(renderDuration * sampleRate);
 
-  const offCtx = new OfflineAudioContext(1, renderLength, sampleRate);
+  const numChannels = pattern.rows.some((r) => (r.pan ?? 0) !== 0) ? 2 : 1;
+  const offCtx = new OfflineAudioContext(numChannels, renderLength, sampleRate);
 
   for (const row of pattern.rows) {
     if (row.muted) continue;
@@ -65,7 +66,14 @@ export async function bounceSequencerToAudio(
       const gain = offCtx.createGain();
       gain.gain.value = step.velocity * row.volume;
       source.connect(gain);
-      gain.connect(offCtx.destination);
+      if (numChannels === 2 && (row.pan ?? 0) !== 0) {
+        const panner = offCtx.createStereoPanner();
+        panner.pan.value = row.pan ?? 0;
+        gain.connect(panner);
+        panner.connect(offCtx.destination);
+      } else {
+        gain.connect(offCtx.destination);
+      }
       source.start(time);
     }
   }
@@ -76,13 +84,15 @@ export async function bounceSequencerToAudio(
   const trimLength = Math.ceil(patternDuration * sampleRate);
   const trimmed = new AudioBuffer({
     length: trimLength,
-    numberOfChannels: 1,
+    numberOfChannels: numChannels,
     sampleRate,
   });
-  const srcData = rendered.getChannelData(0);
-  const dstData = trimmed.getChannelData(0);
-  for (let i = 0; i < trimLength && i < srcData.length; i++) {
-    dstData[i] = srcData[i];
+  for (let ch = 0; ch < numChannels; ch++) {
+    const srcData = rendered.getChannelData(ch);
+    const dstData = trimmed.getChannelData(ch);
+    for (let i = 0; i < trimLength && i < srcData.length; i++) {
+      dstData[i] = srcData[i];
+    }
   }
 
   const wavBlob = audioBufferToWavBlob(trimmed);

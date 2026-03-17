@@ -66,15 +66,11 @@ export async function regenerateClip(clipId: string): Promise<void> {
   genStore.setIsGenerating(true);
 
   try {
-    const store = useProjectStore.getState();
-    // Save the current "ready" state as a version before overwriting
-    store.saveClipVersion(clipId);
-
     const previousBlob = await getPreviousCumulativeBlob(clipId);
     await generateClipInternal(clipId, previousBlob, {});
 
     // Save the newly generated result as the latest version
-    store.saveClipVersion(clipId);
+    useProjectStore.getState().saveClipVersion(clipId);
   } finally {
     useGenerationStore.getState().setIsGenerating(false);
   }
@@ -93,6 +89,9 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
     const previousBlob = await getPreviousCumulativeBlob(clipId);
     console.log(`[GenerationPipeline] generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
     await generateClipInternal(clipId, previousBlob, options ? { sharedSeed: options.sharedSeed } : {});
+
+    // Save as version so the version arrows appear immediately
+    useProjectStore.getState().saveClipVersion(clipId);
   } finally {
     useGenerationStore.getState().setIsGenerating(false);
   }
@@ -359,9 +358,9 @@ async function generateClipInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.floor(clipStart * sampleRate);
+    const startSample = Math.round(clipStart * sampleRate);
     const endSample = Math.min(
-      Math.floor((clipStart + clipDuration) * sampleRate),
+      Math.round((clipStart + clipDuration) * sampleRate),
       fullBuffer.length,
     );
     const trimmedLength = Math.max(1, endSample - startSample);
@@ -473,6 +472,8 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
           }),
         ),
       );
+      const store = useProjectStore.getState();
+      for (const { clipId } of tracks) store.saveClipVersion(clipId);
     } else {
       // Context mode — sequential; each track's output feeds the next
       let previousCumulativeBlob: Blob | null = null;
@@ -506,6 +507,7 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
         firstCall = false;
         prevClipId = clipId;
         previousCumulativeBlob = await generateClipInternal(clipId, previousCumulativeBlob, opts);
+        useProjectStore.getState().saveClipVersion(clipId);
       }
     }
   } finally {
@@ -574,6 +576,8 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       lyricsOverride: opts.lyrics,
       chunkMaskMode: opts.chunkMaskMode,
     });
+
+    useProjectStore.getState().saveClipVersion(clip.id);
   } finally {
     useGenerationStore.getState().setIsGenerating(false);
   }
@@ -649,6 +653,8 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
           }),
         ),
       );
+      const st = useProjectStore.getState();
+      for (const { clipId } of batchTracks) st.saveClipVersion(clipId);
     } else {
       // Context mode — sequential generation, each builds on previous
       let previousCumulativeBlob = contextBlob;
@@ -669,6 +675,7 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
         }
         prevClipId = clipId;
         previousCumulativeBlob = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
+        useProjectStore.getState().saveClipVersion(clipId);
       }
     }
   } finally {

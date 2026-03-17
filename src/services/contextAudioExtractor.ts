@@ -16,7 +16,11 @@ export interface ContextWindow {
 
 /**
  * Render all ready clips that overlap `contextWindow` into a single mixed WAV blob
- * cropped to exactly the context window duration.
+ * whose time axis starts at project time 0 (not ctxStart).
+ *
+ * The backend assumes src_audio sample 0 = project time 0, so we must produce
+ * a blob that spans [0, ctxEnd] to keep repainting_start / repainting_end
+ * (which use absolute project times) aligned with the audio content.
  *
  * Returns null if no clips have audio in the context window range.
  */
@@ -27,11 +31,10 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
 
   const ctxStart = ctx.startTime;
   const ctxEnd = ctx.endTime;
-  const ctxDuration = ctxEnd - ctxStart;
-  if (ctxDuration <= 0) return null;
+  if (ctxEnd <= ctxStart) return null;
 
   const sampleRate = 48000;
-  const frameLength = Math.ceil(ctxDuration * sampleRate);
+  const frameLength = Math.ceil(ctxEnd * sampleRate);
   const offlineCtx = new OfflineAudioContext(2, frameLength, sampleRate);
 
   const soloActive = project.tracks.some((t) => t.soloed);
@@ -99,8 +102,9 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
         }
       }
 
-      // Schedule at the correct offset within the context window
-      const scheduleTime = overlapStart - ctxStart;
+      // Schedule at absolute project time so the blob's time axis matches
+      // the repainting_start / repainting_end coordinates sent to the backend
+      const scheduleTime = overlapStart;
       const source = offlineCtx.createBufferSource();
       source.buffer = cropped;
       source.connect(offlineCtx.destination);

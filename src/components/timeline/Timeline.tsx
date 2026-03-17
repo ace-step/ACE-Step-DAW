@@ -323,7 +323,7 @@ export function Timeline() {
             <GridOverlay />
             <Playhead />
 
-            {/* Committed context window overlay — scoped to selected track lanes */}
+            {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
             {ctxLeft !== null && ctxWidth !== null && ctxVRange && (
               <div
                 className="absolute pointer-events-none z-10"
@@ -332,23 +332,23 @@ export function Timeline() {
                   width: ctxWidth,
                   top: ctxVRange.top,
                   height: ctxVRange.height,
-                  background: 'rgba(59, 130, 246, 0.10)',
-                  borderLeft: '2px solid rgba(96, 165, 250, 0.7)',
-                  borderRight: '2px solid rgba(96, 165, 250, 0.7)',
-                  borderTop: '2px solid rgba(96, 165, 250, 0.4)',
-                  borderBottom: '2px solid rgba(96, 165, 250, 0.4)',
+                  background: 'rgba(90, 200, 250, 0.10)',
+                  borderLeft: '2px solid rgba(90, 200, 250, 0.7)',
+                  borderRight: '2px solid rgba(90, 200, 250, 0.7)',
+                  borderTop: '2px solid rgba(90, 200, 250, 0.35)',
+                  borderBottom: '2px solid rgba(90, 200, 250, 0.35)',
                 }}
               >
                 <span
-                  className="absolute top-0.5 left-1 text-[9px] font-mono text-blue-300 select-none"
-                  style={{ background: 'rgba(30,30,50,0.7)', padding: '0 3px', borderRadius: 3 }}
+                  className="absolute top-0.5 left-1 text-[9px] font-mono select-none"
+                  style={{ color: '#5AC8FA', background: 'rgba(20,30,40,0.75)', padding: '0 4px', borderRadius: 3 }}
                 >
                   context window
                 </span>
               </div>
             )}
 
-            {/* Committed select window overlay — scoped to selected track lanes */}
+            {/* Committed select window overlay — Apple Purple (#AF52DE) */}
             {selLeft !== null && selWidth !== null && selVRange && (
               <div
                 className="absolute pointer-events-none z-10"
@@ -357,23 +357,23 @@ export function Timeline() {
                   width: selWidth,
                   top: selVRange.top,
                   height: selVRange.height,
-                  background: 'rgba(251, 146, 60, 0.10)',
-                  borderLeft: '2px solid rgba(251, 146, 60, 0.7)',
-                  borderRight: '2px solid rgba(251, 146, 60, 0.7)',
-                  borderTop: '2px solid rgba(251, 146, 60, 0.4)',
-                  borderBottom: '2px solid rgba(251, 146, 60, 0.4)',
+                  background: 'rgba(175, 82, 222, 0.10)',
+                  borderLeft: '2px solid rgba(175, 82, 222, 0.7)',
+                  borderRight: '2px solid rgba(175, 82, 222, 0.7)',
+                  borderTop: '2px solid rgba(175, 82, 222, 0.35)',
+                  borderBottom: '2px solid rgba(175, 82, 222, 0.35)',
                 }}
               >
                 <span
-                  className="absolute top-0.5 right-1 text-[9px] font-mono text-orange-300 select-none"
-                  style={{ background: 'rgba(30,30,50,0.7)', padding: '0 3px', borderRadius: 3 }}
+                  className="absolute top-0.5 right-1 text-[9px] font-mono select-none"
+                  style={{ color: '#AF52DE', background: 'rgba(20,20,35,0.75)', padding: '0 4px', borderRadius: 3 }}
                 >
                   select window
                 </span>
               </div>
             )}
 
-            {/* Live context drag overlay (blue) — vertically scoped */}
+            {/* Live context drag overlay — Apple Teal (#5AC8FA) */}
             {ctxDrag && (
               <div
                 className="absolute pointer-events-none z-10"
@@ -382,16 +382,16 @@ export function Timeline() {
                   width: ctxDrag.width,
                   top: ctxDrag.top,
                   height: ctxDrag.height,
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  borderLeft: '1px solid rgba(96, 165, 250, 0.5)',
-                  borderRight: '1px solid rgba(96, 165, 250, 0.5)',
-                  borderTop: '1px solid rgba(96, 165, 250, 0.3)',
-                  borderBottom: '1px solid rgba(96, 165, 250, 0.3)',
+                  background: 'rgba(90, 200, 250, 0.12)',
+                  borderLeft: '1px solid rgba(90, 200, 250, 0.5)',
+                  borderRight: '1px solid rgba(90, 200, 250, 0.5)',
+                  borderTop: '1px solid rgba(90, 200, 250, 0.3)',
+                  borderBottom: '1px solid rgba(90, 200, 250, 0.3)',
                 }}
               />
             )}
 
-            {/* Live select drag overlay (orange) — vertically scoped */}
+            {/* Live select drag overlay — Apple Purple (#AF52DE) */}
             {selDrag && (
               <div
                 className="absolute pointer-events-none z-10"
@@ -400,16 +400,16 @@ export function Timeline() {
                   width: selDrag.width,
                   top: selDrag.top,
                   height: selDrag.height,
-                  background: 'rgba(251, 146, 60, 0.15)',
-                  borderLeft: '1px solid rgba(251, 146, 60, 0.5)',
-                  borderRight: '1px solid rgba(251, 146, 60, 0.5)',
-                  borderTop: '1px solid rgba(251, 146, 60, 0.3)',
-                  borderBottom: '1px solid rgba(251, 146, 60, 0.3)',
+                  background: 'rgba(175, 82, 222, 0.12)',
+                  borderLeft: '1px solid rgba(175, 82, 222, 0.5)',
+                  borderRight: '1px solid rgba(175, 82, 222, 0.5)',
+                  borderTop: '1px solid rgba(175, 82, 222, 0.3)',
+                  borderBottom: '1px solid rgba(175, 82, 222, 0.3)',
                 }}
               />
             )}
 
-            {/* Live rubber-band clip selection overlay (white/zinc) */}
+            {/* Live rubber-band clip selection overlay — Apple Blue (#007AFF) */}
             {normalDrag && (
               <div
                 className="absolute pointer-events-none z-10"
@@ -418,8 +418,8 @@ export function Timeline() {
                   width: normalDrag.width,
                   top: normalDrag.top,
                   height: normalDrag.height,
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  background: 'rgba(0, 122, 255, 0.10)',
+                  border: '1px solid rgba(0, 122, 255, 0.45)',
                 }}
               />
             )}

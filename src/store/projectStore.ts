@@ -71,6 +71,7 @@ interface ProjectState {
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
   batchDuplicateClips: (clipIds: string[], timeOffset: number) => void;
+  batchMoveClips: (clipIds: string[], timeOffset: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -807,6 +808,28 @@ export const useProjectStore = create<ProjectState>()(
       const extra = newClipsPerTrack.get(t.id);
       return extra ? { ...t, clips: [...t.clips, ...extra] } : t;
     });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  batchMoveClips: (clipIds, timeOffset) => {
+    const state = get();
+    if (!state.project || clipIds.length === 0 || timeOffset === 0) return;
+    const idSet = new Set(clipIds);
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        idSet.has(c.id)
+          ? { ...c, startTime: Math.max(0, c.startTime + timeOffset) }
+          : c,
+      ),
+    }));
     set({
       project: {
         ...state.project,

@@ -39,6 +39,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
+  const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
@@ -115,6 +116,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     dragRef.current = false;
     let isShiftCopy = e.shiftKey;
 
+    const isMultiSelected = selectedClipIds.size > 1 && selectedClipIds.has(clip.id);
+    let lastBatchOffset = 0;
+
     const clipW = clip.duration * pixelsPerSecond;
     const clipH = clipBlockRef.current?.offsetHeight ?? 48;
     const clipRect = clipBlockRef.current?.getBoundingClientRect();
@@ -131,14 +135,29 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
       if (mode === 'move') {
         if (isShiftCopy) {
-          updateClip(clip.id, { startTime: origStart });
+          if (isMultiSelected && lastBatchOffset !== 0) {
+            batchMoveClips([...selectedClipIds], -lastBatchOffset);
+            lastBatchOffset = 0;
+          } else {
+            updateClip(clip.id, { startTime: origStart });
+          }
         } else {
           const isFineMove = ev.metaKey || ev.ctrlKey;
           let newStart = isFineMove
             ? Math.round((origStart + deltaSec) * 100) / 100
             : snapToGrid(origStart + deltaSec, bpm, 1);
           newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
-          updateClip(clip.id, { startTime: newStart });
+          const timeOffset = newStart - origStart;
+
+          if (isMultiSelected) {
+            const delta = timeOffset - lastBatchOffset;
+            if (delta !== 0) {
+              batchMoveClips([...selectedClipIds], delta);
+              lastBatchOffset = timeOffset;
+            }
+          } else {
+            updateClip(clip.id, { startTime: newStart });
+          }
         }
 
         const closest = findClosestLane(ev.clientY);
@@ -170,12 +189,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         const shift = newStart - origStart;
         let newAudioOffset = origAudioOffset + shift;
 
-        // Can't reveal past start of audio buffer — clamp
         if (newAudioOffset < 0) {
           newAudioOffset = 0;
           newStart = origStart - origAudioOffset;
         }
-        // Can't trim past end of audio buffer
         if (newAudioOffset > origAudioDuration - MIN_CLIP_DURATION) {
           newAudioOffset = origAudioDuration - MIN_CLIP_DURATION;
           newStart = origStart + (newAudioOffset - origAudioOffset);
@@ -205,14 +222,19 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           : snapToGrid(origStart + deltaSec, bpm, 1));
 
         if (ev.shiftKey && closest) {
-          updateClip(clip.id, { startTime: origStart });
+          if (isMultiSelected && lastBatchOffset !== 0) {
+            batchMoveClips([...selectedClipIds], -lastBatchOffset);
+            lastBatchOffset = 0;
+          } else {
+            updateClip(clip.id, { startTime: origStart });
+          }
           const timeOffset = dropStart - origStart;
-          if (selectedClipIds.size > 1 && selectedClipIds.has(clip.id)) {
+          if (isMultiSelected) {
             batchDuplicateClips([...selectedClipIds], timeOffset);
           } else {
             duplicateClipToTrack(clip.id, closest.trackId, dropStart);
           }
-        } else if (closest && closest.trackId !== track.id) {
+        } else if (closest && closest.trackId !== track.id && !isMultiSelected) {
           moveClipToTrack(clip.id, closest.trackId);
         }
       }
@@ -220,7 +242,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, selectedClipIds, findClosestLane]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -294,7 +316,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         ref={clipBlockRef}
         className={`absolute top-1 bottom-1 rounded-md select-none overflow-hidden
           ${statusStyles[clip.generationStatus] ?? ''}
-          ${isSelected ? 'ring-2 ring-white/80 ring-offset-1 ring-offset-transparent' : ''}
+          ${isSelected ? 'ring-2 ring-offset-1 ring-offset-transparent' : ''}
           ${dragGhost && dragGhost.targetTrackId && !dragGhost.isShiftCopy ? 'opacity-0' : ''}
         `}
         style={{
@@ -302,7 +324,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           width: Math.max(width, 4),
           background: `linear-gradient(180deg, ${hexToRgba(track.color, 0.45)} 0%, ${hexToRgba(track.color, 0.28)} 100%)`,
           borderLeft: `3px solid ${track.color}`,
-          boxShadow: isSelected ? `0 0 8px ${hexToRgba(track.color, 0.3)}` : 'none',
+          boxShadow: isSelected ? '0 0 10px rgba(0, 122, 255, 0.45), inset 0 0 0 1px rgba(0, 122, 255, 0.3)' : 'none',
+          ...(isSelected ? { '--tw-ring-color': 'rgba(0, 122, 255, 0.85)' } as React.CSSProperties : {}),
         }}
         data-clip-block
         onMouseDown={handleMouseDown}
@@ -346,13 +369,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {/* Label */}
         <div className="absolute top-0 left-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm pointer-events-none"
-          style={{ right: totalVersions > 1 ? '52px' : '6px' }}
+          style={{ right: totalVersions >= 1 ? '52px' : '6px' }}
         >
           {clip.prompt || '(no prompt)'}
         </div>
 
-        {/* Version navigation — only visible when multiple versions exist */}
-        {totalVersions > 1 && (
+        {/* Version navigation — visible whenever at least one version exists */}
+        {totalVersions >= 1 && (
           <div
             className="absolute top-0 right-0.5 flex items-center gap-0.5 z-20"
             onClick={(e) => e.stopPropagation()}
@@ -370,12 +393,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               {activeVersionIdx + 1}/{totalVersions}
             </span>
             <button
-              onClick={(e) => { e.stopPropagation(); setActiveVersion(clip.id, activeVersionIdx + 1); }}
-              disabled={activeVersionIdx >= totalVersions - 1}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (activeVersionIdx < totalVersions - 1) {
+                  setActiveVersion(clip.id, activeVersionIdx + 1);
+                } else {
+                  regenerateClip(clip.id);
+                }
+              }}
+              disabled={clip.generationStatus === 'generating' || clip.generationStatus === 'queued'}
               className="text-[8px] text-white/80 hover:text-white disabled:opacity-30 px-0.5 leading-4 transition-opacity"
-              title="Next version"
+              title={activeVersionIdx >= totalVersions - 1 ? 'Generate new version' : 'Next version'}
             >
-              ▶
+              {clip.generationStatus === 'generating' || clip.generationStatus === 'queued'
+                ? <span className="inline-block w-2 h-2 border border-white/80 border-t-transparent rounded-full animate-spin" />
+                : '▶'}
             </button>
           </div>
         )}

@@ -16,9 +16,9 @@ function trimBuffer(
   clipDuration: number,
 ): AudioBuffer {
   const sr = buffer.sampleRate;
-  const startSample = Math.floor(clipStartTime * sr);
+  const startSample = Math.round(clipStartTime * sr);
   const endSample = Math.min(
-    Math.floor((clipStartTime + clipDuration) * sr),
+    Math.round((clipStartTime + clipDuration) * sr),
     buffer.length,
   );
   const trimmedLength = Math.max(1, endSample - startSample);

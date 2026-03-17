@@ -4,13 +4,18 @@ function makeKey(projectId: string, clipId: string, type: 'cumulative' | 'isolat
   return `audio:${projectId}:${clipId}:${type}`;
 }
 
+/**
+ * Save an audio blob with a unique versioned key so that previous generations
+ * are not overwritten (needed for clip version navigation).
+ */
 export async function saveAudioBlob(
   projectId: string,
   clipId: string,
   type: 'cumulative' | 'isolated',
   blob: Blob,
 ): Promise<string> {
-  const key = makeKey(projectId, clipId, type);
+  const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const key = `audio:${projectId}:${clipId}:${type}:${suffix}`;
   await set(key, blob);
   return key;
 }

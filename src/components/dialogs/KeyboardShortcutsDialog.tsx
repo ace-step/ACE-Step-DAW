@@ -2,6 +2,7 @@ import { useUIStore } from '../../store/uiStore';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = isMac ? '⌘' : 'Ctrl';
+const opt = isMac ? '⌥' : 'Alt';
 
 interface ShortcutRow {
   keys: string[];
@@ -33,6 +34,17 @@ const SECTIONS: Section[] = [
       { keys: ['E'],                    description: 'Edit selected clip' },
       { keys: [`${mod}`, 'Enter'],      description: 'Generate selected clip' },
       { keys: ['Esc'],                  description: 'Close modal / deselect all' },
+    ],
+  },
+  {
+    title: 'Timeline Selection',
+    rows: [
+      { keys: ['Drag'],                   description: 'Rubber-band select clips' },
+      { keys: [`${mod}`, 'Drag'],         description: 'Select window (generation target)' },
+      { keys: [opt, 'Drag'],              description: 'Context window (audio context)' },
+      { keys: [`${mod}`, 'Click'],        description: 'Toggle clip multi-select' },
+      { keys: ['⇧', 'Drag clip'],        description: 'Copy clip(s) — works with multi-select' },
+      { keys: [`${mod}`, 'Drag clip'],   description: 'Fine-move clip (bypass grid snap)' },
     ],
   },
   {

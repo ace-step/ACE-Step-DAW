@@ -40,6 +40,7 @@ export function SequencerEditor() {
 
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [samplePickerRow, setSamplePickerRow] = useState<string | null>(null);
+  const [showAddInstrument, setShowAddInstrument] = useState(false);
   const [rowCtxMenu, setRowCtxMenu] = useState<{ rowId: string; x: number; y: number } | null>(null);
   const [isBouncing, setIsBouncing] = useState(false);
   const [soloRowId, setSoloRowId] = useState<string | null>(null);
@@ -128,6 +129,34 @@ export function SequencerEditor() {
           stopPreview();
           closeEditor(null);
         }
+      } else if (e.code === 'Delete' || e.code === 'Backspace') {
+        const sel = selectionRef.current;
+        if (!sel) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const state = useProjectStore.getState();
+        const t = state.project?.tracks.find((tr) => tr.id === trackId);
+        const pat = t?.sequencerPattern;
+        if (!t || !pat) return;
+        const rMin = Math.min(sel.rowStart, sel.rowEnd);
+        const rMax = Math.max(sel.rowStart, sel.rowEnd);
+        const sMin = Math.min(sel.stepStart, sel.stepEnd);
+        const sMax = Math.max(sel.stepStart, sel.stepEnd);
+        const ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[] = [];
+        for (let ri = rMin; ri <= rMax; ri++) {
+          const row = pat.rows[ri];
+          if (!row) continue;
+          for (let si = sMin; si <= sMax; si++) {
+            const step = row.steps[si];
+            if (step?.active) {
+              ops.push({ rowId: row.id, stepIndex: si, active: false, velocity: step.velocity });
+            }
+          }
+        }
+        if (ops.length > 0) {
+          state.batchSetSequencerSteps(t.id, ops);
+        }
+        setSelection(null);
       }
     };
     window.addEventListener('keydown', handler, true);
@@ -310,13 +339,11 @@ export function SequencerEditor() {
       }
     }
 
-    // Not shift-drag-copy: start marquee selection
+    // Not shift-drag-copy: prepare for marquee or single-click toggle
     marqueeRef.current = { anchorRowIdx: rowIdx, anchorStepIdx: stepIdx, active: false };
-    setSelection({ rowStart: rowIdx, rowEnd: rowIdx, stepStart: stepIdx, stepEnd: stepIdx });
 
     const onMove = (ev: MouseEvent) => {
       if (!marqueeRef.current) return;
-      marqueeRef.current.active = true;
       const target = document.elementFromPoint(ev.clientX, ev.clientY);
       if (!target) return;
       const stepEl = (target as HTMLElement).closest('[data-seq-step]') as HTMLElement | null;
@@ -326,6 +353,7 @@ export function SequencerEditor() {
       if (!hoverRow || isNaN(hoverStep)) return;
       const hoverRowIdx = pattern.rows.findIndex((r) => r.id === hoverRow);
       if (hoverRowIdx < 0) return;
+      marqueeRef.current.active = true;
       setSelection({
         rowStart: marqueeRef.current.anchorRowIdx,
         rowEnd: hoverRowIdx,
@@ -337,9 +365,12 @@ export function SequencerEditor() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       if (marqueeRef.current && !marqueeRef.current.active) {
-        // Was just a click without drag: clear selection, do normal toggle
-        setSelection(null);
-        handleStepMouseDown(rowId, stepIdx, e);
+        toggleStep(track.id, rowId, stepIdx);
+        const row = pattern.rows.find((r) => r.id === rowId);
+        if (row) {
+          const step = row.steps[stepIdx];
+          if (!step?.active) previewSample(row.sampleKey, step?.velocity ?? 0.8);
+        }
       }
       marqueeRef.current = null;
     };
@@ -486,18 +517,23 @@ export function SequencerEditor() {
               <option value={32}>32</option>
             </select>
           </label>
-          <label className="flex items-center gap-1 text-[10px] text-zinc-400">
+          <div className="flex items-center gap-1 text-[10px] text-zinc-400">
             Bars:
-            <select
-              value={pattern.bars}
-              onChange={(e) => setBars(track.id, Number(e.target.value))}
-              className="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-200 text-[10px]"
+            <button
+              onClick={() => { if (pattern.bars > 1) setBars(track.id, pattern.bars - 1); }}
+              disabled={pattern.bars <= 1}
+              className="w-5 h-5 flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-[10px] font-bold"
             >
-              {[1, 2, 4, 8].map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </label>
+              -
+            </button>
+            <span className="text-zinc-200 w-5 text-center font-medium">{pattern.bars}</span>
+            <button
+              onClick={() => setBars(track.id, pattern.bars + 1)}
+              className="w-5 h-5 flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded text-zinc-300 hover:bg-zinc-700 text-[10px] font-bold"
+            >
+              +
+            </button>
+          </div>
           <label className="flex items-center gap-1 text-[10px] text-zinc-400">
             Swing:
             <input
@@ -511,16 +547,6 @@ export function SequencerEditor() {
         </div>
 
         <div className="flex items-center gap-1.5 ml-auto">
-          <button
-            onClick={() => {
-              const allSamples = ALL_DRUM_SAMPLES;
-              const next = allSamples[pattern.rows.length % allSamples.length];
-              addRow(track.id, next.id, next.name, next.color);
-            }}
-            className="px-2 py-1 bg-emerald-700/30 hover:bg-emerald-700/50 text-emerald-300 rounded text-[10px] font-medium transition-colors"
-          >
-            + Row
-          </button>
           <button
             onClick={togglePreview}
             className={`px-3 py-1 rounded text-[10px] font-medium transition-colors ${
@@ -640,7 +666,32 @@ export function SequencerEditor() {
               );
             })}
 
-            {/* Sample picker dropdown */}
+            {/* Add instrument row */}
+            <div className="relative">
+              <button
+                className="flex items-center gap-2 w-full px-3 border-b border-zinc-800/50 text-zinc-500 hover:text-emerald-400 hover:bg-zinc-800/40 transition-colors"
+                style={{ height: STEP_H }}
+                onClick={() => setShowAddInstrument(!showAddInstrument)}
+                title="Add instrument"
+              >
+                <span className="text-sm font-bold">+</span>
+                <span className="text-[11px]">Add Instrument...</span>
+              </button>
+              {showAddInstrument && (
+                <SamplePickerDropdown
+                  currentKey=""
+                  onSelect={(key, name) => {
+                    const sample = ALL_DRUM_SAMPLES.find((s) => s.id === key);
+                    addRow(track.id, key, name, sample?.color ?? '#71717a');
+                    setShowAddInstrument(false);
+                  }}
+                  onClose={() => setShowAddInstrument(false)}
+                  onPreview={(key) => previewSample(key, 0.8)}
+                />
+              )}
+            </div>
+
+            {/* Sample picker dropdown for existing rows */}
             {samplePickerRow && (
               <SamplePickerDropdown
                 currentKey={pattern.rows.find((r) => r.id === samplePickerRow)?.sampleKey ?? ''}
@@ -695,6 +746,15 @@ export function SequencerEditor() {
                   </div>
                 );
               })}
+              {/* Extend button in header row */}
+              <button
+                className="shrink-0 flex items-center justify-center text-zinc-600 hover:text-emerald-400 hover:bg-zinc-800/60 transition-colors border-l border-zinc-700/30"
+                style={{ width: STEP_W * 2, height: 18 }}
+                onClick={() => setBars(track.id, pattern.bars + 1)}
+                title="Add 1 bar"
+              >
+                <span className="text-[10px] font-bold">+1</span>
+              </button>
             </div>
 
             {/* Step cells */}
@@ -712,7 +772,6 @@ export function SequencerEditor() {
                     const isCurrent = idx === currentStep && isPreviewPlaying;
                     const selected = isInSelection(rowIdx, idx);
 
-                    // Copy-ghost: show preview of where steps will be pasted
                     let isGhost = false;
                     if (copyGhostOffset !== null && copyGhostOffset !== 0 && selection) {
                       const rMin = Math.min(selection.rowStart, selection.rowEnd);
@@ -765,14 +824,12 @@ export function SequencerEditor() {
                             }}
                           />
                         )}
-                        {/* Selection highlight */}
                         {selected && (
                           <div
                             className="absolute inset-0 pointer-events-none border-2 border-cyan-400/60"
                             style={{ backgroundColor: 'rgba(34,211,238,0.08)' }}
                           />
                         )}
-                        {/* Copy ghost overlay */}
                         {isGhost && !step.active && (
                           <div
                             className="absolute inset-1 rounded-sm pointer-events-none"
@@ -786,6 +843,15 @@ export function SequencerEditor() {
                       </div>
                     );
                   })}
+                  {/* Extend button per row */}
+                  <div
+                    className="shrink-0 flex items-center justify-center text-zinc-700 hover:text-emerald-400 hover:bg-zinc-800/40 cursor-pointer transition-colors border-l border-zinc-700/30"
+                    style={{ width: STEP_W * 2, height: STEP_H }}
+                    onClick={() => setBars(track.id, pattern.bars + 1)}
+                    title="Add 1 bar"
+                  >
+                    <span className="text-lg font-light">+</span>
+                  </div>
                 </div>
               );
             })}
@@ -910,9 +976,25 @@ interface SamplePickerDropdownProps {
   onSelect: (key: string, name: string) => void;
   onClose: () => void;
   onPreview: (key: string) => void;
+  onImportFile?: () => void;
 }
 
-function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview }: SamplePickerDropdownProps) {
+function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview, onImportFile }: SamplePickerDropdownProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('audio/')) return;
+    const engine = getAudioEngine();
+    await engine.resume();
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
+    const key = `user-sample-${Date.now()}-${file.name}`;
+    cacheUserSample(key, audioBuffer);
+    const displayName = file.name.replace(/\.[^.]+$/, '');
+    onSelect(key, displayName);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -932,6 +1014,21 @@ function SamplePickerDropdown({ currentKey, onSelect, onClose, onPreview }: Samp
             {currentKey === kit.id && <span className="ml-auto text-emerald-400">✓</span>}
           </button>
         ))}
+        <div className="my-0.5 border-t border-zinc-800" />
+        <button
+          className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] text-amber-400 hover:bg-zinc-800 transition-colors text-left"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <span className="text-sm">📂</span>
+          <span>Import Audio...</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
       </div>
     </>
   );

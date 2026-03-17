@@ -63,8 +63,11 @@ export function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
+  const selectClips = useUIStore((s) => s.selectClips);
+
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
+  const [normalDrag, setNormalDrag] = useState<DragRect | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const { importMultipleFiles } = useAudioImport();
@@ -148,7 +151,9 @@ export function Timeline() {
       if (target.closest?.('.fixed')) return;
       if (target.closest?.('[data-sequencer-grid]')) return;
 
-      const isCtx = e.metaKey || e.ctrlKey;
+      const isCtx = e.altKey;
+      const isSel = !isCtx && (e.metaKey || e.ctrlKey);
+      const isNormal = !isCtx && !isSel;
 
       e.preventDefault();
       e.stopPropagation();
@@ -166,7 +171,7 @@ export function Timeline() {
       const startViewY = startClientY - cRect.top + container.scrollTop;
 
       let hasDragged = false;
-      const setDrag = isCtx ? setCtxDrag : setSelDrag;
+      const setDrag = isCtx ? setCtxDrag : isSel ? setSelDrag : setNormalDrag;
 
       const onMouseMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startClientX;
@@ -181,14 +186,19 @@ export function Timeline() {
 
         const minY = Math.min(startViewY, curViewY);
         const maxY = Math.max(startViewY, curViewY);
-        const vRange = getTrackVerticalRange(
-          container, getIntersectedTrackIds(container, minY, maxY),
-        );
-        const trackAreaTop = trackArea.getBoundingClientRect().top - cRect.top + container.scrollTop;
-        const top = vRange ? vRange.top - trackAreaTop : minY - trackAreaTop;
-        const height = vRange ? vRange.height : maxY - minY;
 
-        setDrag({ left, width, top, height });
+        if (isNormal) {
+          const trackAreaTop = trackArea.getBoundingClientRect().top - cRect.top + container.scrollTop;
+          setDrag({ left, width, top: minY - trackAreaTop, height: maxY - minY });
+        } else {
+          const vRange = getTrackVerticalRange(
+            container, getIntersectedTrackIds(container, minY, maxY),
+          );
+          const trackAreaTop = trackArea.getBoundingClientRect().top - cRect.top + container.scrollTop;
+          const top = vRange ? vRange.top - trackAreaTop : minY - trackAreaTop;
+          const height = vRange ? vRange.height : maxY - minY;
+          setDrag({ left, width, top, height });
+        }
       };
 
       const onMouseUp = (ev: MouseEvent) => {
@@ -208,17 +218,35 @@ export function Timeline() {
         const minY = Math.min(startViewY, endViewY);
         const maxY = Math.max(startViewY, endViewY);
 
-        const rawStart = leftPx / pixelsPerSecond;
-        const rawEnd = rightPx / pixelsPerSecond;
-        const startTime = Math.max(0, snapToGrid(rawStart, bpm, 1));
-        const endTime = snapToGrid(rawEnd, bpm, 1);
-        const trackIds = getIntersectedTrackIds(container, minY, maxY);
+        if (isNormal) {
+          const rawStart = leftPx / pixelsPerSecond;
+          const rawEnd = rightPx / pixelsPerSecond;
+          const trackIds = new Set(getIntersectedTrackIds(container, minY, maxY));
+          const tracks = project?.tracks ?? [];
+          const hitClipIds: string[] = [];
+          for (const t of tracks) {
+            if (!trackIds.has(t.id)) continue;
+            for (const c of t.clips) {
+              const clipEnd = c.startTime + c.duration;
+              if (clipEnd > rawStart && c.startTime < rawEnd) {
+                hitClipIds.push(c.id);
+              }
+            }
+          }
+          selectClips(hitClipIds);
+        } else {
+          const rawStart = leftPx / pixelsPerSecond;
+          const rawEnd = rightPx / pixelsPerSecond;
+          const startTime = Math.max(0, snapToGrid(rawStart, bpm, 1));
+          const endTime = snapToGrid(rawEnd, bpm, 1);
+          const trackIds = getIntersectedTrackIds(container, minY, maxY);
 
-        if (endTime > startTime && trackIds.length > 0) {
-          if (isCtx) {
-            setContextWindow({ startTime, endTime, trackIds });
-          } else {
-            setSelectWindow({ startTime, endTime, trackIds });
+          if (endTime > startTime && trackIds.length > 0) {
+            if (isCtx) {
+              setContextWindow({ startTime, endTime, trackIds });
+            } else {
+              setSelectWindow({ startTime, endTime, trackIds });
+            }
           }
         }
         setDrag(null);
@@ -227,7 +255,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, selectClips],
   );
 
 
@@ -377,6 +405,21 @@ export function Timeline() {
                   borderRight: '1px solid rgba(251, 146, 60, 0.5)',
                   borderTop: '1px solid rgba(251, 146, 60, 0.3)',
                   borderBottom: '1px solid rgba(251, 146, 60, 0.3)',
+                }}
+              />
+            )}
+
+            {/* Live rubber-band clip selection overlay (white/zinc) */}
+            {normalDrag && (
+              <div
+                className="absolute pointer-events-none z-10"
+                style={{
+                  left: normalDrag.left,
+                  width: normalDrag.width,
+                  top: normalDrag.top,
+                  height: normalDrag.height,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
                 }}
               />
             )}

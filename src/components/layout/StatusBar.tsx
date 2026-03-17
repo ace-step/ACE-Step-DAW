@@ -37,8 +37,9 @@ export function StatusBar() {
         href="http://acestudio.ai/"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-zinc-500 hover:text-violet-400 transition-colors"
+        className="flex items-center gap-1 text-zinc-500 hover:text-violet-400 transition-colors"
       >
+        <img src="/logo.png" alt="" width={14} height={14} className="rounded-sm opacity-60" />
         ACE Studio ↗
       </a>
     </div>

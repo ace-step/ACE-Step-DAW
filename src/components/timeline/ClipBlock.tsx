@@ -38,6 +38,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const updateClip = useProjectStore((s) => s.updateClip);
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
+  const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
@@ -132,7 +133,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         if (isShiftCopy) {
           updateClip(clip.id, { startTime: origStart });
         } else {
-          let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
+          const isFineMove = ev.metaKey || ev.ctrlKey;
+          let newStart = isFineMove
+            ? Math.round((origStart + deltaSec) * 100) / 100
+            : snapToGrid(origStart + deltaSec, bpm, 1);
           newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
           updateClip(clip.id, { startTime: newStart });
         }
@@ -195,12 +199,19 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       if (mode === 'move' && dragRef.current) {
         const closest = findClosestLane(ev.clientY);
         const deltaSec = (ev.clientX - startX) / pixelsPerSecond;
-        const dropStart = Math.max(0, snapToGrid(origStart + deltaSec, bpm, 1));
+        const isFineMove = ev.metaKey || ev.ctrlKey;
+        const dropStart = Math.max(0, isFineMove
+          ? Math.round((origStart + deltaSec) * 100) / 100
+          : snapToGrid(origStart + deltaSec, bpm, 1));
 
         if (ev.shiftKey && closest) {
-          // Shift+drag = copy: restore original position, duplicate to target
           updateClip(clip.id, { startTime: origStart });
-          duplicateClipToTrack(clip.id, closest.trackId, dropStart);
+          const timeOffset = dropStart - origStart;
+          if (selectedClipIds.size > 1 && selectedClipIds.has(clip.id)) {
+            batchDuplicateClips([...selectedClipIds], timeOffset);
+          } else {
+            duplicateClipToTrack(clip.id, closest.trackId, dropStart);
+          }
         } else if (closest && closest.trackId !== track.id) {
           moveClipToTrack(clip.id, closest.trackId);
         }
@@ -209,7 +220,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, findClosestLane]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, selectedClipIds, findClosestLane]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

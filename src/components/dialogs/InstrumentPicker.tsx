@@ -162,7 +162,7 @@ export function InstrumentPicker() {
           <div className="p-5 flex flex-col gap-3">
             <div className="text-center mb-2">
               <span className="text-3xl">🎹</span>
-              <p className="text-xs text-zinc-400 mt-2">Creates a step sequencer track with a default 808-style drum kit (8 sounds). You can customize samples after creation.</p>
+              <p className="text-xs text-zinc-400 mt-2">Creates a step sequencer track with a default drum kit. You can add instruments and swap samples after creation.</p>
             </div>
             <button
               onClick={() => {
@@ -172,24 +172,10 @@ export function InstrumentPicker() {
               className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-zinc-600 transition-colors text-left"
               style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.sequencer.color}` }}
             >
-              <span className="text-xl">🥁</span>
+              <span className="text-xl">🎹</span>
               <div>
-                <div className="text-sm font-medium">Drum Kit Sequencer</div>
-                <div className="text-[11px] text-zinc-400">16-step pattern with Kick, Snare, Hi-Hat, Clap, Tom, Rim</div>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                addTrack('synth', 'sequencer');
-                close();
-              }}
-              className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-zinc-600 transition-colors text-left"
-              style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.sequencer.color}` }}
-            >
-              <span className="text-xl">🎛️</span>
-              <div>
-                <div className="text-sm font-medium">Synth Sequencer</div>
-                <div className="text-[11px] text-zinc-400">Same drum kit — rename and swap samples for any sound</div>
+                <div className="text-sm font-medium">Step Sequencer</div>
+                <div className="text-[11px] text-zinc-400">16-step pattern with Kick, Snare, Hi-Hat and more — fully customizable</div>
               </div>
             </button>
           </div>

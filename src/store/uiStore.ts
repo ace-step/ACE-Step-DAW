@@ -21,9 +21,9 @@ interface UIState {
   showAssetsPanel: boolean;
   assetsPanelWidth: number;
   trackListWidth: number;
-  /** Global context window set by Cmd+drag on the timeline. */
+  /** Global context window set by Option/Alt+drag on the timeline. */
   contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
-  /** Multi-track select window set by non-Cmd drag on the timeline. */
+  /** Multi-track select window set by Cmd/Ctrl+drag on the timeline. */
   selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Track whose inspector panel is currently expanded. */
   expandedTrackId: string | null;
@@ -37,6 +37,7 @@ interface UIState {
   setScrollX: (x: number) => void;
   setScrollY: (y: number) => void;
   selectClip: (clipId: string, multi?: boolean) => void;
+  selectClips: (clipIds: string[]) => void;
   deselectAll: () => void;
   setEditingClip: (clipId: string | null) => void;
   setShowNewProjectDialog: (v: boolean) => void;
@@ -115,6 +116,8 @@ export const useUIStore = create<UIState>((set) => ({
       }
       return { selectedClipIds: new Set([clipId]) };
     }),
+
+  selectClips: (clipIds) => set({ selectedClipIds: new Set(clipIds) }),
 
   deselectAll: () => set({ selectedClipIds: new Set() }),
 

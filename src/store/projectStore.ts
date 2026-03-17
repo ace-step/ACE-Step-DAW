@@ -70,6 +70,7 @@ interface ProjectState {
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
+  batchDuplicateClips: (clipIds: string[], timeOffset: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -764,6 +765,49 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return newClip;
+  },
+
+  batchDuplicateClips: (clipIds, timeOffset) => {
+    const state = get();
+    if (!state.project) return;
+    const idSet = new Set(clipIds);
+    const clipsToClone: { clip: Clip; trackId: string }[] = [];
+    for (const t of state.project.tracks) {
+      for (const c of t.clips) {
+        if (idSet.has(c.id)) clipsToClone.push({ clip: c, trackId: t.id });
+      }
+    }
+    if (clipsToClone.length === 0) return;
+    _pushHistory(state.project);
+    const newClipsPerTrack = new Map<string, Clip[]>();
+    for (const { clip, trackId } of clipsToClone) {
+      const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+      const dup: Clip = {
+        ...clip,
+        id: uuidv4(),
+        trackId,
+        startTime: Math.max(0, clip.startTime + timeOffset),
+        generationStatus: isReady ? 'ready' : 'empty',
+        generationJobId: null,
+        cumulativeMixKey: clip.cumulativeMixKey,
+        isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+        waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+      };
+      if (!newClipsPerTrack.has(trackId)) newClipsPerTrack.set(trackId, []);
+      newClipsPerTrack.get(trackId)!.push(dup);
+    }
+    const newTracks = state.project.tracks.map((t) => {
+      const extra = newClipsPerTrack.get(t.id);
+      return extra ? { ...t, clips: [...t.clips, ...extra] } : t;
+    });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
   },
 
   removeAsset: (assetId) => {

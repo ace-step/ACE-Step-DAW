@@ -28,6 +28,10 @@ export function Toolbar() {
 
   return (
     <div className="flex items-center h-10 px-3 gap-2 bg-daw-surface border-b border-daw-border shrink-0">
+      {/* App logo */}
+      <img src="/logo.png" alt="ACE-Step" width={22} height={22} className="rounded-sm shrink-0" />
+      <div className="w-px h-5 bg-daw-border" />
+
       {/* Left section */}
       <button
         onClick={() => setShowProjectListDialog(true)}

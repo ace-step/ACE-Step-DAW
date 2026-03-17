@@ -3,7 +3,6 @@ import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
-import { getSample } from '../services/sampleManager';
 
 /**
  * Trim an AudioBuffer to a specific project-time region.
@@ -107,45 +106,6 @@ export function useTransport() {
       }
     }
 
-    // Schedule sequencer patterns
-    for (const track of proj.tracks) {
-      if ((track.trackType ?? 'stems') !== 'sequencer') continue;
-      if (!track.sequencerPattern || track.sequencerPattern.rows.length === 0) continue;
-
-      const sampleBuffers = new Map<string, AudioBuffer>();
-      for (const row of track.sequencerPattern.rows) {
-        if (row.muted) continue;
-        const buf = await getSample(engine.ctx, row.sampleKey);
-        if (buf) sampleBuffers.set(row.sampleKey, buf);
-      }
-
-      if (sampleBuffers.size > 0) {
-        const trackNode = engine.getOrCreateTrackNode(track.id);
-        trackNode.volume = track.volume;
-        trackNode.muted = track.muted;
-        trackNode.soloed = track.soloed;
-        trackNode.pan = track.pan ?? 0;
-        trackNode.eqLowGain = track.eqLowGain ?? 0;
-        trackNode.eqMidGain = track.eqMidGain ?? 0;
-        trackNode.eqHighGain = track.eqHighGain ?? 0;
-        trackNode.applyCompressor(
-          track.compressorEnabled ?? false,
-          track.compressorThreshold ?? -24,
-          track.compressorRatio ?? 4,
-        );
-        trackNode.setReverb(track.reverbMix ?? 0, track.reverbRoomSize ?? 0.5);
-      }
-
-      // Defer actual scheduling after we know startFrom and effectiveEnd (below)
-      (engine as any).__pendingSequencers = (engine as any).__pendingSequencers || [];
-      (engine as any).__pendingSequencers.push({
-        trackId: track.id,
-        pattern: track.sequencerPattern,
-        sampleBuffers,
-        bpm: proj.bpm,
-      });
-    }
-
     engine.updateSoloState();
 
     const startFrom = fromTime ?? useTransportStore.getState().currentTime;
@@ -161,15 +121,6 @@ export function useTransport() {
     }
 
     engine.schedulePlayback(clipBuffers, startFrom, effectiveEnd);
-
-    // Schedule any pending sequencer patterns
-    const pendingSeqs = (engine as any).__pendingSequencers as any[] | undefined;
-    if (pendingSeqs) {
-      for (const seqInfo of pendingSeqs) {
-        engine.scheduleSequencer(seqInfo, startFrom, effectiveEnd);
-      }
-      delete (engine as any).__pendingSequencers;
-    }
 
     const { metronomeEnabled } = useTransportStore.getState();
     if (metronomeEnabled) {

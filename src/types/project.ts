@@ -68,6 +68,30 @@ export interface Clip {
   starred?: boolean;
 }
 
+export interface SequencerStep {
+  active: boolean;
+  velocity: number;      // 0–1, default 0.8
+}
+
+export interface SequencerRow {
+  id: string;
+  name: string;           // e.g. "Kick", "Snare", "Hi-Hat"
+  sampleKey: string;      // built-in sample id or IndexedDB key for user sample
+  steps: SequencerStep[];
+  volume: number;         // 0–1
+  muted: boolean;
+  color: string;
+}
+
+export interface SequencerPattern {
+  id: string;
+  name: string;
+  rows: SequencerRow[];
+  stepsPerBar: number;    // default 16 (16th notes)
+  bars: number;           // default 1
+  swing: number;          // 0–1, 0 = straight, 0.67 = heavy swing
+}
+
 export interface Track {
   id: string;
   trackType?: TrackType;
@@ -79,6 +103,7 @@ export interface Track {
   muted: boolean;
   soloed: boolean;
   clips: Clip[];
+  sequencerPattern?: SequencerPattern;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   eqLowGain?: number;         // dB ±15, low shelf at 250 Hz, default 0

@@ -42,9 +42,33 @@ export interface TrackTypeInfo {
 export const TRACK_TYPE_CATALOG: Record<TrackType, TrackTypeInfo> = {
   stems:     { type: 'stems',     label: 'Stems',      abbr: 'STM', emoji: '🎛️', color: '#3b82f6', description: 'AI-generated isolated instrument tracks' },
   sample:    { type: 'sample',    label: 'Sample',     abbr: 'SMP', emoji: '📁', color: '#f97316', description: 'User-imported audio clips' },
-  sequencer: { type: 'sequencer', label: 'Sequencer',  abbr: 'SEQ', emoji: '🎹', color: '#22c55e', description: 'Step-based pattern editor (coming soon)' },
+  sequencer: { type: 'sequencer', label: 'Sequencer',  abbr: 'SEQ', emoji: '🎹', color: '#22c55e', description: 'Step-based drum pattern editor' },
   pianoRoll: { type: 'pianoRoll', label: 'Piano Roll', abbr: 'PNO', emoji: '🎵', color: '#a855f7', description: 'MIDI note editor with virtual instruments (coming soon)' },
 };
+
+export interface DrumKitSample {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export const DEFAULT_DRUM_KIT: DrumKitSample[] = [
+  { id: 'kick',       name: 'Kick',       color: '#ef4444' },
+  { id: 'snare',      name: 'Snare',      color: '#f97316' },
+  { id: 'closed_hh',  name: 'Closed HH',  color: '#eab308' },
+  { id: 'open_hh',    name: 'Open HH',    color: '#84cc16' },
+];
+
+export const ALL_DRUM_SAMPLES: DrumKitSample[] = [
+  { id: 'kick',       name: 'Kick',       color: '#ef4444' },
+  { id: 'snare',      name: 'Snare',      color: '#f97316' },
+  { id: 'closed_hh',  name: 'Closed HH',  color: '#eab308' },
+  { id: 'open_hh',    name: 'Open HH',    color: '#84cc16' },
+  { id: 'clap',       name: 'Clap',       color: '#22c55e' },
+  { id: 'rim',        name: 'Rim',        color: '#06b6d4' },
+  { id: 'low_tom',    name: 'Low Tom',    color: '#3b82f6' },
+  { id: 'high_tom',   name: 'High Tom',   color: '#8b5cf6' },
+];
 
 export const KEY_SCALES = [
   'C major', 'C minor', 'C# major', 'C# minor',

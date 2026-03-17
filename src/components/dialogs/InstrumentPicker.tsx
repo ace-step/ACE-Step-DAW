@@ -41,7 +41,7 @@ export function InstrumentPicker() {
   };
 
   const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'pianoRoll'];
-  const isComingSoon = selectedType === 'sequencer' || selectedType === 'pianoRoll';
+  const isComingSoon = selectedType === 'pianoRoll';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
@@ -72,7 +72,7 @@ export function InstrumentPicker() {
           <div className="p-4 grid grid-cols-2 gap-3">
             {typeOrder.map((type) => {
               const info = TRACK_TYPE_CATALOG[type];
-              const comingSoon = type === 'sequencer' || type === 'pianoRoll';
+              const comingSoon = type === 'pianoRoll';
               return (
                 <button
                   key={type}
@@ -153,6 +153,43 @@ export function InstrumentPicker() {
               <div>
                 <div className="text-sm font-medium">Import Audio File</div>
                 <div className="text-[11px] text-zinc-400">Pick a file from your computer to create a track with audio</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {step === 'instrument' && selectedType === 'sequencer' && (
+          <div className="p-5 flex flex-col gap-3">
+            <div className="text-center mb-2">
+              <span className="text-3xl">🎹</span>
+              <p className="text-xs text-zinc-400 mt-2">Creates a step sequencer track with a default 808-style drum kit (8 sounds). You can customize samples after creation.</p>
+            </div>
+            <button
+              onClick={() => {
+                addTrack('percussion', 'sequencer');
+                close();
+              }}
+              className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-zinc-600 transition-colors text-left"
+              style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.sequencer.color}` }}
+            >
+              <span className="text-xl">🥁</span>
+              <div>
+                <div className="text-sm font-medium">Drum Kit Sequencer</div>
+                <div className="text-[11px] text-zinc-400">16-step pattern with Kick, Snare, Hi-Hat, Clap, Tom, Rim</div>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                addTrack('synth', 'sequencer');
+                close();
+              }}
+              className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-zinc-600 transition-colors text-left"
+              style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.sequencer.color}` }}
+            >
+              <span className="text-xl">🎛️</span>
+              <div>
+                <div className="text-sm font-medium">Synth Sequencer</div>
+                <div className="text-[11px] text-zinc-400">Same drum kit — rename and swap samples for any sound</div>
               </div>
             </button>
           </div>

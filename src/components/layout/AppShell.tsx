@@ -12,6 +12,7 @@ import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
 import { MixerPanel } from '../mixer/MixerPanel';
 import { AssetsPanel } from '../assets/AssetsPanel';
+import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -44,6 +45,7 @@ export function AppShell() {
         {project && <AssetsPanel />}
       </div>
 
+      {project && <SequencerEditor />}
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
       <StatusBar />

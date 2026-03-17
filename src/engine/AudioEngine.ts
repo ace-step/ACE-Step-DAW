@@ -1,10 +1,18 @@
 import { TrackNode } from './TrackNode';
+import type { SequencerPattern } from '../types/project';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
   clipId: string;
   trackId: string;
   startTime: number;
+}
+
+export interface SequencerScheduleInfo {
+  trackId: string;
+  pattern: SequencerPattern;
+  sampleBuffers: Map<string, AudioBuffer>;
+  bpm: number;
 }
 
 export interface ClipScheduleInfo {
@@ -134,6 +142,81 @@ export class AudioEngine {
     this._startedAt = this.ctx.currentTime;
     this._offset = fromTime;
     this._startTimeUpdate(totalDuration);
+  }
+
+  /**
+   * Schedule sequencer pattern playback for a track.
+   * The pattern loops from time 0 and tiles across the timeline.
+   */
+  scheduleSequencer(
+    info: SequencerScheduleInfo,
+    fromTime: number,
+    totalDuration: number,
+  ) {
+    const { trackId, pattern, sampleBuffers, bpm } = info;
+    const trackNode = this.getOrCreateTrackNode(trackId);
+    const contextNow = this.ctx.currentTime;
+
+    const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
+    const patternDuration = stepDuration * pattern.stepsPerBar * pattern.bars;
+    if (patternDuration <= 0) return;
+
+    // Tile the pattern across the timeline
+    const startLoop = Math.floor(fromTime / patternDuration);
+    const endLoop = Math.ceil(totalDuration / patternDuration);
+
+    for (let loopIdx = startLoop; loopIdx < endLoop; loopIdx++) {
+      const loopStartTime = loopIdx * patternDuration;
+
+      for (const row of pattern.rows) {
+        if (row.muted) continue;
+        const buffer = sampleBuffers.get(row.sampleKey);
+        if (!buffer) continue;
+
+        for (let stepIdx = 0; stepIdx < row.steps.length; stepIdx++) {
+          const step = row.steps[stepIdx];
+          if (!step.active) continue;
+
+          // Apply swing: offset even-indexed steps (1, 3, 5, ...)
+          let swingOffset = 0;
+          if (pattern.swing > 0 && stepIdx % 2 === 1) {
+            swingOffset = stepDuration * pattern.swing * 0.5;
+          }
+
+          const stepTime = loopStartTime + stepIdx * stepDuration + swingOffset;
+          if (stepTime + buffer.duration <= fromTime) continue;
+          if (stepTime >= totalDuration) break;
+
+          const source = this.ctx.createBufferSource();
+          source.buffer = buffer;
+
+          // Per-step velocity gain
+          const velocityGain = this.ctx.createGain();
+          velocityGain.gain.value = step.velocity * row.volume;
+          source.connect(velocityGain);
+          velocityGain.connect(trackNode.inputGain);
+
+          const delay = stepTime - fromTime;
+          if (delay >= 0) {
+            source.start(contextNow + delay);
+          } else {
+            const seekInto = -delay;
+            if (seekInto < buffer.duration) {
+              source.start(contextNow, seekInto);
+            } else {
+              continue;
+            }
+          }
+
+          this.scheduledSources.push({
+            source,
+            clipId: `seq-${row.id}-${stepIdx}-${loopIdx}`,
+            trackId,
+            startTime: stepTime,
+          });
+        }
+      }
+    }
   }
 
   private _startTimeUpdate(totalDuration: number) {

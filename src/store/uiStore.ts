@@ -27,6 +27,9 @@ interface UIState {
   selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Track whose inspector panel is currently expanded. */
   expandedTrackId: string | null;
+  /** Track whose sequencer editor is currently open (bottom panel). */
+  openSequencerTrackId: string | null;
+  sequencerEditorHeight: number;
 
   setPixelsPerSecond: (pps: number) => void;
   zoomIn: () => void;
@@ -52,6 +55,8 @@ interface UIState {
   setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setExpandedTrackId: (id: string | null) => void;
+  setOpenSequencerTrackId: (id: string | null) => void;
+  setSequencerEditorHeight: (v: number) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -78,6 +83,8 @@ export const useUIStore = create<UIState>((set) => ({
   contextWindow: null,
   selectWindow: null,
   expandedTrackId: null,
+  openSequencerTrackId: null,
+  sequencerEditorHeight: 320,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
 
@@ -130,4 +137,6 @@ export const useUIStore = create<UIState>((set) => ({
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),
+  setOpenSequencerTrackId: (id) => set({ openSequencerTrackId: id }),
+  setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),
 }));

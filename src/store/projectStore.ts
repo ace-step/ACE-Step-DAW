@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import type { Project, Track, Clip, ClipVersion, TrackName, TrackType, ClipGenerationStatus, AssetClip } from '../types/project';
-import { TRACK_CATALOG } from '../constants/tracks';
+import type { Project, Track, Clip, ClipVersion, TrackName, TrackType, ClipGenerationStatus, AssetClip, SequencerPattern, SequencerRow, SequencerStep } from '../types/project';
+import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
 import {
   DEFAULT_BPM,
   DEFAULT_KEY_SCALE,
@@ -66,11 +66,28 @@ interface ProjectState {
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
 
+  splitClip: (clipId: string, splitTime: number) => void;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
+  duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
+
+  // Sequencer actions
+  initSequencerPattern: (trackId: string) => void;
+  toggleSequencerStep: (trackId: string, rowId: string, stepIndex: number) => void;
+  setSequencerStepVelocity: (trackId: string, rowId: string, stepIndex: number, velocity: number) => void;
+  addSequencerRow: (trackId: string, sampleId: string, name: string, color: string) => void;
+  removeSequencerRow: (trackId: string, rowId: string) => void;
+  updateSequencerSwing: (trackId: string, swing: number) => void;
+  setSequencerStepsPerBar: (trackId: string, stepsPerBar: number) => void;
+  setSequencerBars: (trackId: string, bars: number) => void;
+  setSequencerRowVolume: (trackId: string, rowId: string, volume: number) => void;
+  toggleSequencerRowMute: (trackId: string, rowId: string) => void;
+  setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string) => void;
+  clearSequencerRow: (trackId: string, rowId: string) => void;
+  batchSetSequencerSteps: (trackId: string, ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[]) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
@@ -248,7 +265,31 @@ export const useProjectStore = create<ProjectState>()(
       muted: false,
       soloed: false,
       clips: [],
+      laneHeight: resolvedType === 'sequencer' ? 80 : undefined,
     };
+
+    // Auto-initialize sequencer pattern for sequencer tracks
+    if (resolvedType === 'sequencer') {
+      const stepsPerBar = 16;
+      const bars = 1;
+      const totalSteps = stepsPerBar * bars;
+      track.sequencerPattern = {
+        id: uuidv4(),
+        name: 'Pattern 1',
+        rows: DEFAULT_DRUM_KIT.map((kit) => ({
+          id: uuidv4(),
+          name: kit.name,
+          sampleKey: kit.id,
+          steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
+          volume: 0.8,
+          muted: false,
+          color: kit.color,
+        })),
+        stepsPerBar,
+        bars,
+        swing: 0,
+      };
+    }
 
     const newTracks = [...state.project.tracks, track];
     set({
@@ -455,6 +496,66 @@ export const useProjectStore = create<ProjectState>()(
     return newClip;
   },
 
+  splitClip: (clipId, splitTime) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const t of state.project.tracks) {
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; trackId = t.id; break; }
+    }
+    if (!sourceClip || !trackId) return;
+
+    const origStart = sourceClip.startTime;
+    const origEnd = origStart + sourceClip.duration;
+    if (splitTime <= origStart || splitTime >= origEnd) return;
+
+    _pushHistory(state.project);
+    const origAudioOffset = sourceClip.audioOffset ?? 0;
+    const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+
+    const leftDuration = splitTime - origStart;
+    const rightDuration = origEnd - splitTime;
+
+    const leftClip: Clip = {
+      ...sourceClip,
+      duration: leftDuration,
+    };
+
+    const rightClip: Clip = {
+      ...sourceClip,
+      id: uuidv4(),
+      startTime: splitTime,
+      duration: rightDuration,
+      audioOffset: origAudioOffset + leftDuration,
+      generationStatus: isReady ? 'ready' : 'empty',
+      generationJobId: null,
+      cumulativeMixKey: sourceClip.cumulativeMixKey,
+      isolatedAudioKey: isReady ? sourceClip.isolatedAudioKey : null,
+      waveformPeaks: isReady && sourceClip.waveformPeaks ? [...sourceClip.waveformPeaks] : null,
+      audioDuration: sourceClip.audioDuration,
+    };
+
+    const newTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      return {
+        ...t,
+        clips: t.clips.map((c) => (c.id === clipId ? leftClip : c)).concat(rightClip),
+      };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
+  },
+
   updateClipStatus: (clipId, status, extra) => {
     const state = get();
     if (!state.project) return;
@@ -629,6 +730,42 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  duplicateClipToTrack: (clipId, targetTrackId, startTime) => {
+    const state = get();
+    if (!state.project) return undefined;
+    let sourceClip: Clip | undefined;
+    for (const t of state.project.tracks) {
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; break; }
+    }
+    if (!sourceClip) return undefined;
+    _pushHistory(state.project);
+    const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    const newClip: Clip = {
+      ...sourceClip,
+      id: uuidv4(),
+      trackId: targetTrackId,
+      startTime: startTime ?? sourceClip.startTime,
+      generationStatus: isReady ? 'ready' : 'empty',
+      generationJobId: null,
+      cumulativeMixKey: sourceClip.cumulativeMixKey,
+      isolatedAudioKey: isReady ? sourceClip.isolatedAudioKey : null,
+      waveformPeaks: isReady && sourceClip.waveformPeaks ? [...sourceClip.waveformPeaks] : null,
+    };
+    const newTracks = state.project.tracks.map((t) =>
+      t.id === targetTrackId ? { ...t, clips: [...t.clips, newClip] } : t,
+    );
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
+    return newClip;
+  },
+
   removeAsset: (assetId) => {
     const state = get();
     if (!state.project) return;
@@ -662,6 +799,369 @@ export const useProjectStore = create<ProjectState>()(
             c.id === asset.clipId ? { ...c, starred: newStarred } : c,
           ),
         })),
+      },
+    });
+  },
+
+  // ── Sequencer actions ───────────────────────────────────────────────────
+
+  initSequencerPattern: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track || track.sequencerPattern) return;
+    _pushHistory(state.project);
+
+    const stepsPerBar = 16;
+    const bars = 1;
+    const totalSteps = stepsPerBar * bars;
+    const emptyStep = (): SequencerStep => ({ active: false, velocity: 0.8 });
+
+    const rows: SequencerRow[] = DEFAULT_DRUM_KIT.map((kit) => ({
+      id: uuidv4(),
+      name: kit.name,
+      sampleKey: kit.id,
+      steps: Array.from({ length: totalSteps }, emptyStep),
+      volume: 0.8,
+      muted: false,
+      color: kit.color,
+    }));
+
+    const pattern: SequencerPattern = {
+      id: uuidv4(),
+      name: 'Pattern 1',
+      rows,
+      stepsPerBar,
+      bars,
+      swing: 0,
+    };
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, sequencerPattern: pattern } : t,
+        ),
+      },
+    });
+  },
+
+  toggleSequencerStep: (trackId, rowId, stepIndex) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const newSteps = [...r.steps];
+                const s = newSteps[stepIndex];
+                if (s) newSteps[stepIndex] = { ...s, active: !s.active };
+                return { ...r, steps: newSteps };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerStepVelocity: (trackId, rowId, stepIndex, velocity) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const newSteps = [...r.steps];
+                const s = newSteps[stepIndex];
+                if (s) newSteps[stepIndex] = { ...s, velocity: Math.max(0, Math.min(1, velocity)) };
+                return { ...r, steps: newSteps };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  addSequencerRow: (trackId, sampleId, name, color) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          const totalSteps = t.sequencerPattern.stepsPerBar * t.sequencerPattern.bars;
+          const newRow: SequencerRow = {
+            id: uuidv4(),
+            name,
+            sampleKey: sampleId,
+            steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
+            volume: 0.8,
+            muted: false,
+            color,
+          };
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: [...t.sequencerPattern.rows, newRow],
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  removeSequencerRow: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.filter((r) => r.id !== rowId),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  updateSequencerSwing: (trackId, swing) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: { ...t.sequencerPattern, swing: Math.max(0, Math.min(1, swing)) },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerStepsPerBar: (trackId, stepsPerBar) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          const p = t.sequencerPattern;
+          const newTotal = stepsPerBar * p.bars;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...p,
+              stepsPerBar,
+              rows: p.rows.map((r) => {
+                const steps = [...r.steps];
+                while (steps.length < newTotal) steps.push({ active: false, velocity: 0.8 });
+                return { ...r, steps: steps.slice(0, newTotal) };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerBars: (trackId, bars) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          const p = t.sequencerPattern;
+          const newTotal = p.stepsPerBar * bars;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...p,
+              bars,
+              rows: p.rows.map((r) => {
+                const steps = [...r.steps];
+                while (steps.length < newTotal) steps.push({ active: false, velocity: 0.8 });
+                return { ...r, steps: steps.slice(0, newTotal) };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerRowVolume: (trackId, rowId, volume) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, volume: Math.max(0, Math.min(1, volume)) } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  toggleSequencerRowMute: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, muted: !r.muted } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerRowSample: (trackId, rowId, sampleKey) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId ? { ...r, sampleKey } : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  clearSequencerRow: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) =>
+                r.id === rowId
+                  ? { ...r, steps: r.steps.map((s) => ({ ...s, active: false })) }
+                  : r,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  batchSetSequencerSteps: (trackId, ops) => {
+    const state = get();
+    if (!state.project || ops.length === 0) return;
+    _pushHistory(state.project);
+    const lookup = new Map<string, Map<number, { active: boolean; velocity: number }>>();
+    for (const op of ops) {
+      let m = lookup.get(op.rowId);
+      if (!m) { m = new Map(); lookup.set(op.rowId, m); }
+      m.set(op.stepIndex, { active: op.active, velocity: op.velocity });
+    }
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                const stepMap = lookup.get(r.id);
+                if (!stepMap) return r;
+                return {
+                  ...r,
+                  steps: r.steps.map((s, idx) => {
+                    const patch = stepMap.get(idx);
+                    return patch ? { ...s, active: patch.active, velocity: patch.velocity } : s;
+                  }),
+                };
+              }),
+            },
+          };
+        }),
       },
     });
   },

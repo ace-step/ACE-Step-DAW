@@ -93,7 +93,7 @@ export function TrackEditModal({ track, onClose }: TrackEditModalProps) {
               {(['stems', 'sample', 'sequencer', 'pianoRoll'] as TrackType[]).map((tt) => {
                 const tti = TRACK_TYPE_CATALOG[tt];
                 const isActive = (track.trackType ?? 'stems') === tt;
-                const comingSoon = tt === 'sequencer' || tt === 'pianoRoll';
+                const comingSoon = tt === 'pianoRoll';
                 return (
                   <button
                     key={tt}

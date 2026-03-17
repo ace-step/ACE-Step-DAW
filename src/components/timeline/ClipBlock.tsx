@@ -25,8 +25,8 @@ interface DragGhostInfo {
   height: number;
   targetTrackId: string | null;
   targetLaneRect: { top: number; height: number } | null;
-  /** Original lane rect for showing source placeholder */
   sourceLaneRect: { top: number; height: number } | null;
+  isShiftCopy?: boolean;
 }
 
 export function ClipBlock({ clip, track }: ClipBlockProps) {
@@ -80,6 +80,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   }, []);
 
   const moveClipToTrack = useProjectStore((s) => s.moveClipToTrack);
+  const duplicateClipToTrack = useProjectStore((s) => s.duplicateClipToTrack);
   const clipBlockRef = useRef<HTMLDivElement>(null);
 
   const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
@@ -111,39 +112,49 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const bpm = project?.bpm ?? 120;
     const totalDuration = project?.totalDuration ?? 600;
     dragRef.current = false;
+    let isShiftCopy = e.shiftKey;
 
     const clipW = clip.duration * pixelsPerSecond;
     const clipH = clipBlockRef.current?.offsetHeight ?? 48;
+    const clipRect = clipBlockRef.current?.getBoundingClientRect();
+    const clickOffsetPx = clipRect ? startX - clipRect.left : 0;
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
       dragRef.current = true;
+      isShiftCopy = ev.shiftKey;
 
       const deltaSec = dx / pixelsPerSecond;
 
       if (mode === 'move') {
-        let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
-        newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
-        updateClip(clip.id, { startTime: newStart });
+        if (isShiftCopy) {
+          updateClip(clip.id, { startTime: origStart });
+        } else {
+          let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
+          newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
+          updateClip(clip.id, { startTime: newStart });
+        }
 
         const closest = findClosestLane(ev.clientY);
         if (closest) {
-          const ghostLeft = newStart * pixelsPerSecond;
+          const ghostLeftVp = ev.clientX - clickOffsetPx;
           const sourceLane = findClosestLane(startY);
+          const isCrossingTrack = closest.trackId !== track.id;
           setDragGhost({
-            x: ghostLeft,
+            x: ghostLeftVp,
             y: closest.rect.top + 4,
             width: clipW,
             height: clipH,
-            targetTrackId: closest.trackId !== track.id ? closest.trackId : null,
-            targetLaneRect: closest.trackId !== track.id
+            targetTrackId: (isCrossingTrack || isShiftCopy) ? closest.trackId : null,
+            targetLaneRect: (isCrossingTrack || isShiftCopy)
               ? { top: closest.rect.top, height: closest.rect.height }
               : null,
-            sourceLaneRect: closest.trackId !== track.id && sourceLane
+            sourceLaneRect: (isCrossingTrack || isShiftCopy) && sourceLane
               ? { top: sourceLane.rect.top, height: sourceLane.rect.height }
               : null,
+            isShiftCopy,
           });
         }
       } else if (mode === 'resize-left') {
@@ -154,14 +165,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         const shift = newStart - origStart;
         let newAudioOffset = origAudioOffset + shift;
+
+        // Can't reveal past start of audio buffer — clamp
         if (newAudioOffset < 0) {
-          newStart = origStart - origAudioOffset;
           newAudioOffset = 0;
+          newStart = origStart - origAudioOffset;
         }
+        // Can't trim past end of audio buffer
         if (newAudioOffset > origAudioDuration - MIN_CLIP_DURATION) {
           newAudioOffset = origAudioDuration - MIN_CLIP_DURATION;
           newStart = origStart + (newAudioOffset - origAudioOffset);
         }
+
         const newDuration = origDuration + (origStart - newStart);
         updateClip(clip.id, { startTime: newStart, duration: newDuration, audioOffset: newAudioOffset });
       } else {
@@ -179,7 +194,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
       if (mode === 'move' && dragRef.current) {
         const closest = findClosestLane(ev.clientY);
-        if (closest && closest.trackId !== track.id) {
+        const deltaSec = (ev.clientX - startX) / pixelsPerSecond;
+        const dropStart = Math.max(0, snapToGrid(origStart + deltaSec, bpm, 1));
+
+        if (ev.shiftKey && closest) {
+          // Shift+drag = copy: restore original position, duplicate to target
+          updateClip(clip.id, { startTime: origStart });
+          duplicateClipToTrack(clip.id, closest.trackId, dropStart);
+        } else if (closest && closest.trackId !== track.id) {
           moveClipToTrack(clip.id, closest.trackId);
         }
       }
@@ -187,7 +209,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, findClosestLane]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, findClosestLane]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -231,20 +253,29 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     stale: 'opacity-50',
   };
 
-  // Crop waveform peaks to the visible region
+  // Waveform: render at fixed density so trimming/extending never stretches the waveform
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
-  const peakWidthPx = width - 4; // padding
+  const peakWidthPx = width - 4;
 
-  // Determine visible portion of peaks array
+  // Fixed pixels-per-peak: each peak sample always maps to the same width
+  const pxPerPeak = peaks && peaks.length > 0 && audioDuration > 0
+    ? (audioDuration * pixelsPerSecond) / peaks.length
+    : 2;
+  // Minimum bar width of 2px
+  const barWidth = Math.max(pxPerPeak * 0.7, 0.5);
+  const barSpacing = Math.max(pxPerPeak, 1);
+
+  // Which peak indices are visible in this clip window
   const startPeakIdx = peaks ? Math.floor((audioOffset / audioDuration) * peaks.length) : 0;
+  const visibleAudioSec = Math.min(clip.duration, Math.max(0, audioDuration - audioOffset));
   const endPeakIdx = peaks ? Math.min(
-    Math.ceil(((audioOffset + clip.duration) / audioDuration) * peaks.length),
+    Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * peaks.length),
     peaks.length,
   ) : 0;
   const visiblePeakCount = endPeakIdx - startPeakIdx;
-  const numBars = peaks ? Math.min(visiblePeakCount, Math.floor(peakWidthPx / 2)) : 0;
-  const barSpacing = numBars > 0 ? peakWidthPx / numBars : 0;
+  const numBars = Math.max(0, visiblePeakCount);
+  const audioWidthPx = numBars * barSpacing;
 
   return (
     <>
@@ -253,7 +284,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         className={`absolute top-1 bottom-1 rounded-sm select-none overflow-hidden
           ${statusStyles[clip.generationStatus] ?? ''}
           ${isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-transparent' : ''}
-          ${dragGhost && dragGhost.targetTrackId ? 'opacity-0' : dragGhost ? '' : ''}
+          ${dragGhost && dragGhost.targetTrackId && !dragGhost.isShiftCopy ? 'opacity-0' : ''}
         `}
         style={{
           left,
@@ -272,26 +303,26 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <div className="absolute top-0 bottom-0 left-0 w-[6px] cursor-col-resize z-10" />
         <div className="absolute top-0 bottom-0 right-0 w-[6px] cursor-col-resize z-10" />
 
-        {/* Waveform — peaks rendered at fixed density, not stretched */}
-        {peaks && numBars > 0 && (
+        {/* Waveform — fixed density, only in audio-backed region */}
+        {peaks && numBars > 0 && audioWidthPx > 0 && (
           <div className="absolute inset-0 flex items-center overflow-hidden">
             <svg
-              width={peakWidthPx}
+              width={audioWidthPx}
               height="100%"
-              viewBox={`0 0 ${peakWidthPx} 100`}
+              viewBox={`0 0 ${audioWidthPx} 100`}
               preserveAspectRatio="none"
               className="opacity-60 ml-0.5"
             >
               {Array.from({ length: numBars }, (_, i) => {
-                const peakIdx = startPeakIdx + Math.floor((i / numBars) * visiblePeakCount);
-                const peak = peaks[Math.min(peakIdx, peaks.length - 1)];
+                const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);
+                const peak = peaks[peakIdx];
                 const h = peak * 80;
                 return (
                   <rect
                     key={i}
                     x={i * barSpacing}
                     y={50 - h / 2}
-                    width={Math.max(barSpacing * 0.7, 0.5)}
+                    width={barWidth}
                     height={Math.max(h, 1)}
                     fill={track.color}
                   />
@@ -406,25 +437,27 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             <div
               className="fixed pointer-events-none z-[98]"
               style={{
-                left: clipBlockRef.current?.getBoundingClientRect().left ?? left,
+                left: left,
                 top: dragGhost.sourceLaneRect.top + 4,
                 width,
                 height: dragGhost.sourceLaneRect.height - 8,
                 border: `1.5px dashed ${hexToRgba(track.color, 0.4)}`,
                 borderRadius: 2,
-                backgroundColor: hexToRgba(track.color, 0.04),
+                backgroundColor: hexToRgba(track.color, dragGhost.isShiftCopy ? 0.15 : 0.04),
               }}
             />
           )}
 
-          {/* Lane-aligned ghost — visually mirrors the original clip at full size */}
+          {/* Lane-aligned ghost — visually mirrors the original clip at target lane size */}
           <div
             className="fixed pointer-events-none z-[100] rounded-sm overflow-hidden"
             style={{
-              left: clipBlockRef.current?.getBoundingClientRect().left ?? left,
+              left: dragGhost.x,
               top: dragGhost.y,
               width: dragGhost.width,
-              height: dragGhost.height,
+              height: dragGhost.targetLaneRect
+                ? dragGhost.targetLaneRect.height - 8
+                : dragGhost.height,
               backgroundColor: hexToRgba(track.color, 0.45),
               borderLeft: `2px solid ${track.color}`,
               boxShadow: `0 4px 20px ${hexToRgba(track.color, 0.3)}, 0 0 0 1px ${hexToRgba(track.color, 0.5)}`,
@@ -432,25 +465,25 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             }}
           >
             {/* Mini waveform inside ghost */}
-            {peaks && numBars > 0 && (
+            {peaks && numBars > 0 && audioWidthPx > 0 && (
               <div className="absolute inset-0 flex items-center overflow-hidden">
                 <svg
-                  width={peakWidthPx}
+                  width={audioWidthPx}
                   height="100%"
-                  viewBox={`0 0 ${peakWidthPx} 100`}
+                  viewBox={`0 0 ${audioWidthPx} 100`}
                   preserveAspectRatio="none"
                   className="opacity-50 ml-0.5"
                 >
                   {Array.from({ length: numBars }, (_, i) => {
-                    const peakIdx = startPeakIdx + Math.floor((i / numBars) * visiblePeakCount);
-                    const peak = peaks[Math.min(peakIdx, peaks.length - 1)];
+                    const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);
+                    const peak = peaks[peakIdx];
                     const h = peak * 80;
                     return (
                       <rect
                         key={i}
                         x={i * barSpacing}
                         y={50 - h / 2}
-                        width={Math.max(barSpacing * 0.7, 0.5)}
+                        width={barWidth}
                         height={Math.max(h, 1)}
                         fill={track.color}
                       />
@@ -462,6 +495,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             <div className="absolute top-0 left-1.5 right-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm">
               {clip.prompt || track.displayName}
             </div>
+            {/* Copy badge when Shift is held */}
+            {dragGhost.isShiftCopy && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow z-20">
+                +
+              </div>
+            )}
           </div>
 
           {/* Target lane highlight */}

@@ -12,15 +12,15 @@ interface TrackLaneProps {
   track: Track;
 }
 
-// Lane context menu (right-click / double-click on empty area)
 interface LaneContextMenuProps {
   x: number;
   y: number;
   onAddLayer: () => void;
+  onOpenSequencer?: () => void;
   onClose: () => void;
 }
 
-function LaneContextMenu({ x, y, onAddLayer, onClose }: LaneContextMenuProps) {
+function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onClose }: LaneContextMenuProps) {
   const clampedX = Math.min(x, window.innerWidth - 180);
   const clampedY = Math.min(y, window.innerHeight - 80);
   return (
@@ -34,6 +34,14 @@ function LaneContextMenu({ x, y, onAddLayer, onClose }: LaneContextMenuProps) {
         className="fixed z-50 bg-daw-surface border border-daw-border rounded shadow-xl py-1 min-w-[160px]"
         style={{ left: clampedX, top: clampedY }}
       >
+        {onOpenSequencer && (
+          <button
+            onClick={() => { onClose(); onOpenSequencer(); }}
+            className="w-full text-left px-3 py-1.5 text-xs text-emerald-300 hover:bg-daw-surface-2 transition-colors"
+          >
+            Open Sequencer Editor...
+          </button>
+        )}
         <button
           onClick={() => { onClose(); onAddLayer(); }}
           className="w-full text-left px-3 py-1.5 text-xs text-zinc-200 hover:bg-daw-surface-2 transition-colors"
@@ -46,11 +54,12 @@ function LaneContextMenu({ x, y, onAddLayer, onClose }: LaneContextMenuProps) {
 }
 
 const MIN_LANE_HEIGHT = 40;
-const MAX_LANE_HEIGHT = 200;
+const MAX_LANE_HEIGHT = 400;
 
 export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
+  const setOpenSequencerTrackId = useUIStore((s) => s.setOpenSequencerTrackId);
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
 
@@ -65,7 +74,6 @@ export function TrackLane({ track }: TrackLaneProps) {
   const { importAudioToTrack } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
 
-  // Lane height resize
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const laneHeight = track.laneHeight ?? 64;
 
@@ -92,7 +100,8 @@ export function TrackLane({ track }: TrackLaneProps) {
   if (!project) return null;
 
   const trackType = track.trackType ?? 'stems';
-  const isComingSoon = trackType === 'sequencer' || trackType === 'pianoRoll';
+  const isSequencer = trackType === 'sequencer';
+  const isComingSoon = trackType === 'pianoRoll';
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
   const hitsClip = useCallback((clickTime: number): boolean => {
@@ -120,6 +129,14 @@ export function TrackLane({ track }: TrackLaneProps) {
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     if (isComingSoon) return;
+
+    // For sequencer tracks, double-click opens the editor
+    if (isSequencer) {
+      e.stopPropagation();
+      setOpenSequencerTrackId(track.id);
+      return;
+    }
+
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
@@ -131,7 +148,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     const duration = Math.max(10, Math.min(30, remaining));
     setCtxMenu({ x: e.clientX, y: e.clientY, startTime, duration });
     setAddLayerTarget(null);
-  }, [isComingSoon, pixelsPerSecond, project.bpm, project.totalDuration, hitsClip]);
+  }, [isComingSoon, isSequencer, pixelsPerSecond, project.bpm, project.totalDuration, hitsClip, track.id, setOpenSequencerTrackId]);
 
   const clearSel = useCallback(() => {
     setAddLayerTarget(null);
@@ -169,12 +186,16 @@ export function TrackLane({ track }: TrackLaneProps) {
     }
   }, [project, pixelsPerSecond, track.id, importAudioToTrack]);
 
+  const hasClips = track.clips.length > 0;
+
   return (
     <>
       <div
         data-track-id={track.id}
         className={`relative border-b border-daw-border ${fileDragOver ? 'bg-blue-900/20' : ''}`}
         style={{ width: totalWidth, height: laneHeight }}
+        onContextMenu={handleContextMenu}
+        onDoubleClick={handleDoubleClick}
         onDragOver={handleFileDragOver}
         onDragLeave={handleFileDragLeave}
         onDrop={handleFileDrop}
@@ -194,9 +215,25 @@ export function TrackLane({ track }: TrackLaneProps) {
             </div>
           </div>
         ) : (
-          track.clips.map((clip) => (
-            <ClipBlock key={clip.id} clip={clip} track={track} />
-          ))
+          <>
+            {/* Render clips (works for all track types including sequencer after bounce) */}
+            {track.clips.map((clip) => (
+              <ClipBlock key={clip.id} clip={clip} track={track} />
+            ))}
+
+            {/* Sequencer track hint when no bounced clips */}
+            {isSequencer && !hasClips && (
+              <div
+                className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                onClick={() => setOpenSequencerTrackId(track.id)}
+              >
+                <div className="flex items-center gap-2 bg-daw-surface/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-daw-border border-dashed">
+                  <span className="text-emerald-400 text-sm">SEQ</span>
+                  <span className="text-xs text-zinc-400">Double-click to open sequencer editor</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {ctxMenu && (
@@ -204,6 +241,7 @@ export function TrackLane({ track }: TrackLaneProps) {
             x={ctxMenu.x}
             y={ctxMenu.y}
             onAddLayer={() => setAddLayerTarget({ startTime: ctxMenu.startTime, duration: ctxMenu.duration })}
+            onOpenSequencer={isSequencer ? () => setOpenSequencerTrackId(track.id) : undefined}
             onClose={() => setCtxMenu(null)}
           />
         )}
@@ -227,3 +265,4 @@ export function TrackLane({ track }: TrackLaneProps) {
     </>
   );
 }
+

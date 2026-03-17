@@ -5,7 +5,7 @@ import { TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import { TrackEditModal } from './TrackEditModal';
 
 const MIN_LANE_HEIGHT = 40;
-const MAX_LANE_HEIGHT = 200;
+const MAX_LANE_HEIGHT = 400;
 
 interface TrackHeaderProps {
   track: Track;

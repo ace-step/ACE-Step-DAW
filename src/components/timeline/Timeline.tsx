@@ -146,6 +146,7 @@ export function Timeline() {
       const target = e.target as HTMLElement;
       if (target.closest?.('[data-clip-block]')) return;
       if (target.closest?.('.fixed')) return;
+      if (target.closest?.('[data-sequencer-grid]')) return;
 
       const isCtx = e.metaKey || e.ctrlKey;
 

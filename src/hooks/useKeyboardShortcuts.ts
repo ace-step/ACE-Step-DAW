@@ -251,6 +251,16 @@ export function useKeyboardShortcuts() {
           break;
         }
 
+        // Split clip at playhead
+        case 'KeyS': {
+          const selected = [...ui.selectedClipIds];
+          if (selected.length === 1) {
+            e.preventDefault();
+            project.splitClip(selected[0], transport.currentTime);
+          }
+          break;
+        }
+
         // Mixer toggle
         case 'KeyM':
           e.preventDefault();

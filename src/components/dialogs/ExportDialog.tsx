@@ -3,7 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
-import { exportMixToWav } from '../../engine/exportMix';
+import { exportMixToWav, type ExportClip } from '../../engine/exportMix';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../../engine/offlineRender';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 
@@ -19,7 +19,7 @@ export function ExportDialog() {
     setExporting(true);
     try {
       const engine = getAudioEngine();
-      const clips: Array<{ startTime: number; buffer: AudioBuffer; volume: number; pan?: number }> = [];
+      const clips: ExportClip[] = [];
 
       const anySoloed = project.tracks.some((t) => t.soloed);
       for (const track of project.tracks) {
@@ -38,7 +38,7 @@ export function ExportDialog() {
               track.synthPreset ?? 'piano',
               project.totalDuration,
             );
-            clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0 });
+            clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
           }
         }
 
@@ -49,7 +49,7 @@ export function ExportDialog() {
             project.totalDuration,
             track.drumKit ?? '808',
           );
-          clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0 });
+          clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
         }
 
         for (const clip of track.clips) {
@@ -57,7 +57,7 @@ export function ExportDialog() {
             const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
             if (blob) {
               const buffer = await engine.decodeAudioData(blob);
-              clips.push({ startTime: clip.startTime, buffer, volume: track.volume, pan: track.pan ?? 0 });
+              clips.push({ startTime: clip.startTime, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
             }
           }
         }

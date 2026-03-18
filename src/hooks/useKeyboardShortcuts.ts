@@ -222,9 +222,24 @@ export function useKeyboardShortcuts() {
           transport.toggleLoop();
           break;
 
+        case 'KeyK':
+          e.preventDefault();
+          transport.toggleMetronome();
+          break;
+
         case 'KeyR':
           e.preventDefault();
           void toggleRecord();
+          break;
+
+        case 'Home':
+          e.preventDefault();
+          seek(0);
+          break;
+
+        case 'End':
+          e.preventDefault();
+          if (project.project) seek(project.project.totalDuration);
           break;
 
         case 'ArrowLeft':

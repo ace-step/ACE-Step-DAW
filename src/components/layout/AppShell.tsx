@@ -42,6 +42,18 @@ export function AppShell() {
     }
   }, []);
 
+  // Warn before closing tab with unsaved project
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (project) {
+        e.preventDefault();
+        // Modern browsers ignore custom messages, but still show the dialog
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [project]);
+
   useKeyboardShortcuts();
 
   return (

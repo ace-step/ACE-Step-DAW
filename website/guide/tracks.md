@@ -15,7 +15,7 @@ Stems tracks are powered by the AI generation engine. Each stems track represent
 **Generation order:**
 Drums → Bass → Guitar → Keyboard → Percussion → Strings → Synth → FX → Brass → Woodwinds → Backing Vocals → Vocals
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Add Track Demo](/demos/feature-add-track.gif)
 
 ::: tip
 You can regenerate any track out of order. The engine will use whatever valid cumulative context is available.
@@ -31,7 +31,7 @@ Sample tracks hold imported audio clips. Drag audio files onto the timeline or u
 - Split clips at the playhead with `S`
 - Duplicate clips with `Cmd/Ctrl + D`
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Add Track Demo](/demos/feature-add-track.gif)
 
 ::: tip
 Sample tracks are great for recording takes. Record mic input directly into a sample track, then edit the resulting clip.
@@ -50,7 +50,7 @@ An FL Studio-inspired drum pattern editor for creating rhythmic patterns.
 - 4 drum kits: 808, Acoustic, Electronic, Lo-Fi
 - 16-pad beat pads with QWERTY keyboard mapping (`1-4`, `Q-R`, `A-F`, `Z-V`)
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Add Track Demo](/demos/feature-add-track.gif)
 
 See [Step Sequencer](/guide/sequencer) for the full guide.
 
@@ -66,7 +66,7 @@ A canvas-based MIDI note editor with built-in synth playback.
 - 6 synth presets: Piano, Strings, Pad, Lead, Bass, Organ
 - Independent X/Y zoom and scroll
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Add Track Demo](/demos/feature-add-track.gif)
 
 See [Piano Roll](/guide/piano-roll) for the full guide.
 

@@ -12,7 +12,7 @@ The core generation mode. Tracks are generated sequentially, with each new track
 2. Each generation receives the cumulative audio from prior tracks
 3. The AI uses this context to produce parts that harmonically and rhythmically fit the existing mix
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![AI Generation Demo](/demos/feature-ai-generation.gif)
 
 ### Generation Parameters
 

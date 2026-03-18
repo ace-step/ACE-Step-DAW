@@ -6,7 +6,7 @@ The loop browser provides 15 built-in synthesized loops that you can preview, se
 
 Press `O` to toggle the loop browser / assets panel.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Loop Browser](/demos/feature-library.gif)
 
 ## Built-in Loops
 

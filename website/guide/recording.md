@@ -8,7 +8,7 @@ ACE-Step DAW supports microphone recording directly into sample tracks with real
 2. **Select input device** — Open Settings (`Cmd/Ctrl + ,`) to choose from available microphone inputs
 3. **Arm a track** — Select the track you want to record into
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Recording](/demos/feature-complete-tour.gif)
 
 ## Recording Controls
 

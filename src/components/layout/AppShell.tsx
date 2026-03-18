@@ -4,6 +4,8 @@ import { StatusBar } from './StatusBar';
 import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
+import { CoverModal } from '../generation/CoverModal';
+import { RepaintModal } from '../generation/RepaintModal';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
 import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -65,6 +67,8 @@ export function AppShell() {
       <SettingsDialog />
       <ProjectListDialog />
       <KeyboardShortcutsDialog />
+      <CoverModal />
+      <RepaintModal />
     </div>
   );
 }

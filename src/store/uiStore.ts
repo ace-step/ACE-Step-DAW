@@ -46,6 +46,11 @@ interface UIState {
   loopBrowserSearch: string;
   previewingLoopId: string | null;
 
+  // Cover / Repaint modals
+  coverClipId: string | null;
+  repaintClipId: string | null;
+  repaintRange: { start: number; end: number } | null;
+
   setPixelsPerSecond: (pps: number) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -86,6 +91,10 @@ interface UIState {
   setLoopBrowserCategory: (v: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth') => void;
   setLoopBrowserSearch: (v: string) => void;
   setPreviewingLoopId: (id: string | null) => void;
+
+  // Cover / Repaint modals
+  setCoverModal: (clipId: string | null) => void;
+  setRepaintModal: (clipId: string | null, range?: { start: number; end: number } | null) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -127,6 +136,10 @@ export const useUIStore = create<UIState>((set) => ({
   loopBrowserCategory: 'All',
   loopBrowserSearch: '',
   previewingLoopId: null,
+
+  coverClipId: null,
+  repaintClipId: null,
+  repaintRange: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
 
@@ -202,4 +215,7 @@ export const useUIStore = create<UIState>((set) => ({
   setLoopBrowserCategory: (v) => set({ loopBrowserCategory: v }),
   setLoopBrowserSearch: (v) => set({ loopBrowserSearch: v }),
   setPreviewingLoopId: (id) => set({ previewingLoopId: id }),
+
+  setCoverModal: (clipId) => set({ coverClipId: clipId }),
+  setRepaintModal: (clipId, range = null) => set({ repaintClipId: clipId, repaintRange: range }),
 }));

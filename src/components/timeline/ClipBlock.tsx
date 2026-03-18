@@ -2,6 +2,7 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useGenerationStore } from '../../store/generationStore';
 import { useGeneration } from '../../hooks/useGeneration';
 import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
@@ -36,6 +37,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const contextWindow = useUIStore((s) => s.contextWindow);
+  const selectWindow = useUIStore((s) => s.selectWindow);
+  const setCoverModal = useUIStore((s) => s.setCoverModal);
+  const setRepaintModal = useUIStore((s) => s.setRepaintModal);
+
+  // Track generating progress for this clip to show in the status overlay
+  const generatingProgress = useGenerationStore((s) => {
+    const job = s.jobs.find(
+      (j) => j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing'),
+    );
+    return job?.progress ?? null;
+  });
   const updateClip = useProjectStore((s) => s.updateClip);
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
@@ -418,10 +430,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           </div>
         )}
 
-        {/* Status indicator */}
-        {clip.generationStatus === 'generating' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        {/* Status overlay — spinner + progress text during generation */}
+        {generatingProgress && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none bg-black/30 rounded-md">
+            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mb-0.5" />
+            <span className="text-[8px] text-white/90 font-medium text-center px-1 leading-tight max-w-full truncate">
+              {generatingProgress}
+            </span>
           </div>
         )}
         {clip.generationStatus === 'error' && (
@@ -456,6 +471,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
           onAddLayer={() => { closeCtxMenu(); setAddLayerOpen(true); }}
+          onCreateCover={() => {
+            closeCtxMenu();
+            setCoverModal(clip.id);
+          }}
+          onRepaint={() => {
+            closeCtxMenu();
+            // Compute repaint range from selectWindow if it overlaps this clip
+            let range: { start: number; end: number } | null = null;
+            if (selectWindow) {
+              const rs = Math.max(selectWindow.startTime, clip.startTime);
+              const re = Math.min(selectWindow.endTime, clip.startTime + clip.duration);
+              if (re > rs) range = { start: rs, end: re };
+            }
+            setRepaintModal(clip.id, range);
+          }}
           onClose={closeCtxMenu}
           hasPrompt={!!clip.prompt}
           isReady={clip.generationStatus === 'ready'}
@@ -583,7 +613,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 }
 
 function ClipContextMenu({
-  x, y, onEdit, onGenerate, onRegenerate, onOpenMidi, onDuplicate, onDelete, onAddLayer, onClose, hasPrompt, isReady, isMidiClip,
+  x, y,
+  onEdit, onGenerate, onRegenerate, onOpenMidi,
+  onDuplicate, onDelete, onAddLayer,
+  onCreateCover, onRepaint,
+  onClose,
+  hasPrompt, isReady, isMidiClip,
 }: {
   x: number;
   y: number;
@@ -594,19 +629,21 @@ function ClipContextMenu({
   onDuplicate: () => void;
   onDelete: () => void;
   onAddLayer: () => void;
+  onCreateCover: () => void;
+  onRepaint: () => void;
   onClose: () => void;
   hasPrompt: boolean;
   isReady: boolean;
   isMidiClip: boolean;
 }) {
-  const clampedX = Math.min(x, window.innerWidth - 200);
-  const clampedY = Math.min(y, window.innerHeight - 240);
+  const clampedX = Math.min(x, window.innerWidth - 210);
+  const clampedY = Math.min(y, window.innerHeight - 300);
 
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <div
-        className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[180px] backdrop-blur-sm"
+        className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[190px] backdrop-blur-sm"
         style={{ left: clampedX, top: clampedY }}
       >
         <button onClick={onEdit} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
@@ -618,25 +655,35 @@ function ClipContextMenu({
           </button>
         ) : isReady ? (
           <button onClick={onRegenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
-            Re-generate
+            Regenerate
           </button>
         ) : (
           <button onClick={onGenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
             Generate
           </button>
         )}
+
+        {!isMidiClip && isReady && (
+          <>
+            <button onClick={onCreateCover} className="w-full text-left px-3 py-1.5 text-[11px] text-amber-300 hover:bg-daw-accent hover:text-white transition-colors">
+              Create Cover…
+            </button>
+            <button onClick={onRepaint} className="w-full text-left px-3 py-1.5 text-[11px] text-rose-300 hover:bg-daw-accent hover:text-white transition-colors">
+              Repaint Selection…
+            </button>
+          </>
+        )}
+
+        <div className="my-1 border-t border-[#555]" />
         <button onClick={onDuplicate} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
           Duplicate
         </button>
-        <div className="my-1 border-t border-[#555]" />
         {!isMidiClip && (
-          <>
-            <button onClick={onAddLayer} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-              Add Layer here...
-            </button>
-            <div className="my-1 border-t border-[#555]" />
-          </>
+          <button onClick={onAddLayer} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
+            Add Layer here…
+          </button>
         )}
+        <div className="my-1 border-t border-[#555]" />
         <button onClick={onDelete} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-600 hover:text-white transition-colors">
           Delete
         </button>

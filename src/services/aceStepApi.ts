@@ -1,5 +1,7 @@
 import type {
   LegoTaskParams,
+  CoverTaskParams,
+  RepaintTaskParams,
   ApiEnvelope,
   ReleaseTaskResponse,
   TaskResultEntry,
@@ -8,6 +10,8 @@ import type {
   InitModelRequest,
   InitModelResponse,
 } from '../types/api';
+
+export type AceStepTaskParams = LegoTaskParams | CoverTaskParams | RepaintTaskParams;
 import { downsampleWavBlob } from '../utils/audioDownsample';
 
 const BACKEND_URL_KEY = 'ace-step-daw-backend-url';
@@ -116,18 +120,19 @@ const RELEASE_TASK_MAX_RETRIES = 3;
 
 export async function releaseLegoTask(
   srcAudioBlob: Blob,
-  params: LegoTaskParams,
+  params: AceStepTaskParams,
 ): Promise<ReleaseTaskResponse> {
   const base = getApiBase();
 
-  const usePath = Boolean(params.src_audio_path);
+  const legoParams = params as Partial<LegoTaskParams>;
+  const usePath = Boolean(legoParams.src_audio_path);
 
   console.log(
-    `[aceStepApi] releaseLegoTask: ${usePath ? `src_audio_path=${params.src_audio_path}` : `src_audio blob size=${srcAudioBlob.size}`}`,
+    `[aceStepApi] releaseLegoTask: ${usePath ? `src_audio_path=${legoParams.src_audio_path}` : `src_audio blob size=${srcAudioBlob.size}`}`,
     `task_type=${params.task_type}`,
     `audio_duration=${params.audio_duration}`,
-    `repainting_start=${params.repainting_start}`,
-    `repainting_end=${params.repainting_end}`,
+    `repainting_start=${legoParams.repainting_start}`,
+    `repainting_end=${legoParams.repainting_end}`,
   );
 
   // Only downsample and upload the blob when no server-side path is provided.

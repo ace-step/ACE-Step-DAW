@@ -1,3 +1,41 @@
+/** Parameters for cover generation — transforms source audio into a new style */
+export interface CoverTaskParams {
+  task_type: 'cover';
+  caption: string;        // Style/genre description
+  lyrics: string;
+  cover_strength: number; // 0.0–1.0: how much to deviate from original
+  audio_duration: number;
+  inference_steps: number;
+  guidance_scale: number;
+  shift: number;
+  batch_size: number;
+  audio_format: 'wav';
+  thinking: boolean;
+  model: string;
+  seed?: number;
+  use_random_seed?: boolean;
+}
+
+/** Parameters for repaint — partially regenerates a section of an existing clip */
+export interface RepaintTaskParams {
+  task_type: 'repaint';
+  prompt: string;
+  global_caption: string;
+  lyrics: string;
+  repainting_start: number;
+  repainting_end: number;
+  audio_duration: number;
+  inference_steps: number;
+  guidance_scale: number;
+  shift: number;
+  batch_size: number;
+  audio_format: 'wav';
+  thinking: boolean;
+  model: string;
+  seed?: number;
+  use_random_seed?: boolean;
+}
+
 export interface LegoTaskParams {
   task_type: 'lego';
   track_name: string;

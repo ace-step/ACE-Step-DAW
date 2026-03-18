@@ -15,6 +15,8 @@ export function useRecording() {
   const storeArmTrack = useTransportStore((s) => s.armTrack);
   const storeDisarmTrack = useTransportStore((s) => s.disarmTrack);
   const storeToggleArmTrack = useTransportStore((s) => s.toggleArmTrack);
+  const storeDisarmAll = useTransportStore((s) => s.disarmAll);
+  const setCountIn = useTransportStore((s) => s.setCountIn);
   const addClip = useProjectStore((s) => s.addClip);
   const updateClipStatus = useProjectStore((s) => s.updateClipStatus);
   const updateTrack = useProjectStore((s) => s.updateTrack);
@@ -32,16 +34,33 @@ export function useRecording() {
     updateTrack(id, { armed: false });
   }, [storeDisarmTrack, updateTrack]);
 
-  const toggleArmTrack = useCallback((id: string) => {
-    const armed = useTransportStore.getState().armedTrackIds.includes(id);
-    if (armed) {
+  /**
+   * Toggle arm on a track.
+   * exclusive=true (default): Ableton convention — disarms all other tracks first.
+   * exclusive=false: additive (Cmd/Ctrl+click behavior).
+   */
+  const toggleArmTrack = useCallback((id: string, exclusive = true) => {
+    const state = useTransportStore.getState();
+    const isArmed = state.armedTrackIds.includes(id);
+
+    if (isArmed) {
       disarmTrack(id);
       return;
     }
-    storeToggleArmTrack(id);
+
+    // Exclusive arm: disarm all others first
+    if (exclusive) {
+      for (const prevId of state.armedTrackIds) {
+        recordingEngine.setMonitoring(prevId, false);
+        updateTrack(prevId, { armed: false });
+      }
+      storeDisarmAll();
+    }
+
+    storeToggleArmTrack(id, false); // false = additive since we already cleared
     recordingEngine.setMonitoring(id, true);
     updateTrack(id, { armed: true });
-  }, [disarmTrack, storeToggleArmTrack, updateTrack]);
+  }, [disarmTrack, storeToggleArmTrack, storeDisarmAll, updateTrack]);
 
   const stopRecording = useCallback(async () => {
     const project = useProjectStore.getState().project;
@@ -109,6 +128,19 @@ export function useRecording() {
       return;
     }
 
+    // Play count-in if configured (default: 1 bar)
+    const project = useProjectStore.getState().project;
+    const bpm = project?.bpm ?? 120;
+    const beatsPerBar = (typeof project?.timeSignature === 'number' ? project.timeSignature : 4);
+
+    if (recordingEngine.getCountInLength() !== 'off') {
+      setCountIn(true, -(beatsPerBar * (recordingEngine.getCountInLength() === '1bar' ? 1 : 2)));
+      await recordingEngine.playCountIn(bpm, beatsPerBar, (_bar, _beat, remaining) => {
+        setCountIn(true, -remaining);
+      });
+      setCountIn(false, 0);
+    }
+
     setIsRecording(true);
     const transportTime = useTransportStore.getState().currentTime;
     let startedCount = 0;
@@ -127,7 +159,7 @@ export function useRecording() {
     }
 
     toastInfo('Recording started');
-  }, [setIsRecording, stopRecording]);
+  }, [setIsRecording, setCountIn, stopRecording]);
 
   return {
     isRecording,

@@ -221,7 +221,7 @@ export function TrackHeader({
           </svg>
         </button>
         <button
-          onClick={() => toggleArmTrack(track.id)}
+          onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
           className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
             isArmed
               ? 'bg-red-600/90 text-white'

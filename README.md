@@ -2,12 +2,40 @@
 
 > **Looking for a full-featured, production-ready experience?** Try [ACE Studio](http://acestudio.ai/) — our professional AI music creation platform.
 
-A browser-based Digital Audio Workstation that uses [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) for AI music generation. Tracks are generated sequentially in a "LEGO-style" pipeline — each new instrument layer is musically aware of everything generated before it.
+A browser-based Digital Audio Workstation powered by [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) for AI music generation. Tracks are generated sequentially in a "LEGO-style" pipeline — each new instrument layer is musically aware of everything generated before it.
+
+## Features
+
+### AI Music Generation
+- **LEGO Pipeline** — Sequential generation with cumulative context (drums → bass → guitar → vocals)
+- **Cover Generation** — AI-powered cover creation from existing audio
+- **Repaint/Edit** — Selective regeneration of specific time ranges
+- **Vocal2BGM** — Generate accompaniment from vocal tracks
+- **Audio Analysis** — AI-powered BPM, key, and genre detection
+- **16 Generation Presets** — Pop, Rock, Jazz, Electronic, Hip-Hop, Classical, Lo-Fi, Ambient
+- **Model Selector** — Choose DiT and LM models, LoRA support
+
+### DAW Capabilities
+- **Multi-Track Timeline** — Arrangement view with clip-based editing
+- **4 Track Types** — Stems (AI-generated), Sample (imported audio), Sequencer (step-based drums), Piano Roll (MIDI)
+- **Piano Roll Editor** — Canvas-based MIDI note editor with velocity lane, draw mode, grid snap
+- **Step Sequencer** — FL Studio-inspired drum pattern editor with beat pads
+- **Effect Chain** — 6 built-in effects (EQ3, Compressor, Reverb, Delay, Distortion, Filter) with per-effect UI
+- **Mixer Panel** — Per-track volume, pan, mute, solo, channel strips
+- **6 Synth Presets** — Piano, Strings, Pad, Lead, Bass, Organ (Tone.js)
+- **16 Drum Sounds** — Synthesized kicks, snares, hi-hats, claps, toms, cymbals (4 kit presets)
+- **Loop Browser** — 15 built-in synthesized loops with search, filter, and drag-to-timeline
+- **Recording Engine** — Microphone input, real-time waveform, count-in, input level metering
+- **Automation** — Breakpoint envelopes with interpolation for volume and pan
+- **Smart Controls** — Per-track parameter panels
+- **Project Persistence** — Save/load projects via IndexedDB
+- **WAV Export** — Bounce mix to stereo WAV file
+- **Keyboard Shortcuts** — Comprehensive shortcut system
 
 ## Requirements
 
 - **Node.js** 18+
-- **ACE-Step 1.5 API server** running on `localhost:8001` (default)
+- **ACE-Step 1.5 API server** running on `localhost:8001` (default), or use cloud API
 
 ## Quick Start
 
@@ -18,6 +46,10 @@ npm run dev
 
 Opens at [http://localhost:5174](http://localhost:5174). The dev server proxies `/api` requests to the ACE-Step 1.5 backend at `localhost:8001`.
 
+### Using Cloud API
+
+To use the ACE-Step cloud API instead of a local server, configure the backend URL in Settings → API URL: `https://api.acemusic.ai`
+
 ### Production Build
 
 ```bash
@@ -25,98 +57,62 @@ npm run build
 npm run preview
 ```
 
-## How It Works
+## Tech Stack
 
-### Generation Pipeline
-
-ACE-Step DAW generates tracks bottom-to-top. Each step sends the cumulative mix of all previous tracks as context:
-
-1. **Drums** — generated on silence
-2. **Bass** — receives drums mix, generates bass on top
-3. **Guitar** — receives drums+bass, generates guitar on top
-4. ... and so on up through **Vocals**
-
-After each generation, the app isolates the new track via wave subtraction (`currentMix - previousMix`) so you can control volume, mute, and solo individual tracks during playback.
-
-### Workflow
-
-1. **Create a project** — set name, BPM, key, time signature
-2. **Add tracks** — pick from 13 instrument types (vocals, drums, bass, guitar, synth, strings, etc.)
-3. **Create clips** — click an empty track lane; a clip appears snapped to the beat grid
-4. **Write prompts** — double-click a clip to describe what it should sound like, optionally add lyrics
-5. **Generate** — hit "Generate All" or right-click a single clip to generate just that one
-6. **Mix** — adjust volume, mute/solo tracks, play back in the browser
-7. **Export** — render all unmuted tracks to a stereo WAV file
-
-### Musical Controls
-
-Each clip has three tiers of musical control for BPM, key, and time signature:
-
-| Mode        | Behavior                                   |
-| ----------- | ------------------------------------------ |
-| **Auto**    | ACE-Step 1.5 infers from the audio context |
-| **Project** | Uses the project-level setting             |
-| **Manual**  | Explicit per-clip override                 |
-
-After generation, inferred values (BPM, key, time signature, genres, seed) are displayed on the clip.
-
-### Sample Mode
-
-Toggle "Sample Mode" in the clip editor to use ACE-Step 1.5's sample generation mode. The prompt field becomes a description field, lyrics are hidden, and the prompt is sent as a `sample_query`.
-
-### Model Selection
-
-Open **Settings** to pick from available models fetched from the ACE-Step 1.5 API. Leave it on "Server Default" to let the backend decide.
+- **React 19** + **TypeScript** + **Vite**
+- **Tailwind CSS v4**
+- **Zustand** (state management)
+- **Tone.js** (synth engine, effects, drum synthesis)
+- **Web Audio API** (playback, recording, rendering)
+- **IndexedDB** via idb-keyval (audio blob storage)
 
 ## Project Structure
 
 ```
 src/
   components/
-    dialogs/         # NewProjectDialog, SettingsDialog, ExportDialog
-    generation/      # ClipPromptEditor, GenerationPanel
-    layout/          # AppShell, Toolbar, StatusBar
-    timeline/        # TimelineView, TimeRuler, ClipBlock
-    tracks/          # TrackLane, TrackHeader, InstrumentPicker
-    transport/       # TransportBar
-  constants/         # Defaults, track definitions, key scales
-  engine/            # AudioEngine, TrackNode, wave subtraction, export
-  hooks/             # useAudioEngine, useGeneration, useTransport
-  services/          # ACE-Step API client, generation pipeline, audio storage
+    assets/          # Loop browser, assets panel
+    controls/        # Smart controls panel
+    dialogs/         # New project, settings, export, instrument picker
+    generation/      # AI generation panels (cover, repaint, vocal2bgm, analysis)
+    layout/          # App shell, toolbar, status bar
+    mixer/           # Mixer panel, effect chain
+    pianoroll/       # Piano roll MIDI editor
+    sequencer/       # Step sequencer, beat pads
+    timeline/        # Timeline view, track lanes, clip blocks
+    tracks/          # Track list, track headers
+    transport/       # Transport bar, tempo/time display
+    ui/              # Shared UI components (knob, fader, slider)
+  constants/         # Defaults, track definitions, generation presets
+  engine/            # Audio engine, synth/effects/drum/recording/automation engines
+  hooks/             # React hooks (audio, transport, keyboard shortcuts)
+  services/          # ACE-Step API, generation pipeline, project storage
   store/             # Zustand stores (project, transport, UI, generation)
-  types/             # TypeScript interfaces (API, project)
+  types/             # TypeScript interfaces (API, project, audio)
   utils/             # WAV encoding, waveform peaks, color, time helpers
 ```
 
+## Development
+
+See [AGENTS.md](AGENTS.md) for the complete development workflow, rules, and required skills.
+
+See [docs/dev-process.md](docs/dev-process.md) for competitive research index and system test checklists.
+
 ## Keyboard Shortcuts
 
-| Key                 | Action        |
-| ------------------- | ------------- |
-| `Space`             | Play / Pause  |
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
 | `Ctrl/Cmd + Scroll` | Zoom timeline |
+| `B` | Toggle draw mode (Piano Roll) |
+| `Delete` | Delete selected clip/notes |
+| `Ctrl/Cmd + A` | Select all |
+| `Escape` | Deselect |
 
-## Configuration
+## License
 
-The ACE-Step 1.5 API URL is configured in `vite.config.ts` under `server.proxy`. Change the `target` if your server runs on a different host/port:
-
-```ts
-proxy: {
-  '/api': {
-    target: 'http://localhost:8001',  // ← your ACE-Step 1.5 server
-    changeOrigin: true,
-    rewrite: (path) => path.replace(/^\/api/, ''),
-  },
-},
-```
+MIT
 
 ## ACE Studio
 
-ACE-Step DAW is an open-source research demo. For professional music production with higher quality models, real-time collaboration, and a polished workflow, visit **[ACE Studio](http://acestudio.ai/)**.
-
-## Tech Stack
-
-- React 19, TypeScript, Vite
-- Tailwind CSS v4
-- Zustand (state management)
-- Web Audio API (playback & rendering)
-- IndexedDB via idb-keyval (audio blob storage)
+ACE-Step DAW is an open-source project. For professional music production with higher quality models, real-time collaboration, and a polished workflow, visit **[ACE Studio](http://acestudio.ai/)**.

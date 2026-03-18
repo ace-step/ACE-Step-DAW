@@ -193,6 +193,14 @@ Agents MUST read and follow the relevant skill before each step. Do not improvis
 
 ---
 
+## Language Policy
+
+- **All project files** (source code, comments, docs, commit messages, PR descriptions, release notes) **MUST be in English**.
+- The only exception is `docs/research-notes/` which may contain bilingual content for competitive research from non-English sources.
+- Conversations with the user may be in Chinese, but all output committed to the repo must be English.
+
+---
+
 ## Red Lines (absolute prohibitions)
 
 - ❌ Never push directly to main

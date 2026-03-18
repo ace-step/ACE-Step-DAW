@@ -390,7 +390,7 @@ export const useProjectStore = create<ProjectState>()(
     _pushHistory(state.project);
 
     const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
-    const info = TRACK_CATALOG[trackName];
+    const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG['custom'];
     const existingOrders = state.project.tracks.map((t) => t.order);
     const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
 

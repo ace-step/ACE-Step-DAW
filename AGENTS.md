@@ -146,6 +146,53 @@ git checkout -b feat/v0.0.X-feature-name
 
 ---
 
+## Required Skills (install via `npx clawhub@latest install <name> --dir .claude/skills`)
+
+Agents MUST read and follow the relevant skill before each step. Do not improvise — use best practices.
+
+### Step 1 — Research
+- `find-skill` — Search for additional skills on ClawHub if needed
+
+### Step 2 — Planning
+- `agile-toolkit` — Sprint planning, backlog management, estimation
+- `task-development-workflow` — Task breakdown and dev workflow
+
+### Step 3 — UI/UX Design
+- `ui-ux-pro-max` — Visual hierarchy, cognitive load, navigation patterns
+- `ui-ux-design` — Mobile-first design, WCAG 2.2, Tailwind + Shadcn
+- `ui-audit` — Automated UI audit against UX principles
+- `superdesign` — Modern UI best practices for landing pages and dashboards
+- `distinctive-design-systems` — Design tokens, typography, layered surfaces
+
+### Step 4 — Coding
+- `react-expert` — React 18+ component architecture, hooks, performance
+- `typescript-mastery` — Advanced TS patterns, branded types, generics
+- `zustand-patterns` — Store design, slice factory, persist, testing
+- `tailwind-v4-shadcn` — Tailwind v4 + shadcn/ui theming
+- `software-architect` — Scalable systems, trade-offs, boundaries
+- `clean-code-review` — Naming, functions, structure, anti-patterns
+
+### Step 5 — Code Review
+- `clean-code-review` — Pre-edit safety checks, coding standards
+
+### Step 6-7 — Testing & Validation
+- `test-master` — Unit, integration, E2E, coverage, performance testing
+- `e2e-testing-patterns` — Playwright/Cypress patterns, flaky test elimination
+- `happy-hues` — Color palette validation
+- `ui-audit` — Accessibility and UX principle verification
+
+### Step 8 — Release
+- No specific skill (follow Git workflow in this document)
+
+### ACE-Step Music Generation
+- `acestep` — ACE-Step API for music generation
+- `acestep-songwriting` — Lyrics and caption writing guide
+- `acestep-lyrics-transcription` — Audio to timestamped lyrics
+- `acestep-simplemv` — Music video rendering
+- `acestep-thumbnail` — Cover art generation via Gemini
+
+---
+
 ## Red Lines (absolute prohibitions)
 
 - ❌ Never push directly to main

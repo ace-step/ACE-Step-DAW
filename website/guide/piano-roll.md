@@ -7,7 +7,7 @@ The Piano Roll is a canvas-based MIDI editor for composing melodies, chords, and
 1. Select a Piano Roll clip on the timeline
 2. Press `E` or double-click the clip to open the editor
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Piano Roll Demo](/demos/feature-piano-roll.gif)
 
 ## Interface Layout
 

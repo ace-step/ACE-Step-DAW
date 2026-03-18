@@ -37,7 +37,7 @@ This starts the Vite development server. Open [http://localhost:5173](http://loc
 5. **Mix** — Press `X` to open the mixer. Adjust volume, pan, and add effects.
 6. **Export** — Press `Cmd/Ctrl + Shift + E` to export your project as a WAV file.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Getting Started](/demos/feature-complete-tour.gif)
 
 ## Project Structure
 

@@ -12,7 +12,7 @@ Input → EQ3 → Compressor → Reverb → Delay → Distortion → Filter → 
 
 Each effect has its own enable/disable toggle — bypassed effects pass audio through unchanged.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Effects & Smart Controls](/demos/feature-smart-controls.gif)
 
 ## EQ3 — 3-Band Equalizer
 

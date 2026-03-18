@@ -6,7 +6,7 @@ The mixer panel provides per-track channel strips and a master fader for control
 
 Press `X` to toggle the mixer panel. It appears at the bottom of the DAW interface and can be resized by dragging the top divider.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Mixer Demo](/demos/feature-mixer.gif)
 
 ## Channel Strip
 

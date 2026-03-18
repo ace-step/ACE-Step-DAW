@@ -12,7 +12,7 @@ The step sequencer is an FL Studio-inspired drum pattern editor for creating rhy
 
 Swing offsets the timing of odd-numbered steps. At 0 the rhythm is perfectly straight; at 0.67 you get a heavy shuffle feel.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Sequencer Demo](/demos/feature-sequencer.gif)
 
 ## Step Grid
 
@@ -67,7 +67,7 @@ A 16-pad grid (4 x 4) for triggering drum sounds in real time.
 
 Press any mapped key to trigger the corresponding pad with LED-style visual feedback.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Sequencer Demo](/demos/feature-sequencer.gif)
 
 ## Step-by-Step: Building a Pattern
 

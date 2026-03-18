@@ -19,7 +19,7 @@ Point A (0s, 0.8) ──── Point B (4s, 0.2) ──── Point C (8s, 1.0)
 
 The engine interpolates smoothly between breakpoints during playback, creating continuous parameter changes.
 
-<!-- ![Demo](/images/placeholder.svg) -->
+![Automation](/demos/feature-smart-controls.gif)
 
 ## Breakpoint Properties
 

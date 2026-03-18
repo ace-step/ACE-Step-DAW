@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/ACE-Step-DAW/',
   title: 'ACE-Step DAW',
   description: 'The AI-Powered Digital Audio Workstation',
   head: [

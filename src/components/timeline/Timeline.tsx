@@ -8,6 +8,7 @@ import { GridOverlay } from './GridOverlay';
 import { snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { Minimap } from './Minimap';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -318,6 +319,7 @@ export function Timeline() {
 
   return (
     <>
+      <Minimap />
       <div
         ref={scrollRef}
         className="flex-1 overflow-auto bg-[#242424] relative"

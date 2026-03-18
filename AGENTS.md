@@ -1,23 +1,23 @@
-# AGENTS.md — ACE-Step DAW 开发规范
+# AGENTS.md — ACE-Step DAW Development Rules
 
-> 所有参与开发的 AI agent 必须遵守此文件。
-> 仓库: ace-step/ACE-Step-DAW
+> All AI agents participating in development MUST follow this file.
+> Repository: ace-step/ACE-Step-DAW
 
 ---
 
-## Git 工作流（PR 驱动，无例外）
+## Git Workflow (PR-driven, no exceptions)
 
-### 分支
-- `main` — 稳定版本，**只通过 PR merge**，禁止直接 push
-- `feat/v0.0.X-xxx` — 每个功能一个短期分支，从 main 创建，merge 后删除
-- `fix/v0.0.X-xxx` — bug 修复分支
-- `test/v0.0.X-system-test` — 系统测试 + 重构分支
+### Branches
+- `main` — Stable. **Only updated via PR merge.** Never push directly.
+- `feat/v0.0.X-xxx` — Short-lived feature branch. Created from main, deleted after merge.
+- `fix/v0.0.X-xxx` — Bug fix branch.
+- `test/v0.0.X-system-test` — System test + refactor branch.
 
-### 身份
+### Identity
 - `user.name`: ChuxiJ
 - `user.email`: junmin@acestudio.ai
 
-### Commit 规范
+### Commit Convention
 - `feat: add Piano Roll MIDI editor with velocity lane`
 - `fix: resolve track deletion memory leak in audio engine`
 - `docs: add MIDI editing research from Ableton Live 12`
@@ -25,100 +25,110 @@
 - `test: add system test round 3 for v0.0.15`
 - `chore: update dependencies`
 
-### 单版本流程
+### Per-Version Workflow
 ```
 git fetch origin && git checkout main && git pull --ff-only origin main
 git checkout -b feat/v0.0.X-feature-name
-→ 开发 + 测试 + 修复（同一分支内完成）
+→ Develop + test + fix (all within the same branch)
 → git push origin feat/v0.0.X-feature-name
-→ 创建 PR → Codex 审核 PR → merge
+→ Create PR → Codex reviews PR → merge
 → git checkout main && git pull --ff-only origin main
 → git tag -a v0.0.X -m "release notes" && git push origin main --tags
-→ 创建 GitHub Release（含深度测试 GIF）
+→ Create GitHub Release (with deep-tested GIF demos)
 → git push origin --delete feat/v0.0.X-feature-name
 ```
 
-**热修复例外**: `fix/` 分支可跳过 Step 1 竞品调研，但 Step 5-8 不可跳过。
+**Hotfix exception**: `fix/` branches may skip Step 1 (competitive research), but Steps 5-8 are mandatory.
 
-### Release 标准（不达标不发）
-- 详细 changelog（每个功能 + 修复 + 改动文件）
-- 深度测试 GIF（完整用户流程，不是随便截图）
-- 测试覆盖报告（测了什么、发现什么、修了什么）
-- 已知问题列表
-- 下一步计划
-
----
-
-## 每版本开发 9 步流程（Step 1-8 每版必做，Step 9 每 5 版触发）
-
-### Step 1: 竞品深度调研 🔍
-- 逐字读竞品文档，**交互细节级别**
-- 深度标准：参数范围、边界情况、视觉反馈、快捷键、错误处理
-- ❌ "Ableton 有 Group Track" — 太浅
-- ✅ "Ableton Group Track: 可嵌套、折叠后显示子轨概览..." — 够深
-- 输出更新到 `docs/research-notes/`
-
-### Step 2: 敏捷规划 📋
-- 基于调研写具体开发任务（含竞品引用）
-- 决定：照搬 / 改进 / 跳过
-- 创建 feat 分支
-
-### Step 3: UI/UX 设计审计 🎨
-- 编码前先设计 UI 方案
-- 配色、间距、视觉层级、信息密度
-- 对照竞品截图确认
-
-### Step 4: 编码（三模型并行）💻
-| 模型 | 角色 | 何时用 |
-|------|------|--------|
-| 🧠 Claude Opus (1M) | 规划/审查/测试分析 | 需要理解大量上下文 |
-| 🔧 Claude Code CLI | 精细编码/适配/重构 | 需要深度上下文的编码 |
-| ⚡ Codex (gpt-5.4) | 大量代码/PR 审核/测试 | 快速执行 |
-
-**关键：空闲 agent 并行利用，不浪费。**
-
-### Step 5: 代码审查 🔬
-- `npx tsc --noEmit` — 0 errors
-- `npm run build` — 通过
-- 扫描（merge blocker，必须清零）：unused imports、console.log（error handler 除外）、untyped `any`
-- 代码结构审查
-
-### Step 6: 浏览器测试 🖥️
-- 启动 dev server → 浏览器打开
-- 截图验证 UI 渲染
-- **模拟完整用户流程**（不是随便点两下）
-- 对照竞品检查遗漏
-- 发现 bug **在同一分支修复**
-
-### Step 7: 配色校验 🎨
-- 暗色主题一致性
-- WCAG 对比度标准
-- DAW 行业颜色规范
-
-### Step 8: PR + 审核 + Merge + Tag 📦
-1. Push feat 分支到 `ace-step/ACE-Step-DAW`
-2. 创建 PR（详细描述改动）
-3. 派 Codex 审核 PR（代码质量 + 功能验证）
-4. 审核通过 → merge to main
-5. 打 tag: `git tag -a v0.0.X -m "详细 release notes"`
-6. 创建 GitHub Release（含深度测试 GIF）
-7. 发 Discord 通知
-8. 删除 feat 分支
-
-### Step 9: 每 5 版全面系统测试 🛡️
-- 触发条件: v0.0.15, v0.0.20, v0.0.25...
-- 走 `test/` 分支 → PR → merge 流程
-- 测试清单:
-  - 冷启动
-  - 完整用户流程（创建→AI生成→编辑→混音→导出）
-  - 交互边界（极端操作、空状态、大量数据）
-  - 视觉审查（截图逐页对比）
-  - 音频引擎稳定性
-  - 代码质量扫描 + 重构
+### Release Standards (must meet ALL to publish)
+- Detailed changelog (every feature + fix + changed file)
+- Deep-tested GIF demos (full user workflows, not quick screenshots)
+- Test coverage report (what was tested, what was found, what was fixed)
+- Known issues list
+- Next steps
 
 ---
 
-## 竞品调研文档索引
+## 9-Step Development Process (Steps 1-8 every version, Step 9 every 5 versions)
+
+### Step 1: Competitive Deep Research 🔍
+- Read competitor docs word-by-word at **interaction-detail level**
+- Depth standard: parameter ranges, edge cases, visual feedback, shortcuts, error handling
+- ❌ "Ableton has Group Tracks" — too shallow
+- ✅ "Ableton Group Track: nestable, shows sub-clip overview when folded, Cmd+Click for multi-select, color applies to all sub-tracks, output routes to Group by default but can be overridden, can be used as pure folder" — deep enough
+- Output: update `docs/research-notes/`
+
+### Step 2: Agile Planning 📋
+- Write specific dev tasks with competitive references
+- Decide: copy from competitor / improve / skip
+- Create feat branch
+
+### Step 3: UI/UX Design Audit 🎨
+- Design UI before coding
+- Check colors, spacing, visual hierarchy, information density
+- Compare against competitor screenshots
+
+### Step 4: Coding (Three-Model Parallel) 💻
+| Model | Role | When to use |
+|-------|------|-------------|
+| 🧠 Claude Opus (1M) | Planning / review / test analysis | Large context understanding |
+| 🔧 Claude Code CLI | Precise coding / adaptation / refactoring | Deep context-aware coding |
+| ⚡ Codex (gpt-5.4) | Bulk coding / PR review / testing | Fast execution |
+
+**Key: Use idle agents in parallel. Never waste capacity.**
+
+### Step 5: Code Review 🔬
+- `npx tsc --noEmit` — must be 0 errors
+- `npm run build` — must pass
+- Scan (merge blockers, must be zero): unused imports, console.log (except error handlers), untyped `any`
+- Code structure review
+
+### Step 6: Browser Testing 🖥️
+- Start dev server → open in browser
+- Screenshot to verify UI rendering
+- **Simulate full user workflows** (not just clicking around)
+- Compare against competitors for gaps
+- Fix bugs found **in the same branch**
+
+### Step 7: Color Validation 🎨
+- Dark theme consistency
+- WCAG contrast standards
+- DAW industry color conventions
+
+### Step 8: PR + Review + Merge + Tag 📦
+1. Push feat branch to `ace-step/ACE-Step-DAW`
+2. Create PR (detailed description of changes)
+3. Codex reviews PR (code quality + functional verification)
+4. Approved → merge to main
+5. Tag: `git tag -a v0.0.X -m "detailed release notes"` + push
+6. Create GitHub Release (with deep-tested GIF demos)
+7. Send Discord notification
+8. Delete feat branch
+
+### Step 9: Full System Test Every 5 Versions 🛡️
+- Trigger: v0.0.15, v0.0.20, v0.0.25...
+- Uses `test/` branch → PR → merge workflow
+- Test checklist:
+  - Cold start
+  - Full user journey (create → AI generate → edit → mix → export)
+  - Edge cases (extreme operations, empty states, large data)
+  - Visual audit (screenshot comparison page by page)
+  - Audio engine stability
+  - Code quality scan + refactor
+
+---
+
+## Three-Model Strategy
+
+| Model | Role | Budget |
+|-------|------|--------|
+| 🧠 Claude Opus (1M) | Research / planning / review / test analysis | Company API (conserve) |
+| 🔧 Claude Code CLI | Precise coding / adaptation / refactoring | Personal free 6 months |
+| ⚡ Codex (gpt-5.4) | Bulk coding / PR review / testing | Sponsored free 6 months |
+
+---
+
+## Competitive Research Index
 
 ### Ableton Live 12
 - Mixing: https://www.ableton.com/en/live-manual/12/mixing/
@@ -136,15 +146,15 @@ git checkout -b feat/v0.0.X-feature-name
 
 ---
 
-## 红线（绝对不做）
+## Red Lines (absolute prohibitions)
 
-- ❌ 不直接 push main
-- ❌ 不发水 release（没深度测试 GIF 不发）
-- ❌ 不跳过竞品调研就编码
-- ❌ 不跳过浏览器测试就发版
-- ❌ 不往个人 fork push（只用 org 仓库）
-- ❌ 不用错误的 git identity
+- ❌ Never push directly to main
+- ❌ Never publish a release without deep-tested GIF demos
+- ❌ Never code without competitive research (except hotfixes)
+- ❌ Never skip browser testing before release
+- ❌ Never push to personal fork (org repo only)
+- ❌ Never use wrong git identity
 
 ---
 
-_这份文件是开发的法律。违反任何一条都要停下来修正。_
+_This document is the law. Violating any rule requires stopping and correcting before continuing._

@@ -162,3 +162,5 @@ When using Claude Code on this project, install these skills for better UX outpu
 - Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 - Identity: `user.name: ChuxiJ`, `user.email: junmin@acestudio.ai`
 - Never push directly to main — always use PR workflow
+- Never merge a PR before CI passes — check CI status first, fix if red
+- If CI fails: understand root cause → add fix commit → wait for green → then merge

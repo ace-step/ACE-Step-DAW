@@ -320,6 +320,9 @@ Every 10 versions (v0.0.20, v0.0.30...), review all installed skills:
 ## Red Lines (absolute prohibitions)
 
 - ❌ Never push directly to main
+- ❌ Never merge a PR before CI passes — if CI fails, add fix commits until green
+- ✅ After creating a PR, check CI status via GitHub API before merging
+- ✅ If CI was red, understand the root cause before fixing (don't guess)
 - ❌ Never publish a release without deep-tested GIF demos
 - ❌ Never code without competitive research (except hotfixes)
 - ❌ Never skip browser testing before release

@@ -97,6 +97,10 @@ export class AudioEngine {
   get masterVolume() { return this.masterGain.gain.value; }
   set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
 
+  getTrackLevel(trackId: string): number {
+    return this.trackNodes.get(trackId)?.getLevel() ?? 0;
+  }
+
   updateSoloState() {
     const anySoloed = Array.from(this.trackNodes.values()).some((n) => n.soloed);
     for (const node of this.trackNodes.values()) {

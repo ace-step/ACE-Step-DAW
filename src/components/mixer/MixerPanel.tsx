@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { Knob } from '../ui/Knob';
+import { LevelMeter } from './LevelMeter';
 import type { Track } from '../../types/project';
 
 function volumeToDb(v: number): string {
@@ -79,7 +80,8 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
       </div>
 
       <div className="flex-1 flex flex-col items-center gap-1 mt-1 min-h-0 w-full">
-        <div className="relative flex justify-center" style={{ height: faderHeight }}>
+        <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
+          <LevelMeter trackId={track.id} />
           <input
             type="range" min={0} max={1} step={0.01} value={vol}
             onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}

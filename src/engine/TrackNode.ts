@@ -5,7 +5,7 @@
  *   source → inputGain → panNode → eqLow → eqMid → eqHigh
  *          → dryGain ─────────────────────────────────────┐
  *          → convolver → wetGain → reverbOut              |
- *                                       → sumGain → compressor → volumeGain → masterGain
+ *                                       → sumGain → compressor → volumeGain → analyserNode → masterGain
  */
 export class TrackNode {
   readonly inputGain: GainNode;
@@ -19,6 +19,8 @@ export class TrackNode {
   private readonly sumGain: GainNode;
   private readonly compressor: DynamicsCompressorNode;
   readonly volumeGain: GainNode;
+  private readonly analyserNode: AnalyserNode;
+  private readonly analyserData: Uint8Array<ArrayBuffer>;
 
   private _volume = 0.8;
   private _muted = false;
@@ -41,6 +43,10 @@ export class TrackNode {
     this.sumGain    = ctx.createGain();
     this.compressor = ctx.createDynamicsCompressor();
     this.volumeGain = ctx.createGain();
+    this.analyserNode = ctx.createAnalyser();
+    this.analyserNode.fftSize = 256;
+    this.analyserNode.smoothingTimeConstant = 0.6;
+    this.analyserData = new Uint8Array(this.analyserNode.frequencyBinCount);
 
     // Configure EQ defaults
     this.eqLow.type = 'lowshelf';
@@ -72,7 +78,7 @@ export class TrackNode {
     //                                    ↓
     //                               dryGain → sumGain
     //                               convolver → wetGain → sumGain
-    //                               sumGain → compressor → volumeGain → destination
+    //                               sumGain → compressor → volumeGain → analyserNode → destination
     this.inputGain.connect(this.panNode);
     this.panNode.connect(this.eqLow);
     this.eqLow.connect(this.eqMid);
@@ -87,7 +93,8 @@ export class TrackNode {
 
     this.sumGain.connect(this.compressor);
     this.compressor.connect(this.volumeGain);
-    this.volumeGain.connect(destination);
+    this.volumeGain.connect(this.analyserNode);
+    this.analyserNode.connect(destination);
 
     this.volumeGain.gain.value = this._volume;
 
@@ -153,6 +160,19 @@ export class TrackNode {
 
   set compressorRatio(ratio: number) {
     this.compressor.ratio.value = Math.max(1, Math.min(20, ratio));
+  }
+
+  getLevel(): number {
+    this.analyserNode.getByteFrequencyData(this.analyserData);
+
+    let peak = 0;
+    for (let i = 0; i < this.analyserData.length; i++) {
+      if (this.analyserData[i] > peak) {
+        peak = this.analyserData[i];
+      }
+    }
+
+    return peak / 255;
   }
 
   /**
@@ -247,5 +267,6 @@ export class TrackNode {
     this.sumGain.disconnect();
     this.compressor.disconnect();
     this.volumeGain.disconnect();
+    this.analyserNode.disconnect();
   }
 }

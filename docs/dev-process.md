@@ -1,132 +1,111 @@
-# ACE-Step DAW — 开发流程规范
+# ACE-Step DAW — Development Process
 
-> 项目: ChuxiJ/ACE-Step-DAW (dev/acestudio-lite 分支)
-> 每一步都不能跳过。
-
-## 每版本开发流程（严格执行）
-
-### Step 1: 竞品深度调研 🔍
-- 选择当前版本要开发的功能，逐字读对应的竞品文档
-- 深度标准：交互细节级别（不是功能列表级别）
-- 输出：更新 docs/research-notes/ 并引用具体设计决策
-- Skills 辅助：利用已安装的 23 个 skills 中相关的
-
-### Step 2: 敏捷规划 📋
-- 基于调研写出具体开发任务（含交互细节）
-- 决定：照搬竞品 / 改进 / 跳过
-- 更新 roadmap
-- Skills: agile-toolkit, task-development-workflow
-
-### Step 3: UI/UX 设计审计 🎨
-- 在编码前先设计 UI 方案
-- 对照竞品截图确认布局/交互
-- 审查配色、间距、视觉层级
-- Skills: ui-ux-pro-max, ui-audit, happy-hues, distinctive-design-systems
-
-### Step 4: 编码（三模型协作）💻
-- 🧠 **Claude Opus (1M)**: 规划任务、写 prompt、架构决策
-- 🔧 **Claude Code CLI**: 精细适配、需要深度上下文的编码
-- ⚡ **Codex (gpt-5.4)**: 大量代码生成、机械性任务
-- **并行执行**：Claude Code 做功能开发时，Codex 可同时做测试/审查
-- Skills: nextjs-expert, react-expert, zustand-patterns, typescript-mastery, clean-code-review, software-architect
-
-### Step 5: 代码审查 🔬
-- TypeScript 严格检查 (npx tsc --noEmit)
-- Build 验证 (npm run build)
-- 扫描 unused imports、console.log、any 类型
-- Skills: clean-code-review
-
-### Step 6: 浏览器测试 🖥️
-- 启动 dev server → 浏览器打开
-- 截图验证 UI 渲染
-- 模拟用户操作（点击、拖拽、输入）
-- 对照竞品检查遗漏
-- 发现的 bug 立即修复
-
-### Step 7: 配色校验 🎨
-- 检查暗色主题一致性
-- 验证对比度（WCAG 标准）
-- 确认颜色使用跟 DAW 行业标准一致
-- Skills: happy-hues, accessibility, ui-audit
-
-### Step 8: 发版 📦
-- Git commit（描述性 message）
-- Git push 到 GitHub
-- 录制 GIF demo（浏览器截图序列 → ffmpeg）
-- 发送 GIF + 更新到 Discord
-
-### Step 9: 每 5 版全面系统测试 🛡️
-触发条件：v0.0.15, v0.0.20, v0.0.25...
-
-**测试清单**:
-- 冷启动测试
-- 完整用户流程模拟（创建项目→添加轨道→AI生成→编辑→混音→导出）
-- 交互边界测试（极端操作、空状态、大量数据）
-- 视觉审查（截图逐页对比）
-- 音频引擎测试
-- 代码质量扫描
-- Skills: test-master, e2e-testing-patterns
-
-**重构原则**:
-- 不改功能，只改结构
-- 提取公共组件/hooks
-- 统一命名
-- 清理冗余
-- 性能优化
+> Repository: ace-step/ACE-Step-DAW
+> This document supplements AGENTS.md with detailed operational procedures.
 
 ---
 
-## 三模型分工
+## Competitive Research Index
 
-| 模型 | 角色 | 何时用 | 额度 |
-|------|------|--------|------|
-| 🧠 Claude Opus (1M) | 大脑 | 调研、规划、审查、测试分析、发版 | 公司 API（省） |
-| 🔧 Claude Code CLI | 精细执行 | 适配、重构、需上下文的编码 | 个人免费 6 月 |
-| ⚡ Codex (gpt-5.4) | 快速执行 | 大量编码、新功能、测试 | 赞助免费 6 月 |
-
-**关键**：空闲 agent 要用起来！Claude Code 编码时 Codex 做测试，反之亦然。
-
----
-
-## 竞品文档索引
-
-### Ableton Live 12
+### Ableton Live 12 (Primary Reference)
 - Mixing: https://www.ableton.com/en/live-manual/12/mixing/
-- Arrangement: https://www.ableton.com/en/live-manual/12/arrangement-view/
+- Arrangement View: https://www.ableton.com/en/live-manual/12/arrangement-view/
+- Session View: https://www.ableton.com/en/live-manual/12/session-view/
 - MIDI Editing: https://www.ableton.com/en/live-manual/12/editing-midi/
-- Audio Effects: https://www.ableton.com/en/live-manual/12/live-audio-effect-reference/
-- Instruments: https://www.ableton.com/en/live-manual/12/live-instrument-reference/
-- Routing: https://www.ableton.com/en/live-manual/12/routing-and-i-o/
+- Audio Clips & Warping: https://www.ableton.com/en/live-manual/12/audio-clips-tempo-and-warping/
+- Instruments & Effects: https://www.ableton.com/en/live-manual/12/working-with-instruments-and-effects/
+- Audio Effect Reference: https://www.ableton.com/en/live-manual/12/live-audio-effect-reference/
+- MIDI Effect Reference: https://www.ableton.com/en/live-manual/12/live-midi-effect-reference/
+- Instrument Reference: https://www.ableton.com/en/live-manual/12/live-instrument-reference/
+- Routing & I/O: https://www.ableton.com/en/live-manual/12/routing-and-i-o/
 - Automation: https://www.ableton.com/en/live-manual/12/automation-and-editing-envelopes/
 - Recording: https://www.ableton.com/en/live-manual/12/recording-new-clips/
 - Browser: https://www.ableton.com/en/live-manual/12/working-with-the-browser/
 
-### 参考项目
-- ACE-Step DAW (upstream): https://github.com/ace-step/ACE-Step-DAW
+### FL Studio
+- Features: https://www.image-line.com/fl-studio/features/
+
+### GarageBand
+- User Guide: https://support.apple.com/guide/garageband/welcome/mac
+
+### REAPER
+- User Guide: https://www.reaper.fm/userguide.php
+
+### ACE-Step
+- DAW (upstream): https://github.com/ace-step/ACE-Step-DAW
 - ACE-Step 1.5 API: https://github.com/ace-step/ACE-Step-1.5
+- Local API docs: docs/research-notes/ace-step-api-details.md
 
 ---
 
-## Git 工作流
+## Research Depth Standard
 
-### 分支
-- `main` — 稳定版本，只通过 merge 更新
-- `dev/acestudio-lite` — 日常开发分支
+Every feature must be researched at interaction-detail level before coding.
 
-### 发版流程
-1. 在 dev 分支开发并 commit
-2. 每个版本 push 到 dev 分支
-3. 每 5 个版本（系统测试后）merge 到 main
-4. 在 main 上打 tag: `git tag -a v0.0.X -m "release notes"`
-5. Push tag: `git push origin v0.0.X`
-6. 创建 GitHub Release（含 GIF demo）
-7. GIF 放在 demos/ 目录，release note 中引用
+### Bad (too shallow)
+> "Ableton has Group Tracks"
 
-### Tag 命名
-- `v0.0.X` — patch 版本（功能迭代）
-- `v0.X.0` — minor 版本（里程碑）
-- `v1.0.0` — 正式版
+### Good (deep enough)
+> "Ableton Group Track: nestable, folded view shows sub-clip overview, Session View group slots have independent launch/stop, Cmd+Click for multi-select grouping, group color can be applied to all sub-tracks, output defaults to Group Track but can be rerouted, can serve as pure folder, deleting Group deletes all contents, Ungroup reverts to individual tracks"
+
+### Research output
+- Save to `docs/research-notes/<feature>-details.md`
+- Include: interaction details, parameter ranges, edge cases, shortcuts, visual feedback, error handling
 
 ---
 
-_每一步都不能跳过。速度不如质量重要。_
+## System Test Checklist (Every 5 Versions)
+
+### Cold Start
+- [ ] Clear browser cache / IndexedDB
+- [ ] Open app from scratch
+- [ ] Verify all components render correctly
+
+### Full User Journey
+- [ ] Create new project (name, BPM, key, time signature)
+- [ ] Add Stems track → generate with AI → verify playback
+- [ ] Add Piano Roll track → draw MIDI notes → verify synth playback
+- [ ] Add Sequencer track → program drum pattern → verify playback
+- [ ] Add Sample track → import audio file → verify playback
+- [ ] Open Mixer → adjust volume/pan/mute/solo per track
+- [ ] Add effects to a track → verify effect chain UI
+- [ ] Multi-track playback → verify all tracks play in sync
+- [ ] Export project to WAV → verify output file
+- [ ] Save project → close → reopen → verify all data persists
+
+### AI Features
+- [ ] Generate track via LEGO pipeline (context-aware)
+- [ ] Create Cover from existing clip
+- [ ] Repaint selection on a clip
+- [ ] Vocal2BGM generation
+- [ ] Audio Analysis (BPM/key detection)
+- [ ] Model selector in Settings
+
+### Edge Cases
+- [ ] Rapid button clicking (transport, add track, etc.)
+- [ ] Extreme zoom (min/max)
+- [ ] Empty project with all operations
+- [ ] 10+ tracks performance
+- [ ] Browser resize / responsive behavior
+- [ ] Network offline behavior (generation should show clear error)
+
+### Visual Audit
+- [ ] Dark theme consistency across all panels
+- [ ] Button states (hover, active, disabled) all correct
+- [ ] Text readability (no truncated labels)
+- [ ] Alignment and spacing consistency
+- [ ] No overlapping elements
+
+### Code Quality
+- [ ] `npx tsc --noEmit` — 0 errors
+- [ ] `npm run build` — passes
+- [ ] Zero unused imports
+- [ ] Zero console.log (except error handlers)
+- [ ] Zero untyped `any`
+- [ ] Components under 600 lines (split if larger)
+- [ ] All useEffect have cleanup returns where needed
+- [ ] All event listeners properly removed
+
+---
+
+_Refer to AGENTS.md for the complete development workflow and rules._

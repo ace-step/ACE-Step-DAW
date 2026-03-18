@@ -295,14 +295,14 @@ function AssetLoopItem({
           }`}
           title={asset.starred ? 'Remove star' : 'Star'}
         >
-          {asset.starred ? '\u2605' : '\u2606'}
+          {asset.starred ? '★' : '☆'}
         </button>
         <button
           onClick={(e) => onDelete(e, asset.id)}
           className="w-5 h-5 flex items-center justify-center rounded text-[10px] text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
           title="Remove"
         >
-          \u00d7
+          ×
         </button>
       </div>
     </div>

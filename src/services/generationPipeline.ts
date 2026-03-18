@@ -7,53 +7,77 @@ import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
+import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
+
+interface GenerationOutcome {
+  cumulativeBlob: Blob | null;
+  succeeded: boolean;
+  errorMessage?: string;
+}
+
+async function withGenerationToast(label: string, action: () => Promise<boolean>): Promise<void> {
+  toastInfo(`${label} started`);
+
+  const succeeded = await action();
+  if (succeeded) {
+    toastSuccess(`${label} completed`);
+  } else {
+    toastError(`${label} failed`);
+  }
+}
 
 /**
  * Generate all tracks sequentially (bottom → top in generation order).
  */
 export async function generateAllTracks(): Promise<void> {
-  const { project, getTracksInGenerationOrder, updateClipStatus } = useProjectStore.getState();
+  const { project, getTracksInGenerationOrder } = useProjectStore.getState();
   const genStore = useGenerationStore.getState();
 
   if (!project || genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-  try {
-    const allTracks = getTracksInGenerationOrder();
-    const tracks = allTracks.filter(t => (t.trackType ?? 'stems') === 'stems');
-    let previousCumulativeBlob: Blob | null = null;
+    try {
+      const allTracks = getTracksInGenerationOrder();
+      const tracks = allTracks.filter(t => (t.trackType ?? 'stems') === 'stems');
+      let previousCumulativeBlob: Blob | null = null;
+      let allSucceeded = true;
 
-    console.log(`[GenerationPipeline] generateAllTracks: ${tracks.length} stems tracks (of ${allTracks.length} total) in order:`,
-      tracks.map(t => t.trackName));
+      console.log(`[GenerationPipeline] generateAllTracks: ${tracks.length} stems tracks (of ${allTracks.length} total) in order:`,
+        tracks.map(t => t.trackName));
 
-    for (const track of tracks) {
-      for (const clip of track.clips) {
-        if (clip.generationStatus === 'ready') {
-          // Already generated — use its cumulative mix as input for next track
-          if (clip.cumulativeMixKey) {
-            const blob = await loadAudioBlobByKey(clip.cumulativeMixKey);
-            if (blob) {
-              previousCumulativeBlob = blob;
-              console.log(`[GenerationPipeline] Loaded existing cumulative for clip=${clip.id} (${track.trackName}), size=${blob.size}`);
+      for (const track of tracks) {
+        for (const clip of track.clips) {
+          if (clip.generationStatus === 'ready') {
+            if (clip.cumulativeMixKey) {
+              const blob = await loadAudioBlobByKey(clip.cumulativeMixKey);
+              if (blob) {
+                previousCumulativeBlob = blob;
+                console.log(`[GenerationPipeline] Loaded existing cumulative for clip=${clip.id} (${track.trackName}), size=${blob.size}`);
+              }
             }
+            continue;
           }
-          continue;
-        }
 
-        console.log(`[GenerationPipeline] Generating clip=${clip.id} (${track.trackName}), previousCumulative=${previousCumulativeBlob ? `${previousCumulativeBlob.size} bytes` : 'null'}`);
-        previousCumulativeBlob = await generateClipInternal(
-          clip.id,
-          previousCumulativeBlob,
-        );
-        console.log(`[GenerationPipeline] After generate clip=${clip.id}, cumulativeBlob=${previousCumulativeBlob ? `${previousCumulativeBlob.size} bytes` : 'null'}`);
+          console.log(`[GenerationPipeline] Generating clip=${clip.id} (${track.trackName}), previousCumulative=${previousCumulativeBlob ? `${previousCumulativeBlob.size} bytes` : 'null'}`);
+          const outcome = await generateClipInternal(
+            clip.id,
+            previousCumulativeBlob,
+          );
+          previousCumulativeBlob = outcome.cumulativeBlob;
+          allSucceeded = allSucceeded && outcome.succeeded;
+          console.log(`[GenerationPipeline] After generate clip=${clip.id}, cumulativeBlob=${previousCumulativeBlob ? `${previousCumulativeBlob.size} bytes` : 'null'}`);
+        }
       }
+
+      return allSucceeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
     }
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+  });
 }
 
 /**
@@ -63,17 +87,23 @@ export async function generateAllTracks(): Promise<void> {
 export async function regenerateClip(clipId: string): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
 
-  try {
-    const previousBlob = await getPreviousCumulativeBlob(clipId);
-    await generateClipInternal(clipId, previousBlob, {});
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-    // Save the newly generated result as the latest version
-    useProjectStore.getState().saveClipVersion(clipId);
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+    try {
+      const previousBlob = await getPreviousCumulativeBlob(clipId);
+      const outcome = await generateClipInternal(clipId, previousBlob, {});
+
+      if (outcome.succeeded) {
+        useProjectStore.getState().saveClipVersion(clipId);
+      }
+
+      return outcome.succeeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
+    }
+  });
 }
 
 /**
@@ -82,19 +112,24 @@ export async function regenerateClip(clipId: string): Promise<void> {
 export async function generateSingleClip(clipId: string, options?: { sharedSeed?: number }): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
 
-  try {
-    // Find the previous cumulative blob (from the track generated just before this one)
-    const previousBlob = await getPreviousCumulativeBlob(clipId);
-    console.log(`[GenerationPipeline] generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
-    await generateClipInternal(clipId, previousBlob, options ? { sharedSeed: options.sharedSeed } : {});
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-    // Save as version so the version arrows appear immediately
-    useProjectStore.getState().saveClipVersion(clipId);
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+    try {
+      const previousBlob = await getPreviousCumulativeBlob(clipId);
+      console.log(`[GenerationPipeline] generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
+      const outcome = await generateClipInternal(clipId, previousBlob, options ? { sharedSeed: options.sharedSeed } : {});
+
+      if (outcome.succeeded) {
+        useProjectStore.getState().saveClipVersion(clipId);
+      }
+
+      return outcome.succeeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
+    }
+  });
 }
 
 async function getPreviousCumulativeBlob(clipId: string): Promise<Blob | null> {
@@ -180,20 +215,22 @@ async function generateClipInternal(
   clipId: string,
   previousCumulativeBlob: Blob | null,
   options: ClipInternalOptions = {},
-): Promise<Blob | null> {
+): Promise<GenerationOutcome> {
   const store = useProjectStore.getState();
   const genStore = useGenerationStore.getState();
   const project = store.project;
-  if (!project) return null;
+  if (!project) return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'No project' };
 
   const clip = store.getClipById(clipId);
   const track = store.getTrackForClip(clipId);
-  if (!clip || !track) return null;
+  if (!clip || !track) {
+    return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Clip or track not found' };
+  }
 
   const trackType = track.trackType ?? 'stems';
   if (trackType !== 'stems') {
     console.warn(`[GenerationPipeline] Skipping generation for non-stems track (type=${trackType}, track=${track.displayName})`);
-    return null;
+    return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Track type is not generatable' };
   }
 
   // Create generation job
@@ -411,12 +448,12 @@ async function generateClipInternal(
 
     useGenerationStore.getState().updateJob(jobId, { status: 'done', progress: 'Done' });
 
-    return cumulativeBlob;
+    return { cumulativeBlob, succeeded: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
     useGenerationStore.getState().updateJob(jobId, { status: 'error', progress: message, error: message });
-    return previousCumulativeBlob;
+    return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: message };
   }
 }
 
@@ -455,33 +492,38 @@ export interface GenerateBatchOptions {
 export async function generateBatch(options: GenerateBatchOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
 
-  try {
-    const { mode, globalCaption, tracks, sharedSeed, contextAudioPath, chunkMaskMode } = options;
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-    if (mode === 'silence') {
-      // All tracks in parallel — no dependency on each other
-      await Promise.all(
-        tracks.map(({ clipId, localDescription, lyrics }) =>
-          generateClipInternal(clipId, null, {
-            forceSilence: true,
-            localDescription,
-            globalCaptionOverride: globalCaption,
-            sharedSeed,
-            lyricsOverride: lyrics,
-            chunkMaskMode,
-          }),
-        ),
-      );
-      const store = useProjectStore.getState();
-      for (const { clipId } of tracks) store.saveClipVersion(clipId);
-    } else {
-      // Context mode — sequential; each track's output feeds the next
+    try {
+      const { mode, globalCaption, tracks, sharedSeed, contextAudioPath, chunkMaskMode } = options;
+
+      if (mode === 'silence') {
+        const outcomes = await Promise.all(
+          tracks.map(({ clipId, localDescription, lyrics }) =>
+            generateClipInternal(clipId, null, {
+              forceSilence: true,
+              localDescription,
+              globalCaptionOverride: globalCaption,
+              sharedSeed,
+              lyricsOverride: lyrics,
+              chunkMaskMode,
+            }),
+          ),
+        );
+        const store = useProjectStore.getState();
+        outcomes.forEach((outcome, index) => {
+          if (outcome.succeeded) {
+            store.saveClipVersion(tracks[index].clipId);
+          }
+        });
+        return outcomes.every((outcome) => outcome.succeeded);
+      }
+
       let previousCumulativeBlob: Blob | null = null;
+      let allSucceeded = true;
 
-      // Start from any already-generated predecessor of the first requested clip,
-      // unless an explicit context audio path was provided by the user.
       if (!contextAudioPath && tracks.length > 0) {
         previousCumulativeBlob = await getPreviousCumulativeBlob(tracks[0].clipId);
       }
@@ -496,11 +538,9 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
           lyricsOverride: lyrics,
           chunkMaskMode,
         };
-        // On the first track, substitute the user-supplied path for the blob
         if (firstCall && contextAudioPath) {
           opts.srcAudioPath = contextAudioPath;
         } else if (!firstCall && prevClipId) {
-          // For subsequent tracks: prefer server-side path of the previous clip's cumulative
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
           if (prevClip?.serverCumulativePath) {
             opts.srcAudioPath = prevClip.serverCumulativePath;
@@ -508,13 +548,19 @@ export async function generateBatch(options: GenerateBatchOptions): Promise<void
         }
         firstCall = false;
         prevClipId = clipId;
-        previousCumulativeBlob = await generateClipInternal(clipId, previousCumulativeBlob, opts);
-        useProjectStore.getState().saveClipVersion(clipId);
+        const outcome = await generateClipInternal(clipId, previousCumulativeBlob, opts);
+        previousCumulativeBlob = outcome.cumulativeBlob;
+        allSucceeded = allSucceeded && outcome.succeeded;
+        if (outcome.succeeded) {
+          useProjectStore.getState().saveClipVersion(clipId);
+        }
       }
+
+      return allSucceeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
     }
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -541,48 +587,49 @@ export interface AddLayerOptions {
 export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
 
-  try {
-    const store = useProjectStore.getState();
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-    // Create a new clip at the select window time range
-    const clip = store.addClip(opts.trackId, {
-      startTime: opts.startTime,
-      duration: opts.duration,
-      prompt: opts.localDescription,
-      globalCaption: opts.globalCaption,
-      lyrics: opts.lyrics,
-    });
+    try {
+      const store = useProjectStore.getState();
 
-    // Sync local description to the track-level localCaption so the
-    // TrackInspector reflects it
-    if (opts.localDescription) {
-      store.setTrackLocalCaption(opts.trackId, opts.localDescription);
+      const clip = store.addClip(opts.trackId, {
+        startTime: opts.startTime,
+        duration: opts.duration,
+        prompt: opts.localDescription,
+        globalCaption: opts.globalCaption,
+        lyrics: opts.lyrics,
+      });
+
+      if (opts.localDescription) {
+        store.setTrackLocalCaption(opts.trackId, opts.localDescription);
+      }
+
+      let contextBlob: Blob | null = null;
+
+      if (opts.contextWindow) {
+        const { extractContextAudio } = await import('./contextAudioExtractor');
+        contextBlob = await extractContextAudio(opts.contextWindow);
+      }
+
+      const outcome = await generateClipInternal(clip.id, contextBlob, {
+        forceSilence: !contextBlob,
+        localDescription: opts.localDescription,
+        globalCaptionOverride: opts.globalCaption,
+        lyricsOverride: opts.lyrics,
+        chunkMaskMode: opts.chunkMaskMode,
+      });
+
+      if (outcome.succeeded) {
+        useProjectStore.getState().saveClipVersion(clip.id);
+      }
+
+      return outcome.succeeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
     }
-
-    let contextBlob: Blob | null = null;
-
-    if (opts.contextWindow) {
-      // Render the mixed audio from all existing clips within the context window
-      const { extractContextAudio } = await import('./contextAudioExtractor');
-      contextBlob = await extractContextAudio(opts.contextWindow);
-    }
-
-    // Pass contextBlob as the previousCumulativeBlob — the pipeline uploads it
-    // as src_audio to the backend when non-null.
-    await generateClipInternal(clip.id, contextBlob, {
-      forceSilence: !contextBlob,
-      localDescription: opts.localDescription,
-      globalCaptionOverride: opts.globalCaption,
-      lyricsOverride: opts.lyrics,
-      chunkMaskMode: opts.chunkMaskMode,
-    });
-
-    useProjectStore.getState().saveClipVersion(clip.id);
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -607,60 +654,66 @@ export interface MultiTrackGenerateOptions {
 export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
 
-  try {
-    const store = useProjectStore.getState();
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-    // Determine mode: if contextWindow exists and any audio exists in context range → context
-    let hasContextAudio = false;
-    let contextBlob: Blob | null = null;
-    if (opts.contextWindow) {
-      const { extractContextAudio } = await import('./contextAudioExtractor');
-      contextBlob = await extractContextAudio(opts.contextWindow);
-      hasContextAudio = contextBlob !== null && contextBlob.size > 44; // > WAV header
-    }
-    const mode = hasContextAudio ? 'context' : 'silence';
+    try {
+      const store = useProjectStore.getState();
 
-    // Create clips for each selected track
-    const batchTracks: BatchTrackEntry[] = [];
-    for (const entry of opts.tracks) {
-      const clip = store.addClip(entry.trackId, {
-        startTime: opts.selectWindow.startTime,
-        duration: opts.selectWindow.endTime - opts.selectWindow.startTime,
-        prompt: entry.localDescription,
-        globalCaption: opts.globalCaption,
-        lyrics: entry.lyrics,
-      });
-      if (entry.localDescription) {
-        store.setTrackLocalCaption(entry.trackId, entry.localDescription);
+      let hasContextAudio = false;
+      let contextBlob: Blob | null = null;
+      if (opts.contextWindow) {
+        const { extractContextAudio } = await import('./contextAudioExtractor');
+        contextBlob = await extractContextAudio(opts.contextWindow);
+        hasContextAudio = contextBlob !== null && contextBlob.size > 44;
       }
-      batchTracks.push({
-        clipId: clip.id,
-        localDescription: entry.localDescription,
-        lyrics: entry.lyrics,
-      });
-    }
+      const mode = hasContextAudio ? 'context' : 'silence';
 
-    if (mode === 'silence') {
-      await Promise.all(
-        batchTracks.map(({ clipId, localDescription, lyrics }) =>
-          generateClipInternal(clipId, null, {
-            forceSilence: true,
-            localDescription,
-            globalCaptionOverride: opts.globalCaption,
-            sharedSeed: opts.sharedSeed,
-            lyricsOverride: lyrics,
-            chunkMaskMode: opts.chunkMaskMode,
-          }),
-        ),
-      );
-      const st = useProjectStore.getState();
-      for (const { clipId } of batchTracks) st.saveClipVersion(clipId);
-    } else {
-      // Context mode — sequential generation, each builds on previous
+      const batchTracks: BatchTrackEntry[] = [];
+      for (const entry of opts.tracks) {
+        const clip = store.addClip(entry.trackId, {
+          startTime: opts.selectWindow.startTime,
+          duration: opts.selectWindow.endTime - opts.selectWindow.startTime,
+          prompt: entry.localDescription,
+          globalCaption: opts.globalCaption,
+          lyrics: entry.lyrics,
+        });
+        if (entry.localDescription) {
+          store.setTrackLocalCaption(entry.trackId, entry.localDescription);
+        }
+        batchTracks.push({
+          clipId: clip.id,
+          localDescription: entry.localDescription,
+          lyrics: entry.lyrics,
+        });
+      }
+
+      if (mode === 'silence') {
+        const outcomes = await Promise.all(
+          batchTracks.map(({ clipId, localDescription, lyrics }) =>
+            generateClipInternal(clipId, null, {
+              forceSilence: true,
+              localDescription,
+              globalCaptionOverride: opts.globalCaption,
+              sharedSeed: opts.sharedSeed,
+              lyricsOverride: lyrics,
+              chunkMaskMode: opts.chunkMaskMode,
+            }),
+          ),
+        );
+        const st = useProjectStore.getState();
+        outcomes.forEach((outcome, index) => {
+          if (outcome.succeeded) {
+            st.saveClipVersion(batchTracks[index].clipId);
+          }
+        });
+        return outcomes.every((outcome) => outcome.succeeded);
+      }
+
       let previousCumulativeBlob = contextBlob;
       let prevClipId: string | null = null;
+      let allSucceeded = true;
       for (const { clipId, localDescription, lyrics } of batchTracks) {
         const clipOpts: ClipInternalOptions = {
           forceSilence: false,
@@ -676,13 +729,19 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
           }
         }
         prevClipId = clipId;
-        previousCumulativeBlob = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
-        useProjectStore.getState().saveClipVersion(clipId);
+        const outcome = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
+        previousCumulativeBlob = outcome.cumulativeBlob;
+        allSucceeded = allSucceeded && outcome.succeeded;
+        if (outcome.succeeded) {
+          useProjectStore.getState().saveClipVersion(clipId);
+        }
       }
+
+      return allSucceeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
     }
-  } finally {
-    useGenerationStore.getState().setIsGenerating(false);
-  }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -703,130 +762,132 @@ export interface GenerateCoverOptions {
 export async function generateCoverClip(opts: GenerateCoverOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-  const { clipId, caption, lyrics, coverStrength, createNew } = opts;
-  const store = useProjectStore.getState();
+    const { clipId, caption, lyrics, coverStrength, createNew } = opts;
+    const store = useProjectStore.getState();
 
-  const sourceClip = store.getClipById(clipId);
-  const sourceTrack = store.getTrackForClip(clipId);
-  if (!sourceClip || !sourceTrack) {
-    genStore.setIsGenerating(false);
-    return;
-  }
-
-  // Load the source audio (prefer isolated, fall back to cumulative mix)
-  let sourceAudioBlob: Blob | null = null;
-  if (sourceClip.isolatedAudioKey) {
-    sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
-  }
-  if (!sourceAudioBlob && sourceClip.cumulativeMixKey) {
-    sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
-  }
-  if (!sourceAudioBlob) {
-    genStore.setIsGenerating(false);
-    return;
-  }
-
-  const project = store.project!;
-
-  // Determine target clip
-  let targetClipId: string;
-  if (createNew) {
-    const newClip = store.addClip(sourceTrack.id, {
-      startTime: sourceClip.startTime,
-      duration: sourceClip.duration,
-      prompt: caption,
-      globalCaption: caption,
-      lyrics,
-    });
-    targetClipId = newClip.id;
-  } else {
-    store.saveClipVersion(clipId);
-    targetClipId = clipId;
-  }
-
-  const jobId = uuidv4();
-  genStore.addJob({
-    id: jobId,
-    clipId: targetClipId,
-    trackName: sourceTrack.trackName,
-    status: 'queued',
-    progress: 'Queued',
-  });
-  store.updateClipStatus(targetClipId, 'queued', { generationJobId: jobId });
-
-  try {
-    const coverParams: CoverTaskParams = {
-      task_type: 'cover',
-      caption,
-      lyrics,
-      cover_strength: coverStrength,
-      audio_duration: sourceClip.duration,
-      inference_steps: project.generationDefaults.inferenceSteps,
-      guidance_scale: project.generationDefaults.guidanceScale,
-      shift: project.generationDefaults.shift,
-      batch_size: 1,
-      audio_format: 'wav',
-      thinking: project.generationDefaults.thinking,
-      model: project.generationDefaults.model,
-    };
-
-    genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
-    store.updateClipStatus(targetClipId, 'generating');
-
-    const releaseResp = await api.releaseLegoTask(sourceAudioBlob, coverParams);
-    const taskId = releaseResp.task_id;
-
-    const startTime = Date.now();
-    let resultAudioPath: string | null = null;
-
-    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
-      await sleep(POLL_INTERVAL_MS);
-      const entries = await api.queryResult([taskId]);
-      const entry = entries?.[0];
-      if (!entry) continue;
-      genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating...' });
-      if (entry.status === 1) {
-        const items: TaskResultItem[] = JSON.parse(entry.result);
-        resultAudioPath = items?.[0]?.file ?? null;
-        break;
-      } else if (entry.status === 2) {
-        throw new Error(`Cover generation failed: ${entry.result}`);
-      }
+    const sourceClip = store.getClipById(clipId);
+    const sourceTrack = store.getTrackForClip(clipId);
+    if (!sourceClip || !sourceTrack) {
+      genStore.setIsGenerating(false);
+      return false;
     }
 
-    if (!resultAudioPath) throw new Error('Cover generation timed out');
+    let sourceAudioBlob: Blob | null = null;
+    if (sourceClip.isolatedAudioKey) {
+      sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
+    }
+    if (!sourceAudioBlob && sourceClip.cumulativeMixKey) {
+      sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
+    }
+    if (!sourceAudioBlob) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
 
-    genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
-    store.updateClipStatus(targetClipId, 'processing');
+    const project = store.project!;
 
-    const coverBlob = await api.downloadAudio(resultAudioPath);
-    const engine = getAudioEngine();
-    const buffer = await engine.decodeAudioData(coverBlob);
-    const peaks = computeWaveformPeaks(buffer, 200);
+    let targetClipId: string;
+    if (createNew) {
+      const newClip = store.addClip(sourceTrack.id, {
+        startTime: sourceClip.startTime,
+        duration: sourceClip.duration,
+        prompt: caption,
+        globalCaption: caption,
+        lyrics,
+      });
+      targetClipId = newClip.id;
+    } else {
+      store.saveClipVersion(clipId);
+      targetClipId = clipId;
+    }
 
-    const isolatedKey = await saveAudioBlob(project.id, targetClipId, 'isolated', coverBlob);
-    const cumulativeKey = await saveAudioBlob(project.id, targetClipId, 'cumulative', coverBlob);
-
-    store.updateClipStatus(targetClipId, 'ready', {
-      cumulativeMixKey: cumulativeKey,
-      isolatedAudioKey: isolatedKey,
-      waveformPeaks: peaks,
-      audioDuration: buffer.duration,
-      audioOffset: 0,
-      generatedFromContext: false,
+    const jobId = uuidv4();
+    genStore.addJob({
+      id: jobId,
+      clipId: targetClipId,
+      trackName: sourceTrack.trackName,
+      status: 'queued',
+      progress: 'Queued',
     });
+    store.updateClipStatus(targetClipId, 'queued', { generationJobId: jobId });
 
-    genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
-    store.saveClipVersion(targetClipId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    store.updateClipStatus(targetClipId, 'error', { errorMessage: message });
-    genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
-  } finally {
-    genStore.setIsGenerating(false);
-  }
+    try {
+      const coverParams: CoverTaskParams = {
+        task_type: 'cover',
+        caption,
+        lyrics,
+        cover_strength: coverStrength,
+        audio_duration: sourceClip.duration,
+        inference_steps: project.generationDefaults.inferenceSteps,
+        guidance_scale: project.generationDefaults.guidanceScale,
+        shift: project.generationDefaults.shift,
+        batch_size: 1,
+        audio_format: 'wav',
+        thinking: project.generationDefaults.thinking,
+        model: project.generationDefaults.model,
+      };
+
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
+      store.updateClipStatus(targetClipId, 'generating');
+
+      const releaseResp = await api.releaseLegoTask(sourceAudioBlob, coverParams);
+      const taskId = releaseResp.task_id;
+
+      const startTime = Date.now();
+      let resultAudioPath: string | null = null;
+
+      while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        const entries = await api.queryResult([taskId]);
+        const entry = entries?.[0];
+        if (!entry) continue;
+        genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating...' });
+        if (entry.status === 1) {
+          const items: TaskResultItem[] = JSON.parse(entry.result);
+          resultAudioPath = items?.[0]?.file ?? null;
+          break;
+        } else if (entry.status === 2) {
+          throw new Error(`Cover generation failed: ${entry.result}`);
+        }
+      }
+
+      if (!resultAudioPath) throw new Error('Cover generation timed out');
+
+      genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
+      store.updateClipStatus(targetClipId, 'processing');
+
+      const coverBlob = await api.downloadAudio(resultAudioPath);
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(coverBlob);
+      const peaks = computeWaveformPeaks(buffer, 200);
+
+      const isolatedKey = await saveAudioBlob(project.id, targetClipId, 'isolated', coverBlob);
+      const cumulativeKey = await saveAudioBlob(project.id, targetClipId, 'cumulative', coverBlob);
+
+      store.updateClipStatus(targetClipId, 'ready', {
+        cumulativeMixKey: cumulativeKey,
+        isolatedAudioKey: isolatedKey,
+        waveformPeaks: peaks,
+        audioDuration: buffer.duration,
+        audioOffset: 0,
+        generatedFromContext: false,
+      });
+
+      genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
+      store.saveClipVersion(targetClipId);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      store.updateClipStatus(targetClipId, 'error', { errorMessage: message });
+      genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
+      return false;
+    } finally {
+      genStore.setIsGenerating(false);
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -844,33 +905,37 @@ export interface GenerateRepaintOptions {
 export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-  try {
-    const store = useProjectStore.getState();
-    const clip = store.getClipById(opts.clipId);
-    if (!clip) return;
+    try {
+      const store = useProjectStore.getState();
+      const clip = store.getClipById(opts.clipId);
+      if (!clip) return false;
 
-    // Save the current state as a version before overwriting
-    store.saveClipVersion(opts.clipId);
+      store.saveClipVersion(opts.clipId);
 
-    // Use the clip's existing cumulative mix as context audio
-    let srcBlob: Blob | null = null;
-    if (clip.cumulativeMixKey) {
-      srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
+      let srcBlob: Blob | null = null;
+      if (clip.cumulativeMixKey) {
+        srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
+      }
+
+      const outcome = await generateClipInternal(opts.clipId, srcBlob, {
+        forceSilence: !srcBlob,
+        localDescription: opts.prompt,
+        globalCaptionOverride: opts.globalCaption,
+        repaintRange: { start: opts.repaintStart, end: opts.repaintEnd },
+      });
+
+      if (outcome.succeeded) {
+        store.saveClipVersion(opts.clipId);
+      }
+
+      return outcome.succeeded;
+    } finally {
+      genStore.setIsGenerating(false);
     }
-
-    await generateClipInternal(opts.clipId, srcBlob, {
-      forceSilence: !srcBlob,
-      localDescription: opts.prompt,
-      globalCaptionOverride: opts.globalCaption,
-      repaintRange: { start: opts.repaintStart, end: opts.repaintEnd },
-    });
-
-    store.saveClipVersion(opts.clipId);
-  } finally {
-    genStore.setIsGenerating(false);
-  }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -893,144 +958,143 @@ export interface Vocal2BGMOptions {
 export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
-  genStore.setIsGenerating(true);
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
 
-  const { clipId, caption, targetTrackId, bpm, keyScale } = opts;
-  const store = useProjectStore.getState();
+    const { clipId, caption, targetTrackId } = opts;
+    const store = useProjectStore.getState();
 
-  const sourceClip = store.getClipById(clipId);
-  const sourceTrack = store.getTrackForClip(clipId);
-  if (!sourceClip || !sourceTrack) {
-    genStore.setIsGenerating(false);
-    return;
-  }
-
-  // Load the vocal audio (prefer isolated, fall back to cumulative)
-  let vocalBlob: Blob | null = null;
-  if (sourceClip.isolatedAudioKey) {
-    vocalBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
-  }
-  if (!vocalBlob && sourceClip.cumulativeMixKey) {
-    vocalBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
-  }
-  if (!vocalBlob) {
-    genStore.setIsGenerating(false);
-    return;
-  }
-
-  const project = store.project!;
-  const targetTrack = project.tracks.find((t) => t.id === targetTrackId);
-  if (!targetTrack) {
-    genStore.setIsGenerating(false);
-    return;
-  }
-
-  // Create a new clip on the target track
-  const newClip = store.addClip(targetTrackId, {
-    startTime: sourceClip.startTime,
-    duration: sourceClip.duration,
-    prompt: caption,
-    globalCaption: caption,
-    lyrics: '',
-  });
-
-  const jobId = uuidv4();
-  genStore.addJob({
-    id: jobId,
-    clipId: newClip.id,
-    trackName: targetTrack.trackName,
-    status: 'queued',
-    progress: 'Queued',
-  });
-  store.updateClipStatus(newClip.id, 'queued', { generationJobId: jobId });
-
-  try {
-    // Send vocal as reference_audio via the cover endpoint — task_type 'cover'
-    // with low cover_strength so the model treats the vocal as a reference
-    // and generates accompaniment matching the caption.
-    const coverParams: CoverTaskParams = {
-      task_type: 'cover',
-      caption: `accompaniment for vocals: ${caption}`,
-      lyrics: '',
-      cover_strength: 0.8,
-      audio_duration: sourceClip.duration,
-      inference_steps: project.generationDefaults.inferenceSteps,
-      guidance_scale: project.generationDefaults.guidanceScale,
-      shift: project.generationDefaults.shift,
-      batch_size: 1,
-      audio_format: 'wav',
-      thinking: project.generationDefaults.thinking,
-      model: project.generationDefaults.model,
-    };
-
-    genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
-    store.updateClipStatus(newClip.id, 'generating');
-
-    const releaseResp = await api.releaseLegoTask(vocalBlob, coverParams);
-    const taskId = releaseResp.task_id;
-
-    const startTime = Date.now();
-    let resultAudioPath: string | null = null;
-    let firstResult: TaskResultItem | null = null;
-
-    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
-      await sleep(POLL_INTERVAL_MS);
-      const entries = await api.queryResult([taskId]);
-      const entry = entries?.[0];
-      if (!entry) continue;
-      genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating accompaniment...' });
-      if (entry.status === 1) {
-        const items: TaskResultItem[] = JSON.parse(entry.result);
-        firstResult = items?.[0] ?? null;
-        resultAudioPath = firstResult?.file ?? null;
-        break;
-      } else if (entry.status === 2) {
-        throw new Error(`Vocal2BGM generation failed: ${entry.result}`);
-      }
+    const sourceClip = store.getClipById(clipId);
+    const sourceTrack = store.getTrackForClip(clipId);
+    if (!sourceClip || !sourceTrack) {
+      genStore.setIsGenerating(false);
+      return false;
     }
 
-    if (!resultAudioPath) throw new Error('Vocal2BGM generation timed out');
+    let vocalBlob: Blob | null = null;
+    if (sourceClip.isolatedAudioKey) {
+      vocalBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
+    }
+    if (!vocalBlob && sourceClip.cumulativeMixKey) {
+      vocalBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
+    }
+    if (!vocalBlob) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
 
-    genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
-    store.updateClipStatus(newClip.id, 'processing');
+    const project = store.project!;
+    const targetTrack = project.tracks.find((t) => t.id === targetTrackId);
+    if (!targetTrack) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
 
-    const bgmBlob = await api.downloadAudio(resultAudioPath);
-    const engine = getAudioEngine();
-    const buffer = await engine.decodeAudioData(bgmBlob);
-    const peaks = computeWaveformPeaks(buffer, 200);
-
-    const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', bgmBlob);
-    const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', bgmBlob);
-
-    const inferredMetas: InferredMetas | undefined = firstResult
-      ? {
-          bpm: firstResult.metas?.bpm,
-          keyScale: firstResult.metas?.keyscale,
-          genres: firstResult.metas?.genres,
-          seed: firstResult.seed_value,
-          ditModel: firstResult.dit_model,
-        }
-      : undefined;
-
-    store.updateClipStatus(newClip.id, 'ready', {
-      cumulativeMixKey: cumulativeKey,
-      isolatedAudioKey: isolatedKey,
-      waveformPeaks: peaks,
-      audioDuration: buffer.duration,
-      audioOffset: 0,
-      inferredMetas,
-      generatedFromContext: true,
+    const newClip = store.addClip(targetTrackId, {
+      startTime: sourceClip.startTime,
+      duration: sourceClip.duration,
+      prompt: caption,
+      globalCaption: caption,
+      lyrics: '',
     });
 
-    genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
-    store.saveClipVersion(newClip.id);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    store.updateClipStatus(newClip.id, 'error', { errorMessage: message });
-    genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
-  } finally {
-    genStore.setIsGenerating(false);
-  }
+    const jobId = uuidv4();
+    genStore.addJob({
+      id: jobId,
+      clipId: newClip.id,
+      trackName: targetTrack.trackName,
+      status: 'queued',
+      progress: 'Queued',
+    });
+    store.updateClipStatus(newClip.id, 'queued', { generationJobId: jobId });
+
+    try {
+      const coverParams: CoverTaskParams = {
+        task_type: 'cover',
+        caption: `accompaniment for vocals: ${caption}`,
+        lyrics: '',
+        cover_strength: 0.8,
+        audio_duration: sourceClip.duration,
+        inference_steps: project.generationDefaults.inferenceSteps,
+        guidance_scale: project.generationDefaults.guidanceScale,
+        shift: project.generationDefaults.shift,
+        batch_size: 1,
+        audio_format: 'wav',
+        thinking: project.generationDefaults.thinking,
+        model: project.generationDefaults.model,
+      };
+
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
+      store.updateClipStatus(newClip.id, 'generating');
+
+      const releaseResp = await api.releaseLegoTask(vocalBlob, coverParams);
+      const taskId = releaseResp.task_id;
+
+      const startTime = Date.now();
+      let resultAudioPath: string | null = null;
+      let firstResult: TaskResultItem | null = null;
+
+      while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        const entries = await api.queryResult([taskId]);
+        const entry = entries?.[0];
+        if (!entry) continue;
+        genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating accompaniment...' });
+        if (entry.status === 1) {
+          const items: TaskResultItem[] = JSON.parse(entry.result);
+          firstResult = items?.[0] ?? null;
+          resultAudioPath = firstResult?.file ?? null;
+          break;
+        } else if (entry.status === 2) {
+          throw new Error(`Vocal2BGM generation failed: ${entry.result}`);
+        }
+      }
+
+      if (!resultAudioPath) throw new Error('Vocal2BGM generation timed out');
+
+      genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
+      store.updateClipStatus(newClip.id, 'processing');
+
+      const bgmBlob = await api.downloadAudio(resultAudioPath);
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(bgmBlob);
+      const peaks = computeWaveformPeaks(buffer, 200);
+
+      const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', bgmBlob);
+      const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', bgmBlob);
+
+      const inferredMetas: InferredMetas | undefined = firstResult
+        ? {
+            bpm: firstResult.metas?.bpm,
+            keyScale: firstResult.metas?.keyscale,
+            genres: firstResult.metas?.genres,
+            seed: firstResult.seed_value,
+            ditModel: firstResult.dit_model,
+          }
+        : undefined;
+
+      store.updateClipStatus(newClip.id, 'ready', {
+        cumulativeMixKey: cumulativeKey,
+        isolatedAudioKey: isolatedKey,
+        waveformPeaks: peaks,
+        audioDuration: buffer.duration,
+        audioOffset: 0,
+        inferredMetas,
+        generatedFromContext: true,
+      });
+
+      genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
+      store.saveClipVersion(newClip.id);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      store.updateClipStatus(newClip.id, 'error', { errorMessage: message });
+      genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
+      return false;
+    } finally {
+      genStore.setIsGenerating(false);
+    }
+  });
 }
 
 /**

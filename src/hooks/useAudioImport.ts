@@ -4,6 +4,7 @@ import { getAudioEngine } from './useAudioEngine';
 import { saveAudioBlob } from '../services/audioFileManager';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { audioBufferToWavBlob } from '../utils/wav';
+import { toastSuccess } from './useToast';
 
 function trimAudioBuffer(
   engine: ReturnType<typeof getAudioEngine>,
@@ -70,6 +71,8 @@ export function useAudioImport() {
       audioOffset: 0,
       source: 'uploaded',
     });
+
+    toastSuccess('Audio file imported');
   }, [addClip, updateClipStatus]);
 
   const importAudioFile = useCallback(async (file: File) => {
@@ -116,6 +119,8 @@ export function useAudioImport() {
       audioOffset: 0,
       source: 'uploaded',
     });
+
+    toastSuccess('Audio file imported');
   }, [addTrack, addClip, updateClipStatus]);
 
   const importAudioToTrack = useCallback(async (file: File, trackId: string, startTime: number) => {

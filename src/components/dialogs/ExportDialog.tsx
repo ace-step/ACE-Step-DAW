@@ -5,6 +5,7 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { exportMixToWav } from '../../engine/exportMix';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../../engine/offlineRender';
+import { toastError, toastSuccess } from '../../hooks/useToast';
 
 export function ExportDialog() {
   const show = useUIStore((s) => s.showExportDialog);
@@ -69,9 +70,11 @@ export function ExportDialog() {
       a.download = `${project.name}.wav`;
       a.click();
       URL.revokeObjectURL(url);
+      toastSuccess('WAV exported successfully');
       setShow(false);
     } catch (error) {
       console.error('Export failed:', error);
+      toastError('Export failed');
     } finally {
       setExporting(false);
     }

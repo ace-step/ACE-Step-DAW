@@ -21,6 +21,7 @@ import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
 import { EffectChain } from '../mixer/EffectChain';
+import { ToastContainer } from '../ui/Toast';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -61,6 +62,7 @@ export function AppShell() {
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
       <StatusBar />
+      <ToastContainer />
 
       {/* Modals */}
       <NewProjectDialog />

@@ -26,6 +26,7 @@ import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useEffectsSync } from '../../hooks/useEffectsSync';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
@@ -57,6 +58,7 @@ export function AppShell() {
   }, [project]);
 
   useKeyboardShortcuts();
+  useEffectsSync(); // Keep effects chain synced with store — always, not just when Mixer is open
 
   return (
     <div className="flex flex-col h-screen bg-daw-bg text-zinc-300" onClick={handleClick}>

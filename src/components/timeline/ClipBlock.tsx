@@ -8,6 +8,9 @@ import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { regenerateClip } from '../../services/generationPipeline';
+import { ClipContextMenu } from './ClipContextMenu';
+import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { ClipStatusOverlay } from './ClipStatusOverlay';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -43,7 +46,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setVocal2BGMModal = useUIStore((s) => s.setVocal2BGMModal);
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
 
-  // Track generating progress for this clip to show in the status overlay
   const generatingProgress = useGenerationStore((s) => {
     const job = s.jobs.find(
       (j) => j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing'),
@@ -64,7 +66,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
 
-  // Listen for external "edit clip" signal (keyboard shortcut E)
   const editingClipId = useUIStore((s) => s.editingClipId);
   useEffect(() => {
     if (editingClipId === clip.id) {
@@ -73,12 +74,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     }
   }, [editingClipId, clip.id, setEditingClip]);
 
-  // Version navigation
   const versions = clip.versions ?? [];
   const activeVersionIdx = clip.activeVersionIdx ?? (versions.length > 0 ? versions.length - 1 : -1);
   const totalVersions = versions.length;
-
-  const peaks = clip.waveformPeaks;
 
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
@@ -86,7 +84,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const dragRef = useRef(false);
 
-  // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
   const getDragMode = useCallback((e: React.MouseEvent): DragMode => {
@@ -146,7 +143,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
-      if (!dragRef.current) beginDrag(); // capture undo snapshot once on first drag movement
+      if (!dragRef.current) beginDrag();
       dragRef.current = true;
       isShiftCopy = ev.shiftKey;
 
@@ -231,7 +228,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       setDragGhost(null);
-      endDrag(); // re-enable normal history tracking
+      endDrag();
 
       if (mode === 'move' && dragRef.current) {
         const closest = findClosestLane(ev.clientY);
@@ -310,24 +307,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     stale: 'opacity-50',
   };
 
-  // Waveform: render visible portion of audio peaks within the clip's pixel width
+  const peaks = clip.waveformPeaks;
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
-  // Clip content width (subtract 3px border-left)
-  const clipContentWidth = Math.max(width - 3, 0);
-
-  // Which peak indices are visible in this clip window
-  const startPeakIdx = peaks && peaks.length > 0 && audioDuration > 0
-    ? Math.floor((audioOffset / audioDuration) * peaks.length) : 0;
-  const visibleAudioSec = Math.min(clip.duration, Math.max(0, audioDuration - audioOffset));
-  const endPeakIdx = peaks && peaks.length > 0 && audioDuration > 0 ? Math.min(
-    Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * peaks.length),
-    peaks.length,
-  ) : 0;
-  const numBars = Math.max(0, endPeakIdx - startPeakIdx);
-  // Bar spacing in viewBox coordinates — viewBox maps to clipContentWidth pixels
-  const barSpacing = numBars > 0 ? clipContentWidth / numBars : 1;
-  const barWidth = Math.max(barSpacing * 0.7, 0.5);
 
   return (
     <>
@@ -353,75 +335,34 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         onMouseMove={handleMouseMoveLocal}
         onContextMenu={handleContextMenu}
       >
-        {/* Resize handles */}
         <div className="absolute top-0 bottom-0 left-0 w-[6px] cursor-col-resize z-10" />
         <div className="absolute top-0 bottom-0 right-0 w-[6px] cursor-col-resize z-10" />
 
-        {/* Waveform — peaks mapped to clip content width */}
-        {peaks && numBars > 0 && clipContentWidth > 0 && (
-          <div className="absolute inset-0 flex items-center overflow-hidden">
-            <svg
-              width={clipContentWidth}
-              height="100%"
-              viewBox={`0 0 ${clipContentWidth} 100`}
-              preserveAspectRatio="none"
-              className="opacity-60"
-            >
-              {Array.from({ length: numBars }, (_, i) => {
-                const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);
-                const peak = peaks[peakIdx];
-                const h = peak * 80;
-                return (
-                  <rect
-                    key={i}
-                    x={i * barSpacing}
-                    y={50 - h / 2}
-                    width={barWidth}
-                    height={Math.max(h, 1)}
-                    fill={track.color}
-                  />
-                );
-              })}
-            </svg>
-          </div>
+        <ClipWaveform
+          peaks={peaks}
+          audioDuration={audioDuration}
+          audioOffset={audioOffset}
+          clipDuration={clip.duration}
+          width={width}
+          color={track.color}
+        />
+
+        {isMidiClip && clip.midiData && (
+          <ClipMidiThumbnail
+            midiData={clip.midiData}
+            width={width}
+            duration={clip.duration}
+            bpm={project?.bpm ?? 120}
+            color={track.color}
+          />
         )}
 
-        {/* MIDI note thumbnail */}
-        {isMidiClip && clip.midiData && clip.midiData.notes.length > 0 && (
-          <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: 14 }}>
-            <svg width="100%" height="100%" preserveAspectRatio="none"
-              viewBox={`0 0 ${width} 100`}
-            >
-              {(() => {
-                const notes = clip.midiData!.notes;
-                const bpm = project?.bpm ?? 120;
-                const secPerBeat = 60 / bpm;
-                const clipDur = clip.duration;
-                const pitches = notes.map(n => n.pitch);
-                const minP = Math.min(...pitches);
-                const maxP = Math.max(...pitches);
-                const range = Math.max(maxP - minP, 12);
-                const pad = 2;
-                return notes.map((n, i) => {
-                  const x = (n.startBeat * secPerBeat / clipDur) * width;
-                  const w = Math.max((n.durationBeats * secPerBeat / clipDur) * width, 1);
-                  const y = 100 - ((n.pitch - minP + pad) / (range + pad * 2)) * 100;
-                  const h = Math.max(100 / (range + pad * 2), 2);
-                  return <rect key={i} x={x} y={y} width={w} height={h} fill={track.color} opacity={0.8} rx={0.5} />;
-                });
-              })()}
-            </svg>
-          </div>
-        )}
-
-        {/* Label */}
         <div className="absolute top-0 left-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm pointer-events-none"
           style={{ right: totalVersions >= 1 ? '52px' : '6px' }}
         >
           {isMidiClip ? `${clip.midiData?.notes.length ?? 0} notes` : (clip.prompt || '(no prompt)')}
         </div>
 
-        {/* Version navigation — visible whenever at least one version exists */}
         {totalVersions >= 1 && (
           <div
             className="absolute top-0 right-0.5 flex items-center gap-0.5 z-20"
@@ -459,36 +400,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           </div>
         )}
 
-        {/* Status overlay — spinner + progress text during generation */}
-        {generatingProgress && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none bg-black/30 rounded-md">
-            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mb-0.5" />
-            <span className="text-[8px] text-white/90 font-medium text-center px-1 leading-tight max-w-full truncate">
-              {generatingProgress}
-            </span>
-          </div>
-        )}
-        {clip.generationStatus === 'error' && (
-          <div className="absolute bottom-0 left-1.5 text-[8px] text-red-300 truncate pointer-events-none">
-            Error
-          </div>
-        )}
-        {clip.generationStatus === 'ready' && clip.inferredMetas && (
-          <div className="absolute bottom-0 left-1.5 right-1.5 text-[8px] text-zinc-400 truncate pointer-events-none">
-            {[
-              clip.inferredMetas.bpm != null ? `${clip.inferredMetas.bpm}bpm` : null,
-              clip.inferredMetas.keyScale || null,
-            ].filter(Boolean).join(' | ')}
-          </div>
-        )}
-        {isMidiClip && (
-          <div className="absolute bottom-0 left-1.5 right-1.5 text-[8px] text-zinc-300/80 truncate pointer-events-none">
-            MIDI clip • double-click to edit
-          </div>
-        )}
+        <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} isMidiClip={isMidiClip} />
       </div>
 
-      {/* Context menu */}
       {ctxMenu && (
         <ClipContextMenu
           x={ctxMenu.x}
@@ -531,7 +445,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         />
       )}
 
-      {/* AddLayerModal — opened from clip context menu "Add Layer here" */}
       {addLayerOpen && (
         <AddLayerModal
           trackId={track.id}
@@ -542,7 +455,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         />
       )}
 
-      {/* Edit Clip — unified modal in edit mode */}
       {editModalOpen && (
         <AddLayerModal
           trackId={track.id}
@@ -554,10 +466,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         />
       )}
 
-      {/* Cross-track drag ghost + target lane highlight */}
       {dragGhost && dragGhost.targetTrackId && (
         <>
-          {/* Source lane placeholder (dashed outline showing where clip came from) */}
           {dragGhost.sourceLaneRect && (
             <div
               className="fixed pointer-events-none z-[98]"
@@ -573,7 +483,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             />
           )}
 
-          {/* Lane-aligned ghost — visually mirrors the original clip at target lane size */}
           <div
             className="fixed pointer-events-none z-[100] rounded-sm overflow-hidden"
             style={{
@@ -589,38 +498,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               transition: 'top 80ms ease-out',
             }}
           >
-            {/* Mini waveform inside ghost */}
-            {peaks && numBars > 0 && clipContentWidth > 0 && (
-              <div className="absolute inset-0 flex items-center overflow-hidden">
-                <svg
-                  width={clipContentWidth}
-                  height="100%"
-                  viewBox={`0 0 ${clipContentWidth} 100`}
-                  preserveAspectRatio="none"
-                  className="opacity-50"
-                >
-                  {Array.from({ length: numBars }, (_, i) => {
-                    const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);
-                    const peak = peaks[peakIdx];
-                    const h = peak * 80;
-                    return (
-                      <rect
-                        key={i}
-                        x={i * barSpacing}
-                        y={50 - h / 2}
-                        width={barWidth}
-                        height={Math.max(h, 1)}
-                        fill={track.color}
-                      />
-                    );
-                  })}
-                </svg>
-              </div>
-            )}
+            <ClipWaveform
+              peaks={peaks}
+              audioDuration={audioDuration}
+              audioOffset={audioOffset}
+              clipDuration={clip.duration}
+              width={width}
+              color={track.color}
+              opacityClassName="opacity-50"
+            />
             <div className="absolute top-0 left-1.5 right-1.5 text-[9px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm">
               {clip.prompt || track.displayName}
             </div>
-            {/* Copy badge when Shift is held */}
             {dragGhost.isShiftCopy && (
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow z-20">
                 +
@@ -628,7 +517,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             )}
           </div>
 
-          {/* Target lane highlight */}
           {dragGhost.targetLaneRect && (
             <div
               className="fixed pointer-events-none z-[99]"
@@ -646,98 +534,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           )}
         </>
       )}
-    </>
-  );
-}
-
-function ClipContextMenu({
-  x, y,
-  onEdit, onGenerate, onRegenerate, onOpenMidi,
-  onDuplicate, onDelete, onAddLayer,
-  onCreateCover, onRepaint,
-  onVocal2BGM, onAnalyze,
-  onClose,
-  hasPrompt, isReady, isMidiClip, isVocalTrack,
-}: {
-  x: number;
-  y: number;
-  onEdit: () => void;
-  onGenerate: () => void;
-  onRegenerate: () => void;
-  onOpenMidi: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onAddLayer: () => void;
-  onCreateCover: () => void;
-  onRepaint: () => void;
-  onVocal2BGM: () => void;
-  onAnalyze: () => void;
-  onClose: () => void;
-  hasPrompt: boolean;
-  isReady: boolean;
-  isMidiClip: boolean;
-  isVocalTrack: boolean;
-}) {
-  const clampedX = Math.min(x, window.innerWidth - 210);
-  const clampedY = Math.min(y, window.innerHeight - 300);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
-      <div
-        className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[190px] backdrop-blur-sm"
-        style={{ left: clampedX, top: clampedY }}
-      >
-        <button onClick={onEdit} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-          Edit Clip
-        </button>
-        {isMidiClip ? (
-          <button onClick={onOpenMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-200 hover:bg-daw-accent hover:text-white transition-colors">
-            Open Piano Roll
-          </button>
-        ) : isReady ? (
-          <button onClick={onRegenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
-            Regenerate
-          </button>
-        ) : (
-          <button onClick={onGenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
-            Generate
-          </button>
-        )}
-
-        {!isMidiClip && isReady && (
-          <>
-            <button onClick={onCreateCover} className="w-full text-left px-3 py-1.5 text-[11px] text-amber-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Create Cover…
-            </button>
-            <button onClick={onRepaint} className="w-full text-left px-3 py-1.5 text-[11px] text-rose-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Repaint Selection…
-            </button>
-            {isVocalTrack && (
-              <button onClick={onVocal2BGM} className="w-full text-left px-3 py-1.5 text-[11px] text-emerald-300 hover:bg-daw-accent hover:text-white transition-colors">
-                Generate Accompaniment…
-              </button>
-            )}
-            <button onClick={onAnalyze} className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Analyze Audio…
-            </button>
-          </>
-        )}
-
-        <div className="my-1 border-t border-[#555]" />
-        <button onClick={onDuplicate} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-          Duplicate
-        </button>
-        {!isMidiClip && (
-          <button onClick={onAddLayer} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-            Add Layer here…
-          </button>
-        )}
-        <div className="my-1 border-t border-[#555]" />
-        <button onClick={onDelete} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-600 hover:text-white transition-colors">
-          Delete
-        </button>
-      </div>
     </>
   );
 }

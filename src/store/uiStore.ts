@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface UIState {
   pixelsPerSecond: number;
@@ -107,7 +108,9 @@ interface UIState {
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
   pixelsPerSecond: 50,
   scrollX: 0,
   scrollY: 0,
@@ -232,4 +235,28 @@ export const useUIStore = create<UIState>((set) => ({
 
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
-}));
+}),
+    {
+      name: 'ace-step-daw-ui',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        // Panel open/close states
+        showMixer: state.showMixer,
+        showLibrary: state.showLibrary,
+        loopBrowserOpen: state.loopBrowserOpen,
+        showSmartControls: state.showSmartControls,
+        // Panel sizes
+        mixerHeight: state.mixerHeight,
+        sequencerEditorHeight: state.sequencerEditorHeight,
+        pianoRollHeight: state.pianoRollHeight,
+        effectChainHeight: state.effectChainHeight,
+        assetsPanelWidth: state.assetsPanelWidth,
+        trackListWidth: state.trackListWidth,
+        // Zoom level
+        pixelsPerSecond: state.pixelsPerSecond,
+        // Loop Browser preference
+        loopBrowserCategory: state.loopBrowserCategory,
+      }),
+    },
+  ),
+);

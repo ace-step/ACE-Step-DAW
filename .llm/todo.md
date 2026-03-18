@@ -12,7 +12,7 @@
 - [x] Write Vitest unit tests for color utilities (src/utils/color.ts)
 - [x] Write Vitest unit tests for WAV export utilities (src/utils/wav.ts)
 - [x] Write Vitest unit tests for waveform peak calculation (src/utils/waveformPeaks.ts)
-- [ ] Write Vitest unit tests for audio downsample utility (src/utils/audioDownsample.ts)
+- [x] Write Vitest unit tests for audio downsample utility (src/utils/audioDownsample.ts)
 - [ ] Write Vitest unit tests for generationPipeline service state machine
 - [x] Write Vitest unit tests for automation types (normalizedToMixerValue, automationParamEquals)
 - [ ] Write Playwright E2E test: sequencer workflow (add track, toggle steps, verify pattern)

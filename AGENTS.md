@@ -10,7 +10,7 @@
 ### 分支
 - `main` — 稳定版本，**只通过 PR merge**，禁止直接 push
 - `feat/v0.0.X-xxx` — 每个功能一个短期分支，从 main 创建，merge 后删除
-- `fix/xxx` — bug 修复分支
+- `fix/v0.0.X-xxx` — bug 修复分支
 - `test/v0.0.X-system-test` — 系统测试 + 重构分支
 
 ### 身份
@@ -18,22 +18,27 @@
 - `user.email`: junmin@acestudio.ai
 
 ### Commit 规范
-- feat: 新功能
-- fix: 修复
-- docs: 文档
-- refactor: 重构
-- test: 测试
-- chore: 杂项
+- `feat: add Piano Roll MIDI editor with velocity lane`
+- `fix: resolve track deletion memory leak in audio engine`
+- `docs: add MIDI editing research from Ableton Live 12`
+- `refactor: extract shared Canvas utils into canvasUtils.ts`
+- `test: add system test round 3 for v0.0.15`
+- `chore: update dependencies`
 
 ### 单版本流程
 ```
-git checkout main && git pull
+git fetch origin && git checkout main && git pull --ff-only origin main
 git checkout -b feat/v0.0.X-feature-name
 → 开发 + 测试 + 修复（同一分支内完成）
-→ push 分支 → 创建 PR → Codex 审核 PR → merge
-→ 在 main 打 tag → 创建 GitHub Release（含深度测试 GIF）
-→ 删除 feat 分支
+→ git push origin feat/v0.0.X-feature-name
+→ 创建 PR → Codex 审核 PR → merge
+→ git checkout main && git pull --ff-only origin main
+→ git tag -a v0.0.X -m "release notes" && git push origin main --tags
+→ 创建 GitHub Release（含深度测试 GIF）
+→ git push origin --delete feat/v0.0.X-feature-name
 ```
+
+**热修复例外**: `fix/` 分支可跳过 Step 1 竞品调研，但 Step 5-8 不可跳过。
 
 ### Release 标准（不达标不发）
 - 详细 changelog（每个功能 + 修复 + 改动文件）
@@ -44,7 +49,7 @@ git checkout -b feat/v0.0.X-feature-name
 
 ---
 
-## 每版本开发 9 步流程（每步都不能跳过）
+## 每版本开发 9 步流程（Step 1-8 每版必做，Step 9 每 5 版触发）
 
 ### Step 1: 竞品深度调研 🔍
 - 逐字读竞品文档，**交互细节级别**
@@ -75,7 +80,7 @@ git checkout -b feat/v0.0.X-feature-name
 ### Step 5: 代码审查 🔬
 - `npx tsc --noEmit` — 0 errors
 - `npm run build` — 通过
-- 扫描：unused imports、console.log、any 类型
+- 扫描（merge blocker，必须清零）：unused imports、console.log（error handler 除外）、untyped `any`
 - 代码结构审查
 
 ### Step 6: 浏览器测试 🖥️

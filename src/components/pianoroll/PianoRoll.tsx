@@ -85,7 +85,7 @@ export function PianoRoll() {
   const [prZoomX, setPrZoomX] = useState(1);
   const [prZoomY, setPrZoomY] = useState(1);
   const [prScrollX, setPrScrollX] = useState(0);
-  const [prScrollY, setPrScrollY] = useState(200); // start near middle (C4 range)
+  const [prScrollY, setPrScrollY] = useState(780); // C4 centered: (127-60)*14 - 158 ≈ 780
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   // Store state

@@ -7,6 +7,7 @@ import { PianoRollEmptyState } from './PianoRollEmptyState';
 
 export function PianoRoll() {
   const [drawMode, setDrawMode] = useState(false);
+  const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
 
@@ -32,6 +33,23 @@ export function PianoRoll() {
     }
     return track.clips.find((candidate) => candidate.midiData) ?? null;
   }, [openClipId, track]);
+
+  // Ghost notes from other tracks' MIDI clips
+  const ghostNotes = useMemo(() => {
+    if (!showGhostNotes || !project || !track) return [];
+    const notes: Array<{ pitch: number; startBeat: number; durationBeats: number; color: string }> = [];
+    for (const otherTrack of project.tracks) {
+      if (otherTrack.id === track.id) continue;
+      for (const otherClip of otherTrack.clips) {
+        if (otherClip.midiData) {
+          for (const note of otherClip.midiData.notes) {
+            notes.push({ pitch: note.pitch, startBeat: note.startBeat, durationBeats: note.durationBeats, color: otherTrack.color });
+          }
+        }
+      }
+    }
+    return notes;
+  }, [showGhostNotes, project, track]);
 
   const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -79,6 +97,16 @@ export function PianoRoll() {
           title="Toggle draw mode (B)"
         >
           ✏ Draw
+        </button>
+
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            showGhostNotes ? 'bg-cyan-600/50 text-cyan-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
+          }`}
+          onClick={() => setShowGhostNotes((v) => !v)}
+          title="Show notes from other tracks"
+        >
+          👻 Ghost
         </button>
 
         <select
@@ -142,6 +170,7 @@ export function PianoRoll() {
           gridSize={gridSize}
           prZoomX={prZoomX}
           onZoomXChange={setPrZoomX}
+          ghostNotes={ghostNotes}
         />
       ) : (
         <PianoRollEmptyState />

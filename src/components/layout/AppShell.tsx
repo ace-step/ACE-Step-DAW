@@ -15,7 +15,6 @@ import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
 import { MixerPanel } from '../mixer/MixerPanel';
-import { AssetsPanel } from '../assets/AssetsPanel';
 import { LoopBrowser } from '../assets/LoopBrowser';
 import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
@@ -51,7 +50,6 @@ export function AppShell() {
         {project && <TrackList />}
         {project && <LoopBrowser />}
         <Timeline />
-        {project && <AssetsPanel />}
       </div>
 
       {project && <SmartControlsPanel />}

@@ -273,10 +273,10 @@ export function useKeyboardShortcuts() {
           ui.setShowSmartControls(!ui.showSmartControls);
           break;
 
-        // Loop Browser / Assets toggle (O)
+        // Loop Browser toggle (O)
         case 'KeyO':
           e.preventDefault();
-          ui.setShowAssetsPanel(!ui.showAssetsPanel);
+          ui.toggleLoopBrowser();
           break;
 
         // Help

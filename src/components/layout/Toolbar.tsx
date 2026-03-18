@@ -61,8 +61,8 @@ export function Toolbar() {
   const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
   const showMixer = useUIStore((s) => s.showMixer);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
-  const showAssetsPanel = useUIStore((s) => s.showAssetsPanel);
-  const setShowAssetsPanel = useUIStore((s) => s.setShowAssetsPanel);
+  const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
+  const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
   const showLibrary = useUIStore((s) => s.showLibrary);
   const setShowLibrary = useUIStore((s) => s.setShowLibrary);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
@@ -212,8 +212,8 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton
-          active={showAssetsPanel}
-          onClick={() => setShowAssetsPanel(!showAssetsPanel)}
+          active={loopBrowserOpen}
+          onClick={toggleLoopBrowser}
           title="Loop Browser (O)"
           disabled={!project}
         >

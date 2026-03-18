@@ -4,54 +4,110 @@
 As a user, I want to click Export and get a WAV file that includes my Piano Roll melodies and Sequencer drum patterns, not just AI-generated audio.
 
 ## Problem
-Export WAV button is disabled when there are no AI-generated audio blobs (`isolatedAudioKey`). MIDI and Sequencer tracks have no audio blobs — they only play in real-time via SynthEngine/DrumEngine.
+Export WAV button disabled when `readyClips.length === 0`. MIDI/Sequencer tracks have no `isolatedAudioKey` — they only play live.
 
 ## Current Export Flow
-`src/engine/exportMix.ts` (or similar):
-- Collects clips with `isolatedAudioKey` or `cumulativeMixKey`
-- Loads AudioBuffers from IndexedDB
-- Mixes them into a stereo WAV at 48kHz
-- Downloads the WAV file
-
-## Solution: Offline Render MIDI + Sequencer to AudioBuffer
-
-### Approach: Use Tone.Offline to render each track
-```typescript
-// For pianoRoll tracks:
-const buffer = await Tone.Offline(async ({ transport }) => {
-  const synth = new Tone.PolySynth(Tone.Synth).toDestination();
-  // configure synth preset...
-  for (const note of clip.midiData.notes) {
-    const startSec = note.startBeat * (60 / bpm);
-    const durSec = note.durationBeats * (60 / bpm);
-    const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
-    transport.schedule((time) => {
-      synth.triggerAttackRelease(freq, durSec, time, note.velocity);
-    }, startSec);
-  }
-  transport.start();
-}, totalDuration, 2, 48000);
-
-// For sequencer tracks:
-// Similar approach with DrumEngine sounds in Tone.Offline
+```
+ExportDialog.handleExport():
+  for each track:
+    for each clip with isolatedAudioKey:
+      load AudioBuffer from IndexedDB
+      push {startTime, buffer, volume}
+  exportMixToWav(clips, totalDuration) → OfflineAudioContext → WAV blob → download
 ```
 
-### Integration Points:
-1. **Export dialog** — Remove the `disabled` check (or make it check for ANY content, not just audio blobs)
-2. **Export function** — Before mixing, render MIDI/Seq tracks to AudioBuffers via Tone.Offline
-3. **Mix** — Combine rendered MIDI/Seq buffers with any AI audio blobs
+## Solution
 
-### Alternative simpler approach:
-Before export, render each MIDI/Seq track to an AudioBuffer, store it temporarily, then proceed with existing export pipeline.
+### 1. Add offline rendering functions in `src/engine/offlineRender.ts` (new file)
+
+```typescript
+import * as Tone from 'tone';
+import type { Track, MidiNote, SequencerPattern } from '../types/project';
+
+export async function renderMidiTrackOffline(
+  notes: MidiNote[], 
+  clipStartTime: number,
+  bpm: number, 
+  synthPreset: string,
+  totalDuration: number,
+  sampleRate: number = 48000
+): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(({ transport }) => {
+    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+    // Apply preset settings...
+    transport.bpm.value = bpm;
+    const secondsPerBeat = 60 / bpm;
+    
+    for (const note of notes) {
+      const startSec = clipStartTime + note.startBeat * secondsPerBeat;
+      const durSec = note.durationBeats * secondsPerBeat;
+      const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+      transport.schedule((time) => {
+        synth.triggerAttackRelease(freq, durSec, time, note.velocity);
+      }, startSec);
+    }
+    transport.start();
+  }, totalDuration, 2, sampleRate);
+  
+  return buffer instanceof AudioBuffer ? buffer : buffer.get();
+}
+
+export async function renderSequencerTrackOffline(
+  pattern: SequencerPattern,
+  bpm: number,
+  totalDuration: number,
+  sampleRate: number = 48000
+): Promise<AudioBuffer> {
+  // Similar to renderMidiTrackOffline but uses DrumEngine-style synthesis
+}
+```
+
+### 2. Update `ExportDialog.tsx`
+
+In `handleExport`, before the existing clip collection loop, add:
+
+```typescript
+// Render MIDI tracks offline
+for (const track of project.tracks) {
+  if (track.muted) continue;
+  if (anySoloed && !track.soloed) continue;
+  
+  if (track.trackType === 'pianoRoll') {
+    for (const clip of track.clips) {
+      const notes = clip.midiData?.notes;
+      if (notes?.length) {
+        const buffer = await renderMidiTrackOffline(
+          notes, clip.startTime, project.bpm, 
+          track.synthPreset ?? 'piano', project.totalDuration
+        );
+        clips.push({ startTime: 0, buffer, volume: track.volume });
+      }
+    }
+  }
+  
+  if (track.trackType === 'sequencer' && track.sequencerPattern) {
+    const buffer = await renderSequencerTrackOffline(
+      track.sequencerPattern, project.bpm, project.totalDuration
+    );
+    clips.push({ startTime: 0, buffer, volume: track.volume });
+  }
+}
+```
+
+### 3. Change disabled condition
+
+```diff
+- disabled={exporting || readyClips.length === 0}
++ disabled={exporting || !hasExportableContent}
+```
+
+Where `hasExportableContent` is true if there are ready clips, MIDI notes, OR sequencer patterns.
 
 ## Files to Touch
-- `src/engine/exportMix.ts` or wherever export logic lives
-- `src/components/dialogs/ExportDialog.tsx` or similar — remove disabled condition
-- May need utility functions for MIDI→AudioBuffer and Seq→AudioBuffer offline rendering
+1. `src/engine/offlineRender.ts` — NEW: renderMidiTrackOffline + renderSequencerTrackOffline
+2. `src/components/dialogs/ExportDialog.tsx` — import and call offline renderers + fix disabled check
+3. `src/engine/SynthEngine.ts` — may need createSynthForPreset to be exported as standalone
 
-## Verification
-1. Create Piano Roll track with notes
-2. Create Sequencer track with drum pattern
-3. Click Export → WAV file downloads
-4. Open WAV in audio player → hear both melody and drums
-5. `npm run build` passes 0 errors
+## Build Check
+- `npm run build` must pass 0 errors
+- No unused imports

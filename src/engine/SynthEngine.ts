@@ -7,7 +7,7 @@ interface SynthInstance {
   gain: Tone.Gain;
 }
 
-function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
+export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
   const synth = new Tone.PolySynth(Tone.Synth);
 
   switch (preset) {

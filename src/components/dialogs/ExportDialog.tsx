@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { exportMixToWav } from '../../engine/exportMix';
+import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../../engine/offlineRender';
 
 export function ExportDialog() {
   const show = useUIStore((s) => s.showExportDialog);
@@ -23,6 +24,33 @@ export function ExportDialog() {
       for (const track of project.tracks) {
         if (track.muted) continue;
         if (anySoloed && !track.soloed) continue;
+
+        if (track.trackType === 'pianoRoll') {
+          for (const clip of track.clips) {
+            const notes = clip.midiData?.notes ?? [];
+            if (notes.length === 0) continue;
+
+            const buffer = await renderMidiTrackOffline(
+              notes,
+              clip.startTime,
+              project.bpm,
+              track.synthPreset ?? 'piano',
+              project.totalDuration,
+            );
+            clips.push({ startTime: 0, buffer, volume: track.volume });
+          }
+        }
+
+        if (track.trackType === 'sequencer' && track.sequencerPattern) {
+          const buffer = await renderSequencerTrackOffline(
+            track.sequencerPattern,
+            project.bpm,
+            project.totalDuration,
+            track.drumKit ?? '808',
+          );
+          clips.push({ startTime: 0, buffer, volume: track.volume });
+        }
+
         for (const clip of track.clips) {
           if (clip.generationStatus === 'ready' && clip.isolatedAudioKey) {
             const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
@@ -50,8 +78,21 @@ export function ExportDialog() {
   };
 
   const readyClips = project.tracks.flatMap((t) =>
-    t.clips.filter((c) => c.generationStatus === 'ready'),
+    t.clips.filter((c) => c.generationStatus === 'ready' && c.isolatedAudioKey),
   );
+  const anySoloed = project.tracks.some((t) => t.soloed);
+  const hasExportableContent = project.tracks.some((track) => {
+    if (track.muted) return false;
+    if (anySoloed && !track.soloed) return false;
+
+    const hasReadyAudio = track.clips.some((clip) => clip.generationStatus === 'ready' && clip.isolatedAudioKey);
+    const hasMidiNotes = track.trackType === 'pianoRoll'
+      && track.clips.some((clip) => (clip.midiData?.notes?.length ?? 0) > 0);
+    const hasSequencerSteps = track.trackType === 'sequencer'
+      && track.sequencerPattern?.rows.some((row) => !row.muted && row.steps.some((step) => step.active));
+
+    return hasReadyAudio || hasMidiNotes || Boolean(hasSequencerSteps);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -85,7 +126,7 @@ export function ExportDialog() {
           </button>
           <button
             onClick={handleExport}
-            disabled={exporting || readyClips.length === 0}
+            disabled={exporting || !hasExportableContent}
             className="px-4 py-1.5 text-xs font-medium bg-daw-accent hover:bg-daw-accent-hover text-white rounded transition-colors disabled:opacity-50"
           >
             {exporting ? 'Exporting...' : 'Export WAV'}

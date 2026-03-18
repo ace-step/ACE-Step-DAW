@@ -43,40 +43,53 @@ export const BEAT_PAD_KEYS: string[] = [
 
 // ─── Synthesized Drum Sound Generators ──────────────────────────────────────
 
-function createKick808(): DrumVoice {
+function connectDrumNode<T extends Tone.ToneAudioNode>(node: T, connectTo?: Tone.InputNode): T {
+  if (connectTo) {
+    node.connect(connectTo);
+  } else {
+    node.toDestination();
+  }
+  return node;
+}
+
+function createKick808(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.08, octaves: 6,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.5 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('C1', '8n', time, vel),
     dispose: () => synth.dispose(),
   };
 }
 
-function createKickAcoustic(): DrumVoice {
+function createKickAcoustic(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.05, octaves: 4,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.3 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D1', '8n', time, vel),
     dispose: () => synth.dispose(),
   };
 }
 
-function createSnare808(): DrumVoice {
+function createSnare808(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
-  }).toDestination();
+  });
   const body = new Tone.MembraneSynth({
     pitchDecay: 0.03, octaves: 3,
     oscillator: { type: 'triangle' },
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
+  connectDrumNode(body, connectTo);
   return {
     trigger: (time, vel = 1) => {
       noise.triggerAttackRelease('16n', time, vel * 0.7);
@@ -86,16 +99,18 @@ function createSnare808(): DrumVoice {
   };
 }
 
-function createSnareAcoustic(): DrumVoice {
+function createSnareAcoustic(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'pink' },
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
-  }).toDestination();
+  });
   const body = new Tone.MembraneSynth({
     pitchDecay: 0.02, octaves: 2,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.1 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
+  connectDrumNode(body, connectTo);
   return {
     trigger: (time, vel = 1) => {
       noise.triggerAttackRelease('16n', time, vel * 0.8);
@@ -105,83 +120,91 @@ function createSnareAcoustic(): DrumVoice {
   };
 }
 
-function createHiHatClosed(): DrumVoice {
+function createHiHatClosed(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
   return {
     trigger: (time, vel = 1) => noise.triggerAttackRelease('32n', time, vel * 0.6),
     dispose: () => noise.dispose(),
   };
 }
 
-function createHiHatOpen(): DrumVoice {
+function createHiHatOpen(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
   return {
     trigger: (time, vel = 1) => noise.triggerAttackRelease('8n', time, vel * 0.6),
     dispose: () => noise.dispose(),
   };
 }
 
-function createClap(): DrumVoice {
+function createClap(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
   return {
     trigger: (time, vel = 1) => noise.triggerAttackRelease('16n', time, vel * 0.8),
     dispose: () => noise.dispose(),
   };
 }
 
-function createRim(): DrumVoice {
+function createRim(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MetalSynth({
     envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
     harmonicity: 5.1, modulationIndex: 10, resonance: 8000, octaves: 0.5,
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(400, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
   };
 }
 
-function createTomHigh(): DrumVoice {
+function createTomHigh(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.04, octaves: 3,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('G2', '8n', time, vel),
     dispose: () => synth.dispose(),
   };
 }
 
-function createTomLow(): DrumVoice {
+function createTomLow(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.04, octaves: 3,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.2 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D2', '8n', time, vel),
     dispose: () => synth.dispose(),
   };
 }
 
-function createCrash(): DrumVoice {
+function createCrash(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 1.0 },
-  }).toDestination();
+  });
   const metal = new Tone.MetalSynth({
     envelope: { attack: 0.001, decay: 1.2, release: 0.5 },
     harmonicity: 5.1, modulationIndex: 32, resonance: 6000, octaves: 1.5,
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
+  connectDrumNode(metal, connectTo);
   return {
     trigger: (time, vel = 1) => {
       noise.triggerAttackRelease('4n', time, vel * 0.4);
@@ -191,86 +214,93 @@ function createCrash(): DrumVoice {
   };
 }
 
-function createRide(): DrumVoice {
+function createRide(connectTo?: Tone.InputNode): DrumVoice {
   const metal = new Tone.MetalSynth({
     envelope: { attack: 0.001, decay: 0.6, release: 0.3 },
     harmonicity: 5.1, modulationIndex: 20, resonance: 5000, octaves: 1.0,
-  }).toDestination();
+  });
+  connectDrumNode(metal, connectTo);
   return {
     trigger: (time, vel = 1) => metal.triggerAttackRelease(400, '8n', time, vel * 0.4),
     dispose: () => metal.dispose(),
   };
 }
 
-function createShaker(): DrumVoice {
+function createShaker(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.005, decay: 0.06, sustain: 0, release: 0.04 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
   return {
     trigger: (time, vel = 1) => noise.triggerAttackRelease('32n', time, vel * 0.5),
     dispose: () => noise.dispose(),
   };
 }
 
-function createCowbell(): DrumVoice {
+function createCowbell(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MetalSynth({
     envelope: { attack: 0.001, decay: 0.2, release: 0.1 },
     harmonicity: 1.4, modulationIndex: 2, resonance: 4000, octaves: 0.5,
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(560, '16n', time, vel * 0.6),
     dispose: () => synth.dispose(),
   };
 }
 
-function createConga(): DrumVoice {
+function createConga(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.03, octaves: 2,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('A2', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
   };
 }
 
-function createBongo(): DrumVoice {
+function createBongo(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MembraneSynth({
     pitchDecay: 0.02, octaves: 2,
     oscillator: { type: 'sine' },
     envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.08 },
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D3', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
   };
 }
 
-function createTambourine(): DrumVoice {
+function createTambourine(connectTo?: Tone.InputNode): DrumVoice {
   const noise = new Tone.NoiseSynth({
     noise: { type: 'white' },
     envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.08 },
-  }).toDestination();
+  });
+  connectDrumNode(noise, connectTo);
   return {
     trigger: (time, vel = 1) => noise.triggerAttackRelease('16n', time, vel * 0.5),
     dispose: () => noise.dispose(),
   };
 }
 
-function createPerc(): DrumVoice {
+function createPerc(connectTo?: Tone.InputNode): DrumVoice {
   const synth = new Tone.MetalSynth({
     envelope: { attack: 0.001, decay: 0.08, release: 0.04 },
     harmonicity: 3.1, modulationIndex: 8, resonance: 3000, octaves: 0.5,
-  }).toDestination();
+  });
+  connectDrumNode(synth, connectTo);
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(200, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
   };
 }
 
-type VoiceFactory = () => DrumVoice;
+type VoiceFactory = (connectTo?: Tone.InputNode) => DrumVoice;
 
 const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
   '808': [
@@ -298,6 +328,10 @@ const KIT_FACTORIES: Record<DrumKitName, VoiceFactory[]> = {
     createConga, createBongo, createTambourine, createPerc,
   ],
 };
+
+export function createDrumVoicesForKit(kit: DrumKitName, connectTo?: Tone.InputNode): DrumVoice[] {
+  return KIT_FACTORIES[kit].map((factory) => factory(connectTo));
+}
 
 // ─── Pattern Presets ─────────────────────────────────────────────────────────
 
@@ -408,8 +442,7 @@ class DrumEngine {
 
     this.disposeTrack(trackId);
 
-    const factories = KIT_FACTORIES[kit];
-    const voices: DrumVoice[] = factories.map((factory) => factory());
+    const voices = createDrumVoicesForKit(kit);
     this.voices.set(trackId, voices);
     this.currentKit.set(trackId, kit);
   }

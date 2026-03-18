@@ -15,7 +15,7 @@ test.describe('Sequencer Workflow', () => {
   test('can add a drum track via store API', async ({ page }) => {
     const trackType = await page.evaluate(() => {
       const store = (window as any).__store;
-      const track = store.getState().addTrack('drums');
+      const track = store.getState().addTrack('percussion', 'sequencer');
       return store.getState().project?.tracks[0]?.trackType;
     });
     expect(trackType).toBe('sequencer');
@@ -24,7 +24,7 @@ test.describe('Sequencer Workflow', () => {
   test('can toggle sequencer steps via store API', async ({ page }) => {
     const result = await page.evaluate(() => {
       const store = (window as any).__store;
-      const track = store.getState().addTrack('drums');
+      const track = store.getState().addTrack('percussion', 'sequencer');
       const pattern = store.getState().project?.tracks[0]?.sequencerPattern;
       if (!pattern || pattern.rows.length === 0) return null;
 
@@ -43,7 +43,7 @@ test.describe('Sequencer Workflow', () => {
   test('can toggle a step off after toggling on', async ({ page }) => {
     const isActive = await page.evaluate(() => {
       const store = (window as any).__store;
-      const track = store.getState().addTrack('drums');
+      const track = store.getState().addTrack('percussion', 'sequencer');
       const pattern = store.getState().project?.tracks[0]?.sequencerPattern;
       if (!pattern) return null;
       const rowId = pattern.rows[0].id;
@@ -59,7 +59,7 @@ test.describe('Sequencer Workflow', () => {
   test('can batch set multiple sequencer steps', async ({ page }) => {
     const activeCount = await page.evaluate(() => {
       const store = (window as any).__store;
-      const track = store.getState().addTrack('drums');
+      const track = store.getState().addTrack('percussion', 'sequencer');
       const pattern = store.getState().project?.tracks[0]?.sequencerPattern;
       if (!pattern) return 0;
       const rowId = pattern.rows[0].id;
@@ -81,7 +81,7 @@ test.describe('Sequencer Workflow', () => {
   test('drum track has the expected number of rows', async ({ page }) => {
     const rowCount = await page.evaluate(() => {
       const store = (window as any).__store;
-      store.getState().addTrack('drums');
+      store.getState().addTrack('percussion', 'sequencer');
       return store.getState().project?.tracks[0]?.sequencerPattern?.rows?.length ?? 0;
     });
 
@@ -92,7 +92,7 @@ test.describe('Sequencer Workflow', () => {
   test('each sequencer row has 16 steps by default', async ({ page }) => {
     const stepCount = await page.evaluate(() => {
       const store = (window as any).__store;
-      store.getState().addTrack('drums');
+      store.getState().addTrack('percussion', 'sequencer');
       return store.getState().project?.tracks[0]?.sequencerPattern?.rows[0]?.steps?.length ?? 0;
     });
 

@@ -107,4 +107,26 @@
 
 ---
 
+## Git 工作流
+
+### 分支
+- `main` — 稳定版本，只通过 merge 更新
+- `dev/acestudio-lite` — 日常开发分支
+
+### 发版流程
+1. 在 dev 分支开发并 commit
+2. 每个版本 push 到 dev 分支
+3. 每 5 个版本（系统测试后）merge 到 main
+4. 在 main 上打 tag: `git tag -a v0.0.X -m "release notes"`
+5. Push tag: `git push origin v0.0.X`
+6. 创建 GitHub Release（含 GIF demo）
+7. GIF 放在 demos/ 目录，release note 中引用
+
+### Tag 命名
+- `v0.0.X` — patch 版本（功能迭代）
+- `v0.X.0` — minor 版本（里程碑）
+- `v1.0.0` — 正式版
+
+---
+
 _每一步都不能跳过。速度不如质量重要。_

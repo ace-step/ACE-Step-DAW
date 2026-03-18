@@ -4,7 +4,9 @@ test.describe('Project Lifecycle', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Wait for the app to fully load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    // Wait for the store to be exposed by the app
+    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
   });
 
   test('app loads without errors', async ({ page }) => {

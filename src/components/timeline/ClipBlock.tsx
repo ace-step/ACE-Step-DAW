@@ -310,29 +310,24 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     stale: 'opacity-50',
   };
 
-  // Waveform: render at fixed density so trimming/extending never stretches the waveform
+  // Waveform: render visible portion of audio peaks within the clip's pixel width
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
-  const peakWidthPx = width - 4;
-
-  // Fixed pixels-per-peak: each peak sample always maps to the same width
-  const pxPerPeak = peaks && peaks.length > 0 && audioDuration > 0
-    ? (audioDuration * pixelsPerSecond) / peaks.length
-    : 2;
-  // Minimum bar width of 2px
-  const barWidth = Math.max(pxPerPeak * 0.7, 0.5);
-  const barSpacing = Math.max(pxPerPeak, 1);
+  // Clip content width (subtract 3px border-left)
+  const clipContentWidth = Math.max(width - 3, 0);
 
   // Which peak indices are visible in this clip window
-  const startPeakIdx = peaks ? Math.floor((audioOffset / audioDuration) * peaks.length) : 0;
+  const startPeakIdx = peaks && peaks.length > 0 && audioDuration > 0
+    ? Math.floor((audioOffset / audioDuration) * peaks.length) : 0;
   const visibleAudioSec = Math.min(clip.duration, Math.max(0, audioDuration - audioOffset));
-  const endPeakIdx = peaks ? Math.min(
+  const endPeakIdx = peaks && peaks.length > 0 && audioDuration > 0 ? Math.min(
     Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * peaks.length),
     peaks.length,
   ) : 0;
-  const visiblePeakCount = endPeakIdx - startPeakIdx;
-  const numBars = Math.max(0, visiblePeakCount);
-  const audioWidthPx = numBars * barSpacing;
+  const numBars = Math.max(0, endPeakIdx - startPeakIdx);
+  // Bar spacing in viewBox coordinates — viewBox maps to clipContentWidth pixels
+  const barSpacing = numBars > 0 ? clipContentWidth / numBars : 1;
+  const barWidth = Math.max(barSpacing * 0.7, 0.5);
 
   return (
     <>
@@ -362,15 +357,15 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <div className="absolute top-0 bottom-0 left-0 w-[6px] cursor-col-resize z-10" />
         <div className="absolute top-0 bottom-0 right-0 w-[6px] cursor-col-resize z-10" />
 
-        {/* Waveform — fixed density, only in audio-backed region */}
-        {peaks && numBars > 0 && audioWidthPx > 0 && (
+        {/* Waveform — peaks mapped to clip content width */}
+        {peaks && numBars > 0 && clipContentWidth > 0 && (
           <div className="absolute inset-0 flex items-center overflow-hidden">
             <svg
-              width={audioWidthPx}
+              width={clipContentWidth}
               height="100%"
-              viewBox={`0 0 ${audioWidthPx} 100`}
+              viewBox={`0 0 ${clipContentWidth} 100`}
               preserveAspectRatio="none"
-              className="opacity-60 ml-0.5"
+              className="opacity-60"
             >
               {Array.from({ length: numBars }, (_, i) => {
                 const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);
@@ -595,14 +590,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             }}
           >
             {/* Mini waveform inside ghost */}
-            {peaks && numBars > 0 && audioWidthPx > 0 && (
+            {peaks && numBars > 0 && clipContentWidth > 0 && (
               <div className="absolute inset-0 flex items-center overflow-hidden">
                 <svg
-                  width={audioWidthPx}
+                  width={clipContentWidth}
                   height="100%"
-                  viewBox={`0 0 ${audioWidthPx} 100`}
+                  viewBox={`0 0 ${clipContentWidth} 100`}
                   preserveAspectRatio="none"
-                  className="opacity-50 ml-0.5"
+                  className="opacity-50"
                 >
                   {Array.from({ length: numBars }, (_, i) => {
                     const peakIdx = Math.min(startPeakIdx + i, peaks.length - 1);

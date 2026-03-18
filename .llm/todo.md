@@ -8,8 +8,8 @@
 ## Priority 1: Test Coverage Foundation
 
 - [x] Write Vitest unit tests for uiStore (panel toggles, selection state)
-- [ ] Write Vitest unit tests for generationStore (queue management, status)
-- [ ] Write Vitest unit tests for color utilities (src/utils/color.ts)
+- [x] Write Vitest unit tests for generationStore (queue management, status)
+- [x] Write Vitest unit tests for color utilities (src/utils/color.ts)
 - [x] Write Vitest unit tests for WAV export utilities (src/utils/wav.ts)
 - [x] Write Vitest unit tests for waveform peak calculation (src/utils/waveformPeaks.ts)
 - [ ] Write Vitest unit tests for audio downsample utility (src/utils/audioDownsample.ts)

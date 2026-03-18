@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
@@ -15,6 +15,36 @@ export function SettingsDialog() {
   const project = useProjectStore((s) => s.project);
 
   const [bpm, setBpm] = useState(120);
+  const tapTimesRef = useRef<number[]>([]);
+  const tapResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTapTempo = useCallback(() => {
+    const now = Date.now();
+    const taps = tapTimesRef.current;
+
+    // Reset if last tap was more than 3 seconds ago
+    if (taps.length > 0 && now - taps[taps.length - 1] > 3000) {
+      tapTimesRef.current = [];
+    }
+
+    tapTimesRef.current = [...tapTimesRef.current, now];
+
+    // Clear auto-reset timer
+    if (tapResetRef.current) clearTimeout(tapResetRef.current);
+    tapResetRef.current = setTimeout(() => { tapTimesRef.current = []; }, 3000);
+
+    // Need at least 2 taps to calculate
+    if (tapTimesRef.current.length >= 2) {
+      const intervals: number[] = [];
+      for (let i = 1; i < tapTimesRef.current.length; i++) {
+        intervals.push(tapTimesRef.current[i] - tapTimesRef.current[i - 1]);
+      }
+      const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const calculatedBpm = Math.round(60000 / avgInterval);
+      setBpm(Math.min(300, Math.max(40, calculatedBpm)));
+    }
+  }, []);
+
   const [keyScale, setKeyScale] = useState('');
   const [timeSignature, setTimeSignature] = useState(4);
   const [measures, setMeasures] = useState(DEFAULT_MEASURES);
@@ -208,14 +238,25 @@ export function SettingsDialog() {
           <div className="grid grid-cols-4 gap-3">
             <div>
               <label className="block text-xs text-zinc-400 mb-1">BPM</label>
-              <input
-                type="number"
-                value={bpm}
-                onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
-                min={40}
-                max={300}
-                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  type="number"
+                  value={bpm}
+                  onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
+                  min={40}
+                  max={300}
+                  className="flex-1 min-w-0 px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+                />
+                <button
+                  type="button"
+                  onClick={handleTapTempo}
+                  className="px-2 py-1.5 text-xs font-medium text-zinc-300 bg-daw-bg border border-daw-border rounded hover:border-daw-accent hover:text-white transition-colors select-none"
+                  title="Tap to detect BPM (T)"
+                  aria-label="Tap tempo"
+                >
+                  TAP
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Key / Scale</label>

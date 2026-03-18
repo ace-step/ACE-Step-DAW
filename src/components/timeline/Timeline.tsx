@@ -54,6 +54,8 @@ function getTrackVerticalRange(
 
 export function Timeline() {
   const project = useProjectStore((s) => s.project);
+  const addTrack = useProjectStore((s) => s.addTrack);
+  const updateTrack = useProjectStore((s) => s.updateTrack);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
@@ -70,17 +72,23 @@ export function Timeline() {
   const [normalDrag, setNormalDrag] = useState<DragRect | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const dragCounterRef = useRef(0);
-  const { importMultipleFiles } = useAudioImport();
+  const { importAudioBufferToTrack, importMultipleFiles } = useAudioImport();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (
+      e.dataTransfer.types.includes('Files')
+      || e.dataTransfer.types.includes('application/x-loop-id')
+    ) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     }
   }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (
+      e.dataTransfer.types.includes('Files')
+      || e.dataTransfer.types.includes('application/x-loop-id')
+    ) {
       e.preventDefault();
       dragCounterRef.current++;
       setFileDragOver(true);
@@ -99,11 +107,24 @@ export function Timeline() {
     e.preventDefault();
     dragCounterRef.current = 0;
     setFileDragOver(false);
+
+    const loopId = e.dataTransfer.getData('application/x-loop-id');
+    if (loopId) {
+      const { LOOP_DEFINITIONS, loadLoop } = await import('../../engine/LoopLibrary');
+      const def = LOOP_DEFINITIONS.find((item) => item.id === loopId);
+      if (!def) return;
+      const { audioBuffer } = await loadLoop(def);
+      const track = addTrack('custom', 'sample');
+      updateTrack(track.id, { displayName: def.name });
+      await importAudioBufferToTrack(audioBuffer, def.name, track.id, 0);
+      return;
+    }
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       await importMultipleFiles(files);
     }
-  }, [importMultipleFiles]);
+  }, [addTrack, importAudioBufferToTrack, importMultipleFiles, updateTrack]);
 
   // Safety net: if a child (e.g. TrackLane) stops propagation on drop,
   // the Timeline's own handleDrop never fires. Listen globally to clear the overlay.

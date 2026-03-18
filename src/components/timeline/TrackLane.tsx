@@ -86,7 +86,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     startTime: number; duration: number;
   } | null>(null);
 
-  const { importAudioToTrack } = useAudioImport();
+  const { importAudioBufferToTrack, importAudioToTrack } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
 
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -178,7 +178,10 @@ export function TrackLane({ track }: TrackLaneProps) {
   }, []);
 
   const handleFileDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (
+      e.dataTransfer.types.includes('Files')
+      || e.dataTransfer.types.includes('application/x-loop-id')
+    ) {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
@@ -194,20 +197,32 @@ export function TrackLane({ track }: TrackLaneProps) {
     e.preventDefault();
     e.stopPropagation();
     setFileDragOver(false);
-    const files = e.dataTransfer.files;
-    if (!files.length || !project) return;
+    if (!project) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
     const rawTime = laneX / pixelsPerSecond;
     const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
 
+    const loopId = e.dataTransfer.getData('application/x-loop-id');
+    if (loopId) {
+      const { LOOP_DEFINITIONS, loadLoop } = await import('../../engine/LoopLibrary');
+      const def = LOOP_DEFINITIONS.find((item) => item.id === loopId);
+      if (!def) return;
+      const { audioBuffer } = await loadLoop(def);
+      await importAudioBufferToTrack(audioBuffer, def.name, track.id, startTime);
+      return;
+    }
+
+    const files = e.dataTransfer.files;
+    if (!files.length) return;
+
     for (const file of Array.from(files)) {
       if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
         await importAudioToTrack(file, track.id, startTime);
       }
     }
-  }, [project, pixelsPerSecond, track.id, importAudioToTrack]);
+  }, [project, pixelsPerSecond, track.id, importAudioBufferToTrack, importAudioToTrack]);
 
   const hasClips = track.clips.length > 0;
 

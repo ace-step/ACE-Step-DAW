@@ -12,6 +12,7 @@ import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
 import { MixerPanel } from '../mixer/MixerPanel';
 import { AssetsPanel } from '../assets/AssetsPanel';
+import { LoopBrowser } from '../assets/LoopBrowser';
 import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
@@ -44,6 +45,7 @@ export function AppShell() {
 
       <div className="flex flex-1 min-h-0">
         {project && <TrackList />}
+        {project && <LoopBrowser />}
         <Timeline />
         {project && <AssetsPanel />}
       </div>

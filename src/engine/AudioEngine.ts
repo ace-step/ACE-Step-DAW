@@ -313,6 +313,16 @@ export class AudioEngine {
     this._metronomeSources = [];
   }
 
+  setTrackVolume(trackId: string, volume: number) {
+    const node = this.trackNodes.get(trackId);
+    if (node) node.volume = Math.max(0, Math.min(1, volume));
+  }
+
+  setTrackPan(trackId: string, pan: number) {
+    const node = this.trackNodes.get(trackId);
+    if (node) node.pan = pan;
+  }
+
   async decodeAudioData(blob: Blob): Promise<AudioBuffer> {
     const arrayBuffer = await blob.arrayBuffer();
     return this.ctx.decodeAudioData(arrayBuffer);

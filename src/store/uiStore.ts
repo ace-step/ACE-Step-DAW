@@ -40,6 +40,12 @@ interface UIState {
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
   activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | null;
 
+  // Loop Browser
+  loopBrowserOpen: boolean;
+  loopBrowserCategory: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth';
+  loopBrowserSearch: string;
+  previewingLoopId: string | null;
+
   setPixelsPerSecond: (pps: number) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -74,6 +80,12 @@ interface UIState {
   setShowSmartControls: (v: boolean) => void;
   setShowLibrary: (v: boolean) => void;
   setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | null) => void;
+
+  // Loop Browser
+  toggleLoopBrowser: () => void;
+  setLoopBrowserCategory: (v: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth') => void;
+  setLoopBrowserSearch: (v: string) => void;
+  setPreviewingLoopId: (id: string | null) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -110,6 +122,11 @@ export const useUIStore = create<UIState>((set) => ({
   showSmartControls: false,
   showLibrary: false,
   activeBottomPanel: null,
+
+  loopBrowserOpen: false,
+  loopBrowserCategory: 'All',
+  loopBrowserSearch: '',
+  previewingLoopId: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
 
@@ -180,4 +197,9 @@ export const useUIStore = create<UIState>((set) => ({
   setShowSmartControls: (v) => set({ showSmartControls: v }),
   setShowLibrary: (v) => set({ showLibrary: v }),
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
+
+  toggleLoopBrowser: () => set((s) => ({ loopBrowserOpen: !s.loopBrowserOpen })),
+  setLoopBrowserCategory: (v) => set({ loopBrowserCategory: v }),
+  setLoopBrowserSearch: (v) => set({ loopBrowserSearch: v }),
+  setPreviewingLoopId: (id) => set({ previewingLoopId: id }),
 }));

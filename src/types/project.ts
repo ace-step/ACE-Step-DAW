@@ -246,4 +246,35 @@ export interface Project {
   masterVolume?: number;
   /** Persistent asset clips — survives clip/track removal. */
   assets?: AssetClip[];
+  /** Per-track automation lanes. */
+  automationLanes?: AutomationLane[];
+}
+
+// ─── Automation Types ────────────────────────────────────────────────────────
+
+export interface AutomationPoint {
+  time: number;   // seconds
+  value: number;  // normalized 0–1
+  curve?: number; // -1 (ease-in) to +1 (ease-out), 0 = linear
+}
+
+export type AutomationParameter =
+  | { type: 'mixer'; param: 'volume' | 'pan' };
+
+export interface AutomationLane {
+  id: string;
+  trackId: string;
+  parameter: AutomationParameter;
+  points: AutomationPoint[];
+}
+
+/** Compare two AutomationParameter values for equality */
+export function automationParamEquals(a: AutomationParameter, b: AutomationParameter): boolean {
+  return a.type === b.type && a.param === b.param;
+}
+
+/** Map normalized 0–1 value to mixer parameter range */
+export function normalizedToMixerValue(param: 'volume' | 'pan', normalized: number): number {
+  if (param === 'volume') return normalized; // 0–1
+  return normalized * 2 - 1;                // -1..+1
 }

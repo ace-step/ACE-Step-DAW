@@ -15,7 +15,7 @@
 - [x] Write Vitest unit tests for audio downsample utility (src/utils/audioDownsample.ts)
 - [ ] Write Vitest unit tests for generationPipeline service state machine
 - [x] Write Vitest unit tests for automation types (normalizedToMixerValue, automationParamEquals)
-- [ ] Write Playwright E2E test: sequencer workflow (add track, toggle steps, verify pattern)
+- [x] Write Playwright E2E test: sequencer workflow (add track, toggle steps, verify pattern)
 - [ ] Write Playwright E2E test: piano roll workflow (add track, add notes via store API)
 - [ ] Write Playwright E2E test: mixer operations (volume, pan, mute, solo)
 - [ ] Write Playwright E2E test: effect chain (add/remove/reorder effects)

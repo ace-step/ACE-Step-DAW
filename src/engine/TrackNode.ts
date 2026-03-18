@@ -26,6 +26,8 @@ export class TrackNode {
   private _soloActive = false;
   private _reverbMix = 0;
   private _reverbRoomSize = 0.5;
+  private _effectsInput: AudioNode | null = null;
+  private _effectsOutput: AudioNode | null = null;
 
   constructor(private ctx: AudioContext, destination: AudioNode) {
     this.inputGain  = ctx.createGain();
@@ -199,6 +201,36 @@ export class TrackNode {
       }
     }
     this.convolver.buffer = ir;
+  }
+
+  // -----------------------------------------------------------------------
+
+  /**
+   * Splice an external effects chain (from EffectsEngine) between eqHigh and dryGain/convolver.
+   * Pass null/null to remove effects and restore the direct path.
+   */
+  spliceEffects(input: AudioNode | null, output: AudioNode | null) {
+    // Disconnect current splice point
+    try { this.eqHigh.disconnect(this.dryGain); } catch {}
+    try { this.eqHigh.disconnect(this.convolver); } catch {}
+
+    if (this._effectsOutput) {
+      try { this._effectsOutput.disconnect(this.dryGain); } catch {}
+      try { this._effectsOutput.disconnect(this.convolver); } catch {}
+    }
+
+    if (input && output) {
+      this.eqHigh.connect(input);
+      output.connect(this.dryGain);
+      output.connect(this.convolver);
+    } else {
+      // Restore direct path
+      this.eqHigh.connect(this.dryGain);
+      this.eqHigh.connect(this.convolver);
+    }
+
+    this._effectsInput = input;
+    this._effectsOutput = output;
   }
 
   // -----------------------------------------------------------------------

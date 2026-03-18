@@ -3,7 +3,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Transport Controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
+    // Wait for the store to be exposed by the app
+    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });
     // Create a project so the DAW UI is visible
     await page.evaluate(() => {
       const store = (window as any).__store;

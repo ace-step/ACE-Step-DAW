@@ -202,6 +202,28 @@ class EffectsEngine {
     return this.chains.get(trackId) ?? [];
   }
 
+  /**
+   * Returns the native AudioNode input of this track's effect chain, or null if empty.
+   * Tone.js ToneAudioNode exposes `.input` which is a native AudioNode suitable for connect().
+   */
+  getInputNode(trackId: string): AudioNode | null {
+    const nodes = this.chains.get(trackId);
+    if (!nodes?.length) return null;
+    const toneNode = nodes[0].node as unknown as { input?: AudioNode };
+    return toneNode.input ?? null;
+  }
+
+  /**
+   * Returns the native AudioNode output of this track's effect chain, or null if empty.
+   * Tone.js ToneAudioNode exposes `.output` which is a native AudioNode suitable for connect().
+   */
+  getOutputNode(trackId: string): AudioNode | null {
+    const nodes = this.chains.get(trackId);
+    if (!nodes?.length) return null;
+    const toneNode = nodes[nodes.length - 1].node as unknown as { output?: AudioNode };
+    return toneNode.output ?? null;
+  }
+
   disposeChain(trackId: string) {
     const nodes = this.chains.get(trackId);
     if (!nodes) return;

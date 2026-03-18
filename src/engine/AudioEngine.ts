@@ -1,3 +1,4 @@
+import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
 import type { SequencerPattern } from '../types/project';
 
@@ -53,6 +54,8 @@ export class AudioEngine {
 
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
+    // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
+    Tone.setContext(this.ctx as unknown as Tone.BaseContext);
     this.masterGain = this.ctx.createGain();
     this.masterGain.connect(this.ctx.destination);
     this._metronomeGain = this.ctx.createGain();

@@ -24,6 +24,7 @@ const Trash2 = ({ className }: { className?: string }) => (
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type {
   TrackEffect,
   TrackEffectType,
@@ -414,6 +415,15 @@ function EffectDevice({
     updateTrackEffect(track.id, effect.id, { params: preset.params } as Partial<TrackEffect>);
     effectsEngine.updateEffectParams(track.id, effect.id, preset.params, effect.type);
     effectsEngine.rebuildChain(track.id, track.effects ?? []);
+    // Wire Tone.js effect chain into the TrackNode audio graph
+    const engine = getAudioEngine();
+    const trackNode = engine.getOrCreateTrackNode(track.id);
+    if (trackNode) {
+      trackNode.spliceEffects(
+        effectsEngine.getInputNode(track.id),
+        effectsEngine.getOutputNode(track.id),
+      );
+    }
   };
 
   return (
@@ -557,6 +567,15 @@ export function EffectChain() {
   useEffect(() => {
     if (!track) return;
     effectsEngine.rebuildChain(track.id, track.effects ?? []);
+    // Wire rebuilt Tone.js chain into TrackNode audio graph
+    const engine = getAudioEngine();
+    const trackNode = engine.getOrCreateTrackNode(track.id);
+    if (trackNode) {
+      trackNode.spliceEffects(
+        effectsEngine.getInputNode(track.id),
+        effectsEngine.getOutputNode(track.id),
+      );
+    }
   }, [track?.id, effectsKey, track?.effects?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resize handle

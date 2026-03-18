@@ -8,17 +8,26 @@ import { formatTime, formatBarsBeats } from '../../utils/time';
 
 function LCDDisplay() {
   const currentTime = useTransportStore((s) => s.currentTime);
+  const countInActive = useTransportStore((s) => s.countInActive);
+  const countInBeat = useTransportStore((s) => s.countInBeat);
   const project = useProjectStore((s) => s.project);
   const barsBeats = project
     ? formatBarsBeats(currentTime, project.bpm, project.timeSignature)
     : '1.1.00';
 
+  // During count-in: show negative beat count in cyan (Ableton convention)
+  const displayBarsBeats = countInActive ? `${countInBeat}` : barsBeats;
+  const barsBeatsColor = countInActive ? 'text-cyan-400 animate-pulse' : 'text-green-400';
+
   return (
     <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center">
-      <span className="text-[13px] font-mono text-green-400 tracking-wider">{barsBeats}</span>
+      <span className={`text-[13px] font-mono tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[11px] font-mono text-zinc-400">{formatTime(currentTime)}</span>
-      {project && (
+      {project && !countInActive && (
         <span className="text-[11px] font-mono text-zinc-500">{project.bpm} bpm</span>
+      )}
+      {countInActive && (
+        <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>
       )}
     </div>
   );

@@ -4,6 +4,8 @@ interface TransportState {
   isPlaying: boolean;
   isRecording: boolean;
   armedTrackIds: string[];
+  countInActive: boolean;
+  countInBeat: number; // 0 = not counting in, negative = beats remaining
   currentTime: number;
   loopEnabled: boolean;
   loopStart: number;
@@ -14,9 +16,11 @@ interface TransportState {
   pause: () => void;
   stop: () => void;
   setIsRecording: (v: boolean) => void;
+  setCountIn: (active: boolean, beat?: number) => void;
   armTrack: (id: string) => void;
   disarmTrack: (id: string) => void;
-  toggleArmTrack: (id: string) => void;
+  disarmAll: () => void;
+  toggleArmTrack: (id: string, exclusive?: boolean) => void;
   seek: (time: number) => void;
   setCurrentTime: (time: number) => void;
   toggleLoop: () => void;
@@ -28,6 +32,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   isPlaying: false,
   isRecording: false,
   armedTrackIds: [],
+  countInActive: false,
+  countInBeat: 0,
   currentTime: 0,
   loopEnabled: false,
   loopStart: 0,
@@ -38,17 +44,23 @@ export const useTransportStore = create<TransportState>((set) => ({
   pause: () => set({ isPlaying: false }),
   stop: () => set({ isPlaying: false, currentTime: 0 }),
   setIsRecording: (v) => set({ isRecording: v }),
+  setCountIn: (active, beat = 0) => set({ countInActive: active, countInBeat: beat }),
   armTrack: (id) => set((s) => (
     s.armedTrackIds.includes(id) ? s : { armedTrackIds: [...s.armedTrackIds, id] }
   )),
   disarmTrack: (id) => set((s) => ({
     armedTrackIds: s.armedTrackIds.filter((trackId) => trackId !== id),
   })),
-  toggleArmTrack: (id) => set((s) => ({
-    armedTrackIds: s.armedTrackIds.includes(id)
-      ? s.armedTrackIds.filter((trackId) => trackId !== id)
-      : [...s.armedTrackIds, id],
-  })),
+  disarmAll: () => set({ armedTrackIds: [] }),
+  toggleArmTrack: (id, exclusive = true) => set((s) => {
+    const isArmed = s.armedTrackIds.includes(id);
+    if (isArmed) {
+      // Always disarm when already armed
+      return { armedTrackIds: s.armedTrackIds.filter((tid) => tid !== id) };
+    }
+    // Arm: exclusive by default (Ableton convention), additive with modifier
+    return { armedTrackIds: exclusive ? [id] : [...s.armedTrackIds, id] };
+  }),
   seek: (time) => set({ currentTime: Math.max(0, time) }),
   setCurrentTime: (time) => set({ currentTime: time }),
   toggleLoop: () => set((s) => ({ loopEnabled: !s.loopEnabled })),

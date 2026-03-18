@@ -3,6 +3,7 @@ import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ClipBlock } from './ClipBlock';
+import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
@@ -227,6 +228,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   }, [project, pixelsPerSecond, track.id, importAudioToTrack, importLoopToTrack, importAssetToTrack]);
 
   const hasClips = track.clips.length > 0;
+  const automationLanes = (project?.automationLanes ?? []).filter((l) => l.trackId === track.id);
 
   return (
     <>
@@ -299,6 +301,11 @@ export function TrackLane({ track }: TrackLaneProps) {
           onMouseDown={onResizeMouseDown}
         />
       </div>
+
+      {/* Automation Lanes — rendered below the track lane when present */}
+      {automationLanes.map((lane) => (
+        <AutomationLaneView key={lane.id} trackId={track.id} lane={lane} />
+      ))}
 
       {addLayerTarget && (
         <AddLayerModal

@@ -323,6 +323,8 @@ Every 10 versions (v0.0.20, v0.0.30...), review all installed skills:
 - ❌ Never merge a PR before CI passes — if CI fails, add fix commits until green
 - ✅ After creating a PR, check CI status via GitHub API before merging
 - ✅ If CI was red, understand the root cause before fixing (don't guess)
+- ✅ Multi-model review: Copilot auto-reviews PRs. Check Copilot feedback before merge
+- ✅ For critical PRs: manually request `gh copilot` review on the diff
 - ❌ Never publish a release without deep-tested GIF demos
 - ❌ Never code without competitive research (except hotfixes)
 - ❌ Never skip browser testing before release

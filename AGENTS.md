@@ -205,6 +205,12 @@ Agents MUST read and follow the relevant skill before each step. Do not improvis
 
 Every feature MUST be usable by both human users AND AI agents. This is not optional.
 
+### What "CLI-First / Agent CLI化" Means
+- **Every feature must be operable from the command line** — via `window.__store` API, keyboard shortcuts, or browser automation (Playwright MCP / OpenClaw browser).
+- **Development itself is CLI-driven**: agents write plans, execute code, run builds, test via browser automation, commit, PR, merge — all without manual GUI steps.
+- **Testing is CLI-driven**: agents open the app in a headless browser, interact via accessibility refs and store API, take screenshots, verify results programmatically.
+- This applies to both the **product** (end users + agent users) and the **development process** (agents building + testing the product).
+
 ### Principles
 1. **Expose state globally**: `window.__store` provides full Zustand store access. Agents call `getState()` to read, and store actions (e.g. `addMidiNote`, `toggleSequencerStep`) to write.
 2. **ARIA labels on interactive elements**: Every clickable element (buttons, step cells, knobs, sliders) MUST have an `aria-label` or `role` so browser automation tools (Playwright MCP, OpenClaw browser) can discover and interact via accessibility tree refs.
@@ -237,6 +243,64 @@ window.__store.getState().toggleSequencerStep(trackId, rowId, stepIndex)
 // Change BPM
 window.__store.getState().updateProjectSettings({ bpm: 140 })
 ```
+
+---
+
+## User Story Driven Development
+
+All requirements, plans, implementations, and bug fixes MUST be written and tracked as user stories.
+
+### Format
+```
+As a [human user / AI agent], I want to [action], so that [outcome].
+```
+
+### Examples
+- ❌ "Fix Loop Browser" — too vague
+- ✅ "As a user, I want to click Loop Browser (O) and see 15 built-in loops organized by category (Drums/Bass/Keys/Synth), so I can drag a loop onto my timeline" — actionable
+- ✅ "As an agent, I want to call `window.__store.getState().addMidiNote(clipId, note)` and see the note appear in the Piano Roll, so I can compose melodies programmatically" — agent-oriented
+
+### Plans Must Be Executable
+Every plan document (`docs/plans/*.md`) must contain:
+1. **Problem** — what's broken or missing (with evidence)
+2. **Root Cause** — why it's happening (with file:line references)
+3. **Solution** — exact changes needed (which files, which lines, what to change)
+4. **Verification** — how to confirm the fix works (build check + user story test)
+5. **Files to Touch** — explicit list
+
+Plans are written by the orchestrator (Opus) and executed by coding agents (Codex / Claude Code).
+
+---
+
+## Skill Utilization Policy
+
+The 23 skills listed in "Required Skills" are NOT decorations. They MUST be actively used.
+
+### Rules
+1. **Before every step, read the relevant skill's SKILL.md**. Don't improvise what a skill already covers.
+2. **Cite the skill in your plan/commit** when its guidance shaped the implementation.
+3. **Periodically audit skill usage** — if a skill hasn't been read in 3+ versions, review whether it's still relevant or needs replacement.
+
+### Skill Combos (pre-packaged for common tasks)
+
+| Task | Skills to Load Together |
+|------|----------------------|
+| **New UI Feature** | `react-expert` + `ui-ux-pro-max` + `zustand-patterns` + `tailwind-v4-shadcn` |
+| **Code Review** | `clean-code-review` + `typescript-mastery` |
+| **E2E Testing** | `e2e-testing-patterns` + `test-master` + `ui-audit` |
+| **Design Audit** | `ui-ux-design` + `distinctive-design-systems` + `happy-hues` |
+| **AI Music Feature** | `acestep` + `acestep-songwriting` + `software-architect` |
+| **Architecture Refactor** | `software-architect` + `zustand-patterns` + `clean-code-review` |
+| **Planning Sprint** | `agile-toolkit` + `task-development-workflow` |
+
+When starting a task, load the relevant combo. Don't cherry-pick one skill and ignore the others.
+
+### Quarterly Skill Review
+Every 10 versions (v0.0.20, v0.0.30...), review all installed skills:
+- Are they still up-to-date?
+- Are there newer/better alternatives on ClawHub?
+- Should any be replaced or new ones added?
+- Run `npx clawhub@latest search <keyword>` to discover new skills.
 
 ---
 

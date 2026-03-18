@@ -99,6 +99,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const moveClipToTrack = useProjectStore((s) => s.moveClipToTrack);
   const duplicateClipToTrack = useProjectStore((s) => s.duplicateClipToTrack);
+  const beginDrag = useProjectStore((s) => s.beginDrag);
+  const endDrag = useProjectStore((s) => s.endDrag);
   const clipBlockRef = useRef<HTMLDivElement>(null);
 
   const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
@@ -144,6 +146,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
+      if (!dragRef.current) beginDrag(); // capture undo snapshot once on first drag movement
       dragRef.current = true;
       isShiftCopy = ev.shiftKey;
 
@@ -228,6 +231,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       setDragGhost(null);
+      endDrag(); // re-enable normal history tracking
 
       if (mode === 'move' && dragRef.current) {
         const closest = findClosestLane(ev.clientY);
@@ -258,7 +262,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

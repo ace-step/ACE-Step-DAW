@@ -40,12 +40,29 @@ const TIMELINE_PADDING = 10; // seconds beyond last clip
 const _history: Project[] = [];
 const _future: Project[] = [];
 const MAX_HISTORY = 50;
+let _isDragging = false;
 
 function _pushHistory(project: Project | null) {
   if (!project) return;
+  // During drag operations, history is already captured by beginDrag — skip intermediate states
+  if (_isDragging) return;
   _history.push(structuredClone(project));
   if (_history.length > MAX_HISTORY) _history.shift();
   _future.length = 0;
+}
+
+/** Call before starting a drag/continuous operation. Captures undo snapshot once. */
+function _beginDrag(project: Project | null) {
+  if (!project || _isDragging) return;
+  _isDragging = true;
+  _history.push(structuredClone(project));
+  if (_history.length > MAX_HISTORY) _history.shift();
+  _future.length = 0;
+}
+
+/** Call when drag/continuous operation ends. Re-enables normal history tracking. */
+function _endDrag() {
+  _isDragging = false;
 }
 
 interface ProjectState {
@@ -60,6 +77,10 @@ interface ProjectState {
   }) => void;
   undo: () => void;
   redo: () => void;
+  /** Call before starting a drag/continuous operation to capture a single undo snapshot. */
+  beginDrag: () => void;
+  /** Call when a drag/continuous operation ends to re-enable normal history. */
+  endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
@@ -269,6 +290,15 @@ export const useProjectStore = create<ProjectState>()(
     if (state.project) _history.push(structuredClone(state.project));
     const next = _future.pop()!;
     set({ project: next });
+  },
+
+  beginDrag: () => {
+    const state = get();
+    _beginDrag(state.project);
+  },
+
+  endDrag: () => {
+    _endDrag();
   },
 
   createProject: (params) => {
@@ -1062,6 +1092,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleSequencerStep: (trackId, rowId, stepIndex) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1089,6 +1120,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerStepVelocity: (trackId, rowId, stepIndex, velocity) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1248,6 +1280,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowVolume: (trackId, rowId, volume) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1271,6 +1304,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowPan: (trackId, rowId, pan) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1294,6 +1328,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleSequencerRowMute: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1414,6 +1449,7 @@ export const useProjectStore = create<ProjectState>()(
   renameSequencerRow: (trackId, rowId, name) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,
@@ -1437,6 +1473,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowColor: (trackId, rowId, color) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,

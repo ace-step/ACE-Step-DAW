@@ -93,6 +93,8 @@ export function PianoRoll() {
   const addMidiNote = useProjectStore((s) => s.addMidiNote);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
+  const beginDrag = useProjectStore((s) => s.beginDrag);
+  const endDrag = useProjectStore((s) => s.endDrag);
 
   const currentTime = useTransportStore((s) => s.currentTime);
 
@@ -456,6 +458,7 @@ export function PianoRoll() {
           const nx = beatToX(note.startBeat);
           const nw = Math.max(note.durationBeats * pixelsPerBeat, 4);
           if (x >= nx && x <= nx + nw) {
+            beginDrag();
             const newVel = Math.round(Math.max(1, Math.min(127, ((velAreaTop + velAreaH - y) / velAreaH) * 127)));
             updateMidiNote(clip.id, note.id, { velocity: newVel });
             dragRef.current = {
@@ -498,6 +501,7 @@ export function PianoRoll() {
           };
           addMidiNote(clip.id, newNote);
           if (previewEnabled) synthEngine.previewNote(pitch, 100, 0.3, synthPreset);
+          beginDrag();
           dragRef.current = {
             mode: 'resize-right', noteId: newNote.id,
             startMouseX: x, startMouseY: y,
@@ -519,6 +523,7 @@ export function PianoRoll() {
         } else if (!selectedNoteIds.has(hit.note.id)) {
           setSelectedNoteIds(new Set([hit.note.id]));
         }
+        beginDrag();
         dragRef.current = {
           mode: hit.edge === 'right' ? 'resize-right' : 'move',
           noteId: hit.note.id,
@@ -539,7 +544,7 @@ export function PianoRoll() {
     [
       clip, notes, drawMode, gridBeats, previewEnabled, synthPreset, velocityHeight,
       selectedNoteIds, beatToX, xToBeat, yToPitch, pitchToY, findNoteAt, snapBeat,
-      addMidiNote, removeMidiNote, updateMidiNote, pixelsPerBeat,
+      addMidiNote, removeMidiNote, updateMidiNote, pixelsPerBeat, beginDrag,
     ],
   );
 
@@ -652,6 +657,7 @@ export function PianoRoll() {
 
     const handleGlobalUp = () => {
       dividerDragRef.current = null;
+      if (dragRef.current) endDrag(); // re-enable normal history tracking
       dragRef.current = null;
     };
 
@@ -664,7 +670,7 @@ export function PianoRoll() {
   }, [
     clip, notes, pixelsPerBeat, gridBeats, velocityHeight, keyHeight,
     previewEnabled, synthPreset,
-    beatToX, pitchToY, yToPitch, snapBeat, updateMidiNote,
+    beatToX, pitchToY, yToPitch, snapBeat, updateMidiNote, endDrag,
   ]);
 
   // ─── Wheel (scroll/zoom) ──────────────────────────────────────────────────

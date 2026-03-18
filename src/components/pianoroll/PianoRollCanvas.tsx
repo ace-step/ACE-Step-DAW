@@ -33,6 +33,13 @@ interface NoteDragState {
   boxStartY?: number;
 }
 
+export interface GhostNote {
+  pitch: number;
+  startBeat: number;
+  durationBeats: number;
+  color: string;
+}
+
 interface PianoRollCanvasProps {
   clip: Clip;
   track: Track;
@@ -40,6 +47,7 @@ interface PianoRollCanvasProps {
   gridSize: PianoRollGrid;
   prZoomX: number;
   onZoomXChange: React.Dispatch<React.SetStateAction<number>>;
+  ghostNotes?: GhostNote[];
 }
 
 export function PianoRollCanvas({
@@ -49,6 +57,7 @@ export function PianoRollCanvas({
   gridSize,
   prZoomX,
   onZoomXChange,
+  ghostNotes = [],
 }: PianoRollCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -210,6 +219,22 @@ export function PianoRollCanvas({
         ctx.textBaseline = 'top';
         ctx.fillText(`${Math.floor(beat / beatsPerBar) + 1}`, x + 3, 3);
       }
+    }
+
+    // Ghost notes from other tracks (drawn first, behind main notes)
+    if (ghostNotes.length > 0) {
+      ctx.globalAlpha = 0.15;
+      for (const gn of ghostNotes) {
+        const gnX = beatToX(gn.startBeat);
+        const gnY = pitchToY(gn.pitch);
+        const gnW = gn.durationBeats * pixelsPerBeat;
+        const gnH = keyHeight - 1;
+        if (gnX + gnW < PIANO_KEYBOARD_WIDTH || gnX > width) continue;
+        if (gnY + gnH < 0 || gnY > noteAreaHeight) continue;
+        ctx.fillStyle = gn.color;
+        ctx.fillRect(gnX, gnY, Math.max(gnW - 1, 2), gnH);
+      }
+      ctx.globalAlpha = 1.0;
     }
 
     for (const note of notes) {

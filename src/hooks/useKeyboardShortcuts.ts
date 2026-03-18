@@ -279,6 +279,12 @@ export function useKeyboardShortcuts() {
           ui.toggleLoopBrowser();
           break;
 
+        // Library toggle (Y)
+        case 'KeyY':
+          e.preventDefault();
+          ui.setShowLibrary(!ui.showLibrary);
+          break;
+
         // Help
         case 'Slash':
           // ? key (Shift+/ on most keyboards)

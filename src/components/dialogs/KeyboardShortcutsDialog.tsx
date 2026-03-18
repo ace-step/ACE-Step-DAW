@@ -65,6 +65,7 @@ const SECTIONS: Section[] = [
   {
     title: 'Panels',
     rows: [
+      { keys: ['Y'],                    description: 'Toggle Library' },
       { keys: ['X'],                    description: 'Toggle Mixer' },
       { keys: ['B'],                    description: 'Toggle Smart Controls' },
       { keys: ['O'],                    description: 'Toggle Loop Browser' },

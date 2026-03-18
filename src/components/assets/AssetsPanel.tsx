@@ -37,7 +37,7 @@ function fmtDuration(sec: number): string {
 }
 
 export function AssetsPanel() {
-  const showAssetsPanel = useUIStore((s) => s.showAssetsPanel);
+  const showLibrary = useUIStore((s) => s.showLibrary);
   const assetsPanelWidth = useUIStore((s) => s.assetsPanelWidth);
   const setAssetsPanelWidth = useUIStore((s) => s.setAssetsPanelWidth);
   const selectClip = useUIStore((s) => s.selectClip);
@@ -100,7 +100,7 @@ export function AssetsPanel() {
     removeAsset(assetId);
   }, [removeAsset]);
 
-  if (!showAssetsPanel || !project) return null;
+  if (!showLibrary || !project) return null;
 
   const filters: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -123,7 +123,7 @@ export function AssetsPanel() {
           <circle cx="5" cy="5" r="3.5" />
           <path d="M8 8l2.5 2.5" strokeLinecap="round" />
         </svg>
-        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Loop Browser</span>
+        <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Library</span>
       </div>
 
       {/* Search */}

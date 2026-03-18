@@ -12,11 +12,9 @@ test.describe('Transport Controls', () => {
   });
 
   test('transport bar is visible', async ({ page }) => {
-    // The transport bar should be rendered in the app
-    const transportExists = await page.evaluate(() => {
-      return document.querySelector('[aria-label]') !== null;
-    });
-    expect(transportExists).toBe(true);
+    // Wait for the DAW UI to render after createProject
+    // Use a Playwright locator with built-in auto-wait instead of raw evaluate
+    await expect(page.locator('[aria-label]').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('play button exists and is clickable', async ({ page }) => {

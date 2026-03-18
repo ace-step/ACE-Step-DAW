@@ -201,6 +201,45 @@ Agents MUST read and follow the relevant skill before each step. Do not improvis
 
 ---
 
+## Agent-Usability Mandate (CLI-First, Agent-Friendly)
+
+Every feature MUST be usable by both human users AND AI agents. This is not optional.
+
+### Principles
+1. **Expose state globally**: `window.__store` provides full Zustand store access. Agents call `getState()` to read, and store actions (e.g. `addMidiNote`, `toggleSequencerStep`) to write.
+2. **ARIA labels on interactive elements**: Every clickable element (buttons, step cells, knobs, sliders) MUST have an `aria-label` or `role` so browser automation tools (Playwright MCP, OpenClaw browser) can discover and interact via accessibility tree refs.
+3. **No canvas-only interactions**: If a feature relies on canvas click events (e.g. Piano Roll note drawing), provide an equivalent store API so agents can accomplish the same task programmatically.
+4. **Reasonable defaults**: UI scroll positions, zoom levels, and panel states should open to the most useful position (e.g. Piano Roll opens centered on C4, not C8).
+5. **Keyboard shortcuts for every action**: Every toolbar button and panel toggle must have a keyboard shortcut. Agents can send key events more reliably than coordinate clicks.
+
+### Testing Standard
+- ❌ "I opened the panel and it rendered" — too shallow (panel-level)
+- ✅ "I programmed a basic rock beat: Kick 1/5/9/13, Snare 5/13, HH 8th notes via store API, verified each step activated" — deep enough (user-story level)
+- Tests must cover **full user workflows**, not just UI rendering
+- Every feature must be tested both as a human (click) AND as an agent (API/DOM)
+
+### Agent API Cheat Sheet
+```js
+// Read project state
+window.__store.getState().project.tracks
+
+// Add MIDI note to a clip
+window.__store.getState().addMidiNote(clipId, {
+  pitch: 60,        // MIDI note number (C4)
+  startBeat: 0,     // Beat position
+  durationBeats: 1, // Length in beats
+  velocity: 0.8     // 0-1
+})
+
+// Toggle a sequencer step
+window.__store.getState().toggleSequencerStep(trackId, rowId, stepIndex)
+
+// Change BPM
+window.__store.getState().updateProjectSettings({ bpm: 140 })
+```
+
+---
+
 ## Red Lines (absolute prohibitions)
 
 - ❌ Never push directly to main

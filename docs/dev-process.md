@@ -96,6 +96,14 @@ Every feature must be researched at interaction-detail level before coding.
 - [ ] Alignment and spacing consistency
 - [ ] No overlapping elements
 
+### Agent Usability (every feature, every version)
+- [ ] All new interactive elements have `aria-label` or `role` attributes
+- [ ] New features are accessible via `window.__store` API (not just UI clicks)
+- [ ] User story tested as agent: program a beat, write a melody, adjust mixer, trigger generation — all via store API or DOM automation
+- [ ] Canvas-based features have equivalent programmatic API (e.g. Piano Roll → `addMidiNote`)
+- [ ] Default scroll/zoom positions open to the most useful view (not blank/extreme ranges)
+- [ ] Keyboard shortcuts documented and working for all new toolbar actions
+
 ### Code Quality
 - [ ] `npx tsc --noEmit` — 0 errors
 - [ ] `npm run build` — passes

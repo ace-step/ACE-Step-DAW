@@ -234,6 +234,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     <>
       <div
         data-track-id={track.id}
+        data-testid={`track-lane-${track.id}`}
         className={`relative border-b border-[#333] ${fileDragOver ? 'bg-blue-900/20' : ''}`}
         style={{ width: totalWidth, height: laneHeight }}
         onContextMenu={handleContextMenu}

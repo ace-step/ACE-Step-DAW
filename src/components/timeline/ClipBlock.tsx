@@ -329,6 +329,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           ...(isSelected ? { '--tw-ring-color': 'rgba(0, 122, 255, 0.85)' } as React.CSSProperties : {}),
         }}
         data-clip-block
+        data-clip-id={clip.id}
+        data-testid={`clip-${clip.id}`}
         onMouseDown={handleMouseDown}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}

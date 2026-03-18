@@ -65,6 +65,7 @@ export function PianoRollCanvas({
   const addMidiNote = useProjectStore((s) => s.addMidiNote);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
+  const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
 
@@ -691,10 +692,7 @@ export function PianoRollCanvas({
 
       if (key === 'q' && !e.metaKey && !e.ctrlKey && selectedNoteIds.size > 0) {
         e.preventDefault();
-        for (const noteId of selectedNoteIds) {
-          const note = notes.find((candidate) => candidate.id === noteId);
-          if (note) updateMidiNote(clip.id, noteId, { startBeat: Math.max(0, snapBeat(note.startBeat)) });
-        }
+        quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
         return;
       }
 

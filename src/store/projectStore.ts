@@ -141,6 +141,7 @@ interface ProjectState {
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
+  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeats: number) => void;
   setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
@@ -1645,6 +1646,37 @@ export const useProjectStore = create<ProjectState>()(
                   midiData: {
                     ...clip.midiData,
                     notes: clip.midiData.notes.filter((note) => note.id !== noteId),
+                  },
+                }
+              : clip,
+          ),
+        })),
+      },
+    });
+  },
+
+  quantizeMidiNotes: (clipId, noteIds, gridBeats) => {
+    const state = get();
+    if (!state.project || gridBeats <= 0) return;
+    _pushHistory(state.project);
+    const noteIdSet = new Set(noteIds);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === clipId && clip.midiData
+              ? {
+                  ...clip,
+                  midiData: {
+                    ...clip.midiData,
+                    notes: clip.midiData.notes.map((note) =>
+                      noteIdSet.has(note.id)
+                        ? { ...note, startBeat: Math.round(note.startBeat / gridBeats) * gridBeats }
+                        : note,
+                    ),
                   },
                 }
               : clip,

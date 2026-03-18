@@ -161,4 +161,49 @@ describe('projectStore', () => {
       ]);
     });
   });
+
+  describe('quantizeMidiNotes', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('snaps selected note startBeats to the nearest grid line', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+      const noteId1 = useProjectStore.getState().addMidiNote(clip.id, {
+        pitch: 60, startBeat: 0.3, durationBeats: 1, velocity: 100,
+      })!;
+      const noteId2 = useProjectStore.getState().addMidiNote(clip.id, {
+        pitch: 64, startBeat: 1.7, durationBeats: 1, velocity: 80,
+      })!;
+      const noteId3 = useProjectStore.getState().addMidiNote(clip.id, {
+        pitch: 67, startBeat: 3.1, durationBeats: 0.5, velocity: 90,
+      })!;
+
+      // Quantize notes 1 and 2 to quarter-note grid (1 beat), leave note 3 alone
+      useProjectStore.getState().quantizeMidiNotes(clip.id, [noteId1, noteId2], 1);
+
+      const notes = useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes;
+      const n1 = notes.find(n => n.id === noteId1)!;
+      const n2 = notes.find(n => n.id === noteId2)!;
+      const n3 = notes.find(n => n.id === noteId3)!;
+
+      expect(n1.startBeat).toBe(0);   // 0.3 → 0
+      expect(n2.startBeat).toBe(2);   // 1.7 → 2
+      expect(n3.startBeat).toBe(3.1); // unchanged
+    });
+
+    it('quantizes to eighth-note grid (0.5 beats)', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+      const noteId = useProjectStore.getState().addMidiNote(clip.id, {
+        pitch: 60, startBeat: 0.6, durationBeats: 1, velocity: 100,
+      })!;
+
+      useProjectStore.getState().quantizeMidiNotes(clip.id, [noteId], 0.5);
+
+      const note = useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes[0];
+      expect(note.startBeat).toBe(0.5); // 0.6 → 0.5
+    });
+  });
 });

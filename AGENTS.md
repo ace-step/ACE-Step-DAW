@@ -128,6 +128,19 @@ git checkout -b feat/v0.0.X-feature-name
 
 ---
 
+## Design & UX Resources
+
+- **Interaction Design Standards**: `CLAUDE.md` → "DAW Interaction Design Standards" section
+- **Design Guide**: `docs/design/INTERACTION_DESIGN_GUIDE.md` (comprehensive product design guide)
+- **UX Improvement Checklist**: `docs/design/UX_IMPROVEMENT_CHECKLIST.md` (prioritized actionable items)
+- **Drag Testing Research**: `docs/research-notes/drag-testing-best-practices.md`
+- **Mixer UX Gaps**: `docs/research-notes/mixer-ux-gaps.md`
+- **Recording UX Gaps**: `docs/research-notes/recording-ux-gaps.md`
+
+**Rule**: Every new component or feature must follow the interaction design standards in CLAUDE.md.
+
+---
+
 ## Competitive Research Index
 
 ### Ableton Live 12

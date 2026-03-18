@@ -12,6 +12,7 @@ import {
   type ProjectSummary,
 } from '../../services/projectStorage';
 import { deleteAllProjectAudio } from '../../services/audioFileManager';
+import { toastSuccess } from '../../hooks/useToast';
 
 export function ProjectListDialog() {
   const show = useUIStore((s) => s.showProjectListDialog);
@@ -43,6 +44,7 @@ export function ProjectListDialog() {
     const project = await loadProject(id);
     if (project) {
       setProject(project);
+      toastSuccess('Project loaded');
       setShow(false);
     }
   };
@@ -76,6 +78,7 @@ export function ProjectListDialog() {
         await saveProject(currentProject);
       }
       setProject(project);
+      toastSuccess('Project loaded');
       setShow(false);
     }
   };

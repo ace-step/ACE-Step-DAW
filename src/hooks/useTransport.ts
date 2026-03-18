@@ -194,6 +194,11 @@ export function useTransport() {
         if (track.muted) continue;
         if (anySoloed && !track.soloed) continue;
 
+        // Skip MIDI scheduling if the track already has bounced audio clips —
+        // otherwise the drum triggers overlap with the rendered audio.
+        const hasReadyClips = track.clips.some((c) => c.generationStatus === 'ready');
+        if (hasReadyClips) continue;
+
         const { sequencerPattern } = track;
         const stepDuration = (60 / proj.bpm) / (sequencerPattern.stepsPerBar / 4);
         const totalSteps = sequencerPattern.stepsPerBar * sequencerPattern.bars;

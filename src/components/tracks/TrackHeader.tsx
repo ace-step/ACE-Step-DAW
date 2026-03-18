@@ -234,6 +234,41 @@ export function TrackHeader({
             <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
           </svg>
         </button>
+        {/* Automation toggle */}
+        <button
+          onClick={() => {
+            const project = useProjectStore.getState().project;
+            if (!project) return;
+            const hasLane = (project.automationLanes ?? []).some((l) => l.trackId === track.id);
+            if (!hasLane) {
+              // Create a default volume automation lane with 2 points
+              useProjectStore.getState().addAutomationPoint(
+                track.id,
+                { type: 'mixer', param: 'volume' },
+                { time: 0, value: track.volume },
+              );
+              useProjectStore.getState().addAutomationPoint(
+                track.id,
+                { type: 'mixer', param: 'volume' },
+                { time: project.totalDuration, value: track.volume },
+              );
+            } else {
+              // Clear all automation for this track
+              for (const lane of (project.automationLanes ?? []).filter((l) => l.trackId === track.id)) {
+                useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
+              }
+            }
+          }}
+          className={`w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors ${
+            (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
+              ? 'bg-amber-600/80 text-white'
+              : 'text-zinc-500 hover:text-amber-400 hover:bg-[#444]'
+          }`}
+          title="Toggle automation lane (A)"
+          aria-label={`Toggle automation ${track.displayName}`}
+        >
+          A
+        </button>
         {/* Delete - hidden by default, visible on hover */}
         <button
           onClick={() => removeTrack(track.id)}

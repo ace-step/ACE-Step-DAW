@@ -86,7 +86,7 @@ import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
-import { encodeMidiFile } from '../utils/midi';
+import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
@@ -511,6 +511,8 @@ export interface ProjectState {
   exportTrackMidi: (trackId: string) => void;
   /** Export all MIDI tracks as a multi-track .mid file for sharing with other DAWs. */
   exportProjectMidi: () => void;
+  /** Import a .mid file, creating piano roll tracks for each MIDI track/channel. */
+  importMidiFile: (file: File, options?: { startTime?: number; applyMetadata?: boolean }) => Promise<string[]>;
 
   // Groove pool
   extractGrooveFromClip: (clipId: string, name: string, options: ExtractGrooveOptions) => GrooveTemplate | undefined;
@@ -5902,6 +5904,7 @@ export const useProjectStore = create<ProjectState>()(
     toastSuccess(`Exported ${exportTracks.length} MIDI track${exportTracks.length > 1 ? 's' : ''} from ${project.name}`);
   },
 
+
   // ── Groove Pool ─────────────────────────────────────────────────────────
 
   extractGrooveFromClip: (clipId, name, options) => {
@@ -6066,6 +6069,81 @@ export const useProjectStore = create<ProjectState>()(
         groovePool: (state.project.groovePool ?? []).filter((g) => g.id !== grooveId),
       },
     });
+  },
+
+  importMidiFile: async (file, options) => {
+    const state = get();
+    if (!state.project) return [];
+
+    try {
+      const parsed = parseMidiFile(await file.arrayBuffer());
+      if (parsed.tracks.length === 0) {
+        toastError('No MIDI note data found in file');
+        return [];
+      }
+
+      const startTime = options?.startTime ?? 0;
+      const applyMetadata = options?.applyMetadata ?? false;
+
+      let effectiveBpm = state.project.bpm;
+      let effectiveTimeSignature = state.project.timeSignature;
+
+      if (applyMetadata) {
+        const updates: Partial<Pick<Project, 'bpm' | 'timeSignature'>> = {};
+        if (parsed.bpm !== undefined) {
+          effectiveBpm = parsed.bpm;
+          updates.bpm = parsed.bpm;
+        }
+        if (parsed.timeSignature && parsed.timeSignature.denominator === 4) {
+          effectiveTimeSignature = parsed.timeSignature.numerator;
+          updates.timeSignature = parsed.timeSignature.numerator;
+        }
+        if (Object.keys(updates).length > 0) {
+          get().updateProject(updates);
+        }
+      }
+
+      const baseName = file.name.replace(/\.(mid|midi)$/i, '');
+      const trackIds: string[] = [];
+
+      for (let index = 0; index < parsed.tracks.length; index++) {
+        const parsedTrack = parsed.tracks[index];
+        const track = get().addTrack('keyboard', 'pianoRoll');
+        trackIds.push(track.id);
+
+        get().updateTrack(track.id, {
+          displayName: parsedTrack.name || (parsed.tracks.length === 1 ? baseName : `${baseName} ${index + 1}`),
+        });
+
+        const clipBeats = parsedTrack.notes.reduce(
+          (max, note) => Math.max(max, note.startBeat + note.durationBeats),
+          effectiveTimeSignature,
+        );
+        const clipDurationSeconds = Math.max(
+          (clipBeats * 60) / effectiveBpm,
+          (effectiveTimeSignature * 60) / effectiveBpm,
+        );
+
+        get().addClip(track.id, {
+          startTime,
+          duration: clipDurationSeconds,
+          prompt: `Imported MIDI: ${file.name}`,
+          lyrics: '',
+          source: 'uploaded',
+          midiData: {
+            notes: parsedTrack.notes.map((note) => ({ ...note, id: uuidv4() })),
+            grid: '1/16' as PianoRollGrid,
+          },
+        });
+      }
+
+      toastSuccess(`Imported MIDI into ${parsed.tracks.length} piano roll track${parsed.tracks.length === 1 ? '' : 's'}`);
+      return trackIds;
+    } catch (error) {
+      console.error(error);
+      toastError(`Failed to import MIDI file: ${file.name}`);
+      return [];
+    }
   },
 
   renameGrooveTemplate: (grooveId, name) => {

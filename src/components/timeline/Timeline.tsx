@@ -371,8 +371,8 @@ export function Timeline() {
         {fileDragOver && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-900/30 border-2 border-dashed border-blue-400/60 pointer-events-none">
             <div className="bg-blue-950/80 border border-blue-500/50 rounded-lg px-6 py-4 text-center">
-              <p className="text-sm font-medium text-blue-200">Drop audio files here</p>
-              <p className="text-[10px] text-blue-400 mt-1">WAV, MP3, OGG, FLAC, AAC</p>
+              <p className="text-sm font-medium text-blue-200">Drop audio or MIDI files here</p>
+              <p className="text-[10px] text-blue-400 mt-1">WAV, MP3, OGG, FLAC, AAC, MID</p>
             </div>
           </div>
         )}

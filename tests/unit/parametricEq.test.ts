@@ -15,7 +15,9 @@ import {
   PARAMETRIC_EQ_MIN_FREQUENCY,
   PARAMETRIC_EQ_MIN_GAIN,
   PARAMETRIC_EQ_MIN_Q,
+  PARAMETRIC_EQ_SAMPLE_RATE,
   ratioToFrequency,
+  spectrumBinToFrequency,
 } from '../../src/utils/parametricEq';
 
 describe('parametricEq utilities', () => {
@@ -226,5 +228,30 @@ describe('parametricEq utilities', () => {
     expect(getBandControlLabel('notch')).toBe('Notch');
     expect(getBandControlLabel('highpass')).toBe('High Pass');
     expect(getBandControlLabel('lowpass')).toBe('Low Pass');
+  });
+
+  // ── Spectrum bin to frequency mapping ──────────────────────────────────
+
+  describe('spectrumBinToFrequency', () => {
+    it('maps bin 0 to 0 Hz (DC)', () => {
+      expect(spectrumBinToFrequency(0, 1024)).toBe(0);
+    });
+
+    it('maps the last bin to Nyquist frequency', () => {
+      const nyquist = PARAMETRIC_EQ_SAMPLE_RATE / 2;
+      expect(spectrumBinToFrequency(1024, 1024)).toBeCloseTo(nyquist, 0);
+    });
+
+    it('maps middle bin to quarter of sample rate', () => {
+      // bin 512 of 1024 → freq = 512 * 48000 / 2048 = 12000 Hz
+      expect(spectrumBinToFrequency(512, 1024)).toBeCloseTo(12000, 0);
+    });
+
+    it('respects custom sample rate', () => {
+      expect(spectrumBinToFrequency(100, 1024, 44100)).toBeCloseTo(
+        (100 * 44100) / 2048,
+        0,
+      );
+    });
   });
 });

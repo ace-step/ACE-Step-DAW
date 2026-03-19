@@ -30,6 +30,10 @@ export function TrackHeader({
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+
+  // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
+  const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
+  const isImpliedMute = anySoloed && !track.soloed;
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
   const { armedTrackIds, toggleArmTrack } = useRecording();
@@ -106,6 +110,8 @@ export function TrackHeader({
         height: laneHeight,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,
         borderBottom: isDragOver && dragOverPosition === 'after' ? '2px solid var(--color-daw-accent)' : undefined,
+        opacity: isImpliedMute ? 0.45 : undefined,
+        transition: 'opacity 150ms ease',
       }}
       draggable
       onDragStart={() => onDragStart(track.id)}

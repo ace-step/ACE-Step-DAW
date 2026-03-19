@@ -13,22 +13,57 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Auto-merge ready PRs + trigger PM
+
+      - name: Auto-merge ready PRs (all checks must pass)
         run: |
           cd /Users/junmingong/.openclaw/workspace/acestep-daw
-          
-          # Auto-merge any PR that's ready + CI green
+
+          # Auto-merge any PR that's ready + ALL checks green
           READY=$(gh pr list --repo ${{ github.repository }} --state open --json number,isDraft,mergeable --jq '.[] | select(.isDraft==false and .mergeable=="MERGEABLE") | .number')
           for PR in $READY; do
-            ALL_GREEN=$(gh pr checks $PR --repo ${{ github.repository }} 2>&1 | grep -c "fail" || true)
-            if [ "$ALL_GREEN" = "0" ]; then
-              echo "Auto-merging PR #$PR"
-              gh pr merge $PR --repo ${{ github.repository }} --squash --admin || true
+            # Require ALL checks to pass (not just absence of "fail")
+            CHECK_STATUS=$(gh pr checks $PR --repo ${{ github.repository }} --json bucket --jq '[.[] | select(.bucket != "pass")] | length')
+            if [ "$CHECK_STATUS" = "0" ]; then
+              PENDING=$(gh pr checks $PR --repo ${{ github.repository }} --json bucket --jq '[.[] | select(.bucket == "pending")] | length')
+              if [ "$PENDING" = "0" ]; then
+                echo "Auto-merging PR #$PR — all checks passed"
+                gh pr merge $PR --repo ${{ github.repository }} --squash --admin || true
+              else
+                echo "Skipping PR #$PR — $PENDING check(s) still pending"
+              fi
+            else
+              echo "Skipping PR #$PR — $CHECK_STATUS check(s) not passing"
             fi
           done
-          
-          # Run Project Manager brain
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify test workflow passed before running PM
+        id: verify-tests
+        run: |
+          MERGE_SHA=$(git rev-parse HEAD)
+          echo "Checking test workflow status for commit $MERGE_SHA"
+
+          # Query the test workflow conclusion for the current commit
+          TEST_STATUS=$(gh api \
+            repos/${{ github.repository }}/actions/workflows/test.yml/runs \
+            --jq ".workflow_runs[] | select(.head_sha==\"$MERGE_SHA\") | .conclusion" \
+            | head -1)
+
+          if [ "$TEST_STATUS" = "success" ]; then
+            echo "Test workflow passed for $MERGE_SHA"
+            echo "tests_passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Test workflow status: ${TEST_STATUS:-not found}. Skipping PM."
+            echo "tests_passed=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Project Manager brain
+        if: steps.verify-tests.outputs.tests_passed == 'true'
+        run: |
+          cd /Users/junmingong/.openclaw/workspace/acestep-daw
           bash scripts/agents/project-manager.sh &
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

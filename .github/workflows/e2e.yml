@@ -24,9 +24,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+
       - name: Run E2E tests
-        run: npx playwright test
+        id: e2e
+        run: |
+          npx playwright test 2>&1 | tee /tmp/e2e-output.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
+
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -34,3 +39,23 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      - name: Report E2E failures
+        if: steps.e2e.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SUMMARY=$(tail -30 /tmp/e2e-output.txt)
+          gh issue create \
+            --title "E2E regression: $(date '+%Y-%m-%d') on ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+            --body "$(cat <<BODY
+          ## E2E Test Failure
+          **Branch**: ${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          **Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          \`\`\`
+          $SUMMARY
+          \`\`\`
+          BODY
+          )" \
+            --label "bug,e2e-regression"

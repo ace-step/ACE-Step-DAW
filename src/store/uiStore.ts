@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AIChatMessage } from '../types/aiAssistant';
 import type { InlineSuggestion } from '../types/suggestions';
+import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
@@ -72,6 +73,7 @@ export interface UIState {
   openDrumMachineTrackId: string | null;
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
+  activePianoRollTool: PianoRollTool;
   openEffectChainTrackId: string | null;
   openMidiEffectChainTrackId: string | null;
   drumMachineEditorHeight: number;
@@ -185,6 +187,8 @@ export interface UIState {
   setOpenSequencerTrackId: (id: string | null) => void;
   setOpenDrumMachineTrackId: (id: string | null) => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
+  setActivePianoRollTool: (tool: PianoRollTool) => void;
+  togglePianoRollPencilTool: () => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
   setOpenMidiEffectChainTrackId: (id: string | null) => void;
   setDrumMachineEditorHeight: (v: number) => void;
@@ -345,6 +349,7 @@ export const useUIStore = create<UIState>()(
   openDrumMachineTrackId: null,
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
+  activePianoRollTool: 'select',
   openEffectChainTrackId: null,
   openMidiEffectChainTrackId: null,
   drumMachineEditorHeight: 400,
@@ -544,6 +549,10 @@ export const useUIStore = create<UIState>()(
     historyFocusTrackId: trackId,
     historyFocusClipId: clipId,
   })),
+  setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
+  togglePianoRollPencilTool: () => set((state) => ({
+    activePianoRollTool: state.activePianoRollTool === 'pencil' ? 'select' : 'pencil',
+  })),
   setOpenEffectChainTrackId: (id) => set({
     openEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
@@ -735,6 +744,7 @@ export const useUIStore = create<UIState>()(
         loopBrowserOpen: state.loopBrowserOpen,
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
+        activePianoRollTool: state.activePianoRollTool,
         // Panel sizes
         mixerHeight: state.mixerHeight,
         drumMachineEditorHeight: state.drumMachineEditorHeight,

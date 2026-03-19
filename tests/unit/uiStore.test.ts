@@ -125,6 +125,21 @@ describe('uiStore', () => {
     });
   });
 
+  describe('piano roll tools', () => {
+    it('defaults to the select tool and updates through store actions', () => {
+      expect(useUIStore.getState().activePianoRollTool).toBe('select');
+
+      useUIStore.getState().setActivePianoRollTool('paint');
+      expect(useUIStore.getState().activePianoRollTool).toBe('paint');
+
+      useUIStore.getState().togglePianoRollPencilTool();
+      expect(useUIStore.getState().activePianoRollTool).toBe('pencil');
+
+      useUIStore.getState().togglePianoRollPencilTool();
+      expect(useUIStore.getState().activePianoRollTool).toBe('select');
+    });
+  });
+
   describe('command palette', () => {
     it('opens, executes commands, and promotes recent commands', async () => {
       useProjectStore.getState().createProject({ name: 'Palette Project' });

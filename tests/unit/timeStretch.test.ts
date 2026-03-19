@@ -71,4 +71,53 @@ describe('Time Stretch & Pitch Shift', () => {
     const clip = useProjectStore.getState().project!.tracks[0].clips[0];
     expect(clip.pitchShift).toBe(-3);
   });
+
+  it('setClipSourceBpm stores the source BPM on the clip', () => {
+    useProjectStore.getState().setClipSourceBpm('clip-1', 140);
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.sourceBpm).toBe(140);
+  });
+
+  it('setClipStretchMode stores the stretch mode on the clip', () => {
+    useProjectStore.getState().setClipStretchMode('clip-1', 'repitch');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.stretchMode).toBe('repitch');
+  });
+
+  it('tempoMatchClip calculates rate from sourceBpm to project BPM', () => {
+    // Project BPM is 120, source BPM is 100 → rate = 120/100 = 1.2
+    useProjectStore.getState().setClipSourceBpm('clip-1', 100);
+    useProjectStore.getState().tempoMatchClip('clip-1');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.timeStretchRate).toBeCloseTo(1.2);
+  });
+
+  it('tempoMatchClip does nothing when sourceBpm is not set', () => {
+    useProjectStore.getState().tempoMatchClip('clip-1');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.timeStretchRate).toBeUndefined();
+  });
+
+  it('tempoMatchClip does nothing when sourceBpm is 0', () => {
+    useProjectStore.getState().setClipSourceBpm('clip-1', 0);
+    useProjectStore.getState().tempoMatchClip('clip-1');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.timeStretchRate).toBeUndefined();
+  });
+
+  it('tempoMatchClip with slower source speeds up playback', () => {
+    // Source is 80 BPM, project is 120 → rate = 1.5 (speed up)
+    useProjectStore.getState().setClipSourceBpm('clip-1', 80);
+    useProjectStore.getState().tempoMatchClip('clip-1');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.timeStretchRate).toBeCloseTo(1.5);
+  });
+
+  it('tempoMatchClip with faster source slows down playback', () => {
+    // Source is 140 BPM, project is 120 → rate ≈ 0.857 (slow down)
+    useProjectStore.getState().setClipSourceBpm('clip-1', 140);
+    useProjectStore.getState().tempoMatchClip('clip-1');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.timeStretchRate).toBeCloseTo(120 / 140);
+  });
 });

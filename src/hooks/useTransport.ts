@@ -8,6 +8,7 @@ import { synthEngine } from '../engine/SynthEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import { useRecording } from './useRecording';
+import { getEffectivePlaybackRate } from '../utils/warp';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -84,6 +85,7 @@ export function useTransport() {
       buffer: AudioBuffer;
       audioOffset: number;
       clipDuration: number;
+      playbackRate?: number;
     }
     const clipBuffers: ScheduleEntry[] = [];
 
@@ -125,6 +127,8 @@ export function useTransport() {
           ? rawBuffer
           : trimBuffer(engine.ctx, rawBuffer, clip.startTime, clip.duration);
 
+        const playbackRate = getEffectivePlaybackRate(clip, proj.bpm);
+
         clipBuffers.push({
           clipId: clip.id,
           trackId: track.id,
@@ -132,6 +136,7 @@ export function useTransport() {
           buffer,
           audioOffset: clip.audioOffset ?? 0,
           clipDuration: clip.duration,
+          playbackRate,
         });
       }
     }

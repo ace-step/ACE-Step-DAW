@@ -12,6 +12,7 @@ interface ClipContextMenuProps {
   onRepaint: () => void;
   onVocal2BGM: () => void;
   onAnalyze: () => void;
+  onWarp: () => void;
   onClose: () => void;
   hasPrompt: boolean;
   isReady: boolean;
@@ -33,6 +34,7 @@ export function ClipContextMenu({
   onRepaint,
   onVocal2BGM,
   onAnalyze,
+  onWarp,
   onClose,
   hasPrompt,
   isReady,
@@ -81,6 +83,9 @@ export function ClipContextMenu({
             )}
             <button onClick={onAnalyze} className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-300 hover:bg-daw-accent hover:text-white transition-colors">
               Analyze Audio…
+            </button>
+            <button onClick={onWarp} className="w-full text-left px-3 py-1.5 text-[11px] text-teal-300 hover:bg-daw-accent hover:text-white transition-colors">
+              Warp / Time-Stretch…
             </button>
           </>
         )}

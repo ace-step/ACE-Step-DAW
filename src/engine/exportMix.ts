@@ -7,6 +7,7 @@ export interface ExportClip {
   volume: number;
   pan?: number;
   effects?: TrackEffect[];
+  playbackRate?: number;
 }
 
 /**
@@ -137,6 +138,12 @@ export async function exportMixToWav(
   for (const clip of clips) {
     const source = offlineCtx.createBufferSource();
     source.buffer = clip.buffer;
+
+    // Apply time-stretch via playbackRate
+    const rate = clip.playbackRate ?? 1;
+    if (rate !== 1 && rate > 0) {
+      source.playbackRate.value = rate;
+    }
 
     const gain = offlineCtx.createGain();
     gain.gain.value = clip.volume;

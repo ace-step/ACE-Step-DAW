@@ -113,6 +113,14 @@ export interface Take {
   selected: boolean;
 }
 
+/** A warp marker pins a point in the source audio to a position on the project timeline. */
+export interface WarpMarker {
+  /** Position in the source audio buffer (seconds). */
+  sourceTime: number;
+  /** Corresponding position on the project timeline (seconds, relative to clip start). */
+  projectTime: number;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -161,6 +169,13 @@ export interface Clip {
   timeStretchRate?: number;
   /** Pitch shift in semitones (0 = original pitch). */
   pitchShift?: number;
+  /** Original BPM of the audio source (user-entered or auto-detected). */
+  sourceBpm?: number;
+  /** Stretch algorithm mode. 'repitch' changes pitch with speed (Web Audio playbackRate),
+   *  'basic' time-stretches without pitch change (future WASM). */
+  stretchMode?: 'repitch' | 'basic';
+  /** User-placed warp markers mapping source-time to project-time. */
+  warpMarkers?: WarpMarker[];
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
   /** Comping takes for this clip. */

@@ -124,6 +124,10 @@ interface ProjectState {
   setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
+  setClipSourceBpm: (clipId: string, bpm: number) => void;
+  setClipStretchMode: (clipId: string, mode: 'repitch' | 'basic') => void;
+  /** Auto-calculate timeStretchRate to match clip's sourceBpm to project BPM. */
+  tempoMatchClip: (clipId: string) => void;
 
   splitClip: (clipId: string, splitTime: number) => void;
   toggleClipStar: (clipId: string) => void;
@@ -840,6 +844,27 @@ export const useProjectStore = create<ProjectState>()(
 
   setClipPitchShift: (clipId, semitones) => {
     get().updateClip(clipId, { pitchShift: semitones });
+  },
+
+  setClipSourceBpm: (clipId, bpm) => {
+    get().updateClip(clipId, { sourceBpm: bpm });
+  },
+
+  setClipStretchMode: (clipId, mode) => {
+    get().updateClip(clipId, { stretchMode: mode });
+  },
+
+  tempoMatchClip: (clipId) => {
+    const state = get();
+    if (!state.project) return;
+    let clip: Clip | undefined;
+    for (const t of state.project.tracks) {
+      clip = t.clips.find((c) => c.id === clipId);
+      if (clip) break;
+    }
+    if (!clip?.sourceBpm || clip.sourceBpm <= 0) return;
+    const rate = state.project.bpm / clip.sourceBpm;
+    get().updateClip(clipId, { timeStretchRate: rate });
   },
 
   splitClip: (clipId, splitTime) => {

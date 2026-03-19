@@ -23,6 +23,7 @@ export interface ClipScheduleInfo {
   buffer: AudioBuffer;
   audioOffset: number;   // offset into the buffer (crop start)
   clipDuration: number;  // how long to play (crop length)
+  playbackRate?: number; // time-stretch rate (1 = original, 2 = double speed)
 }
 
 /**
@@ -125,19 +126,29 @@ export class AudioEngine {
       source.buffer = clip.buffer;
       source.connect(trackNode.inputGain);
 
+      // Apply time-stretch via playbackRate (repitch mode — changes pitch with speed)
+      const rate = clip.playbackRate ?? 1;
+      if (rate !== 1 && rate > 0) {
+        source.playbackRate.value = rate;
+      }
+
       const clipEnd = clip.startTime + clip.clipDuration;
       if (clipEnd <= fromTime) continue;
 
+      // When playbackRate != 1, we need to adjust the source offsets/durations
+      // because AudioBufferSourceNode offset/duration are in source-time (pre-rate).
+      // Timeline duration = source duration / rate, so source duration = timeline duration * rate.
       const contextNow = this.ctx.currentTime;
       if (clip.startTime >= fromTime) {
-        // Clip hasn't started: schedule with delay, start from audioOffset
         const delay = clip.startTime - fromTime;
-        source.start(contextNow + delay, clip.audioOffset, clip.clipDuration);
+        const sourceDuration = clip.clipDuration * rate;
+        source.start(contextNow + delay, clip.audioOffset, sourceDuration);
       } else {
-        // Clip already started: seek into it
         const seekOffset = fromTime - clip.startTime;
         const remaining = clip.clipDuration - seekOffset;
-        source.start(contextNow, clip.audioOffset + seekOffset, remaining);
+        const sourceSeek = seekOffset * rate;
+        const sourceRemaining = remaining * rate;
+        source.start(contextNow, clip.audioOffset + sourceSeek, sourceRemaining);
       }
 
       this.scheduledSources.push({

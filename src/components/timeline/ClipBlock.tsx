@@ -11,6 +11,7 @@ import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
 import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
+import { WarpDialog } from '../dialogs/WarpDialog';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -64,6 +65,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [warpDialogOpen, setWarpDialogOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
 
   const editingClipId = useUIStore((s) => s.editingClipId);
@@ -439,6 +441,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             closeCtxMenu();
             setAnalysisPanel(clip.id);
           }}
+          onWarp={() => {
+            closeCtxMenu();
+            setWarpDialogOpen(true);
+          }}
           onClose={closeCtxMenu}
           hasPrompt={!!clip.prompt}
           isReady={clip.generationStatus === 'ready'}
@@ -465,6 +471,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           contextWindow={contextWindow}
           clipId={clip.id}
           onClose={() => setEditModalOpen(false)}
+        />
+      )}
+
+      {warpDialogOpen && project && (
+        <WarpDialog
+          clip={clip}
+          projectBpm={project.bpm}
+          onClose={() => setWarpDialogOpen(false)}
         />
       )}
 

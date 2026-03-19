@@ -152,13 +152,20 @@ export function EQCurve({ low, mid, high }: { low: number; mid: number; high: nu
 
 export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { type: 'compressor' }; trackId: string }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const setSidechainSource = useProjectStore((s) => s.setSidechainSource);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
   const p = effect.params;
   const [reduction, setReduction] = useState(0);
+  const [scReduction, setScReduction] = useState(0);
   const animRef = useRef<number>(0);
+
+  const hasSidechain = !!p.sidechainSourceTrackId;
+  const otherTracks = tracks.filter((t) => t.id !== trackId);
 
   useEffect(() => {
     const tick = () => {
       setReduction(effectsEngine.getCompressorReduction(trackId, effect.id));
+      setScReduction(effectsEngine.getSidechainReduction(trackId, effect.id));
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
@@ -171,6 +178,11 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
     effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'compressor');
   };
 
+  const handleSidechainChange = (sourceTrackId: string) => {
+    const value = sourceTrackId === '' ? undefined : sourceTrackId;
+    setSidechainSource(trackId, effect.id, value);
+  };
+
   return (
     <div className="flex flex-col gap-2 p-2">
       <div className="flex gap-2 justify-center">
@@ -180,6 +192,28 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
         <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={28} step={0.01} />
       </div>
       <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" size={24} step={1} />
+
+      {/* Sidechain source dropdown */}
+      <div className="border-t border-white/5 pt-1.5 mt-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[7px] text-white/30 uppercase w-6">SC</span>
+          <select
+            data-testid="sidechain-source-select"
+            className="flex-1 text-[9px] bg-white/5 border border-white/10 rounded px-1 py-0.5 text-white/70 outline-none focus:border-amber-500/50"
+            value={p.sidechainSourceTrackId ?? ''}
+            onChange={(e) => handleSidechainChange(e.target.value)}
+          >
+            <option value="">None</option>
+            {otherTracks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.displayName || `Track ${tracks.indexOf(t) + 1}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Compressor GR meter */}
       <div className="flex items-center gap-1.5">
         <span className="text-[7px] text-white/30 w-6">GR</span>
         <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden relative">
@@ -190,6 +224,20 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
         </div>
         <span className="text-[8px] text-white/40 font-mono w-10 text-right">{reduction.toFixed(1)} dB</span>
       </div>
+
+      {/* Sidechain GR meter (only shown when sidechain is active) */}
+      {hasSidechain && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[7px] text-amber-400/50 w-6">SC</span>
+          <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden relative">
+            <div
+              className="absolute right-0 top-0 bottom-0 bg-amber-400/40 rounded-full transition-all"
+              style={{ width: `${Math.min(100, Math.abs(scReduction) * 100 / 30)}%` }}
+            />
+          </div>
+          <span className="text-[8px] text-amber-400/40 font-mono w-10 text-right">{scReduction.toFixed(1)} dB</span>
+        </div>
+      )}
     </div>
   );
 }

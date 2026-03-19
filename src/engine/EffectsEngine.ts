@@ -9,6 +9,7 @@ import type {
   DistortionParams,
   FilterParams,
 } from '../types/project';
+import { SidechainFollower } from './sidechainFollower';
 
 type EffectNode = {
   id: string;
@@ -86,8 +87,13 @@ function createNode(effect: TrackEffect): EffectNode {
   }
 }
 
+function scKey(trackId: string, effectId: string): string {
+  return `${trackId}:${effectId}`;
+}
+
 class EffectsEngine {
   private chains = new Map<string, EffectNode[]>();
+  private sidechains = new Map<string, SidechainFollower>();
 
   rebuildChain(trackId: string, effects: TrackEffect[]) {
     this.disposeChain(trackId);
@@ -99,9 +105,6 @@ class EffectsEngine {
     this.chains.set(trackId, nodes);
   }
 
-  /**
-   * Update a single effect's parameters in real-time (no full rebuild needed for most effects).
-   */
   updateEffectParams(
     trackId: string,
     effectId: string,
@@ -132,6 +135,7 @@ class EffectsEngine {
         comp.attack.value = p.attack;
         comp.release.value = p.release;
         comp.knee.value = p.knee;
+        this.updateSidechainParams(trackId, effectId, p);
         break;
       }
       case 'reverb': {
@@ -198,14 +202,82 @@ class EffectsEngine {
     return (effectNode.node as Tone.Compressor).reduction;
   }
 
+  /** Get sidechain gain reduction in dB for metering. */
+  getSidechainReduction(trackId: string, effectId: string): number {
+    const follower = this.sidechains.get(scKey(trackId, effectId));
+    return follower ? follower.reduction : 0;
+  }
+
+  /**
+   * Connect a sidechain source to a compressor on a target track.
+   * Inserts SidechainFollower.gainNode after the compressor in the chain.
+   */
+  connectSidechain(
+    targetTrackId: string,
+    effectId: string,
+    sourceOutput: AudioNode,
+    params: CompressorParams,
+  ) {
+    const key = scKey(targetTrackId, effectId);
+    this.disconnectSidechain(targetTrackId, effectId);
+
+    const ctx = sourceOutput.context as AudioContext;
+    const follower = new SidechainFollower(ctx, sourceOutput, {
+      threshold: params.threshold,
+      ratio: params.ratio,
+      attack: params.attack,
+      release: params.release,
+      knee: params.knee,
+    });
+    this.sidechains.set(key, follower);
+
+    // Insert the gainNode into the chain after the compressor
+    const nodes = this.chains.get(targetTrackId);
+    if (!nodes) return;
+    const compIdx = nodes.findIndex((n) => n.id === effectId && n.type === 'compressor');
+    if (compIdx < 0) return;
+
+    const compNode = nodes[compIdx];
+    const nextNode = nodes[compIdx + 1];
+
+    if (nextNode) {
+      try { compNode.node.disconnect(nextNode.node); } catch { /* ok */ }
+      const nextInput = (nextNode.node as unknown as { input?: AudioNode }).input
+        ?? (nextNode.node as unknown as AudioNode);
+      compNode.node.connect(follower.gainNode as unknown as AudioNode);
+      (follower.gainNode as unknown as AudioNode).connect(nextInput);
+    } else {
+      compNode.node.connect(follower.gainNode as unknown as AudioNode);
+    }
+  }
+
+  disconnectSidechain(targetTrackId: string, effectId: string) {
+    const key = scKey(targetTrackId, effectId);
+    const follower = this.sidechains.get(key);
+    if (follower) {
+      follower.dispose();
+      this.sidechains.delete(key);
+    }
+  }
+
+  updateSidechainParams(targetTrackId: string, effectId: string, params: CompressorParams) {
+    const key = scKey(targetTrackId, effectId);
+    const follower = this.sidechains.get(key);
+    if (follower) {
+      follower.updateParams({
+        threshold: params.threshold,
+        ratio: params.ratio,
+        attack: params.attack,
+        release: params.release,
+        knee: params.knee,
+      });
+    }
+  }
+
   getChain(trackId: string): EffectNode[] {
     return this.chains.get(trackId) ?? [];
   }
 
-  /**
-   * Returns the native AudioNode input of this track's effect chain, or null if empty.
-   * Tone.js ToneAudioNode exposes `.input` which is a native AudioNode suitable for connect().
-   */
   getInputNode(trackId: string): AudioNode | null {
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
@@ -213,18 +285,29 @@ class EffectsEngine {
     return toneNode.input ?? null;
   }
 
-  /**
-   * Returns the native AudioNode output of this track's effect chain, or null if empty.
-   * Tone.js ToneAudioNode exposes `.output` which is a native AudioNode suitable for connect().
-   */
   getOutputNode(trackId: string): AudioNode | null {
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
-    const toneNode = nodes[nodes.length - 1].node as unknown as { output?: AudioNode };
+
+    // If the last node is a compressor with sidechain, return the follower's gainNode
+    const lastNode = nodes[nodes.length - 1];
+    if (lastNode.type === 'compressor') {
+      const follower = this.sidechains.get(scKey(trackId, lastNode.id));
+      if (follower) return follower.gainNode;
+    }
+
+    const toneNode = lastNode.node as unknown as { output?: AudioNode };
     return toneNode.output ?? null;
   }
 
   disposeChain(trackId: string) {
+    // Dispose all sidechains for this track
+    for (const [key, follower] of this.sidechains) {
+      if (key.startsWith(`${trackId}:`)) {
+        follower.dispose();
+        this.sidechains.delete(key);
+      }
+    }
     const nodes = this.chains.get(trackId);
     if (!nodes) return;
     for (const node of nodes) {
@@ -235,6 +318,10 @@ class EffectsEngine {
   }
 
   dispose() {
+    for (const follower of this.sidechains.values()) {
+      follower.dispose();
+    }
+    this.sidechains.clear();
     for (const trackId of this.chains.keys()) {
       this.disposeChain(trackId);
     }

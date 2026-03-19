@@ -1,13 +1,17 @@
 #!/bin/bash
 # Release Manager — Evaluate if ready to release, then tag + publish
+# Runs in an isolated worktree to avoid disrupting other agents.
 set -e
-cd /Users/junmingong/.openclaw/workspace/acestep-daw
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="ace-step/ACE-Step-DAW"
+
+# Create isolated worktree (never touches the main checkout)
+source "$SCRIPT_DIR/ensure-worktree.sh" "release-manager"
+cd "$WT"
 
 ~/.local/bin/claude --print --permission-mode bypassPermissions --allowedTools 'Edit,Write,Read,Bash' \
   "You are the Release Manager for ACE-Step DAW.
-
-cd /Users/junmingong/.openclaw/workspace/acestep-daw && git fetch origin && git reset --hard origin/main
+Your working directory is $WT (an isolated worktree on origin/main). Do NOT cd elsewhere.
 
 1. Check current version: grep version package.json
 2. Check last release tag: git tag -l 'v*' --sort=-v:refname | head -1
@@ -33,3 +37,7 @@ If ready to release:
 7. Create GitHub Release: gh release create vX.Y.Z --repo $REPO --title 'vX.Y.Z' --notes-file CHANGELOG.md
 
 If NOT ready: print what's missing and what needs to happen first."
+
+# Cleanup
+cd /tmp && rm -rf "$WT"
+git -C /Users/junmingong/.openclaw/workspace/acestep-daw worktree prune 2>/dev/null

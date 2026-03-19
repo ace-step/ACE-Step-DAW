@@ -1,20 +1,24 @@
 #!/bin/bash
 # QA Tester — Dual mode: regression + feature-specific
+# Runs in an isolated worktree to avoid disrupting other agents.
 set -e
-cd /Users/junmingong/.openclaw/workspace/acestep-daw
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="ace-step/ACE-Step-DAW"
 
 MODE=${1:-"full"}  # "full" or "pr-specific"
 PR_NUM=${2:-""}
 
+# Create isolated worktree (never touches the main checkout)
+source "$SCRIPT_DIR/ensure-worktree.sh" "qa-tester"
+cd "$WT"
+
 ~/.local/bin/claude --print --permission-mode bypassPermissions \
   "You are QA for ACE-Step DAW. Mode: $MODE
-
-cd /Users/junmingong/.openclaw/workspace/acestep-daw && git fetch origin && git reset --hard origin/main
+Your working directory is $WT (an isolated worktree on origin/main). Do NOT cd elsewhere.
 
 ## If mode=full (scheduled regression):
 1. npm run build — report any errors
-2. npx vitest run tests/unit/ — report failures  
+2. npx vitest run tests/unit/ — report failures
 3. npx playwright test tests/e2e/ — report failures
 4. Check recently merged PRs: gh pr list --repo $REPO --state merged --limit 5
 5. For each merged PR, verify the feature works (read code, run relevant test)
@@ -28,3 +32,7 @@ cd /Users/junmingong/.openclaw/workspace/acestep-daw && git fetch origin && git 
 5. Comment on the PR with test results
 
 For any bugs: gh issue create --repo $REPO --title 'bug: ...' --label 'priority:P0,role:developer'"
+
+# Cleanup worktree after agent exits
+cd /tmp && rm -rf "$WT"
+git -C /Users/junmingong/.openclaw/workspace/acestep-daw worktree prune 2>/dev/null

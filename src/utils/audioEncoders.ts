@@ -1,20 +1,31 @@
 /**
- * Audio encoding utilities for exporting to MP3 and FLAC formats.
+ * Audio encoding utilities for exporting to MP3, FLAC, and OGG formats.
  * WAV encoding lives in wav.ts (pre-existing).
  */
 
 import { Mp3Encoder } from '@breezystack/lamejs';
 
-export type ExportFormat = 'wav' | 'mp3' | 'flac';
+export type ExportFormat = 'wav' | 'mp3' | 'flac' | 'ogg';
 export type Mp3Bitrate = 128 | 192 | 256 | 320;
 export type SampleRateOption = 44100 | 48000;
 export type BitDepth = 16 | 24;
+
+export interface ExportMetadata {
+  title?: string;
+  artist?: string;
+  album?: string;
+  trackNumber?: number;
+  genre?: string;
+  year?: string;
+}
 
 export interface ExportOptions {
   format: ExportFormat;
   sampleRate: SampleRateOption;
   bitDepth: BitDepth;
   mp3Bitrate: Mp3Bitrate;
+  oggQuality: number; // 0.0 - 1.0
+  metadata?: ExportMetadata;
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -22,6 +33,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   sampleRate: 48000,
   bitDepth: 16,
   mp3Bitrate: 320,
+  oggQuality: 0.5,
 };
 
 /**
@@ -39,10 +51,12 @@ export function floatToInt16(samples: Float32Array): Int16Array {
 /**
  * Encode an AudioBuffer to MP3 using lamejs.
  * Returns a Blob with type audio/mpeg.
+ * Optionally prepends ID3v2 metadata tags.
  */
 export function encodeToMp3(
   buffer: AudioBuffer,
   bitrate: Mp3Bitrate = 320,
+  metadata?: ExportMetadata,
 ): Blob {
   const channels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
@@ -53,6 +67,14 @@ export function encodeToMp3(
 
   const blockSize = 1152;
   const mp3Data: Uint8Array[] = [];
+
+  // Prepend ID3v2 tag if metadata is provided
+  if (metadata) {
+    const id3Tag = encodeId3v2Tag(metadata);
+    if (id3Tag.length > 0) {
+      mp3Data.push(id3Tag);
+    }
+  }
 
   for (let i = 0; i < left.length; i += blockSize) {
     const leftChunk = left.subarray(i, i + blockSize);
@@ -85,6 +107,7 @@ export function encodeToMp3(
 export function encodeToFlac(
   buffer: AudioBuffer,
   bitDepth: BitDepth = 16,
+  metadata?: ExportMetadata,
 ): Blob {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
@@ -116,7 +139,7 @@ export function encodeToFlac(
   // 1. Magic number: "fLaC"
   parts.push(new Uint8Array([0x66, 0x4c, 0x61, 0x43]));
 
-  // 2. STREAMINFO metadata block (last metadata block)
+  // 2. STREAMINFO metadata block
   const blockSize = 4096;
   const streaminfo = buildStreamInfo(
     blockSize,
@@ -128,9 +151,29 @@ export function encodeToFlac(
     bitDepth,
     totalSamples,
   );
-  // Block header: last-block flag (1) | type 0 (STREAMINFO) = 0x80, then 3-byte length = 34
-  parts.push(new Uint8Array([0x80, 0x00, 0x00, 0x22]));
-  parts.push(streaminfo);
+
+  // Build optional VORBIS_COMMENT block for metadata
+  const vorbisComment = metadata ? buildFlacVorbisComment(metadata) : null;
+
+  if (vorbisComment) {
+    // STREAMINFO is NOT last (0x00 | type 0)
+    parts.push(new Uint8Array([0x00, 0x00, 0x00, 0x22]));
+    parts.push(streaminfo);
+
+    // VORBIS_COMMENT is last (0x80 | type 4 = 0x84)
+    const vcLen = vorbisComment.length;
+    parts.push(new Uint8Array([
+      0x84,
+      (vcLen >> 16) & 0xff,
+      (vcLen >> 8) & 0xff,
+      vcLen & 0xff,
+    ]));
+    parts.push(vorbisComment);
+  } else {
+    // STREAMINFO is last (0x80 | type 0)
+    parts.push(new Uint8Array([0x80, 0x00, 0x00, 0x22]));
+    parts.push(streaminfo);
+  }
 
   // 3. Audio frames — verbatim subframes
   let sampleOffset = 0;
@@ -466,7 +509,7 @@ export function estimateFileSize(
   durationSeconds: number,
   sampleRate: SampleRateOption,
   channels: number,
-  options: Pick<ExportOptions, 'format' | 'bitDepth' | 'mp3Bitrate'>,
+  options: Pick<ExportOptions, 'format' | 'bitDepth' | 'mp3Bitrate' | 'oggQuality'>,
 ): number {
   const { format, bitDepth, mp3Bitrate } = options;
   switch (format) {
@@ -477,6 +520,12 @@ export function estimateFileSize(
     case 'flac':
       // Verbatim FLAC is similar size to WAV, estimate ~70% of WAV
       return Math.ceil(durationSeconds * sampleRate * channels * (bitDepth / 8) * 0.7);
+    case 'ogg': {
+      // OGG Opus: quality maps to bitrate (~32-320 kbps)
+      const quality = options.oggQuality ?? 0.5;
+      const oggBitrate = 32000 + quality * 288000; // 32-320 kbps range
+      return Math.ceil(durationSeconds * oggBitrate / 8);
+    }
   }
 }
 
@@ -487,4 +536,204 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── OGG Opus encoding via MediaRecorder ────────────────────────────────
+
+/**
+ * Encode an AudioBuffer to OGG Opus format using the browser's MediaRecorder API.
+ * Quality maps to audioBitsPerSecond (0.0 = 32kbps, 1.0 = 320kbps).
+ *
+ * Note: encoding takes approximately real-time duration since it uses MediaRecorder.
+ * Chrome produces WebM/Opus containers; Firefox produces OGG/Opus natively.
+ * Both are saved with audio/ogg MIME type for consistency.
+ */
+export async function encodeToOgg(
+  buffer: AudioBuffer,
+  quality: number = 0.5,
+): Promise<Blob> {
+  if (typeof globalThis.AudioContext === 'undefined') {
+    throw new Error('OGG export requires AudioContext (not available in this environment)');
+  }
+  if (typeof globalThis.MediaRecorder === 'undefined') {
+    throw new Error('OGG export requires MediaRecorder (not available in this environment)');
+  }
+
+  const clampedQuality = Math.max(0, Math.min(1, quality));
+  const bitsPerSecond = Math.round(32000 + clampedQuality * 288000);
+
+  // Determine best available MIME type
+  const oggSupported = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus');
+  const webmSupported = MediaRecorder.isTypeSupported('audio/webm;codecs=opus');
+  if (!oggSupported && !webmSupported) {
+    throw new Error('Neither audio/ogg nor audio/webm Opus encoding is supported in this browser');
+  }
+  const mimeType = oggSupported ? 'audio/ogg;codecs=opus' : 'audio/webm;codecs=opus';
+
+  const ctx = new AudioContext({ sampleRate: buffer.sampleRate });
+  const dest = ctx.createMediaStreamDestination();
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(dest);
+
+  const recorder = new MediaRecorder(dest.stream, {
+    mimeType,
+    audioBitsPerSecond: bitsPerSecond,
+  });
+
+  const chunks: Blob[] = [];
+
+  return new Promise<Blob>((resolve, reject) => {
+    recorder.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      void ctx.close();
+      resolve(new Blob(chunks, { type: 'audio/ogg' }));
+    };
+
+    recorder.onerror = () => {
+      void ctx.close();
+      reject(new Error('OGG encoding failed'));
+    };
+
+    recorder.start();
+    source.start(0);
+
+    source.onended = () => {
+      // Small delay to ensure final audio data is captured
+      setTimeout(() => recorder.stop(), 100);
+    };
+  });
+}
+
+// ── ID3v2 Tag Encoding for MP3 ────────────────────────────────────────
+
+/**
+ * Encode metadata as an ID3v2.3 tag.
+ * Returns a Uint8Array that should be prepended to the MP3 data.
+ */
+export function encodeId3v2Tag(metadata: ExportMetadata): Uint8Array {
+  const frames: Uint8Array[] = [];
+
+  const addTextFrame = (id: string, value: string | undefined) => {
+    if (!value) return;
+    const encoder = new TextEncoder();
+    const textBytes = encoder.encode(value);
+    // Frame: 4-byte ID + 4-byte size + 2-byte flags + 1-byte encoding (3=UTF-8) + text
+    const frameSize = 1 + textBytes.length;
+    const frame = new Uint8Array(10 + frameSize);
+    const idBytes = encoder.encode(id);
+    frame.set(idBytes, 0);
+    // Size (big-endian, 4 bytes, NOT syncsafe for frame size in ID3v2.3)
+    frame[4] = (frameSize >> 24) & 0xff;
+    frame[5] = (frameSize >> 16) & 0xff;
+    frame[6] = (frameSize >> 8) & 0xff;
+    frame[7] = frameSize & 0xff;
+    // Flags: 0x00, 0x00
+    frame[8] = 0;
+    frame[9] = 0;
+    // Encoding: 3 = UTF-8
+    frame[10] = 3;
+    // Text data
+    frame.set(textBytes, 11);
+    frames.push(frame);
+  };
+
+  addTextFrame('TIT2', metadata.title);
+  addTextFrame('TPE1', metadata.artist);
+  addTextFrame('TALB', metadata.album);
+  addTextFrame('TCON', metadata.genre);
+  addTextFrame('TYER', metadata.year);
+  if (metadata.trackNumber !== undefined) {
+    addTextFrame('TRCK', String(metadata.trackNumber));
+  }
+
+  if (frames.length === 0) return new Uint8Array(0);
+
+  // Calculate total frames size
+  let totalFrameSize = 0;
+  for (const f of frames) totalFrameSize += f.length;
+
+  // ID3v2 header: "ID3" + version (2.3) + flags + syncsafe size
+  const header = new Uint8Array(10);
+  const enc = new TextEncoder();
+  header.set(enc.encode('ID3'), 0);
+  header[3] = 3; // Version 2.3
+  header[4] = 0; // Revision 0
+  header[5] = 0; // Flags
+
+  // Syncsafe integer: each byte uses 7 bits
+  const size = totalFrameSize;
+  header[6] = (size >> 21) & 0x7f;
+  header[7] = (size >> 14) & 0x7f;
+  header[8] = (size >> 7) & 0x7f;
+  header[9] = size & 0x7f;
+
+  // Combine header + frames
+  const result = new Uint8Array(10 + totalFrameSize);
+  result.set(header, 0);
+  let offset = 10;
+  for (const frame of frames) {
+    result.set(frame, offset);
+    offset += frame.length;
+  }
+
+  return result;
+}
+
+// ── FLAC VORBIS_COMMENT block ──────────────────────────────────────────
+
+/**
+ * Build a VORBIS_COMMENT data block for FLAC metadata.
+ * Returns the raw block data (without the metadata block header).
+ */
+export function buildFlacVorbisComment(metadata: ExportMetadata): Uint8Array {
+  const encoder = new TextEncoder();
+  const vendor = 'ACE-Step DAW';
+  const vendorBytes = encoder.encode(vendor);
+
+  const comments: Uint8Array[] = [];
+  const addComment = (key: string, value: string | undefined) => {
+    if (!value) return;
+    comments.push(encoder.encode(`${key}=${value}`));
+  };
+
+  addComment('TITLE', metadata.title);
+  addComment('ARTIST', metadata.artist);
+  addComment('ALBUM', metadata.album);
+  addComment('GENRE', metadata.genre);
+  addComment('DATE', metadata.year);
+  if (metadata.trackNumber !== undefined) {
+    addComment('TRACKNUMBER', String(metadata.trackNumber));
+  }
+
+  // Calculate total size
+  let totalSize = 4 + vendorBytes.length + 4; // vendor length + vendor + comment count
+  for (const c of comments) totalSize += 4 + c.length; // each comment: length + data
+
+  const buf = new Uint8Array(totalSize);
+  const view = new DataView(buf.buffer);
+  let offset = 0;
+
+  // Vendor string (little-endian length + UTF-8 string)
+  view.setUint32(offset, vendorBytes.length, true);
+  offset += 4;
+  buf.set(vendorBytes, offset);
+  offset += vendorBytes.length;
+
+  // Comment count (little-endian)
+  view.setUint32(offset, comments.length, true);
+  offset += 4;
+
+  // Comments (little-endian length + UTF-8 string each)
+  for (const c of comments) {
+    view.setUint32(offset, c.length, true);
+    offset += 4;
+    buf.set(c, offset);
+    offset += c.length;
+  }
+
+  return buf;
 }

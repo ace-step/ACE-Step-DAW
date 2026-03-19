@@ -9,6 +9,7 @@ import { createSamplerConfig } from '../../engine/SamplerEngine';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import {
   type ExportFormat,
+  type ExportMetadata,
   type Mp3Bitrate,
   type SampleRateOption,
   type BitDepth,
@@ -22,6 +23,7 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'wav', label: 'WAV' },
   { value: 'mp3', label: 'MP3' },
   { value: 'flac', label: 'FLAC' },
+  { value: 'ogg', label: 'OGG (Opus)' },
 ];
 
 const BITRATE_OPTIONS: { value: Mp3Bitrate; label: string }[] = [
@@ -45,6 +47,7 @@ function fileExtension(format: ExportFormat): string {
   switch (format) {
     case 'mp3': return '.mp3';
     case 'flac': return '.flac';
+    case 'ogg': return '.ogg';
     default: return '.wav';
   }
 }
@@ -56,6 +59,10 @@ export function ExportDialog() {
   const [exporting, setExporting] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [progress, setProgress] = useState(0);
+  const [metadata, setMetadata] = useState<ExportMetadata>({
+    title: project?.name ?? '',
+    artist: '',
+  });
 
   if (!show || !project) return null;
 
@@ -136,7 +143,11 @@ export function ExportDialog() {
       }
 
       setProgress(60);
-      const blob = await exportMix(clips, project.totalDuration, exportOptions);
+      const optionsWithMeta = {
+        ...exportOptions,
+        metadata: (metadata.title || metadata.artist) ? metadata : undefined,
+      };
+      const blob = await exportMix(clips, project.totalDuration, optionsWithMeta);
       setProgress(90);
 
       const url = URL.createObjectURL(blob);
@@ -232,7 +243,7 @@ export function ExportDialog() {
           </div>
 
           {/* Bit depth (WAV & FLAC only) */}
-          {exportOptions.format !== 'mp3' && (
+          {exportOptions.format !== 'mp3' && exportOptions.format !== 'ogg' && (
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Bit Depth</label>
               <select
@@ -266,6 +277,55 @@ export function ExportDialog() {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* OGG quality (OGG only) */}
+          {exportOptions.format === 'ogg' && (
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Quality: {Math.round(exportOptions.oggQuality * 10)}/10
+              </label>
+              <input
+                data-testid="export-ogg-quality"
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={exportOptions.oggQuality}
+                onChange={(e) =>
+                  setExportOptions((prev) => ({ ...prev, oggQuality: Number(e.target.value) }))
+                }
+                className="w-full accent-daw-accent"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 mt-0.5">
+                <span>Smaller</span>
+                <span>~{Math.round(32 + exportOptions.oggQuality * 288)} kbps</span>
+                <span>Better</span>
+              </div>
+            </div>
+          )}
+
+          {/* Metadata (MP3 & FLAC) */}
+          {(exportOptions.format === 'mp3' || exportOptions.format === 'flac') && (
+            <div className="space-y-2 pt-1 border-t border-daw-border">
+              <label className="block text-xs text-zinc-400">Metadata</label>
+              <input
+                data-testid="export-metadata-title"
+                type="text"
+                placeholder="Title"
+                value={metadata.title ?? ''}
+                onChange={(e) => setMetadata((prev) => ({ ...prev, title: e.target.value }))}
+                className="w-full bg-daw-surface-2 border border-daw-border rounded px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-daw-accent"
+              />
+              <input
+                data-testid="export-metadata-artist"
+                type="text"
+                placeholder="Artist"
+                value={metadata.artist ?? ''}
+                onChange={(e) => setMetadata((prev) => ({ ...prev, artist: e.target.value }))}
+                className="w-full bg-daw-surface-2 border border-daw-border rounded px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-daw-accent"
+              />
             </div>
           )}
 

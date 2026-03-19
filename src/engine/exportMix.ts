@@ -1,5 +1,5 @@
 import { audioBufferToWavBlob } from '../utils/wav';
-import { encodeToMp3, encodeToFlac } from '../utils/audioEncoders';
+import { encodeToMp3, encodeToFlac, encodeToOgg } from '../utils/audioEncoders';
 import type { ExportOptions } from '../utils/audioEncoders';
 import type { MasteringState, TrackEffect } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
@@ -314,9 +314,11 @@ export async function exportMix(
 
   switch (options.format) {
     case 'mp3':
-      return encodeToMp3(rendered, options.mp3Bitrate);
+      return encodeToMp3(rendered, options.mp3Bitrate, options.metadata);
     case 'flac':
-      return encodeToFlac(rendered, options.bitDepth);
+      return encodeToFlac(rendered, options.bitDepth, options.metadata);
+    case 'ogg':
+      return encodeToOgg(rendered, options.oggQuality);
     case 'wav':
     default:
       return audioBufferToWavBlob(rendered, options.bitDepth);

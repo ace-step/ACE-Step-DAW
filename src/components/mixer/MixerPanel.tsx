@@ -163,15 +163,15 @@ export function MixerPanel() {
       />
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <div className="flex items-stretch h-full">
+          {project.tracks.length === 0 && (
+            <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">
+              Add tracks to see mixer channels
+            </div>
+          )}
           {project.tracks.map((track) => (
             <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} />
           ))}
           <MasterStrip faderHeight={faderHeight} />
-          {project.tracks.length === 0 && (
-            <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">
-              Add tracks to see the mixer
-            </div>
-          )}
         </div>
       </div>
     </div>

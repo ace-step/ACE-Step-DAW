@@ -858,11 +858,24 @@ export function PianoRollCanvas({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      if (selectedNoteIds.size > 0) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // If right-clicking on a note that isn't selected, auto-select it
+      const hit = findNoteAt(x, y);
+      if (hit && !selectedNoteIds.has(hit.note.id)) {
+        setSelectedNoteIds(new Set([hit.note.id]));
+      }
+
+      if (hit || selectedNoteIds.size > 0) {
         setContextMenu({ x: e.clientX, y: e.clientY });
       }
     },
-    [selectedNoteIds],
+    [selectedNoteIds, findNoteAt, setSelectedNoteIds],
   );
 
   const handleContextMenuQuantize = useCallback(() => {

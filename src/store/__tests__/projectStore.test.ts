@@ -498,6 +498,18 @@ describe('projectStore', () => {
       const clip = useProjectStore.getState().getClipById(clipId);
       expect(clip!.midiData!.notes[0].pitch).toBe(72);
     });
+
+    it('stores slide-note metadata', () => {
+      const noteId = useProjectStore.getState().addMidiNote(clipId, {
+        pitch: 67,
+        startBeat: 1,
+        durationBeats: 0.5,
+        velocity: 96,
+        isSlide: true,
+      });
+      const clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes.find((note) => note.id === noteId)?.isSlide).toBe(true);
+    });
   });
 
   describe('effects', () => {

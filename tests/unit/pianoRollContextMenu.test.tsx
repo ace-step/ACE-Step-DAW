@@ -4,16 +4,24 @@ import '@testing-library/jest-dom';
 import { PianoRollCanvas } from '../../src/components/pianoroll/PianoRollCanvas';
 import type { Clip, MidiNote, Track } from '../../src/types/project';
 
+const mockAddMidiNote = vi.fn();
+const mockRemoveMidiNote = vi.fn();
+const mockUpdateMidiNote = vi.fn();
+const mockQuantizeMidiNotes = vi.fn();
+const mockBeginDrag = vi.fn();
+const mockEndDrag = vi.fn();
+const mockOpenQuantizeDialog = vi.fn();
+
 // Mock stores
 vi.mock('../../src/store/projectStore', () => ({
   useProjectStore: vi.fn((selector) => {
     const state: Record<string, unknown> = {
-      addMidiNote: vi.fn(),
-      removeMidiNote: vi.fn(),
-      updateMidiNote: vi.fn(),
-      quantizeMidiNotes: vi.fn(),
-      beginDrag: vi.fn(),
-      endDrag: vi.fn(),
+      addMidiNote: mockAddMidiNote,
+      removeMidiNote: mockRemoveMidiNote,
+      updateMidiNote: mockUpdateMidiNote,
+      quantizeMidiNotes: mockQuantizeMidiNotes,
+      beginDrag: mockBeginDrag,
+      endDrag: mockEndDrag,
       project: { bpm: 120 },
     };
     return selector(state);
@@ -23,7 +31,7 @@ vi.mock('../../src/store/projectStore', () => ({
 vi.mock('../../src/store/uiStore', () => ({
   useUIStore: vi.fn((selector) => {
     const state: Record<string, unknown> = {
-      openQuantizeDialog: vi.fn(),
+      openQuantizeDialog: mockOpenQuantizeDialog,
     };
     return selector(state);
   }),
@@ -120,6 +128,13 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
   let setSelectedNoteIds: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    mockAddMidiNote.mockReset();
+    mockRemoveMidiNote.mockReset();
+    mockUpdateMidiNote.mockReset();
+    mockQuantizeMidiNotes.mockReset();
+    mockBeginDrag.mockReset();
+    mockEndDrag.mockReset();
+    mockOpenQuantizeDialog.mockReset();
     setSelectedNoteIds = vi.fn();
     // Mock getBoundingClientRect on all elements so canvas has real dimensions
     Element.prototype.getBoundingClientRect = vi.fn().mockReturnValue({
@@ -142,7 +157,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
       <PianoRollCanvas
         clip={clip}
         track={makeTrack()}
-        drawMode={false}
+        activeTool="select"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -171,7 +186,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
       <PianoRollCanvas
         clip={clip}
         track={makeTrack()}
-        drawMode={false}
+        activeTool="select"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -202,7 +217,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
       <PianoRollCanvas
         clip={clip}
         track={makeTrack()}
-        drawMode={false}
+        activeTool="select"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -224,5 +239,36 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
       b.textContent?.includes('Quantize'),
     );
     expect(quantizeButton).toBeFalsy();
+  });
+
+  it('creates slide notes through the explicit slide tool', () => {
+    const clip = makeClip([]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="slide"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseDown(canvas, {
+      clientX: 120,
+      clientY: NOTE_HIT_CLIENT_Y,
+    });
+
+    expect(mockAddMidiNote).toHaveBeenCalledTimes(1);
+    const [, note] = mockAddMidiNote.mock.calls[0];
+    expect(note).toMatchObject({
+      isSlide: true,
+      durationBeats: 1,
+      velocity: 100,
+    });
   });
 });

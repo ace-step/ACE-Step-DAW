@@ -228,10 +228,11 @@ export function useTransport() {
         }
 
         for (const clip of track.clips) {
-          const notes = clip.midiData?.notes ?? [];
+          const notes = [...(clip.midiData?.notes ?? [])].sort((a, b) => a.startBeat - b.startBeat);
           if (notes.length === 0) continue;
 
-          for (const note of notes) {
+          for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
+            const note = notes[noteIndex];
             const noteStart = clip.startTime + beatToTime(note.startBeat, tempoMap, fallbackBpm);
             const noteDuration = Math.max(0, beatToTime(note.startBeat + note.durationBeats, tempoMap, fallbackBpm) - beatToTime(note.startBeat, tempoMap, fallbackBpm));
             const noteEnd = noteStart + noteDuration;
@@ -252,7 +253,24 @@ export function useTransport() {
               });
             } else {
               const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+              const previousOverlap = note.isSlide
+                ? [...notes]
+                    .slice(0, noteIndex)
+                    .reverse()
+                    .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
+                : undefined;
               engine.scheduleMidiEvent(scheduledStart, () => {
+                if (previousOverlap) {
+                  void synthEngine.playSlideNote(
+                    trackId,
+                    previousOverlap.pitch,
+                    note.pitch,
+                    Math.max(1, Math.round(velocity * 127)),
+                    scheduledDuration,
+                    preset,
+                  );
+                  return;
+                }
                 const synth = synthEngine.getSynth(trackId);
                 if (synth) {
                   synth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);

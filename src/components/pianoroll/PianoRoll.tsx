@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import type { PianoRollGrid } from '../../types/project';
@@ -7,11 +7,11 @@ import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { TransformMenu } from './TransformMenu';
-import { midiNoteToName } from './PianoRollConstants';
+import { getPianoRollToolShortcut, midiNoteToName, type PianoRollTool } from './PianoRollConstants';
 import { useAudioImport } from '../../hooks/useAudioImport';
 
 export function PianoRoll() {
-  const [drawMode, setDrawMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<PianoRollTool>('select');
   const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
@@ -29,6 +29,29 @@ export function PianoRoll() {
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
+
+      if (event.key === 'b' || event.key === 'B') {
+        event.preventDefault();
+        setActiveTool((tool) => (tool === 'pencil' ? 'select' : 'pencil'));
+        return;
+      }
+
+      if (event.key === '1') setActiveTool('select');
+      if (event.key === '2') setActiveTool('pencil');
+      if (event.key === '3') setActiveTool('paint');
+      if (event.key === '4') setActiveTool('erase');
+      if (event.key === '5') setActiveTool('slide');
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const track = useMemo(
     () => project?.tracks.find((candidate) => candidate.id === openTrackId) ?? null,
@@ -98,16 +121,28 @@ export function PianoRoll() {
       <div className="h-9 px-3 border-b border-[#2a2a2a] bg-[#0e0e24] flex items-center gap-2 shrink-0">
         <div className="text-xs font-medium text-zinc-200">{track.displayName}</div>
 
-        <button
-          aria-label="Toggle piano roll draw mode"
-          className={`px-2 py-1 rounded text-[10px] transition-colors ${
-            drawMode ? 'bg-violet-600/50 text-violet-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
-          }`}
-          onClick={() => setDrawMode((mode) => !mode)}
-          title="Toggle draw mode (B)"
-        >
-          ✏ Draw
-        </button>
+        {([
+          { tool: 'select', label: 'Select', icon: '↖' },
+          { tool: 'pencil', label: 'Pencil', icon: '✏' },
+          { tool: 'paint', label: 'Paint', icon: '▦' },
+          { tool: 'erase', label: 'Erase', icon: '⌫' },
+          { tool: 'slide', label: 'Slide', icon: '⇢' },
+        ] as const).map(({ tool, label, icon }) => {
+          const active = activeTool === tool;
+          return (
+            <button
+              key={tool}
+              aria-label={`Activate ${label.toLowerCase()} tool`}
+              className={`px-2 py-1 rounded text-[10px] transition-colors ${
+                active ? 'bg-violet-600/50 text-violet-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
+              }`}
+              onClick={() => setActiveTool(tool)}
+              title={`${label} tool (${getPianoRollToolShortcut(tool)})`}
+            >
+              {icon} {label}
+            </button>
+          );
+        })}
 
         <button
           className={`px-2 py-1 rounded text-[10px] transition-colors ${
@@ -228,7 +263,7 @@ export function PianoRoll() {
         <PianoRollCanvas
           clip={clip}
           track={track}
-          drawMode={drawMode}
+          activeTool={activeTool}
           gridSize={gridSize}
           prZoomX={prZoomX}
           onZoomXChange={setPrZoomX}

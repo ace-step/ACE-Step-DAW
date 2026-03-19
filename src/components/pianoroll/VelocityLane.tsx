@@ -46,10 +46,20 @@ export function drawVelocityLane({
     const barHeight = (note.velocity / 127) * velAreaHeight;
     const barY = velAreaTop + velAreaHeight - barHeight;
     const isSelected = selectedNoteIds.has(note.id);
+    const isSlide = note.isSlide === true;
 
-    ctx.fillStyle = velocityToBarColor(note.velocity);
+    ctx.fillStyle = isSlide ? 'rgba(251,191,36,0.85)' : velocityToBarColor(note.velocity);
     ctx.globalAlpha = isSelected ? 1.0 : 0.6;
     ctx.fillRect(x, barY, Math.max(widthPx - 1, 3), barHeight);
+
+    if (isSlide) {
+      ctx.strokeStyle = 'rgba(24,24,27,0.9)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 1, barY + barHeight - 2);
+      ctx.lineTo(x + Math.max(widthPx - 2, 3), barY + 2);
+      ctx.stroke();
+    }
 
     if (isSelected) {
       ctx.strokeStyle = '#fff';

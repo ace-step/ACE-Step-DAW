@@ -119,6 +119,7 @@ export function useTransport() {
       fadeOutCurve?: import('../types/project').Clip['fadeOutCurve'];
       timeStretchRate?: number;
       gainEnvelope?: import('../types/project').GainEnvelopePoint[];
+      warpMarkers?: import('../types/project').AudioWarpMarker[];
     }
     const clipBuffers: ScheduleEntry[] = [];
     const sessionTracks = mainView === 'session' ? getSessionTracks(proj) : [];
@@ -220,6 +221,7 @@ export function useTransport() {
           fadeOutCurve: clip.fadeOutCurve,
           timeStretchRate: clip.timeStretchRate,
           gainEnvelope: clip.gainEnvelope,
+          warpMarkers: clip.warpMarkers,
         });
       }
     }

@@ -814,4 +814,106 @@ describe('setClipFade', () => {
       expect(updated.warpMarkers).toBeUndefined();
     });
   });
+
+  describe('applyAudioQuantize', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('detects transients from waveformPeaks and stores warp markers', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const peaksLength = 2000;
+      const peakDuration = 2.0;
+      const peakSampleRate = peaksLength / peakDuration;
+      const peaks: number[] = new Array(peaksLength).fill(0);
+      const transientStart = Math.floor(0.48 * peakSampleRate);
+      for (let i = transientStart; i < transientStart + 50; i++) {
+        peaks[i] = 0.8;
+      }
+
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: peakDuration, prompt: 'beat', lyrics: '',
+      });
+      useProjectStore.getState().updateClip(clip.id, {
+        waveformPeaks: peaks,
+        audioDuration: peakDuration,
+      });
+
+      useProjectStore.getState().applyAudioQuantize(clip.id);
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(updated.warpMarkers).toBeDefined();
+      expect(updated.warpMarkers!.length).toBeGreaterThan(0);
+      expect(updated.warpMarkers![0].quantizedTime).toBeCloseTo(0.5, 1);
+    });
+
+    it('does nothing for a clip without waveformPeaks', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: 2, prompt: 'beat', lyrics: '',
+      });
+
+      useProjectStore.getState().applyAudioQuantize(clip.id);
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(updated.warpMarkers).toBeUndefined();
+    });
+
+    it('respects gridDivision option for 8th note quantize', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const peaksLength = 44100;
+      const peakDuration = 2.0;
+      const peakSampleRate = peaksLength / peakDuration;
+      const peaks: number[] = new Array(peaksLength).fill(0);
+      const start = Math.floor(0.23 * peakSampleRate);
+      for (let i = start; i < start + 100; i++) {
+        peaks[i] = 0.8;
+      }
+
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: peakDuration, prompt: 'beat', lyrics: '',
+      });
+      useProjectStore.getState().updateClip(clip.id, {
+        waveformPeaks: peaks,
+        audioDuration: peakDuration,
+      });
+
+      useProjectStore.getState().applyAudioQuantize(clip.id, { gridDivision: 0.5 });
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(updated.warpMarkers).toBeDefined();
+      if (updated.warpMarkers && updated.warpMarkers.length > 0) {
+        expect(updated.warpMarkers[0].quantizedTime).toBeCloseTo(0.25, 1);
+      }
+    });
+
+    it('respects strength option for partial quantize', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const peaksLength = 2000;
+      const peakDuration = 2.0;
+      const peakSampleRate = peaksLength / peakDuration;
+      const peaks: number[] = new Array(peaksLength).fill(0);
+      const start = Math.floor(0.4 * peakSampleRate);
+      for (let i = start; i < start + 50; i++) {
+        peaks[i] = 0.8;
+      }
+
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: peakDuration, prompt: 'beat', lyrics: '',
+      });
+      useProjectStore.getState().updateClip(clip.id, {
+        waveformPeaks: peaks,
+        audioDuration: peakDuration,
+      });
+
+      useProjectStore.getState().applyAudioQuantize(clip.id, { strength: 0.5 });
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      if (updated.warpMarkers && updated.warpMarkers.length > 0) {
+        const m = updated.warpMarkers[0];
+        expect(m.quantizedTime).toBeGreaterThan(m.originalTime);
+        expect(m.quantizedTime).toBeLessThan(0.5);
+      }
+    });
+  });
 });

@@ -53,6 +53,7 @@ import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
+import { detectTransients, computeWarpMarkers } from '../utils/audioQuantize';
 import {
   analyzeProjectForMastering,
   buildMasteringChain,
@@ -344,6 +345,7 @@ interface ProjectState {
   tempoMatchClip: (clipId: string, sourceBpm: number) => void;
   quantizeAudioClip: (clipId: string, warpMarkers: AudioWarpMarker[]) => void;
   clearAudioQuantize: (clipId: string) => void;
+  applyAudioQuantize: (clipId: string, options?: { gridDivision?: number; strength?: number; sensitivity?: number }) => void;
   setClipGainEnvelope: (clipId: string, points: GainEnvelopePoint[]) => void;
   addClipGainPoint: (clipId: string, point: GainEnvelopePoint) => void;
   removeClipGainPoint: (clipId: string, pointIndex: number) => void;
@@ -2648,6 +2650,31 @@ export const useProjectStore = create<ProjectState>()(
 
   clearAudioQuantize: (clipId) => {
     get().updateClip(clipId, { warpMarkers: undefined });
+  },
+
+  applyAudioQuantize: (clipId, options = {}) => {
+    const state = get();
+    if (!state.project) return;
+    const { gridDivision = 1, strength = 1, sensitivity = 0.1 } = options;
+
+    let clip: Clip | undefined;
+    for (const track of state.project.tracks) {
+      clip = track.clips.find((c) => c.id === clipId);
+      if (clip) break;
+    }
+    if (!clip || !clip.waveformPeaks || clip.waveformPeaks.length === 0) return;
+
+    const peaks = new Float32Array(clip.waveformPeaks);
+    const audioDuration = clip.audioDuration ?? clip.duration;
+    const peakSampleRate = peaks.length / audioDuration;
+
+    const transients = detectTransients(peaks, peakSampleRate, { sensitivity });
+    if (transients.length === 0) return;
+
+    const markers = computeWarpMarkers(transients, state.project.bpm, gridDivision, strength);
+    if (markers.length === 0) return;
+
+    get().updateClip(clipId, { warpMarkers: markers });
   },
 
   slipClip: (clipId, deltaSeconds) => {

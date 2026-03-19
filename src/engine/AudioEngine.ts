@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
 import type {
+  AudioWarpMarker,
   GainEnvelopePoint,
   MasteringState,
   SequencerPattern,
@@ -10,6 +11,7 @@ import type {
 import { ensureMasteringState } from '../utils/mastering';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBarAtBeat } from '../utils/tempoMap';
+import { computeWarpedSegments } from '../utils/audioWarp';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -38,6 +40,7 @@ export interface ClipScheduleInfo {
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
+  warpMarkers?: AudioWarpMarker[]; // flex-time warp markers for audio quantize
 }
 
 /**
@@ -359,62 +362,13 @@ export class AudioEngine {
 
     for (const clip of clips) {
       const trackNode = this.getOrCreateTrackNode(clip.trackId);
-      const source = this.ctx.createBufferSource();
-      source.buffer = clip.buffer;
+      const hasWarpMarkers = clip.warpMarkers && clip.warpMarkers.length > 0;
 
-      // Insert per-clip fade and gain envelope nodes when needed.
-      const envelope = clip.gainEnvelope;
-      const hasFades = (clip.fadeInDuration ?? 0) > 0 || (clip.fadeOutDuration ?? 0) > 0;
-      const hasEnvelope = Boolean(envelope && envelope.length > 0);
-      let outputNode: AudioNode = source;
-
-      if (hasFades) {
-        const fadeNode = this.ctx.createGain();
-        outputNode.connect(fadeNode);
-        outputNode = fadeNode;
-        this._scheduleClipFade(fadeNode, clip, fromTime);
-      }
-      if (hasEnvelope) {
-        const gainNode = this.ctx.createGain();
-        outputNode.connect(gainNode);
-        outputNode = gainNode;
-        this._scheduleGainEnvelope(gainNode, envelope!, clip, fromTime);
-      }
-
-      outputNode.connect(trackNode.inputGain);
-
-      // Apply time-stretch via playback rate
-      const rate = clip.timeStretchRate ?? 1;
-      if (rate !== 1) {
-        source.playbackRate.value = rate;
-      }
-
-      const clipEnd = clip.startTime + clip.clipDuration;
-      if (clipEnd <= fromTime) continue;
-
-      const contextNow = this.ctx.currentTime;
-      if (clip.startTime >= fromTime) {
-        // Clip hasn't started: schedule with delay, start from audioOffset
-        const delay = clip.startTime - fromTime;
-        // source.start duration is in buffer-time; scale by rate so wall-clock = clipDuration
-        const bufferDuration = clip.clipDuration * rate;
-        source.start(contextNow + delay, clip.audioOffset, bufferDuration);
+      if (hasWarpMarkers) {
+        this._scheduleWarpedClip(clip, trackNode, fromTime);
       } else {
-        // Clip already started: seek into it
-        const seekOffset = fromTime - clip.startTime;
-        const remaining = clip.clipDuration - seekOffset;
-        // Scale seek and remaining by rate for buffer-time coordinates
-        const bufferSeek = seekOffset * rate;
-        const bufferRemaining = remaining * rate;
-        source.start(contextNow, clip.audioOffset + bufferSeek, bufferRemaining);
+        this._scheduleStandardClip(clip, trackNode, fromTime);
       }
-
-      this.scheduledSources.push({
-        source,
-        clipId: clip.clipId,
-        trackId: clip.trackId,
-        startTime: clip.startTime,
-      });
     }
 
     this._playing = true;
@@ -555,6 +509,105 @@ export class AudioEngine {
       const ptContextTime = contextNow + delay + (pt.time - seekOffset);
       if (ptContextTime <= contextNow + delay) continue;
       gainNode.gain.linearRampToValueAtTime(clamp(pt.gain), ptContextTime);
+    }
+  }
+
+  private _scheduleStandardClip(
+    clip: ClipScheduleInfo,
+    trackNode: TrackNode,
+    fromTime: number,
+  ) {
+    const source = this.ctx.createBufferSource();
+    source.buffer = clip.buffer;
+
+    const envelope = clip.gainEnvelope;
+    const hasFades = (clip.fadeInDuration ?? 0) > 0 || (clip.fadeOutDuration ?? 0) > 0;
+    const hasEnvelope = Boolean(envelope && envelope.length > 0);
+    let outputNode: AudioNode = source;
+
+    if (hasFades) {
+      const fadeNode = this.ctx.createGain();
+      outputNode.connect(fadeNode);
+      outputNode = fadeNode;
+      this._scheduleClipFade(fadeNode, clip, fromTime);
+    }
+    if (hasEnvelope) {
+      const gainNode = this.ctx.createGain();
+      outputNode.connect(gainNode);
+      outputNode = gainNode;
+      this._scheduleGainEnvelope(gainNode, envelope!, clip, fromTime);
+    }
+
+    outputNode.connect(trackNode.inputGain);
+
+    const rate = clip.timeStretchRate ?? 1;
+    if (rate !== 1) {
+      source.playbackRate.value = rate;
+    }
+
+    const clipEnd = clip.startTime + clip.clipDuration;
+    if (clipEnd <= fromTime) return;
+
+    const contextNow = this.ctx.currentTime;
+    if (clip.startTime >= fromTime) {
+      const delay = clip.startTime - fromTime;
+      const bufferDuration = clip.clipDuration * rate;
+      source.start(contextNow + delay, clip.audioOffset, bufferDuration);
+    } else {
+      const seekOffset = fromTime - clip.startTime;
+      const remaining = clip.clipDuration - seekOffset;
+      const bufferSeek = seekOffset * rate;
+      const bufferRemaining = remaining * rate;
+      source.start(contextNow, clip.audioOffset + bufferSeek, bufferRemaining);
+    }
+
+    this.scheduledSources.push({
+      source,
+      clipId: clip.clipId,
+      trackId: clip.trackId,
+      startTime: clip.startTime,
+    });
+  }
+
+  private _scheduleWarpedClip(
+    clip: ClipScheduleInfo,
+    trackNode: TrackNode,
+    fromTime: number,
+  ) {
+    const segments = computeWarpedSegments(clip.warpMarkers!, clip.clipDuration);
+    const contextNow = this.ctx.currentTime;
+
+    for (const seg of segments) {
+      const segTimelineStart = clip.startTime + seg.targetStart;
+      const segTimelineEnd = clip.startTime + seg.targetEnd;
+
+      if (segTimelineEnd <= fromTime) continue;
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = clip.buffer;
+      source.playbackRate.value = seg.playbackRate;
+      source.connect(trackNode.inputGain);
+
+      if (segTimelineStart >= fromTime) {
+        const delay = segTimelineStart - fromTime;
+        const sourceDur = seg.sourceEnd - seg.sourceStart;
+        source.start(contextNow + delay, clip.audioOffset + seg.sourceStart, sourceDur);
+      } else {
+        const elapsedTarget = fromTime - segTimelineStart;
+        const targetDur = seg.targetEnd - seg.targetStart;
+        const fraction = elapsedTarget / targetDur;
+        const sourceDur = seg.sourceEnd - seg.sourceStart;
+        const sourceSeek = fraction * sourceDur;
+        const sourceRemaining = sourceDur - sourceSeek;
+        source.start(contextNow, clip.audioOffset + seg.sourceStart + sourceSeek, sourceRemaining);
+      }
+
+      this.scheduledSources.push({
+        source,
+        clipId: clip.clipId,
+        trackId: clip.trackId,
+        startTime: segTimelineStart,
+      });
     }
   }
 

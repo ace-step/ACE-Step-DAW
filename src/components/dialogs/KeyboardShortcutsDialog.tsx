@@ -157,10 +157,19 @@ export function KeyboardShortcutsDialog() {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 border-t border-daw-border text-center">
+        <div className="flex items-center justify-between px-5 py-2.5 border-t border-daw-border">
           <p className="text-[10px] text-zinc-600">
             Shortcuts are disabled when typing in text fields. Press <Key label="Esc" /> or <Key label="?" /> to toggle this overlay.
           </p>
+          <button
+            onClick={() => {
+              setShow(false);
+              useUIStore.getState().setShowShortcutEditorDialog(true);
+            }}
+            className="ml-3 px-3 py-1 text-[10px] rounded bg-daw-accent text-white hover:brightness-110 transition-colors whitespace-nowrap flex-shrink-0"
+          >
+            Customize…
+          </button>
         </div>
       </div>
     </div>

@@ -4,8 +4,10 @@ import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
+import { useShortcutsStore } from '../store/shortcutsStore';
 import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
+import type { KeyCombo } from '../types/shortcuts';
 
 function isInputFocused(e: KeyboardEvent): boolean {
   return (
@@ -18,6 +20,17 @@ function isInputFocused(e: KeyboardEvent): boolean {
 const NUDGE_SECONDS = 5;
 const DEFAULT_PIXELS_PER_SECOND = 50;
 
+/** Check whether a keyboard event matches a KeyCombo binding. */
+function eventMatchesCombo(e: KeyboardEvent, combo: KeyCombo): boolean {
+  const mod = e.metaKey || e.ctrlKey;
+  return (
+    e.code === combo.code &&
+    mod === !!combo.mod &&
+    e.shiftKey === !!combo.shift &&
+    e.altKey === !!combo.alt
+  );
+}
+
 export function useKeyboardShortcuts() {
   const { play, pause, stop, seek } = useTransport();
   const { toggleRecord } = useRecording();
@@ -25,10 +38,10 @@ export function useKeyboardShortcuts() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const getCombo = useShortcutsStore.getState().getCombo;
 
       // Undo/Redo are always available — even when an input field is focused
       if (mod && e.code === 'KeyZ' && !e.altKey) {
-        // Only intercept if we're not in a native text field that handles its own undo
         if (!isInputFocused(e)) {
           e.preventDefault();
           if (e.shiftKey) {
@@ -47,8 +60,11 @@ export function useKeyboardShortcuts() {
       const transport = useTransportStore.getState();
       const gen = useGenerationStore.getState();
 
+      // ─── Helper: check if event matches a given action's binding ───
+      const matches = (actionId: string) => eventMatchesCombo(e, getCombo(actionId));
+
       // -----------------------------------------------------------------------
-      // Escape — close topmost modal in priority order
+      // Escape — close topmost modal in priority order (not rebindable)
       // -----------------------------------------------------------------------
       if (e.code === 'Escape') {
         if (ui.showAIAssistant) {
@@ -63,6 +79,9 @@ export function useKeyboardShortcuts() {
         } else if (ui.showKeyboardShortcutsDialog) {
           e.preventDefault();
           ui.setShowKeyboardShortcutsDialog(false);
+        } else if (ui.showShortcutEditorDialog) {
+          e.preventDefault();
+          ui.setShowShortcutEditorDialog(false);
         } else if (ui.showInstrumentPicker) {
           e.preventDefault();
           ui.setShowInstrumentPicker(false);
@@ -92,6 +111,7 @@ export function useKeyboardShortcuts() {
         ui.editingClipId !== null ||
         ui.batchGenerateMode !== null ||
         ui.showKeyboardShortcutsDialog ||
+        ui.showShortcutEditorDialog ||
         ui.showInstrumentPicker ||
         ui.showSettingsDialog ||
         ui.showExportDialog ||
@@ -99,266 +119,165 @@ export function useKeyboardShortcuts() {
         ui.showNewProjectDialog;
 
       // -----------------------------------------------------------------------
-      // Mod + key shortcuts (work even with modals closed)
+      // Mod shortcuts — zoom always works, others check anyModalOpen
       // -----------------------------------------------------------------------
-      if (mod) {
-        switch (e.code) {
-          // Zoom
-          case 'Equal':   // Cmd/Ctrl + =  (also +)
-          case 'NumpadAdd':
-            e.preventDefault();
-            ui.zoomIn();
-            return;
-          case 'Minus':
-          case 'NumpadSubtract':
-            e.preventDefault();
-            ui.zoomOut();
-            return;
-          case 'Digit0':
-          case 'Numpad0':
-            e.preventDefault();
-            ui.setPixelsPerSecond(DEFAULT_PIXELS_PER_SECOND);
-            return;
 
-          // Project
-          case 'Comma':   // Cmd+,  → Settings
-            e.preventDefault();
-            if (!anyModalOpen) ui.setShowSettingsDialog(true);
-            return;
-          case 'KeyN':
-            e.preventDefault();
-            if (!anyModalOpen) ui.setShowNewProjectDialog(true);
-            return;
-          case 'KeyO':
-            e.preventDefault();
-            if (!anyModalOpen) ui.setShowProjectListDialog(true);
-            return;
+      // Zoom (always)
+      if (matches('view.zoomIn')) { e.preventDefault(); ui.zoomIn(); return; }
+      if (matches('view.zoomOut')) { e.preventDefault(); ui.zoomOut(); return; }
+      if (matches('view.zoomReset')) { e.preventDefault(); ui.setPixelsPerSecond(DEFAULT_PIXELS_PER_SECOND); return; }
 
-          // Generation
-          case 'KeyG':
-            e.preventDefault();
-            if (!anyModalOpen && !gen.isGenerating) {
-              if (e.shiftKey) {
-                ui.setBatchGenerateMode('context');
-              } else {
-                ui.setBatchGenerateMode('silence');
-              }
-            }
-            return;
+      // Project shortcuts (require no modal)
+      if (matches('project.settings')) { e.preventDefault(); if (!anyModalOpen) ui.setShowSettingsDialog(true); return; }
+      if (matches('project.new')) { e.preventDefault(); if (!anyModalOpen) ui.setShowNewProjectDialog(true); return; }
+      if (matches('project.open')) { e.preventDefault(); if (!anyModalOpen) ui.setShowProjectListDialog(true); return; }
+      if (matches('project.export')) { e.preventDefault(); if (!anyModalOpen) ui.setShowExportDialog(true); return; }
+      if (matches('project.addTrack')) { e.preventDefault(); if (!anyModalOpen) ui.setShowInstrumentPicker(true); return; }
+      if (matches('project.help')) { e.preventDefault(); if (!anyModalOpen) ui.setShowKeyboardShortcutsDialog(true); return; }
 
-          // AI Assistant toggle (Cmd+/)
-          case 'Slash':
-            e.preventDefault();
-            ui.toggleAIAssistant();
-            return;
-
-          // Export
-          case 'KeyE':
-            if (e.shiftKey) {
-              e.preventDefault();
-              if (!anyModalOpen) ui.setShowExportDialog(true);
-            }
-            return;
-
-          // Add Track
-          case 'KeyI':
-            if (e.shiftKey) {
-              e.preventDefault();
-              if (!anyModalOpen) ui.setShowInstrumentPicker(true);
-            }
-            return;
-
-          // Clips
-          case 'KeyA':
-            e.preventDefault();
-            if (!anyModalOpen && project.project) {
-              const allClips = project.project.tracks.flatMap((t) => t.clips);
-              if (allClips.length > 0) {
-                const firstId = allClips[0].id;
-                ui.selectClip(firstId, false);
-                for (let i = 1; i < allClips.length; i++) {
-                  ui.selectClip(allClips[i].id, true);
-                }
-              }
-            }
-            return;
-          case 'KeyD':
-            e.preventDefault();
-            if (!anyModalOpen) {
-              const [firstSelected] = ui.selectedClipIds;
-              if (firstSelected) {
-                project.duplicateClip(firstSelected);
-              }
-            }
-            return;
-          case 'Enter':
-          case 'NumpadEnter':
-            // Cmd+Return → generate selected clip
-            e.preventDefault();
-            if (!anyModalOpen && !gen.isGenerating) {
-              const [clipId] = ui.selectedClipIds;
-              if (clipId) {
-                generateSingleClip(clipId);
-              }
-            }
-            return;
-        }
-        // Let other Cmd combos pass through (browser copy/paste etc.)
+      // Generation
+      if (matches('generation.context')) {
+        e.preventDefault();
+        if (!anyModalOpen && !gen.isGenerating) ui.setBatchGenerateMode('context');
         return;
       }
+      if (matches('generation.silence')) {
+        e.preventDefault();
+        if (!anyModalOpen && !gen.isGenerating) ui.setBatchGenerateMode('silence');
+        return;
+      }
+
+      // AI Assistant
+      if (matches('panels.aiAssistant')) { e.preventDefault(); ui.toggleAIAssistant(); return; }
+
+      // Clip actions with mod
+      if (matches('clips.selectAll')) {
+        e.preventDefault();
+        if (!anyModalOpen && project.project) {
+          const allClips = project.project.tracks.flatMap((t) => t.clips);
+          if (allClips.length > 0) {
+            const firstId = allClips[0].id;
+            ui.selectClip(firstId, false);
+            for (let i = 1; i < allClips.length; i++) {
+              ui.selectClip(allClips[i].id, true);
+            }
+          }
+        }
+        return;
+      }
+      if (matches('clips.duplicate')) {
+        e.preventDefault();
+        if (!anyModalOpen) {
+          const [firstSelected] = ui.selectedClipIds;
+          if (firstSelected) project.duplicateClip(firstSelected);
+        }
+        return;
+      }
+      if (matches('clips.generate')) {
+        e.preventDefault();
+        if (!anyModalOpen && !gen.isGenerating) {
+          const [clipId] = ui.selectedClipIds;
+          if (clipId) generateSingleClip(clipId);
+        }
+        return;
+      }
+
+      // If event uses mod and hasn't matched anything above, let it pass through
+      if (mod) return;
 
       // -----------------------------------------------------------------------
       // Non-mod shortcuts — skip if any modal is open
       // -----------------------------------------------------------------------
       if (anyModalOpen) return;
 
-      switch (e.code) {
-        // Transport
-        case 'Space':
-          e.preventDefault();
-          if (transport.isPlaying) pause();
-          else play();
-          break;
-
-        case 'Enter':
-        case 'NumpadEnter':
-          e.preventDefault();
-          stop();
-          break;
-
-        case 'KeyL':
-          e.preventDefault();
-          transport.toggleLoop();
-          break;
-
-        case 'KeyK':
-          e.preventDefault();
-          transport.toggleMetronome();
-          break;
-
-        case 'KeyR':
-          e.preventDefault();
-          void toggleRecord();
-          break;
-
-        case 'Home':
-          e.preventDefault();
-          seek(0);
-          break;
-
-        case 'End':
-          e.preventDefault();
-          if (project.project) seek(project.project.totalDuration);
-          break;
-
-        case 'ArrowLeft':
-          e.preventDefault();
-          seek(Math.max(0, transport.currentTime - NUDGE_SECONDS));
-          break;
-
-        case 'ArrowRight':
-          e.preventDefault();
-          seek(transport.currentTime + NUDGE_SECONDS);
-          break;
-
-        // Clips — require selection
-        case 'Delete':
-        case 'Backspace':
-          e.preventDefault();
-          if (ui.selectedClipIds.size > 0) {
-            const ids = [...ui.selectedClipIds];
-            ui.deselectAll();
-            ids.forEach((id) => project.removeClip(id));
-          }
-          break;
-
-        case 'KeyE': {
-          // Open editor for single selected clip
-          const selected = [...ui.selectedClipIds];
-          if (selected.length === 1) {
-            e.preventDefault();
-            ui.setEditingClip(selected[0]);
-          }
-          break;
-        }
-
-        // Split clip at playhead
-        case 'KeyS': {
-          const selected = [...ui.selectedClipIds];
-          if (selected.length === 1) {
-            e.preventDefault();
-            project.splitClip(selected[0], transport.currentTime);
-          }
-          break;
-        }
-
-        // Zoom to fit project (Z)
-        case 'KeyZ':
-          if (!e.shiftKey) {
-            e.preventDefault();
-            if (project.project && project.project.totalDuration > 0) {
-              // Calculate pixels per second to fit the entire project in the viewport
-              const viewportWidth = window.innerWidth - 200; // approximate sidebar width
-              const fitPps = Math.max(10, Math.min(500, viewportWidth / project.project.totalDuration));
-              ui.setPixelsPerSecond(fitPps);
-            }
-          }
-          break;
-
-        // Snap toggle (N for snap oN/off)
-        case 'KeyN':
-          e.preventDefault();
-          ui.toggleSnap();
-          break;
-
-        // Mixer toggle (X like GarageBand)
-        case 'KeyX':
-          e.preventDefault();
-          ui.setShowMixer(!ui.showMixer);
-          break;
-
-        // Smart Controls toggle (B like GarageBand)
-        case 'KeyB':
-          e.preventDefault();
-          ui.setShowSmartControls(!ui.showSmartControls);
-          break;
-
-        // Punch In — set punch-in point at playhead (I)
-        case 'KeyI':
-          e.preventDefault();
-          transport.setPunchIn(transport.currentTime);
-          break;
-
-        // Punch Out — set punch-out point at playhead (O)
-        case 'KeyO':
-          e.preventDefault();
-          transport.setPunchOut(transport.currentTime);
-          break;
-
-        // Library toggle (Y)
-        case 'KeyY':
-          e.preventDefault();
-          ui.setShowLibrary(!ui.showLibrary);
-          break;
-
-        // Tempo lane toggle (T)
-        case 'KeyT':
-          e.preventDefault();
-          ui.toggleTempoLane();
-          break;
-
-        // Help
-        case 'Slash':
-          // ? key (Shift+/ on most keyboards)
-          if (e.shiftKey) {
-            e.preventDefault();
-            ui.setShowKeyboardShortcutsDialog(true);
-          }
-          break;
+      // Transport
+      if (matches('transport.playPause')) {
+        e.preventDefault();
+        if (transport.isPlaying) pause(); else play();
+        return;
       }
+      if (matches('transport.stop')) {
+        e.preventDefault();
+        stop();
+        return;
+      }
+      if (matches('transport.loop')) { e.preventDefault(); transport.toggleLoop(); return; }
+      if (matches('transport.metronome')) { e.preventDefault(); transport.toggleMetronome(); return; }
+      if (matches('transport.record')) { e.preventDefault(); void toggleRecord(); return; }
+      if (matches('transport.home')) { e.preventDefault(); seek(0); return; }
+      if (matches('transport.end')) {
+        e.preventDefault();
+        if (project.project) seek(project.project.totalDuration);
+        return;
+      }
+      if (matches('transport.nudgeLeft')) {
+        e.preventDefault();
+        seek(Math.max(0, transport.currentTime - NUDGE_SECONDS));
+        return;
+      }
+      if (matches('transport.nudgeRight')) {
+        e.preventDefault();
+        seek(transport.currentTime + NUDGE_SECONDS);
+        return;
+      }
+      if (matches('transport.punchIn')) {
+        e.preventDefault();
+        transport.setPunchIn(transport.currentTime);
+        return;
+      }
+      if (matches('transport.punchOut')) {
+        e.preventDefault();
+        transport.setPunchOut(transport.currentTime);
+        return;
+      }
+
+      // Clips
+      if (matches('clips.delete')) {
+        e.preventDefault();
+        if (ui.selectedClipIds.size > 0) {
+          const ids = [...ui.selectedClipIds];
+          ui.deselectAll();
+          ids.forEach((id) => project.removeClip(id));
+        }
+        return;
+      }
+      if (matches('clips.edit')) {
+        const selected = [...ui.selectedClipIds];
+        if (selected.length === 1) {
+          e.preventDefault();
+          ui.setEditingClip(selected[0]);
+        }
+        return;
+      }
+      if (matches('clips.split')) {
+        const selected = [...ui.selectedClipIds];
+        if (selected.length === 1) {
+          e.preventDefault();
+          project.splitClip(selected[0], transport.currentTime);
+        }
+        return;
+      }
+
+      // View
+      if (matches('view.zoomToFit')) {
+        e.preventDefault();
+        if (project.project && project.project.totalDuration > 0) {
+          const viewportWidth = window.innerWidth - 200;
+          const fitPps = Math.max(10, Math.min(500, viewportWidth / project.project.totalDuration));
+          ui.setPixelsPerSecond(fitPps);
+        }
+        return;
+      }
+      if (matches('view.toggleSnap')) { e.preventDefault(); ui.toggleSnap(); return; }
+
+      // Panels
+      if (matches('panels.mixer')) { e.preventDefault(); ui.setShowMixer(!ui.showMixer); return; }
+      if (matches('panels.smartControls')) { e.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
+      if (matches('panels.library')) { e.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }
+      if (matches('panels.tempoLane')) { e.preventDefault(); ui.toggleTempoLane(); return; }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [play, pause, stop, seek]);
+  }, [play, pause, stop, seek, toggleRecord]);
 }

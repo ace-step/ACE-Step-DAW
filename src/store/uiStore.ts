@@ -33,6 +33,7 @@ interface UIState {
   /** Optional time range pre-filled into BatchGenerateModal when opened from a lane drag-select or context menu. */
   batchGenerateInitialRange: { startTime: number; duration: number } | null;
   showKeyboardShortcutsDialog: boolean;
+  showShortcutEditorDialog: boolean;
   showMixer: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
@@ -116,6 +117,7 @@ interface UIState {
   setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
   setBatchGenerateInitialRange: (v: { startTime: number; duration: number } | null) => void;
   setShowKeyboardShortcutsDialog: (v: boolean) => void;
+  setShowShortcutEditorDialog: (v: boolean) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
@@ -198,6 +200,7 @@ export const useUIStore = create<UIState>()(
   batchGenerateMode: null,
   batchGenerateInitialRange: null,
   showKeyboardShortcutsDialog: false,
+  showShortcutEditorDialog: false,
   showMixer: false,
   mixerHeight: 420,
   showAssetsPanel: false,
@@ -295,6 +298,7 @@ export const useUIStore = create<UIState>()(
     : { batchGenerateMode: mode }),
   setBatchGenerateInitialRange: (v) => set({ batchGenerateInitialRange: v }),
   setShowKeyboardShortcutsDialog: (v) => set({ showKeyboardShortcutsDialog: v }),
+  setShowShortcutEditorDialog: (v) => set({ showShortcutEditorDialog: v }),
   setShowMixer: (v) => set({ showMixer: v }),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),

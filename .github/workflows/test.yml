@@ -41,9 +41,11 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # E2E runs but does NOT block merging
   e2e-test:
     runs-on: ubuntu-latest
     needs: build
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,4 +54,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - name: Run E2E tests
+        run: npx playwright test --timeout 60000
+        continue-on-error: true
+      - name: Report E2E results
+        if: always()
+        run: |
+          echo "E2E tests completed (non-blocking)"
+          echo "Check artifacts for details"

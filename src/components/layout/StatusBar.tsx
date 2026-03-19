@@ -6,8 +6,10 @@ import { useProjectStore } from '../../store/projectStore';
 export function StatusBar() {
   const [connected, setConnected] = useState(false);
   const jobs = useGenerationStore((s) => s.jobs);
-  const activeJobs = jobs.filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing');
-  const primaryJob = activeJobs[0] ?? null;
+  const activeJobs = [...jobs]
+    .filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing')
+    .sort((a, b) => (a.lastUpdatedAt ?? 0) - (b.lastUpdatedAt ?? 0));
+  const primaryJob = activeJobs[activeJobs.length - 1] ?? null;
   const model = useProjectStore((s) => s.project?.generationDefaults.model);
 
   useEffect(() => {
@@ -32,6 +34,11 @@ export function StatusBar() {
         <span className="text-daw-accent">
           Generating: {activeJobs.length}
           {primaryJob ? ` • ${primaryJob.trackName} • ${primaryJob.stage ?? primaryJob.progress}${primaryJob.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}` : ''}
+        </span>
+      )}
+      {primaryJob && (
+        <span className="truncate text-zinc-500">
+          {primaryJob.trackName}: {primaryJob.stage ?? primaryJob.status} {Math.round(primaryJob.progressPercent ?? 0)}%
         </span>
       )}
       <span className="flex-1" />

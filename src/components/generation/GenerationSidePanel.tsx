@@ -12,6 +12,7 @@ import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generatio
 import type { PresetCategory } from '../../constants/generationPresets';
 import { generateVariationSession } from '../../services/generationPipeline';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { computeEta, formatEtaDisplay } from '../../utils/generationProgress';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -485,7 +486,7 @@ export function GenerationSidePanel() {
 
             {jobs.map((job) => {
               const eta = job.etaSeconds != null && (job.etaConfidence === 'medium' || job.etaConfidence === 'high')
-                ? formatEta(job.etaSeconds)
+                ? formatEtaDisplay(job.etaSeconds)
                 : null;
               const progressLabel = job.progressPercent != null
                 ? `${Math.round(job.progressPercent)}%`
@@ -546,6 +547,8 @@ export function GenerationSidePanel() {
 
             {variationSession.variations.map((variation) => {
               const isActive = variation.index === variationSession.activeVariationIndex;
+              const etaSeconds = variation.etaSeconds ?? computeEta(variation.startedAt, variation.progressPercent);
+              const etaLabel = formatEtaDisplay(etaSeconds);
 
               return (
                 <button
@@ -582,8 +585,22 @@ export function GenerationSidePanel() {
                         <div className="h-2.5 w-2.5 rounded-full border border-indigo-400 border-t-transparent animate-spin" />
                       )}
                     </div>
-                    {variation.progress && (
+                    {variation.stage && (
+                      <span className="mt-0.5 block text-[10px] text-zinc-400">{variation.stage}</span>
+                    )}
+                    {variation.progress && !variation.stage && (
                       <span className="mt-0.5 block text-[10px] text-zinc-500">{variation.progress}</span>
+                    )}
+                    {variation.progressPercent !== undefined && variation.status === 'generating' && (
+                      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-700">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                          style={{ width: `${Math.min(100, variation.progressPercent)}%` }}
+                        />
+                      </div>
+                    )}
+                    {etaLabel && (
+                      <span className="block text-[10px] text-zinc-600" data-testid={`variation-eta-${variation.index}`}>ETA: {etaLabel}</span>
                     )}
                     {variation.error && (
                       <span className="mt-0.5 block truncate text-[10px] text-red-400">{variation.error}</span>
@@ -618,12 +635,4 @@ export function GenerationSidePanel() {
       </div>
     </aside>
   );
-}
-
-function formatEta(etaSeconds: number): string {
-  if (etaSeconds < 5) return '< 5s';
-  if (etaSeconds < 60) return `~${Math.round(etaSeconds)}s`;
-  const minutes = Math.floor(etaSeconds / 60);
-  const seconds = etaSeconds % 60;
-  return seconds === 0 ? `~${minutes}m` : `~${minutes}m ${seconds}s`;
 }

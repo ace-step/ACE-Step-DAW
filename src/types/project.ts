@@ -5,6 +5,7 @@ export type TrackName =
   | 'custom';
 
 export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll';
+export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
@@ -203,6 +204,7 @@ export interface Track {
   muted: boolean;
   soloed: boolean;
   armed?: boolean;
+  inputMonitoring?: InputMonitoringMode;
   clips: Clip[];
   // Track grouping / folder tracks
   parentTrackId?: string;

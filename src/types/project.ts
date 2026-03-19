@@ -107,6 +107,12 @@ export interface ClipVersion {
   generatedAt: number;
 }
 
+export interface Take {
+  id: string;
+  audioKey: string;
+  selected: boolean;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -151,8 +157,14 @@ export interface Clip {
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   /** Fade out curve shape. */
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
+  /** Time-stretch playback rate (1 = original speed, 0.5 = half, 2 = double). */
+  timeStretchRate?: number;
+  /** Pitch shift in semitones (0 = original pitch). */
+  pitchShift?: number;
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
+  /** Comping takes for this clip. */
+  takes?: Take[];
 }
 
 export interface SequencerStep {
@@ -260,6 +272,13 @@ export interface GenerationDefaults {
   model: string;
 }
 
+export interface Marker {
+  id: string;
+  time: number;
+  name: string;
+  color: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -283,6 +302,8 @@ export interface Project {
   automationLanes?: AutomationLane[];
   /** Shared effect return tracks (mixer buses). */
   returnTracks?: ReturnTrack[];
+  /** Timeline markers (sorted by time). */
+  markers?: Marker[];
 }
 
 // ─── Automation Types ────────────────────────────────────────────────────────

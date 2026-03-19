@@ -22,6 +22,7 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  Marker,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -118,6 +119,8 @@ interface ProjectState {
   /** Restore clip audio fields from a version by index. */
   setActiveVersion: (clipId: string, idx: number) => void;
   setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
+  setClipTimeStretch: (clipId: string, rate: number) => void;
+  setClipPitchShift: (clipId: string, semitones: number) => void;
 
   splitClip: (clipId: string, splitTime: number) => void;
   toggleClipStar: (clipId: string) => void;
@@ -177,6 +180,11 @@ interface ProjectState {
   moveTrackToGroup: (trackId: string, groupId: string | null) => void;
   toggleGroupCollapse: (groupId: string) => void;
   getGroupVolume: (groupId: string) => number;
+
+  // Markers
+  addMarker: (time: number, name: string) => void;
+  removeMarker: (id: string) => void;
+  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color'>>) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
@@ -786,6 +794,14 @@ export const useProjectStore = create<ProjectState>()(
 
   setClipFade: (clipId, fade) => {
     get().updateClip(clipId, fade);
+  },
+
+  setClipTimeStretch: (clipId, rate) => {
+    get().updateClip(clipId, { timeStretchRate: rate });
+  },
+
+  setClipPitchShift: (clipId, semitones) => {
+    get().updateClip(clipId, { pitchShift: semitones });
   },
 
   splitClip: (clipId, splitTime) => {

@@ -5,6 +5,7 @@ import type { PianoRollGrid } from '../../types/project';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
+import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { TransformMenu } from './TransformMenu';
 
 export function PianoRoll() {
@@ -22,6 +23,7 @@ export function PianoRoll() {
   const pianoRollHeight = useUIStore((s) => s.pianoRollHeight);
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
+  const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
 
   const track = useMemo(
     () => project?.tracks.find((candidate) => candidate.id === openTrackId) ?? null,
@@ -140,6 +142,16 @@ export function PianoRoll() {
 
         {clip && <TransformMenu clipId={clip.id} selectedNoteIds={selectedNoteIds} />}
 
+        {clip && (
+          <button
+            className="px-2 py-1 rounded text-[10px] bg-violet-600/30 text-violet-200 hover:bg-violet-600/50 transition-colors"
+            onClick={() => openGeneratePatternDialog(clip.id)}
+            title="Generate MIDI pattern from genre/scale constraints"
+          >
+            Generate Pattern
+          </button>
+        )}
+
         {clip && <span className="text-[10px] text-zinc-500 ml-1 truncate max-w-[200px]">{clip.prompt}</span>}
 
         <div className="ml-auto flex items-center gap-2">
@@ -183,6 +195,7 @@ export function PianoRoll() {
         <PianoRollEmptyState />
       )}
       <QuantizeDialog />
+      <GeneratePatternDialog />
     </div>
   );
 }

@@ -69,6 +69,10 @@ interface UIState {
   /** Clip ID + selected note IDs passed from the piano roll to the quantize dialog. */
   quantizeTarget: { clipId: string; noteIds: string[] } | null;
 
+  // Generate pattern dialog
+  showGeneratePatternDialog: boolean;
+  generatePatternClipId: string | null;
+
   setPixelsPerSecond: (pps: number) => void;
   toggleSnap: () => void;
   zoomIn: () => void;
@@ -130,6 +134,10 @@ interface UIState {
   setShowQuantizeDialog: (v: boolean) => void;
   setQuantizeTarget: (target: { clipId: string; noteIds: string[] } | null) => void;
   openQuantizeDialog: (clipId: string, noteIds: string[]) => void;
+
+  // Generate pattern dialog
+  setShowGeneratePatternDialog: (v: boolean) => void;
+  openGeneratePatternDialog: (clipId: string) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -190,6 +198,9 @@ export const useUIStore = create<UIState>()(
 
   showQuantizeDialog: false,
   quantizeTarget: null,
+
+  showGeneratePatternDialog: false,
+  generatePatternClipId: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
@@ -285,6 +296,9 @@ export const useUIStore = create<UIState>()(
   setShowQuantizeDialog: (v) => set(v ? { showQuantizeDialog: v } : { showQuantizeDialog: false, quantizeTarget: null }),
   setQuantizeTarget: (target) => set({ quantizeTarget: target }),
   openQuantizeDialog: (clipId, noteIds) => set({ showQuantizeDialog: true, quantizeTarget: { clipId, noteIds } }),
+
+  setShowGeneratePatternDialog: (v) => set(v ? { showGeneratePatternDialog: v } : { showGeneratePatternDialog: false, generatePatternClipId: null }),
+  openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),
 }),
     {
       name: 'ace-step-daw-ui',

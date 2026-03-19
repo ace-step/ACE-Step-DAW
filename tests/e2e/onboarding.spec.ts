@@ -24,6 +24,13 @@ test.describe('first-run onboarding', () => {
 
     await expect(page.getByText('Tutorial 1/5')).toBeVisible();
 
+    for (let i = 0; i < 4; i++) {
+      await page.getByRole('button', { name: 'Next' }).click();
+    }
+
+    await expect(page.getByRole('heading', { name: 'Command Palette' })).toBeVisible();
+    await expect(page.getByText('Press Cmd+K to search actions, settings, and workflow shortcuts without leaving the arrangement.')).toBeVisible();
+
     const state = await page.evaluate(() => {
       const ui = (window as any).__uiStore.getState();
       const project = (window as any).__store.getState().project;

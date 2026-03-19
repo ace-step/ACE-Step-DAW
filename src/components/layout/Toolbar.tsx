@@ -388,6 +388,7 @@ export function Toolbar() {
           className="flex items-center gap-2 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-surface-2 hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
+          data-onboarding-target="command-palette-button"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
             <circle cx="6" cy="6" r="3.75" />

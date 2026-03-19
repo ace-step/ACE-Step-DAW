@@ -40,6 +40,7 @@ import type {
   MasteringState,
   DrumMachineConfig,
   DrumKitName,
+  SamplerConfig,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
@@ -144,6 +145,8 @@ interface ProjectState {
   removeTrack: (trackId: string) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
+  /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
+  updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
@@ -1141,6 +1144,22 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateSamplerConfig: (trackId, config) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, samplerConfig: config ?? undefined }
+            : t,
+        ),
+      },
+    });
+  },
 
   setTrackHeightPreset: (trackId, preset) => {
     const state = get();

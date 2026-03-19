@@ -357,6 +357,100 @@ describe('projectStore', () => {
     });
   });
 
+  describe('exportTrackMidi', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject({ name: 'Track MIDI Export' });
+    });
+
+    it('exports all MIDI clips from a track merged into a single .mid file', () => {
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mid');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const click = vi.fn();
+      const anchor = { click, href: '', download: '' } as unknown as HTMLAnchorElement;
+      const originalCreateElement = document.createElement.bind(document);
+      const createElement = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+        if (tagName === 'a') return anchor;
+        return originalCreateElement(tagName);
+      }) as typeof document.createElement);
+
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      useProjectStore.getState().updateTrack(track.id, { displayName: 'Lead Synth' });
+
+      const clip1 = useProjectStore.getState().ensureMidiClip(track.id);
+      useProjectStore.getState().addMidiNote(clip1.id, {
+        pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8,
+      });
+      useProjectStore.getState().addClip(track.id, {
+        startTime: 2, duration: 2, prompt: 'phrase-b', globalCaption: '', lyrics: '',
+        midiData: { grid: '1/16', notes: [{ id: 'n2', pitch: 64, startBeat: 0, durationBeats: 1, velocity: 0.9 }] },
+        source: 'uploaded',
+      });
+
+      useProjectStore.getState().exportTrackMidi(track.id);
+
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(anchor.download).toBe('Track MIDI Export_Lead Synth.mid');
+      expect(click).toHaveBeenCalledOnce();
+
+      createElement.mockRestore();
+      revokeObjectURL.mockRestore();
+      createObjectURL.mockRestore();
+    });
+
+    it('shows error when track has no MIDI notes', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      useProjectStore.getState().exportTrackMidi(track.id);
+      expect(mockToastError).toHaveBeenCalledWith('Track has no MIDI notes to export');
+    });
+  });
+
+  describe('exportProjectMidi', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject({ name: 'Project MIDI Export' });
+    });
+
+    it('exports all MIDI tracks as a multi-track .mid file', () => {
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mid');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const click = vi.fn();
+      const anchor = { click, href: '', download: '' } as unknown as HTMLAnchorElement;
+      const originalCreateElement = document.createElement.bind(document);
+      const createElement = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+        if (tagName === 'a') return anchor;
+        return originalCreateElement(tagName);
+      }) as typeof document.createElement);
+
+      const track1 = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      useProjectStore.getState().updateTrack(track1.id, { displayName: 'Piano' });
+      const clip1 = useProjectStore.getState().ensureMidiClip(track1.id);
+      useProjectStore.getState().addMidiNote(clip1.id, {
+        pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8,
+      });
+
+      const track2 = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      useProjectStore.getState().updateTrack(track2.id, { displayName: 'Bass' });
+      const clip2 = useProjectStore.getState().ensureMidiClip(track2.id);
+      useProjectStore.getState().addMidiNote(clip2.id, {
+        pitch: 36, startBeat: 0, durationBeats: 2, velocity: 1.0,
+      });
+
+      useProjectStore.getState().exportProjectMidi();
+
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(anchor.download).toBe('Project MIDI Export.mid');
+      expect(click).toHaveBeenCalledOnce();
+
+      createElement.mockRestore();
+      revokeObjectURL.mockRestore();
+      createObjectURL.mockRestore();
+    });
+
+    it('shows error when no MIDI tracks have notes', () => {
+      useProjectStore.getState().exportProjectMidi();
+      expect(mockToastError).toHaveBeenCalledWith('No MIDI tracks with notes to export');
+    });
+  });
+
   describe('consolidateClips', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

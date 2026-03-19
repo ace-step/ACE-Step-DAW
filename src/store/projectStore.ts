@@ -80,6 +80,7 @@ import type { StemCount } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile } from '../utils/midi';
+import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
@@ -463,6 +464,10 @@ interface ProjectState {
   /** Create a new project from a template. */
   createProjectFromTemplate: (template: ProjectTemplate, projectName?: string) => void;
   exportMidiClip: (clipId: string) => void;
+  /** Export all MIDI clips from a track merged into a single .mid file. */
+  exportTrackMidi: (trackId: string) => void;
+  /** Export all MIDI tracks as a multi-track .mid file for sharing with other DAWs. */
+  exportProjectMidi: () => void;
 
   // Groove pool
   extractGrooveFromClip: (clipId: string, name: string, options: ExtractGrooveOptions) => GrooveTemplate | undefined;
@@ -4744,6 +4749,119 @@ export const useProjectStore = create<ProjectState>()(
       `${fileName}.mid`,
     );
     toastSuccess(`Exported MIDI clip from ${track.displayName}`);
+  },
+
+  exportTrackMidi: (trackId: string) => {
+    const project = get().project;
+    if (!project) {
+      toastError('Create or open a project before exporting MIDI');
+      return;
+    }
+
+    const track = project.tracks.find((t) => t.id === trackId);
+    if (!track) {
+      toastError('Track not found');
+      return;
+    }
+
+    const bpm = project.bpm;
+    const secPerBeat = 60 / bpm;
+    const allNotes: MidiNote[] = [];
+
+    for (const clip of track.clips) {
+      if (!clip.midiData?.notes.length) continue;
+      const clipStartBeat = clip.startTime / secPerBeat;
+      for (const note of clip.midiData.notes) {
+        allNotes.push({
+          ...note,
+          id: note.id,
+          startBeat: clipStartBeat + note.startBeat,
+        });
+      }
+    }
+
+    if (allNotes.length === 0) {
+      toastError('Track has no MIDI notes to export');
+      return;
+    }
+
+    const numerator = project.timeSignatureMap?.[0]?.numerator ?? project.timeSignature;
+    const denominator = project.timeSignatureMap?.[0]?.denominator ?? 4;
+
+    const bytes = encodeMidiFile(allNotes, {
+      bpm,
+      timeSignature: { numerator, denominator },
+      trackName: track.displayName,
+    });
+
+    const fileName = [
+      sanitizeFileNameSegment(project.name),
+      sanitizeFileNameSegment(track.displayName),
+    ].join('_');
+
+    downloadBlob(
+      new Blob([Uint8Array.from(bytes)], { type: 'audio/midi' }),
+      `${fileName}.mid`,
+    );
+    toastSuccess(`Exported MIDI from ${track.displayName}`);
+  },
+
+  exportProjectMidi: () => {
+    const project = get().project;
+    if (!project) {
+      toastError('Create or open a project before exporting MIDI');
+      return;
+    }
+
+    const bpm = project.bpm;
+    const secPerBeat = 60 / bpm;
+    const numerator = project.timeSignatureMap?.[0]?.numerator ?? project.timeSignature;
+    const denominator = project.timeSignatureMap?.[0]?.denominator ?? 4;
+
+    const exportTracks: MidiExportTrack[] = [];
+    let channelIndex = 0;
+
+    for (const track of project.tracks) {
+      const allNotes: MidiNote[] = [];
+      for (const clip of track.clips) {
+        if (!clip.midiData?.notes.length) continue;
+        const clipStartBeat = clip.startTime / secPerBeat;
+        for (const note of clip.midiData.notes) {
+          allNotes.push({
+            ...note,
+            id: note.id,
+            startBeat: clipStartBeat + note.startBeat,
+          });
+        }
+      }
+
+      if (allNotes.length > 0) {
+        exportTracks.push({
+          name: track.displayName,
+          channel: channelIndex % 16,
+          notes: allNotes,
+        });
+        channelIndex++;
+      }
+    }
+
+    if (exportTracks.length === 0) {
+      toastError('No MIDI tracks with notes to export');
+      return;
+    }
+
+    const encoded = encodeMultiTrackMidiFile(exportTracks, {
+      bpm,
+      timeSignature: { bar: 1, numerator, denominator },
+    });
+
+    const fileName = sanitizeFileNameSegment(project.name);
+
+    downloadBlob(
+      new Blob([new Uint8Array(encoded)], { type: 'audio/midi' }),
+      `${fileName}.mid`,
+    );
+    toastSuccess(`Exported ${exportTracks.length} MIDI track${exportTracks.length > 1 ? 's' : ''} from ${project.name}`);
   },
 
   // ── Groove Pool ─────────────────────────────────────────────────────────

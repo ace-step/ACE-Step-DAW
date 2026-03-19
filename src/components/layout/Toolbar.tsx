@@ -190,8 +190,11 @@ export function Toolbar() {
         <button onClick={() => setShowNewProjectDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="New Project">
           New
         </button>
-        <button onClick={() => setShowExportDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export">
+        <button onClick={() => setShowExportDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export Audio">
           Export
+        </button>
+        <button onClick={() => useProjectStore.getState().exportProjectMidi()} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export all MIDI tracks as .mid file">
+          Export MIDI
         </button>
         <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
           Import

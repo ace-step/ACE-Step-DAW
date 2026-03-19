@@ -36,6 +36,7 @@ export function TrackHeader({
   const setTrackHeightPreset = useProjectStore((s) => s.setTrackHeightPreset);
   const setAllTracksHeightPreset = useProjectStore((s) => s.setAllTracksHeightPreset);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
+  const exportTrackMidi = useProjectStore((s) => s.exportTrackMidi);
   const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
   const project = useProjectStore((s) => s.project);
 
@@ -516,6 +517,14 @@ export function TrackHeader({
           >
             Bounce in Place...
           </button>
+          {track.clips.some((c) => c.midiData?.notes.length) && (
+            <button
+              onClick={() => { setCtxMenu(null); exportTrackMidi(track.id); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              Export MIDI
+            </button>
+          )}
           <div className="my-1 border-t border-[#555]" />
           <button
             onClick={() => { setCtxMenu(null); void handleFreeze(); }}

@@ -32,6 +32,10 @@ import {
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
+import { exportStemToWav, type ExportClip } from '../engine/exportMix';
+import { loadAudioBlobByKey } from '../services/audioFileManager';
+import { getAudioEngine } from '../hooks/useAudioEngine';
+import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -164,6 +168,9 @@ interface ProjectState {
   getTotalDuration: () => number;
   /** Actual audio duration without timeline padding: max(clip ends) */
   getAudioDuration: () => number;
+
+  /** Export each track as a separate WAV file (stem export). */
+  exportStems: () => Promise<void>;
 }
 
 function computeTotalDuration(
@@ -1962,6 +1969,57 @@ export const useProjectStore = create<ProjectState>()(
       }
     }
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
+  },
+
+  exportStems: async () => {
+    const project = get().project;
+    if (!project) return;
+
+    const engine = getAudioEngine();
+    const totalDuration = project.totalDuration;
+
+    for (const track of project.tracks) {
+      const clips: ExportClip[] = [];
+
+      if (track.trackType === 'pianoRoll') {
+        for (const clip of track.clips) {
+          const notes = clip.midiData?.notes ?? [];
+          if (notes.length === 0) continue;
+          const buffer = await renderMidiTrackOffline(
+            notes, clip.startTime, project.bpm,
+            track.synthPreset ?? 'piano', totalDuration,
+          );
+          clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
+        }
+      }
+
+      if (track.trackType === 'sequencer' && track.sequencerPattern) {
+        const buffer = await renderSequencerTrackOffline(
+          track.sequencerPattern, project.bpm, totalDuration, track.drumKit ?? '808',
+        );
+        clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
+      }
+
+      for (const clip of track.clips) {
+        if (clip.generationStatus === 'ready' && clip.isolatedAudioKey) {
+          const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
+          if (blob) {
+            const buffer = await engine.decodeAudioData(blob);
+            clips.push({ startTime: clip.startTime, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
+          }
+        }
+      }
+
+      if (clips.length === 0) continue;
+
+      const wavBlob = await exportStemToWav(clips, totalDuration);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.name}_${track.displayName}.wav`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   },
 }),
     {

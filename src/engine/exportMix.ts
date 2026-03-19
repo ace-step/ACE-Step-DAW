@@ -171,3 +171,15 @@ export async function exportMixToWav(
   const rendered = await offlineCtx.startRendering();
   return audioBufferToWavBlob(rendered);
 }
+
+/**
+ * Render a single track's clips to a stereo WAV blob.
+ * Same pipeline as exportMixToWav but semantically scoped to one track.
+ */
+export async function exportStemToWav(
+  clips: ExportClip[],
+  totalDuration: number,
+  sampleRate: number = 48000,
+): Promise<Blob> {
+  return exportMixToWav(clips, totalDuration, sampleRate);
+}

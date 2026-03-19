@@ -11,6 +11,8 @@ interface TransportState {
   loopStart: number;
   loopEnd: number;
   metronomeEnabled: boolean;
+  metronomeSound: 'click' | 'woodblock' | 'beep';
+  metronomeVolume: number;
 
   play: () => void;
   pause: () => void;
@@ -26,6 +28,8 @@ interface TransportState {
   toggleLoop: () => void;
   setLoopRegion: (start: number, end: number) => void;
   toggleMetronome: () => void;
+  setMetronomeSound: (sound: 'click' | 'woodblock' | 'beep') => void;
+  setMetronomeVolume: (volume: number) => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -39,6 +43,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   loopStart: 0,
   loopEnd: 0,
   metronomeEnabled: false,
+  metronomeSound: 'click',
+  metronomeVolume: 0.5,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -66,4 +72,6 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleLoop: () => set((s) => ({ loopEnabled: !s.loopEnabled })),
   setLoopRegion: (start, end) => set({ loopStart: start, loopEnd: end }),
   toggleMetronome: () => set((s) => ({ metronomeEnabled: !s.metronomeEnabled })),
+  setMetronomeSound: (sound) => set({ metronomeSound: sound }),
+  setMetronomeVolume: (volume) => set({ metronomeVolume: Math.max(0, Math.min(1, volume)) }),
 }));

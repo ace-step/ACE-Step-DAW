@@ -3,7 +3,6 @@ import { useTransportStore } from '../transportStore';
 
 describe('transportStore', () => {
   beforeEach(() => {
-    // Reset store to initial state before each test
     useTransportStore.setState({
       isPlaying: false,
       isRecording: false,
@@ -13,6 +12,8 @@ describe('transportStore', () => {
       loopStart: 0,
       loopEnd: 0,
       metronomeEnabled: false,
+      metronomeSound: 'click',
+      metronomeVolume: 0.5,
     });
   });
 
@@ -78,6 +79,26 @@ describe('transportStore', () => {
       expect(useTransportStore.getState().metronomeEnabled).toBe(true);
       useTransportStore.getState().toggleMetronome();
       expect(useTransportStore.getState().metronomeEnabled).toBe(false);
+    });
+  });
+
+  describe('metronome sound and volume', () => {
+    it('setMetronomeSound changes metronome sound', () => {
+      expect(useTransportStore.getState().metronomeSound).toBe('click');
+      useTransportStore.getState().setMetronomeSound('woodblock');
+      expect(useTransportStore.getState().metronomeSound).toBe('woodblock');
+      useTransportStore.getState().setMetronomeSound('beep');
+      expect(useTransportStore.getState().metronomeSound).toBe('beep');
+    });
+
+    it('setMetronomeVolume sets volume clamped to 0-1', () => {
+      expect(useTransportStore.getState().metronomeVolume).toBe(0.5);
+      useTransportStore.getState().setMetronomeVolume(0.8);
+      expect(useTransportStore.getState().metronomeVolume).toBe(0.8);
+      useTransportStore.getState().setMetronomeVolume(-0.5);
+      expect(useTransportStore.getState().metronomeVolume).toBe(0);
+      useTransportStore.getState().setMetronomeVolume(1.5);
+      expect(useTransportStore.getState().metronomeVolume).toBe(1);
     });
   });
 

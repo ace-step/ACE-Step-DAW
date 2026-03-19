@@ -10,6 +10,7 @@ import { AddLayerModal } from '../generation/AddLayerModal';
 import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
 import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
 
 interface ClipBlockProps {
@@ -355,6 +356,16 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           width={width}
           color={track.color}
         />
+
+        {clip.gainEnvelope && clip.gainEnvelope.length > 0 && (
+          <ClipGainEnvelope
+            clipId={clip.id}
+            clipDuration={clip.duration}
+            width={width}
+            gainEnvelope={clip.gainEnvelope}
+            color={track.color}
+          />
+        )}
 
         {isMidiClip && clip.midiData && (
           <ClipMidiThumbnail

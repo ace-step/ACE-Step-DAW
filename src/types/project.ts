@@ -141,6 +141,12 @@ export interface Take {
   selected: boolean;
 }
 
+/** A point in a clip-level gain envelope (non-destructive volume automation). */
+export interface GainEnvelopePoint {
+  time: number;   // seconds relative to clip start
+  gain: number;   // 0–2 (1 = unity, >1 = boost)
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -197,6 +203,8 @@ export interface Clip {
   takes?: Take[];
   /** Warp markers for audio quantize (transient-to-grid alignment). */
   warpMarkers?: AudioWarpMarker[];
+  /** Per-clip gain envelope for non-destructive volume automation. */
+  gainEnvelope?: GainEnvelopePoint[];
 }
 
 /** A warp marker on a clip mapping an original transient time to a grid-snapped position. */

@@ -85,6 +85,7 @@ export function useTransport() {
       audioOffset: number;
       clipDuration: number;
       timeStretchRate?: number;
+      gainEnvelope?: import('../types/project').GainEnvelopePoint[];
     }
     const clipBuffers: ScheduleEntry[] = [];
 
@@ -151,6 +152,7 @@ export function useTransport() {
           audioOffset: clip.audioOffset ?? 0,
           clipDuration: clip.duration,
           timeStretchRate: clip.timeStretchRate,
+          gainEnvelope: clip.gainEnvelope,
         });
       }
     }

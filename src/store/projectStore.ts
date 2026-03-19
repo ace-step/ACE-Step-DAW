@@ -32,6 +32,7 @@ import type {
   TimeSignatureEvent,
   AudioWarpMarker,
   StretchMode,
+  GainEnvelopePoint,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -137,6 +138,10 @@ interface ProjectState {
   setClipPitchShift: (clipId: string, semitones: number) => void;
   quantizeAudioClip: (clipId: string, warpMarkers: AudioWarpMarker[]) => void;
   clearAudioQuantize: (clipId: string) => void;
+  setClipGainEnvelope: (clipId: string, points: GainEnvelopePoint[]) => void;
+  addClipGainPoint: (clipId: string, point: GainEnvelopePoint) => void;
+  removeClipGainPoint: (clipId: string, pointIndex: number) => void;
+  updateClipGainPoint: (clipId: string, pointIndex: number, updates: Partial<GainEnvelopePoint>) => void;
 
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
@@ -988,6 +993,37 @@ export const useProjectStore = create<ProjectState>()(
       get().updateClip(clipId, { audioOffset: newOffset });
       return;
     }
+  },
+
+  setClipGainEnvelope: (clipId, points) => {
+    get().updateClip(clipId, { gainEnvelope: [...points] });
+  },
+
+  addClipGainPoint: (clipId, point) => {
+    const clip = get().getClipById(clipId);
+    if (!clip) return;
+    const envelope = [...(clip.gainEnvelope ?? []), point];
+    envelope.sort((a, b) => a.time - b.time);
+    get().updateClip(clipId, { gainEnvelope: envelope });
+  },
+
+  removeClipGainPoint: (clipId, pointIndex) => {
+    const clip = get().getClipById(clipId);
+    if (!clip || !clip.gainEnvelope) return;
+    if (pointIndex < 0 || pointIndex >= clip.gainEnvelope.length) return;
+    const envelope = clip.gainEnvelope.filter((_, i) => i !== pointIndex);
+    get().updateClip(clipId, { gainEnvelope: envelope });
+  },
+
+  updateClipGainPoint: (clipId, pointIndex, updates) => {
+    const clip = get().getClipById(clipId);
+    if (!clip || !clip.gainEnvelope) return;
+    if (pointIndex < 0 || pointIndex >= clip.gainEnvelope.length) return;
+    const envelope = clip.gainEnvelope.map((p, i) =>
+      i === pointIndex ? { ...p, ...updates } : p,
+    );
+    envelope.sort((a, b) => a.time - b.time);
+    get().updateClip(clipId, { gainEnvelope: envelope });
   },
 
   splitClip: (clipId, splitTime) => {

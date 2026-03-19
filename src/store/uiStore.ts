@@ -594,7 +594,6 @@ export const useUIStore = create<UIState>()(
         // Zoom level
         arrangementView: state.arrangementView,
         mainView: state.mainView,
-        arrangementView: state.arrangementView,
         pixelsPerSecond: state.pixelsPerSecond,
         // Snap
         snapEnabled: state.snapEnabled,

@@ -384,6 +384,27 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
           lfoDepth: 0.25,
         },
       };
+    case 'chorus':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: { frequency: 1.5, delayTime: 3.5, depth: 0.7, feedback: 0, wet: 0.5 },
+      };
+    case 'flanger':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: { frequency: 0.5, delayTime: 3, depth: 0.7, feedback: 0.5, wet: 0.5 },
+      };
+    case 'phaser':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: { frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350, wet: 0.5 },
+      };
   }
 }
 

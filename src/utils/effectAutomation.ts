@@ -48,6 +48,27 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     lfoDepth: { label: 'LFO Depth', min: 0, max: 1, color: '#06b6d4' },
   },
   parametricEq: {},
+  chorus: {
+    frequency: { label: 'Rate', min: 0.1, max: 10, color: '#a78bfa' },
+    delayTime: { label: 'Delay', min: 0.5, max: 20, color: '#a78bfa' },
+    depth: { label: 'Depth', min: 0, max: 1, color: '#a78bfa' },
+    feedback: { label: 'Feedback', min: 0, max: 0.95, color: '#a78bfa' },
+    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#a78bfa' },
+  },
+  flanger: {
+    frequency: { label: 'Rate', min: 0.05, max: 5, color: '#34d399' },
+    delayTime: { label: 'Delay', min: 0.5, max: 10, color: '#34d399' },
+    depth: { label: 'Depth', min: 0, max: 1, color: '#34d399' },
+    feedback: { label: 'Feedback', min: -0.95, max: 0.95, color: '#34d399' },
+    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#34d399' },
+  },
+  phaser: {
+    frequency: { label: 'Rate', min: 0.1, max: 8, color: '#fb923c' },
+    octaves: { label: 'Octaves', min: 1, max: 6, color: '#fb923c' },
+    Q: { label: 'Q', min: 0.1, max: 20, color: '#fb923c' },
+    baseFrequency: { label: 'Base Freq', min: 100, max: 4000, color: '#fb923c' },
+    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#fb923c' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -77,6 +98,18 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'filter': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'chorus': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'flanger': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'phaser': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

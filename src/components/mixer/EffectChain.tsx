@@ -35,6 +35,9 @@ import type {
   DelayParams,
   DistortionParams,
   FilterParams,
+  ChorusParams,
+  FlangerParams,
+  PhaserParams,
   Track,
 } from '../../types/project';
 
@@ -117,6 +120,24 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'High Pass', params: { frequency: 300, resonance: 1, filterType: 'highpass', lfoEnabled: false, lfoRate: 2, lfoDepth: 0.3 } as FilterParams },
     { name: 'Wah LFO', params: { frequency: 1000, resonance: 4, filterType: 'bandpass', lfoEnabled: true, lfoRate: 3, lfoDepth: 0.6 } as FilterParams },
   ],
+  chorus: [
+    { name: 'Subtle', params: { frequency: 1.5, delayTime: 3.5, depth: 0.4, feedback: 0, wet: 0.3 } as ChorusParams },
+    { name: 'Classic', params: { frequency: 1.5, delayTime: 3.5, depth: 0.7, feedback: 0, wet: 0.5 } as ChorusParams },
+    { name: 'Deep', params: { frequency: 0.8, delayTime: 8, depth: 0.9, feedback: 0.3, wet: 0.6 } as ChorusParams },
+    { name: 'Vibrato', params: { frequency: 5, delayTime: 2, depth: 1, feedback: 0, wet: 1 } as ChorusParams },
+  ],
+  flanger: [
+    { name: 'Subtle', params: { frequency: 0.3, delayTime: 2, depth: 0.4, feedback: 0.3, wet: 0.4 } as FlangerParams },
+    { name: 'Classic', params: { frequency: 0.5, delayTime: 3, depth: 0.7, feedback: 0.5, wet: 0.5 } as FlangerParams },
+    { name: 'Jet', params: { frequency: 0.2, delayTime: 5, depth: 0.9, feedback: 0.8, wet: 0.6 } as FlangerParams },
+    { name: 'Metallic', params: { frequency: 1, delayTime: 1.5, depth: 0.5, feedback: -0.7, wet: 0.5 } as FlangerParams },
+  ],
+  phaser: [
+    { name: 'Subtle', params: { frequency: 0.3, octaves: 2, stages: 4, Q: 5, baseFrequency: 400, wet: 0.4 } as PhaserParams },
+    { name: 'Classic', params: { frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350, wet: 0.5 } as PhaserParams },
+    { name: 'Deep', params: { frequency: 0.2, octaves: 5, stages: 12, Q: 15, baseFrequency: 200, wet: 0.6 } as PhaserParams },
+    { name: 'Fast', params: { frequency: 4, octaves: 2, stages: 6, Q: 8, baseFrequency: 500, wet: 0.5 } as PhaserParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -140,6 +161,9 @@ import {
   DelayCard,
   DistortionCard,
   FilterCard,
+  ChorusCard,
+  FlangerCard,
+  PhaserCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -248,6 +272,9 @@ function EffectDevice({
           {effect.type === 'delay' && <DelayCard effect={effect} trackId={track.id} />}
           {effect.type === 'distortion' && <DistortionCard effect={effect} trackId={track.id} />}
           {effect.type === 'filter' && <FilterCard effect={effect} trackId={track.id} />}
+          {effect.type === 'chorus' && <ChorusCard effect={effect} trackId={track.id} />}
+          {effect.type === 'flanger' && <FlangerCard effect={effect} trackId={track.id} />}
+          {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
         </div>
       )}
     </div>
@@ -268,6 +295,9 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'delay', label: 'Delay', icon: '🔁' },
     { type: 'distortion', label: 'Distortion', icon: '⚡' },
     { type: 'filter', label: 'Filter', icon: '🎛' },
+    { type: 'chorus', label: 'Chorus', icon: '🎵' },
+    { type: 'flanger', label: 'Flanger', icon: '🌀' },
+    { type: 'phaser', label: 'Phaser', icon: '🔮' },
   ];
 
   return (

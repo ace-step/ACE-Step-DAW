@@ -156,6 +156,31 @@ export interface FilterParams {
   lfoDepth: number;
 }
 
+export interface ChorusParams {
+  frequency: number;    // LFO rate in Hz (0.1–10)
+  delayTime: number;    // base delay in ms (0.5–20)
+  depth: number;        // modulation depth (0–1)
+  feedback: number;     // feedback amount (0–0.95)
+  wet: number;          // dry/wet mix (0–1)
+}
+
+export interface FlangerParams {
+  frequency: number;    // LFO rate in Hz (0.05–5)
+  delayTime: number;    // base delay in ms (0.5–10)
+  depth: number;        // modulation depth (0–1)
+  feedback: number;     // feedback amount (-0.95 to 0.95)
+  wet: number;          // dry/wet mix (0–1)
+}
+
+export interface PhaserParams {
+  frequency: number;    // LFO rate in Hz (0.1–8)
+  octaves: number;      // sweep range in octaves (1–6)
+  stages: number;       // number of allpass stages (2–12, even only)
+  Q: number;            // filter Q factor (0.1–20)
+  baseFrequency: number; // base filter frequency (100–4000 Hz)
+  wet: number;          // dry/wet mix (0–1)
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -163,7 +188,10 @@ export type TrackEffect =
   | EffectBase<'reverb', ReverbParams>
   | EffectBase<'delay', DelayParams>
   | EffectBase<'distortion', DistortionParams>
-  | EffectBase<'filter', FilterParams>;
+  | EffectBase<'filter', FilterParams>
+  | EffectBase<'chorus', ChorusParams>
+  | EffectBase<'flanger', FlangerParams>
+  | EffectBase<'phaser', PhaserParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -516,7 +544,10 @@ export type AutomatableEffectTarget =
   | { effectType: 'reverb'; param: keyof ReverbParams }
   | { effectType: 'delay'; param: keyof DelayParams }
   | { effectType: 'distortion'; param: Exclude<keyof DistortionParams, 'distortionType'> }
-  | { effectType: 'filter'; param: Exclude<keyof FilterParams, 'filterType' | 'lfoEnabled'> };
+  | { effectType: 'filter'; param: Exclude<keyof FilterParams, 'filterType' | 'lfoEnabled'> }
+  | { effectType: 'chorus'; param: keyof ChorusParams }
+  | { effectType: 'flanger'; param: keyof FlangerParams }
+  | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

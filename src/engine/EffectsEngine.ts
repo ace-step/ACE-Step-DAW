@@ -10,6 +10,9 @@ import type {
   DelayParams,
   DistortionParams,
   FilterParams,
+  ChorusParams,
+  FlangerParams,
+  PhaserParams,
 } from '../types/project';
 import { denormalizeEffectParamValue } from '../utils/effectAutomation';
 import { useProjectStore } from '../store/projectStore';
@@ -153,6 +156,49 @@ function createNode(effect: TrackEffect): EffectNode {
       }
       return { id: effect.id, type: effect.type, node, lfo };
     }
+    case 'chorus': {
+      const p = effect.params as ChorusParams;
+      const node = new Tone.Chorus({
+        frequency: p.frequency,
+        delayTime: p.delayTime,
+        depth: p.depth,
+        feedback: p.feedback,
+        wet: p.wet,
+      });
+      node.start();
+      return { id: effect.id, type: effect.type, node };
+    }
+    case 'flanger': {
+      const p = effect.params as FlangerParams;
+      const node = new Tone.FeedbackDelay({
+        delayTime: p.delayTime / 1000,
+        feedback: Math.abs(p.feedback),
+        wet: p.wet,
+      });
+      const lfo = new Tone.LFO({
+        frequency: p.frequency,
+        min: 0.0005,
+        max: Math.max(0.001, p.delayTime / 1000 * p.depth),
+      });
+      lfo.connect(node.delayTime);
+      lfo.start();
+      return { id: effect.id, type: effect.type, node, lfo };
+    }
+    case 'phaser': {
+      const p = effect.params as PhaserParams;
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: new Tone.Phaser({
+          frequency: p.frequency,
+          octaves: p.octaves,
+          stages: p.stages,
+          Q: p.Q,
+          baseFrequency: p.baseFrequency,
+          wet: p.wet,
+        }),
+      };
+    }
   }
 }
 
@@ -267,6 +313,38 @@ class EffectsEngine {
         }
         break;
       }
+      case 'chorus': {
+        const p = params as ChorusParams;
+        const chorus = effectNode.node as Tone.Chorus;
+        chorus.frequency.value = p.frequency;
+        chorus.delayTime = p.delayTime;
+        chorus.depth = p.depth;
+        chorus.feedback.value = p.feedback;
+        chorus.wet.value = p.wet;
+        break;
+      }
+      case 'flanger': {
+        const p = params as FlangerParams;
+        const flanger = effectNode.node as Tone.FeedbackDelay;
+        flanger.delayTime.value = p.delayTime / 1000;
+        flanger.feedback.value = Math.abs(p.feedback);
+        flanger.wet.value = p.wet;
+        if (effectNode.lfo) {
+          effectNode.lfo.frequency.value = p.frequency;
+          effectNode.lfo.max = Math.max(0.001, p.delayTime / 1000 * p.depth);
+        }
+        break;
+      }
+      case 'phaser': {
+        const p = params as PhaserParams;
+        const phaser = effectNode.node as Tone.Phaser;
+        phaser.frequency.value = p.frequency;
+        phaser.octaves = p.octaves;
+        phaser.Q.value = p.Q;
+        phaser.baseFrequency = p.baseFrequency;
+        phaser.wet.value = p.wet;
+        break;
+      }
     }
   }
 
@@ -352,6 +430,36 @@ class EffectsEngine {
           effectNode.lfo.min = Math.max(20, freq * (1 - value));
           effectNode.lfo.max = Math.min(20000, freq * (1 + value));
         }
+        break;
+      }
+      case 'chorus': {
+        const chorus = effectNode.node as Tone.Chorus;
+        if (target.param === 'frequency') chorus.frequency.value = value;
+        if (target.param === 'delayTime') chorus.delayTime = value;
+        if (target.param === 'depth') chorus.depth = value;
+        if (target.param === 'feedback') chorus.feedback.value = value;
+        if (target.param === 'wet') chorus.wet.value = value;
+        break;
+      }
+      case 'flanger': {
+        const flanger = effectNode.node as Tone.FeedbackDelay;
+        if (target.param === 'frequency' && effectNode.lfo) effectNode.lfo.frequency.value = value;
+        if (target.param === 'delayTime') flanger.delayTime.value = value / 1000;
+        if (target.param === 'depth' && effectNode.lfo) {
+          const delayMs = Number(flanger.delayTime.value) * 1000;
+          effectNode.lfo.max = Math.max(0.001, delayMs / 1000 * value);
+        }
+        if (target.param === 'feedback') flanger.feedback.value = Math.abs(value);
+        if (target.param === 'wet') flanger.wet.value = value;
+        break;
+      }
+      case 'phaser': {
+        const phaser = effectNode.node as Tone.Phaser;
+        if (target.param === 'frequency') phaser.frequency.value = value;
+        if (target.param === 'octaves') phaser.octaves = value;
+        if (target.param === 'Q') phaser.Q.value = value;
+        if (target.param === 'baseFrequency') phaser.baseFrequency = value;
+        if (target.param === 'wet') phaser.wet.value = value;
         break;
       }
     }

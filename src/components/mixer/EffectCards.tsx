@@ -21,6 +21,9 @@ import type {
   DelayParams,
   DistortionParams,
   FilterParams,
+  ChorusParams,
+  FlangerParams,
+  PhaserParams,
 } from '../../types/project';
 import {
   PARAMETRIC_EQ_MAX_GAIN,
@@ -832,6 +835,111 @@ export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 
   );
 }
 
+export function ChorusCard({ effect, trackId }: { effect: TrackEffect & { type: 'chorus' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<ChorusParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'chorus');
+  };
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'frequency' }} normalizedValue={normalizeEffectParamValue('chorus', 'frequency', p.frequency) ?? 0.5}>
+          <Knob value={p.frequency} onChange={(v) => update({ frequency: v })} min={0.1} max={10} defaultValue={1.5} label="Rate" unit="Hz" size={32} step={0.1} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'depth' }} normalizedValue={normalizeEffectParamValue('chorus', 'depth', p.depth) ?? 0.5}>
+          <Knob value={p.depth} onChange={(v) => update({ depth: v })} min={0} max={1} defaultValue={0.7} label="Depth" size={32} step={0.01} />
+        </AutomationControlShell>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'delayTime' }} normalizedValue={normalizeEffectParamValue('chorus', 'delayTime', p.delayTime) ?? 0.5}>
+          <Knob value={p.delayTime} onChange={(v) => update({ delayTime: v })} min={0.5} max={20} defaultValue={3.5} label="Delay" unit="ms" size={28} step={0.1} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'feedback' }} normalizedValue={normalizeEffectParamValue('chorus', 'feedback', p.feedback) ?? 0.5}>
+          <Knob value={p.feedback} onChange={(v) => update({ feedback: v })} min={0} max={0.95} defaultValue={0} label="Feedback" size={28} step={0.01} />
+        </AutomationControlShell>
+      </div>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'wet' }} normalizedValue={normalizeEffectParamValue('chorus', 'wet', p.wet) ?? 0.5}>
+        <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color="#a78bfa" />
+      </AutomationControlShell>
+    </div>
+  );
+}
+
+export function FlangerCard({ effect, trackId }: { effect: TrackEffect & { type: 'flanger' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<FlangerParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'flanger');
+  };
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'frequency' }} normalizedValue={normalizeEffectParamValue('flanger', 'frequency', p.frequency) ?? 0.5}>
+          <Knob value={p.frequency} onChange={(v) => update({ frequency: v })} min={0.05} max={5} defaultValue={0.5} label="Rate" unit="Hz" size={32} step={0.01} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'depth' }} normalizedValue={normalizeEffectParamValue('flanger', 'depth', p.depth) ?? 0.5}>
+          <Knob value={p.depth} onChange={(v) => update({ depth: v })} min={0} max={1} defaultValue={0.7} label="Depth" size={32} step={0.01} />
+        </AutomationControlShell>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'delayTime' }} normalizedValue={normalizeEffectParamValue('flanger', 'delayTime', p.delayTime) ?? 0.5}>
+          <Knob value={p.delayTime} onChange={(v) => update({ delayTime: v })} min={0.5} max={10} defaultValue={3} label="Delay" unit="ms" size={28} step={0.1} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'feedback' }} normalizedValue={normalizeEffectParamValue('flanger', 'feedback', p.feedback) ?? 0.5}>
+          <Knob value={p.feedback} onChange={(v) => update({ feedback: v })} min={-0.95} max={0.95} defaultValue={0.5} label="Feedback" size={28} step={0.01} />
+        </AutomationControlShell>
+      </div>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'wet' }} normalizedValue={normalizeEffectParamValue('flanger', 'wet', p.wet) ?? 0.5}>
+        <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color="#34d399" />
+      </AutomationControlShell>
+    </div>
+  );
+}
+
+export function PhaserCard({ effect, trackId }: { effect: TrackEffect & { type: 'phaser' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<PhaserParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'phaser');
+  };
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'frequency' }} normalizedValue={normalizeEffectParamValue('phaser', 'frequency', p.frequency) ?? 0.5}>
+          <Knob value={p.frequency} onChange={(v) => update({ frequency: v })} min={0.1} max={8} defaultValue={0.5} label="Rate" unit="Hz" size={32} step={0.1} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'octaves' }} normalizedValue={normalizeEffectParamValue('phaser', 'octaves', p.octaves) ?? 0.5}>
+          <Knob value={p.octaves} onChange={(v) => update({ octaves: v })} min={1} max={6} defaultValue={3} label="Octaves" size={32} step={0.5} />
+        </AutomationControlShell>
+      </div>
+      <div className="flex gap-3 justify-center">
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'Q' }} normalizedValue={normalizeEffectParamValue('phaser', 'Q', p.Q) ?? 0.5}>
+          <Knob value={p.Q} onChange={(v) => update({ Q: v })} min={0.1} max={20} defaultValue={10} label="Q" size={28} step={0.1} />
+        </AutomationControlShell>
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'baseFrequency' }} normalizedValue={normalizeEffectParamValue('phaser', 'baseFrequency', p.baseFrequency) ?? 0.5}>
+          <Knob value={p.baseFrequency} onChange={(v) => update({ baseFrequency: v })} min={100} max={4000} defaultValue={350} label="Base" unit="Hz" size={28} step={10} />
+        </AutomationControlShell>
+      </div>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'wet' }} normalizedValue={normalizeEffectParamValue('phaser', 'wet', p.wet) ?? 0.5}>
+        <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color="#fb923c" />
+      </AutomationControlShell>
+    </div>
+  );
+}
+
 // ─── Effect Device Card ──────────────────────────────────────────────────────
 
 export const EFFECT_COLORS: Record<TrackEffectType, string> = {
@@ -842,4 +950,7 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   delay: '#f59e0b',
   distortion: '#ef4444',
   filter: '#06b6d4',
+  chorus: '#a78bfa',
+  flanger: '#34d399',
+  phaser: '#fb923c',
 };

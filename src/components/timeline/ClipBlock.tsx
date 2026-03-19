@@ -50,6 +50,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setVocal2BGMModal = useUIStore((s) => s.setVocal2BGMModal);
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
   const setStemSeparationModal = useUIStore((s) => s.setStemSeparationModal);
+  const setAudioToMidiModal = useUIStore((s) => s.setAudioToMidiModal);
 
   const generatingProgress = useGenerationStore((s) => {
     const job = [...s.jobs].reverse().find(
@@ -671,7 +672,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           }}
           onConvertToMidi={() => {
             closeCtxMenu();
-            convertAudioToMidi(clip.id);
+            setAudioToMidiModal(clip.id);
           }}
           onCreateQuickSampler={() => {
             closeCtxMenu();

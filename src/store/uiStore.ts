@@ -212,6 +212,7 @@ export interface UIState {
   setVocal2BGMModal: (clipId: string | null) => void;
   setAnalysisPanel: (clipId: string | null) => void;
   setStemSeparationModal: (clipId: string | null) => void;
+  setAudioToMidiModal: (clipId: string | null) => void;
 
   // Spectrum analyzer & loudness metering
   setShowSpectrumAnalyzer: (v: boolean) => void;
@@ -579,6 +580,7 @@ export const useUIStore = create<UIState>()(
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
   setStemSeparationModal: (clipId) => set({ stemSeparationClipId: clipId }),
+  setAudioToMidiModal: (clipId) => set({ audioToMidiClipId: clipId }),
 
   setShowSpectrumAnalyzer: (v) => set({ showSpectrumAnalyzer: v }),
   toggleSpectrumAnalyzer: () => set((s) => ({ showSpectrumAnalyzer: !s.showSpectrumAnalyzer })),

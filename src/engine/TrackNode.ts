@@ -117,14 +117,22 @@ export class TrackNode {
 
   set soloActive(v: boolean) { this._soloActive = v; this._applyGain(); }
 
+  /** Fade duration in seconds to avoid audio clicks on mute/unmute. */
+  static readonly MUTE_FADE_SEC = 0.005;
+
   private _applyGain() {
+    let target: number;
     if (this._muted) {
-      this.volumeGain.gain.value = 0;
+      target = 0;
     } else if (this._soloActive && !this._soloed) {
-      this.volumeGain.gain.value = 0;
+      target = 0;
     } else {
-      this.volumeGain.gain.value = this._volume;
+      target = this._volume;
     }
+    const now = this.ctx.currentTime;
+    this.volumeGain.gain.cancelScheduledValues(now);
+    this.volumeGain.gain.setValueAtTime(this.volumeGain.gain.value, now);
+    this.volumeGain.gain.linearRampToValueAtTime(target, now + TrackNode.MUTE_FADE_SEC);
   }
 
   // -----------------------------------------------------------------------

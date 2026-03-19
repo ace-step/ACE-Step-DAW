@@ -127,6 +127,11 @@ const TIMELINE_PADDING = 10; // seconds beyond last clip
 // ── Undo/Redo history ───────────────────────────────────────────────────────
 export type HistoryScope = 'arrangement' | 'track' | 'pianoRoll' | 'mixer';
 
+export interface HistoryTarget {
+  trackId?: string;
+  clipId?: string;
+}
+
 export interface ProjectHistoryEntry {
   id: string;
   label: string;
@@ -138,8 +143,10 @@ export interface ProjectHistoryEntry {
   snapshot: Project;
 }
 
-type HistoryBuckets<T> = Record<HistoryScope, T>;
-type HistoryOptions = Partial<Pick<ProjectHistoryEntry, 'label' | 'scope' | 'trackId' | 'clipId'>>;
+type HistoryScopes<T> = Record<HistoryScope, T>;
+type HistoryBucketMap<T> = Record<string, T>;
+type HistoryBuckets<T> = HistoryScopes<HistoryBucketMap<T>>;
+type HistoryOptions = HistoryTarget & Partial<Pick<ProjectHistoryEntry, 'label' | 'scope'>>;
 
 const HISTORY_SCOPES: HistoryScope[] = ['arrangement', 'track', 'pianoRoll', 'mixer'];
 const DEFAULT_HISTORY_LABEL: Record<HistoryScope, string> = {
@@ -149,6 +156,7 @@ const DEFAULT_HISTORY_LABEL: Record<HistoryScope, string> = {
   mixer: 'Adjust mixer',
 };
 const MIXER_TRACK_KEYS = new Set(['volume', 'muted', 'soloed', 'pan', 'eqLowGain', 'eqMidGain', 'eqHighGain', 'compressorEnabled', 'compressorThreshold', 'compressorRatio']);
+const GLOBAL_HISTORY_BUCKET = '__global__';
 
 function getTrackUpdateHistoryOptions(trackId: string, updates: Partial<Track>): HistoryOptions {
   const keys = Object.keys(updates);
@@ -166,10 +174,10 @@ function getTrackUpdateHistoryOptions(trackId: string, updates: Partial<Track>):
 
 function createHistoryBuckets<T>(factory: () => T): HistoryBuckets<T> {
   return {
-    arrangement: factory(),
-    track: factory(),
-    pianoRoll: factory(),
-    mixer: factory(),
+    arrangement: { [GLOBAL_HISTORY_BUCKET]: factory() },
+    track: { [GLOBAL_HISTORY_BUCKET]: factory() },
+    pianoRoll: { [GLOBAL_HISTORY_BUCKET]: factory() },
+    mixer: { [GLOBAL_HISTORY_BUCKET]: factory() },
   };
 }
 
@@ -180,8 +188,35 @@ const MAX_HISTORY = 50;
 let _isDragging = false;
 let _historyOrder = 0;
 
-function _trimHistory(scope: HistoryScope) {
-  if (_history[scope].length > MAX_HISTORY) _history[scope].shift();
+function _getHistoryBucketKey(scope: HistoryScope, target: HistoryTarget = {}) {
+  switch (scope) {
+    case 'track':
+      return target.trackId ? `track:${target.trackId}` : GLOBAL_HISTORY_BUCKET;
+    case 'pianoRoll':
+      if (target.clipId) return `clip:${target.clipId}`;
+      if (target.trackId) return `track:${target.trackId}`;
+      return GLOBAL_HISTORY_BUCKET;
+    case 'arrangement':
+    case 'mixer':
+    default:
+      return GLOBAL_HISTORY_BUCKET;
+  }
+}
+
+function _ensureHistoryBucket(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope: HistoryScope, target: HistoryTarget = {}) {
+  const key = _getHistoryBucketKey(scope, target);
+  buckets[scope][key] ??= [];
+  return { key, bucket: buckets[scope][key] };
+}
+
+function _getHistoryBucket(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope: HistoryScope, target: HistoryTarget = {}) {
+  const key = _getHistoryBucketKey(scope, target);
+  const bucket = buckets[scope][key];
+  return bucket ? { key, bucket } : null;
+}
+
+function _trimHistory(bucket: ProjectHistoryEntry[]) {
+  if (bucket.length > MAX_HISTORY) bucket.shift();
 }
 
 function _createHistoryEntry(project: Project, options: HistoryOptions = {}): ProjectHistoryEntry {
@@ -200,31 +235,64 @@ function _createHistoryEntry(project: Project, options: HistoryOptions = {}): Pr
 
 function _clearHistory() {
   for (const scope of HISTORY_SCOPES) {
-    _history[scope].length = 0;
-    _future[scope].length = 0;
+    _history[scope] = { [GLOBAL_HISTORY_BUCKET]: [] };
+    _future[scope] = { [GLOBAL_HISTORY_BUCKET]: [] };
   }
 }
 
-function _resolveHistoryScope(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope?: HistoryScope): HistoryScope | null {
-  if (scope) return buckets[scope].length > 0 ? scope : null;
-  let candidate: HistoryScope | null = null;
+function _resolveHistoryBucket(
+  buckets: HistoryBuckets<ProjectHistoryEntry[]>,
+  scope?: HistoryScope,
+  target?: HistoryTarget,
+): { scope: HistoryScope; key: string; bucket: ProjectHistoryEntry[] } | null {
+  if (scope) {
+    if (target?.trackId || target?.clipId) {
+      const match = _getHistoryBucket(buckets, scope, target);
+      if (match?.bucket.length) {
+        return { scope, key: match.key, bucket: match.bucket };
+      }
+      return null;
+    }
+
+    let scopedCandidate: { key: string; bucket: ProjectHistoryEntry[] } | null = null;
+    let scopedLatestOrder = -1;
+    for (const [key, bucket] of Object.entries(buckets[scope])) {
+      const entry = bucket[bucket.length - 1];
+      if (entry && entry.order > scopedLatestOrder) {
+        scopedLatestOrder = entry.order;
+        scopedCandidate = { key, bucket };
+      }
+    }
+    return scopedCandidate ? { scope, key: scopedCandidate.key, bucket: scopedCandidate.bucket } : null;
+  }
+
+  let candidate: { scope: HistoryScope; key: string; bucket: ProjectHistoryEntry[] } | null = null;
   let latestOrder = -1;
-  for (const key of HISTORY_SCOPES) {
-    const entry = buckets[key][buckets[key].length - 1];
-    if (entry && entry.order > latestOrder) {
-      latestOrder = entry.order;
-      candidate = key;
+  for (const candidateScope of HISTORY_SCOPES) {
+    for (const [key, bucket] of Object.entries(buckets[candidateScope])) {
+      const entry = bucket[bucket.length - 1];
+      if (entry && entry.order > latestOrder) {
+        latestOrder = entry.order;
+        candidate = { scope: candidateScope, key, bucket };
+      }
     }
   }
   return candidate;
 }
 
-function _getHistoryEntries(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope?: HistoryScope) {
+function _getHistoryEntries(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope?: HistoryScope, target?: HistoryTarget) {
   if (scope) {
-    return buckets[scope].map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
+    if (target?.trackId || target?.clipId) {
+      const match = _getHistoryBucket(buckets, scope, target);
+      return (match?.bucket ?? []).map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
+    }
+    return Object.values(buckets[scope])
+      .flatMap((bucket) => bucket)
+      .sort((a, b) => a.order - b.order)
+      .map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
   }
   return HISTORY_SCOPES
-    .flatMap((key) => buckets[key])
+    .flatMap((key) => Object.values(buckets[key]).flatMap((bucket) => bucket))
     .sort((a, b) => a.order - b.order)
     .map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
 }
@@ -234,9 +302,10 @@ function _pushHistory(project: Project | null, options: HistoryOptions = {}) {
   // During drag operations, history is already captured by beginDrag — skip intermediate states
   if (_isDragging) return;
   const entry = _createHistoryEntry(project, options);
-  _history[entry.scope].push(entry);
-  _trimHistory(entry.scope);
-  _future[entry.scope].length = 0;
+  const { bucket, key } = _ensureHistoryBucket(_history, entry.scope, entry);
+  bucket.push(entry);
+  _trimHistory(bucket);
+  _future[entry.scope][key] = [];
 }
 
 /** Call before starting a drag/continuous operation. Captures undo snapshot once. */
@@ -244,14 +313,81 @@ function _beginDrag(project: Project | null, options: HistoryOptions = {}) {
   if (!project || _isDragging) return;
   _isDragging = true;
   const entry = _createHistoryEntry(project, options);
-  _history[entry.scope].push(entry);
-  _trimHistory(entry.scope);
-  _future[entry.scope].length = 0;
+  const { bucket, key } = _ensureHistoryBucket(_history, entry.scope, entry);
+  bucket.push(entry);
+  _trimHistory(bucket);
+  _future[entry.scope][key] = [];
 }
 
 /** Call when drag/continuous operation ends. Re-enables normal history tracking. */
 function _endDrag() {
   _isDragging = false;
+}
+
+function _replaceTrackFromSnapshot(current: Project, snapshot: Project, trackId: string) {
+  const snapshotTrack = snapshot.tracks.find((track) => track.id === trackId);
+  if (!snapshotTrack) return current;
+  return {
+    ...current,
+    updatedAt: Date.now(),
+    tracks: current.tracks.map((track) => (
+      track.id === trackId ? structuredClone(snapshotTrack) : track
+    )),
+  };
+}
+
+function _replaceClipFromSnapshot(current: Project, snapshot: Project, clipId: string) {
+  let snapshotTrackId: string | null = null;
+  let snapshotClip: Clip | null = null;
+
+  for (const track of snapshot.tracks) {
+    const clip = track.clips.find((candidate) => candidate.id === clipId);
+    if (clip) {
+      snapshotTrackId = track.id;
+      snapshotClip = clip;
+      break;
+    }
+  }
+
+  if (!snapshotTrackId || !snapshotClip) return current;
+
+  return {
+    ...current,
+    updatedAt: Date.now(),
+    tracks: current.tracks.map((track) => {
+      if (track.id !== snapshotTrackId) return track;
+      return {
+        ...track,
+        clips: track.clips.map((clip) => (
+          clip.id === clipId ? structuredClone(snapshotClip) : clip
+        )),
+      };
+    }),
+  };
+}
+
+function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry: Pick<ProjectHistoryEntry, 'scope' | 'trackId' | 'clipId'>) {
+  if (!current) return structuredClone(snapshot);
+
+  switch (entry.scope) {
+    case 'track':
+      return entry.trackId ? _replaceTrackFromSnapshot(current, snapshot, entry.trackId) : structuredClone(snapshot);
+    case 'pianoRoll':
+      if (entry.clipId) return _replaceClipFromSnapshot(current, snapshot, entry.clipId);
+      if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
+      return structuredClone(snapshot);
+    case 'mixer':
+      if (entry.trackId) return _replaceTrackFromSnapshot(current, snapshot, entry.trackId);
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        mastering: structuredClone(snapshot.mastering),
+        returnTracks: structuredClone(snapshot.returnTracks ?? []),
+      };
+    case 'arrangement':
+    default:
+      return structuredClone(snapshot);
+  }
 }
 
 export interface ProjectState {
@@ -264,11 +400,11 @@ export interface ProjectState {
     keyScale?: string;
     timeSignature?: number;
   }) => void;
-  undo: (scope?: HistoryScope) => void;
-  redo: (scope?: HistoryScope) => void;
-  getUndoHistory: (scope?: HistoryScope) => ProjectHistoryEntry[];
-  getRedoHistory: (scope?: HistoryScope) => ProjectHistoryEntry[];
-  jumpToHistoryEntry: (entryId: string, scope?: HistoryScope) => void;
+  undo: (scope?: HistoryScope, target?: HistoryTarget) => void;
+  redo: (scope?: HistoryScope, target?: HistoryTarget) => void;
+  getUndoHistory: (scope?: HistoryScope, target?: HistoryTarget) => ProjectHistoryEntry[];
+  getRedoHistory: (scope?: HistoryScope, target?: HistoryTarget) => ProjectHistoryEntry[];
+  jumpToHistoryEntry: (entryId: string, scope?: HistoryScope, target?: HistoryTarget) => void;
   /** Call before starting a drag/continuous operation to capture a single undo snapshot. */
   beginDrag: () => void;
   /** Call when a drag/continuous operation ends to re-enable normal history. */
@@ -1316,13 +1452,14 @@ export const useProjectStore = create<ProjectState>()(
     set({ project: ensureProjectSession(migratedBase) });
   },
 
-  undo: (scope) => {
+  undo: (scope, target) => {
     const state = get();
-    const resolvedScope = _resolveHistoryScope(_history, scope);
-    if (!resolvedScope) return;
-    const prev = _history[resolvedScope].pop()!;
+    const resolved = _resolveHistoryBucket(_history, scope, target);
+    if (!resolved) return;
+    const prev = resolved.bucket.pop()!;
+    const futureBucket = _ensureHistoryBucket(_future, resolved.scope, prev).bucket;
     if (state.project) {
-      _future[resolvedScope].push({
+      futureBucket.push({
         ...prev,
         id: uuidv4(),
         timestamp: Date.now(),
@@ -1330,60 +1467,75 @@ export const useProjectStore = create<ProjectState>()(
         snapshot: structuredClone(state.project),
       });
     }
-    set({ project: structuredClone(prev.snapshot) });
+    set({ project: _applyHistorySnapshot(state.project, prev.snapshot, prev) });
   },
 
-  redo: (scope) => {
+  redo: (scope, target) => {
     const state = get();
-    const resolvedScope = _resolveHistoryScope(_future, scope);
-    if (!resolvedScope) return;
-    const next = _future[resolvedScope].pop()!;
+    const resolved = _resolveHistoryBucket(_future, scope, target);
+    if (!resolved) return;
+    const next = resolved.bucket.pop()!;
     if (state.project) {
-      _history[resolvedScope].push({
+      const historyBucket = _ensureHistoryBucket(_history, resolved.scope, next).bucket;
+      historyBucket.push({
         ...next,
         id: uuidv4(),
         timestamp: Date.now(),
         order: ++_historyOrder,
         snapshot: structuredClone(state.project),
       });
-      _trimHistory(resolvedScope);
+      _trimHistory(historyBucket);
     }
-    set({ project: structuredClone(next.snapshot) });
+    set({ project: _applyHistorySnapshot(state.project, next.snapshot, next) });
   },
 
-  getUndoHistory: (scope) => _getHistoryEntries(_history, scope),
+  getUndoHistory: (scope, target) => _getHistoryEntries(_history, scope, target),
 
-  getRedoHistory: (scope) => _getHistoryEntries(_future, scope),
+  getRedoHistory: (scope, target) => _getHistoryEntries(_future, scope, target),
 
-  jumpToHistoryEntry: (entryId, scope) => {
+  jumpToHistoryEntry: (entryId, scope, target) => {
     const state = get();
-    const resolvedScope = scope ?? HISTORY_SCOPES.find((candidate) => _history[candidate].some((entry) => entry.id === entryId));
-    if (!resolvedScope) return;
-    const stack = _history[resolvedScope];
-    const idx = stack.findIndex((entry) => entry.id === entryId);
+    const resolved = (() => {
+      if (scope && (target?.trackId || target?.clipId)) {
+        const match = _getHistoryBucket(_history, scope, target);
+        if (!match) return null;
+        return { scope, key: match.key, bucket: match.bucket };
+      }
+      for (const candidateScope of scope ? [scope] : HISTORY_SCOPES) {
+        for (const [key, bucket] of Object.entries(_history[candidateScope])) {
+          if (bucket.some((entry) => entry.id === entryId)) {
+            return { scope: candidateScope, key, bucket };
+          }
+        }
+      }
+      return null;
+    })();
+    if (!resolved) return;
+    const idx = resolved.bucket.findIndex((entry) => entry.id === entryId);
     if (idx === -1) return;
 
-    const target = stack[idx];
+    const destination = resolved.bucket[idx];
+    const futureBucket = _ensureHistoryBucket(_future, resolved.scope, destination).bucket;
     if (state.project) {
-      _future[resolvedScope].push({
-        ...target,
+      futureBucket.push({
+        ...destination,
         id: uuidv4(),
         timestamp: Date.now(),
         order: ++_historyOrder,
         snapshot: structuredClone(state.project),
       });
     }
-    for (let pointer = stack.length - 1; pointer > idx; pointer -= 1) {
-      const entry = stack[pointer];
-      _future[resolvedScope].push({
+    for (let pointer = resolved.bucket.length - 1; pointer > idx; pointer -= 1) {
+      const entry = resolved.bucket[pointer];
+      futureBucket.push({
         ...entry,
         id: uuidv4(),
         timestamp: Date.now(),
         order: ++_historyOrder,
       });
     }
-    stack.splice(idx);
-    set({ project: structuredClone(target.snapshot) });
+    resolved.bucket.splice(idx);
+    set({ project: _applyHistorySnapshot(state.project, destination.snapshot, destination) });
   },
 
   beginDrag: () => {
@@ -2889,7 +3041,7 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        _history.arrangement.pop();
+        _history.arrangement[GLOBAL_HISTORY_BUCKET]?.pop();
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
         return undefined;
       }
@@ -3589,7 +3741,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     const track = state.project.tracks.find((t) => t.id === trackId);
     if (!track || track.sequencerPattern) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Initialize sequencer', trackId });
 
     const stepsPerBar = 16;
     const bars = 1;
@@ -3658,7 +3810,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerStepVelocity: (trackId, rowId, stepIndex, velocity) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust sequencer step velocity', trackId });
     set({
       project: {
         ...state.project,
@@ -3686,7 +3838,7 @@ export const useProjectStore = create<ProjectState>()(
   addSequencerRow: (trackId, sampleId, name, color) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Add sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -3719,7 +3871,7 @@ export const useProjectStore = create<ProjectState>()(
   removeSequencerRow: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Remove sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -3741,7 +3893,7 @@ export const useProjectStore = create<ProjectState>()(
   updateSequencerSwing: (trackId, swing) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust sequencer swing', trackId });
     set({
       project: {
         ...state.project,
@@ -3760,7 +3912,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerStepsPerBar: (trackId, stepsPerBar) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Set sequencer resolution', trackId });
     set({
       project: {
         ...state.project,
@@ -3789,7 +3941,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerBars: (trackId, bars) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Set sequencer length', trackId });
     set({
       project: {
         ...state.project,
@@ -3818,7 +3970,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowVolume: (trackId, rowId, volume) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust sequencer row volume', trackId });
     set({
       project: {
         ...state.project,
@@ -3842,7 +3994,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowPan: (trackId, rowId, pan) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust sequencer row pan', trackId });
     set({
       project: {
         ...state.project,
@@ -3866,7 +4018,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleSequencerRowMute: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Toggle sequencer row mute', trackId });
     set({
       project: {
         ...state.project,
@@ -3890,7 +4042,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowSample: (trackId, rowId, sampleKey) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Assign sequencer row sample', trackId });
     set({
       project: {
         ...state.project,
@@ -3914,7 +4066,7 @@ export const useProjectStore = create<ProjectState>()(
   clearSequencerRow: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Clear sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -3940,7 +4092,7 @@ export const useProjectStore = create<ProjectState>()(
   reorderSequencerRows: (trackId, fromIndex, toIndex) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Reorder sequencer rows', trackId });
     set({
       project: {
         ...state.project,
@@ -3960,7 +4112,7 @@ export const useProjectStore = create<ProjectState>()(
   cloneSequencerRow: (trackId, rowId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Duplicate sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -3987,7 +4139,7 @@ export const useProjectStore = create<ProjectState>()(
   renameSequencerRow: (trackId, rowId, name) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Rename sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -4011,7 +4163,7 @@ export const useProjectStore = create<ProjectState>()(
   setSequencerRowColor: (trackId, rowId, color) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Color sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -4035,7 +4187,7 @@ export const useProjectStore = create<ProjectState>()(
   fillSequencerRow: (trackId, rowId, every) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Fill sequencer row', trackId });
     set({
       project: {
         ...state.project,
@@ -4104,7 +4256,7 @@ export const useProjectStore = create<ProjectState>()(
   initDrumMachine: (trackId, kit) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Initialize drum machine', trackId });
     set({
       project: {
         ...state.project,
@@ -4191,7 +4343,7 @@ export const useProjectStore = create<ProjectState>()(
   renameDrumPad: (trackId, padIndex, name) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Rename drum pad', trackId });
     set({
       project: {
         ...state.project,
@@ -4215,7 +4367,7 @@ export const useProjectStore = create<ProjectState>()(
   setDrumMachineKit: (trackId, kit) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Change drum kit', trackId });
     set({
       project: {
         ...state.project,

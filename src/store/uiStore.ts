@@ -16,6 +16,7 @@ import {
   type CommandPaletteRegistryEntry,
   type CommandPaletteSearchResult,
 } from '../services/commandPalette';
+import type { HistoryTarget } from './projectStore';
 
 function createAssistantMessage(role: AIChatMessage['role'], content: string): AIChatMessage {
   return {
@@ -53,6 +54,8 @@ interface UIState {
   recentCommandIds: string[];
   showUndoHistoryPanel: boolean;
   historyFocusScope: HistoryScope;
+  historyFocusTrackId: string | null;
+  historyFocusClipId: string | null;
   showMixer: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
@@ -167,7 +170,7 @@ interface UIState {
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
   setShowUndoHistoryPanel: (v: boolean) => void;
-  setHistoryFocusScope: (scope: HistoryScope) => void;
+  setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
@@ -324,6 +327,8 @@ export const useUIStore = create<UIState>()(
   recentCommandIds: [],
   showUndoHistoryPanel: false,
   historyFocusScope: 'arrangement',
+  historyFocusTrackId: null,
+  historyFocusClipId: null,
   showMixer: false,
   mixerHeight: 420,
   showAssetsPanel: false,
@@ -486,7 +491,22 @@ export const useUIStore = create<UIState>()(
     return true;
   },
   setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
-  setHistoryFocusScope: (scope) => set({ historyFocusScope: scope }),
+  setHistoryFocusScope: (scope, target) => set((state) => {
+    const resolvedTrackId =
+      target?.trackId
+      ?? (scope === 'track'
+        ? state.openSequencerTrackId ?? state.openDrumMachineTrackId ?? state.openMidiEffectChainTrackId ?? state.expandedTrackId ?? state.keyboardContext.trackId
+        : scope === 'pianoRoll'
+          ? state.openPianoRollTrackId
+          : null);
+    const resolvedClipId = target?.clipId ?? (scope === 'pianoRoll' ? state.openPianoRollClipId : null);
+
+    return {
+      historyFocusScope: scope,
+      historyFocusTrackId: resolvedTrackId ?? null,
+      historyFocusClipId: resolvedClipId ?? null,
+    };
+  }),
   setShowMixer: (v) => set({ showMixer: v }),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
@@ -495,24 +515,42 @@ export const useUIStore = create<UIState>()(
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),
-  setOpenSequencerTrackId: (id) => set({ openSequencerTrackId: id, activeBottomPanel: id ? 'editor' : null, historyFocusScope: id ? 'track' : 'arrangement' }),
-  setOpenDrumMachineTrackId: (id) => set({ openDrumMachineTrackId: id, activeBottomPanel: id ? 'drumMachine' : null, historyFocusScope: id ? 'track' : 'arrangement' }),
+  setOpenSequencerTrackId: (id) => set({
+    openSequencerTrackId: id,
+    activeBottomPanel: id ? 'editor' : null,
+    historyFocusScope: id ? 'track' : 'arrangement',
+    historyFocusTrackId: id,
+    historyFocusClipId: null,
+  }),
+  setOpenDrumMachineTrackId: (id) => set({
+    openDrumMachineTrackId: id,
+    activeBottomPanel: id ? 'drumMachine' : null,
+    historyFocusScope: id ? 'track' : 'arrangement',
+    historyFocusTrackId: id,
+    historyFocusClipId: null,
+  }),
   setOpenPianoRoll: (trackId, clipId = null) => set((state) => ({
     keyboardContext: trackId ? { scope: 'pianoRoll', trackId } : state.keyboardContext,
     openPianoRollTrackId: trackId,
     openPianoRollClipId: clipId,
     activeBottomPanel: trackId ? 'pianoRoll' : null,
     historyFocusScope: trackId ? 'pianoRoll' : 'arrangement',
+    historyFocusTrackId: trackId,
+    historyFocusClipId: clipId,
   })),
   setOpenEffectChainTrackId: (id) => set({
     openEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
     historyFocusScope: id ? 'mixer' : 'arrangement',
+    historyFocusTrackId: id,
+    historyFocusClipId: null,
   }),
   setOpenMidiEffectChainTrackId: (id) => set({
     openMidiEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
     historyFocusScope: id ? 'track' : 'arrangement',
+    historyFocusTrackId: id,
+    historyFocusClipId: null,
   }),
   setDrumMachineEditorHeight: (v) => set({ drumMachineEditorHeight: Math.min(600, Math.max(300, v)) }),
   setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),

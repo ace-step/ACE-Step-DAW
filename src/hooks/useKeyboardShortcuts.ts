@@ -139,6 +139,10 @@ export function useKeyboardShortcuts() {
       const transport = useTransportStore.getState();
       const generation = useGenerationStore.getState();
       const activeHistoryScope = ui.historyFocusScope;
+      const activeHistoryTarget = {
+        trackId: ui.historyFocusTrackId ?? undefined,
+        clipId: ui.historyFocusClipId ?? undefined,
+      };
       const matches = (actionId: string) => eventMatchesCombo(event, getCombo(actionId));
 
       if (mod && event.code === 'KeyK') {
@@ -150,8 +154,8 @@ export function useKeyboardShortcuts() {
 
       if (mod && event.code === 'KeyZ' && !event.altKey && !isInputFocused(event)) {
         event.preventDefault();
-        if (event.shiftKey) useProjectStore.getState().redo(activeHistoryScope);
-        else useProjectStore.getState().undo(activeHistoryScope);
+        if (event.shiftKey) useProjectStore.getState().redo(activeHistoryScope, activeHistoryTarget);
+        else useProjectStore.getState().undo(activeHistoryScope, activeHistoryTarget);
         return;
       }
 

@@ -81,4 +81,30 @@ describe('useKeyboardShortcuts', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyO' }));
     expect(useUIStore.getState().loopBrowserOpen).toBe(true);
   });
+
+  it('routes Cmd+Z to the active scoped history context', () => {
+    const drums = useProjectStore.getState().addTrack('drums', 'sequencer');
+    const bass = useProjectStore.getState().addTrack('bass', 'sequencer');
+
+    useProjectStore.getState().initSequencerPattern(drums.id);
+    useProjectStore.getState().initSequencerPattern(bass.id);
+
+    const drumRowId = useProjectStore.getState().project!.tracks.find((track) => track.id === drums.id)!.sequencerPattern!.rows[0].id;
+    const bassRowId = useProjectStore.getState().project!.tracks.find((track) => track.id === bass.id)!.sequencerPattern!.rows[0].id;
+
+    useProjectStore.getState().toggleSequencerStep(drums.id, drumRowId, 0);
+    useProjectStore.getState().toggleSequencerStep(bass.id, bassRowId, 1);
+
+    useUIStore.getState().setOpenSequencerTrackId(drums.id);
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ', metaKey: true }));
+
+    const project = useProjectStore.getState().project!;
+    const drumTrack = project.tracks.find((track) => track.id === drums.id)!;
+    const bassTrack = project.tracks.find((track) => track.id === bass.id)!;
+
+    expect(drumTrack.sequencerPattern!.rows[0].steps[0].active).toBe(false);
+    expect(bassTrack.sequencerPattern!.rows[0].steps[1].active).toBe(true);
+  });
 });

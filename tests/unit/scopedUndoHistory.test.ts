@@ -90,4 +90,35 @@ describe('Scoped undo history', () => {
     useUIStore.getState().setOpenPianoRoll('track-1', 'clip-1');
     expect(useUIStore.getState().historyFocusScope).toBe('pianoRoll');
   });
+
+  it('keeps track editor history isolated per track', () => {
+    const drums = useProjectStore.getState().addTrack('drums', 'sequencer');
+    const bass = useProjectStore.getState().addTrack('bass', 'sequencer');
+
+    useProjectStore.getState().initSequencerPattern(drums.id);
+    useProjectStore.getState().initSequencerPattern(bass.id);
+
+    const drumRowId = useProjectStore.getState().project!.tracks.find((track) => track.id === drums.id)!.sequencerPattern!.rows[0].id;
+    const bassRowId = useProjectStore.getState().project!.tracks.find((track) => track.id === bass.id)!.sequencerPattern!.rows[0].id;
+
+    useProjectStore.getState().toggleSequencerStep(drums.id, drumRowId, 0);
+    useProjectStore.getState().toggleSequencerStep(bass.id, bassRowId, 1);
+
+    const drumHistory = useProjectStore.getState().getUndoHistory('track', { trackId: drums.id });
+    const bassHistory = useProjectStore.getState().getUndoHistory('track', { trackId: bass.id });
+
+    expect(drumHistory[drumHistory.length - 1]?.label).toBe('Toggle sequencer step');
+    expect(bassHistory[bassHistory.length - 1]?.label).toBe('Toggle sequencer step');
+    expect(drumHistory.every((entry) => entry.trackId === drums.id)).toBe(true);
+    expect(bassHistory.every((entry) => entry.trackId === bass.id)).toBe(true);
+
+    useProjectStore.getState().undo('track', { trackId: drums.id });
+
+    const project = useProjectStore.getState().project!;
+    const drumTrack = project.tracks.find((track) => track.id === drums.id)!;
+    const bassTrack = project.tracks.find((track) => track.id === bass.id)!;
+
+    expect(drumTrack.sequencerPattern!.rows[0].steps[0].active).toBe(false);
+    expect(bassTrack.sequencerPattern!.rows[0].steps[1].active).toBe(true);
+  });
 });

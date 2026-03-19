@@ -145,7 +145,14 @@ export interface Clip {
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
   /** Recording take lanes for comping workflow. */
-  takes?: { id: string; audioKey: string; selected: boolean }[];
+  takes?: Take[];
+}
+
+/** A single recording take within a comping lane. */
+export interface Take {
+  id: string;
+  audioKey: string;
+  selected: boolean;
 }
 
 export interface SequencerStep {

@@ -159,6 +159,7 @@ interface ProjectState {
   // Comping / take lanes
   addTake: (clipId: string, audioKey: string) => void;
   selectTake: (clipId: string, takeId: string) => void;
+  deleteTake: (clipId: string, takeId: string) => void;
   toggleTakeLanes: (trackId: string) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
@@ -1945,13 +1946,31 @@ export const useProjectStore = create<ProjectState>()(
   selectTake: (clipId, takeId) => {
     const state = get();
     if (!state.project) return;
+    let found = false;
+    const tracks = state.project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => {
+        if (clip.id !== clipId || !clip.takes) return clip;
+        // Guard: no-op if takeId doesn't exist in this clip's takes list
+        if (!clip.takes.some((t) => t.id === takeId)) return clip;
+        found = true;
+        return { ...clip, takes: clip.takes.map((t) => ({ ...t, selected: t.id === takeId })) };
+      }),
+    }));
+    if (!found) return;
+    _pushHistory(state.project);
+    set({ project: { ...state.project, updatedAt: Date.now(), tracks } });
+  },
+
+  deleteTake: (clipId, takeId) => {
+    const state = get();
+    if (!state.project) return;
     _pushHistory(state.project);
     const tracks = state.project.tracks.map((track) => ({
       ...track,
       clips: track.clips.map((clip) => {
         if (clip.id !== clipId || !clip.takes) return clip;
-        const takes = clip.takes.map((t) => ({ ...t, selected: t.id === takeId }));
-        return { ...clip, takes };
+        return { ...clip, takes: clip.takes.filter((t) => t.id !== takeId) };
       }),
     }));
     set({ project: { ...state.project, updatedAt: Date.now(), tracks } });

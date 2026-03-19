@@ -22,6 +22,7 @@ export function TempoLane() {
   const removeTempoEvent = useProjectStore((s) => s.removeTempoEvent);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
+  const undo = useProjectStore((s) => s.undo);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
 
   const bpm = project?.bpm ?? 120;
@@ -144,15 +145,25 @@ export function TempoLane() {
         const newBpm = Math.max(MIN_BPM, Math.min(MAX_BPM, yToBpm(y)));
         updateTempoEvent(ev.beat, { bpm: newBpm });
       };
+      const onKeyDown = (ke: KeyboardEvent) => {
+        if (ke.key !== 'Escape') return;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKeyDown);
+        endDrag();
+        undo();
+      };
       const onUp = () => {
         endDrag();
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKeyDown);
       };
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
+      window.addEventListener('keydown', onKeyDown);
     },
-    [yToBpm, updateTempoEvent, beginDrag, endDrag],
+    [yToBpm, updateTempoEvent, beginDrag, endDrag, undo],
   );
 
   const handlePointContextMenu = useCallback(

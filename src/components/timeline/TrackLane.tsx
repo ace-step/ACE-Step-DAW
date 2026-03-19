@@ -125,13 +125,25 @@ export function TrackLane({ track }: TrackLaneProps) {
       const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
       updateTrack(track.id, { laneHeight: newH });
     };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      if (resizeRef.current) {
+        updateTrack(track.id, { laneHeight: resizeRef.current.startH });
+      }
+      resizeRef.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+    };
     const onMouseUp = () => {
       resizeRef.current = null;
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('keydown', onKeyDown);
   }, [laneHeight, track.id, updateTrack]);
 
   if (!project) return null;

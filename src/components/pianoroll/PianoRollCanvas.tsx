@@ -90,6 +90,7 @@ export function PianoRollCanvas({
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
+  const undo = useProjectStore((s) => s.undo);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
@@ -733,11 +734,42 @@ export function PianoRollCanvas({
       dragRef.current = null;
     };
 
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (dividerDragRef.current) {
+        setVelocityHeight(dividerDragRef.current.startHeight);
+        dividerDragRef.current = null;
+        return;
+      }
+      const drag = dragRef.current;
+      if (!drag) return;
+      if (drag.isBoxSelect) {
+        setSelectedNoteIds(new Set());
+        dragRef.current = null;
+        return;
+      }
+      // Restore the note to its original state before cancelling
+      if (drag.mode && drag.noteId) {
+        updateMidiNote(clip.id, drag.noteId, {
+          pitch: drag.originalPitch,
+          startBeat: drag.originalStartBeat,
+          durationBeats: drag.originalDurationBeats,
+          velocity: drag.originalVelocity,
+        });
+      }
+      endDrag();
+      undo();
+      toolStrokeRef.current = { noteIds: new Set(), cells: new Set() };
+      dragRef.current = null;
+    };
+
     window.addEventListener('mousemove', handleGlobalMove);
     window.addEventListener('mouseup', handleGlobalUp);
+    window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('mousemove', handleGlobalMove);
       window.removeEventListener('mouseup', handleGlobalUp);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, [
     activeTool,
@@ -756,6 +788,7 @@ export function PianoRollCanvas({
     previewEnabled,
     previewNoteAtPitch,
     snapBeat,
+    undo,
     updateMidiNote,
     velocityHeight,
     xToBeat,
@@ -813,7 +846,10 @@ export function PianoRollCanvas({
       }
 
       if (e.key === 'Escape') {
-        setSelectedNoteIds(new Set());
+        // During an active drag, the global keydown handler cancels the drag
+        if (!dragRef.current && !dividerDragRef.current) {
+          setSelectedNoteIds(new Set());
+        }
         return;
       }
 

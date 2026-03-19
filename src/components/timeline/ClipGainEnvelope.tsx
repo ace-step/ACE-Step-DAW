@@ -25,6 +25,7 @@ export function ClipGainEnvelope({
   const updateClipGainPoint = useProjectStore((s) => s.updateClipGainPoint);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
+  const undo = useProjectStore((s) => s.undo);
   const svgRef = useRef<SVGSVGElement>(null);
 
   const timeToX = useCallback((time: number) => (time / clipDuration) * width, [clipDuration, width]);
@@ -70,15 +71,25 @@ export function ClipGainEnvelope({
       });
     };
 
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+      endDrag();
+      undo();
+    };
     const onMouseUp = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
       endDrag();
     };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clipId, xToTime, yToGain, updateClipGainPoint, removeClipGainPoint, beginDrag, endDrag]);
+    window.addEventListener('keydown', onKeyDown);
+  }, [clipId, xToTime, yToGain, updateClipGainPoint, removeClipGainPoint, beginDrag, endDrag, undo]);
 
   if (gainEnvelope.length === 0) return null;
 

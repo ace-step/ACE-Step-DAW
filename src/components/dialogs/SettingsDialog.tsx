@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
+import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 
 function modelSupportsThinking(modelName: string): boolean {
@@ -52,6 +53,7 @@ export function SettingsDialog() {
   const [timeSignature, setTimeSignature] = useState(4);
   const [measures, setMeasures] = useState(DEFAULT_MEASURES);
   const [globalCaption, setGlobalCaption] = useState('');
+  const [manualLatencyText, setManualLatencyText] = useState('');
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
   const [guidance, setGuidance] = useState(DEFAULT_GENERATION.guidanceScale);
   const [shift, setShift] = useState(DEFAULT_GENERATION.shift);
@@ -66,7 +68,6 @@ export function SettingsDialog() {
   const [selectedLmModel, setSelectedLmModel] = useState('');
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
-  const [latencyOverrideMs, setLatencyOverrideMs] = useState('');
   const prevShow = useRef(false);
 
   const handleModelChange = (newModel: string) => {
@@ -130,6 +131,11 @@ export function SettingsDialog() {
       setTimeSignature(project?.timeSignature ?? 4);
       setMeasures(project?.measures ?? DEFAULT_MEASURES);
       setGlobalCaption(project?.globalCaption ?? '');
+      setManualLatencyText(
+        project?.playbackLatency?.manualOverrideMs !== null && project?.playbackLatency?.manualOverrideMs !== undefined
+          ? String(project.playbackLatency.manualOverrideMs)
+          : '',
+      );
       setSteps(gen.inferenceSteps);
       setGuidance(gen.guidanceScale);
       setShift(gen.shift);
@@ -139,7 +145,6 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
-      setLatencyOverrideMs(project?.playbackLatency?.overrideMs?.toString() ?? '');
       void refreshModels(gen.model);
     }
     prevShow.current = show;
@@ -151,8 +156,8 @@ export function SettingsDialog() {
     const store = useProjectStore.getState();
     if (store.project) {
       store.updateProject({ bpm, keyScale, timeSignature, measures, globalCaption });
-      const trimmedLatencyOverride = latencyOverrideMs.trim();
-      store.setPlaybackLatencyOverride(trimmedLatencyOverride === '' ? null : Number(trimmedLatencyOverride));
+      const parsedManualLatency = manualLatencyText.trim() === '' ? null : Number.parseFloat(manualLatencyText);
+      store.setPlaybackLatencyOverride(Number.isFinite(parsedManualLatency) ? parsedManualLatency : null);
       useProjectStore.setState({
         project: {
           ...useProjectStore.getState().project!,
@@ -174,7 +179,8 @@ export function SettingsDialog() {
 
   const selectedModelEntry = availableModels.find((m) => m.name === model);
   const selectedLmEntry = availableLmModels.find((m) => m.name === selectedLmModel);
-  const playbackLatency = project?.playbackLatency;
+  const playbackLatency = normalizePlaybackLatencySettings(project?.playbackLatency);
+  const manualLatencyValue = manualLatencyText.trim() === '' ? null : Number.parseFloat(manualLatencyText);
 
   const handleInitSelectedModel = async () => {
     if (!model) return;
@@ -322,44 +328,49 @@ export function SettingsDialog() {
             </p>
           </div>
 
-          <div className="rounded border border-daw-border bg-daw-bg/60 p-3 space-y-2">
+          <div className="rounded-md border border-daw-border bg-daw-bg/60 p-3 space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-medium text-zinc-300">Playback Latency</h3>
-                <p className="mt-1 text-[10px] text-zinc-500">
-                  {playbackLatency?.detectedMs !== null && playbackLatency?.detectedMs !== undefined
-                    ? `Detected ${playbackLatency.detectedMs} ms from Web Audio (${playbackLatency.baseLatencyMs ?? 0} ms base + ${playbackLatency.outputLatencyMs ?? 0} ms output).`
-                    : 'Browser latency metrics unavailable. Enter a manual correction if playback feels late.'}
-                </p>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Active</div>
-                <div className="text-sm font-medium text-zinc-100">{playbackLatency?.effectiveMs ?? 0} ms</div>
-              </div>
+              <h3 className="text-xs font-medium text-zinc-300">Playback Latency</h3>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                {playbackLatency.source === 'manual' ? 'Manual override' : playbackLatency.source === 'auto' ? 'Auto-detected' : 'Fallback'}
+              </span>
             </div>
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="block text-xs text-zinc-400 mb-1">Manual Override (ms)</label>
+            <p className="text-[11px] text-zinc-400">
+              {playbackLatency.browserSupport === 'available'
+                ? `Detected ${playbackLatency.detectedLatencyMs?.toFixed(1) ?? '0.0'} ms from Web Audio (${playbackLatency.detectedBaseLatencyMs?.toFixed(1) ?? '0.0'} ms base + ${playbackLatency.detectedOutputLatencyMs?.toFixed(1) ?? '0.0'} ms output).`
+                : 'Browser latency unavailable. Enter a manual playback compensation value if timing feels late.'}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Detected Latency</label>
+                <div className="rounded border border-daw-border bg-black/20 px-3 py-1.5 text-sm text-zinc-200">
+                  {playbackLatency.detectedLatencyMs !== null ? `${playbackLatency.detectedLatencyMs.toFixed(1)} ms` : 'Unavailable'}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1" htmlFor="manual-playback-latency">
+                  Manual Override
+                </label>
                 <input
+                  id="manual-playback-latency"
+                  aria-label="Manual playback latency"
                   type="number"
+                  value={manualLatencyText}
+                  onChange={(e) => setManualLatencyText(e.target.value)}
                   min={0}
-                  step={1}
-                  value={latencyOverrideMs}
-                  onChange={(e) => setLatencyOverrideMs(e.target.value)}
-                  placeholder={String(playbackLatency?.detectedMs ?? 0)}
-                  aria-label="Playback latency override in milliseconds"
+                  max={500}
+                  step={0.1}
+                  placeholder="Use detected value"
                   className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setLatencyOverrideMs('')}
-                className="px-3 py-1.5 text-xs font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
-              >
-                Use Detected
-              </button>
             </div>
-          </div>
+             <p className="text-[10px] text-zinc-500">
+               Active compensation: {playbackLatency.source === 'manual' && manualLatencyValue !== null && Number.isFinite(manualLatencyValue)
+                 ? `${manualLatencyValue.toFixed(1)} ms`
+                 : `${playbackLatency.compensationMs.toFixed(1)} ms`}
+             </p>
+           </div>
 
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Generation Parameters</h3>
 

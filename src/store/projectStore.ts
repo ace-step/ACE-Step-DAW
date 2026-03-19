@@ -79,7 +79,7 @@ import { exportStemToWav, type ExportClip } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
-import { getAudioEngine } from '../hooks/useAudioEngine';
+import * as audioEngineHooks from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
@@ -96,14 +96,17 @@ import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
+import {
+  createDefaultPlaybackLatencySettings,
+  detectPlaybackLatencySettings,
+  normalizePlaybackLatencySettings,
+  setPlaybackLatencyOverrideSettings,
+} from '../utils/playbackLatency';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
 import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
-  buildPlaybackLatencySettings,
   ensurePlaybackLatencySettings,
-  type PlaybackLatencyMeasurement,
-  setPlaybackLatencyOverride as applyPlaybackLatencyOverride,
 } from '../utils/playbackLatency';
 
 function _isViewerMode(): boolean {
@@ -444,8 +447,8 @@ export interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
-  capturePlaybackLatency: (measurement: PlaybackLatencyMeasurement) => PlaybackLatencySettings | null;
-  setPlaybackLatencyOverride: (overrideMs: number | null) => void;
+  detectPlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
+  setPlaybackLatencyOverride: (latencyMs: number | null) => void;
   analyzeMastering: () => Promise<void>;
   setMasteringPreset: (preset: MasteringPreset) => void;
   setMasteringLoudnessTarget: (target: LoudnessTarget) => void;
@@ -1470,6 +1473,27 @@ function applyMasteringPreferences(mastering: MasteringState): MasteringState {
   };
 }
 
+function detectPlaybackLatencyFromEngine() {
+  let getExistingAudioEngine:
+    | (() => { ctx: Pick<AudioContext, 'baseLatency' | 'outputLatency'> } | null)
+    | undefined;
+  try {
+    getExistingAudioEngine = (
+      audioEngineHooks as {
+        getExistingAudioEngine?: () => { ctx: Pick<AudioContext, 'baseLatency' | 'outputLatency'> } | null;
+      }
+    ).getExistingAudioEngine;
+  } catch {
+    return createDefaultPlaybackLatencySettings();
+  }
+  const engine = getExistingAudioEngine?.() ?? null;
+  if (!engine) return createDefaultPlaybackLatencySettings();
+  return detectPlaybackLatencySettings(undefined, {
+    baseLatency: engine.ctx.baseLatency,
+    outputLatency: engine.ctx.outputLatency,
+  });
+}
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
@@ -1492,7 +1516,10 @@ export const useProjectStore = create<ProjectState>()(
         return { ...t, trackType: inferred };
       }).map(ensureTrackDefaults),
       mastering: ensureMasteringState(project.mastering),
-      playbackLatency: ensurePlaybackLatencySettings(project.playbackLatency),
+      playbackLatency:
+        project.playbackLatency
+          ? normalizePlaybackLatencySettings(project.playbackLatency)
+          : detectPlaybackLatencyFromEngine(),
     };
     set({ project: ensureProjectSession(migratedBase) });
   },
@@ -1612,7 +1639,7 @@ export const useProjectStore = create<ProjectState>()(
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
       mastering: createDefaultMasteringState(),
-      playbackLatency: ensurePlaybackLatencySettings(),
+      playbackLatency: detectPlaybackLatencyFromEngine(),
       session: createDefaultSessionState(),
     };
     set({ project: ensureProjectSession(project) });
@@ -1636,21 +1663,33 @@ export const useProjectStore = create<ProjectState>()(
     set({ project: merged });
   },
 
-  capturePlaybackLatency: (measurement) => {
+  detectPlaybackLatency: (latency) => {
     const state = get();
-    if (!state.project) return null;
-    const playbackLatency = buildPlaybackLatencySettings(measurement, state.project.playbackLatency);
+    if (!state.project) return;
+    const nextPlaybackLatency = detectPlaybackLatencySettings(state.project.playbackLatency, latency);
+    const currentPlaybackLatency = normalizePlaybackLatencySettings(state.project.playbackLatency);
+
+    if (
+      nextPlaybackLatency.detectedBaseLatencyMs === currentPlaybackLatency.detectedBaseLatencyMs
+      && nextPlaybackLatency.detectedOutputLatencyMs === currentPlaybackLatency.detectedOutputLatencyMs
+      && nextPlaybackLatency.detectedLatencyMs === currentPlaybackLatency.detectedLatencyMs
+      && nextPlaybackLatency.manualOverrideMs === currentPlaybackLatency.manualOverrideMs
+      && nextPlaybackLatency.compensationMs === currentPlaybackLatency.compensationMs
+      && nextPlaybackLatency.source === currentPlaybackLatency.source
+      && nextPlaybackLatency.browserSupport === currentPlaybackLatency.browserSupport
+    ) {
+      return;
+    }
     set({
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        playbackLatency,
+        playbackLatency: nextPlaybackLatency,
       },
     });
-    return playbackLatency;
   },
 
-  setPlaybackLatencyOverride: (overrideMs) => {
+  setPlaybackLatencyOverride: (latencyMs) => {
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'arrangement', label: 'Adjust playback latency' });
@@ -1658,7 +1697,7 @@ export const useProjectStore = create<ProjectState>()(
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        playbackLatency: applyPlaybackLatencyOverride(state.project.playbackLatency, overrideMs),
+        playbackLatency: setPlaybackLatencyOverrideSettings(state.project.playbackLatency, latencyMs),
       },
     });
   },
@@ -2958,7 +2997,7 @@ export const useProjectStore = create<ProjectState>()(
         return;
       }
 
-      const engine = getAudioEngine();
+      const engine = audioEngineHooks.getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
 
@@ -2996,7 +3035,7 @@ export const useProjectStore = create<ProjectState>()(
       const blob = await loadAudioBlobByKey(audioKey);
       if (!blob) return;
 
-      const engine = getAudioEngine();
+      const engine = audioEngineHooks.getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
       const audioOffset = clip.audioOffset ?? 0;
@@ -5840,7 +5879,7 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return;
 
-    const engine = getAudioEngine();
+    const engine = audioEngineHooks.getAudioEngine();
     const totalDuration = project.totalDuration;
 
     for (const track of project.tracks) {

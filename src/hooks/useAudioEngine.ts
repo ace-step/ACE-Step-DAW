@@ -13,6 +13,10 @@ export function getAudioEngine(): AudioEngine {
   return _engineInstance;
 }
 
+export function getExistingAudioEngine(): AudioEngine | null {
+  return _engineInstance;
+}
+
 export function useAudioEngine() {
   const engineRef = useRef<AudioEngine>(getAudioEngine());
 
@@ -32,11 +36,14 @@ export function useAudioEngine() {
       engineRef.current.resume(),
       Tone.start(),
     ]);
-
-    const playbackLatency = useProjectStore.getState().capturePlaybackLatency(
-      engineRef.current.refreshPlaybackLatencyCompensation(),
+    const latency = engineRef.current.refreshPlaybackLatencyCompensation();
+    const store = (await import('../store/projectStore')).useProjectStore.getState();
+    store.detectPlaybackLatency(latency);
+    engineRef.current.setPlaybackLatencyCompensation(
+      useProjectStore.getState().project?.playbackLatency?.compensationMs
+        ? useProjectStore.getState().project!.playbackLatency!.compensationMs / 1000
+        : 0,
     );
-    engineRef.current.setPlaybackLatencyCompensation((playbackLatency?.effectiveMs ?? 0) / 1000);
   }, []);
 
   return { engine: engineRef.current, resumeOnGesture };

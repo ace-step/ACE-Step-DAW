@@ -11,6 +11,7 @@ import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
+import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
 import type { Clip, Project, Track } from '../types/project';
 import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
@@ -136,16 +137,18 @@ export function useTransport() {
     const proj = useProjectStore.getState().project;
     if (!proj) return;
 
-    const playbackLatency = useProjectStore.getState().capturePlaybackLatency(
+    useProjectStore.getState().detectPlaybackLatency(
       engine.refreshPlaybackLatencyCompensation(),
     );
-    engine.setPlaybackLatencyCompensation((playbackLatency?.effectiveMs ?? 0) / 1000);
 
     engine.clearMidiEvents();
 
     // Sync master volume
-    engine.masterVolume = proj.masterVolume ?? 1.0;
-    engine.applyMastering(proj.mastering);
+    const nextProject = useProjectStore.getState().project;
+    if (!nextProject) return;
+    engine.masterVolume = nextProject.masterVolume ?? 1.0;
+    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(nextProject.playbackLatency));
+    engine.applyMastering(nextProject.mastering);
 
     interface ScheduleEntry {
       clipId: string;
@@ -163,7 +166,7 @@ export function useTransport() {
       warpMarkers?: import('../types/project').AudioWarpMarker[];
     }
     const clipBuffers: ScheduleEntry[] = [];
-    const sessionTracks = mainView === 'session' ? getSessionTracks(proj) : [];
+    const sessionTracks = mainView === 'session' ? getSessionTracks(nextProject) : [];
     const sessionTrackMap = new Map(sessionTracks.map((entry) => [entry.track.id, entry]));
 
     // First pass: create all TrackNodes (groups first so children can route to them)
@@ -673,6 +676,7 @@ export function useTransport() {
     if (!project || !isPlaying) return;
     const engine = getAudioEngine();
     engine.masterVolume = project.masterVolume ?? 1.0;
+    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(project.playbackLatency));
     engine.applyMastering(project.mastering);
     for (const track of project.tracks) {
       const trackNode = engine.trackNodes.get(track.id);

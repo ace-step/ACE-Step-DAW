@@ -143,6 +143,7 @@ export class AudioEngine {
 
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
+    this._playbackLatencyCompensation = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
     // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
     Tone.setContext(this.ctx as unknown as Tone.BaseContext);
     // Configure Tone.js lookahead for stable scheduling under UI load
@@ -506,6 +507,14 @@ export class AudioEngine {
 
   get masterVolume() { return this.masterOutputGain.gain.value; }
   set masterVolume(v: number) { this.masterOutputGain.gain.value = Math.max(0, Math.min(2, v)); }
+
+  setPlaybackLatencyCompensation(seconds: number) {
+    this._playbackLatencyCompensation = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+  }
+
+  getPlaybackLatencyCompensation(): number {
+    return this._playbackLatencyCompensation;
+  }
 
   getTrackLevel(trackId: string): number {
     return this.getTrackMeter(trackId).level;

@@ -225,5 +225,16 @@ describe('Lookahead Transport Scheduling', () => {
       expect(compensated).toBeLessThan(raw);
       expect(compensated).toBeGreaterThanOrEqual(0);
     });
+
+    it('prefers the normalized latency compensation override when provided', () => {
+      mockCurrentTime = 10.0;
+      engine.schedulePlayback([], 0, 20);
+      mockCurrentTime = 11.0;
+
+      engine.setPlaybackLatencyCompensation(0.25);
+
+      expect(engine.getCurrentTime()).toBeCloseTo(1.0, 1);
+      expect(engine.getCompensatedTime()).toBeCloseTo(0.75, 5);
+    });
   });
 });

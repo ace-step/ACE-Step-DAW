@@ -10,73 +10,127 @@ interface AudioContextLatencyLike {
   outputLatency?: number;
 }
 
-function normalizeLatencyMs(value?: number | null): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 1000);
+const MAX_PLAYBACK_LATENCY_MS = 500;
+
+function roundLatencyMs(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
-function normalizeOverrideMs(value?: number | null): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  return Math.max(0, Math.round(value));
+function clampLatencyMs(value: number): number {
+  return roundLatencyMs(Math.max(0, Math.min(MAX_PLAYBACK_LATENCY_MS, value)));
 }
 
-export function buildPlaybackLatencySettings(
-  measurement?: PlaybackLatencyMeasurement,
-  current?: PlaybackLatencySettings | null,
-): PlaybackLatencySettings {
-  const baseLatencyMs = normalizeLatencyMs(measurement?.baseLatency) ?? current?.baseLatencyMs ?? null;
-  const outputLatencyMs = normalizeLatencyMs(measurement?.outputLatency) ?? current?.outputLatencyMs ?? null;
-  const detectedMs = baseLatencyMs !== null || outputLatencyMs !== null
-    ? (baseLatencyMs ?? 0) + (outputLatencyMs ?? 0)
-    : null;
-  const overrideMs = normalizeOverrideMs(current?.overrideMs);
-
-  if (overrideMs !== null) {
-    return {
-      source: 'manual',
-      baseLatencyMs,
-      outputLatencyMs,
-      detectedMs,
-      overrideMs,
-      effectiveMs: overrideMs,
-    };
+function toLatencyMs(value?: number | null): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
   }
+  return clampLatencyMs(value * 1000);
+}
 
-  if (detectedMs !== null) {
-    return {
-      source: 'detected',
-      baseLatencyMs,
-      outputLatencyMs,
-      detectedMs,
-      overrideMs: null,
-      effectiveMs: detectedMs,
-    };
-  }
-
+export function createDefaultPlaybackLatencySettings(): PlaybackLatencySettings {
   return {
+    detectedBaseLatencyMs: null,
+    detectedOutputLatencyMs: null,
+    detectedLatencyMs: null,
+    manualOverrideMs: null,
+    compensationMs: 0,
     source: 'fallback',
-    baseLatencyMs: null,
-    outputLatencyMs: null,
-    detectedMs: null,
-    overrideMs: null,
-    effectiveMs: 0,
+    browserSupport: 'missing',
+    updatedAt: null,
   };
 }
 
-export function setPlaybackLatencyOverride(
-  current: PlaybackLatencySettings | null | undefined,
-  overrideMs: number | null,
+export function normalizePlaybackLatencySettings(
+  settings?: Partial<PlaybackLatencySettings> | null,
 ): PlaybackLatencySettings {
-  return buildPlaybackLatencySettings(undefined, {
-    ...buildPlaybackLatencySettings(undefined, current),
-    overrideMs: normalizeOverrideMs(overrideMs),
+  const defaults = createDefaultPlaybackLatencySettings();
+  const detectedBaseLatencyMs = settings?.detectedBaseLatencyMs ?? defaults.detectedBaseLatencyMs;
+  const detectedOutputLatencyMs = settings?.detectedOutputLatencyMs ?? defaults.detectedOutputLatencyMs;
+  const manualOverrideMs =
+    typeof settings?.manualOverrideMs === 'number' && Number.isFinite(settings.manualOverrideMs)
+      ? clampLatencyMs(settings.manualOverrideMs)
+      : null;
+  const explicitDetectedMs =
+    typeof settings?.detectedLatencyMs === 'number' && Number.isFinite(settings.detectedLatencyMs)
+      ? clampLatencyMs(settings.detectedLatencyMs)
+      : null;
+  const detectedLatencyMs = explicitDetectedMs
+    ?? (detectedBaseLatencyMs !== null || detectedOutputLatencyMs !== null
+      ? clampLatencyMs((detectedBaseLatencyMs ?? 0) + (detectedOutputLatencyMs ?? 0))
+      : null);
+  const browserSupport =
+    settings?.browserSupport
+    ?? (detectedBaseLatencyMs !== null || detectedOutputLatencyMs !== null ? 'available' : 'missing');
+  const source = manualOverrideMs !== null
+    ? 'manual'
+    : detectedLatencyMs !== null
+      ? 'auto'
+      : 'fallback';
+  const compensationMs = manualOverrideMs ?? detectedLatencyMs ?? 0;
+
+  return {
+    detectedBaseLatencyMs,
+    detectedOutputLatencyMs,
+    detectedLatencyMs,
+    manualOverrideMs,
+    compensationMs,
+    source,
+    browserSupport,
+    updatedAt: settings?.updatedAt ?? defaults.updatedAt,
+  };
+}
+
+export function detectPlaybackLatencySettings(
+  current: PlaybackLatencySettings | null | undefined,
+  latency: {
+    baseLatency?: number | null;
+    outputLatency?: number | null;
+  },
+): PlaybackLatencySettings {
+  const previous = normalizePlaybackLatencySettings(current);
+  const detectedBaseLatencyMs = toLatencyMs(latency.baseLatency);
+  const detectedOutputLatencyMs = toLatencyMs(latency.outputLatency);
+
+  return normalizePlaybackLatencySettings({
+    ...previous,
+    detectedBaseLatencyMs,
+    detectedOutputLatencyMs,
+    detectedLatencyMs:
+      detectedBaseLatencyMs !== null || detectedOutputLatencyMs !== null
+        ? clampLatencyMs((detectedBaseLatencyMs ?? 0) + (detectedOutputLatencyMs ?? 0))
+        : null,
+    browserSupport:
+      detectedBaseLatencyMs !== null || detectedOutputLatencyMs !== null ? 'available' : 'missing',
+    updatedAt: Date.now(),
   });
+}
+
+export function setPlaybackLatencyOverrideSettings(
+  current: PlaybackLatencySettings | null | undefined,
+  manualOverrideMs: number | null,
+): PlaybackLatencySettings {
+  const previous = normalizePlaybackLatencySettings(current);
+
+  return normalizePlaybackLatencySettings({
+    ...previous,
+    manualOverrideMs:
+      typeof manualOverrideMs === 'number' && Number.isFinite(manualOverrideMs)
+        ? clampLatencyMs(manualOverrideMs)
+        : null,
+    updatedAt: Date.now(),
+  });
+}
+
+export function getPlaybackLatencyCompensationSeconds(
+  latency: PlaybackLatencySettings | null | undefined,
+): number {
+  return normalizePlaybackLatencySettings(latency).compensationMs / 1000;
 }
 
 export function ensurePlaybackLatencySettings(
   current?: PlaybackLatencySettings | null,
 ): PlaybackLatencySettings {
-  return buildPlaybackLatencySettings(undefined, current);
+  return normalizePlaybackLatencySettings(current);
 }
 
 export function readAudioContextPlaybackLatency(

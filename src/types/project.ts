@@ -542,6 +542,20 @@ export interface GenerationDefaults {
   model: string;
 }
 
+export type PlaybackLatencySource = 'auto' | 'manual' | 'fallback';
+export type PlaybackLatencyBrowserSupport = 'available' | 'missing';
+
+export interface PlaybackLatencySettings {
+  detectedBaseLatencyMs: number | null;
+  detectedOutputLatencyMs: number | null;
+  detectedLatencyMs: number | null;
+  manualOverrideMs: number | null;
+  compensationMs: number;
+  source: PlaybackLatencySource;
+  browserSupport: PlaybackLatencyBrowserSupport;
+  updatedAt: number | null;
+}
+
 export interface Marker {
   id: string;
   time: number;
@@ -598,17 +612,6 @@ export interface SessionState {
   lastLaunchAt: number | null;
 }
 
-export type PlaybackLatencySource = 'detected' | 'manual' | 'fallback';
-
-export interface PlaybackLatencySettings {
-  source: PlaybackLatencySource;
-  baseLatencyMs: number | null;
-  outputLatencyMs: number | null;
-  detectedMs: number | null;
-  overrideMs: number | null;
-  effectiveMs: number;
-}
-
 /** A saved project template — a snapshot of project settings and track layout (without audio). */
 export interface ProjectTemplate {
   id: string;
@@ -653,6 +656,8 @@ export interface Project {
   totalDuration: number;
   /** User-configured bar/measure count; timeline is at least this many bars long. */
   measures?: number;
+  /** Normalized playback latency compensation used by audio + visuals. */
+  playbackLatency?: PlaybackLatencySettings;
   tracks: Track[];
   generationDefaults: GenerationDefaults;
   /** Project-level global song description used as fallback when a clip's globalCaption is empty. */

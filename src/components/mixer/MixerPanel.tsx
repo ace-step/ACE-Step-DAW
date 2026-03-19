@@ -6,13 +6,28 @@ import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
-import type { Track } from '../../types/project';
+import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
 const MIXER_RESIZE_HANDLE_HEIGHT = 6;
-const CHANNEL_STRIP_RESERVED_HEIGHT = 246;
+const CHANNEL_STRIP_RESERVED_HEIGHT = 346;
 const CHANNEL_STRIP_BOTTOM_PADDING = 12;
 const FADER_MIN_HEIGHT = 96;
+const MAX_INSERT_SLOTS = 4;
+const MAX_SEND_SLOTS = 2;
+
+const EFFECT_SHORT_NAMES: Record<string, string> = {
+  eq3: 'EQ3',
+  parametricEq: 'PEQ',
+  compressor: 'Comp',
+  reverb: 'Reverb',
+  delay: 'Delay',
+  distortion: 'Dist',
+  filter: 'Filter',
+  chorus: 'Chorus',
+  flanger: 'Flanger',
+  phaser: 'Phaser',
+};
 
 function volumeToDb(v: number): string {
   if (v <= 0) return '-inf';
@@ -23,11 +38,14 @@ function volumeToDb(v: number): string {
 interface ChannelStripProps {
   track: Track;
   faderHeight: number;
+  returnTracks: ReturnTrack[];
 }
 
-function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
+function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
+  const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const updateTrackSend = useProjectStore((s) => s.updateTrackSend);
 
   const vol = track.volume;
   const pan = track.pan ?? 0;
@@ -38,9 +56,15 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
   const compThresh = track.compressorThreshold ?? -24;
   const compRatio = track.compressorRatio ?? 4;
   const isFrozen = track.frozen ?? false;
+  const effects = track.effects ?? [];
+  const sends = track.sends ?? [];
 
   return (
-    <div className={`flex h-full min-h-0 min-w-[120px] flex-col border-r border-[#3a3a3a] bg-[#2a2a2a] px-3 py-2 ${isFrozen ? 'opacity-70' : ''}`}>
+    <div
+      data-testid="channel-strip"
+      data-track-id={track.id}
+      className={`flex h-full min-h-0 min-w-[120px] flex-col border-r border-[#3a3a3a] bg-[#2a2a2a] px-3 py-2 ${isFrozen ? 'opacity-70' : ''}`}
+    >
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto">
         <div className="w-full h-1.5 rounded-full mb-0.5" style={{ backgroundColor: track.color }} />
         <span className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide" title={track.displayName}>
@@ -51,6 +75,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
         <div className="flex gap-2 mt-0.5">
           <button
             onClick={() => updateTrack(track.id, { muted: !track.muted })}
+            aria-label={`Mute ${track.displayName}`}
             className={`text-xs font-bold px-2.5 py-1 rounded transition-colors ${
               track.muted ? 'bg-amber-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
             }`}
@@ -59,6 +84,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
           </button>
           <button
             onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
+            aria-label={`Solo ${track.displayName}`}
             className={`text-xs font-bold px-2.5 py-1 rounded transition-colors ${
               track.soloed ? 'bg-emerald-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
             }`}
@@ -68,6 +94,76 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
         </div>
 
         <Knob value={pan} min={-1} max={1} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { pan: v })} label="Pan" size={36} step={0.01} disabled={isFrozen} />
+
+        {/* Inserts section — 4 effect slots */}
+        <div data-testid="inserts-section" className="w-full mt-1">
+          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Inserts</div>
+          <div className="flex flex-col gap-0.5">
+            {Array.from({ length: MAX_INSERT_SLOTS }).map((_, i) => {
+              const effect = effects[i];
+              return (
+                <button
+                  key={i}
+                  data-testid={`insert-slot-${i}`}
+                  className={`text-[10px] w-full rounded px-1.5 py-0.5 text-left truncate transition-colors ${
+                    effect
+                      ? effect.enabled
+                        ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
+                        : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
+                      : 'bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]'
+                  }`}
+                  title={effect ? `${EFFECT_SHORT_NAMES[effect.type] ?? effect.type}${effect.enabled ? '' : ' (bypassed)'}` : 'Add insert effect'}
+                  onClick={() => {
+                    if (!effect && !isFrozen) {
+                      addTrackEffect(track.id, 'reverb' as TrackEffectType);
+                    }
+                  }}
+                  disabled={isFrozen}
+                >
+                  {effect ? (EFFECT_SHORT_NAMES[effect.type] ?? effect.type) : '+'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sends section — 2 send slots */}
+        <div data-testid="sends-section" className="w-full mt-1">
+          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-0.5">Sends</div>
+          <div className="flex flex-col gap-0.5">
+            {Array.from({ length: MAX_SEND_SLOTS }).map((_, i) => {
+              const rt = returnTracks[i];
+              const send = rt ? sends.find((s) => s.returnTrackId === rt.id) : undefined;
+              const amount = send?.amount ?? 0;
+              return (
+                <div
+                  key={i}
+                  data-testid={`send-slot-${i}`}
+                  className="flex items-center gap-1"
+                >
+                  {rt ? (
+                    <>
+                      <span className="text-[10px] text-zinc-400 truncate flex-1" title={rt.name}>{rt.name}</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={amount}
+                        onChange={(e) => updateTrackSend(track.id, rt.id, parseFloat(e.target.value))}
+                        aria-label={`Send ${track.displayName} to ${rt.name}`}
+                        className="w-12 h-3 accent-blue-500"
+                        disabled={isFrozen}
+                      />
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-zinc-600 w-full text-center">&mdash;</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">EQ</div>
         <div className="flex gap-1.5">
@@ -188,6 +284,7 @@ export function MixerPanel() {
 
   if (!showMixer || !project) return null;
 
+  const returnTracks = project.returnTracks ?? [];
   const visibleMixerHeight = Math.max(mixerHeight, MIXER_MIN_VISIBLE_HEIGHT);
   const faderHeight = Math.max(
     FADER_MIN_HEIGHT,
@@ -209,7 +306,7 @@ export function MixerPanel() {
             </div>
           )}
           {project.tracks.map((track) => (
-            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} />
+            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} />
           ))}
           <MasterStrip faderHeight={faderHeight} />
         </div>

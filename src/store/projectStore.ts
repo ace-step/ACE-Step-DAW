@@ -143,6 +143,7 @@ interface ProjectState {
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeats: number) => void;
+  stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
@@ -1713,6 +1714,50 @@ export const useProjectStore = create<ProjectState>()(
         })),
       },
     });
+  },
+
+  stampChord: (clipId, rootPitch, intervals, startBeat, durationBeats, velocity = 100) => {
+    const state = get();
+    if (!state.project) return [];
+    _pushHistory(state.project);
+    const noteIds: string[] = [];
+    const pitches = intervals.map((i) => rootPitch + i).filter((p) => p <= 127);
+    for (const pitch of pitches) {
+      const id = crypto.randomUUID();
+      noteIds.push(id);
+      // Use addMidiNote internally (but we batch in one history push)
+    }
+    // Batch add all chord notes in one state update
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === clipId && clip.midiData
+              ? {
+                  ...clip,
+                  midiData: {
+                    ...clip.midiData,
+                    notes: [
+                      ...clip.midiData.notes,
+                      ...pitches.map((pitch, i) => ({
+                        id: noteIds[i],
+                        pitch,
+                        startBeat,
+                        durationBeats,
+                        velocity,
+                      })),
+                    ],
+                  },
+                }
+              : clip,
+          ),
+        })),
+      },
+    });
+    return noteIds;
   },
 
   setMidiGrid: (clipId, grid) => {

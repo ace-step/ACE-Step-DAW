@@ -6,6 +6,12 @@ import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import type { Track } from '../../types/project';
 
+const MIXER_MIN_VISIBLE_HEIGHT = 360;
+const MIXER_RESIZE_HANDLE_HEIGHT = 6;
+const CHANNEL_STRIP_RESERVED_HEIGHT = 246;
+const CHANNEL_STRIP_BOTTOM_PADDING = 12;
+const FADER_MIN_HEIGHT = 96;
+
 function volumeToDb(v: number): string {
   if (v <= 0) return '-inf';
   const db = 20 * Math.log10(v);
@@ -32,7 +38,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
   const isFrozen = track.frozen ?? false;
 
   return (
-    <div className={`flex flex-col items-center gap-1.5 px-3 py-2 bg-[#2a2a2a] border-r border-[#3a3a3a] min-w-[120px] ${isFrozen ? 'opacity-70' : ''}`}>
+    <div className={`flex h-full min-h-0 flex-col items-center gap-1.5 border-r border-[#3a3a3a] bg-[#2a2a2a] px-3 py-2 ${isFrozen ? 'opacity-70' : ''} min-w-[120px]`}>
       <div className="w-full h-1.5 rounded-full mb-0.5" style={{ backgroundColor: track.color }} />
       <span className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide" title={track.displayName}>
         {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
@@ -81,7 +87,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
         <Knob value={compRatio} min={1} max={20} defaultValue={4} onChange={(v) => updateTrackMixer(track.id, { compressorRatio: v })} label="Rat" size={34} step={0.5} disabled={!compEnabled || isFrozen} />
       </div>
 
-      <div className="flex-1 flex flex-col items-center gap-1 mt-1 min-h-0 w-full">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-1 mt-1 w-full pb-1">
         <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter trackId={track.id} />
           <input
@@ -107,9 +113,9 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
 
   return (
-    <div className="flex flex-col items-center gap-1.5 px-4 py-2 bg-[#252525] border-l-2 border-[#555] min-w-[120px]">
+    <div className="flex h-full min-h-0 flex-col items-center gap-1.5 border-l-2 border-[#555] bg-[#252525] px-4 py-2 min-w-[120px]">
       <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Master</span>
-      <div className="flex-1 flex flex-col items-center justify-end gap-1 w-full">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-1 w-full pb-1">
         <div className="relative flex justify-center" style={{ height: faderHeight }}>
           <input
             type="range" min={0} max={1.5} step={0.01} value={masterVol}
@@ -154,16 +160,20 @@ export function MixerPanel() {
 
   if (!showMixer || !project) return null;
 
-  const faderHeight = Math.max(60, mixerHeight - 300);
+  const visibleMixerHeight = Math.max(mixerHeight, MIXER_MIN_VISIBLE_HEIGHT);
+  const faderHeight = Math.max(
+    FADER_MIN_HEIGHT,
+    visibleMixerHeight - MIXER_RESIZE_HANDLE_HEIGHT - CHANNEL_STRIP_RESERVED_HEIGHT - CHANNEL_STRIP_BOTTOM_PADDING,
+  );
 
   return (
-    <div className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0" style={{ height: mixerHeight }}>
+    <div className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0" style={{ height: visibleMixerHeight }}>
       <div
         className="h-1.5 w-full cursor-ns-resize bg-[#444] hover:bg-daw-accent transition-colors flex-shrink-0"
         onMouseDown={onResizeMouseDown}
         title="Drag to resize mixer"
       />
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-3">
         <div className="flex items-stretch h-full">
           {project.tracks.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">

@@ -17,31 +17,28 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve issue with Claude Code CLI
+      - name: Resolve with context-aware Claude Code CLI
         run: |
           ISSUE_NUM=${{ github.event.issue.number }}
           ISSUE_TITLE=$(gh issue view $ISSUE_NUM --repo ${{ github.repository }} --json title --jq .title)
           ISSUE_BODY=$(gh issue view $ISSUE_NUM --repo ${{ github.repository }} --json body --jq .body | head -80)
-          
-          echo "Auto-resolving issue #$ISSUE_NUM: $ISSUE_TITLE"
+          CONTEXT=$(cat scripts/agents/AGENT_CONTEXT.md)
           
           cd /Users/junmingong/.openclaw/workspace/acestep-daw
           git fetch origin && git reset --hard origin/main
           
-          ~/.local/bin/claude --print --permission-mode bypassPermissions \
-            "You are a senior developer for ACE-Step DAW.
+          ~/.local/bin/claude --print --permission-mode bypassPermissions --allowedTools 'Edit,Write,Read,Bash' \
+            "$CONTEXT
           
-          Fix issue #$ISSUE_NUM: $ISSUE_TITLE
+          ---
           
+          NOW IMPLEMENT THIS ISSUE:
+          
+          Issue #$ISSUE_NUM: $ISSUE_TITLE
           Details: $ISSUE_BODY
           
-          1. Understand the issue, find relevant files
-          2. Implement the fix/feature with tests
-          3. npm run build && npx vitest run tests/unit/
-          4. git checkout -b fix/issue-$ISSUE_NUM
-          5. git -c user.name=ChuxiJ -c user.email=junmin@acestudio.ai add -A && git commit -m 'fix: resolve #$ISSUE_NUM'
-          6. git push origin fix/issue-$ISSUE_NUM  
-          7. gh pr create --repo ${{ github.repository }} --title 'fix: #$ISSUE_NUM — $ISSUE_TITLE' --body 'Closes #$ISSUE_NUM' --base main
-          8. Request review: gh api repos/${{ github.repository }}/pulls/\$(gh pr view --json number --jq .number)/requested_reviewers -f reviewers[]=copilot[bot]"
+          IMPORTANT: First read CLAUDE.md and the relevant section of INTERACTION_DESIGN_GUIDE.md.
+          Then implement following ALL the standards above.
+          Create branch, build, test, push, create PR."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

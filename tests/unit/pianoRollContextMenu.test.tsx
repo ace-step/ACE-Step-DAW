@@ -377,6 +377,45 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     expect(mockAddMidiNote).toHaveBeenCalledTimes(1);
   });
 
+  it('paints repeated notes while dragging with the primary button held', () => {
+    const clip = makeClip([]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="paint"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+
+    fireEvent.mouseDown(canvas, {
+      clientX: 120,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+    fireEvent.mouseMove(window, {
+      clientX: 160,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+    fireEvent.mouseMove(window, {
+      clientX: 200,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+
+    expect(mockAddMidiNote).toHaveBeenCalledTimes(3);
+    expect(mockBeginDrag).not.toHaveBeenCalled();
+    expect(mockUpdateMidiNote).not.toHaveBeenCalled();
+  });
+
   it('does not erase notes on hover without the primary mouse button pressed (#394)', () => {
     const note = makeNote();
     const clip = makeClip([note]);

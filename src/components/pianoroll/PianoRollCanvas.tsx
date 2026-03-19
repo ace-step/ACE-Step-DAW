@@ -112,6 +112,23 @@ export function PianoRollCanvas({
   const pixelsPerBeat = 40 * prZoomX;
   const gridBeats = gridSizeToBeats(gridSize);
 
+  const canvasCursor = activeTool === 'select'
+    ? 'default'
+    : activeTool === 'erase'
+      ? 'not-allowed'
+      : activeTool === 'slide'
+        ? 'alias'
+        : 'crosshair';
+  const canvasTitle = activeTool === 'select'
+    ? 'Select notes, drag a marquee, or resize existing notes'
+    : activeTool === 'pencil'
+      ? 'Pencil tool: click to create a note, then drag to adjust its length'
+      : activeTool === 'paint'
+        ? 'Paint tool: drag across the grid to stamp repeated notes'
+        : activeTool === 'erase'
+          ? 'Erase tool: click or drag across notes to remove them'
+          : 'Slide tool: create slide notes for portamento transitions';
+
   const beatToX = useCallback(
     (beat: number) => PIANO_KEYBOARD_WIDTH + beat * pixelsPerBeat - prScrollX,
     [pixelsPerBeat, prScrollX],
@@ -525,12 +542,23 @@ export function PianoRollCanvas({
         return;
       }
 
-      if (activeTool === 'pencil' || activeTool === 'paint' || activeTool === 'slide') {
+      if (activeTool === 'paint') {
+        if (hit) {
+          return;
+        }
+
+        const newNote = createNoteAt(x, y, { select: false });
+        if (!newNote) return;
+
+        toolStrokeRef.current.noteIds.add(newNote.id);
+        toolStrokeRef.current.cells.add(getCellKey(newNote.startBeat, newNote.pitch));
+        setSelectedNoteIds(new Set([newNote.id]));
+        return;
+      }
+
+      if (activeTool === 'pencil' || activeTool === 'slide') {
         if (hit && activeTool !== 'slide') {
           deleteNoteById(hit.note.id);
-          if (activeTool === 'paint') {
-            toolStrokeRef.current.noteIds.add(hit.note.id);
-          }
           return;
         }
 
@@ -1159,17 +1187,12 @@ export function PianoRollCanvas({
       <canvas
         ref={canvasRef}
         aria-label="Piano roll editor"
+        data-active-tool={activeTool}
         className="absolute inset-0"
         style={{
-          cursor:
-            activeTool === 'select'
-              ? 'default'
-              : activeTool === 'erase'
-                ? 'not-allowed'
-                : activeTool === 'slide'
-                  ? 'alias'
-                  : 'crosshair',
+          cursor: canvasCursor,
         }}
+        title={canvasTitle}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}

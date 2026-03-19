@@ -63,7 +63,7 @@
 
 ### Piano Roll (Learn from FL Studio)
 - ✅ **Ghost notes** — Show notes from other tracks as 15% opacity background. Toggle with 👻 button.
-- ⬜ **Draw/paint tools** — Pencil (single note), paint brush (repeat notes), select, erase. Number keys `1-4` to switch tools.
+- ✅ **Draw/paint tools** — Pencil (single note), paint brush (repeat notes), select, erase. Number keys `1-4` to switch tools.
 - ⬜ **Velocity color** — Note color = velocity (light = soft, saturated = loud). Also show velocity bars below piano roll.
 - ✅ **Quick quantize** — `Q` quantizes selected notes to current grid. `Cmd+Q` opens quantize dialog with strength slider.
 - ⬜ **Chord stamp** — Click to place common chord shapes (maj, min, 7th, dim, etc.). Shortcut: hold `Shift` + click.

@@ -374,6 +374,15 @@ export interface Clip {
   sessionFollowAction?: SessionFollowAction;
 }
 
+export interface BounceInPlaceOptions {
+  includeEffects: boolean;
+  includeAutomation: boolean;
+  normalize: boolean;
+  replaceOriginal: boolean;
+  startTime?: number;
+  duration?: number;
+}
+
 /** A warp marker on a clip mapping an original transient time to a grid-snapped position. */
 export interface AudioWarpMarker {
   /** Original transient position in seconds (relative to clip audio start). */

@@ -505,6 +505,12 @@ export function TrackHeader({
             )}
           </div>
           <button
+            onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            Bounce in Place...
+          </button>
+          <button
             onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
           >

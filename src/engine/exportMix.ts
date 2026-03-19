@@ -78,7 +78,7 @@ function buildOfflineMasteringChain(
  * - distortion → WaveShaperNode
  * - filter → BiquadFilterNode
  */
-function buildOfflineEffects(
+export function buildOfflineEffects(
   ctx: OfflineAudioContext,
   effects: TrackEffect[],
 ): { input: AudioNode; output: AudioNode } | null {

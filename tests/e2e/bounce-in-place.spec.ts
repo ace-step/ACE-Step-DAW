@@ -43,8 +43,8 @@ test.describe('Bounce In Place', () => {
     await page.getByRole('button', { name: 'Cancel' }).click();
 
     await page.getByText('Agent Keys').click({ button: 'right', force: true });
-    await expect(page.getByRole('button', { name: 'Bounce in Place...' })).toBeVisible();
-    await page.getByRole('button', { name: 'Bounce in Place...' }).click();
+    await expect(page.getByRole('button', { name: 'Bounce in Place...' }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Bounce in Place...' }).first().click();
 
     await expect(page.getByLabel('Include effects')).toBeVisible();
     await Promise.all([

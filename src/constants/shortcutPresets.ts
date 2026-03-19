@@ -27,6 +27,7 @@ const abletonMap: ShortcutMap = {
   'panels.loopBrowser':   { code: 'Tab' },
   'project.new':          { code: 'KeyN', mod: true },
   'project.export':       { code: 'KeyE', mod: true, shift: true },
+  'project.bounceInPlace': { code: 'KeyR', mod: true, shift: true },
   'project.settings':     { code: 'Comma', mod: true },
 };
 
@@ -56,6 +57,7 @@ const logicProMap: ShortcutMap = {
   'project.new':            { code: 'KeyN', mod: true },
   'project.settings':       { code: 'Comma', mod: true },
   'project.export':         { code: 'KeyE', mod: true },  // Cmd+E = bounce in Logic
+  'project.bounceInPlace':  { code: 'KeyB', mod: true },
 };
 
 const flStudioMap: ShortcutMap = {
@@ -79,6 +81,7 @@ const flStudioMap: ShortcutMap = {
   'panels.loopBrowser':     { code: 'KeyO' },
   'project.new':            { code: 'KeyN', mod: true },
   'project.export':         { code: 'KeyR', mod: true, shift: true },
+  'project.bounceInPlace':  { code: 'KeyB', mod: true, alt: true },
   'project.settings':       { code: 'F11' },
 };
 
@@ -104,6 +107,7 @@ const proToolsMap: ShortcutMap = {
   'panels.loopBrowser':     { code: 'KeyO' },
   'project.new':            { code: 'KeyN', mod: true },
   'project.export':         { code: 'KeyB', mod: true, shift: true, alt: true },
+  'project.bounceInPlace':  { code: 'KeyR', mod: true, shift: true },
   'project.settings':       { code: 'Comma', mod: true },
 };
 

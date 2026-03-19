@@ -90,11 +90,10 @@ import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGroove
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
-import { audioBufferToWavBlob } from '../utils/wav';
-import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS, renderTrackForBounceInPlace } from '../services/bounceInPlace';
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import { useTransportStore } from './transportStore';
+import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -532,6 +531,68 @@ function computeTotalDuration(
     measuredDuration = effectiveMeasures * barDur;
   }
   return Math.max(measuredDuration, maxEnd + TIMELINE_PADDING);
+}
+
+function buildBouncedClip(trackId: string, input: {
+  startTime: number;
+  duration: number;
+  audioKey: string;
+  waveformPeaks: number[];
+  prompt?: string;
+}): Clip {
+  return {
+    id: uuidv4(),
+    trackId,
+    startTime: input.startTime,
+    duration: input.duration,
+    prompt: input.prompt ?? '',
+    globalCaption: '',
+    lyrics: '',
+    generationStatus: 'ready',
+    generationJobId: null,
+    cumulativeMixKey: null,
+    isolatedAudioKey: input.audioKey,
+    waveformPeaks: input.waveformPeaks,
+    audioDuration: input.duration,
+    source: 'generated',
+    starred: false,
+  };
+}
+
+function createNeutralBouncedTrack(track: Track, bouncedClip: Clip, displayName: string): Track {
+  return {
+    ...track,
+    trackName: 'custom',
+    trackType: 'sample',
+    displayName,
+    volume: 1,
+    muted: false,
+    soloed: false,
+    armed: false,
+    clips: [bouncedClip],
+    sequencerPattern: undefined,
+    synthPreset: undefined,
+    sampler: undefined,
+    samplerConfig: undefined,
+    effects: [],
+    midiEffects: [],
+    drumMachine: undefined,
+    frozen: false,
+    frozenAudioKey: undefined,
+    pan: 0,
+    panMode: 'stereo',
+    panLeft: undefined,
+    panRight: undefined,
+    eqLowGain: 0,
+    eqMidGain: 0,
+    eqHighGain: 0,
+    compressorEnabled: false,
+    compressorThreshold: -24,
+    compressorRatio: 4,
+    reverbMix: 0,
+    reverbRoomSize: 0.5,
+    plugins: [],
+  };
 }
 
 function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
@@ -1461,178 +1522,119 @@ export const useProjectStore = create<ProjectState>()(
 
   bounceInPlace: async (trackId, options) => {
     const state = get();
-    const project = state.project;
-    if (!project) throw new Error('No project');
+    if (!state.project) {
+      throw new Error('No project');
+    }
 
-    const track = project.tracks.find((candidate) => candidate.id === trackId);
-    if (!track) throw new Error(`Track '${trackId}' not found`);
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) {
+      throw new Error(`Track '${trackId}' not found`);
+    }
 
     const resolvedOptions: BounceInPlaceOptions = {
-      ...DEFAULT_BOUNCE_IN_PLACE_OPTIONS,
+      includeEffects: true,
+      includeAutomation: true,
+      normalize: false,
+      replaceOriginal: true,
       ...options,
     };
 
-    const rendered = await renderTrackForBounceInPlace(project, track, resolvedOptions);
-    if (!rendered) return undefined;
-
-    const clipId = uuidv4();
-    const audioKey = await saveAudioBlob(
-      project.id,
-      clipId,
-      'isolated',
-      audioBufferToWavBlob(rendered.buffer),
-    );
-
+    const bounced = await bounceTrackToAudioAsset(state.project, track, resolvedOptions);
     const latest = get();
-    if (!latest.project) return undefined;
+    if (!latest.project) return;
+
     const latestTrack = latest.project.tracks.find((candidate) => candidate.id === trackId);
-    if (!latestTrack) return undefined;
-
-    _pushHistory(latest.project);
-
-    const baseClip: Clip = {
-      id: clipId,
-      trackId,
-      startTime: rendered.startTime,
-      duration: rendered.duration,
-      prompt: `${latestTrack.displayName} Bounce`,
-      lyrics: '',
-      generationStatus: 'ready',
-      generationJobId: null,
-      cumulativeMixKey: null,
-      isolatedAudioKey: audioKey,
-      waveformPeaks: rendered.waveformPeaks,
-      audioDuration: rendered.duration,
-      audioOffset: 0,
-      source: 'uploaded',
-    };
-
-    if (resolvedOptions.replaceOriginal) {
-      const updatedTracks = latest.project.tracks.map((candidate) =>
-        candidate.id === trackId
-          ? {
-              ...candidate,
-              trackType: 'sample' as TrackType,
-              clips: [{ ...baseClip, trackId }],
-              frozen: false,
-              frozenAudioKey: undefined,
-              sequencerPattern: undefined,
-              drumMachine: undefined,
-              synthPreset: undefined,
-              sampler: undefined,
-              samplerConfig: undefined,
-              midiEffects: [],
-              effects: resolvedOptions.includeEffects ? [] : candidate.effects,
-            }
-          : candidate,
-      );
-
-      set({
-        project: {
-          ...latest.project,
-          updatedAt: Date.now(),
-          totalDuration: computeTotalDuration(
-            updatedTracks,
-            latest.project.measures,
-            latest.project.bpm,
-            latest.project.timeSignature,
-            latest.project.tempoMap,
-            latest.project.timeSignatureMap,
-          ),
-          tracks: updatedTracks,
-          assets: [
-            ...(latest.project.assets ?? []),
-            {
-              id: uuidv4(),
-              clipId,
-              trackDisplayName: latestTrack.displayName,
-              prompt: baseClip.prompt,
-              source: 'uploaded',
-              isolatedAudioKey: audioKey,
-              cumulativeMixKey: null,
-              waveformPeaks: rendered.waveformPeaks,
-              starred: false,
-              createdAt: Date.now(),
-              duration: rendered.duration,
-            },
-          ],
-        },
-      });
-
-      toastSuccess(`Bounced ${latestTrack.displayName} in place`);
-      return baseClip;
+    if (!latestTrack) {
+      throw new Error(`Track '${trackId}' not found`);
     }
 
-    const bouncedTrackId = uuidv4();
-    const insertAfterOrder = latestTrack.order;
-    const shiftedTracks = latest.project.tracks.map((candidate) =>
-      candidate.order > insertAfterOrder
-        ? { ...candidate, order: candidate.order + 1 }
-        : candidate,
-    );
-    const bouncedTrack: Track = {
-      ...createTrackFromTemplate(shiftedTracks, latestTrack.trackName, 'sample', {
-        color: latestTrack.color,
-        volume: latestTrack.volume,
-        laneHeight: latestTrack.laneHeight,
-        pan: latestTrack.pan,
-        eqLowGain: latestTrack.eqLowGain,
-        eqMidGain: latestTrack.eqMidGain,
-        eqHighGain: latestTrack.eqHighGain,
-        compressorEnabled: latestTrack.compressorEnabled,
-        compressorThreshold: latestTrack.compressorThreshold,
-        compressorRatio: latestTrack.compressorRatio,
-        reverbMix: latestTrack.reverbMix,
-        reverbRoomSize: latestTrack.reverbRoomSize,
-        effects: resolvedOptions.includeEffects ? [] : latestTrack.effects,
-      }),
-      id: bouncedTrackId,
-      displayName: buildUniqueTrackName(shiftedTracks, `${latestTrack.displayName} Bounce`),
-      order: insertAfterOrder + 1,
-      clips: [{ ...baseClip, trackId: bouncedTrackId }],
-      synthPreset: undefined,
-      sampler: undefined,
-      samplerConfig: undefined,
-      sequencerPattern: undefined,
-      drumMachine: undefined,
-      midiEffects: [],
+    _pushHistory(latest.project, {
+      scope: 'arrangement',
+      label: resolvedOptions.replaceOriginal ? 'Bounce track in place' : 'Create bounced audio track',
+      trackId,
+    });
+
+    const bouncedClip = buildBouncedClip(trackId, {
+      startTime: bounced.startTime,
+      duration: bounced.duration,
+      audioKey: bounced.audioKey,
+      waveformPeaks: bounced.waveformPeaks,
+      prompt: `${latestTrack.displayName} Bounce`,
+    });
+
+    const assetEntry = {
+      id: uuidv4(),
+      clipId: bouncedClip.id,
+      trackDisplayName: latestTrack.displayName,
+      prompt: bouncedClip.prompt,
+      source: 'uploaded' as const,
+      isolatedAudioKey: bounced.audioKey,
+      cumulativeMixKey: null,
+      waveformPeaks: bounced.waveformPeaks,
+      starred: false,
+      createdAt: Date.now(),
+      duration: bounced.duration,
     };
-    const updatedTracks = [...shiftedTracks, bouncedTrack];
+
+    let nextTracks: Track[];
+    let nextAutomationLanes = latest.project.automationLanes ?? [];
+    let assets = [...(latest.project.assets ?? [])];
+    let resultClip: Clip = bouncedClip;
+
+    if (resolvedOptions.replaceOriginal) {
+      nextTracks = latest.project.tracks.map((candidate) =>
+        candidate.id === trackId
+          ? createNeutralBouncedTrack(candidate, bouncedClip, candidate.displayName)
+          : candidate,
+      );
+      nextAutomationLanes = nextAutomationLanes.filter((lane) => lane.trackId !== trackId);
+      assets.push(assetEntry);
+      toastSuccess(`Bounced ${latestTrack.displayName} in place`);
+    } else {
+      const sourceIndex = latest.project.tracks.findIndex((candidate) => candidate.id === trackId);
+      const insertedTrackId = uuidv4();
+      const insertedClip = { ...bouncedClip, id: uuidv4(), trackId: insertedTrackId };
+      const bouncedTrack = createNeutralBouncedTrack(
+        {
+          ...latestTrack,
+          id: insertedTrackId,
+        },
+        insertedClip,
+        `${latestTrack.displayName} Bounce`,
+      );
+
+      nextTracks = [...latest.project.tracks];
+      nextTracks.splice(sourceIndex + 1, 0, bouncedTrack);
+      resultClip = insertedClip;
+      assets.push({
+        ...assetEntry,
+        clipId: insertedClip.id,
+        trackDisplayName: bouncedTrack.displayName,
+      });
+      toastSuccess(`Created bounced audio track for ${latestTrack.displayName}`);
+    }
+
+    nextTracks = nextTracks.map((candidate, index) => ({ ...candidate, order: index }));
 
     set({
       project: {
         ...latest.project,
         updatedAt: Date.now(),
+        automationLanes: nextAutomationLanes,
+        tracks: nextTracks,
         totalDuration: computeTotalDuration(
-          updatedTracks,
+          nextTracks,
           latest.project.measures,
           latest.project.bpm,
           latest.project.timeSignature,
           latest.project.tempoMap,
           latest.project.timeSignatureMap,
         ),
-        tracks: updatedTracks,
-        assets: [
-          ...(latest.project.assets ?? []),
-          {
-            id: uuidv4(),
-            clipId,
-            trackDisplayName: bouncedTrack.displayName,
-            prompt: baseClip.prompt,
-            source: 'uploaded',
-            isolatedAudioKey: audioKey,
-            cumulativeMixKey: null,
-            waveformPeaks: rendered.waveformPeaks,
-            starred: false,
-            createdAt: Date.now(),
-            duration: rendered.duration,
-          },
-        ],
+        assets,
       },
     });
 
-    toastSuccess(`Created bounced audio track for ${latestTrack.displayName}`);
-    return { ...baseClip, trackId: bouncedTrackId };
+    return resultClip;
   },
 
   addTrack: (trackName, trackType) => {

@@ -5,6 +5,8 @@ import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS } from '../../services/bounceInPlace';
 import type { BounceInPlaceOptions } from '../../types/project';
 import { toastError } from '../../hooks/useToast';
 
+const checkboxClass = 'h-4 w-4 rounded border border-daw-border bg-daw-surface-2 text-daw-accent focus:ring-1 focus:ring-daw-accent';
+
 export function BounceInPlaceDialog() {
   const trackId = useUIStore((state) => state.bounceInPlaceTrackId);
   const close = useUIStore((state) => state.closeBounceInPlaceDialog);
@@ -22,8 +24,6 @@ export function BounceInPlaceDialog() {
   }, [trackId]);
 
   if (!trackId || !track) return null;
-
-  const checkboxClass = 'h-4 w-4 rounded border border-daw-border bg-daw-surface-2 text-daw-accent focus:ring-1 focus:ring-daw-accent';
 
   const handleBounce = async () => {
     setIsBouncing(true);
@@ -65,6 +65,7 @@ export function BounceInPlaceDialog() {
         <div className="space-y-3 px-4 py-4">
           <label className="flex cursor-pointer items-start gap-3 rounded-md border border-daw-border bg-daw-surface-2/60 px-3 py-2">
             <input
+              aria-label="Include effects"
               type="checkbox"
               className={checkboxClass}
               checked={options.includeEffects}
@@ -78,6 +79,21 @@ export function BounceInPlaceDialog() {
 
           <label className="flex cursor-pointer items-start gap-3 rounded-md border border-daw-border bg-daw-surface-2/60 px-3 py-2">
             <input
+              aria-label="Include automation"
+              type="checkbox"
+              className={checkboxClass}
+              checked={options.includeAutomation}
+              onChange={(event) => setOptions((current) => ({ ...current, includeAutomation: event.target.checked }))}
+            />
+            <span>
+              <span className="block text-sm text-zinc-100">Include automation</span>
+              <span className="block text-xs text-zinc-400">Bake track volume and pan automation into the bounced audio.</span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-daw-border bg-daw-surface-2/60 px-3 py-2">
+            <input
+              aria-label="Normalize"
               type="checkbox"
               className={checkboxClass}
               checked={options.normalize}
@@ -91,6 +107,7 @@ export function BounceInPlaceDialog() {
 
           <label className="flex cursor-pointer items-start gap-3 rounded-md border border-daw-border bg-daw-surface-2/60 px-3 py-2">
             <input
+              aria-label="Replace original"
               type="checkbox"
               className={checkboxClass}
               checked={options.replaceOriginal}

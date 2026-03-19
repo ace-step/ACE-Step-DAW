@@ -245,6 +245,38 @@ export interface ReturnTrack {
   pan: number;     // -1 (full left) to +1 (full right)
 }
 
+export interface TrackPresetSettings {
+  color: string;
+  volume: number;
+  laneHeight?: number;
+  synthPreset?: SynthPreset;
+  drumKit?: DrumKitName;
+  pan?: number;
+  panMode?: 'stereo' | 'dual-mono';
+  panLeft?: number;
+  panRight?: number;
+  eqLowGain?: number;
+  eqMidGain?: number;
+  eqHighGain?: number;
+  compressorEnabled?: boolean;
+  compressorThreshold?: number;
+  compressorRatio?: number;
+  reverbMix?: number;
+  reverbRoomSize?: number;
+  localCaption?: string;
+}
+
+export interface TrackPreset {
+  id: string;
+  name: string;
+  trackName: TrackName;
+  trackType: TrackType;
+  settings: TrackPresetSettings;
+  effects: TrackEffect[];
+  midiEffects: MidiEffect[];
+  createdAt: number;
+}
+
 export interface Track {
   id: string;
   trackType?: TrackType;
@@ -349,6 +381,8 @@ export interface Project {
   automationLanes?: AutomationLane[];
   /** Shared effect return tracks (mixer buses). */
   returnTracks?: ReturnTrack[];
+  /** Reusable track templates saved from existing tracks. */
+  trackPresets?: TrackPreset[];
   /** Timeline markers (sorted by time). */
   markers?: Marker[];
   /** Tempo map: discrete tempo changes sorted by beat. Empty = use project.bpm everywhere. */

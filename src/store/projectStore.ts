@@ -26,6 +26,8 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  TrackPreset,
+  TrackPresetSettings,
   Take,
   Marker,
   TempoEvent,
@@ -119,6 +121,9 @@ interface ProjectState {
   removeTrack: (trackId: string) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
+  saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
+  applyTrackPreset: (presetId: string) => Track | undefined;
+  deleteTrackPreset: (presetId: string) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
   setTrackHeightPreset: (trackId: string, preset: TrackHeightPreset) => void;
@@ -334,18 +339,172 @@ function createDefaultMidiEffect(type: MidiEffectType): MidiEffect {
   }
 }
 
-function ensureTrackDefaults(track: Track): Track {
-  const defaultSynthPreset =
-    track.trackName === 'bass' ? 'bass'
-      : track.trackName === 'strings' ? 'strings'
-        : track.trackName === 'synth' ? 'lead'
-          : track.trackName === 'keyboard' ? 'organ'
-            : 'piano';
+function cloneTrackEffectsForPreset(effects: TrackEffect[] | undefined): TrackEffect[] {
+  return (effects ?? []).map((effect) => {
+    if (effect.type !== 'compressor') {
+      return structuredClone(effect);
+    }
+
+    const params = { ...effect.params };
+    delete params.sidechainSourceTrackId;
+    return { ...effect, params };
+  });
+}
+
+function cloneTrackEffectsWithNewIds(effects: TrackEffect[] | undefined): TrackEffect[] {
+  return cloneTrackEffectsForPreset(effects).map((effect) => ({
+    ...effect,
+    id: uuidv4(),
+  }));
+}
+
+function cloneMidiEffectsWithNewIds(effects: MidiEffect[] | undefined): MidiEffect[] {
+  return (effects ?? []).map((effect) => ({
+    ...structuredClone(effect),
+    id: uuidv4(),
+  }));
+}
+
+function createDefaultSequencerPattern(): SequencerPattern {
+  const stepsPerBar = 16;
+  const bars = 1;
+  const totalSteps = stepsPerBar * bars;
 
   return {
+    id: uuidv4(),
+    name: 'Pattern 1',
+    rows: DEFAULT_DRUM_KIT.map((kit) => ({
+      id: uuidv4(),
+      name: kit.name,
+      sampleKey: kit.id,
+      steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
+      volume: 0.8,
+      pan: 0,
+      muted: false,
+      color: kit.color,
+    })),
+    stepsPerBar,
+    bars,
+    swing: 0,
+  };
+}
+
+function getDefaultTrackSynthPreset(trackName: TrackName): Track['synthPreset'] {
+  return trackName === 'bass' ? 'bass'
+    : trackName === 'strings' ? 'strings'
+      : trackName === 'synth' ? 'lead'
+        : trackName === 'keyboard' ? 'organ'
+          : 'piano';
+}
+
+function buildTrackDisplayName(existingTracks: Track[], trackName: TrackName): string {
+  const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG.custom;
+  const sameNameCount = existingTracks.filter((track) => track.trackName === trackName).length;
+  return sameNameCount === 0 ? info.displayName : `${info.displayName} ${sameNameCount + 1}`;
+}
+
+function createTrackFromTemplate(
+  existingTracks: Track[],
+  trackName: TrackName,
+  trackType: TrackType,
+  overrides?: Partial<Track>,
+): Track {
+  const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG.custom;
+  const existingOrders = existingTracks.map((track) => track.order);
+  const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+  const displayName = buildTrackDisplayName(existingTracks, trackName);
+  const {
+    id: _ignoredId,
+    trackType: _ignoredTrackType,
+    trackName: _ignoredTrackName,
+    displayName: _ignoredDisplayName,
+    order: _ignoredOrder,
+    muted: _ignoredMuted,
+    soloed: _ignoredSoloed,
+    clips: _ignoredClips,
+    effects: presetEffects,
+    midiEffects: presetMidiEffects,
+    sequencerPattern: presetSequencerPattern,
+    ...trackOverrides
+  } = overrides ?? {};
+
+  const track: Track = {
+    color: info.color,
+    volume: 0.8,
+    laneHeight: trackType === 'sequencer' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
+    synthPreset: getDefaultTrackSynthPreset(trackName),
+    drumKit: trackName === 'drums' || trackType === 'sequencer' ? '808' : undefined,
+    ...trackOverrides,
+    id: uuidv4(),
+    trackType,
+    trackName,
+    displayName,
+    order: maxOrder + 1,
+    muted: false,
+    soloed: false,
+    clips: [],
+    effects: cloneTrackEffectsWithNewIds(presetEffects),
+    midiEffects: cloneMidiEffectsWithNewIds(presetMidiEffects),
+  };
+
+  if (track.trackType === 'sequencer') {
+    track.sequencerPattern = presetSequencerPattern
+      ? {
+          ...structuredClone(presetSequencerPattern),
+          id: uuidv4(),
+          rows: presetSequencerPattern.rows.map((row) => ({
+            ...structuredClone(row),
+            id: uuidv4(),
+          })),
+        }
+      : createDefaultSequencerPattern();
+  } else {
+    delete track.sequencerPattern;
+  }
+
+  return track;
+}
+
+function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
+  const settings: TrackPresetSettings = {
+    color: track.color,
+    volume: track.volume,
+    laneHeight: track.laneHeight,
+    synthPreset: track.synthPreset,
+    drumKit: track.drumKit,
+    pan: track.pan,
+    panMode: track.panMode,
+    panLeft: track.panLeft,
+    panRight: track.panRight,
+    eqLowGain: track.eqLowGain,
+    eqMidGain: track.eqMidGain,
+    eqHighGain: track.eqHighGain,
+    compressorEnabled: track.compressorEnabled,
+    compressorThreshold: track.compressorThreshold,
+    compressorRatio: track.compressorRatio,
+    reverbMix: track.reverbMix,
+    reverbRoomSize: track.reverbRoomSize,
+    localCaption: track.localCaption,
+  };
+
+  return {
+    id: uuidv4(),
+    name,
+    trackName: track.trackName,
+    trackType: track.trackType ?? (track.trackName === 'custom' ? 'sample' : 'stems'),
+    settings,
+    effects: cloneTrackEffectsForPreset(track.effects),
+    midiEffects: structuredClone(track.midiEffects ?? []),
+    createdAt: Date.now(),
+  };
+}
+
+function ensureTrackDefaults(track: Track): Track {
+  return {
     ...track,
-    synthPreset: track.synthPreset ?? defaultSynthPreset,
+    synthPreset: track.synthPreset ?? getDefaultTrackSynthPreset(track.trackName),
     effects: track.effects ?? [],
+    midiEffects: track.midiEffects ?? [],
     drumKit: track.drumKit ?? '808',
     clips: track.clips.map((clip) => ({
       ...clip,
@@ -370,6 +529,7 @@ export const useProjectStore = create<ProjectState>()(
     // Migration: backfill trackType for projects created before the field existed
     const migrated: Project = {
       ...project,
+      trackPresets: project.trackPresets ?? [],
       tracks: project.tracks.map((t) => {
         if (t.trackType) return t;
         const inferred: TrackType =
@@ -424,6 +584,7 @@ export const useProjectStore = create<ProjectState>()(
       totalDuration: measures * getBarDurationSec(bpm, timeSig),
       measures,
       tracks: [],
+      trackPresets: [],
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
     };
@@ -601,58 +762,7 @@ export const useProjectStore = create<ProjectState>()(
     _pushHistory(state.project);
 
     const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
-    const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG['custom'];
-    const existingOrders = state.project.tracks.map((t) => t.order);
-    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
-
-    const sameNameCount = state.project.tracks.filter((t) => t.trackName === trackName).length;
-    const displayName = sameNameCount === 0 ? info.displayName : `${info.displayName} ${sameNameCount + 1}`;
-
-    const track: Track = {
-      id: uuidv4(),
-      trackType: resolvedType,
-      trackName,
-      displayName,
-      color: info.color,
-      order: maxOrder + 1,
-      volume: 0.8,
-      muted: false,
-      soloed: false,
-      clips: [],
-      laneHeight: resolvedType === 'sequencer' ? 80 : resolvedType === 'pianoRoll' ? 88 : undefined,
-      synthPreset:
-        trackName === 'bass' ? 'bass'
-          : trackName === 'strings' ? 'strings'
-            : trackName === 'synth' ? 'lead'
-              : trackName === 'keyboard' ? 'organ'
-                : 'piano',
-      effects: [],
-      drumKit: trackName === 'drums' || resolvedType === 'sequencer' ? '808' : undefined,
-    };
-
-    // Auto-initialize sequencer pattern for sequencer tracks
-    if (resolvedType === 'sequencer') {
-      const stepsPerBar = 16;
-      const bars = 1;
-      const totalSteps = stepsPerBar * bars;
-      track.sequencerPattern = {
-        id: uuidv4(),
-        name: 'Pattern 1',
-        rows: DEFAULT_DRUM_KIT.map((kit) => ({
-          id: uuidv4(),
-          name: kit.name,
-          sampleKey: kit.id,
-          steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
-          volume: 0.8,
-          pan: 0,
-          muted: false,
-          color: kit.color,
-        })),
-        stepsPerBar,
-        bars,
-        swing: 0,
-      };
-    }
+    const track = createTrackFromTemplate(state.project.tracks, trackName, resolvedType);
 
     const newTracks = [...state.project.tracks, track];
     set({
@@ -665,6 +775,70 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return track;
+  },
+
+  saveTrackPreset: (trackId, presetName) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) throw new Error(`Track '${trackId}' not found`);
+
+    const trimmedName = presetName.trim();
+    if (!trimmedName) throw new Error('Preset name is required');
+
+    const preset = createTrackPresetSnapshot(track, trimmedName);
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        trackPresets: [...(state.project.trackPresets ?? []), preset],
+      },
+    });
+    return preset;
+  },
+
+  applyTrackPreset: (presetId) => {
+    const state = get();
+    if (!state.project) return undefined;
+    const preset = (state.project.trackPresets ?? []).find((candidate) => candidate.id === presetId);
+    if (!preset) return undefined;
+
+    _pushHistory(state.project);
+    const track = createTrackFromTemplate(
+      state.project.tracks,
+      preset.trackName,
+      preset.trackType,
+      {
+        ...preset.settings,
+        effects: preset.effects,
+        midiEffects: preset.midiEffects,
+      },
+    );
+
+    const newTracks = [...state.project.tracks, track];
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
+    return track;
+  },
+
+  deleteTrackPreset: (presetId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        trackPresets: (state.project.trackPresets ?? []).filter((preset) => preset.id !== presetId),
+      },
+    });
   },
 
   removeTrack: (trackId) => {

@@ -150,6 +150,130 @@ describe('projectStore', () => {
     });
   });
 
+  describe('track presets', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('saves track type, effects, and settings as a reusable preset', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('keyboard', 'pianoRoll');
+
+      store.updateTrack(track.id, { color: '#112233', volume: 0.42, synthPreset: 'pad' });
+      store.updateTrackMixer(track.id, {
+        pan: -0.35,
+        eqLowGain: 3,
+        eqMidGain: -2,
+        eqHighGain: 5,
+        compressorEnabled: true,
+        compressorThreshold: -18,
+        compressorRatio: 6,
+      });
+      store.setTrackLocalCaption(track.id, 'Warm pad stack');
+      store.setTrackReverb(track.id, 0.33, 0.72);
+
+      const effectId = store.addTrackEffect(track.id, 'reverb');
+      expect(effectId).toBeDefined();
+      store.updateTrackEffect(track.id, effectId!, {
+        enabled: false,
+        params: { decay: 8.4, preDelay: 0.2, wet: 0.61 },
+      });
+
+      const midiEffectId = store.addMidiEffect(track.id, 'arpeggiator');
+      expect(midiEffectId).toBeDefined();
+      store.updateMidiEffect(track.id, midiEffectId!, {
+        params: { rate: '1/16', pattern: 'up-down', octaves: 2 },
+      });
+
+      const preset = store.saveTrackPreset(track.id, 'Dream Keys');
+
+      expect(preset.name).toBe('Dream Keys');
+      expect(preset.trackName).toBe('keyboard');
+      expect(preset.trackType).toBe('pianoRoll');
+      expect(preset.settings).toMatchObject({
+        color: '#112233',
+        volume: 0.42,
+        synthPreset: 'pad',
+        pan: -0.35,
+        eqLowGain: 3,
+        eqMidGain: -2,
+        eqHighGain: 5,
+        compressorEnabled: true,
+        compressorThreshold: -18,
+        compressorRatio: 6,
+        reverbMix: 0.33,
+        reverbRoomSize: 0.72,
+        localCaption: 'Warm pad stack',
+      });
+      expect(preset.effects).toHaveLength(1);
+      expect(preset.effects[0]).toMatchObject({
+        type: 'reverb',
+        enabled: false,
+        params: { decay: 8.4, preDelay: 0.2, wet: 0.61 },
+      });
+      expect(preset.midiEffects).toHaveLength(1);
+      expect(preset.midiEffects[0]).toMatchObject({
+        type: 'arpeggiator',
+        enabled: true,
+        params: { rate: '1/16', pattern: 'up-down', octaves: 2 },
+      });
+      expect(useProjectStore.getState().project!.trackPresets).toHaveLength(1);
+    });
+
+    it('applies a track preset to a new track with fresh ids and no clips', () => {
+      const store = useProjectStore.getState();
+      const sourceTrack = store.addTrack('drums', 'sequencer');
+
+      store.updateTrack(sourceTrack.id, { color: '#445566', volume: 0.55, drumKit: 'lofi' });
+      store.updateTrackMixer(sourceTrack.id, {
+        pan: 0.2,
+        eqLowGain: 4,
+        compressorEnabled: true,
+        compressorThreshold: -12,
+        compressorRatio: 8,
+      });
+      const effectId = store.addTrackEffect(sourceTrack.id, 'compressor');
+      expect(effectId).toBeDefined();
+      store.updateTrackEffect(sourceTrack.id, effectId!, {
+        params: {
+          threshold: -10,
+          ratio: 10,
+          attack: 0.02,
+          release: 0.15,
+          knee: 4,
+          sidechainSourceTrackId: undefined,
+        },
+      });
+      const midiEffectId = store.addMidiEffect(sourceTrack.id, 'scale-lock');
+      expect(midiEffectId).toBeDefined();
+
+      const preset = store.saveTrackPreset(sourceTrack.id, 'Dusty Drums');
+      const appliedTrack = useProjectStore.getState().applyTrackPreset(preset.id);
+
+      expect(appliedTrack).toBeDefined();
+      expect(appliedTrack!.id).not.toBe(sourceTrack.id);
+      expect(appliedTrack!.trackName).toBe('drums');
+      expect(appliedTrack!.trackType).toBe('sequencer');
+      expect(appliedTrack!.displayName).not.toBe(sourceTrack.displayName);
+      expect(appliedTrack!.clips).toEqual([]);
+      expect(appliedTrack!.color).toBe('#445566');
+      expect(appliedTrack!.volume).toBe(0.55);
+      expect(appliedTrack!.drumKit).toBe('lofi');
+      expect(appliedTrack!.pan).toBe(0.2);
+      expect(appliedTrack!.eqLowGain).toBe(4);
+      expect(appliedTrack!.compressorEnabled).toBe(true);
+      expect(appliedTrack!.compressorThreshold).toBe(-12);
+      expect(appliedTrack!.compressorRatio).toBe(8);
+      expect(appliedTrack!.effects).toHaveLength(1);
+      expect(appliedTrack!.effects?.[0].type).toBe('compressor');
+      expect(appliedTrack!.effects?.[0].id).not.toBe(effectId);
+      expect(appliedTrack!.midiEffects).toHaveLength(1);
+      expect(appliedTrack!.midiEffects?.[0].id).not.toBe(midiEffectId);
+      expect(appliedTrack!.sequencerPattern).toBeDefined();
+      expect(appliedTrack!.sequencerPattern?.id).not.toBe(sourceTrack.sequencerPattern?.id);
+    });
+  });
+
   describe('renameTrack', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

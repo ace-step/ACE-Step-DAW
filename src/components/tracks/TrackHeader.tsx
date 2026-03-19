@@ -31,6 +31,7 @@ export function TrackHeader({
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+  const saveTrackPreset = useProjectStore((s) => s.saveTrackPreset);
   const setTrackHeightPreset = useProjectStore((s) => s.setTrackHeightPreset);
   const setAllTracksHeightPreset = useProjectStore((s) => s.setAllTracksHeightPreset);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
@@ -133,6 +134,14 @@ export function TrackHeader({
     e.stopPropagation();
     setCtxMenu({ x: e.clientX, y: e.clientY });
   }, []);
+
+  const handleSavePreset = useCallback(() => {
+    const presetName = window.prompt('Preset name', `${track.displayName} Preset`);
+    if (!presetName) return;
+    const trimmedName = presetName.trim();
+    if (!trimmedName) return;
+    saveTrackPreset(track.id, trimmedName);
+  }, [saveTrackPreset, track.displayName, track.id]);
 
   return (
     <>
@@ -421,6 +430,12 @@ export function TrackHeader({
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
           >
             Track Settings...
+          </button>
+          <button
+            onClick={() => { setCtxMenu(null); handleSavePreset(); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            Save as Track Preset...
           </button>
           {/* Track Height submenu */}
           <div

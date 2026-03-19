@@ -18,6 +18,7 @@ function makeProject(): Project {
     totalDuration: 128,
     measures: 64,
     tracks: [],
+    trackPresets: [],
     generationDefaults: {
       inferenceSteps: 20,
       guidanceScale: 7.5,

@@ -11,6 +11,7 @@ export function InstrumentPicker() {
   const show = useUIStore((s) => s.showInstrumentPicker);
   const setShow = useUIStore((s) => s.setShowInstrumentPicker);
   const addTrack = useProjectStore((s) => s.addTrack);
+  const applyTrackPreset = useProjectStore((s) => s.applyTrackPreset);
   const project = useProjectStore((s) => s.project);
   const { openFilePicker } = useAudioImport();
 
@@ -37,6 +38,11 @@ export function InstrumentPicker() {
 
   const handleInstrumentSelect = (name: TrackName) => {
     addTrack(name, selectedType);
+    close();
+  };
+
+  const handlePresetSelect = (presetId: string) => {
+    applyTrackPreset(presetId);
     close();
   };
 
@@ -68,30 +74,73 @@ export function InstrumentPicker() {
         </div>
 
         {step === 'type' && (
-          <div className="p-4 grid grid-cols-2 gap-3">
-            {typeOrder.map((type) => {
-              const info = TRACK_TYPE_CATALOG[type];
-              return (
-                <button
-                  key={type}
-                  onClick={() => handleTypeSelect(type)}
-                  className="flex flex-col gap-1.5 p-3 rounded-lg text-left transition-colors relative bg-daw-surface-2 hover:bg-[#484848]"
-                  style={{ borderLeft: `3px solid ${info.color}` }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{info.emoji}</span>
-                    <span className="text-sm font-medium">{info.label}</span>
-                    <span
-                      className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: info.color + '30', color: info.color }}
-                    >
-                      {info.abbr}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-zinc-400 leading-tight">{info.description}</span>
-                </button>
-              );
-            })}
+          <div className="p-4 space-y-4">
+            {(project.trackPresets ?? []).length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Track Presets</h3>
+                  <span className="text-[10px] text-zinc-600">Apply to new tracks</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(project.trackPresets ?? []).map((preset) => {
+                    const typeInfo = TRACK_TYPE_CATALOG[preset.trackType];
+                    const trackInfo = TRACK_CATALOG[preset.trackName];
+
+                    return (
+                      <button
+                        key={preset.id}
+                        onClick={() => handlePresetSelect(preset.id)}
+                        aria-label={`Apply track preset ${preset.name}`}
+                        className="flex flex-col gap-1.5 p-3 rounded-lg text-left transition-colors bg-[#262626] hover:bg-[#343434] border border-white/6"
+                        style={{ borderLeft: `3px solid ${preset.settings.color || typeInfo.color}` }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{trackInfo.emoji}</span>
+                          <span className="text-sm font-medium text-zinc-100 truncate">{preset.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                          <span>{typeInfo.label}</span>
+                          <span>•</span>
+                          <span>{trackInfo.displayName}</span>
+                          {preset.effects.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <span>{preset.effects.length} FX</span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {typeOrder.map((type) => {
+                const info = TRACK_TYPE_CATALOG[type];
+                return (
+                  <button
+                    key={type}
+                    onClick={() => handleTypeSelect(type)}
+                    className="flex flex-col gap-1.5 p-3 rounded-lg text-left transition-colors relative bg-daw-surface-2 hover:bg-[#484848]"
+                    style={{ borderLeft: `3px solid ${info.color}` }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{info.emoji}</span>
+                      <span className="text-sm font-medium">{info.label}</span>
+                      <span
+                        className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: info.color + '30', color: info.color }}
+                      >
+                        {info.abbr}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-zinc-400 leading-tight">{info.description}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

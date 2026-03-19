@@ -51,6 +51,7 @@ import type {
   SessionPendingLaunch,
   SessionScene,
   SessionState,
+  PlaybackLatencySettings,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
@@ -97,6 +98,12 @@ import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import { useTransportStore } from './transportStore';
 import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
+import {
+  buildPlaybackLatencySettings,
+  ensurePlaybackLatencySettings,
+  type PlaybackLatencyMeasurement,
+  setPlaybackLatencyOverride as applyPlaybackLatencyOverride,
+} from '../utils/playbackLatency';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -411,6 +418,8 @@ export interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  capturePlaybackLatency: (measurement: PlaybackLatencyMeasurement) => PlaybackLatencySettings | null;
+  setPlaybackLatencyOverride: (overrideMs: number | null) => void;
   analyzeMastering: () => Promise<void>;
   setMasteringPreset: (preset: MasteringPreset) => void;
   setMasteringLoudnessTarget: (target: LoudnessTarget) => void;
@@ -857,6 +866,7 @@ function ensureProjectSession(project: Project): Project {
 
   return {
     ...project,
+    playbackLatency: ensurePlaybackLatencySettings(project.playbackLatency),
     session,
   };
 }
@@ -1450,6 +1460,7 @@ export const useProjectStore = create<ProjectState>()(
         return { ...t, trackType: inferred };
       }).map(ensureTrackDefaults),
       mastering: ensureMasteringState(project.mastering),
+      playbackLatency: ensurePlaybackLatencySettings(project.playbackLatency),
     };
     set({ project: ensureProjectSession(migratedBase) });
   },
@@ -1569,6 +1580,7 @@ export const useProjectStore = create<ProjectState>()(
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
       mastering: createDefaultMasteringState(),
+      playbackLatency: ensurePlaybackLatencySettings(),
       session: createDefaultSessionState(),
     };
     set({ project: ensureProjectSession(project) });
@@ -1589,6 +1601,33 @@ export const useProjectStore = create<ProjectState>()(
       );
     }
     set({ project: merged });
+  },
+
+  capturePlaybackLatency: (measurement) => {
+    const state = get();
+    if (!state.project) return null;
+    const playbackLatency = buildPlaybackLatencySettings(measurement, state.project.playbackLatency);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        playbackLatency,
+      },
+    });
+    return playbackLatency;
+  },
+
+  setPlaybackLatencyOverride: (overrideMs) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Adjust playback latency' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        playbackLatency: applyPlaybackLatencyOverride(state.project.playbackLatency, overrideMs),
+      },
+    });
   },
 
   analyzeMastering: async () => {

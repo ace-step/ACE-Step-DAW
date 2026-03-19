@@ -71,6 +71,60 @@ describe('projectStore', () => {
     });
   });
 
+  describe('playback latency calibration', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('stores detected audio context latency and computes a normalized effective value', () => {
+      useProjectStore.getState().capturePlaybackLatency({
+        baseLatency: 0.005,
+        outputLatency: 0.02,
+      });
+
+      const latency = useProjectStore.getState().project!.playbackLatency;
+      expect(latency).toMatchObject({
+        source: 'detected',
+        baseLatencyMs: 5,
+        outputLatencyMs: 20,
+        detectedMs: 25,
+        overrideMs: null,
+        effectiveMs: 25,
+      });
+    });
+
+    it('prefers manual override over detected latency', () => {
+      const store = useProjectStore.getState();
+      store.capturePlaybackLatency({
+        baseLatency: 0.005,
+        outputLatency: 0.02,
+      });
+      store.setPlaybackLatencyOverride(42);
+
+      const latency = useProjectStore.getState().project!.playbackLatency;
+      expect(latency).toMatchObject({
+        source: 'manual',
+        detectedMs: 25,
+        overrideMs: 42,
+        effectiveMs: 42,
+      });
+    });
+
+    it('falls back gracefully when browser latency metrics are unavailable', () => {
+      useProjectStore.getState().capturePlaybackLatency({});
+
+      const latency = useProjectStore.getState().project!.playbackLatency;
+      expect(latency).toMatchObject({
+        source: 'fallback',
+        baseLatencyMs: null,
+        outputLatencyMs: null,
+        detectedMs: null,
+        overrideMs: null,
+        effectiveMs: 0,
+      });
+    });
+  });
+
   describe('addTrack', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

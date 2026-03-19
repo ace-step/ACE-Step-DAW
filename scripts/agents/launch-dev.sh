@@ -26,9 +26,10 @@ cleanup_stale_worktrees() {
 }
 cleanup_stale_worktrees
 
-# Skip if already running — check for active run-agent.sh process for this exact issue
-if pgrep -f "run-agent.sh.*/tmp/daw-worktrees/agent-$ISSUE_NUM " > /dev/null 2>&1; then
-  echo "SKIP: #$ISSUE_NUM already running"
+# Skip if already assigned (check registry)
+ASSIGNED=$(bash "$DAW/scripts/agents/registry.sh" check "$ISSUE_NUM")
+if [ "$ASSIGNED" = "yes" ]; then
+  echo "SKIP: #$ISSUE_NUM already assigned (registry)"
   exit 0
 fi
 
@@ -276,6 +277,8 @@ git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Reb
 git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
 
 # Create PR (or get existing PR number)
+# Unregister from registry
+bash /Users/junmingong/.openclaw/workspace/acestep-daw/scripts/agents/registry.sh unregister "$ISSUE" 2>/dev/null
 gh pr create --repo "$REPO" --title "feat: #$ISSUE — $TITLE" \
   --body "Closes #$ISSUE" --base main --head "$BRANCH" 2>/dev/null
 PR_NUM=$(gh pr list --repo "$REPO" --head "$BRANCH" --json number -q '.[0].number' 2>/dev/null)
@@ -354,4 +357,6 @@ chmod +x "$WT/run-agent.sh"
 
 # Launch
 nohup bash "$WT/run-agent.sh" "$WT" "$TOOL" "$ISSUE_NUM" "$TITLE" > "/tmp/daw-worktrees/agent-$ISSUE_NUM.$TOOL.log" 2>&1 &
-echo "$TOOL-$ISSUE_NUM: PID $!"
+AGENT_PID=$!
+bash "$DAW/scripts/agents/registry.sh" register "$ISSUE_NUM" "$TOOL" "$AGENT_PID"
+echo "$TOOL-$ISSUE_NUM: PID $AGENT_PID" 

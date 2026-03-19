@@ -23,6 +23,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  globalTimeout: process.env.CI ? 4 * 60 * 1000 : undefined, // 4 min hard cap in CI
   use: {
     baseURL: `http://127.0.0.1:${e2ePort}`,
     trace: 'on-first-retry',

@@ -101,6 +101,7 @@ export interface UIState {
   vocal2bgmClipId: string | null;
   analysisClipId: string | null;
   stemSeparationClipId: string | null;
+  audioToMidiClipId: string | null;
 
   // Spectrum analyzer & loudness metering
   showSpectrumAnalyzer: boolean;
@@ -109,6 +110,8 @@ export interface UIState {
   showQuantizeDialog: boolean;
   /** Clip ID + selected note IDs passed from the piano roll to the quantize dialog. */
   quantizeTarget: { clipId: string; noteIds: string[] } | null;
+  /** Preview positions for quantize: noteId → { startBeat, durationBeats }. Canvas uses these to override rendering. */
+  quantizePreviewPositions: Record<string, { startBeat: number; durationBeats: number }> | null;
 
   // Generate pattern dialog
   showGeneratePatternDialog: boolean;
@@ -218,6 +221,7 @@ export interface UIState {
   setShowQuantizeDialog: (v: boolean) => void;
   setQuantizeTarget: (target: { clipId: string; noteIds: string[] } | null) => void;
   openQuantizeDialog: (clipId: string, noteIds: string[]) => void;
+  setQuantizePreviewPositions: (positions: Record<string, { startBeat: number; durationBeats: number }> | null) => void;
 
   // Generate pattern dialog
   setShowGeneratePatternDialog: (v: boolean) => void;
@@ -365,11 +369,13 @@ export const useUIStore = create<UIState>()(
   vocal2bgmClipId: null,
   analysisClipId: null,
   stemSeparationClipId: null,
+  audioToMidiClipId: null,
 
   showSpectrumAnalyzer: false,
 
   showQuantizeDialog: false,
   quantizeTarget: null,
+  quantizePreviewPositions: null,
 
   showGeneratePatternDialog: false,
   generatePatternClipId: null,
@@ -577,9 +583,10 @@ export const useUIStore = create<UIState>()(
   setShowSpectrumAnalyzer: (v) => set({ showSpectrumAnalyzer: v }),
   toggleSpectrumAnalyzer: () => set((s) => ({ showSpectrumAnalyzer: !s.showSpectrumAnalyzer })),
 
-  setShowQuantizeDialog: (v) => set(v ? { showQuantizeDialog: v } : { showQuantizeDialog: false, quantizeTarget: null }),
+  setShowQuantizeDialog: (v) => set(v ? { showQuantizeDialog: v } : { showQuantizeDialog: false, quantizeTarget: null, quantizePreviewPositions: null }),
   setQuantizeTarget: (target) => set({ quantizeTarget: target }),
   openQuantizeDialog: (clipId, noteIds) => set({ showQuantizeDialog: true, quantizeTarget: { clipId, noteIds } }),
+  setQuantizePreviewPositions: (positions) => set({ quantizePreviewPositions: positions }),
 
   setShowGeneratePatternDialog: (v) => set(v ? { showGeneratePatternDialog: v } : { showGeneratePatternDialog: false, generatePatternClipId: null }),
   openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),

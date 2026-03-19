@@ -91,6 +91,7 @@ export function PianoRollCanvas({
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
+  const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -302,15 +303,40 @@ export function PianoRollCanvas({
     }
 
     for (const note of notes) {
-      const noteX = beatToX(note.startBeat);
+      // Use quantize preview positions when available (real-time preview)
+      const preview = quantizePreviewPositions?.[note.id];
+      const drawStartBeat = preview ? preview.startBeat : note.startBeat;
+      const drawDuration = preview ? preview.durationBeats : note.durationBeats;
+      const hasPreview = !!preview;
+
+      const noteX = beatToX(drawStartBeat);
       const noteY = pitchToY(note.pitch);
-      const noteWidth = note.durationBeats * pixelsPerBeat;
+      const noteWidth = drawDuration * pixelsPerBeat;
       const noteHeight = keyHeight - 1;
       if (noteX + noteWidth < PIANO_KEYBOARD_WIDTH || noteX > width) continue;
       if (noteY + noteHeight < 0 || noteY > noteAreaHeight) continue;
 
       const isSelected = selectedNoteIds.has(note.id);
       const isSlide = note.isSlide === true;
+
+      // Draw ghost of original position when preview is active
+      if (hasPreview) {
+        const origX = beatToX(note.startBeat);
+        const origW = note.durationBeats * pixelsPerBeat;
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath();
+        ctx.roundRect(origX, noteY, Math.max(origW, 3), noteHeight, 2);
+        ctx.fill();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(origX, noteY, Math.max(origW, 3), noteHeight, 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1.0;
+      }
 
       ctx.fillStyle = isSlide ? 'rgba(251, 191, 36, 0.92)' : velocityToColor(note.velocity);
       ctx.globalAlpha = isSelected ? 1.0 : 0.8;
@@ -415,6 +441,7 @@ export function PianoRollCanvas({
     pitchToY,
     prScrollX,
     prZoomY,
+    quantizePreviewPositions,
     selectedNoteIds,
     velocityHeight,
   ]);
@@ -817,14 +844,19 @@ export function PianoRollCanvas({
         return;
       }
 
-      if (key === 'q' && selectedNoteIds.size > 0) {
+      if (key === 'q') {
+        // Use selected notes, or all notes if nothing is selected
+        const targetIds = selectedNoteIds.size > 0
+          ? Array.from(selectedNoteIds)
+          : notes.map((n) => n.id);
+        if (targetIds.length === 0) return;
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
           // Ctrl/Cmd+Q: open quantize dialog with options
-          openQuantizeDialog(clip.id, Array.from(selectedNoteIds));
+          openQuantizeDialog(clip.id, targetIds);
         } else {
           // Q: quick quantize to current grid
-          quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
+          quantizeMidiNotes(clip.id, targetIds, gridBeats);
         }
         return;
       }

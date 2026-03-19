@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import type { PianoRollGrid } from '../../types/project';
-import type { QuantizeOptions } from '../../utils/midiQuantize';
+import { quantizeNote, type QuantizeOptions } from '../../utils/midiQuantize';
 import { gridSizeToBeats } from './PianoRollConstants';
 
 const GRID_OPTIONS: { label: string; value: PianoRollGrid }[] = [
@@ -22,15 +22,56 @@ export function QuantizeDialog() {
   const show = useUIStore((s) => s.showQuantizeDialog);
   const target = useUIStore((s) => s.quantizeTarget);
   const setShow = useUIStore((s) => s.setShowQuantizeDialog);
+  const setPreview = useUIStore((s) => s.setQuantizePreviewPositions);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
+  const project = useProjectStore((s) => s.project);
 
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/8');
   const [strength, setStrength] = useState(100);
   const [swing, setSwing] = useState(0);
   const [scope, setScope] = useState<QuantizeOptions['scope']>('start');
 
+  // Resolve the target notes from the store so we can compute preview positions
+  const targetNotes = useMemo(() => {
+    if (!project || !target) return [];
+    const noteIdSet = new Set(target.noteIds);
+    for (const track of project.tracks) {
+      for (const clip of track.clips) {
+        if (clip.id === target.clipId && clip.midiData) {
+          return clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
+        }
+      }
+    }
+    return [];
+  }, [project, target]);
+
+  // Compute and emit preview positions whenever parameters change
+  useEffect(() => {
+    if (!show || !target || targetNotes.length === 0) {
+      return;
+    }
+    const options: QuantizeOptions = {
+      gridBeats: gridSizeToBeats(gridSize),
+      strength,
+      swing,
+      scope,
+    };
+    const positions: Record<string, { startBeat: number; durationBeats: number }> = {};
+    for (const note of targetNotes) {
+      const q = quantizeNote(note, options);
+      positions[note.id] = { startBeat: q.startBeat, durationBeats: q.durationBeats };
+    }
+    setPreview(positions);
+  }, [show, target, targetNotes, gridSize, strength, swing, scope, setPreview]);
+
+  // Clear preview on unmount / close
+  useEffect(() => {
+    return () => setPreview(null);
+  }, [setPreview]);
+
   const handleApply = useCallback(() => {
     if (!target) return;
+    setPreview(null);
     const options: QuantizeOptions = {
       gridBeats: gridSizeToBeats(gridSize),
       strength,
@@ -39,11 +80,12 @@ export function QuantizeDialog() {
     };
     quantizeMidiNotes(target.clipId, target.noteIds, options);
     setShow(false);
-  }, [target, gridSize, strength, swing, scope, quantizeMidiNotes, setShow]);
+  }, [target, gridSize, strength, swing, scope, quantizeMidiNotes, setShow, setPreview]);
 
   const handleCancel = useCallback(() => {
+    setPreview(null);
     setShow(false);
-  }, [setShow]);
+  }, [setShow, setPreview]);
 
   if (!show || !target) return null;
 

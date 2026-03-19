@@ -151,3 +151,59 @@ describe('quantizeNotes', () => {
     expect(result[0].startBeat).toBe(0.3);
   });
 });
+
+describe('quantize preview (real-time computation)', () => {
+  it('computes preview positions without mutating original notes', () => {
+    const notes = [
+      makeNote({ id: 'a', startBeat: 0.3, durationBeats: 0.6 }),
+      makeNote({ id: 'b', startBeat: 1.7, durationBeats: 0.4 }),
+    ];
+    const originals = notes.map((n) => ({ ...n }));
+    const noteIds = new Set(['a', 'b']);
+
+    const options: QuantizeOptions = { gridBeats: 0.5, strength: 50, swing: 0, scope: 'start' };
+
+    // Simulate what the dialog does: compute quantized positions per-note
+    const preview: Record<string, { startBeat: number; durationBeats: number }> = {};
+    for (const note of notes) {
+      if (noteIds.has(note.id)) {
+        const q = quantizeNote(note, options);
+        preview[note.id] = { startBeat: q.startBeat, durationBeats: q.durationBeats };
+      }
+    }
+
+    // Preview positions should be different from originals at 50% strength
+    expect(preview['a'].startBeat).toBeCloseTo(0.4); // 0.3 + (0.5 - 0.3) * 0.5
+    expect(preview['b'].startBeat).toBeCloseTo(1.6); // 1.7 + (1.5 - 1.7) * 0.5
+
+    // Original notes must be untouched
+    expect(notes).toEqual(originals);
+  });
+
+  it('preview with 0% strength returns original positions', () => {
+    const note = makeNote({ id: 'a', startBeat: 0.37, durationBeats: 0.8 });
+    const q = quantizeNote(note, { gridBeats: 0.5, strength: 0, swing: 0, scope: 'start' });
+    expect(q.startBeat).toBe(0.37);
+    expect(q.durationBeats).toBe(0.8);
+  });
+
+  it('preview with different grid sizes produces different results', () => {
+    const note = makeNote({ startBeat: 0.3 });
+
+    const q8 = quantizeNote(note, { gridBeats: 0.5, strength: 100, swing: 0, scope: 'start' });
+    const q16 = quantizeNote(note, { gridBeats: 0.25, strength: 100, swing: 0, scope: 'start' });
+
+    expect(q8.startBeat).toBe(0.5);  // 1/8 grid: nearest is 0.5
+    expect(q16.startBeat).toBe(0.25); // 1/16 grid: nearest is 0.25
+  });
+
+  it('preview with swing on startEnd scope quantizes both endpoints', () => {
+    const note = makeNote({ startBeat: 0.45, durationBeats: 0.55 });
+    const q = quantizeNote(note, { gridBeats: 0.5, strength: 100, swing: 50, scope: 'startEnd' });
+
+    // Start snaps to grid index 1 (0.5), odd → swing: 0.5 + 0.5*0.5*0.25 = 0.625
+    expect(q.startBeat).toBeCloseTo(0.625);
+    // End (1.0) snaps to grid index 2 (even), no swing → 1.0
+    expect(q.startBeat + q.durationBeats).toBeCloseTo(1.0);
+  });
+});

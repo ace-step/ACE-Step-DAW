@@ -90,6 +90,7 @@ const SECTIONS: Section[] = [
       { keys: ['⇧', '↑'],               description: 'Transpose selected notes up 1 semitone' },
       { keys: ['⇧', '↓'],               description: 'Transpose selected notes down 1 semitone' },
       { keys: ['Q'],                    description: 'Quantize selected notes to the current grid' },
+      { keys: [`${mod}`, 'Q'],          description: 'Quantize with options (strength, swing, scope)' },
       { keys: [`${mod}`, 'A'],          description: 'Select all notes in the current clip' },
     ],
   },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { synthEngine } from '../../engine/SynthEngine';
 import { useProjectStore } from '../../store/projectStore';
+import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
@@ -70,6 +71,7 @@ export function PianoRollCanvas({
   const [prScrollX, setPrScrollX] = useState(0);
   const [prScrollY, setPrScrollY] = useState(780);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const addMidiNote = useProjectStore((s) => s.addMidiNote);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
@@ -77,6 +79,7 @@ export function PianoRollCanvas({
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
+  const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -750,9 +753,15 @@ export function PianoRollCanvas({
         return;
       }
 
-      if (key === 'q' && !e.metaKey && !e.ctrlKey && selectedNoteIds.size > 0) {
+      if (key === 'q' && selectedNoteIds.size > 0) {
         e.preventDefault();
-        quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl/Cmd+Q: open quantize dialog with options
+          openQuantizeDialog(clip.id, Array.from(selectedNoteIds));
+        } else {
+          // Q: quick quantize to current grid
+          quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
+        }
         return;
       }
 
@@ -840,7 +849,28 @@ export function PianoRollCanvas({
     selectedNoteIds,
     snapBeat,
     updateMidiNote,
+    openQuantizeDialog,
   ]);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (selectedNoteIds.size > 0) {
+        setContextMenu({ x: e.clientX, y: e.clientY });
+      }
+    },
+    [selectedNoteIds],
+  );
+
+  const handleContextMenuQuantize = useCallback(() => {
+    setContextMenu(null);
+    openQuantizeDialog(clip.id, Array.from(selectedNoteIds));
+  }, [clip.id, selectedNoteIds, openQuantizeDialog]);
+
+  const handleContextMenuQuickQuantize = useCallback(() => {
+    setContextMenu(null);
+    quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
+  }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
@@ -852,7 +882,37 @@ export function PianoRollCanvas({
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}
+        onContextMenu={handleContextMenu}
       />
+      {contextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div
+            className="fixed z-50 bg-[#1a1a2e] border border-[#333] rounded shadow-xl py-1 min-w-[160px]"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 180),
+              top: Math.min(contextMenu.y, window.innerHeight - 120),
+            }}
+          >
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-violet-600/30 hover:text-white transition-colors"
+              onClick={handleContextMenuQuickQuantize}
+            >
+              Quantize (Q)
+            </button>
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-violet-600/30 hover:text-white transition-colors"
+              onClick={handleContextMenuQuantize}
+            >
+              Quantize with options... ({navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q)
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

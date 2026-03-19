@@ -61,6 +61,11 @@ interface UIState {
   vocal2bgmClipId: string | null;
   analysisClipId: string | null;
 
+  // Quantize dialog
+  showQuantizeDialog: boolean;
+  /** Clip ID + selected note IDs passed from the piano roll to the quantize dialog. */
+  quantizeTarget: { clipId: string; noteIds: string[] } | null;
+
   setPixelsPerSecond: (pps: number) => void;
   toggleSnap: () => void;
   zoomIn: () => void;
@@ -114,6 +119,11 @@ interface UIState {
   // Vocal2BGM / Audio Analysis
   setVocal2BGMModal: (clipId: string | null) => void;
   setAnalysisPanel: (clipId: string | null) => void;
+
+  // Quantize dialog
+  setShowQuantizeDialog: (v: boolean) => void;
+  setQuantizeTarget: (target: { clipId: string; noteIds: string[] } | null) => void;
+  openQuantizeDialog: (clipId: string, noteIds: string[]) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -168,6 +178,9 @@ export const useUIStore = create<UIState>()(
 
   vocal2bgmClipId: null,
   analysisClipId: null,
+
+  showQuantizeDialog: false,
+  quantizeTarget: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
@@ -256,6 +269,10 @@ export const useUIStore = create<UIState>()(
 
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
+
+  setShowQuantizeDialog: (v) => set(v ? { showQuantizeDialog: v } : { showQuantizeDialog: false, quantizeTarget: null }),
+  setQuantizeTarget: (target) => set({ quantizeTarget: target }),
+  openQuantizeDialog: (clipId, noteIds) => set({ showQuantizeDialog: true, quantizeTarget: { clipId, noteIds } }),
 }),
     {
       name: 'ace-step-daw-ui',

@@ -34,6 +34,7 @@ import type {
   StretchMode,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
+import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
 import {
   DEFAULT_BPM,
@@ -174,7 +175,7 @@ interface ProjectState {
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
-  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeats: number) => void;
+  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
@@ -1966,9 +1967,13 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  quantizeMidiNotes: (clipId, noteIds, gridBeats) => {
+  quantizeMidiNotes: (clipId, noteIds, gridBeatsOrOptions) => {
     const state = get();
-    if (!state.project || gridBeats <= 0) return;
+    const options: QuantizeOptions =
+      typeof gridBeatsOrOptions === 'number'
+        ? { gridBeats: gridBeatsOrOptions, strength: 100, swing: 0, scope: 'start' }
+        : gridBeatsOrOptions;
+    if (!state.project || options.gridBeats <= 0) return;
     _pushHistory(state.project);
     const noteIdSet = new Set(noteIds);
     set({
@@ -1983,11 +1988,7 @@ export const useProjectStore = create<ProjectState>()(
                   ...clip,
                   midiData: {
                     ...clip.midiData,
-                    notes: clip.midiData.notes.map((note) =>
-                      noteIdSet.has(note.id)
-                        ? { ...note, startBeat: Math.round(note.startBeat / gridBeats) * gridBeats }
-                        : note,
-                    ),
+                    notes: applyQuantize(clip.midiData.notes, noteIdSet, options),
                   },
                 }
               : clip,

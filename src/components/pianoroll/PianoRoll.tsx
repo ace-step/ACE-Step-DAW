@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import type { PianoRollGrid } from '../../types/project';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
+import { QuantizeDialog } from './QuantizeDialog';
 
 export function PianoRoll() {
   const [drawMode, setDrawMode] = useState(false);
@@ -175,6 +176,7 @@ export function PianoRoll() {
       ) : (
         <PianoRollEmptyState />
       )}
+      <QuantizeDialog />
     </div>
   );
 }

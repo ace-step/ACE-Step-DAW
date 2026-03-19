@@ -100,6 +100,11 @@ export function useTransport() {
     const proj = useProjectStore.getState().project;
     if (!proj) return;
 
+    const playbackLatency = useProjectStore.getState().capturePlaybackLatency(
+      engine.refreshPlaybackLatencyCompensation(),
+    );
+    engine.setPlaybackLatencyCompensation((playbackLatency?.effectiveMs ?? 0) / 1000);
+
     engine.clearMidiEvents();
 
     // Sync master volume

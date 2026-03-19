@@ -596,6 +596,17 @@ export interface SessionState {
   lastLaunchAt: number | null;
 }
 
+export type PlaybackLatencySource = 'detected' | 'manual' | 'fallback';
+
+export interface PlaybackLatencySettings {
+  source: PlaybackLatencySource;
+  baseLatencyMs: number | null;
+  outputLatencyMs: number | null;
+  detectedMs: number | null;
+  overrideMs: number | null;
+  effectiveMs: number;
+}
+
 /** A saved project template — a snapshot of project settings and track layout (without audio). */
 export interface ProjectTemplate {
   id: string;
@@ -648,6 +659,8 @@ export interface Project {
   masterVolume?: number;
   /** AI mastering state for the master bus. */
   mastering?: MasteringState;
+  /** Normalized playback latency compensation shared by audio and visuals. */
+  playbackLatency?: PlaybackLatencySettings;
   /** Persistent asset clips — survives clip/track removal. */
   assets?: AssetClip[];
   /** Per-track automation lanes. */

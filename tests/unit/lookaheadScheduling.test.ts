@@ -196,6 +196,16 @@ describe('Lookahead Transport Scheduling', () => {
       expect(compensated).toBeLessThanOrEqual(raw);
     });
 
+    it('allows a manual playback latency override to replace detected browser latency', () => {
+      mockCurrentTime = 10.0;
+      engine.schedulePlayback([], 0, 20);
+      mockCurrentTime = 11.0;
+
+      engine.setPlaybackLatencyCompensation(0.042);
+
+      expect(engine.getCompensatedTime()).toBeCloseTo(0.958, 3);
+    });
+
     it('getCompensatedTime() never returns negative', () => {
       expect(engine.getCompensatedTime()).toBeGreaterThanOrEqual(0);
     });

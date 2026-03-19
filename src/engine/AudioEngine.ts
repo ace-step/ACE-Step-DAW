@@ -12,6 +12,7 @@ import { ensureMasteringState } from '../utils/mastering';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBarAtBeat } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
+import { readAudioContextPlaybackLatency } from '../utils/playbackLatency';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -89,6 +90,7 @@ export class AudioEngine {
   private _rafId: number | null = null;
   private _onTimeUpdate: ((time: number) => void) | null = null;
   private _onEnded: (() => void) | null = null;
+  private _playbackLatencyCompensation = 0;
 
   // Stored for re-scheduling on loop
   private _lastClips: ClipScheduleInfo[] = [];
@@ -193,10 +195,10 @@ export class AudioEngine {
     this._metronomeGain = this.ctx.createGain();
     this._metronomeGain.gain.value = 0.35;
     this._metronomeGain.connect(this.ctx.destination);
-
     this.scrubGain = this.ctx.createGain();
     this.scrubGain.gain.value = 0;
     this.scrubGain.connect(this.ctx.destination);
+    this.refreshPlaybackLatencyCompensation();
   }
 
   async resume() {
@@ -207,6 +209,23 @@ export class AudioEngine {
 
   setTimeUpdateCallback(cb: (time: number) => void) {
     this._onTimeUpdate = cb;
+  }
+
+  measurePlaybackLatency() {
+    return readAudioContextPlaybackLatency(this.ctx);
+  }
+
+  refreshPlaybackLatencyCompensation() {
+    const measured = this.measurePlaybackLatency();
+    this._playbackLatencyCompensation = Math.max(
+      0,
+      (measured.baseLatency ?? 0) + (measured.outputLatency ?? 0),
+    );
+    return measured;
+  }
+
+  setPlaybackLatencyCompensation(seconds: number) {
+    this._playbackLatencyCompensation = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
   }
 
   setOnEndedCallback(cb: () => void) {
@@ -731,8 +750,7 @@ export class AudioEngine {
 
       // Send latency-compensated time to the visual playhead so it
       // aligns with what the listener actually hears through speakers.
-      const latency = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
-      const compensatedTime = Math.max(0, currentTime - latency);
+      const compensatedTime = Math.max(0, currentTime - this._playbackLatencyCompensation);
       this._onTimeUpdate?.(compensatedTime);
       this._rafId = requestAnimationFrame(tick);
     };
@@ -777,8 +795,7 @@ export class AudioEngine {
    */
   getCompensatedTime(): number {
     const raw = this.getCurrentTime();
-    const latency = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
-    return Math.max(0, raw - latency);
+    return Math.max(0, raw - this._playbackLatencyCompensation);
   }
 
   /**

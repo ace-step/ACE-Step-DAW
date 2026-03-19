@@ -66,6 +66,7 @@ export function SettingsDialog() {
   const [selectedLmModel, setSelectedLmModel] = useState('');
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
+  const [latencyOverrideMs, setLatencyOverrideMs] = useState('');
   const prevShow = useRef(false);
 
   const handleModelChange = (newModel: string) => {
@@ -138,6 +139,7 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
+      setLatencyOverrideMs(project?.playbackLatency?.overrideMs?.toString() ?? '');
       void refreshModels(gen.model);
     }
     prevShow.current = show;
@@ -149,6 +151,8 @@ export function SettingsDialog() {
     const store = useProjectStore.getState();
     if (store.project) {
       store.updateProject({ bpm, keyScale, timeSignature, measures, globalCaption });
+      const trimmedLatencyOverride = latencyOverrideMs.trim();
+      store.setPlaybackLatencyOverride(trimmedLatencyOverride === '' ? null : Number(trimmedLatencyOverride));
       useProjectStore.setState({
         project: {
           ...useProjectStore.getState().project!,
@@ -170,6 +174,7 @@ export function SettingsDialog() {
 
   const selectedModelEntry = availableModels.find((m) => m.name === model);
   const selectedLmEntry = availableLmModels.find((m) => m.name === selectedLmModel);
+  const playbackLatency = project?.playbackLatency;
 
   const handleInitSelectedModel = async () => {
     if (!model) return;
@@ -315,6 +320,45 @@ export function SettingsDialog() {
             <p className="mt-1 text-[10px] text-zinc-600">
               Used as fallback when a clip's global caption is empty. Auto-filled from the first generation if left blank.
             </p>
+          </div>
+
+          <div className="rounded border border-daw-border bg-daw-bg/60 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-medium text-zinc-300">Playback Latency</h3>
+                <p className="mt-1 text-[10px] text-zinc-500">
+                  {playbackLatency?.detectedMs !== null && playbackLatency?.detectedMs !== undefined
+                    ? `Detected ${playbackLatency.detectedMs} ms from Web Audio (${playbackLatency.baseLatencyMs ?? 0} ms base + ${playbackLatency.outputLatencyMs ?? 0} ms output).`
+                    : 'Browser latency metrics unavailable. Enter a manual correction if playback feels late.'}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Active</div>
+                <div className="text-sm font-medium text-zinc-100">{playbackLatency?.effectiveMs ?? 0} ms</div>
+              </div>
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block text-xs text-zinc-400 mb-1">Manual Override (ms)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={latencyOverrideMs}
+                  onChange={(e) => setLatencyOverrideMs(e.target.value)}
+                  placeholder={String(playbackLatency?.detectedMs ?? 0)}
+                  aria-label="Playback latency override in milliseconds"
+                  className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setLatencyOverrideMs('')}
+                className="px-3 py-1.5 text-xs font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
+              >
+                Use Detected
+              </button>
+            </div>
           </div>
 
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Generation Parameters</h3>

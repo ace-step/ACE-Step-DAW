@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
 import { AudioEngine } from '../engine/AudioEngine';
 import { useTransportStore } from '../store/transportStore';
+import { useProjectStore } from '../store/projectStore';
 
 let _engineInstance: AudioEngine | null = null;
 
@@ -31,6 +32,11 @@ export function useAudioEngine() {
       engineRef.current.resume(),
       Tone.start(),
     ]);
+
+    const playbackLatency = useProjectStore.getState().capturePlaybackLatency(
+      engineRef.current.refreshPlaybackLatencyCompensation(),
+    );
+    engineRef.current.setPlaybackLatencyCompensation((playbackLatency?.effectiveMs ?? 0) / 1000);
   }, []);
 
   return { engine: engineRef.current, resumeOnGesture };

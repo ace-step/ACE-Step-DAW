@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 import { NewProjectDialog } from '../../src/components/dialogs/NewProjectDialog';
 import { SettingsDialog } from '../../src/components/dialogs/SettingsDialog';
 import { useUIStore } from '../../src/store/uiStore';
+import { useProjectStore } from '../../src/store/projectStore';
 
 vi.mock('../../src/services/aceStepApi', () => ({
   listModels: vi.fn().mockResolvedValue([]),
@@ -24,8 +25,11 @@ vi.mock('../../src/services/projectStorage', () => ({
 describe('BPM input — clamp on blur, not keystroke', () => {
   beforeEach(() => {
     // Open dialogs via store
+    localStorage.clear();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.getState().setShowNewProjectDialog(true);
     useUIStore.getState().setShowSettingsDialog(true);
+    useProjectStore.getState().createProject({ name: 'Latency Settings Test' });
   });
 
   function getBpmInput(container: HTMLElement): HTMLInputElement {
@@ -119,6 +123,26 @@ describe('BPM input — clamp on blur, not keystroke', () => {
       fireEvent.blur(input);
       // Should clamp to min (30)
       expect(Number(input.value)).toBeGreaterThanOrEqual(30);
+    });
+
+    it('shows detected playback latency and saves a manual override', () => {
+      const store = useProjectStore.getState();
+      store.capturePlaybackLatency({ baseLatency: 0.005, outputLatency: 0.02 });
+
+      render(<SettingsDialog />);
+
+      expect(screen.getByText(/Detected 25 ms from Web Audio/i)).toBeInTheDocument();
+
+      const overrideInput = screen.getByLabelText(/Playback latency override in milliseconds/i);
+      fireEvent.change(overrideInput, { target: { value: '42' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(useProjectStore.getState().project?.playbackLatency).toMatchObject({
+        source: 'manual',
+        detectedMs: 25,
+        overrideMs: 42,
+        effectiveMs: 42,
+      });
     });
   });
 });

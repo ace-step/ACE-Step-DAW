@@ -5,12 +5,14 @@ import type { PianoRollGrid } from '../../types/project';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
+import { TransformMenu } from './TransformMenu';
 
 export function PianoRoll() {
   const [drawMode, setDrawMode] = useState(false);
   const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
 
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
@@ -136,6 +138,8 @@ export function PianoRoll() {
           <option value="organ">Organ</option>
         </select>
 
+        {clip && <TransformMenu clipId={clip.id} selectedNoteIds={selectedNoteIds} />}
+
         {clip && <span className="text-[10px] text-zinc-500 ml-1 truncate max-w-[200px]">{clip.prompt}</span>}
 
         <div className="ml-auto flex items-center gap-2">
@@ -172,6 +176,8 @@ export function PianoRoll() {
           prZoomX={prZoomX}
           onZoomXChange={setPrZoomX}
           ghostNotes={ghostNotes}
+          selectedNoteIds={selectedNoteIds}
+          onSelectedNoteIdsChange={setSelectedNoteIds}
         />
       ) : (
         <PianoRollEmptyState />

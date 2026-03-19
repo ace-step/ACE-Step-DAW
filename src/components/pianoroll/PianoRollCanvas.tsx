@@ -49,6 +49,8 @@ interface PianoRollCanvasProps {
   prZoomX: number;
   onZoomXChange: React.Dispatch<React.SetStateAction<number>>;
   ghostNotes?: GhostNote[];
+  selectedNoteIds: Set<string>;
+  onSelectedNoteIdsChange: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 export function PianoRollCanvas({
@@ -59,6 +61,8 @@ export function PianoRollCanvas({
   prZoomX,
   onZoomXChange,
   ghostNotes = [],
+  selectedNoteIds,
+  onSelectedNoteIdsChange: setSelectedNoteIds,
 }: PianoRollCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,7 +74,6 @@ export function PianoRollCanvas({
   const [prZoomY, setPrZoomY] = useState(1);
   const [prScrollX, setPrScrollX] = useState(0);
   const [prScrollY, setPrScrollY] = useState(780);
-  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const addMidiNote = useProjectStore((s) => s.addMidiNote);

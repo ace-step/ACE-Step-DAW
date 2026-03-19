@@ -46,6 +46,7 @@ import {
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { exportStemToWav, type ExportClip } from '../engine/exportMix';
+import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
@@ -178,6 +179,7 @@ interface ProjectState {
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
+  transformMidiNotes: (clipId: string, noteIds: string[], transform: TransformOptions) => void;
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
   removeTrackEffect: (trackId: string, effectId: string) => void;
@@ -2063,6 +2065,32 @@ export const useProjectStore = create<ProjectState>()(
                 }
               : clip,
           ),
+        })),
+      },
+    });
+  },
+
+  transformMidiNotes: (clipId, noteIds, transform) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const noteIdSet = new Set(noteIds);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId || !clip.midiData) return clip;
+            const selected = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
+            const unselected = clip.midiData.notes.filter((n) => !noteIdSet.has(n.id));
+            const transformed = applyTransform(selected, transform);
+            return {
+              ...clip,
+              midiData: { ...clip.midiData, notes: [...unselected, ...transformed] },
+            };
+          }),
         })),
       },
     });

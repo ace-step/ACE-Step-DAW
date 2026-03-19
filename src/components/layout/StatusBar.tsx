@@ -21,12 +21,12 @@ export function StatusBar() {
   }, []);
 
   return (
-    <div className="flex items-center h-5 px-3 gap-4 bg-gradient-to-b from-[#2a2a2a] to-[#232323] border-t border-[#1a1a1a] text-[10px] text-zinc-500">
+    <div className="flex items-center h-5 px-3 gap-4 bg-gradient-to-b from-[#2a2a2a] to-[#232323] border-t border-[#1a1a1a] text-[10px] text-zinc-400">
       <div className="flex items-center gap-1.5">
         <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
         <span>{connected ? 'Connected' : 'Offline'}</span>
       </div>
-      {model && <span className="text-zinc-600">{model}</span>}
+      {model && <span className="text-zinc-400">{model}</span>}
       {activeJobs.length > 0 && (
         <span className="text-daw-accent">Generating: {activeJobs.length}</span>
       )}
@@ -35,7 +35,7 @@ export function StatusBar() {
         href="http://acestudio.ai/"
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-1 text-zinc-600 hover:text-daw-accent transition-colors"
+        className="flex items-center gap-1 text-zinc-400 hover:text-daw-accent transition-colors"
       >
         <img src="/logo.png" alt="" width={12} height={12} className="rounded-sm opacity-50" />
         ACE Studio

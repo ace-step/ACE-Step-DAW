@@ -1,0 +1,104 @@
+import { expect, test } from '@playwright/test';
+
+test.describe('Generation Panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined');
+    await page.evaluate(() => {
+      const browserWindow = window as unknown as {
+        __store: {
+          getState: () => {
+            createProject: (params: { name: string; bpm: number; keyScale: string }) => void;
+            addTrack: (trackName: string) => { id: string };
+            setShowGenerationPanel: (value: boolean) => void;
+          };
+        };
+      };
+
+      browserWindow.__store.getState().createProject({
+        name: 'Generation Panel Test',
+        bpm: 128,
+        keyScale: 'E minor',
+      });
+      browserWindow.__store.getState().addTrack('drums');
+      browserWindow.__store.getState().setShowGenerationPanel(true);
+    });
+    await page.mouse.click(24, 24);
+  });
+
+  test('submits the visible generation controls through the shared store payload', async ({ page }) => {
+    await expect(page.getByRole('complementary', { name: 'AI generation panel' })).toBeVisible();
+
+    await page.getByRole('textbox', { name: 'Generation prompt' }).fill('glassy future garage with vocal chops');
+    await page.getByTestId('generation-style-tags').getByRole('button', { name: 'Electronic' }).click();
+    await page.getByRole('combobox', { name: 'Generation key' }).selectOption('G minor');
+    await page.getByRole('spinbutton', { name: 'Generation BPM' }).fill('140');
+    await page.getByRole('spinbutton', { name: 'Generation length' }).fill('48');
+    await page.getByTestId('generation-temperature-slider').evaluate((node, value) => {
+      const input = node as HTMLInputElement;
+      input.value = String(value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, '0.45');
+    await page.getByRole('combobox', { name: 'Generation variation count' }).selectOption('4');
+    await page.getByTestId('generation-generate-btn').click();
+
+    const state = await page.evaluate(() => {
+      const browserWindow = window as unknown as {
+        __store: {
+          getState: () => {
+            generationForm: {
+              prompt: string;
+              styleTags: string[];
+              bpm: number;
+              keyScale: string;
+              lengthSeconds: number;
+              temperature: number;
+              variationCount: number;
+            };
+            lastSubmittedRequest: {
+              prompt: string;
+              styleTags: string[];
+              bpm: number;
+              keyScale: string;
+              duration: number;
+              temperature: number;
+              variationCount: number;
+            } | null;
+            variationSession: {
+              variations: Array<unknown>;
+            } | null;
+          };
+        };
+      };
+
+      const dawState = browserWindow.__store.getState();
+      return {
+        generationForm: dawState.generationForm,
+        lastSubmittedRequest: dawState.lastSubmittedRequest,
+        variationCount: dawState.variationSession?.variations.length ?? 0,
+      };
+    });
+
+    expect(state.generationForm).toMatchObject({
+      prompt: 'glassy future garage with vocal chops',
+      styleTags: ['Electronic'],
+      bpm: 140,
+      keyScale: 'G minor',
+      lengthSeconds: 48,
+      temperature: 0.45,
+      variationCount: 4,
+    });
+    expect(state.lastSubmittedRequest).toMatchObject({
+      prompt: 'glassy future garage with vocal chops',
+      styleTags: ['Electronic'],
+      bpm: 140,
+      keyScale: 'G minor',
+      duration: 48,
+      temperature: 0.45,
+      variationCount: 4,
+    });
+    expect(state.variationCount).toBe(4);
+  });
+});

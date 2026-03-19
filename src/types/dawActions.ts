@@ -79,8 +79,17 @@ export type AgentProjectState = ProjectState & Pick<
   'activePianoRollTool'
   | 'setActivePianoRollTool'
   | 'togglePianoRollPencilTool'
+  | 'showGenerationPanel'
+  | 'setShowGenerationPanel'
+  | 'toggleGenerationPanel'
   | 'zoomTimelineToSelection'
   | 'zoomTimelineToProject'
+> & Pick<
+  GenerationState,
+  'generationForm'
+  | 'lastSubmittedRequest'
+  | 'variationSession'
+  | 'submitGenerationRequest'
 >;
 
 // ---------------------------------------------------------------------------

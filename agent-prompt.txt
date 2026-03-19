@@ -49,32 +49,32 @@ You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 - This may happen multiple times. Each round, fix all issues and pass quality gates.
 - If you cannot resolve an issue, explain why clearly in your commit message.
 ---
-IMPLEMENT ISSUE #436: feat: add piano roll draw, paint, select, and erase tools
+IMPLEMENT ISSUE #438: feat: add a dedicated AI generation control panel
 ## User Story
-As a user, I want dedicated piano roll tools for draw, paint, select, and erase with `1-4` shortcuts, so that I can edit MIDI faster without mode confusion.
+As a user, I want a dedicated AI generation panel with prompt, style, key, BPM, length, temperature, and variation controls, so that I can generate musical ideas without hidden settings.
 
 ## Source
 Unchecked item from `docs/design/UX_IMPROVEMENT_CHECKLIST.md`:
-- P1 Piano Roll: **Draw/paint tools**
+- P1 AI Generation UX: **Generation panel**
 
 ## Problem
-The checklist identifies missing tool modes in the piano roll. Without explicit tools and shortcuts, MIDI editing is slower and less discoverable.
+AI generation controls are not consolidated into a single, explicit workflow surface. The checklist calls for a structured sidebar so users can set generation intent before running requests.
 
 ## Scope
-Add tool-state support for pencil, paint, select, and erase in the piano roll UI and state layer.
+Create a generation sidebar panel for core prompt and generation parameters.
 
 ## Acceptance Criteria
-- Piano roll exposes four tools: pencil, paint, select, erase.
-- Number keys `1`, `2`, `3`, `4` switch tools reliably when piano roll focus is active.
-- Pencil creates a single note, paint repeats notes across grid steps, select supports note selection, and erase removes targeted notes.
-- Tool changes use Zustand-backed state so the same behavior is reachable from `window.__store`.
-- Toolbar buttons have ARIA labels and visible active-state feedback.
-- Browser testing covers a short composition workflow using all four tools.
+- The panel includes controls for prompt text, style tags, key, BPM, length, temperature, and variation count.
+- The panel state is accessible via typed Zustand actions and readable from `window.__store`.
+- Controls have ARIA labels and keyboard-focus support.
+- Reasonable defaults are provided so generation can start without excessive setup.
+- The design fits the existing DAW layout without obscuring core transport/timeline interactions.
+- Browser testing covers opening the panel, changing settings, triggering generation, and verifying submitted parameters.
 
 ## Verification
 - `npx tsc --noEmit`
 - `npm run build`
-- Browser test: create a clip, enter piano roll, use each tool and verify resulting note data through UI and store state.
+- Browser test: configure the panel, run generation, and confirm the request payload/state matches the selected parameters.
 
 
-You are on branch fix/issue-436. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #436'. Do NOT push.
+You are on branch fix/issue-438. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #438'. Do NOT push.

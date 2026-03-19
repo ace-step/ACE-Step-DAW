@@ -426,12 +426,6 @@ export function useKeyboardShortcuts() {
         }
       }
 
-      if (event.code === 'KeyG' && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        ui.toggleGenerationPanel();
-        return;
-      }
-
       if (/^Digit[1-4]$/.test(event.code)) {
         const variationIndex = Number(event.code.slice(5)) - 1;
         const session = generation.variationSession;

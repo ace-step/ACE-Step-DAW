@@ -3,7 +3,6 @@ import { useUIStore } from '../../store/uiStore';
 import {
   getGenerationValidationError,
   useGenerationStore,
-  type VariationSessionParams,
   type VariationStatus,
 } from '../../store/generationStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -40,6 +39,7 @@ export function GenerationSidePanel() {
   const variationSession = useGenerationStore((s) => s.variationSession);
   const promptHistory = useGenerationStore((s) => s.promptHistory);
   const setGenerationPrompt = useGenerationStore((s) => s.setGenerationPrompt);
+  const setGenerationStyleTags = useGenerationStore((s) => s.setGenerationStyleTags);
   const toggleGenerationStyleTag = useGenerationStore((s) => s.toggleGenerationStyleTag);
   const setGenerationBpm = useGenerationStore((s) => s.setGenerationBpm);
   const setGenerationKeyScale = useGenerationStore((s) => s.setGenerationKeyScale);
@@ -50,7 +50,7 @@ export function GenerationSidePanel() {
   const setGenerationLyrics = useGenerationStore((s) => s.setGenerationLyrics);
   const setGenerationRequestError = useGenerationStore((s) => s.setGenerationRequestError);
   const applyGenerationPreset = useGenerationStore((s) => s.applyGenerationPreset);
-  const startVariationSession = useGenerationStore((s) => s.startVariationSession);
+  const submitGenerationRequest = useGenerationStore((s) => s.submitGenerationRequest);
   const setActiveVariation = useGenerationStore((s) => s.setActiveVariation);
   const cancelVariationSession = useGenerationStore((s) => s.cancelVariationSession);
   const clearVariationSession = useGenerationStore((s) => s.clearVariationSession);
@@ -58,6 +58,7 @@ export function GenerationSidePanel() {
   const [showHistory, setShowHistory] = useState(false);
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
+  const [styleTagsInput, setStyleTagsInput] = useState('');
 
   const stemsTracks = project?.tracks.filter((track) => track.trackType === 'stems') ?? [];
 
@@ -68,6 +69,10 @@ export function GenerationSidePanel() {
     if (!selectedTrackStillExists) {
       setGenerationTargetTrack(stemsTracks[0]?.id ?? '');
     }
+  }, [generationForm.selectedTrackId, project, setGenerationTargetTrack, stemsTracks]);
+
+  useEffect(() => {
+    if (!project?.keyScale) return;
 
     const isPristine =
       generationForm.prompt.trim() === ''
@@ -79,23 +84,24 @@ export function GenerationSidePanel() {
       useGenerationStore.getState().hydrateGenerationForm({
         bpm: project.bpm,
         keyScale: project.keyScale,
-        temperature: project.generationDefaults.guidanceScale,
       });
     }
   }, [
     generationForm.bpm,
     generationForm.keyScale,
     generationForm.prompt,
-    generationForm.selectedTrackId,
     generationForm.styleTags.length,
-    project,
-    setGenerationTargetTrack,
-    stemsTracks,
+    project?.bpm,
+    project?.keyScale,
   ]);
 
   useEffect(() => {
     if (generationForm.lyrics.trim()) setShowLyrics(true);
   }, [generationForm.lyrics]);
+
+  useEffect(() => {
+    setStyleTagsInput(generationForm.styleTags.join(', '));
+  }, [generationForm.styleTags]);
 
   const filteredPresets = presetCategory === 'All'
     ? GENERATION_PRESETS
@@ -119,43 +125,17 @@ export function GenerationSidePanel() {
   const isSessionActive = isGenerating || variationSession?.status === 'generating';
 
   const handleGenerate = useCallback(() => {
-    const error = getGenerationValidationError({
-      prompt: generationForm.prompt,
-      selectedTrackId: generationForm.selectedTrackId,
-      bpm: generationForm.bpm,
-      lengthSeconds: generationForm.lengthSeconds,
-      temperature: generationForm.temperature,
-      variationCount: generationForm.variationCount,
-    });
-
-    if (error) {
-      setGenerationRequestError(error);
-      return;
-    }
-
-    const params: VariationSessionParams = {
-      prompt: generationForm.prompt.trim(),
-      trackId: generationForm.selectedTrackId,
-      variationCount: generationForm.variationCount,
-      bpm: generationForm.bpm,
-      keyScale: generationForm.keyScale,
-      duration: generationForm.lengthSeconds,
-      guidanceScale: generationForm.temperature,
-      temperature: generationForm.temperature,
-      styleTags: generationForm.styleTags,
-      lyrics: generationForm.lyrics.trim() || undefined,
-      globalCaption: project?.globalCaption || undefined,
-      presetId: generationForm.presetId ?? undefined,
-    };
-
-    setGenerationRequestError(null);
-    startVariationSession(params);
-  }, [generationForm, project?.globalCaption, setGenerationRequestError, startVariationSession]);
+    submitGenerationRequest({ globalCaption: project?.globalCaption });
+  }, [project?.globalCaption, submitGenerationRequest]);
 
   const handleHistorySelect = useCallback((historyPrompt: string) => {
     setGenerationPrompt(historyPrompt);
     setShowHistory(false);
   }, [setGenerationPrompt]);
+
+  const commitStyleTagsInput = useCallback(() => {
+    setGenerationStyleTags(styleTagsInput.split(','));
+  }, [setGenerationStyleTags, styleTagsInput]);
 
   if (!show) return null;
 
@@ -268,6 +248,16 @@ export function GenerationSidePanel() {
               {generationForm.styleTags.length}/6 selected
             </span>
           </div>
+          <input
+            value={styleTagsInput}
+            onChange={(event) => setStyleTagsInput(event.target.value)}
+            onBlur={commitStyleTagsInput}
+            placeholder="Add comma-separated style tags"
+            className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+            disabled={isSessionActive}
+            aria-label="Generation style tags"
+            data-testid="generation-style-tags-input"
+          />
           <div className="flex flex-wrap gap-1.5" data-testid="generation-style-tags">
             {PRESET_CATEGORIES.map((category) => {
               const selected = generationForm.styleTags.some((tag) => tag.toLowerCase() === category.toLowerCase());

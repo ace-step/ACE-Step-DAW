@@ -177,6 +177,8 @@ git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Reb
 git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
 
 # Create PR (or get existing PR number)
+# Unregister from registry
+bash /Users/junmingong/.openclaw/workspace/acestep-daw/scripts/agents/registry.sh unregister "$ISSUE" 2>/dev/null
 gh pr create --repo "$REPO" --title "feat: #$ISSUE — $TITLE" \
   --body "Closes #$ISSUE" --base main --head "$BRANCH" 2>/dev/null
 PR_NUM=$(gh pr list --repo "$REPO" --head "$BRANCH" --json number -q '.[0].number' 2>/dev/null)

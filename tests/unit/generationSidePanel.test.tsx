@@ -92,10 +92,21 @@ describe('GenerationSidePanel', () => {
     fireEvent.click(screen.getByTestId('generation-generate-btn'));
 
     const session = useGenerationStore.getState().variationSession;
+    const submittedRequest = useGenerationStore.getState().lastSubmittedRequest;
     expect(session).not.toBeNull();
+    expect(submittedRequest).not.toBeNull();
     expect(session?.params.prompt).toBe('cinematic strings with pulsing bass');
     expect(session?.params.styleTags).toEqual(['Ambient']);
     expect(session?.params.variationCount).toBe(3);
+    expect(submittedRequest).toMatchObject({
+      prompt: 'cinematic strings with pulsing bass',
+      styleTags: ['Ambient'],
+      variationCount: 3,
+      bpm: 132,
+      keyScale: 'D minor',
+      duration: 30,
+      globalCaption: '',
+    });
     expect(screen.getByTestId('variation-cards')).toBeInTheDocument();
   });
 

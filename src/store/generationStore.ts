@@ -59,6 +59,21 @@ export interface VariationSession {
   createdAt: number;
 }
 
+export interface SubmittedGenerationRequest {
+  prompt: string;
+  trackId: string;
+  bpm: number;
+  keyScale: string;
+  duration: number;
+  temperature: number;
+  variationCount: number;
+  styleTags: string[];
+  lyrics?: string;
+  globalCaption: string;
+  presetId?: string;
+  submittedAt: number;
+}
+
 const MAX_PROMPT_HISTORY = 50;
 const MAX_STYLE_TAGS = 6;
 
@@ -117,6 +132,25 @@ function normalizeStyleTags(tags: string[]) {
   return unique;
 }
 
+function normalizeVariationSessionParams(
+  params: VariationSessionParams,
+  fallbackStyleTags: string[],
+): VariationSessionParams {
+  const normalizedTemperature = clampTemperature(params.temperature ?? params.guidanceScale);
+  return {
+    ...params,
+    prompt: params.prompt.trim(),
+    variationCount: clampVariationCount(params.variationCount),
+    bpm: clampBpm(params.bpm),
+    duration: clampLengthSeconds(params.duration),
+    guidanceScale: normalizedTemperature,
+    temperature: normalizedTemperature,
+    styleTags: normalizeStyleTags(params.styleTags ?? fallbackStyleTags),
+    lyrics: params.lyrics?.trim() || undefined,
+    globalCaption: params.globalCaption?.trim() || undefined,
+  };
+}
+
 export function createDefaultGenerationFormState(): GenerationFormState {
   return {
     prompt: '',
@@ -161,6 +195,7 @@ export interface GenerationState {
   promptHistory: PromptHistoryEntry[];
   variationSession: VariationSession | null;
   generationForm: GenerationFormState;
+  lastSubmittedRequest: SubmittedGenerationRequest | null;
 
   addJob: (job: GenerationJob) => void;
   updateJob: (jobId: string, updates: Partial<GenerationJob>) => void;
@@ -185,6 +220,7 @@ export interface GenerationState {
   applyGenerationPreset: (preset: GenerationPreset) => void;
   getGenerationValidationError: () => string | null;
   canSubmitGeneration: () => boolean;
+  submitGenerationRequest: (context?: { globalCaption?: string | null }) => VariationSessionParams | null;
 
   startVariationSession: (params: VariationSessionParams) => void;
   updateVariation: (index: number, updates: Partial<Omit<Variation, 'index'>>) => void;
@@ -201,6 +237,7 @@ export const useGenerationStore = create<GenerationState>()(
       promptHistory: [],
       variationSession: null,
       generationForm: createDefaultGenerationFormState(),
+      lastSubmittedRequest: null,
 
       addJob: (job) => set((s) => ({ jobs: [...s.jobs, job] })),
 
@@ -377,8 +414,53 @@ export const useGenerationStore = create<GenerationState>()(
         return !state.isGenerating && !state.getGenerationValidationError();
       },
 
+      submitGenerationRequest: (context) => {
+        const { generationForm } = get();
+        const error = get().getGenerationValidationError();
+        if (error) {
+          get().setGenerationRequestError(error);
+          return null;
+        }
+
+        const params = normalizeVariationSessionParams({
+          prompt: generationForm.prompt.trim(),
+          trackId: generationForm.selectedTrackId,
+          variationCount: generationForm.variationCount,
+          bpm: generationForm.bpm,
+          keyScale: generationForm.keyScale,
+          duration: generationForm.lengthSeconds,
+          guidanceScale: generationForm.temperature,
+          temperature: generationForm.temperature,
+          styleTags: generationForm.styleTags,
+          lyrics: generationForm.lyrics.trim() || undefined,
+          globalCaption: context?.globalCaption?.trim() || undefined,
+          presetId: generationForm.presetId ?? undefined,
+        }, generationForm.styleTags);
+
+        set({
+          lastSubmittedRequest: {
+            prompt: params.prompt,
+            trackId: params.trackId,
+            bpm: params.bpm,
+            keyScale: params.keyScale,
+            duration: params.duration,
+            temperature: params.temperature ?? params.guidanceScale,
+            variationCount: params.variationCount,
+            styleTags: params.styleTags ?? [],
+            lyrics: params.lyrics,
+            globalCaption: params.globalCaption ?? '',
+            presetId: params.presetId,
+            submittedAt: Date.now(),
+          },
+        });
+        get().setGenerationRequestError(null);
+        get().startVariationSession(params);
+        return params;
+      },
+
       startVariationSession: (params) => {
-        const count = clampVariationCount(params.variationCount);
+        const normalizedParams = normalizeVariationSessionParams(params, get().generationForm.styleTags);
+        const count = normalizedParams.variationCount;
         const variations: Variation[] = Array.from({ length: count }, (_, i) => ({
           index: i,
           status: 'pending' as const,
@@ -387,34 +469,34 @@ export const useGenerationStore = create<GenerationState>()(
         }));
 
         // Add to prompt history
-        get().addPromptToHistory(params.prompt, {
-          bpm: params.bpm,
-          keyScale: params.keyScale,
+        get().addPromptToHistory(normalizedParams.prompt, {
+          bpm: normalizedParams.bpm,
+          keyScale: normalizedParams.keyScale,
         });
 
         set({
           variationSession: {
             id: crypto.randomUUID(),
-            prompt: params.prompt,
-            trackId: params.trackId,
+            prompt: normalizedParams.prompt,
+            trackId: normalizedParams.trackId,
             variations,
             activeVariationIndex: 0,
             status: 'generating',
-            params: { ...params, variationCount: count },
+            params: normalizedParams,
             createdAt: Date.now(),
           },
           generationForm: {
             ...get().generationForm,
-            prompt: params.prompt,
-            selectedTrackId: params.trackId,
-            variationCount: count,
-            bpm: clampBpm(params.bpm),
-            keyScale: params.keyScale,
-            lengthSeconds: clampLengthSeconds(params.duration),
-            temperature: clampTemperature(params.temperature ?? params.guidanceScale),
-            styleTags: normalizeStyleTags(params.styleTags ?? get().generationForm.styleTags),
-            lyrics: params.lyrics ?? '',
-            presetId: params.presetId ?? get().generationForm.presetId,
+            prompt: normalizedParams.prompt,
+            selectedTrackId: normalizedParams.trackId,
+            variationCount: normalizedParams.variationCount,
+            bpm: normalizedParams.bpm,
+            keyScale: normalizedParams.keyScale,
+            lengthSeconds: normalizedParams.duration,
+            temperature: normalizedParams.temperature ?? normalizedParams.guidanceScale,
+            styleTags: normalizedParams.styleTags ?? [],
+            lyrics: normalizedParams.lyrics ?? '',
+            presetId: normalizedParams.presetId ?? get().generationForm.presetId,
             requestError: null,
           },
         });

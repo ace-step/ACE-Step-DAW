@@ -666,8 +666,6 @@ export interface Project {
   masterVolume?: number;
   /** AI mastering state for the master bus. */
   mastering?: MasteringState;
-  /** Normalized playback latency compensation shared by audio and visuals. */
-  playbackLatency?: PlaybackLatencySettings;
   /** Persistent asset clips — survives clip/track removal. */
   assets?: AssetClip[];
   /** Per-track automation lanes. */

@@ -260,10 +260,6 @@ export class AudioEngine {
     return measured;
   }
 
-  setPlaybackLatencyCompensation(seconds: number) {
-    this._playbackLatencyCompensation = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-  }
-
   setOnEndedCallback(cb: () => void) {
     this._onEnded = cb;
   }

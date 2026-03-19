@@ -60,7 +60,7 @@ PROMPT=$(cat "$WT/agent-prompt.txt")
 if [ "$TOOL" = "codex" ]; then
   codex exec -C "$WT" -s danger-full-access "$PROMPT"
 else
-  ~/.local/bin/claude --print --permission-mode bypassPermissions --fallback-model haiku "$PROMPT"
+  ~/.local/bin/claude --print --permission-mode bypassPermissions --fallback-model sonnet "$PROMPT"
 fi
 
 # Post-agent: verify + rebase + push + PR

@@ -14,6 +14,7 @@ import { ExportDialog } from '../dialogs/ExportDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
+import { ShareDialog } from '../dialogs/ShareDialog';
 import { MixerPanel } from '../mixer/MixerPanel';
 import { AssetsPanel } from '../assets/AssetsPanel';
 import { LoopBrowser } from '../assets/LoopBrowser';
@@ -27,6 +28,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
+import { useShareLink } from '../../hooks/useShareLink';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
@@ -59,6 +61,7 @@ export function AppShell() {
 
   useKeyboardShortcuts();
   useEffectsSync(); // Keep effects chain synced with store — always, not just when Mixer is open
+  useShareLink(); // Check URL for share parameters on mount
 
   return (
     <div className="flex flex-col h-screen bg-daw-bg text-zinc-300" onClick={handleClick}>
@@ -100,6 +103,7 @@ export function AppShell() {
       <RepaintModal />
       <Vocal2BGMModal />
       <AudioAnalysisPanel />
+      <ShareDialog />
     </div>
   );
 }

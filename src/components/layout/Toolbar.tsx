@@ -1,6 +1,7 @@
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
+import { useCollaborationStore } from '../../store/collaborationStore';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
@@ -80,6 +81,8 @@ export function Toolbar() {
   const setShowLibrary = useUIStore((s) => s.setShowLibrary);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
+  const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
+  const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { openFilePicker } = useAudioImport();
   const { toggleRecord } = useRecording();
 
@@ -140,6 +143,9 @@ export function Toolbar() {
         </button>
         <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
           Import
+        </button>
+        <button onClick={() => setShowShareDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Share Project">
+          Share
         </button>
       </div>
 
@@ -260,6 +266,13 @@ export function Toolbar() {
           ?
         </button>
       </div>
+
+      {/* Viewer mode badge */}
+      {isViewerMode && (
+        <div className="px-2 py-0.5 text-[10px] font-medium text-amber-400 bg-amber-950/40 rounded border border-amber-800/40" title="Read-only viewer mode">
+          VIEWER
+        </div>
+      )}
 
       {/* Zoom controls */}
       <div className="w-px h-6 bg-[#555] ml-1" />

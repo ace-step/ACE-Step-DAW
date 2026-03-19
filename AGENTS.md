@@ -9,9 +9,12 @@
 
 ### Branches
 - `main` — Stable. **Only updated via PR merge.** Never push directly.
-- `feat/v0.0.X-xxx` — Short-lived feature branch. Created from main, deleted after merge.
-- `fix/v0.0.X-xxx` — Bug fix branch.
-- `test/v0.0.X-system-test` — System test + refactor branch.
+- **Manual/release branches** (version-tagged, for planned work):
+  - `feat/v0.0.X-xxx` — Short-lived feature branch. Created from main, deleted after merge.
+  - `fix/v0.0.X-xxx` — Bug fix branch.
+  - `test/v0.0.X-system-test` — System test + refactor branch.
+- **Automated branches** (created by `launch-dev.sh` for GitHub Issue work):
+  - `fix/issue-NUMBER` — Auto-created per issue in a worktree. Dev agent owns this branch until PR merges.
 
 ### Identity
 - `user.name`: ChuxiJ
@@ -159,50 +162,52 @@ git checkout -b feat/v0.0.X-feature-name
 
 ---
 
-## Required Skills (install via `npx clawhub@latest install <name> --dir .claude/skills`)
+## Recommended Skills (install via `npx clawhub@latest install <name> --dir .claude/skills`)
 
-Agents MUST read and follow the relevant skill before each step. Do not improvise — use best practices.
+> **Note**: These skills are recommended but NOT currently installed. Install them
+> before use. Agents should follow the relevant skill's guidance when available,
+> but can proceed without them using the standards in CLAUDE.md and this document.
 
 ### Step 1 — Research
-- `find-skill` — Search for additional skills on ClawHub if needed
+- `find-skill` — Search for additional skills on ClawHub if needed (not installed)
 
 ### Step 2 — Planning
-- `agile-toolkit` — Sprint planning, backlog management, estimation
-- `task-development-workflow` — Task breakdown and dev workflow
+- `agile-toolkit` — Sprint planning, backlog management, estimation (not installed)
+- `task-development-workflow` — Task breakdown and dev workflow (not installed)
 
 ### Step 3 — UI/UX Design
-- `ui-ux-pro-max` — Visual hierarchy, cognitive load, navigation patterns
-- `ui-ux-design` — Mobile-first design, WCAG 2.2, Tailwind + Shadcn
-- `ui-audit` — Automated UI audit against UX principles
-- `superdesign` — Modern UI best practices for landing pages and dashboards
-- `distinctive-design-systems` — Design tokens, typography, layered surfaces
+- `ui-ux-pro-max` — Visual hierarchy, cognitive load, navigation patterns (not installed)
+- `ui-ux-design` — Mobile-first design, WCAG 2.2, Tailwind + Shadcn (not installed)
+- `ui-audit` — Automated UI audit against UX principles (not installed)
+- `superdesign` — Modern UI best practices for landing pages and dashboards (not installed)
+- `distinctive-design-systems` — Design tokens, typography, layered surfaces (not installed)
 
 ### Step 4 — Coding
-- `react-expert` — React 18+ component architecture, hooks, performance
-- `typescript-mastery` — Advanced TS patterns, branded types, generics
-- `zustand-patterns` — Store design, slice factory, persist, testing
-- `tailwind-v4-shadcn` — Tailwind v4 + shadcn/ui theming
-- `software-architect` — Scalable systems, trade-offs, boundaries
-- `clean-code-review` — Naming, functions, structure, anti-patterns
+- `react-expert` — React 18+ component architecture, hooks, performance (not installed)
+- `typescript-mastery` — Advanced TS patterns, branded types, generics (not installed)
+- `zustand-patterns` — Store design, slice factory, persist, testing (not installed)
+- `tailwind-v4-shadcn` — Tailwind v4 + shadcn/ui theming (not installed)
+- `software-architect` — Scalable systems, trade-offs, boundaries (not installed)
+- `clean-code-review` — Naming, functions, structure, anti-patterns (not installed)
 
 ### Step 5 — Code Review
-- `clean-code-review` — Pre-edit safety checks, coding standards
+- `clean-code-review` — Pre-edit safety checks, coding standards (not installed)
 
 ### Step 6-7 — Testing & Validation
-- `test-master` — Unit, integration, E2E, coverage, performance testing
-- `e2e-testing-patterns` — Playwright/Cypress patterns, flaky test elimination
-- `happy-hues` — Color palette validation
-- `ui-audit` — Accessibility and UX principle verification
+- `test-master` — Unit, integration, E2E, coverage, performance testing (not installed)
+- `e2e-testing-patterns` — Playwright/Cypress patterns, flaky test elimination (not installed)
+- `happy-hues` — Color palette validation (not installed)
+- `ui-audit` — Accessibility and UX principle verification (not installed)
 
 ### Step 8 — Release
 - No specific skill (follow Git workflow in this document)
 
 ### ACE-Step Music Generation
-- `acestep` — ACE-Step API for music generation
-- `acestep-songwriting` — Lyrics and caption writing guide
-- `acestep-lyrics-transcription` — Audio to timestamped lyrics
-- `acestep-simplemv` — Music video rendering
-- `acestep-thumbnail` — Cover art generation via Gemini
+- `acestep` — ACE-Step API for music generation (not installed)
+- `acestep-songwriting` — Lyrics and caption writing guide (not installed)
+- `acestep-lyrics-transcription` — Audio to timestamped lyrics (not installed)
+- `acestep-simplemv` — Music video rendering (not installed)
+- `acestep-thumbnail` — Cover art generation via Gemini (not installed)
 
 ---
 
@@ -287,12 +292,13 @@ Plans are written by the orchestrator (Opus) and executed by coding agents (Code
 
 ## Skill Utilization Policy
 
-The 23 skills listed in "Required Skills" are NOT decorations. They MUST be actively used.
+The skills listed in "Recommended Skills" are not currently installed. When they are installed, they should be actively used.
 
 ### Rules
-1. **Before every step, read the relevant skill's SKILL.md**. Don't improvise what a skill already covers.
-2. **Cite the skill in your plan/commit** when its guidance shaped the implementation.
-3. **Periodically audit skill usage** — if a skill hasn't been read in 3+ versions, review whether it's still relevant or needs replacement.
+1. **If a skill is installed**, read its SKILL.md before the relevant step. Don't improvise what a skill already covers.
+2. **If no skill is installed**, follow the standards in CLAUDE.md and this document.
+3. **Cite the skill in your plan/commit** when its guidance shaped the implementation.
+4. **Periodically audit skill usage** — if a skill hasn't been read in 3+ versions, review whether it's still relevant or needs replacement.
 
 ### Skill Combos (pre-packaged for common tasks)
 

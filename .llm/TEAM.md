@@ -1,83 +1,92 @@
 # ACE-Step DAW — Virtual Development Team
 
-> This file defines the multi-agent team structure. The orchestrator (main session)
-> manages all agents, assigns tasks, and ensures maximum utilization.
+> This file defines the multi-agent team structure. Agents are orchestrated
+> via cron jobs and on-demand launches, not a persistent orchestrator.
 
 ## Team Roles
 
-### 🎯 Orchestrator (Main Agent — Claude Opus)
-- **Responsibility**: Task prioritization, agent assignment, PR review, merge decisions
-- **Never does**: Long coding tasks alone (delegates to dev agents)
-- **Always does**: Quick fixes (<20 lines), PR merges, responding to the founder
+### Orchestrator (Cron-Based — Claude Opus on main session)
+- **Responsibility**: Strategic oversight, PR review, merge decisions, agent launching
+- **How it runs**: CEO Heartbeat cron (every 1 hour) reviews progress and steers
+- **Does**: High-level review, launch dev/QA agents when needed, handle founder messages
+- **Does NOT**: Execute coding tasks directly (delegates to dev agents)
 
-### 🔬 Researcher (Subagent)
+### Product Manager (Cron Agent)
+- **Responsibility**: Merge ready PRs, balance workload, maintain sprint backlog, create Issues
+- **How it runs**: PM Brain cron (every 10 min, currently disabled — should be re-enabled)
+- **Resumes a persistent session** across ticks (does not cold-start)
+- **Output**: Updated `TASK_QUEUE.md`, new GitHub Issues with labels, sprint plans
+- **Script**: `scripts/agents/project-manager.sh`
+
+### Developer (On-Demand Agent)
+- **Responsibility**: Implement features, fix bugs, write code, run tests
+- **How it runs**: Launched by PM or CEO heartbeat via `scripts/agents/launch-dev.sh`
+- **Owns the PR until merge**: resumed in the same session for CI failures and review comments
+- **Creates**: Branches as `fix/issue-NUMBER`, code changes, tests
+- **Model**: Claude Code CLI (in worktree per issue)
+- **Rules**: Must follow CLAUDE.md interaction design standards and AGENT_CONTEXT.md SOP
+
+### QA Tester (Cron Agent)
+- **Responsibility**: Run user scenario tests, find bugs, create Issues
+- **How it runs**: QA Tester cron (every 2 hours) runs `qa-tester.sh full`
+- **Output**: Test reports, GitHub Issues for bugs (labeled `priority: P0`, `role: tester`)
+- **Script**: `scripts/agents/qa-tester.sh`
+
+### Researcher (On-Demand Agent)
 - **Responsibility**: Deep competitive analysis, technical research, architecture decisions
+- **How it runs**: Triggered on-demand by PM or orchestrator
 - **Output**: Research docs in `docs/research-notes/` or `docs/design/`
-- **Trigger**: New technology question, competitive gap, architecture decision
+- **Script**: `scripts/agents/researcher.sh`
 - **Model**: claude-opus-4-6 (needs depth)
 
-### 📋 Product Manager (Subagent)
-- **Responsibility**: Write feature specs, update UX checklist, prioritize backlog
-- **Output**: Updates to `TASK_QUEUE.md`, `UX_IMPROVEMENT_CHECKLIST.md`, feature specs
-- **Trigger**: After research completes, after user feedback, weekly planning
-- **Model**: claude-opus-4-6 (needs product thinking)
+### Daily Reporter (Cron Agent)
+- **Responsibility**: Summarize daily progress and post to Discord
+- **How it runs**: Daily Dev Report cron (7pm PDT daily, isolated session)
+- **Output**: Formatted report with PRs merged, tests run, sprint progress
 
-### 💻 Developer (Subagent or Codex)
-- **Responsibility**: Implement features, write code, run local tests
-- **Output**: Code changes on feature branches, committed and pushed
-- **Trigger**: Task assigned from TASK_QUEUE.md
-- **Model**: Codex gpt-5.4 (fast, good at coding) or Claude Code
-- **Rules**: Must follow CLAUDE.md interaction design standards
-
-### 🧪 Tester (Subagent)
-- **Responsibility**: Write tests, run test suites, validate PRs
-- **Output**: Test files, test reports, CI status checks
-- **Trigger**: After dev completes a feature, before merge
-- **Model**: claude-opus-4-6 (needs to understand intent)
-
-### 👁️ Reviewer (GitHub Copilot + Subagent)
-- **Responsibility**: Code review, quality checks, bug detection
-- **Output**: PR comments, approval/rejection
-- **Trigger**: PR created
-- **Tools**: GitHub Copilot (auto), plus manual review subagent for critical PRs
+### Additional Roles (scripts available, triggered on-demand)
+- **DevOps** (`devops.sh`): Infrastructure and deployment tasks
+- **Refactorer** (`refactorer.sh`): Code quality and refactoring
+- **Release Manager** (`release-manager.sh`): Release preparation and publishing
+- **Product Reviewer** (`product-manager-review.sh`): Product review tasks
 
 ## Workflow Pipeline
 
 ```
-┌─────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐    ┌──────────┐
-│ Research │───>│ Product  │───>│ Developer │───>│ Tester   │───>│ Reviewer │───> Merge
-│          │    │ Manager  │    │           │    │          │    │          │
-│ (deep    │    │ (spec +  │    │ (code +   │    │ (tests + │    │ (Copilot │
-│  analysis│    │  backlog)│    │  branch)  │    │  CI)     │    │  + agent)│
-└─────────┘    └──────────┘    └───────────┘    └──────────┘    └──────────┘
-     │               │               │               │               │
-     └───────────────┴───────────────┴───────────────┴───────────────┘
-                              Orchestrator manages all
+┌─────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐
+│ Product  │───>│ Developer │───>│ QA Tester │───>│  Merge   │
+│ Manager  │    │ (owns PR) │    │           │    │ (by PM)  │
+│ (sprint +│    │ (code +   │    │ (tests +  │    │          │
+│  backlog)│    │  CI loop) │    │  bugs)    │    │          │
+└──────────┘    └───────────┘    └──────────┘    └──────────┘
+     │               │  ▲               │
+     │               │  │ CI/review     │
+     │               └──┘  feedback     │
+     │                                  │
+     └──── Bug reports feed back ───────┘
 ```
 
-## Parallelization Rules
+## Coordination Model
 
-1. **Max 3 subagents running simultaneously** (to avoid resource contention)
-2. **Research + Dev can run in parallel** (different concerns)
-3. **Tester runs AFTER dev** (needs code to test)
-4. **Reviewer runs AFTER tester** (needs tests passing)
-5. **Orchestrator NEVER waits idle** — always has a quick task or is reviewing
+1. **Cron-driven, not idle-loop**: Agents wake on schedule, do their work, then exit
+2. **PM maintains persistent session**: Context carries across ticks (no cold-start)
+3. **Dev agents own PR lifecycle**: Implement → push → wait CI → fix → address reviews → merge
+4. **Dev agents resume sessions**: When CI/review results arrive, same session is resumed with full context
+5. **CEO heartbeat provides strategic oversight**: Hourly check for stuck agents or direction changes
+6. **Max 3 dev agents running simultaneously** (to avoid resource contention)
 
 ## Task Assignment Protocol
 
-1. Orchestrator reads TASK_QUEUE.md
-2. For each ready task:
-   - Simple (<20 lines): Orchestrator does it directly
-   - Medium (20-200 lines): Spawn developer subagent
-   - Complex (>200 lines): Spawn developer + tester subagents
-   - Research: Spawn researcher subagent
-   - Product: Spawn PM subagent
-3. Track in-progress tasks in TASK_QUEUE.md
-4. When agent completes: review output → merge if good → assign next task
+1. PM reads TASK_QUEUE.md and open GitHub Issues
+2. For each ready task, PM launches a dev agent via `launch-dev.sh`
+3. Dev agent creates worktree, implements, pushes, creates PR
+4. Dev agent is resumed for CI failures and review comments until PR merges
+5. QA tester catches regressions and creates new Issues
+6. PM picks up new Issues in next tick
 
 ## Communication Protocol
 
-- Subagents write to files (not messages)
-- Orchestrator checks completion events
-- Founder's messages are handled by orchestrator immediately (quick reply → delegate if needed)
+- Agents communicate via files and GitHub (Issues, PRs, comments)
+- Daily report posts to Discord for human visibility
+- Founder's messages are handled by orchestrator (CEO heartbeat session)
 - Never block on founder's response — continue working

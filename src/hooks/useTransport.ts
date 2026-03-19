@@ -84,6 +84,7 @@ export function useTransport() {
       buffer: AudioBuffer;
       audioOffset: number;
       clipDuration: number;
+      timeStretchRate?: number;
     }
     const clipBuffers: ScheduleEntry[] = [];
 
@@ -149,6 +150,7 @@ export function useTransport() {
           buffer,
           audioOffset: clip.audioOffset ?? 0,
           clipDuration: clip.duration,
+          timeStretchRate: clip.timeStretchRate,
         });
       }
     }

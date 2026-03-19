@@ -23,6 +23,7 @@ export interface ClipScheduleInfo {
   buffer: AudioBuffer;
   audioOffset: number;   // offset into the buffer (crop start)
   clipDuration: number;  // how long to play (crop length)
+  timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
 }
 
 /**
@@ -125,6 +126,12 @@ export class AudioEngine {
       source.buffer = clip.buffer;
       source.connect(trackNode.inputGain);
 
+      // Apply time-stretch via playback rate
+      const rate = clip.timeStretchRate ?? 1;
+      if (rate !== 1) {
+        source.playbackRate.value = rate;
+      }
+
       const clipEnd = clip.startTime + clip.clipDuration;
       if (clipEnd <= fromTime) continue;
 
@@ -132,12 +139,17 @@ export class AudioEngine {
       if (clip.startTime >= fromTime) {
         // Clip hasn't started: schedule with delay, start from audioOffset
         const delay = clip.startTime - fromTime;
-        source.start(contextNow + delay, clip.audioOffset, clip.clipDuration);
+        // source.start duration is in buffer-time; scale by rate so wall-clock = clipDuration
+        const bufferDuration = clip.clipDuration * rate;
+        source.start(contextNow + delay, clip.audioOffset, bufferDuration);
       } else {
         // Clip already started: seek into it
         const seekOffset = fromTime - clip.startTime;
         const remaining = clip.clipDuration - seekOffset;
-        source.start(contextNow, clip.audioOffset + seekOffset, remaining);
+        // Scale seek and remaining by rate for buffer-time coordinates
+        const bufferSeek = seekOffset * rate;
+        const bufferRemaining = remaining * rate;
+        source.start(contextNow, clip.audioOffset + bufferSeek, bufferRemaining);
       }
 
       this.scheduledSources.push({

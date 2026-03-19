@@ -14,6 +14,12 @@ import type {
   Track,
 } from '../../types/project';
 
+type MidiEffectStoreActions = {
+  updateMidiEffect: (trackId: string, effectId: string, updates: Partial<MidiEffect>) => void;
+  toggleMidiEffect: (trackId: string, effectId: string) => void;
+  reorderMidiEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
+};
+
 // ─── Inline icons ────────────────────────────────────────────────────────────
 
 const GripVertical = ({ className }: { className?: string }) => (
@@ -50,7 +56,7 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 // ─── Scale Lock Card ─────────────────────────────────────────────────────────
 
 function ScaleLockCard({ effect, trackId }: { effect: MidiEffect & { type: 'scale-lock' }; trackId: string }) {
-  const updateMidiEffect = useProjectStore((s) => s.updateMidiEffect);
+  const updateMidiEffect = useProjectStore((s) => (s as MidiEffectStoreActions).updateMidiEffect);
   const params = effect.params as ScaleLockParams;
 
   const setParam = (key: keyof ScaleLockParams, value: ScaleLockParams[keyof ScaleLockParams]) => {
@@ -92,7 +98,7 @@ function ScaleLockCard({ effect, trackId }: { effect: MidiEffect & { type: 'scal
 // ─── Arpeggiator Card ────────────────────────────────────────────────────────
 
 function ArpeggiatorCard({ effect, trackId }: { effect: MidiEffect & { type: 'arpeggiator' }; trackId: string }) {
-  const updateMidiEffect = useProjectStore((s) => s.updateMidiEffect);
+  const updateMidiEffect = useProjectStore((s) => (s as MidiEffectStoreActions).updateMidiEffect);
   const params = effect.params as ArpeggiatorParams;
 
   const setParam = (key: keyof ArpeggiatorParams, value: ArpeggiatorParams[keyof ArpeggiatorParams]) => {
@@ -146,7 +152,7 @@ function ArpeggiatorCard({ effect, trackId }: { effect: MidiEffect & { type: 'ar
 // ─── Chord Generator Card ────────────────────────────────────────────────────
 
 function ChordGenCard({ effect, trackId }: { effect: MidiEffect & { type: 'chord-gen' }; trackId: string }) {
-  const updateMidiEffect = useProjectStore((s) => s.updateMidiEffect);
+  const updateMidiEffect = useProjectStore((s) => (s as MidiEffectStoreActions).updateMidiEffect);
   const params = effect.params as ChordGenParams;
 
   const setParam = (key: keyof ChordGenParams, value: ChordGenParams[keyof ChordGenParams]) => {
@@ -198,7 +204,7 @@ function MidiEffectDevice({
   onDragOver: (idx: number) => void;
   isDragOver: boolean;
 }) {
-  const toggleMidiEffect = useProjectStore((s) => s.toggleMidiEffect);
+  const toggleMidiEffect = useProjectStore((s) => (s as MidiEffectStoreActions).toggleMidiEffect);
   const removeMidiEffect = useProjectStore((s) => s.removeMidiEffect);
   const [collapsed, setCollapsed] = useState(false);
   const color = MIDI_EFFECT_COLORS[effect.type];
@@ -314,11 +320,11 @@ function AddMidiEffectButton({ trackId }: { trackId: string }) {
 
 export function MidiEffectChain() {
   const project = useProjectStore((s) => s.project);
-  const reorderMidiEffect = useProjectStore((s) => s.reorderMidiEffect);
-  const openTrackId = useUIStore((s) => s.openMidiEffectChainTrackId);
+  const reorderMidiEffect = useProjectStore((s) => (s as MidiEffectStoreActions).reorderMidiEffect);
+  const openTrackId = useUIStore((s) => s.openEffectChainTrackId);
   const effectChainHeight = useUIStore((s) => s.effectChainHeight);
   const setEffectChainHeight = useUIStore((s) => s.setEffectChainHeight);
-  const setOpenMidiEffectChainTrackId = useUIStore((s) => s.setOpenMidiEffectChainTrackId);
+  const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
 
   const track = project?.tracks.find((t) => t.id === openTrackId) ?? null;
 
@@ -381,7 +387,7 @@ export function MidiEffectChain() {
           — {effects.length} effect{effects.length !== 1 ? 's' : ''}
         </span>
         <button
-          onClick={() => setOpenMidiEffectChainTrackId(null)}
+          onClick={() => setOpenEffectChainTrackId(null)}
           className="ml-auto text-xs text-zinc-400 hover:text-zinc-200"
         >
           Close

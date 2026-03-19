@@ -8,6 +8,8 @@ export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
+/** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
+export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
 
 export type ClipGenerationStatus =
@@ -187,6 +189,8 @@ export interface Clip {
   timeStretchRate?: number;
   /** Pitch shift in semitones (0 = original pitch). */
   pitchShift?: number;
+  /** Time-stretch algorithm: 'repitch' (playbackRate) or 'slice' (warp markers). */
+  stretchMode?: StretchMode;
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
   /** Comping takes for this clip. */

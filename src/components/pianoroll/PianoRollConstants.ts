@@ -31,19 +31,25 @@ export function gridSizeToBeats(size: PianoRollGrid): number {
   }
 }
 
+export function normalizeMidiVelocity(velocity: number): number {
+  if (!Number.isFinite(velocity)) return 1;
+  const midiVelocity = Math.abs(velocity) <= 1 ? velocity * 127 : velocity;
+  return Math.round(Math.max(1, Math.min(127, midiVelocity)));
+}
+
 export function velocityToColor(velocity: number): string {
-  const t = velocity / 127;
-  const r = Math.round(80 + t * 150);
-  const g = Math.round(130 - t * 60);
-  const b = Math.round(255 - t * 80);
+  const t = (normalizeMidiVelocity(velocity) - 1) / 126;
+  const r = Math.round(76 + t * 160);
+  const g = Math.round(118 + t * 52);
+  const b = Math.round(210 - t * 92);
   return `rgb(${r},${g},${b})`;
 }
 
 export function velocityToBarColor(velocity: number): string {
-  const t = velocity / 127;
-  const r = Math.round(100 + t * 155);
-  const g = Math.round(80 + t * 40);
-  const b = Math.round(200 - t * 100);
+  const t = (normalizeMidiVelocity(velocity) - 1) / 126;
+  const r = Math.round(88 + t * 167);
+  const g = Math.round(122 + t * 42);
+  const b = Math.round(214 - t * 124);
   return `rgba(${r},${g},${b},0.8)`;
 }
 

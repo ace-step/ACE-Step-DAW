@@ -66,6 +66,8 @@ export interface CommandPaletteContext {
     toggleLoopBrowser: () => void;
     toggleTempoLane: () => void;
     toggleAIAssistant: () => void;
+    zoomTimelineToSelection: () => void;
+    zoomTimelineToProject: () => void;
     setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
     addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
     addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
@@ -472,6 +474,28 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       () => context.actions.setShowKeyboardShortcutsDialog(true),
       ['?'],
       'Help dialog',
+    ),
+    createTrackCommand(
+      'view:zoom-to-selection',
+      'Zoom to Selection',
+      'View',
+      'action',
+      ['zoom', 'selection', 'timeline', 'arrangement'],
+      ['zoom to selected clips', 'zoom to region', 'fit selection'],
+      context.actions.zoomTimelineToSelection,
+      ['Z'],
+      'Arrangement zoom',
+    ),
+    createTrackCommand(
+      'view:zoom-to-fit-project',
+      'Fit Full Project',
+      'View',
+      'action',
+      ['zoom', 'fit', 'project', 'timeline', 'arrangement'],
+      ['zoom to fit', 'fit project', 'show full song'],
+      context.actions.zoomTimelineToProject,
+      ['Shift', 'Z'],
+      'Arrangement zoom',
     ),
   );
 

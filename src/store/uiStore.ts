@@ -847,6 +847,8 @@ function buildCommandPaletteContext(state: UIState) {
       toggleLoopBrowser: state.toggleLoopBrowser,
       toggleTempoLane: state.toggleTempoLane,
       toggleAIAssistant: state.toggleAIAssistant,
+      zoomTimelineToSelection: state.zoomTimelineToSelection,
+      zoomTimelineToProject: state.zoomTimelineToProject,
       setBatchGenerateMode: state.setBatchGenerateMode,
       addTrack: projectStore.addTrack,
       addTrackEffect: projectStore.addTrackEffect,

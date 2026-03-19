@@ -19,6 +19,8 @@ A complete reference of all keyboard shortcuts in ACE-Step DAW.
 | `Cmd/Ctrl + =` | Zoom in |
 | `Cmd/Ctrl + -` | Zoom out |
 | `Cmd/Ctrl + 0` | Reset zoom (50 px/s) |
+| `Z` | Zoom to the selected clips or selected time region |
+| `Shift + Z` | Fit the full project in view |
 
 ## Clips
 

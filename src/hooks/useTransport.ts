@@ -76,6 +76,7 @@ export function useTransport() {
 
     // Sync master volume
     engine.masterVolume = proj.masterVolume ?? 1.0;
+    engine.applyMastering(proj.mastering);
 
     interface ScheduleEntry {
       clipId: string;
@@ -335,6 +336,7 @@ export function useTransport() {
     if (!project || !isPlaying) return;
     const engine = getAudioEngine();
     engine.masterVolume = project.masterVolume ?? 1.0;
+    engine.applyMastering(project.mastering);
     for (const track of project.tracks) {
       const trackNode = engine.trackNodes.get(track.id);
       if (trackNode) {

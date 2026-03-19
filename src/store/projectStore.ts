@@ -30,6 +30,8 @@ import type {
   Marker,
   TempoEvent,
   TimeSignatureEvent,
+  MasteringPreset,
+  MasteringLoudnessTarget,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -46,6 +48,11 @@ import { exportStemToWav, type ExportClip } from '../engine/exportMix';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
+import {
+  analyzeProjectForMastering,
+  createDefaultMasteringAnalysis,
+  createDefaultMasteringSettings,
+} from '../utils/mastering';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -101,6 +108,11 @@ interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  setMasteringEnabled: (enabled: boolean) => void;
+  setMasteringPreset: (preset: MasteringPreset) => void;
+  setMasteringTargetLufs: (targetLufs: MasteringLoudnessTarget) => void;
+  setMasteringPreviewBypassed: (previewBypassed: boolean) => void;
+  runMasteringAnalysis: () => Promise<void>;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
   setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
   setDualMonoPan: (trackId: string, left: number, right: number) => void;
@@ -345,6 +357,23 @@ function ensureTrackDefaults(track: Track): Track {
   };
 }
 
+function ensureProjectDefaults(project: Project): Project {
+  return {
+    ...project,
+    masterVolume: project.masterVolume ?? 1.0,
+    mastering: project.mastering
+      ? {
+          ...createDefaultMasteringSettings(),
+          ...project.mastering,
+          analysis: {
+            ...createDefaultMasteringAnalysis(),
+            ...project.mastering.analysis,
+          },
+        }
+      : createDefaultMasteringSettings(),
+  };
+}
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
@@ -355,7 +384,7 @@ export const useProjectStore = create<ProjectState>()(
     _future.length = 0;
     // Migration: backfill trackType for projects created before the field existed
     const migrated: Project = {
-      ...project,
+      ...ensureProjectDefaults(project),
       tracks: project.tracks.map((t) => {
         if (t.trackType) return t;
         const inferred: TrackType =
@@ -412,6 +441,8 @@ export const useProjectStore = create<ProjectState>()(
       tracks: [],
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
+      masterVolume: 1.0,
+      mastering: createDefaultMasteringSettings(),
     };
     set({ project });
   },
@@ -431,6 +462,124 @@ export const useProjectStore = create<ProjectState>()(
       );
     }
     set({ project: merged });
+  },
+
+  setMasteringEnabled: (enabled) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const mastering = {
+      ...(state.project.mastering ?? createDefaultMasteringSettings()),
+      enabled,
+      previewBypassed: enabled ? state.project.mastering?.previewBypassed ?? false : false,
+    };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering,
+      },
+    });
+  },
+
+  setMasteringPreset: (preset) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const mastering = {
+      ...(state.project.mastering ?? createDefaultMasteringSettings()),
+      preset,
+    };
+    const analysis =
+      mastering.analysis.status === 'ready'
+        ? analyzeProjectForMastering(state.project, preset, mastering.targetLufs)
+        : mastering.analysis;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: { ...mastering, analysis },
+      },
+    });
+  },
+
+  setMasteringTargetLufs: (targetLufs) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const mastering = {
+      ...(state.project.mastering ?? createDefaultMasteringSettings()),
+      targetLufs,
+    };
+    const analysis =
+      mastering.analysis.status === 'ready'
+        ? analyzeProjectForMastering(state.project, mastering.preset, targetLufs)
+        : mastering.analysis;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: { ...mastering, analysis },
+      },
+    });
+  },
+
+  setMasteringPreviewBypassed: (previewBypassed) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: {
+          ...(state.project.mastering ?? createDefaultMasteringSettings()),
+          previewBypassed,
+        },
+      },
+    });
+  },
+
+  runMasteringAnalysis: async () => {
+    const state = get();
+    if (!state.project) return;
+    const startedAt = Date.now();
+    const currentSettings = state.project.mastering ?? createDefaultMasteringSettings();
+    set({
+      project: {
+        ...state.project,
+        updatedAt: startedAt,
+        mastering: {
+          ...currentSettings,
+          analysis: {
+            ...currentSettings.analysis,
+            status: 'analyzing',
+          },
+        },
+      },
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+
+    const nextState = get();
+    if (!nextState.project) return;
+    const nextSettings = nextState.project.mastering ?? createDefaultMasteringSettings();
+    const analysis = analyzeProjectForMastering(
+      nextState.project,
+      nextSettings.preset,
+      nextSettings.targetLufs,
+    );
+    set({
+      project: {
+        ...nextState.project,
+        updatedAt: Date.now(),
+        mastering: {
+          ...nextSettings,
+          enabled: true,
+          analysis,
+        },
+      },
+    });
   },
 
   updateTrackMixer: (trackId, updates) => {

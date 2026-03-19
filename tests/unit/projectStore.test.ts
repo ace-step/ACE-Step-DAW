@@ -43,7 +43,63 @@ describe('projectStore', () => {
 
       useProjectStore.getState().setProject(project);
 
-      expect(useProjectStore.getState().project).toEqual(project);
+      expect(useProjectStore.getState().project).toMatchObject(project);
+      expect(useProjectStore.getState().project?.mastering).toBeDefined();
+    });
+  });
+
+  describe('AI mastering', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+      useProjectStore.getState().addTrack('drums');
+      useProjectStore.getState().addTrack('bass');
+    });
+
+    it('creates projects with mastering defaults', () => {
+      const mastering = useProjectStore.getState().project?.mastering;
+      expect(mastering).toBeDefined();
+      expect(mastering?.enabled).toBe(false);
+      expect(mastering?.preset).toBe('balanced');
+      expect(mastering?.targetLufs).toBe(-14);
+      expect(mastering?.analysis.status).toBe('idle');
+    });
+
+    it('updates mastering controls without destroying the preset state', () => {
+      const store = useProjectStore.getState();
+      store.setMasteringPreset('warm');
+      store.setMasteringTargetLufs(-11);
+      store.setMasteringPreviewBypassed(true);
+
+      expect(useProjectStore.getState().project?.mastering).toMatchObject({
+        preset: 'warm',
+        targetLufs: -11,
+        previewBypassed: true,
+      });
+
+      store.setMasteringEnabled(false);
+      expect(useProjectStore.getState().project?.mastering).toMatchObject({
+        preset: 'warm',
+        targetLufs: -11,
+      });
+    });
+
+    it('runs mastering analysis and enables the master bus chain', async () => {
+      vi.useFakeTimers();
+      try {
+        const analysisPromise = useProjectStore.getState().runMasteringAnalysis();
+        expect(useProjectStore.getState().project?.mastering?.analysis.status).toBe('analyzing');
+
+        await vi.advanceTimersByTimeAsync(900);
+        await analysisPromise;
+
+        const mastering = useProjectStore.getState().project?.mastering;
+        expect(mastering?.enabled).toBe(true);
+        expect(mastering?.analysis.status).toBe('ready');
+        expect(mastering?.analysis.outputLufs).toBeGreaterThanOrEqual(mastering?.targetLufs ?? -14);
+        expect(mastering?.analysis.recommendedPreset).toBeDefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

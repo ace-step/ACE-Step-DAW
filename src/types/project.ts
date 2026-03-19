@@ -312,6 +312,32 @@ export interface Marker {
   color: string;
 }
 
+export type MasteringPreset = 'balanced' | 'loud' | 'warm' | 'bright';
+export type MasteringLoudnessTarget = -14 | -11 | -8;
+export type MasteringAnalysisStatus = 'idle' | 'analyzing' | 'ready';
+
+export interface MasteringAnalysis {
+  status: MasteringAnalysisStatus;
+  analyzedAt?: number;
+  recommendedPreset?: MasteringPreset;
+  inputLufs: number;
+  outputLufs: number;
+  dynamicRange: number;
+  stereoWidth: number;
+  lowBalance: number;
+  midBalance: number;
+  highBalance: number;
+  summary: string;
+}
+
+export interface MasteringSettings {
+  enabled: boolean;
+  previewBypassed: boolean;
+  preset: MasteringPreset;
+  targetLufs: MasteringLoudnessTarget;
+  analysis: MasteringAnalysis;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -329,6 +355,8 @@ export interface Project {
   globalCaption?: string;
   /** Master output fader level (0–1), default 1.0 */
   masterVolume?: number;
+  /** AI mastering chain settings for the master bus. */
+  mastering?: MasteringSettings;
   /** Persistent asset clips — survives clip/track removal. */
   assets?: AssetClip[];
   /** Per-track automation lanes. */

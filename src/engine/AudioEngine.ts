@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
-import type { SequencerPattern } from '../types/project';
+import type { MasteringSettings, SequencerPattern } from '../types/project';
+import { createDefaultMasteringSettings } from '../utils/mastering';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -30,9 +31,21 @@ export interface ClipScheduleInfo {
  */
 export class AudioEngine {
   ctx: AudioContext;
+  masterInput: GainNode;
   masterGain: GainNode;
   trackNodes: Map<string, TrackNode> = new Map();
   scheduledSources: ScheduledSource[] = [];
+
+  private readonly masterDryGain: GainNode;
+  private readonly masterWetGain: GainNode;
+  private readonly masterLowShelf: BiquadFilterNode;
+  private readonly masterPresence: BiquadFilterNode;
+  private readonly masterHighShelf: BiquadFilterNode;
+  private readonly masterBusCompressor: DynamicsCompressorNode;
+  private readonly masterLimiterDrive: GainNode;
+  private readonly masterLimiter: WaveShaperNode;
+  private readonly masterAnalysisNode: AnalyserNode;
+  private readonly masterAnalysisData: Float32Array<ArrayBuffer>;
 
   private _playing = false;
   private _startedAt = 0;
@@ -56,11 +69,49 @@ export class AudioEngine {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
     Tone.setContext(this.ctx as unknown as Tone.BaseContext);
+    this.masterInput = this.ctx.createGain();
+    this.masterDryGain = this.ctx.createGain();
+    this.masterWetGain = this.ctx.createGain();
+    this.masterLowShelf = this.ctx.createBiquadFilter();
+    this.masterPresence = this.ctx.createBiquadFilter();
+    this.masterHighShelf = this.ctx.createBiquadFilter();
+    this.masterBusCompressor = this.ctx.createDynamicsCompressor();
+    this.masterLimiterDrive = this.ctx.createGain();
+    this.masterLimiter = this.ctx.createWaveShaper();
     this.masterGain = this.ctx.createGain();
-    this.masterGain.connect(this.ctx.destination);
+    this.masterAnalysisNode = this.ctx.createAnalyser();
+    this.masterAnalysisNode.fftSize = 2048;
+    this.masterAnalysisNode.smoothingTimeConstant = 0.75;
+    this.masterAnalysisData = new Float32Array(this.masterAnalysisNode.fftSize);
+    this.masterGain.connect(this.masterAnalysisNode);
+    this.masterAnalysisNode.connect(this.ctx.destination);
     this._metronomeGain = this.ctx.createGain();
     this._metronomeGain.gain.value = 0.35;
     this._metronomeGain.connect(this.ctx.destination);
+
+    this.masterLowShelf.type = 'lowshelf';
+    this.masterLowShelf.frequency.value = 110;
+    this.masterPresence.type = 'peaking';
+    this.masterPresence.frequency.value = 2400;
+    this.masterPresence.Q.value = 0.8;
+    this.masterHighShelf.type = 'highshelf';
+    this.masterHighShelf.frequency.value = 7200;
+    this.masterLimiter.curve = this.buildSoftClipCurve();
+    this.masterLimiter.oversample = '4x';
+
+    this.masterInput.connect(this.masterDryGain);
+    this.masterDryGain.connect(this.masterGain);
+
+    this.masterInput.connect(this.masterLowShelf);
+    this.masterLowShelf.connect(this.masterPresence);
+    this.masterPresence.connect(this.masterHighShelf);
+    this.masterHighShelf.connect(this.masterBusCompressor);
+    this.masterBusCompressor.connect(this.masterLimiterDrive);
+    this.masterLimiterDrive.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.masterWetGain);
+    this.masterWetGain.connect(this.masterGain);
+
+    this.applyMastering(createDefaultMasteringSettings());
   }
 
   async resume() {
@@ -80,7 +131,7 @@ export class AudioEngine {
   getOrCreateTrackNode(trackId: string): TrackNode {
     let node = this.trackNodes.get(trackId);
     if (!node) {
-      node = new TrackNode(this.ctx, this.masterGain);
+      node = new TrackNode(this.ctx, this.masterInput);
       this.trackNodes.set(trackId, node);
     }
     return node;
@@ -97,8 +148,91 @@ export class AudioEngine {
   get masterVolume() { return this.masterGain.gain.value; }
   set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
 
+  applyMastering(settings?: MasteringSettings) {
+    const mastering = settings ?? createDefaultMasteringSettings();
+    const active = mastering.enabled && !mastering.previewBypassed;
+
+    this.masterDryGain.gain.value = active ? 0 : 1;
+    this.masterWetGain.gain.value = active ? 1 : 0;
+
+    if (!active) {
+      this.masterLowShelf.gain.value = 0;
+      this.masterPresence.gain.value = 0;
+      this.masterHighShelf.gain.value = 0;
+      this.masterBusCompressor.threshold.value = 0;
+      this.masterBusCompressor.ratio.value = 1;
+      this.masterBusCompressor.attack.value = 0.003;
+      this.masterBusCompressor.release.value = 0.25;
+      this.masterBusCompressor.knee.value = 30;
+      this.masterLimiterDrive.gain.value = 1;
+      return;
+    }
+
+    const targetBoost =
+      mastering.targetLufs === -8 ? 1.28 :
+      mastering.targetLufs === -11 ? 1.18 :
+      1.08;
+
+    switch (mastering.preset) {
+      case 'loud':
+        this.masterLowShelf.gain.value = 1.4;
+        this.masterPresence.gain.value = 0.9;
+        this.masterHighShelf.gain.value = 1.25;
+        this.masterBusCompressor.threshold.value = -24;
+        this.masterBusCompressor.ratio.value = 3;
+        this.masterBusCompressor.attack.value = 0.006;
+        this.masterBusCompressor.release.value = 0.12;
+        this.masterBusCompressor.knee.value = 8;
+        this.masterLimiterDrive.gain.value = targetBoost * 1.08;
+        break;
+      case 'warm':
+        this.masterLowShelf.gain.value = 2.2;
+        this.masterPresence.gain.value = -0.5;
+        this.masterHighShelf.gain.value = -0.2;
+        this.masterBusCompressor.threshold.value = -20;
+        this.masterBusCompressor.ratio.value = 2.2;
+        this.masterBusCompressor.attack.value = 0.018;
+        this.masterBusCompressor.release.value = 0.2;
+        this.masterBusCompressor.knee.value = 12;
+        this.masterLimiterDrive.gain.value = targetBoost * 1.02;
+        break;
+      case 'bright':
+        this.masterLowShelf.gain.value = -0.5;
+        this.masterPresence.gain.value = 1.1;
+        this.masterHighShelf.gain.value = 2.1;
+        this.masterBusCompressor.threshold.value = -18;
+        this.masterBusCompressor.ratio.value = 2;
+        this.masterBusCompressor.attack.value = 0.014;
+        this.masterBusCompressor.release.value = 0.16;
+        this.masterBusCompressor.knee.value = 10;
+        this.masterLimiterDrive.gain.value = targetBoost;
+        break;
+      case 'balanced':
+      default:
+        this.masterLowShelf.gain.value = 0.8;
+        this.masterPresence.gain.value = 0.45;
+        this.masterHighShelf.gain.value = 0.9;
+        this.masterBusCompressor.threshold.value = -18;
+        this.masterBusCompressor.ratio.value = 1.8;
+        this.masterBusCompressor.attack.value = 0.012;
+        this.masterBusCompressor.release.value = 0.18;
+        this.masterBusCompressor.knee.value = 10;
+        this.masterLimiterDrive.gain.value = targetBoost;
+        break;
+    }
+  }
+
   getTrackLevel(trackId: string): number {
     return this.trackNodes.get(trackId)?.getLevel() ?? 0;
+  }
+
+  getMasterLevel(): number {
+    this.masterAnalysisNode.getFloatTimeDomainData(this.masterAnalysisData);
+    let peak = 0;
+    for (let i = 0; i < this.masterAnalysisData.length; i++) {
+      peak = Math.max(peak, Math.abs(this.masterAnalysisData[i]));
+    }
+    return peak;
   }
 
   updateSoloState() {
@@ -292,6 +426,16 @@ export class AudioEngine {
       s.source.disconnect();
     }
     this.scheduledSources = [];
+  }
+
+  private buildSoftClipCurve() {
+    const samples = 4096;
+    const curve = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) {
+      const x = (i / (samples - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * 2.6) / Math.tanh(2.6);
+    }
+    return curve;
   }
 
   get playing() { return this._playing; }

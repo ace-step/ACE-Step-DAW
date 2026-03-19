@@ -152,6 +152,8 @@ export function EQCurve({ low, mid, high }: { low: number; mid: number; high: nu
 
 export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { type: 'compressor' }; trackId: string }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const setSidechainSource = useProjectStore((s) => s.setSidechainSource);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
   const p = effect.params;
   const [reduction, setReduction] = useState(0);
   const animRef = useRef<number>(0);
@@ -171,6 +173,8 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
     effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'compressor');
   };
 
+  const otherTracks = tracks.filter((t) => t.id !== trackId);
+
   return (
     <div className="flex flex-col gap-2 p-2">
       <div className="flex gap-2 justify-center">
@@ -180,6 +184,33 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
         <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={28} step={0.01} />
       </div>
       <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" size={24} step={1} />
+      {/* Sidechain source selector */}
+      <div className="border-t border-white/5 pt-1.5 mt-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[7px] text-white/30 uppercase whitespace-nowrap">Sidechain</span>
+          <select
+            data-testid="sidechain-source-select"
+            className="flex-1 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white/70 outline-none cursor-pointer hover:bg-white/10 appearance-none"
+            value={p.sidechainSourceTrackId ?? ''}
+            onChange={(e) => {
+              const sourceId = e.target.value || undefined;
+              setSidechainSource(trackId, effect.id, sourceId);
+            }}
+          >
+            <option value="" className="bg-[#1a1a2e]">None</option>
+            {otherTracks.map((t) => (
+              <option key={t.id} value={t.id} className="bg-[#1a1a2e]">
+                {t.displayName || `Track ${tracks.indexOf(t) + 1}`}
+              </option>
+            ))}
+          </select>
+        </div>
+        {p.sidechainSourceTrackId && (
+          <div className="text-[7px] text-amber-400/60 mt-0.5">
+            SC from: {tracks.find((t) => t.id === p.sidechainSourceTrackId)?.displayName ?? 'Unknown'}
+          </div>
+        )}
+      </div>
       <div className="flex items-center gap-1.5">
         <span className="text-[7px] text-white/30 w-6">GR</span>
         <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden relative">

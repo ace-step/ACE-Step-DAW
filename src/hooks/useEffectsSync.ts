@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { effectsEngine } from '../engine/EffectsEngine';
 import { getAudioEngine } from './useAudioEngine';
+import type { CompressorParams } from '../types/project';
 
 export function useEffectsSync() {
   const tracks = useProjectStore((s) => s.project?.tracks);
@@ -29,6 +30,26 @@ export function useEffectsSync() {
           effectsEngine.getInputNode(track.id),
           effectsEngine.getOutputNode(track.id),
         );
+      }
+
+      // Set up sidechain routing for compressors with sidechainSourceTrackId
+      for (const effect of effects) {
+        if (effect.type !== 'compressor' || !effect.enabled) continue;
+        const params = effect.params as CompressorParams;
+        if (params.sidechainSourceTrackId) {
+          const sourceTrackNode = engine.getOrCreateTrackNode(params.sidechainSourceTrackId);
+          if (sourceTrackNode) {
+            effectsEngine.setupSidechain(
+              track.id,
+              effect.id,
+              sourceTrackNode.volumeGain,
+              engine.ctx,
+              params,
+            );
+          }
+        } else {
+          effectsEngine.removeSidechain(track.id, effect.id);
+        }
       }
     }
   }, [tracks]);

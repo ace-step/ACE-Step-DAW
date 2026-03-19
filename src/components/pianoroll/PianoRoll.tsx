@@ -109,8 +109,7 @@ export function PianoRoll() {
 
   const samplerConfig = track?.samplerConfig ?? null;
   const sampleDuration = Math.max(0.01, track?.sampler?.sampleDuration ?? samplerConfig?.trimEnd ?? 1);
-  const activeToolLabel = PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label
-    ?? (activeTool === 'slide' ? 'Slide' : 'Select');
+  const activeToolLabel = PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label ?? 'Select';
 
   const applySamplerConfig = useCallback((updates: Partial<SamplerConfig>) => {
     if (!track?.sampler?.audioKey || !samplerConfig) return;

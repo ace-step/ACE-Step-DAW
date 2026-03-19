@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+type PianoRollTool = 'select' | 'pencil' | 'paint' | 'erase';
+
 type PianoRollTestStore = {
   getState(): {
     createProject: (input: { name: string }) => void;
@@ -11,8 +13,6 @@ type PianoRollTestStore = {
     ) => string | undefined;
     quantizeMidiNotes: (clipId: string, noteIds: Array<string | undefined>, gridBeats: number) => void;
     removeMidiNote: (clipId: string, noteId: string | undefined) => void;
-    activePianoRollTool: 'select' | 'pencil' | 'paint' | 'erase' | 'slide';
-    setActivePianoRollTool: (tool: 'select' | 'pencil' | 'paint' | 'erase' | 'slide') => void;
     project?: {
       tracks?: Array<{
         clips?: Array<{
@@ -29,6 +29,8 @@ type PianoRollUIStore = {
   getState(): {
     setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
     setShowOnboarding: (value: boolean) => void;
+    activePianoRollTool: PianoRollTool;
+    setActivePianoRollTool: (tool: PianoRollTool) => void;
   };
 };
 
@@ -36,7 +38,7 @@ type PianoRollHelpers = {
   beatToX: (beat: number) => number;
   pitchToY: (pitch: number) => number;
   keyHeight: number;
-  activeTool: 'select' | 'pencil' | 'paint' | 'erase' | 'slide';
+  activeTool: PianoRollTool;
   applyToolStroke: (points: Array<{ x: number; y: number }>) => void;
   selectNoteAt: (x: number, y: number, additive?: boolean) => string | null;
   eraseNoteAt: (x: number, y: number) => string | null;
@@ -158,10 +160,10 @@ test.describe('Piano Roll Workflow', () => {
 
     const helperSnapshot = await page.evaluate(() => {
       const helpers = (window as unknown as { __pianoRollHelpers?: PianoRollHelpers }).__pianoRollHelpers;
-      const store = (window as unknown as { __store: PianoRollTestStore }).__store;
+      const uiStore = (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore;
       return helpers
         ? {
-            activeTool: store.getState().activePianoRollTool,
+            activeTool: uiStore.getState().activePianoRollTool,
             noteX: helpers.beatToX(2),
             noteY: helpers.pitchToY(60) + helpers.keyHeight / 2,
           }
@@ -220,7 +222,7 @@ test.describe('Piano Roll Workflow', () => {
 
     await page.keyboard.press('3');
     await expect.poll(async () => page.evaluate(() =>
-      (window as unknown as { __store: PianoRollTestStore }).__store.getState().activePianoRollTool
+      (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore.getState().activePianoRollTool
     )).toBe('paint');
 
     await page.evaluate(({ points }) => {
@@ -243,7 +245,7 @@ test.describe('Piano Roll Workflow', () => {
 
     await page.keyboard.press('1');
     await expect.poll(async () => page.evaluate(() =>
-      (window as unknown as { __store: PianoRollTestStore }).__store.getState().activePianoRollTool
+      (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore.getState().activePianoRollTool
     )).toBe('select');
 
     await page.evaluate(({ x, y }) => {
@@ -266,7 +268,7 @@ test.describe('Piano Roll Workflow', () => {
 
     await page.keyboard.press('4');
     await expect.poll(async () => page.evaluate(() =>
-      (window as unknown as { __store: PianoRollTestStore }).__store.getState().activePianoRollTool
+      (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore.getState().activePianoRollTool
     )).toBe('erase');
 
     await page.evaluate(({ x, y }) => {

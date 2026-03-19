@@ -74,8 +74,6 @@ export interface DAWActions {
 /** A Zustand store reference with getState/setState/subscribe. */
 export type DAWStore<T> = StoreApi<T> & { getState: () => T };
 
-export type AgentProjectState = ProjectState & Pick<UIState, 'activePianoRollTool' | 'setActivePianoRollTool' | 'togglePianoRollPencilTool'>;
-
 // ---------------------------------------------------------------------------
 // Global window augmentation for agent/automation access
 // ---------------------------------------------------------------------------
@@ -91,7 +89,7 @@ export interface CommandPaletteGlobal {
 
 /** Type declarations for all globals exposed on `window` for agent/automation use. */
 export interface DAWGlobals {
-  __store: DAWStore<AgentProjectState>;
+  __store: DAWStore<ProjectState>;
   __uiStore: DAWStore<UIState>;
   __assistantStore: DAWStore<UIState>;
   __transportStore: DAWStore<TransportState>;

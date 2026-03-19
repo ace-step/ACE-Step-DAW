@@ -269,6 +269,10 @@ export interface UIState {
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
 const TUTORIAL_STEP_COUNT = 5;
 
+function isPianoRollTool(value: unknown): value is PianoRollTool {
+  return value === 'select' || value === 'pencil' || value === 'paint' || value === 'erase';
+}
+
 function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
   switch (tier) {
     case 'simple':
@@ -737,6 +741,16 @@ export const useUIStore = create<UIState>()(
     {
       name: 'ace-step-daw-ui',
       storage: createJSONStorage(() => localStorage),
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<UIState>;
+        return {
+          ...currentState,
+          ...persisted,
+          activePianoRollTool: isPianoRollTool(persisted.activePianoRollTool)
+            ? persisted.activePianoRollTool
+            : currentState.activePianoRollTool,
+        };
+      },
       partialize: (state) => ({
         // Panel open/close states
         showMixer: state.showMixer,

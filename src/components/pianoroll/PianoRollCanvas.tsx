@@ -517,8 +517,8 @@ export function PianoRollCanvas({
         return;
       }
 
-      if (activeTool === 'pencil' || activeTool === 'paint' || activeTool === 'slide') {
-        if (hit && activeTool !== 'slide') {
+      if (activeTool === 'pencil' || activeTool === 'paint') {
+        if (hit) {
           deleteNoteById(hit.note.id);
           if (activeTool === 'paint') {
             toolStrokeRef.current.noteIds.add(hit.note.id);
@@ -526,7 +526,7 @@ export function PianoRollCanvas({
           return;
         }
 
-        const newNote = createNoteAt(x, y, { isSlide: activeTool === 'slide' });
+        const newNote = createNoteAt(x, y);
         if (!newNote) return;
 
         beginDrag();
@@ -1102,7 +1102,7 @@ export function PianoRollCanvas({
       }
 
       const firstPoint = points[0];
-      createNoteAt(firstPoint.x, firstPoint.y, { isSlide: activeTool === 'slide' });
+      createNoteAt(firstPoint.x, firstPoint.y);
     };
 
     globalWindow.__pianoRollHelpers = {
@@ -1153,9 +1153,7 @@ export function PianoRollCanvas({
               ? 'default'
               : activeTool === 'erase'
                 ? 'not-allowed'
-                : activeTool === 'slide'
-                  ? 'alias'
-                  : 'crosshair',
+                : 'crosshair',
         }}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}

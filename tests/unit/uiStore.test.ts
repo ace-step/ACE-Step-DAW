@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUIStore } from '../../src/store/uiStore';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useTransportStore } from '../../src/store/transportStore';
@@ -137,6 +137,18 @@ describe('uiStore', () => {
 
       useUIStore.getState().togglePianoRollPencilTool();
       expect(useUIStore.getState().activePianoRollTool).toBe('select');
+    });
+
+    it('normalizes persisted legacy slide tool state back to select', async () => {
+      localStorage.setItem('ace-step-daw-ui', JSON.stringify({
+        state: { activePianoRollTool: 'slide' },
+        version: 0,
+      }));
+
+      vi.resetModules();
+      const { useUIStore: reloadedUIStore } = await import('../../src/store/uiStore');
+
+      expect(reloadedUIStore.getState().activePianoRollTool).toBe('select');
     });
   });
 

@@ -241,14 +241,14 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     expect(quantizeButton).toBeFalsy();
   });
 
-  it('creates slide notes through the explicit slide tool', () => {
+  it('creates regular notes through the pencil tool', () => {
     const clip = makeClip([]);
 
     const { container } = render(
       <PianoRollCanvas
         clip={clip}
         track={makeTrack()}
-        activeTool="slide"
+        activeTool="pencil"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -266,10 +266,10 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     expect(mockAddMidiNote).toHaveBeenCalledTimes(1);
     const [, note] = mockAddMidiNote.mock.calls[0];
     expect(note).toMatchObject({
-      isSlide: true,
       durationBeats: 1,
       velocity: 100,
     });
+    expect(note.isSlide).toBeUndefined();
   });
 
   it('starts marquee selection when dragging empty space in select mode without Shift (#393)', () => {

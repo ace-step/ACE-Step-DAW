@@ -27,8 +27,10 @@ import type {
   PhaserParams,
 } from '../../types/project';
 import {
+  PARAMETRIC_EQ_MAX_FREQUENCY,
   PARAMETRIC_EQ_MAX_GAIN,
   PARAMETRIC_EQ_MAX_Q,
+  PARAMETRIC_EQ_MIN_FREQUENCY,
   PARAMETRIC_EQ_MIN_GAIN,
   PARAMETRIC_EQ_MIN_Q,
   clampParametricEqFrequency,
@@ -40,6 +42,7 @@ import {
   getBandControlLabel,
   getEqResponseAtFrequency,
   ratioToFrequency,
+  spectrumBinToFrequency,
 } from '../../utils/parametricEq';
 import { automationParamEquals } from '../../types/project';
 import { getEffectAutomationLabel, normalizeEffectParamValue } from '../../utils/effectAutomation';
@@ -440,14 +443,41 @@ export function ParametricEQCard({
     }
 
     if (spectrum && spectrum.length > 0) {
+      const binCount = spectrum.length;
+
+      // Filled spectrum area with gradient
+      ctx.beginPath();
+      let started = false;
+      let firstX = 0;
+      for (let i = 1; i < binCount; i++) {
+        const freq = spectrumBinToFrequency(i, binCount);
+        if (freq < PARAMETRIC_EQ_MIN_FREQUENCY || freq > PARAMETRIC_EQ_MAX_FREQUENCY) continue;
+        const x = frequencyToRatio(freq) * width;
+        const normalized = Math.max(0, Math.min(1, (spectrum[i] + 120) / 90));
+        const y = height - normalized * height;
+        if (!started) { ctx.moveTo(x, height); ctx.lineTo(x, y); firstX = x; started = true; }
+        else ctx.lineTo(x, y);
+      }
+      if (started) {
+        ctx.lineTo(width, height);
+        ctx.lineTo(firstX, height);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(34,197,94,0.08)';
+        ctx.fill();
+      }
+
+      // Spectrum line overlay (logarithmic frequency mapping)
       ctx.beginPath();
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = 'rgba(34,197,94,0.35)';
-      for (let i = 0; i < spectrum.length; i++) {
-        const x = (i / Math.max(1, spectrum.length - 1)) * width;
+      started = false;
+      for (let i = 1; i < binCount; i++) {
+        const freq = spectrumBinToFrequency(i, binCount);
+        if (freq < PARAMETRIC_EQ_MIN_FREQUENCY || freq > PARAMETRIC_EQ_MAX_FREQUENCY) continue;
+        const x = frequencyToRatio(freq) * width;
         const normalized = Math.max(0, Math.min(1, (spectrum[i] + 120) / 90));
         const y = height - normalized * height;
-        if (i === 0) ctx.moveTo(x, y);
+        if (!started) { ctx.moveTo(x, y); started = true; }
         else ctx.lineTo(x, y);
       }
       ctx.stroke();

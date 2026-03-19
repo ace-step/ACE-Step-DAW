@@ -58,6 +58,18 @@ export function createSimpleParametricEqBands(
   ];
 }
 
+/**
+ * Convert an FFT bin index to its corresponding frequency in Hz.
+ * Used to map spectrum analyzer data to the logarithmic frequency display.
+ */
+export function spectrumBinToFrequency(
+  binIndex: number,
+  binCount: number,
+  sampleRate = PARAMETRIC_EQ_SAMPLE_RATE,
+): number {
+  return (binIndex * sampleRate) / (binCount * 2);
+}
+
 export function frequencyToRatio(frequency: number): number {
   const clamped = clampParametricEqFrequency(frequency);
   return (

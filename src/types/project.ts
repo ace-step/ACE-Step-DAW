@@ -12,6 +12,22 @@ export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
 
+/** Configuration for the sampler instrument on a pianoRoll track. */
+export interface SamplerConfig {
+  /** IndexedDB audio key for the loaded sample. */
+  audioKey: string;
+  /** MIDI note number the sample was recorded at (default 60 = C4). */
+  rootNote: number;
+  /** ADSR attack time in seconds. */
+  attack: number;
+  /** ADSR decay time in seconds. */
+  decay: number;
+  /** ADSR sustain level (0–1). */
+  sustain: number;
+  /** ADSR release time in seconds. */
+  release: number;
+}
+
 export interface DrumPad {
   id: string;
   name: string;
@@ -414,6 +430,8 @@ export interface Track {
   midiEffects?: MidiEffect[];
   drumKit?: DrumKitName;
   drumMachine?: DrumMachineConfig;
+  /** Sampler instrument config — when set on a pianoRoll track, uses loaded audio sample instead of synth preset. */
+  samplerConfig?: SamplerConfig;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   panMode?: 'stereo' | 'dual-mono';  // default 'stereo'

@@ -46,6 +46,7 @@ import { exportStemToWav, type ExportClip } from '../engine/exportMix';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
+import { createDefaultParametricEqBands } from '../utils/parametricEq';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -262,6 +263,16 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
         type,
         enabled: true,
         params: { low: 0, mid: 0, high: 0, lowFrequency: 250, highFrequency: 4000 },
+      };
+    case 'parametricEq':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          mode: 'parametric',
+          bands: createDefaultParametricEqBands(),
+        },
       };
     case 'compressor':
       return {

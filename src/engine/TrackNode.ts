@@ -21,6 +21,7 @@ export class TrackNode {
   readonly volumeGain: GainNode;
   private readonly analyserNode: AnalyserNode;
   private readonly analyserData: Uint8Array<ArrayBuffer>;
+  private readonly analyserFloatData: Float32Array<ArrayBuffer>;
 
   private _volume = 0.8;
   private _muted = false;
@@ -44,9 +45,10 @@ export class TrackNode {
     this.compressor = ctx.createDynamicsCompressor();
     this.volumeGain = ctx.createGain();
     this.analyserNode = ctx.createAnalyser();
-    this.analyserNode.fftSize = 256;
-    this.analyserNode.smoothingTimeConstant = 0.6;
+    this.analyserNode.fftSize = 2048;
+    this.analyserNode.smoothingTimeConstant = 0.75;
     this.analyserData = new Uint8Array(this.analyserNode.frequencyBinCount);
+    this.analyserFloatData = new Float32Array(this.analyserNode.frequencyBinCount);
 
     // Configure EQ defaults
     this.eqLow.type = 'lowshelf';
@@ -181,6 +183,11 @@ export class TrackNode {
     }
 
     return peak / 255;
+  }
+
+  getSpectrumData(): Float32Array<ArrayBuffer> {
+    this.analyserNode.getFloatFrequencyData(this.analyserFloatData);
+    return this.analyserFloatData.slice();
   }
 
   /**

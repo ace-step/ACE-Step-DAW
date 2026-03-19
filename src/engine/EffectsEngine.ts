@@ -3,6 +3,7 @@ import type {
   TrackEffect,
   TrackEffectType,
   EQ3Params,
+  ParametricEQParams,
   CompressorParams,
   ReverbParams,
   DelayParams,
@@ -14,8 +15,53 @@ type EffectNode = {
   id: string;
   type: TrackEffectType;
   node: Tone.ToneAudioNode;
+  inputNode?: AudioNode;
+  outputNode?: AudioNode;
   lfo?: Tone.LFO;
+  parametricEqRuntime?: {
+    input: Tone.Gain;
+    output: Tone.Gain;
+    filters: Tone.Filter[];
+  };
+  dispose?: () => void;
 };
+
+function applyParametricEqFilters(
+  input: Tone.Gain,
+  output: Tone.Gain,
+  filters: Tone.Filter[],
+  params: ParametricEQParams,
+) {
+  try { input.disconnect(); } catch {}
+  for (const filter of filters) {
+    try { filter.disconnect(); } catch {}
+  }
+
+  params.bands.forEach((band, index) => {
+    const filter = filters[index];
+    if (!filter) return;
+    filter.type = band.type;
+    filter.frequency.value = band.frequency;
+    filter.Q.value = band.q;
+    filter.gain.value = band.gain;
+  });
+
+  const enabledFilters = filters.filter((_, index) => params.bands[index]?.enabled !== false);
+  let previous: Tone.ToneAudioNode = input;
+  for (const filter of enabledFilters) {
+    previous.connect(filter);
+    previous = filter;
+  }
+  previous.connect(output);
+}
+
+function getEffectInput(effectNode: EffectNode): AudioNode {
+  return effectNode.inputNode ?? (effectNode.node as unknown as { input: AudioNode }).input;
+}
+
+function getEffectOutput(effectNode: EffectNode): AudioNode {
+  return effectNode.outputNode ?? (effectNode.node as unknown as { output: AudioNode }).output;
+}
 
 function createNode(effect: TrackEffect): EffectNode {
   switch (effect.type) {
@@ -38,6 +84,26 @@ function createNode(effect: TrackEffect): EffectNode {
           release: p.release,
           knee: p.knee,
         }),
+      };
+    }
+    case 'parametricEq': {
+      const p = effect.params as ParametricEQParams;
+      const input = new Tone.Gain();
+      const output = new Tone.Gain();
+      const filters = p.bands.map(() => new Tone.Filter({ type: 'peaking', frequency: 1000, Q: 1 }));
+      applyParametricEqFilters(input, output, filters, p);
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: (input as unknown as { input?: AudioNode }).input,
+        outputNode: (output as unknown as { output?: AudioNode }).output,
+        parametricEqRuntime: { input, output, filters },
+        dispose: () => {
+          input.dispose();
+          output.dispose();
+          filters.forEach((filter) => filter.dispose());
+        },
       };
     }
     case 'reverb': {
@@ -94,7 +160,7 @@ class EffectsEngine {
     const activeEffects = effects.filter((e) => e.enabled);
     const nodes = activeEffects.map(createNode);
     for (let i = 0; i < nodes.length - 1; i++) {
-      nodes[i].node.connect(nodes[i + 1].node);
+      getEffectOutput(nodes[i]).connect(getEffectInput(nodes[i + 1]));
     }
     this.chains.set(trackId, nodes);
   }
@@ -122,6 +188,13 @@ class EffectsEngine {
         eq.high.value = p.high;
         eq.lowFrequency.value = p.lowFrequency;
         eq.highFrequency.value = p.highFrequency;
+        break;
+      }
+      case 'parametricEq': {
+        const p = params as ParametricEQParams;
+        const runtime = effectNode.parametricEqRuntime;
+        if (!runtime) break;
+        applyParametricEqFilters(runtime.input, runtime.output, runtime.filters, p);
         break;
       }
       case 'compressor': {
@@ -209,8 +282,7 @@ class EffectsEngine {
   getInputNode(trackId: string): AudioNode | null {
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
-    const toneNode = nodes[0].node as unknown as { input?: AudioNode };
-    return toneNode.input ?? null;
+    return getEffectInput(nodes[0]) ?? null;
   }
 
   /**
@@ -220,8 +292,7 @@ class EffectsEngine {
   getOutputNode(trackId: string): AudioNode | null {
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
-    const toneNode = nodes[nodes.length - 1].node as unknown as { output?: AudioNode };
-    return toneNode.output ?? null;
+    return getEffectOutput(nodes[nodes.length - 1]) ?? null;
   }
 
   disposeChain(trackId: string) {
@@ -229,7 +300,8 @@ class EffectsEngine {
     if (!nodes) return;
     for (const node of nodes) {
       if (node.lfo) { node.lfo.stop(); node.lfo.dispose(); }
-      node.node.dispose();
+      if (node.dispose) node.dispose();
+      else node.node.dispose();
     }
     this.chains.delete(trackId);
   }

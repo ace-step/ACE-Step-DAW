@@ -29,6 +29,7 @@ import type {
   TrackEffect,
   TrackEffectType,
   EQ3Params,
+  ParametricEQParams,
   CompressorParams,
   ReverbParams,
   DelayParams,
@@ -50,6 +51,44 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Bass Boost', params: { low: 6, mid: 0, high: 0, lowFrequency: 250, highFrequency: 4000 } as EQ3Params },
     { name: 'Presence', params: { low: 0, mid: 3, high: 4, lowFrequency: 250, highFrequency: 4000 } as EQ3Params },
     { name: 'Warmth', params: { low: 3, mid: -1, high: -2, lowFrequency: 350, highFrequency: 5000 } as EQ3Params },
+  ],
+  parametricEq: [
+    {
+      name: 'Simple',
+      params: {
+        mode: 'simple',
+        bands: [
+          { id: 'simple-low', enabled: true, type: 'lowshelf', frequency: 250, gain: 0, q: 0.7 },
+          { id: 'simple-mid', enabled: true, type: 'peaking', frequency: 1000, gain: 0, q: 1 },
+          { id: 'simple-high', enabled: true, type: 'highshelf', frequency: 4000, gain: 0, q: 0.7 },
+          { id: 'simple-extra', enabled: false, type: 'highpass', frequency: 20, gain: 0, q: 0.7 },
+        ],
+      } as ParametricEQParams,
+    },
+    {
+      name: 'Vocal Air',
+      params: {
+        mode: 'parametric',
+        bands: [
+          { id: 'vocal-cut', enabled: true, type: 'highpass', frequency: 90, gain: 0, q: 0.7 },
+          { id: 'vocal-box', enabled: true, type: 'peaking', frequency: 320, gain: -3, q: 1.2 },
+          { id: 'vocal-pres', enabled: true, type: 'peaking', frequency: 3500, gain: 2.5, q: 1.1 },
+          { id: 'vocal-air', enabled: true, type: 'highshelf', frequency: 10000, gain: 4, q: 0.7 },
+        ],
+      } as ParametricEQParams,
+    },
+    {
+      name: 'Bass Tight',
+      params: {
+        mode: 'parametric',
+        bands: [
+          { id: 'bass-rumble', enabled: true, type: 'highpass', frequency: 35, gain: 0, q: 0.8 },
+          { id: 'bass-weight', enabled: true, type: 'peaking', frequency: 90, gain: 3, q: 1.1 },
+          { id: 'bass-mud', enabled: true, type: 'peaking', frequency: 260, gain: -2.5, q: 1.4 },
+          { id: 'bass-top', enabled: true, type: 'lowpass', frequency: 9000, gain: 0, q: 0.8 },
+        ],
+      } as ParametricEQParams,
+    },
   ],
   compressor: [
     { name: 'Gentle', params: { threshold: -24, ratio: 2, attack: 0.02, release: 0.2, knee: 10 } as CompressorParams },
@@ -93,7 +132,16 @@ interface HSliderProps {
   width?: number;
 }
 
-import { EQ3Card, CompressorCard, ReverbCard, DelayCard, DistortionCard, FilterCard, EFFECT_COLORS } from './EffectCards';
+import {
+  EQ3Card,
+  ParametricEQCard,
+  CompressorCard,
+  ReverbCard,
+  DelayCard,
+  DistortionCard,
+  FilterCard,
+  EFFECT_COLORS,
+} from './EffectCards';
 
 
 function EffectDevice({
@@ -194,6 +242,7 @@ function EffectDevice({
       {!collapsed && (
         <div className="overflow-y-auto max-h-[220px]">
           {effect.type === 'eq3' && <EQ3Card effect={effect} trackId={track.id} />}
+          {effect.type === 'parametricEq' && <ParametricEQCard effect={effect} trackId={track.id} />}
           {effect.type === 'compressor' && <CompressorCard effect={effect} trackId={track.id} />}
           {effect.type === 'reverb' && <ReverbCard effect={effect} trackId={track.id} />}
           {effect.type === 'delay' && <DelayCard effect={effect} trackId={track.id} />}
@@ -212,6 +261,7 @@ function AddEffectButton({ trackId }: { trackId: string }) {
   const [open, setOpen] = useState(false);
 
   const effectTypes: { type: TrackEffectType; label: string; icon: string }[] = [
+    { type: 'parametricEq', label: 'Parametric EQ', icon: '🎚️' },
     { type: 'eq3', label: 'EQ Three', icon: '📊' },
     { type: 'compressor', label: 'Compressor', icon: '🔧' },
     { type: 'reverb', label: 'Reverb', icon: '🌊' },

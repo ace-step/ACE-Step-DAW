@@ -101,6 +101,10 @@ export class AudioEngine {
     return this.trackNodes.get(trackId)?.getLevel() ?? 0;
   }
 
+  getTrackSpectrum(trackId: string): Float32Array<ArrayBuffer> | null {
+    return this.trackNodes.get(trackId)?.getSpectrumData() ?? null;
+  }
+
   updateSoloState() {
     const anySoloed = Array.from(this.trackNodes.values()).some((n) => n.soloed);
     for (const node of this.trackNodes.values()) {

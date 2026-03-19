@@ -70,10 +70,11 @@ function makeAudioContext(): AudioContext {
     },
     createAnalyser() {
       return makeNode({
-        fftSize: 256,
+        fftSize: 2048,
         smoothingTimeConstant: 0.6,
-        frequencyBinCount: 128,
+        frequencyBinCount: 1024,
         getByteFrequencyData: vi.fn(),
+        getFloatFrequencyData: vi.fn(),
       });
     },
     createBuffer(_channels: number, length: number, sampleRate: number) {

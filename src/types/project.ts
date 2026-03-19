@@ -41,6 +41,28 @@ export interface EQ3Params {
   highFrequency: number;
 }
 
+export type ParametricEQBandType =
+  | 'peaking'
+  | 'lowshelf'
+  | 'highshelf'
+  | 'notch'
+  | 'highpass'
+  | 'lowpass';
+
+export interface ParametricEQBand {
+  id: string;
+  enabled: boolean;
+  type: ParametricEQBandType;
+  frequency: number;
+  gain: number;
+  q: number;
+}
+
+export interface ParametricEQParams {
+  mode: 'simple' | 'parametric';
+  bands: ParametricEQBand[];
+}
+
 export interface CompressorParams {
   threshold: number;
   ratio: number;
@@ -79,6 +101,7 @@ export interface FilterParams {
 
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
+  | EffectBase<'parametricEq', ParametricEQParams>
   | EffectBase<'compressor', CompressorParams>
   | EffectBase<'reverb', ReverbParams>
   | EffectBase<'delay', DelayParams>

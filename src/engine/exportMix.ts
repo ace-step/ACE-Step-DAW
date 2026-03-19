@@ -85,6 +85,19 @@ function buildOfflineEffects(
         nodes.push(high);
         break;
       }
+      case 'parametricEq': {
+        const p = effect.params;
+        for (const band of p.bands ?? []) {
+          if (band.enabled === false) continue;
+          const filter = ctx.createBiquadFilter();
+          filter.type = band.type as BiquadFilterType;
+          filter.frequency.value = band.frequency ?? 1000;
+          filter.gain.value = band.gain ?? 0;
+          filter.Q.value = band.q ?? 1;
+          nodes.push(filter);
+        }
+        break;
+      }
       case 'delay': {
         const p = effect.params;
         const delay = ctx.createDelay(5);

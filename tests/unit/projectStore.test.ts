@@ -206,6 +206,22 @@ describe('projectStore', () => {
       expect(note.startBeat).toBe(0.5); // 0.6 → 0.5
     });
   });
+
+  describe('track effects', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('adds a parametric EQ effect with four default bands', () => {
+      const track = useProjectStore.getState().addTrack('bass');
+      const effectId = useProjectStore.getState().addTrackEffect(track.id, 'parametricEq');
+
+      const effect = useProjectStore.getState().project?.tracks[0].effects?.find((item) => item.id === effectId);
+      expect(effect?.type).toBe('parametricEq');
+      expect(effect?.params.mode).toBe('parametric');
+      expect(effect?.params.bands).toHaveLength(4);
+    });
+  });
 });
 
   describe('duplicateTrack', () => {

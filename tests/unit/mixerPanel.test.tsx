@@ -45,4 +45,19 @@ describe('MixerPanel', () => {
     expect(trackFader).toBeInTheDocument();
     expect(trackFader).toHaveStyle({ minHeight: '96px', height: '100%' });
   });
+
+  it('fader section does not shrink when mixer panel is small (#268)', () => {
+    useUIStore.getState().setMixerHeight(160);
+    render(<MixerPanel />);
+
+    // Channel strip fader region must have shrink-0 to prevent clipping
+    const trackStrips = screen.getAllByTestId('channel-strip');
+    const faderRegion = trackStrips[0].querySelector('[data-testid="fader-region"]');
+    expect(faderRegion).toBeInTheDocument();
+    expect(faderRegion).toHaveClass('shrink-0');
+
+    // Master fader region must also not shrink
+    const masterFaderRegion = screen.getByTestId('master-fader-region');
+    expect(masterFaderRegion).toHaveClass('shrink-0');
+  });
 });

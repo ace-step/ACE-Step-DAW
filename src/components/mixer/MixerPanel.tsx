@@ -205,7 +205,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
         </div>
       </div>
 
-      <div className="mt-1 flex min-h-0 flex-1 flex-col items-center justify-end gap-1 self-stretch pb-1">
+      <div data-testid="fader-region" className="mt-1 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1 self-stretch pb-1" style={{ height: faderHeight + 24 }}>
         <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter trackId={track.id} />
           <input
@@ -236,7 +236,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
 
   return (
-    <div className="flex h-full min-h-0 min-w-[250px] flex-col border-l-2 border-[#555] bg-[#252525] px-4 py-2">
+    <div className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2">
       <div className="flex w-full shrink-0 items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Master</span>
         <button
@@ -254,7 +254,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         {showSpectrum && <SpectrumAnalyzer width={220} height={120} />}
         <MasteringPanel />
       </div>
-      <div data-testid="master-fader-region" className="mt-1 flex min-h-[96px] flex-1 flex-col items-center justify-end gap-1 self-stretch pb-1">
+      <div data-testid="master-fader-region" className="mt-1 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1 self-stretch pb-1" style={{ height: faderHeight + 24 }}>
         <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" />
           <LevelMeter masterStage="output" />

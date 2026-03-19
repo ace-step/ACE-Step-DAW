@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getBeatDuration, getBarDuration } from '../../utils/time';
+import { beatToTime, getBeatAtBar } from '../../utils/tempoMap';
 
 /**
  * Adaptive grid: resolution auto-adjusts based on zoom level.
@@ -20,23 +22,64 @@ export function GridOverlay() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
 
+  const lines = useMemo(() => {
+    if (!project) return [];
+
+    const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const hasTempoMap = tempoMap && tempoMap.length > 0;
+    const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;
+
+    if (!hasTempoMap && !hasTsMap) {
+      // Fast path: constant tempo, constant time signature
+      const beatDuration = getBeatDuration(bpm);
+      const barDuration = getBarDuration(bpm, timeSignature);
+      const { division } = getGridDivision(pixelsPerSecond, bpm);
+      const stepDuration = beatDuration * division;
+
+      const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
+      for (let t = 0; t <= totalDuration; t += stepDuration) {
+        const isBar = Math.abs(t % barDuration) < 0.001 || Math.abs((t % barDuration) - barDuration) < 0.001;
+        const isBeat = Math.abs(t % beatDuration) < 0.001 || Math.abs((t % beatDuration) - beatDuration) < 0.001;
+        result.push({
+          x: t * pixelsPerSecond,
+          strength: isBar ? 'bar' : isBeat ? 'beat' : 'sub',
+        });
+      }
+      return result;
+    }
+
+    // Tempo-map/time-sig-aware path: iterate by beat subdivisions
+    const { division } = getGridDivision(pixelsPerSecond, bpm);
+    const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
+
+    const maxBeat = totalDuration * (300 / 60) * 2; // generous upper bound
+    let currentBar = 1;
+    let nextBarBeat = getBeatAtBar(2, timeSignatureMap, timeSignature);
+
+    for (let beat = 0; beat < maxBeat; beat += division) {
+      const time = beatToTime(beat, tempoMap, bpm);
+      if (time > totalDuration) break;
+
+      while (beat >= nextBarBeat) {
+        currentBar++;
+        nextBarBeat = getBeatAtBar(currentBar + 1, timeSignatureMap, timeSignature);
+      }
+
+      const barBeat = getBeatAtBar(currentBar, timeSignatureMap, timeSignature);
+      const isBar = Math.abs(beat - barBeat) < 0.001;
+      const isBeat = Math.abs(beat - Math.round(beat)) < 0.001;
+
+      result.push({
+        x: time * pixelsPerSecond,
+        strength: isBar ? 'bar' : isBeat ? 'beat' : 'sub',
+      });
+    }
+    return result;
+  }, [project, pixelsPerSecond]);
+
   if (!project) return null;
 
-  const beatDuration = getBeatDuration(project.bpm);
-  const barDuration = getBarDuration(project.bpm, project.timeSignature);
   const totalWidth = project.totalDuration * pixelsPerSecond;
-  const { division } = getGridDivision(pixelsPerSecond, project.bpm);
-  const stepDuration = beatDuration * division;
-
-  const lines: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
-  for (let t = 0; t <= project.totalDuration; t += stepDuration) {
-    const isBar = Math.abs(t % barDuration) < 0.001 || Math.abs((t % barDuration) - barDuration) < 0.001;
-    const isBeat = Math.abs(t % beatDuration) < 0.001 || Math.abs((t % beatDuration) - beatDuration) < 0.001;
-    lines.push({
-      x: t * pixelsPerSecond,
-      strength: isBar ? 'bar' : isBeat ? 'beat' : 'sub',
-    });
-  }
 
   const colors = {
     bar: '#555555',

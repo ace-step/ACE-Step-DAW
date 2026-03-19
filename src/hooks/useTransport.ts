@@ -8,6 +8,7 @@ import { synthEngine } from '../engine/SynthEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import { useRecording } from './useRecording';
+import { beatToTime } from '../utils/tempoMap';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -175,12 +176,16 @@ export function useTransport() {
 
     const { metronomeEnabled } = useTransportStore.getState();
     if (metronomeEnabled) {
-      engine.scheduleMetronome(proj.bpm, proj.timeSignature, startFrom, effectiveEnd);
+      engine.scheduleMetronome(
+        proj.bpm, proj.timeSignature, startFrom, effectiveEnd,
+        proj.tempoMap, proj.timeSignatureMap,
+      );
     }
 
     // Schedule MIDI events using AudioEngine's time base (RAF-driven),
     // so playhead and note triggering stay perfectly in sync.
-    const secondsPerBeat = 60 / proj.bpm;
+    const tempoMap = proj.tempoMap;
+    const fallbackBpm = proj.bpm;
     const anySoloed = proj.tracks.some((track) => track.soloed);
 
     for (const track of proj.tracks) {
@@ -197,8 +202,8 @@ export function useTransport() {
           if (notes.length === 0) continue;
 
           for (const note of notes) {
-            const noteStart = clip.startTime + note.startBeat * secondsPerBeat;
-            const noteDuration = Math.max(0, note.durationBeats * secondsPerBeat);
+            const noteStart = clip.startTime + beatToTime(note.startBeat, tempoMap, fallbackBpm);
+            const noteDuration = Math.max(0, beatToTime(note.startBeat + note.durationBeats, tempoMap, fallbackBpm) - beatToTime(note.startBeat, tempoMap, fallbackBpm));
             const noteEnd = noteStart + noteDuration;
             if (noteEnd <= startFrom || noteStart >= effectiveEnd || noteDuration <= 0) continue;
 
@@ -228,7 +233,8 @@ export function useTransport() {
         if (hasReadyClips) continue;
 
         const { sequencerPattern } = track;
-        const stepDuration = (60 / proj.bpm) / (sequencerPattern.stepsPerBar / 4);
+        const stepsPerBeat = sequencerPattern.stepsPerBar / 4;
+        const stepDuration = (60 / fallbackBpm) / stepsPerBeat;
         const totalSteps = sequencerPattern.stepsPerBar * sequencerPattern.bars;
         const patternDuration = stepDuration * totalSteps;
         if (patternDuration <= 0) continue;

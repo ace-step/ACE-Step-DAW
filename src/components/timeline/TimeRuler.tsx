@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getBarDuration } from '../../utils/time';
+import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tempoMap';
 
 export function TimeRuler() {
   const project = useProjectStore((s) => s.project);
@@ -37,17 +38,46 @@ export function TimeRuler() {
     window.addEventListener('mouseup', onMouseUp);
   }, [project, seekFromX]);
 
+  const markers = useMemo(() => {
+    if (!project) return [];
+    const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const hasTempoMap = tempoMap && tempoMap.length > 0;
+    const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;
+
+    if (!hasTempoMap && !hasTsMap) {
+      const barDur = getBarDuration(bpm, timeSignature);
+      const totalBars = Math.ceil(totalDuration / barDur);
+      const result: { bar: number; x: number; tsLabel?: string }[] = [];
+      for (let bar = 1; bar <= totalBars; bar++) {
+        result.push({ bar, x: (bar - 1) * barDur * pixelsPerSecond });
+      }
+      return result;
+    }
+
+    const result: { bar: number; x: number; tsLabel?: string }[] = [];
+    let prevTs = '';
+    for (let bar = 1; bar <= 999; bar++) {
+      const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
+      const time = beatToTime(barBeat, tempoMap, bpm);
+      if (time > totalDuration) break;
+
+      let tsLabel: string | undefined;
+      if (hasTsMap) {
+        const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+        const label = `${ts.numerator}/${ts.denominator}`;
+        if (label !== prevTs) {
+          tsLabel = label;
+          prevTs = label;
+        }
+      }
+      result.push({ bar, x: time * pixelsPerSecond, tsLabel });
+    }
+    return result;
+  }, [project, pixelsPerSecond]);
+
   if (!project) return <div className="h-6 bg-[#333] border-b border-[#2a2a2a]" />;
 
-  const barDuration = getBarDuration(project.bpm, project.timeSignature);
-  const totalBars = Math.ceil(project.totalDuration / barDuration);
   const totalWidth = project.totalDuration * pixelsPerSecond;
-
-  const markers: { bar: number; x: number }[] = [];
-  for (let bar = 1; bar <= totalBars; bar++) {
-    const x = (bar - 1) * barDuration * pixelsPerSecond;
-    markers.push({ bar, x });
-  }
 
   return (
     <div
@@ -70,7 +100,7 @@ export function TimeRuler() {
       )}
 
       {/* Bar markers */}
-      {markers.map(({ bar, x }) => (
+      {markers.map(({ bar, x, tsLabel }) => (
         <div
           key={bar}
           className="absolute top-0 h-full flex items-end pb-0.5 pointer-events-none"
@@ -78,6 +108,9 @@ export function TimeRuler() {
         >
           <div className="w-px h-3 bg-[#666] mr-1" />
           <span className="text-[10px] text-zinc-400 font-medium">{bar}</span>
+          {tsLabel && (
+            <span className="text-[8px] text-amber-400/60 ml-0.5">{tsLabel}</span>
+          )}
         </div>
       ))}
     </div>

@@ -73,6 +73,32 @@ describe('tempoMap store actions', () => {
       expect(useProjectStore.getState().project!.tempoMap).toEqual([]);
     });
   });
+
+  describe('totalDuration recomputation', () => {
+    it('recomputes totalDuration when tempo event is added', () => {
+      const durationBefore = useProjectStore.getState().project!.totalDuration;
+      // Adding a slower tempo should increase total duration
+      useProjectStore.getState().addTempoEvent({ beat: 0, bpm: 60 });
+      const durationAfter = useProjectStore.getState().project!.totalDuration;
+      expect(durationAfter).toBeGreaterThan(durationBefore);
+    });
+
+    it('recomputes totalDuration when tempo event is removed', () => {
+      useProjectStore.getState().addTempoEvent({ beat: 0, bpm: 60 });
+      const durationWithSlow = useProjectStore.getState().project!.totalDuration;
+      useProjectStore.getState().removeTempoEvent(0);
+      const durationAfter = useProjectStore.getState().project!.totalDuration;
+      expect(durationAfter).toBeLessThan(durationWithSlow);
+    });
+
+    it('recomputes totalDuration when tempo map is cleared', () => {
+      useProjectStore.getState().addTempoEvent({ beat: 0, bpm: 60 });
+      const durationWithSlow = useProjectStore.getState().project!.totalDuration;
+      useProjectStore.getState().clearTempoMap();
+      const durationAfter = useProjectStore.getState().project!.totalDuration;
+      expect(durationAfter).toBeLessThan(durationWithSlow);
+    });
+  });
 });
 
 describe('timeSignatureMap store actions', () => {
@@ -122,6 +148,16 @@ describe('timeSignatureMap store actions', () => {
       useProjectStore.getState().addTimeSignatureEvent({ bar: 1, numerator: 4, denominator: 4 });
       useProjectStore.getState().clearTimeSignatureMap();
       expect(useProjectStore.getState().project!.timeSignatureMap).toEqual([]);
+    });
+  });
+
+  describe('totalDuration recomputation', () => {
+    it('recomputes totalDuration when time signature event changes beats per bar', () => {
+      const durationBefore = useProjectStore.getState().project!.totalDuration;
+      // Changing to 6/8 effectively increases beats per bar from 4 to 6
+      useProjectStore.getState().addTimeSignatureEvent({ bar: 1, numerator: 6, denominator: 8 });
+      const durationAfter = useProjectStore.getState().project!.totalDuration;
+      expect(durationAfter).toBeGreaterThan(durationBefore);
     });
   });
 });

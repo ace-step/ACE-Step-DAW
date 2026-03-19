@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
-import type { GainEnvelopePoint, SequencerPattern } from '../types/project';
+import type { GainEnvelopePoint, SequencerPattern, TempoEvent, TimeSignatureEvent } from '../types/project';
+import { beatToTime, getBarAtBeat } from '../utils/tempoMap';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -379,20 +380,30 @@ export class AudioEngine {
    * Schedule metronome clicks at every beat from `fromTime` to `totalDuration`.
    * Beat 1 of each bar gets a higher-pitched click (accent).
    */
-  scheduleMetronome(bpm: number, timeSignature: number, fromTime: number, totalDuration: number) {
+  scheduleMetronome(
+    bpm: number,
+    timeSignature: number,
+    fromTime: number,
+    totalDuration: number,
+    tempoMap?: TempoEvent[],
+    timeSignatureMap?: TimeSignatureEvent[],
+  ) {
     this.stopMetronome();
-    const beatDuration = 60 / bpm;
     const contextNow = this.ctx.currentTime;
-    const firstBeatIdx = Math.ceil(fromTime / beatDuration);
-    const lastBeatIdx = Math.floor(totalDuration / beatDuration);
+    const peakBpm = tempoMap?.reduce((m, e) => Math.max(m, e.bpm), bpm) ?? bpm;
+    const maxBeats = Math.ceil((totalDuration / 60) * peakBpm) + 8;
 
-    for (let i = firstBeatIdx; i <= lastBeatIdx; i++) {
-      const beatTime = i * beatDuration;
+    for (let beat = 0; beat <= maxBeats; beat++) {
+      const beatTime = beatToTime(beat, tempoMap, bpm);
+      if (beatTime > totalDuration) break;
+      if (beatTime < fromTime) continue;
+
       const delay = beatTime - fromTime;
-      if (delay < 0) continue;
+      const bar = getBarAtBeat(beat, timeSignatureMap, timeSignature);
+      const prevBar = beat > 0 ? getBarAtBeat(beat - 1, timeSignatureMap, timeSignature) : 0;
+      const isDownbeat = beat === 0 || bar > prevBar;
 
-      const isAccent = (i % timeSignature) === 0;
-      const freq = isAccent ? 1200 : 800;
+      const freq = isDownbeat ? 1200 : 800;
       const clickDuration = 0.03;
 
       const osc = this.ctx.createOscillator();

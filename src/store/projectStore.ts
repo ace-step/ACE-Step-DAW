@@ -71,17 +71,19 @@ import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
+import { useTransportStore } from './transportStore';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
-import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
+import { beatToTime, getBeatAtBar, timeToBeat } from '../utils/tempoMap';
 import { encodeMidiFile } from '../utils/midi';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
+import { midiCaptureBuffer, type MidiCaptureSource, type MidiCaptureSpan } from '../services/midiCaptureBuffer';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -104,6 +106,105 @@ function downloadBlob(blob: Blob, fileName: string) {
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+const DEFAULT_CAPTURE_LOOKBACK_BARS = 8;
+
+interface MidiCaptureSnapshotNote {
+  pitch: number;
+  velocity: number;
+  startBeat: number;
+  durationBeats: number;
+  source: MidiCaptureSource;
+}
+
+interface MidiCaptureBufferView {
+  trackId: string;
+  noteCount: number;
+  lookbackBars: number;
+  notes: MidiCaptureSnapshotNote[];
+}
+
+interface CaptureMidiResult {
+  status: 'captured' | 'empty' | 'no-track';
+  trackId?: string;
+  clipId?: string;
+  noteCount?: number;
+  createdNewClip?: boolean;
+}
+
+function getCaptureLookbackMs(bpm: number, beatsPerBar: number, lookbackBars: number) {
+  const clampedBars = Math.max(1, lookbackBars);
+  return ((60 / bpm) * beatsPerBar * clampedBars) * 1000;
+}
+
+function toCapturePoint(project: Project | null, transportTime: number | null | undefined, nowMs: number) {
+  const resolvedTransportTime = transportTime ?? useTransportStore.getState().currentTime ?? 0;
+  return {
+    timestampMs: nowMs,
+    transportTime: project ? resolvedTransportTime : null,
+    transportBeat: project ? timeToBeat(resolvedTransportTime, project.tempoMap, project.bpm) : null,
+  };
+}
+
+function getSnapshotNotes(
+  project: Project,
+  spans: MidiCaptureSpan[],
+  nowMs: number,
+): MidiCaptureSnapshotNote[] {
+  const bpm = project.bpm;
+  return spans
+    .map<MidiCaptureSnapshotNote | null>((span) => {
+      if (span.endTransportBeat !== null && span.startTransportBeat !== null) {
+        const durationBeats = Math.max(0.125, span.endTransportBeat - span.startTransportBeat);
+        return {
+          pitch: span.pitch,
+          velocity: span.velocity,
+          startBeat: span.startTransportBeat,
+          durationBeats,
+          source: span.source,
+        };
+      }
+
+      const startBeat = ((span.startedAtMs - nowMs) / 60_000) * bpm;
+      const endBeat = ((span.endedAtMs - nowMs) / 60_000) * bpm;
+      const normalizedStart = Math.min(startBeat, endBeat);
+      const durationBeats = Math.max(0.125, Math.abs(endBeat - startBeat));
+      return {
+        pitch: span.pitch,
+        velocity: span.velocity,
+        startBeat: normalizedStart,
+        durationBeats,
+        source: span.source,
+      };
+    })
+    .filter((note): note is MidiCaptureSnapshotNote => note !== null)
+    .sort((a, b) => a.startBeat - b.startBeat);
+}
+
+function makeMidiClip(trackId: string, startTime: number, duration: number, notes: MidiNote[]): Clip {
+  return {
+    id: uuidv4(),
+    trackId,
+    startTime,
+    duration,
+    prompt: 'Capture MIDI',
+    globalCaption: '',
+    lyrics: '',
+    generationStatus: 'empty',
+    generationJobId: null,
+    cumulativeMixKey: null,
+    isolatedAudioKey: null,
+    waveformPeaks: null,
+    bpm: null,
+    keyScale: null,
+    timeSignature: null,
+    source: 'uploaded',
+    midiData: {
+      notes,
+      grid: '1/16',
+    },
+  };
 }
 
 const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE); // 64 bars @ 120 BPM 4/4 = 128s
@@ -260,6 +361,10 @@ interface ProjectState {
   renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
+  recordMidiNoteOn: (trackId: string, pitch: number, velocity?: number, options?: { timestampMs?: number; transportTime?: number | null; source?: MidiCaptureSource }) => void;
+  recordMidiNoteOff: (trackId: string, pitch: number, options?: { timestampMs?: number; transportTime?: number | null }) => void;
+  getMidiCaptureBuffer: (trackId: string, options?: { lookbackBars?: number; nowMs?: number; transportTime?: number | null }) => MidiCaptureBufferView;
+  captureMidi: (options?: { trackId?: string; lookbackBars?: number; quantize?: number | QuantizeOptions; transportTime?: number | null; nowMs?: number }) => CaptureMidiResult;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
@@ -2947,6 +3052,184 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return noteId;
+  },
+
+  recordMidiNoteOn: (trackId, pitch, velocity = 100, options) => {
+    const state = get();
+    const project = state.project;
+    const nowMs = options?.timestampMs ?? Date.now();
+    const point = toCapturePoint(project, options?.transportTime, nowMs);
+    midiCaptureBuffer.recordNoteOn(
+      trackId,
+      pitch,
+      Math.max(1, Math.min(127, Math.round(velocity))),
+      point,
+      options?.source ?? 'agent',
+    );
+  },
+
+  recordMidiNoteOff: (trackId, pitch, options) => {
+    const state = get();
+    const nowMs = options?.timestampMs ?? Date.now();
+    const point = toCapturePoint(state.project, options?.transportTime, nowMs);
+    midiCaptureBuffer.recordNoteOff(trackId, pitch, point);
+  },
+
+  getMidiCaptureBuffer: (trackId, options) => {
+    const state = get();
+    const project = state.project;
+    if (!project) {
+      return { trackId, noteCount: 0, lookbackBars: options?.lookbackBars ?? DEFAULT_CAPTURE_LOOKBACK_BARS, notes: [] };
+    }
+
+    const beatsPerBar = project.timeSignature;
+    const lookbackBars = options?.lookbackBars ?? DEFAULT_CAPTURE_LOOKBACK_BARS;
+    const nowMs = options?.nowMs ?? Date.now();
+    const point = toCapturePoint(project, options?.transportTime, nowMs);
+    const spans = midiCaptureBuffer.getSnapshot(
+      trackId,
+      point,
+      getCaptureLookbackMs(project.bpm, beatsPerBar, lookbackBars),
+    );
+    const notes = getSnapshotNotes(project, spans, nowMs);
+    return { trackId, noteCount: notes.length, lookbackBars, notes };
+  },
+
+  captureMidi: (options) => {
+    const state = get();
+    const project = state.project;
+    if (!project) return { status: 'no-track' };
+
+    const targetTrack = options?.trackId
+      ? project.tracks.find((track) => track.id === options.trackId && track.trackType === 'pianoRoll')
+      : project.tracks.find((track) =>
+          track.trackType === 'pianoRoll'
+          && (
+            useTransportStore.getState().armedTrackIds.includes(track.id)
+            || track.inputMonitoring === 'on'
+            || track.inputMonitoring === 'auto'
+          ),
+        );
+
+    if (!targetTrack) {
+      return { status: 'no-track' };
+    }
+
+    const lookbackBars = options?.lookbackBars ?? DEFAULT_CAPTURE_LOOKBACK_BARS;
+    const nowMs = options?.nowMs ?? Date.now();
+    const buffer = state.getMidiCaptureBuffer(targetTrack.id, {
+      lookbackBars,
+      nowMs,
+      transportTime: options?.transportTime,
+    });
+
+    if (buffer.noteCount === 0) {
+      return { status: 'empty', trackId: targetTrack.id };
+    }
+
+    const minStartBeat = Math.min(...buffer.notes.map((note) => note.startBeat));
+    const maxEndBeat = Math.max(...buffer.notes.map((note) => note.startBeat + note.durationBeats));
+    const quantizeOptions = typeof options?.quantize === 'number'
+      ? { gridBeats: options.quantize, strength: 100, swing: 0, scope: 'startEnd' as const }
+      : options?.quantize;
+
+    const clipStartBeat = minStartBeat >= 0
+      ? Math.floor(minStartBeat / project.timeSignature) * project.timeSignature
+      : timeToBeat(options?.transportTime ?? useTransportStore.getState().currentTime, project.tempoMap, project.bpm);
+    const localOffsetBeat = minStartBeat >= 0 ? clipStartBeat : minStartBeat;
+
+    let notes: MidiNote[] = buffer.notes.map((note) => ({
+      id: uuidv4(),
+      pitch: note.pitch,
+      startBeat: Math.max(0, note.startBeat - localOffsetBeat),
+      durationBeats: Math.max(0.125, note.durationBeats),
+      velocity: Math.max(0, Math.min(1, note.velocity > 1 ? note.velocity / 127 : note.velocity)),
+    }));
+
+    if (quantizeOptions) {
+      notes = applyQuantize(notes, new Set(notes.map((note) => note.id)), quantizeOptions);
+    }
+
+    const clipStartTime = minStartBeat >= 0
+      ? beatToTime(clipStartBeat, project.tempoMap, project.bpm)
+      : options?.transportTime ?? useTransportStore.getState().currentTime;
+    const clipDurationBeats = Math.max(
+      project.timeSignature,
+      Math.ceil((maxEndBeat - localOffsetBeat) / project.timeSignature) * project.timeSignature,
+    );
+    const clipDuration = beatToTime(localOffsetBeat + clipDurationBeats, project.tempoMap, project.bpm)
+      - beatToTime(localOffsetBeat, project.tempoMap, project.bpm);
+
+    const existingClip = targetTrack.clips.find((clip) => {
+      if (!clip.midiData) return false;
+      const clipEnd = clip.startTime + clip.duration;
+      const captureEndTime = clipStartTime + clipDuration;
+      return clip.startTime <= clipStartTime && clipEnd >= captureEndTime;
+    });
+
+    _pushHistory(project);
+
+    const newTracks = project.tracks.map((track) => {
+      if (track.id !== targetTrack.id) return track;
+
+      if (existingClip?.midiData) {
+        const existingClipMidiData = existingClip.midiData;
+        const clipGrid = existingClipMidiData.grid ?? '1/16';
+        const clipBeatOffset = timeToBeat(clipStartTime - existingClip.startTime, project.tempoMap, project.bpm);
+        return {
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === existingClip.id
+              ? {
+                  ...clip,
+                  midiData: {
+                    notes: [...existingClipMidiData.notes, ...notes.map((note) => ({
+                      ...note,
+                      startBeat: note.startBeat + clipBeatOffset,
+                    }))],
+                    grid: clipGrid,
+                  },
+                }
+              : clip,
+          ),
+        };
+      }
+
+      return {
+        ...track,
+        clips: [...track.clips, makeMidiClip(track.id, clipStartTime, clipDuration, notes)],
+      };
+    });
+
+    let clipId = existingClip?.id;
+    if (!clipId) {
+      const updatedTrack = newTracks.find((track) => track.id === targetTrack.id);
+      clipId = updatedTrack?.clips[updatedTrack.clips.length - 1]?.id;
+    }
+
+    set({
+      project: {
+        ...project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(
+          newTracks,
+          project.measures,
+          project.bpm,
+          project.timeSignature,
+          project.tempoMap,
+          project.timeSignatureMap,
+        ),
+        tracks: newTracks,
+      },
+    });
+
+    return {
+      status: 'captured',
+      trackId: targetTrack.id,
+      clipId,
+      noteCount: notes.length,
+      createdNewClip: !existingClip,
+    };
   },
 
   updateMidiNote: (clipId, noteId, updates) => {

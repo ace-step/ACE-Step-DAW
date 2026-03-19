@@ -34,6 +34,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useShareLink } from '../../hooks/useShareLink';
+import { useLiveMidiKeyboard } from '../../hooks/useLiveMidiKeyboard';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
@@ -67,6 +68,7 @@ export function AppShell() {
   useKeyboardShortcuts();
   useEffectsSync(); // Keep effects chain synced with store — always, not just when Mixer is open
   useShareLink(); // Check URL for share parameters on mount
+  useLiveMidiKeyboard();
 
   return (
     <div className="flex flex-col h-screen bg-daw-bg text-zinc-300" onClick={handleClick}>

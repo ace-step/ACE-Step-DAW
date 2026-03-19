@@ -6,6 +6,7 @@ import { useCollaborationStore } from '../../store/collaborationStore';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
+import { useCaptureMidi } from '../../hooks/useCaptureMidi';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 
 function LCDDisplay() {
@@ -89,6 +90,7 @@ export function Toolbar() {
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { openFilePicker } = useAudioImport();
   const { toggleRecord } = useRecording();
+  const { triggerCaptureMidi } = useCaptureMidi();
 
   const { isPlaying, play, pause, stop } = useTransport();
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
@@ -200,6 +202,14 @@ export function Toolbar() {
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
           <div className={`w-3.5 h-3.5 rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-60'}`} />
         </ControlBarButton>
+        <button
+          onClick={() => triggerCaptureMidi()}
+          title="Capture MIDI (Shift+C)"
+          className="min-w-10 h-8 px-2 flex items-center justify-center rounded text-[10px] font-semibold tracking-wide text-amber-200 hover:text-white hover:bg-amber-500/15 transition-colors"
+          aria-label="Capture MIDI"
+        >
+          CAP
+        </button>
       </div>
 
       <div className="w-px h-6 bg-[#555] mx-1" />

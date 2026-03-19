@@ -8,6 +8,7 @@ import { useShortcutsStore } from '../store/shortcutsStore';
 import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import type { KeyCombo } from '../types/shortcuts';
+import { useCaptureMidi } from './useCaptureMidi';
 
 function isInputFocused(e: KeyboardEvent): boolean {
   return (
@@ -34,6 +35,7 @@ function eventMatchesCombo(e: KeyboardEvent, combo: KeyCombo): boolean {
 export function useKeyboardShortcuts() {
   const { play, pause, stop, seek } = useTransport();
   const { toggleRecord } = useRecording();
+  const { triggerCaptureMidi } = useCaptureMidi();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -223,6 +225,12 @@ export function useKeyboardShortcuts() {
       // -----------------------------------------------------------------------
       if (anyModalOpen) return;
 
+      if (e.code === 'KeyC' && e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        triggerCaptureMidi();
+        return;
+      }
+
       // Transport
       if (matches('transport.playPause')) {
         e.preventDefault();
@@ -312,5 +320,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [play, pause, stop, seek, toggleRecord]);
+  }, [pause, play, seek, stop, toggleRecord, triggerCaptureMidi]);
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
+import { midiCaptureBuffer } from '../../services/midiCaptureBuffer';
 
 // Mock projectStorage to prevent IndexedDB calls during testing
 vi.mock('../../services/projectStorage', () => ({
@@ -10,6 +11,7 @@ describe('projectStore', () => {
   beforeEach(() => {
     // Reset to a fresh state
     useProjectStore.setState({ project: null });
+    midiCaptureBuffer.clear();
   });
 
   describe('createProject', () => {
@@ -547,6 +549,76 @@ describe('projectStore', () => {
       });
       const clip = useProjectStore.getState().getClipById(clipId);
       expect(clip!.midiData!.notes.find((note) => note.id === noteId)?.isSlide).toBe(true);
+    });
+
+    it('captures a recent MIDI phrase into a new clip', () => {
+      const store = useProjectStore.getState();
+      const track = useProjectStore.getState().project!.tracks[0];
+
+      store.recordMidiNoteOn(track.id, 60, 100, { timestampMs: 1000, transportTime: 0.25, source: 'agent' });
+      store.recordMidiNoteOff(track.id, 60, { timestampMs: 1500, transportTime: 0.5 });
+      store.recordMidiNoteOn(track.id, 64, 110, { timestampMs: 1500, transportTime: 0.75, source: 'agent' });
+      store.recordMidiNoteOff(track.id, 64, { timestampMs: 2000, transportTime: 1.0 });
+
+      useProjectStore.getState().removeClip(clipId);
+
+      const result = useProjectStore.getState().captureMidi({
+        trackId: track.id,
+        nowMs: 2100,
+        transportTime: 0,
+      });
+
+      expect(result.status).toBe('captured');
+      expect(result.createdNewClip).toBe(true);
+
+      const clip = useProjectStore.getState().getClipById(result.clipId!);
+      expect(clip).toBeDefined();
+      expect(clip!.midiData!.notes).toHaveLength(2);
+      expect(clip!.midiData!.notes.map((note) => note.pitch)).toEqual([60, 64]);
+    });
+
+    it('overdubs capture into an existing MIDI clip in one step', () => {
+      const store = useProjectStore.getState();
+      const track = useProjectStore.getState().project!.tracks[0];
+
+      store.recordMidiNoteOn(track.id, 67, 96, { timestampMs: 1000, transportTime: 0.5, source: 'agent' });
+      store.recordMidiNoteOff(track.id, 67, { timestampMs: 1500, transportTime: 1.0 });
+
+      const result = store.captureMidi({
+        trackId: track.id,
+        nowMs: 1600,
+        transportTime: 1.0,
+      });
+
+      expect(result.status).toBe('captured');
+      expect(result.createdNewClip).toBe(false);
+
+      const clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes).toHaveLength(1);
+      expect(clip!.midiData!.notes[0].pitch).toBe(67);
+    });
+
+    it('undoes a captured clip as a single action', () => {
+      const store = useProjectStore.getState();
+      const track = useProjectStore.getState().project!.tracks[0];
+      const originalClipId = clipId;
+
+      useProjectStore.getState().removeClip(originalClipId);
+
+      store.recordMidiNoteOn(track.id, 60, 100, { timestampMs: 1000, transportTime: 0.25, source: 'agent' });
+      store.recordMidiNoteOff(track.id, 60, { timestampMs: 1500, transportTime: 0.5 });
+
+      const result = store.captureMidi({
+        trackId: track.id,
+        nowMs: 1600,
+        transportTime: 0,
+      });
+
+      expect(result.status).toBe('captured');
+      expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(1);
+
+      store.undo();
+      expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(0);
     });
   });
 

@@ -9,16 +9,16 @@ describe('markers', () => {
     useProjectStore.getState().createProject({ name: 'Test', bpm: 120 });
   });
 
-  it('addMarker inserts a marker sorted by time', () => {
+  it('addMarker appends markers in insertion order', () => {
     const store = useProjectStore.getState();
     store.addMarker(10, 'Chorus');
     store.addMarker(5, 'Verse');
     const markers = useProjectStore.getState().project!.markers!;
     expect(markers).toHaveLength(2);
-    expect(markers[0].name).toBe('Verse');
-    expect(markers[0].time).toBe(5);
-    expect(markers[1].name).toBe('Chorus');
-    expect(markers[1].time).toBe(10);
+    expect(markers[0].name).toBe('Chorus');
+    expect(markers[0].time).toBe(10);
+    expect(markers[1].name).toBe('Verse');
+    expect(markers[1].time).toBe(5);
     expect(markers[0].id).toBeDefined();
     expect(markers[0].color).toBeTruthy();
   });
@@ -31,7 +31,7 @@ describe('markers', () => {
     expect(useProjectStore.getState().project!.markers!).toHaveLength(0);
   });
 
-  it('updateMarker patches name, time, color and re-sorts', () => {
+  it('updateMarker patches name, time, and color in place', () => {
     const store = useProjectStore.getState();
     store.addMarker(5, 'Intro');
     store.addMarker(20, 'Bridge');
@@ -40,10 +40,10 @@ describe('markers', () => {
     store.updateMarker(bridgeId, { time: 2, name: 'Pre-Intro', color: '#000000' });
     const updated = useProjectStore.getState().project!.markers!;
     expect(updated).toHaveLength(2);
-    expect(updated[0].id).toBe(bridgeId);
-    expect(updated[0].name).toBe('Pre-Intro');
-    expect(updated[0].time).toBe(2);
-    expect(updated[0].color).toBe('#000000');
-    expect(updated[1].name).toBe('Intro');
+    expect(updated[0].name).toBe('Intro');
+    expect(updated[1].id).toBe(bridgeId);
+    expect(updated[1].name).toBe('Pre-Intro');
+    expect(updated[1].time).toBe(2);
+    expect(updated[1].color).toBe('#000000');
   });
 });

@@ -314,8 +314,19 @@ export function useKeyboardShortcuts() {
           ui.setShowSmartControls(!ui.showSmartControls);
           break;
 
-        // Loop Browser toggle (O)
+        // Punch in/out (I / O — Logic Pro convention)
+        case 'KeyI':
+          e.preventDefault();
+          transport.setPunchIn(transport.currentTime);
+          break;
+
         case 'KeyO':
+          e.preventDefault();
+          transport.setPunchOut(transport.currentTime);
+          break;
+
+        // Loop Browser toggle (P)
+        case 'KeyP':
           e.preventDefault();
           ui.toggleLoopBrowser();
           break;
@@ -325,6 +336,14 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           ui.setShowLibrary(!ui.showLibrary);
           break;
+
+        // Add marker at playhead (M — Logic Pro / Ableton parity)
+        case 'KeyM': {
+          e.preventDefault();
+          const markerCount = (project.project?.markers ?? []).length;
+          project.addMarker(transport.currentTime, `Marker ${markerCount + 1}`);
+          break;
+        }
 
         // Help
         case 'Slash':

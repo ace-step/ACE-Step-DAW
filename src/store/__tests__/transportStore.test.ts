@@ -13,6 +13,9 @@ describe('transportStore', () => {
       loopStart: 0,
       loopEnd: 0,
       metronomeEnabled: false,
+      punchInTime: null,
+      punchOutTime: null,
+      punchEnabled: false,
     });
   });
 
@@ -113,6 +116,32 @@ describe('transportStore', () => {
       expect(useTransportStore.getState().isRecording).toBe(true);
       useTransportStore.getState().setIsRecording(false);
       expect(useTransportStore.getState().isRecording).toBe(false);
+    });
+  });
+
+  describe('punch in/out', () => {
+    it('setPunchIn stores the punch-in time (clamped to >= 0)', () => {
+      useTransportStore.getState().setPunchIn(5);
+      expect(useTransportStore.getState().punchInTime).toBe(5);
+
+      useTransportStore.getState().setPunchIn(-3);
+      expect(useTransportStore.getState().punchInTime).toBe(0);
+    });
+
+    it('setPunchOut stores the punch-out time (clamped to >= 0)', () => {
+      useTransportStore.getState().setPunchOut(12.5);
+      expect(useTransportStore.getState().punchOutTime).toBe(12.5);
+
+      useTransportStore.getState().setPunchOut(-1);
+      expect(useTransportStore.getState().punchOutTime).toBe(0);
+    });
+
+    it('togglePunch toggles punchEnabled on and off', () => {
+      expect(useTransportStore.getState().punchEnabled).toBe(false);
+      useTransportStore.getState().togglePunch();
+      expect(useTransportStore.getState().punchEnabled).toBe(true);
+      useTransportStore.getState().togglePunch();
+      expect(useTransportStore.getState().punchEnabled).toBe(false);
     });
   });
 });

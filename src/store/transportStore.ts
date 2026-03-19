@@ -11,6 +11,9 @@ interface TransportState {
   loopStart: number;
   loopEnd: number;
   metronomeEnabled: boolean;
+  punchInTime: number | null;
+  punchOutTime: number | null;
+  punchEnabled: boolean;
 
   play: () => void;
   pause: () => void;
@@ -26,6 +29,9 @@ interface TransportState {
   toggleLoop: () => void;
   setLoopRegion: (start: number, end: number) => void;
   toggleMetronome: () => void;
+  setPunchIn: (time: number) => void;
+  setPunchOut: (time: number) => void;
+  togglePunch: () => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -39,6 +45,9 @@ export const useTransportStore = create<TransportState>((set) => ({
   loopStart: 0,
   loopEnd: 0,
   metronomeEnabled: false,
+  punchInTime: null,
+  punchOutTime: null,
+  punchEnabled: false,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -55,10 +64,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleArmTrack: (id, exclusive = true) => set((s) => {
     const isArmed = s.armedTrackIds.includes(id);
     if (isArmed) {
-      // Always disarm when already armed
       return { armedTrackIds: s.armedTrackIds.filter((tid) => tid !== id) };
     }
-    // Arm: exclusive by default (Ableton convention), additive with modifier
     return { armedTrackIds: exclusive ? [id] : [...s.armedTrackIds, id] };
   }),
   seek: (time) => set({ currentTime: Math.max(0, time) }),
@@ -66,4 +73,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleLoop: () => set((s) => ({ loopEnabled: !s.loopEnabled })),
   setLoopRegion: (start, end) => set({ loopStart: start, loopEnd: end }),
   toggleMetronome: () => set((s) => ({ metronomeEnabled: !s.metronomeEnabled })),
+  setPunchIn: (time) => set({ punchInTime: Math.max(0, time) }),
+  setPunchOut: (time) => set({ punchOutTime: Math.max(0, time) }),
+  togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
 }));

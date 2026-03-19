@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { samplerEngine } from '../../engine/SamplerEngine';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import type { PianoRollGrid, SamplerConfig, SamplerPlaybackMode } from '../../types/project';
+import type { PianoRollGrid, SamplerConfig } from '../../types/project';
+import { QuickSamplerEditor } from './QuickSamplerEditor';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
 import { TransformMenu } from './TransformMenu';
-import { getPianoRollToolShortcut, midiNoteToName, type PianoRollTool } from './PianoRollConstants';
+import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -298,149 +298,18 @@ export function PianoRoll() {
       {track.synthPreset === 'sampler' && (
         <div
           aria-label="Quick Sampler target"
-          className={`grid grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)] gap-3 px-3 py-3 border-b border-[#1f2536] bg-[#0b1220] shrink-0 ${samplerDropActive ? 'ring-1 ring-cyan-400/70' : ''}`}
+          className={samplerDropActive ? 'ring-1 ring-cyan-400/70 shrink-0' : 'shrink-0'}
           onDragOver={handleSamplerDragOver}
           onDragLeave={() => setSamplerDropActive(false)}
           onDrop={handleSamplerDrop}
         >
-          <div className={`rounded-xl border px-3 py-3 ${track.sampler?.audioKey ? 'border-amber-400/25 bg-amber-300/[0.08]' : 'border-cyan-400/25 bg-cyan-300/[0.06]'}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Quick Sampler</div>
-                <div className="text-sm text-zinc-100">{track.sampler?.sampleName ?? 'Drop audio here to build an instrument'}</div>
-              </div>
-              <button
-                aria-label={`Load sampler source for ${track.displayName}`}
-                className="px-2 py-1 rounded text-[10px] bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 transition-colors"
-                onClick={() => openSamplerFilePicker(track.id)}
-              >
-                {track.sampler?.audioKey ? 'Swap Sample' : 'Load Sample'}
-              </button>
-            </div>
-            <div className="mt-2 text-[11px] text-zinc-400">
-              {track.sampler?.audioKey
-                ? `Drag an imported asset here to remap it instantly. Current range: ${sampleDuration.toFixed(2)}s`
-                : 'Drop an audio file or imported asset here to create a playable instrument in one step.'}
-            </div>
-            {track.sampler?.audioKey && samplerConfig && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="text-[10px] text-zinc-400 flex items-center gap-1">
-                  Root
-                  <input
-                    aria-label="Sampler root note"
-                    type="number"
-                    min="0"
-                    max="127"
-                    value={track.sampler?.rootNote ?? 60}
-                    onChange={(e) => {
-                      const rootNote = Number(e.target.value);
-                      setTrackSampler(track.id, { rootNote });
-                      applySamplerConfig({ rootNote });
-                    }}
-                    className="w-14 bg-[#111] border border-[#333] rounded px-1.5 py-1 text-[11px] text-zinc-200"
-                  />
-                  <span className="text-zinc-500">{midiNoteToName(track.sampler?.rootNote ?? 60)}</span>
-                </label>
-                <label className="text-[10px] text-zinc-400 flex items-center gap-1">
-                  Mode
-                  <select
-                    aria-label="Quick Sampler playback mode"
-                    value={samplerConfig.playbackMode}
-                    onChange={(e) => applySamplerConfig({ playbackMode: e.target.value as SamplerPlaybackMode })}
-                    className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-200"
-                  >
-                    <option value="classic">Classic</option>
-                    <option value="oneShot">One Shot</option>
-                    <option value="loop">Loop</option>
-                  </select>
-                </label>
-                <button
-                  aria-label="Preview quick sampler root note"
-                  className="px-2 py-1 rounded text-[10px] bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25 transition-colors"
-                  onClick={() => void samplerEngine.previewTrackNote(track, track.sampler?.rootNote ?? 60, 110, 0.6)}
-                >
-                  Preview
-                </button>
-                <button
-                  aria-label={`Clear sampler source for ${track.displayName}`}
-                  className="px-2 py-1 rounded text-[10px] bg-white/5 text-zinc-400 hover:bg-white/10"
-                  onClick={() => clearTrackSampler(track.id)}
-                >
-                  Clear
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
-            {samplerConfig ? (
-              <div className="space-y-2">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Sample Editor</div>
-                <label className="block text-[10px] text-zinc-400">
-                  Trim Start
-                  <input
-                    aria-label="Quick Sampler trim start"
-                    type="range"
-                    min="0"
-                    max={sampleDuration}
-                    step="0.01"
-                    value={samplerConfig.trimStart}
-                    onChange={(e) => applySamplerConfig({ trimStart: Number(e.target.value) })}
-                    className="w-full"
-                  />
-                  <span className="text-zinc-500">{samplerConfig.trimStart.toFixed(2)}s</span>
-                </label>
-                <label className="block text-[10px] text-zinc-400">
-                  Trim End
-                  <input
-                    aria-label="Quick Sampler trim end"
-                    type="range"
-                    min="0.01"
-                    max={sampleDuration}
-                    step="0.01"
-                    value={samplerConfig.trimEnd}
-                    onChange={(e) => applySamplerConfig({ trimEnd: Number(e.target.value) })}
-                    className="w-full"
-                  />
-                  <span className="text-zinc-500">{samplerConfig.trimEnd.toFixed(2)}s</span>
-                </label>
-                {samplerConfig.playbackMode === 'loop' && (
-                  <>
-                    <label className="block text-[10px] text-zinc-400">
-                      Loop Start
-                      <input
-                        aria-label="Quick Sampler loop start"
-                        type="range"
-                        min={samplerConfig.trimStart}
-                        max={samplerConfig.trimEnd - 0.01}
-                        step="0.01"
-                        value={samplerConfig.loopStart}
-                        onChange={(e) => applySamplerConfig({ loopStart: Number(e.target.value) })}
-                        className="w-full"
-                      />
-                      <span className="text-zinc-500">{samplerConfig.loopStart.toFixed(2)}s</span>
-                    </label>
-                    <label className="block text-[10px] text-zinc-400">
-                      Loop End
-                      <input
-                        aria-label="Quick Sampler loop end"
-                        type="range"
-                        min={samplerConfig.loopStart + 0.01}
-                        max={samplerConfig.trimEnd}
-                        step="0.01"
-                        value={samplerConfig.loopEnd}
-                        onChange={(e) => applySamplerConfig({ loopEnd: Number(e.target.value) })}
-                        className="w-full"
-                      />
-                      <span className="text-zinc-500">{samplerConfig.loopEnd.toFixed(2)}s</span>
-                    </label>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="text-[11px] text-zinc-500">Load a sample to reveal trim and loop controls.</div>
-            )}
-          </div>
+          <QuickSamplerEditor
+            track={track}
+            onSamplerConfigChange={applySamplerConfig}
+            onSamplerSettingsChange={(updates) => setTrackSampler(track.id, updates)}
+            onClear={() => clearTrackSampler(track.id)}
+            onLoadSample={() => openSamplerFilePicker(track.id)}
+          />
         </div>
       )}
 

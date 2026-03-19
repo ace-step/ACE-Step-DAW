@@ -24,10 +24,11 @@ interface LaneContextMenuProps {
   onAddLayer: () => void;
   onOpenSequencer?: () => void;
   onOpenPianoRoll?: () => void;
+  onCreateQuickSampler?: () => void;
   onClose: () => void;
 }
 
-function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onOpenPianoRoll, onClose }: LaneContextMenuProps) {
+function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onOpenPianoRoll, onCreateQuickSampler, onClose }: LaneContextMenuProps) {
   const clampedX = Math.min(x, window.innerWidth - 180);
   const clampedY = Math.min(y, window.innerHeight - 80);
   return (
@@ -55,6 +56,14 @@ function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onOpenPianoRoll, o
             className="w-full text-left px-3 py-1.5 text-[11px] text-violet-300 hover:bg-daw-accent hover:text-white transition-colors"
           >
             Open Piano Roll...
+          </button>
+        )}
+        {onCreateQuickSampler && (
+          <button
+            onClick={() => { onClose(); onCreateQuickSampler(); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-amber-300 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            Create Quick Sampler...
           </button>
         )}
         <button
@@ -92,10 +101,12 @@ export function TrackLane({ track }: TrackLaneProps) {
   const {
     importAssetAsQuickSampler,
     importAudioFileAsSampler,
+    importAudioFileAsNewQuickSampler,
     importAudioToTrack,
     importMidiFile,
     importLoopToTrack,
     importAssetToTrack,
+    openQuickSamplerFilePicker,
   } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
 
@@ -237,12 +248,16 @@ export function TrackLane({ track }: TrackLaneProps) {
     }
 
     // Handle file drop
+    // Alt+Drop on any track → create as Quick Sampler (new track)
+    const wantsQuickSampler = e.altKey;
     const files = e.dataTransfer.files;
     if (!files.length) return;
     for (const file of Array.from(files)) {
       if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
         if (track.trackType === 'pianoRoll') {
           await importAudioFileAsSampler(file, track.id);
+        } else if (wantsQuickSampler) {
+          await importAudioFileAsNewQuickSampler(file);
         } else {
           await importAudioToTrack(file, track.id, startTime);
         }
@@ -250,7 +265,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         await importMidiFile(file, startTime);
       }
     }
-  }, [project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
+  }, [project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
 
   const hasClips = track.clips.length > 0;
   const automationLanes = (project?.automationLanes ?? []).filter((l) => l.trackId === track.id);
@@ -270,7 +285,7 @@ export function TrackLane({ track }: TrackLaneProps) {
       >
         {fileDragOver && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 border border-dashed border-blue-400/60 rounded-sm">
-            <span className="text-[10px] text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded">Drop audio or MIDI here</span>
+            <span className="text-[10px] text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded">Drop audio or MIDI here {track.trackType !== 'pianoRoll' ? '(Alt = Quick Sampler)' : ''}</span>
           </div>
         )}
 
@@ -317,6 +332,7 @@ export function TrackLane({ track }: TrackLaneProps) {
               const clip = ensureMidiClip(track.id, ctxMenu.startTime, ctxMenu.duration);
               setOpenPianoRoll(track.id, clip.id);
             } : undefined}
+            onCreateQuickSampler={() => openQuickSamplerFilePicker()}
             onClose={() => setCtxMenu(null)}
           />
         )}

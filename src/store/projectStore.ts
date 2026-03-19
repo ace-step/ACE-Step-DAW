@@ -298,6 +298,8 @@ interface ProjectState {
     trackId?: string;
   }) => Track | undefined;
   createQuickSamplerFromClip: (trackId: string, clipId: string) => Track | undefined;
+  /** Create a Quick Sampler track directly from a project asset by ID. */
+  createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
@@ -791,12 +793,12 @@ function createTrackFromTemplate(
   const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG.custom;
   const existingOrders = existingTracks.map((track) => track.order);
   const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
-  const displayName = buildTrackDisplayName(existingTracks, trackName);
+  const autoDisplayName = buildTrackDisplayName(existingTracks, trackName);
   const {
     id: _ignoredId,
     trackType: _ignoredTrackType,
     trackName: _ignoredTrackName,
-    displayName: _ignoredDisplayName,
+    displayName: overrideDisplayName,
     order: _ignoredOrder,
     muted: _ignoredMuted,
     soloed: _ignoredSoloed,
@@ -817,7 +819,7 @@ function createTrackFromTemplate(
     id: uuidv4(),
     trackType,
     trackName,
-    displayName,
+    displayName: overrideDisplayName || autoDisplayName,
     order: maxOrder + 1,
     muted: false,
     soloed: false,
@@ -1683,6 +1685,23 @@ export const useProjectStore = create<ProjectState>()(
       audioKey,
       sampleName,
       sampleDuration,
+    });
+  },
+
+  createQuickSamplerFromAsset: (assetId, options) => {
+    const state = get();
+    if (!state.project) return undefined;
+    const asset = (state.project.assets ?? []).find((a) => a.id === assetId);
+    if (!asset) return undefined;
+    const audioKey = asset.isolatedAudioKey ?? asset.cumulativeMixKey;
+    if (!audioKey) return undefined;
+    const sampleName = asset.prompt?.trim() || asset.trackDisplayName || 'Quick Sampler';
+    return get().createQuickSamplerTrack({
+      audioKey,
+      sampleName,
+      sampleDuration: asset.duration,
+      rootNote: options?.rootNote,
+      trackId: options?.trackId,
     });
   },
 

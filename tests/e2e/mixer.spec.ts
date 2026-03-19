@@ -89,4 +89,52 @@ test.describe('Mixer Operations', () => {
     });
     expect(trackCount).toBe(3); // 2 original + 1 duplicate
   });
+
+  test('keeps the AI Master panel and master fader separated at minimum mixer height', async ({ page }) => {
+    await page.getByText('Click anywhere to enable audio').click();
+
+    await page.evaluate(async () => {
+      const store = (window as any).__store;
+      const ui = (window as any).__uiStore;
+      ui.getState().setShowMixer(true);
+      ui.getState().setMixerHeight(160);
+      await store.getState().analyzeMastering();
+    });
+
+    await page.waitForFunction(() => (window as any).__uiStore?.getState().showMixer === true);
+    await expect(page.getByRole('button', { name: 'Re-analyze master bus' })).toBeVisible();
+    await expect(page.getByRole('slider', { name: 'Master volume fader' })).toBeVisible();
+    await expect(page.getByRole('slider', { name: /volume fader/i }).first()).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const analyzeButton = document.querySelector('[aria-label="Re-analyze master bus"]') as HTMLElement | null;
+      const masterSlider = document.querySelector('[aria-label="Master volume fader"]') as HTMLElement | null;
+      const trackSlider = document.querySelector('[aria-label$="volume fader"]:not([aria-label="Master volume fader"])') as HTMLElement | null;
+      const masteringPanel = analyzeButton?.closest('div[class*="rounded-lg"]') as HTMLElement | null;
+      const controls = masteringPanel?.parentElement as HTMLElement | null;
+      const fader = masterSlider?.parentElement?.parentElement as HTMLElement | null;
+      if (!controls || !fader || !masterSlider || !trackSlider) return null;
+
+      const controlsRect = controls.getBoundingClientRect();
+      const faderRect = fader.getBoundingClientRect();
+      const masterSliderRect = masterSlider.getBoundingClientRect();
+      const trackSliderRect = trackSlider.getBoundingClientRect();
+
+      return {
+        controlsBottom: controlsRect.bottom,
+        faderTop: faderRect.top,
+        masterSliderHeight: masterSliderRect.height,
+        trackSliderHeight: trackSliderRect.height,
+        controlsScrollable: controls.scrollHeight > controls.clientHeight,
+      };
+    });
+
+    expect(layout).not.toBeNull();
+    expect(layout!.controlsBottom).toBeLessThanOrEqual(layout!.faderTop + 1);
+    expect(layout!.masterSliderHeight).toBeGreaterThanOrEqual(96);
+    expect(layout!.trackSliderHeight).toBeGreaterThanOrEqual(96);
+    expect(layout!.controlsScrollable).toBe(true);
+
+    await page.screenshot({ path: 'test-screenshots/issue-296-master-layout.png', fullPage: true });
+  });
 });

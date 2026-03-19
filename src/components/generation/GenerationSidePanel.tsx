@@ -37,6 +37,7 @@ export function GenerationSidePanel() {
   const generationForm = useGenerationStore((s) => s.generationForm);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
   const variationSession = useGenerationStore((s) => s.variationSession);
+  const jobs = useGenerationStore((s) => s.jobs);
   const promptHistory = useGenerationStore((s) => s.promptHistory);
   const setGenerationPrompt = useGenerationStore((s) => s.setGenerationPrompt);
   const setGenerationStyleTags = useGenerationStore((s) => s.setGenerationStyleTags);
@@ -61,6 +62,7 @@ export function GenerationSidePanel() {
   const [styleTagsInput, setStyleTagsInput] = useState('');
 
   const stemsTracks = project?.tracks.filter((track) => track.trackType === 'stems') ?? [];
+  const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing');
 
   useEffect(() => {
     if (!project) return;
@@ -121,7 +123,10 @@ export function GenerationSidePanel() {
     [variationSession],
   );
 
-  const statusMessage = generationForm.requestError ?? variationError ?? validationError;
+  const statusMessage = generationForm.requestError
+    ?? variationError
+    ?? jobs.find((job) => job.status === 'error')?.actionableMessage
+    ?? validationError;
   const isSessionActive = isGenerating || variationSession?.status === 'generating';
 
   const handleGenerate = useCallback(() => {
@@ -455,6 +460,67 @@ export function GenerationSidePanel() {
           {isSessionActive ? 'Generating...' : `Generate ${generationForm.variationCount} Variation${generationForm.variationCount === 1 ? '' : 's'}`}
         </button>
 
+        {jobs.length > 0 && (
+          <section className="space-y-2" data-testid="generation-live-jobs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium uppercase text-zinc-500">Live Progress</span>
+              <span className="text-[10px] text-zinc-600">
+                Store-backed backend stages
+              </span>
+            </div>
+
+            {jobs.map((job) => {
+              const eta = job.etaSeconds != null && (job.etaConfidence === 'medium' || job.etaConfidence === 'high')
+                ? formatEta(job.etaSeconds)
+                : null;
+              const progressLabel = job.progressPercent != null
+                ? `${Math.round(job.progressPercent)}%`
+                : job.status === 'queued'
+                  ? 'Queued'
+                  : null;
+
+              return (
+                <div
+                  key={job.id}
+                  className="rounded border border-[#333] bg-[#252525] px-2 py-2"
+                  data-testid={`generation-job-${job.id}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium uppercase text-zinc-200">{job.trackName}</div>
+                      <div className="mt-0.5 text-[10px] text-zinc-400">
+                        {job.stage ?? 'Generation update pending'}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${VARIATION_STATUS_COLORS[job.status === 'queued' ? 'pending' : job.status]}`}>
+                      {progressLabel ?? VARIATION_STATUS_LABELS[job.status === 'queued' ? 'pending' : job.status]}
+                    </span>
+                  </div>
+
+                  {job.progressPercent != null && (
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#1b1b1b]">
+                      <div
+                        className="h-full rounded-full bg-indigo-500 transition-[width] duration-300"
+                        style={{ width: `${job.progressPercent}%` }}
+                        aria-label={`${job.trackName} progress ${Math.round(job.progressPercent)} percent`}
+                      />
+                    </div>
+                  )}
+
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+                    <span>{job.progress}</span>
+                    {eta ? <span>ETA: {eta}</span> : <span>{job.stage ? 'ETA pending' : 'Waiting for backend'}</span>}
+                  </div>
+
+                  {job.status === 'error' && job.actionableMessage && (
+                    <div className="mt-1 text-[10px] text-red-300">{job.actionableMessage}</div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        )}
+
         {variationSession && (
           <section className="space-y-2" data-testid="variation-cards">
             <div className="flex items-center justify-between">
@@ -466,9 +532,6 @@ export function GenerationSidePanel() {
 
             {variationSession.variations.map((variation) => {
               const isActive = variation.index === variationSession.activeVariationIndex;
-              const eta = variation.status === 'generating' && variation.startedAt
-                ? formatEta(variation.startedAt)
-                : null;
 
               return (
                 <button
@@ -501,9 +564,6 @@ export function GenerationSidePanel() {
                     </div>
                     {variation.progress && (
                       <span className="mt-0.5 block text-[10px] text-zinc-500">{variation.progress}</span>
-                    )}
-                    {eta && (
-                      <span className="block text-[10px] text-zinc-600">ETA: {eta}</span>
                     )}
                     {variation.error && (
                       <span className="mt-0.5 block truncate text-[10px] text-red-400">{variation.error}</span>
@@ -540,10 +600,10 @@ export function GenerationSidePanel() {
   );
 }
 
-function formatEta(startedAt: number): string {
-  const elapsed = (Date.now() - startedAt) / 1000;
-  const estimated = 60;
-  const remaining = Math.max(0, estimated - elapsed);
-  if (remaining < 5) return '< 5s';
-  return `~${Math.round(remaining)}s`;
+function formatEta(etaSeconds: number): string {
+  if (etaSeconds < 5) return '< 5s';
+  if (etaSeconds < 60) return `~${Math.round(etaSeconds)}s`;
+  const minutes = Math.floor(etaSeconds / 60);
+  const seconds = etaSeconds % 60;
+  return seconds === 0 ? `~${minutes}m` : `~${minutes}m ${seconds}s`;
 }

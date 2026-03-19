@@ -91,6 +91,7 @@ export type AgentProjectState = ProjectState & Pick<
 > & Pick<
   GenerationState,
   'generationForm'
+  | 'jobs'
   | 'lastSubmittedRequest'
   | 'variationSession'
   | 'submitGenerationRequest'

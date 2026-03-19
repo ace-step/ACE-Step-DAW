@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectStore } from '../store/projectStore';
-import { useGenerationStore } from '../store/generationStore';
-import type { LegoTaskParams, CoverTaskParams, TaskResultItem } from '../types/api';
+import { useGenerationStore, deriveGenerationJobProgress } from '../store/generationStore';
+import type { LegoTaskParams, CoverTaskParams, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
@@ -11,6 +11,25 @@ import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
+
+function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null; progressPercent: number | null } {
+  let stage: string | null = null;
+  let progressPercent: number | null = null;
+
+  const rawResult = entry.result?.trim();
+  if (rawResult?.startsWith('[')) {
+    try {
+      const resultItems = JSON.parse(rawResult) as TaskResultItem[];
+      const firstResult = resultItems?.[0];
+      stage = firstResult?.stage?.trim() || null;
+      progressPercent = typeof firstResult?.progress === 'number' ? firstResult.progress : null;
+    } catch {
+      // Ignore partial/non-JSON progress payloads and fall back to progress_text parsing.
+    }
+  }
+
+  return { stage, progressPercent };
+}
 
 interface GenerationOutcome {
   cumulativeBlob: Blob | null;
@@ -241,6 +260,10 @@ async function generateClipInternal(
     trackName: track.trackName,
     status: 'queued',
     progress: 'Queued',
+    stage: 'Queued',
+    progressPercent: null,
+    etaSeconds: null,
+    etaConfidence: 'none',
   });
 
   store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
@@ -331,7 +354,17 @@ async function generateClipInternal(
     }
 
     // Submit task
-    useGenerationStore.getState().updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'generating',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'generating',
+          progress: 'Submitting request...',
+          stage: 'Submitting request',
+        }),
+      });
+    }
     useProjectStore.getState().updateClipStatus(clipId, 'generating');
 
     const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
@@ -349,9 +382,18 @@ async function generateClipInternal(
       const entry = entries?.[0];
       if (!entry) continue;
 
-      useGenerationStore.getState().updateJob(jobId, {
-        progress: entry.progress_text || 'Generating...',
-      });
+      {
+        const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+        const { stage, progressPercent } = extractProgressMetadata(entry);
+        useGenerationStore.getState().updateJob(jobId, {
+          ...deriveGenerationJobProgress(currentJob, {
+            status: currentJob?.status === 'processing' ? 'processing' : 'generating',
+            progress: entry.progress_text || 'Generating...',
+            stage,
+            progressPercent,
+          }),
+        });
+      }
 
       if (entry.status === 1) {
         // Done — result is a JSON string containing an array of {file, ...}
@@ -375,7 +417,18 @@ async function generateClipInternal(
     }
 
     // Download audio
-    useGenerationStore.getState().updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'processing',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'processing',
+          progress: 'Downloading audio...',
+          stage: 'Downloading audio',
+          progressPercent: 95,
+        }),
+      });
+    }
     useProjectStore.getState().updateClipStatus(clipId, 'processing');
 
     const cumulativeBlob = await api.downloadAudio(resultAudioPath);
@@ -446,13 +499,35 @@ async function generateClipInternal(
       serverCumulativePath: extractServerPath(resultAudioPath) ?? undefined,
     });
 
-    useGenerationStore.getState().updateJob(jobId, { status: 'done', progress: 'Done' });
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'done',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'done',
+          progress: 'Done',
+          stage: 'Complete',
+          progressPercent: 100,
+        }),
+      });
+    }
 
     return { cumulativeBlob, succeeded: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
-    useGenerationStore.getState().updateJob(jobId, { status: 'error', progress: message, error: message });
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'error',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'error',
+          progress: message,
+          stage: 'Generation failed',
+          error: message,
+        }),
+      });
+    }
     return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: message };
   }
 }

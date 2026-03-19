@@ -132,4 +132,46 @@ describe('GenerationSidePanel', () => {
       'Generation failed: choose a shorter length or lower the variation count.',
     );
   });
+
+  it('shows live backend stage progress and ETA when confidence is high enough', () => {
+    useGenerationStore.getState().addJob({
+      id: 'job-1',
+      clipId: 'clip-1',
+      trackName: 'Drums',
+      status: 'generating',
+      progress: 'Diffusion pass 42%',
+      stage: 'Diffusion pass',
+      progressPercent: 42,
+      etaSeconds: 18,
+      etaConfidence: 'high',
+    });
+
+    render(<GenerationSidePanel />);
+
+    expect(screen.getByTestId('generation-live-jobs')).toHaveTextContent('Live Progress');
+    expect(screen.getByTestId('generation-job-job-1')).toHaveTextContent('Drums');
+    expect(screen.getByTestId('generation-job-job-1')).toHaveTextContent('Diffusion pass');
+    expect(screen.getByTestId('generation-job-job-1')).toHaveTextContent('42%');
+    expect(screen.getByTestId('generation-job-job-1')).toHaveTextContent('ETA: ~18s');
+  });
+
+  it('falls back to stage-only messaging when ETA confidence is low', () => {
+    useGenerationStore.getState().addJob({
+      id: 'job-2',
+      clipId: 'clip-2',
+      trackName: 'Bass',
+      status: 'generating',
+      progress: 'Prompt analysis 8%',
+      stage: 'Prompt analysis',
+      progressPercent: 8,
+      etaSeconds: null,
+      etaConfidence: 'low',
+    });
+
+    render(<GenerationSidePanel />);
+
+    expect(screen.getByTestId('generation-job-job-2')).toHaveTextContent('Prompt analysis');
+    expect(screen.getByTestId('generation-job-job-2')).toHaveTextContent('ETA pending');
+    expect(screen.getByTestId('generation-job-job-2')).not.toHaveTextContent('ETA:');
+  });
 });

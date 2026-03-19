@@ -6,7 +6,8 @@ import { useProjectStore } from '../../store/projectStore';
 export function StatusBar() {
   const [connected, setConnected] = useState(false);
   const jobs = useGenerationStore((s) => s.jobs);
-  const activeJobs = jobs.filter((j) => j.status === 'generating' || j.status === 'queued');
+  const activeJobs = jobs.filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing');
+  const primaryJob = activeJobs[0] ?? null;
   const model = useProjectStore((s) => s.project?.generationDefaults.model);
 
   useEffect(() => {
@@ -28,7 +29,10 @@ export function StatusBar() {
       </div>
       {model && <span className="text-zinc-400">{model}</span>}
       {activeJobs.length > 0 && (
-        <span className="text-daw-accent">Generating: {activeJobs.length}</span>
+        <span className="text-daw-accent">
+          Generating: {activeJobs.length}
+          {primaryJob ? ` • ${primaryJob.trackName} • ${primaryJob.stage ?? primaryJob.progress}${primaryJob.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}` : ''}
+        </span>
       )}
       <span className="flex-1" />
       <a

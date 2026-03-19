@@ -1,0 +1,37 @@
+name: Project Manager — Dynamic Load Balancer
+
+on:
+  # Event-driven triggers
+  issues:
+    types: [opened, closed]
+  pull_request:
+    types: [opened, closed]
+  # Fallback schedule (every 30 min as safety net)
+  schedule:
+    - cron: '*/30 * * * *'
+
+jobs:
+  balance:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Project Manager
+        run: bash scripts/agents/project-manager.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Weekly research (Monday 10am PT)
+  research:
+    if: github.event.schedule == '0 17 * * 1' || github.event_name == 'schedule'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Researcher
+        run: |
+          DAY=$(date +%u)
+          HOUR=$(date +%H)
+          if [ "$DAY" = "1" ] && [ "$HOUR" -ge "10" ] && [ "$HOUR" -lt "11" ]; then
+            bash scripts/agents/researcher.sh
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

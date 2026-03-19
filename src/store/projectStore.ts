@@ -23,6 +23,7 @@ import type {
   AutomationLane,
   ReturnTrack,
   Take,
+  Marker,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -105,8 +106,6 @@ interface ProjectState {
   addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
   removeTrack: (trackId: string) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
-  freezeTrack: (trackId: string) => void;
-  unfreezeTrack: (trackId: string) => void;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
@@ -613,36 +612,6 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return clonedTrack;
-  },
-
-  freezeTrack: (trackId) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, frozen: true } : t,
-        ),
-      },
-    });
-  },
-
-  unfreezeTrack: (trackId) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, frozen: false, frozenAudioKey: undefined } : t,
-        ),
-      },
-    });
   },
 
   updateTrack: (trackId, updates) => {
@@ -2231,6 +2200,50 @@ export const useProjectStore = create<ProjectState>()(
           }
           return { ...track, sends };
         }),
+      },
+    });
+  },
+
+  // ── Markers ────────────────────────────────────────────────────────────────
+
+  addMarker: (time, name) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const marker: Marker = { id: uuidv4(), time, name, color: '#facc15' };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: [...(state.project.markers ?? []), marker],
+      },
+    });
+  },
+
+  removeMarker: (id) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: (state.project.markers ?? []).filter((m) => m.id !== id),
+      },
+    });
+  },
+
+  updateMarker: (id, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: (state.project.markers ?? []).map((m) =>
+          m.id === id ? { ...m, ...updates } : m,
+        ),
       },
     });
   },

@@ -74,6 +74,25 @@ export function PianoRoll() {
 
   if (!track) return null;
 
+  if (track.frozen) {
+    return (
+      <div
+        className="border-t border-[#1a1a1a] bg-[#0a0a1e] flex flex-col items-center justify-center select-none shrink-0"
+        style={{ height: pianoRollHeight }}
+        data-testid="pianoroll-frozen-overlay"
+      >
+        <span className="text-cyan-400 text-lg">{'\u2744'}</span>
+        <span className="text-xs text-cyan-400/70 mt-1">Track frozen — unfreeze to edit</span>
+        <button
+          className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 underline"
+          onClick={() => setOpenPianoRoll(null, null)}
+        >
+          Close
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className="border-t border-[#1a1a1a] bg-[#0a0a1e] flex flex-col select-none shrink-0"

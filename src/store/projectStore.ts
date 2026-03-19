@@ -184,6 +184,9 @@ interface ProjectState {
   // MIDI effects
   addMidiEffect: (trackId: string, type: MidiEffectType) => string | undefined;
   removeMidiEffect: (trackId: string, effectId: string) => void;
+  updateMidiEffect: (trackId: string, effectId: string, updates: Partial<MidiEffect>) => void;
+  toggleMidiEffect: (trackId: string, effectId: string) => void;
+  reorderMidiEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
 
   // Automation
   addAutomationPoint: (trackId: string, parameter: AutomationParameter, point: AutomationPoint) => void;
@@ -2201,6 +2204,70 @@ export const useProjectStore = create<ProjectState>()(
             ? { ...track, midiEffects: (track.midiEffects ?? []).filter((e) => e.id !== effectId) }
             : track,
         ),
+      },
+    });
+  },
+
+  updateMidiEffect: (trackId, effectId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                midiEffects: (track.midiEffects ?? []).map((e) =>
+                  e.id === effectId ? { ...e, ...updates } as MidiEffect : e,
+                ),
+              }
+            : track,
+        ),
+      },
+    });
+  },
+
+  toggleMidiEffect: (trackId, effectId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                midiEffects: (track.midiEffects ?? []).map((e) =>
+                  e.id === effectId ? { ...e, enabled: !e.enabled } : e,
+                ),
+              }
+            : track,
+        ),
+      },
+    });
+  },
+
+  reorderMidiEffect: (trackId, fromIndex, toIndex) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          const effects = [...(track.midiEffects ?? [])];
+          if (fromIndex < 0 || fromIndex >= effects.length || toIndex < 0 || toIndex >= effects.length) return track;
+          const [moved] = effects.splice(fromIndex, 1);
+          effects.splice(toIndex, 0, moved);
+          return { ...track, midiEffects: effects };
+        }),
       },
     });
   },

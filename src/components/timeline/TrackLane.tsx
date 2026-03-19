@@ -249,6 +249,22 @@ export function TrackLane({ track }: TrackLaneProps) {
           </div>
         )}
 
+        {track.frozen && (
+          <div
+            className="absolute inset-0 z-20 bg-cyan-950/20 cursor-not-allowed"
+            data-testid={`frozen-overlay-${track.id}`}
+            title="Track is frozen — unfreeze to edit"
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          >
+            <div className="absolute top-1 right-2 flex items-center gap-1 text-[10px] text-cyan-400/70">
+              <span>{'\u2744'}</span>
+              <span>Frozen</span>
+            </div>
+          </div>
+        )}
+
         <>
           {track.clips.map((clip) => (
             <ClipBlock key={clip.id} clip={clip} track={track} />

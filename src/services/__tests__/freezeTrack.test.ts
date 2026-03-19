@@ -98,4 +98,45 @@ describe('freeze / flatten store actions', () => {
     expect(track!.soloed).toBe(true);
     expect(track!.frozen).toBe(true);
   });
+
+  it('freeze is undoable via history', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().freezeTrack(trackId, 'frozen-key');
+    expect(useProjectStore.getState().project!.tracks[0].frozen).toBe(true);
+
+    useProjectStore.getState().undo();
+    expect(useProjectStore.getState().project!.tracks[0].frozen).toBeFalsy();
+    expect(useProjectStore.getState().project!.tracks[0].frozenAudioKey).toBeUndefined();
+  });
+
+  it('unfreeze is undoable via history', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().freezeTrack(trackId, 'frozen-key');
+    useProjectStore.getState().unfreezeTrack(trackId);
+    expect(useProjectStore.getState().project!.tracks[0].frozen).toBe(false);
+
+    useProjectStore.getState().undo();
+    expect(useProjectStore.getState().project!.tracks[0].frozen).toBe(true);
+    expect(useProjectStore.getState().project!.tracks[0].frozenAudioKey).toBe('frozen-key');
+  });
+
+  it('flattenTrack from pianoRoll type clears synthPreset and converts to sample', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().updateTrack(trackId, { trackType: 'pianoRoll' });
+    useProjectStore.setState((state) => ({
+      project: {
+        ...state.project!,
+        tracks: state.project!.tracks.map((t) =>
+          t.id === trackId ? { ...t, synthPreset: 'piano' as const } : t,
+        ),
+      },
+    }));
+
+    useProjectStore.getState().flattenTrack(trackId, 'flat-key', [0.5], 8);
+    const track = useProjectStore.getState().project!.tracks.find((t) => t.id === trackId);
+    expect(track!.trackType).toBe('sample');
+    expect(track!.synthPreset).toBeUndefined();
+    expect(track!.clips).toHaveLength(1);
+    expect(track!.clips[0].isolatedAudioKey).toBe('flat-key');
+  });
 });

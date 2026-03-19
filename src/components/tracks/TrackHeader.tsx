@@ -9,6 +9,7 @@ import { freezeTrackToAudio, flattenTrackToAudio } from '../../services/freezeTr
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
+const SNOWFLAKE = '\u2744';
 
 interface TrackHeaderProps {
   track: Track;
@@ -216,7 +217,7 @@ export function TrackHeader({
             title={track.displayName}
             onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
           >
-            {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+            {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen" aria-label="Frozen">{SNOWFLAKE}</span>}
             {track.displayName}
           </span>
         )}
@@ -230,8 +231,9 @@ export function TrackHeader({
               max="100"
               value={Math.round(track.volume * 100)}
               onChange={(e) => updateTrack(track.id, { volume: parseInt(e.target.value) / 100 })}
-              className="flex-1 h-1 min-w-0"
+              className={`flex-1 h-1 min-w-0${track.frozen ? ' opacity-50 pointer-events-none' : ''}`}
               title={`Volume: ${Math.round(track.volume * 100)}%`}
+              disabled={!!track.frozen}
             />
           </div>
         )}

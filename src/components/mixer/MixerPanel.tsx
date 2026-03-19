@@ -35,7 +35,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
     <div className={`flex flex-col items-center gap-1.5 px-3 py-2 bg-[#2a2a2a] border-r border-[#3a3a3a] min-w-[120px] ${isFrozen ? 'opacity-70' : ''}`}>
       <div className="w-full h-1.5 rounded-full mb-0.5" style={{ backgroundColor: track.color }} />
       <span className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide" title={track.displayName}>
-        {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+        {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen" aria-label="Frozen">{'\u2744'}</span>}
         {track.displayName}
       </span>
 

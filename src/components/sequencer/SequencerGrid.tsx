@@ -151,6 +151,19 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
   const gridRowsHeight = pattern.rows.length * STEP_H;
   const showVelocity = selectedRow !== null;
 
+  if (track.frozen) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center select-none"
+        style={{ width: totalTimelineWidth, height, minHeight: height, background: FL.bg }}
+        data-testid="sequencer-frozen-overlay"
+      >
+        <span className="text-cyan-400 text-lg">{'\u2744'}</span>
+        <span className="text-xs text-cyan-400/70 mt-1">Track frozen — unfreeze to edit</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col select-none"

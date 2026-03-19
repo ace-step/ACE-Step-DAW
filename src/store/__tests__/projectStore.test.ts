@@ -247,6 +247,32 @@ describe('projectStore', () => {
     });
   });
 
+  describe('updateSequencerSwing', () => {
+    let trackId: string;
+
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+      const track = useProjectStore.getState().addTrack('drums', 'sequencer');
+      trackId = track.id;
+    });
+
+    it('sets swing amount on a sequencer pattern', () => {
+      useProjectStore.getState().updateSequencerSwing(trackId, 0.67);
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.sequencerPattern!.swing).toBe(0.67);
+    });
+
+    it('clamps swing value to 0–1 range', () => {
+      useProjectStore.getState().updateSequencerSwing(trackId, 1.5);
+      const track1 = useProjectStore.getState().project!.tracks[0];
+      expect(track1.sequencerPattern!.swing).toBe(1);
+
+      useProjectStore.getState().updateSequencerSwing(trackId, -0.3);
+      const track2 = useProjectStore.getState().project!.tracks[0];
+      expect(track2.sequencerPattern!.swing).toBe(0);
+    });
+  });
+
   describe('MIDI actions', () => {
     let clipId: string;
 

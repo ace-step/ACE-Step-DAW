@@ -10,6 +10,14 @@ import { TransformMenu } from './TransformMenu';
 import { getPianoRollToolShortcut, midiNoteToName, type PianoRollTool } from './PianoRollConstants';
 import { useAudioImport } from '../../hooks/useAudioImport';
 
+const PIANO_ROLL_TOOL_BUTTONS = [
+  { tool: 'select', label: 'Select', icon: '↖' },
+  { tool: 'pencil', label: 'Pencil', icon: '✏' },
+  { tool: 'paint', label: 'Paint', icon: '▦' },
+  { tool: 'erase', label: 'Erase', icon: '⌫' },
+  { tool: 'slide', label: 'Slide', icon: '⇢' },
+] as const satisfies ReadonlyArray<{ tool: PianoRollTool; label: string; icon: string }>;
+
 export function PianoRoll() {
   const [activeTool, setActiveTool] = useState<PianoRollTool>('select');
   const [showGhostNotes, setShowGhostNotes] = useState(false);
@@ -121,18 +129,15 @@ export function PianoRoll() {
       <div className="h-9 px-3 border-b border-[#2a2a2a] bg-[#0e0e24] flex items-center gap-2 shrink-0">
         <div className="text-xs font-medium text-zinc-200">{track.displayName}</div>
 
-        {([
-          { tool: 'select', label: 'Select', icon: '↖' },
-          { tool: 'pencil', label: 'Pencil', icon: '✏' },
-          { tool: 'paint', label: 'Paint', icon: '▦' },
-          { tool: 'erase', label: 'Erase', icon: '⌫' },
-          { tool: 'slide', label: 'Slide', icon: '⇢' },
-        ] as const).map(({ tool, label, icon }) => {
+        {PIANO_ROLL_TOOL_BUTTONS.map(({ tool, label, icon }) => {
           const active = activeTool === tool;
           return (
             <button
+              type="button"
               key={tool}
               aria-label={`Activate ${label.toLowerCase()} tool`}
+              aria-keyshortcuts={getPianoRollToolShortcut(tool)}
+              aria-pressed={active ? 'true' : 'false'}
               className={`px-2 py-1 rounded text-[10px] transition-colors ${
                 active ? 'bg-violet-600/50 text-violet-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
               }`}
@@ -143,6 +148,15 @@ export function PianoRoll() {
             </button>
           );
         })}
+
+        <div
+          role="status"
+          aria-live="polite"
+          data-active-tool={activeTool}
+          className="px-2 py-1 rounded bg-black/20 border border-white/5 text-[10px] text-zinc-300"
+        >
+          Tool: <span className="text-zinc-100">{PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label ?? 'Select'}</span>
+        </div>
 
         <button
           className={`px-2 py-1 rounded text-[10px] transition-colors ${

@@ -87,9 +87,13 @@ const SECTIONS: Section[] = [
   {
     title: 'Piano Roll',
     rows: [
+      { keys: ['1', '2', '3', '4', '5'],   description: 'Switch tools: Select, Pencil, Paint, Erase, Slide' },
+      { keys: ['B'],                        description: 'Toggle pencil tool' },
       { keys: ['Delete', 'Backspace'],  description: 'Delete selected notes' },
-      { keys: ['⇧', '↑'],               description: 'Transpose selected notes up 1 semitone' },
-      { keys: ['⇧', '↓'],               description: 'Transpose selected notes down 1 semitone' },
+      { keys: ['↑'],                    description: 'Transpose selected notes up 1 semitone' },
+      { keys: ['↓'],                    description: 'Transpose selected notes down 1 semitone' },
+      { keys: ['←'],                    description: 'Nudge selected notes earlier by one grid step' },
+      { keys: ['→'],                    description: 'Nudge selected notes later by one grid step' },
       { keys: ['Q'],                    description: 'Quantize selected notes to the current grid' },
       { keys: [`${mod}`, 'Q'],          description: 'Quantize with options (strength, swing, scope)' },
       { keys: [`${mod}`, 'A'],          description: 'Select all notes in the current clip' },

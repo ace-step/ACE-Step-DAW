@@ -23,6 +23,19 @@ type PianoRollTestStore = {
   };
 };
 
+type PianoRollUIStore = {
+  getState(): {
+    setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
+  };
+};
+
+type PianoRollHelpers = {
+  beatToX: (beat: number) => number;
+  pitchToY: (pitch: number) => number;
+  keyHeight: number;
+  activeTool: 'select' | 'pencil' | 'paint' | 'erase' | 'slide';
+};
+
 test.describe('Piano Roll Workflow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -113,5 +126,37 @@ test.describe('Piano Roll Workflow', () => {
     });
 
     expect(result).toEqual({ isSlide: true, pitch: 67 });
+  });
+
+  test('exposes tool mode state and coordinate helpers for agent-driven canvas testing', async ({ page }) => {
+    await page.evaluate(() => {
+      const store = (window as unknown as { __store: PianoRollTestStore }).__store;
+      const uiStore = (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore;
+      const track = store.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = store.getState().ensureMidiClip(track.id);
+      uiStore.getState().setOpenPianoRoll(track.id, clip.id);
+    });
+
+    await expect(page.getByLabel('Piano roll editor')).toBeVisible();
+    await expect(page.getByText('Tool: Select')).toBeVisible();
+
+    await page.keyboard.press('5');
+    await expect(page.getByText('Tool: Slide')).toBeVisible();
+
+    const helperSnapshot = await page.evaluate(() => {
+      const helpers = (window as unknown as { __pianoRollHelpers?: PianoRollHelpers }).__pianoRollHelpers;
+      return helpers
+        ? {
+            activeTool: helpers.activeTool,
+            noteX: helpers.beatToX(2),
+            noteY: helpers.pitchToY(60) + helpers.keyHeight / 2,
+          }
+        : null;
+    });
+
+    expect(helperSnapshot).not.toBeNull();
+    expect(helperSnapshot?.activeTool).toBe('slide');
+    expect(helperSnapshot?.noteX).toBeGreaterThan(56);
+    expect(helperSnapshot?.noteY).toBeGreaterThan(0);
   });
 });

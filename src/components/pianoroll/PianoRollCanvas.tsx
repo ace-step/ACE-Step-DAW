@@ -943,6 +943,38 @@ export function PianoRollCanvas({
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
+  useEffect(() => {
+    const globalWindow = window as Window & {
+      __pianoRollHelpers?: {
+        beatToX: (beat: number) => number;
+        xToBeat: (x: number) => number;
+        pitchToY: (pitch: number) => number;
+        yToPitch: (y: number) => number;
+        pixelsPerBeat: number;
+        keyHeight: number;
+        prScrollX: number;
+        prScrollY: number;
+        activeTool: PianoRollTool;
+      };
+    };
+
+    globalWindow.__pianoRollHelpers = {
+      beatToX,
+      xToBeat,
+      pitchToY,
+      yToPitch,
+      pixelsPerBeat,
+      keyHeight,
+      prScrollX,
+      prScrollY,
+      activeTool,
+    };
+
+    return () => {
+      delete globalWindow.__pianoRollHelpers;
+    };
+  }, [activeTool, beatToX, keyHeight, pitchToY, pixelsPerBeat, prScrollX, prScrollY, xToBeat, yToPitch]);
+
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
       <canvas

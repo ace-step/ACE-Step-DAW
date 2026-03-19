@@ -18,7 +18,7 @@ A browser-based Digital Audio Workstation powered by [ACE-Step 1.5](https://gith
 ### DAW Capabilities
 - **Multi-Track Timeline** — Arrangement view with clip-based editing
 - **4 Track Types** — Stems (AI-generated), Sample (imported audio), Sequencer (step-based drums), Piano Roll (MIDI)
-- **Piano Roll Editor** — Canvas-based MIDI note editor with velocity lane, draw mode, grid snap
+- **Piano Roll Editor** — Canvas-based MIDI note editor with explicit tool modes, velocity lane, slide notes, and grid snap
 - **Step Sequencer** — FL Studio-inspired drum pattern editor with beat pads
 - **Effect Chain** — 6 built-in effects (EQ3, Compressor, Reverb, Delay, Distortion, Filter) with per-effect UI
 - **Mixer Panel** — Per-track volume, pan, mute, solo, channel strips

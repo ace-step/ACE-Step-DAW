@@ -16,14 +16,19 @@ The Piano Roll is a canvas-based MIDI editor for composing melodies, chords, and
 | **MIDI Keyboard** | 56px sidebar on the left showing note names (C, C#, D, etc.) with octave labels. Black keys are shaded. |
 | **Note Grid** | Main editing area. Notes appear as colored rectangles. |
 | **Velocity Lane** | 60px strip below the grid showing velocity bars for each note. Resizable via drag divider. |
-| **Toolbar** | Grid size selector, draw mode toggle, zoom controls. |
+| **Toolbar** | Explicit tool buttons, grid size selector, ghost-note toggle, synth controls, and zoom controls. |
 
-## Drawing Notes
+## Tool Modes
 
-1. Enable **Draw Mode** by pressing `B` or clicking the draw mode toggle
-2. Click on the grid to place a note
-3. Drag left/right while placing to set duration
-4. Notes snap to the selected grid size
+| Tool | Shortcut | Behavior |
+|---|---|---|
+| **Select** | `1` | Select, move, resize, and box-select notes |
+| **Pencil** | `2` or `B` | Click to place a note, then drag to set duration |
+| **Paint** | `3` | Drag across the grid to write repeated notes on snapped cells |
+| **Erase** | `4` | Click or drag across notes to delete them |
+| **Slide** | `5` | Create slide notes with a distinct color and playback behavior |
+
+The active tool is shown in the toolbar, and notes snap to the selected grid by default.
 
 ## Editing Notes
 
@@ -73,13 +78,17 @@ Each piano roll track includes 6 built-in synth presets:
 |---|---|
 | Zoom X/Y | Scroll wheel with `Cmd/Ctrl` |
 | Pan/Scroll | Scroll wheel |
-| Toggle draw mode | `B` |
+| Tool switching | `1` / `2` / `3` / `4` / `5` |
+| Pencil toggle | `B` |
+| Quantize | `Q` |
+| Quantize options | `Cmd/Ctrl + Q` |
 
 ## Tips
 
 - Use **1/16 grid** for detailed melodies, **1/4 grid** for chord pads
 - Lower velocities work well for ghost notes in drum programming
 - The velocity color gradient makes it easy to spot dynamic variation at a glance
+- Use **Paint** for hi-hat runs and **Slide** for expressive bass transitions
 - Combine with the [Effects Chain](/guide/effects) to shape your synth sound
 
 ::: warning Known Limitation

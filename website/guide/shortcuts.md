@@ -36,7 +36,7 @@ A complete reference of all keyboard shortcuts in ACE-Step DAW.
 | Shortcut | Action |
 |---|---|
 | `X` | Toggle mixer |
-| `B` | Toggle smart controls / draw mode |
+| `B` | Toggle smart controls or the piano roll pencil tool |
 | `O` | Toggle loop browser / assets |
 | `Shift + /` (`?`) | Show shortcuts dialog |
 
@@ -81,8 +81,13 @@ Escape follows a priority order: clip editor → batch generate → dialogs → 
 
 | Shortcut | Action |
 |---|---|
-| `B` | Toggle draw mode |
+| `1` / `2` / `3` / `4` / `5` | Select tool: Select / Pencil / Paint / Erase / Slide |
+| `B` | Toggle the pencil tool |
 | `Delete` / `Backspace` | Delete selected notes |
+| `↑` / `↓` | Transpose selected notes by semitone |
+| `←` / `→` | Nudge selected notes by one grid step |
+| `Q` | Quantize selected notes to the active grid |
+| `Cmd/Ctrl + Q` | Open quantize options |
 | Scroll wheel | Scroll |
 | `Cmd/Ctrl` + scroll | Zoom |
 

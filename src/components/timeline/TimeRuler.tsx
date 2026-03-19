@@ -13,13 +13,29 @@ export function TimeRuler() {
   const loopEnd = useTransportStore((s) => s.loopEnd);
   const { seek } = useTransport();
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  const seekFromX = useCallback((clientX: number, container: HTMLElement) => {
     if (!project) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const rect = container.getBoundingClientRect();
+    const x = clientX - rect.left;
     const time = Math.max(0, Math.min(x / pixelsPerSecond, project.totalDuration));
     seek(time);
   }, [project, pixelsPerSecond, seek]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!project) return;
+    const container = e.currentTarget;
+    seekFromX(e.clientX, container);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      seekFromX(ev.clientX, container);
+    };
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [project, seekFromX]);
 
   if (!project) return <div className="h-6 bg-[#333] border-b border-[#2a2a2a]" />;
 
@@ -37,7 +53,7 @@ export function TimeRuler() {
     <div
       className="relative h-6 bg-[#353535] border-b border-[#2a2a2a] overflow-hidden select-none cursor-pointer"
       style={{ width: totalWidth }}
-      onClick={handleClick}
+      onMouseDown={handleMouseDown}
     >
       {/* Cycle/loop region (yellow strip, GarageBand style) */}
       {loopEnabled && loopEnd > loopStart && (

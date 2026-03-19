@@ -17,6 +17,7 @@ import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
 import { ShortcutEditorDialog } from '../dialogs/ShortcutEditorDialog';
 import { CommandPalette } from '../dialogs/CommandPalette';
+import { BounceInPlaceDialog } from '../dialogs/BounceInPlaceDialog';
 import { ShareDialog } from '../dialogs/ShareDialog';
 import { AIAssistantPanel } from '../dialogs/AIAssistantPanel';
 import { MixerPanel } from '../mixer/MixerPanel';
@@ -107,6 +108,7 @@ export function AppShell() {
       <KeyboardShortcutsDialog />
       <CommandPalette />
       <ShortcutEditorDialog />
+      <BounceInPlaceDialog />
       <CoverModal />
       <RepaintModal />
       <Vocal2BGMModal />

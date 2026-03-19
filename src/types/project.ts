@@ -46,6 +46,12 @@ export interface SamplerSettings {
   sampleDuration?: number;
 }
 
+export interface BounceInPlaceOptions {
+  includeEffects: boolean;
+  normalize: boolean;
+  replaceOriginal: boolean;
+}
+
 export interface DrumPad {
   id: string;
   name: string;

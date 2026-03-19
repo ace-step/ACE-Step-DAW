@@ -80,6 +80,7 @@ const SECTIONS: Section[] = [
       { keys: [`${mod}`, 'K'],         description: 'Open command palette' },
       { keys: [`${mod}`, 'N'],         description: 'New project' },
       { keys: [`${mod}`, 'O'],         description: 'Open project list' },
+      { keys: [`${mod}`, 'B'],         description: 'Bounce selected or focused track' },
       { keys: [`${mod}`, ','],         description: 'Settings' },
       { keys: [`${mod}`, '⇧', 'E'],    description: 'Export' },
       { keys: [`${mod}`, '⇧', 'I'],    description: 'Add Track' },

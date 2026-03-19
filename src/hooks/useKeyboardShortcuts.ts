@@ -17,6 +17,27 @@ function isInputFocused(e: KeyboardEvent): boolean {
   );
 }
 
+function getBounceTargetTrackId(): string | null {
+  const ui = useUIStore.getState();
+  const projectState = useProjectStore.getState();
+  const project = projectState.project;
+  if (!project) return null;
+
+  const [selectedClipId] = [...ui.selectedClipIds];
+  if (selectedClipId) {
+    const track = projectState.getTrackForClip(selectedClipId);
+    if (track) return track.id;
+  }
+
+  return ui.openPianoRollTrackId
+    ?? ui.openSequencerTrackId
+    ?? ui.openDrumMachineTrackId
+    ?? ui.openEffectChainTrackId
+    ?? ui.expandedTrackId
+    ?? project.tracks[0]?.id
+    ?? null;
+}
+
 const NUDGE_SECONDS = 5;
 const DEFAULT_PIXELS_PER_SECOND = 50;
 
@@ -83,6 +104,9 @@ export function useKeyboardShortcuts() {
         } else if (ui.showAIAssistant) {
           e.preventDefault();
           ui.setShowAIAssistant(false);
+        } else if (ui.bounceInPlaceTrackId !== null) {
+          e.preventDefault();
+          ui.closeBounceInPlaceDialog();
         } else if (ui.editingClipId !== null) {
           e.preventDefault();
           ui.setEditingClip(null);
@@ -124,6 +148,7 @@ export function useKeyboardShortcuts() {
         ui.showCommandPalette ||
         ui.editingClipId !== null ||
         ui.batchGenerateMode !== null ||
+        ui.bounceInPlaceTrackId !== null ||
         ui.showKeyboardShortcutsDialog ||
         ui.showShortcutEditorDialog ||
         ui.showInstrumentPicker ||
@@ -148,6 +173,14 @@ export function useKeyboardShortcuts() {
       if (matches('project.export')) { e.preventDefault(); if (!anyModalOpen) ui.setShowExportDialog(true); return; }
       if (matches('project.addTrack')) { e.preventDefault(); if (!anyModalOpen) ui.setShowInstrumentPicker(true); return; }
       if (matches('project.help')) { e.preventDefault(); if (!anyModalOpen) ui.setShowKeyboardShortcutsDialog(true); return; }
+      if (matches('project.bounceInPlace')) {
+        e.preventDefault();
+        if (!anyModalOpen) {
+          const trackId = getBounceTargetTrackId();
+          if (trackId) ui.openBounceInPlaceDialog(trackId);
+        }
+        return;
+      }
 
       // Generation
       if (matches('generation.context')) {

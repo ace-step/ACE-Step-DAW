@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
+  BounceInPlaceOptions,
   Project,
   ProjectTemplate,
   ProjectTemplateTrack,
@@ -82,6 +83,8 @@ import { encodeMidiFile } from '../utils/midi';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
+import { audioBufferToWavBlob } from '../utils/wav';
+import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS, renderTrackForBounceInPlace } from '../services/bounceInPlace';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -171,6 +174,7 @@ interface ProjectState {
   freezeTrack: (trackId: string, frozenAudioKey?: string) => void;
   unfreezeTrack: (trackId: string) => void;
   flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
+  bounceInPlace: (trackId: string, options?: Partial<BounceInPlaceOptions>) => Promise<Clip | undefined>;
 
   addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
   removeTrack: (trackId: string) => void;
@@ -642,6 +646,19 @@ function buildTrackDisplayName(existingTracks: Track[], trackName: TrackName): s
   const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG.custom;
   const sameNameCount = existingTracks.filter((track) => track.trackName === trackName).length;
   return sameNameCount === 0 ? info.displayName : `${info.displayName} ${sameNameCount + 1}`;
+}
+
+function buildUniqueTrackName(existingTracks: Track[], baseName: string): string {
+  const trimmedBaseName = baseName.trim() || 'Bounce';
+  let candidate = trimmedBaseName;
+  let suffix = 2;
+
+  while (existingTracks.some((track) => track.displayName === candidate)) {
+    candidate = `${trimmedBaseName} ${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
 }
 
 function createTrackFromTemplate(
@@ -1153,6 +1170,182 @@ export const useProjectStore = create<ProjectState>()(
         ),
       },
     });
+  },
+
+  bounceInPlace: async (trackId, options) => {
+    const state = get();
+    const project = state.project;
+    if (!project) throw new Error('No project');
+
+    const track = project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) throw new Error(`Track '${trackId}' not found`);
+
+    const resolvedOptions: BounceInPlaceOptions = {
+      ...DEFAULT_BOUNCE_IN_PLACE_OPTIONS,
+      ...options,
+    };
+
+    const rendered = await renderTrackForBounceInPlace(project, track, resolvedOptions);
+    if (!rendered) return undefined;
+
+    const clipId = uuidv4();
+    const audioKey = await saveAudioBlob(
+      project.id,
+      clipId,
+      'isolated',
+      audioBufferToWavBlob(rendered.buffer),
+    );
+
+    const latest = get();
+    if (!latest.project) return undefined;
+    const latestTrack = latest.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!latestTrack) return undefined;
+
+    _pushHistory(latest.project);
+
+    const baseClip: Clip = {
+      id: clipId,
+      trackId,
+      startTime: rendered.startTime,
+      duration: rendered.duration,
+      prompt: `${latestTrack.displayName} Bounce`,
+      lyrics: '',
+      generationStatus: 'ready',
+      generationJobId: null,
+      cumulativeMixKey: null,
+      isolatedAudioKey: audioKey,
+      waveformPeaks: rendered.waveformPeaks,
+      audioDuration: rendered.duration,
+      audioOffset: 0,
+      source: 'uploaded',
+    };
+
+    if (resolvedOptions.replaceOriginal) {
+      const updatedTracks = latest.project.tracks.map((candidate) =>
+        candidate.id === trackId
+          ? {
+              ...candidate,
+              trackType: 'sample' as TrackType,
+              clips: [{ ...baseClip, trackId }],
+              frozen: false,
+              frozenAudioKey: undefined,
+              sequencerPattern: undefined,
+              drumMachine: undefined,
+              synthPreset: undefined,
+              sampler: undefined,
+              samplerConfig: undefined,
+              midiEffects: [],
+              effects: resolvedOptions.includeEffects ? [] : candidate.effects,
+            }
+          : candidate,
+      );
+
+      set({
+        project: {
+          ...latest.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(
+            updatedTracks,
+            latest.project.measures,
+            latest.project.bpm,
+            latest.project.timeSignature,
+            latest.project.tempoMap,
+            latest.project.timeSignatureMap,
+          ),
+          tracks: updatedTracks,
+          assets: [
+            ...(latest.project.assets ?? []),
+            {
+              id: uuidv4(),
+              clipId,
+              trackDisplayName: latestTrack.displayName,
+              prompt: baseClip.prompt,
+              source: 'uploaded',
+              isolatedAudioKey: audioKey,
+              cumulativeMixKey: null,
+              waveformPeaks: rendered.waveformPeaks,
+              starred: false,
+              createdAt: Date.now(),
+              duration: rendered.duration,
+            },
+          ],
+        },
+      });
+
+      toastSuccess(`Bounced ${latestTrack.displayName} in place`);
+      return baseClip;
+    }
+
+    const bouncedTrackId = uuidv4();
+    const insertAfterOrder = latestTrack.order;
+    const shiftedTracks = latest.project.tracks.map((candidate) =>
+      candidate.order > insertAfterOrder
+        ? { ...candidate, order: candidate.order + 1 }
+        : candidate,
+    );
+    const bouncedTrack: Track = {
+      ...createTrackFromTemplate(shiftedTracks, latestTrack.trackName, 'sample', {
+        color: latestTrack.color,
+        volume: latestTrack.volume,
+        laneHeight: latestTrack.laneHeight,
+        pan: latestTrack.pan,
+        eqLowGain: latestTrack.eqLowGain,
+        eqMidGain: latestTrack.eqMidGain,
+        eqHighGain: latestTrack.eqHighGain,
+        compressorEnabled: latestTrack.compressorEnabled,
+        compressorThreshold: latestTrack.compressorThreshold,
+        compressorRatio: latestTrack.compressorRatio,
+        reverbMix: latestTrack.reverbMix,
+        reverbRoomSize: latestTrack.reverbRoomSize,
+        effects: resolvedOptions.includeEffects ? [] : latestTrack.effects,
+      }),
+      id: bouncedTrackId,
+      displayName: buildUniqueTrackName(shiftedTracks, `${latestTrack.displayName} Bounce`),
+      order: insertAfterOrder + 1,
+      clips: [{ ...baseClip, trackId: bouncedTrackId }],
+      synthPreset: undefined,
+      sampler: undefined,
+      samplerConfig: undefined,
+      sequencerPattern: undefined,
+      drumMachine: undefined,
+      midiEffects: [],
+    };
+    const updatedTracks = [...shiftedTracks, bouncedTrack];
+
+    set({
+      project: {
+        ...latest.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(
+          updatedTracks,
+          latest.project.measures,
+          latest.project.bpm,
+          latest.project.timeSignature,
+          latest.project.tempoMap,
+          latest.project.timeSignatureMap,
+        ),
+        tracks: updatedTracks,
+        assets: [
+          ...(latest.project.assets ?? []),
+          {
+            id: uuidv4(),
+            clipId,
+            trackDisplayName: bouncedTrack.displayName,
+            prompt: baseClip.prompt,
+            source: 'uploaded',
+            isolatedAudioKey: audioKey,
+            cumulativeMixKey: null,
+            waveformPeaks: rendered.waveformPeaks,
+            starred: false,
+            createdAt: Date.now(),
+            duration: rendered.duration,
+          },
+        ],
+      },
+    });
+
+    toastSuccess(`Created bounced audio track for ${latestTrack.displayName}`);
+    return { ...baseClip, trackId: bouncedTrackId };
   },
 
   addTrack: (trackName, trackType) => {

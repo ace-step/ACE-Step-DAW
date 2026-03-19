@@ -49,6 +49,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   // ── Project ────────────────────────────────────────────────────
   { id: 'project.new',           category: 'project',   label: 'New Project',               defaultCombo: { code: 'KeyN', mod: true } },
   { id: 'project.open',          category: 'project',   label: 'Open Project List',         defaultCombo: { code: 'KeyO', mod: true } },
+  { id: 'project.bounceInPlace', category: 'project',   label: 'Bounce Selected/Focused Track', defaultCombo: { code: 'KeyB', mod: true } },
   { id: 'project.settings',      category: 'project',   label: 'Settings',                  defaultCombo: { code: 'Comma', mod: true } },
   { id: 'project.export',        category: 'project',   label: 'Export',                    defaultCombo: { code: 'KeyE', mod: true, shift: true } },
   { id: 'project.addTrack',      category: 'project',   label: 'Add Track',                 defaultCombo: { code: 'KeyI', mod: true, shift: true } },

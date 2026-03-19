@@ -44,6 +44,7 @@ export function TrackHeader({
   const isImpliedMute = anySoloed && !track.soloed;
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
+  const openBounceInPlaceDialog = useUIStore((s) => s.openBounceInPlaceDialog);
   const { armedTrackIds, toggleArmTrack } = useRecording();
   const info = TRACK_CATALOG[track.trackName];
 
@@ -493,6 +494,13 @@ export function TrackHeader({
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
           >
             Duplicate Track
+          </button>
+          <div className="my-1 border-t border-[#555]" />
+          <button
+            onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            Bounce in Place...
           </button>
           <div className="my-1 border-t border-[#555]" />
           <button

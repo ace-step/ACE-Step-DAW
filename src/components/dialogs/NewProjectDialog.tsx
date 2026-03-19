@@ -13,6 +13,7 @@ import {
 import {
   listProjects,
   loadProject,
+  deleteProject,
   listTemplates,
   loadTemplate,
   deleteTemplate,
@@ -20,20 +21,46 @@ import {
   type TemplateSummary,
 } from '../../services/projectStorage';
 import { toastSuccess } from '../../hooks/useToast';
+import { formatRelativeTime } from '../../utils/formatRelativeTime';
+import type { ClipLayoutItem } from '../../utils/clipLayout';
 
-function formatDate(ts: number) {
-  const d = new Date(ts);
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+function ProjectThumbnail({
+  trackCount,
+  clipLayout,
+}: {
+  trackCount: number;
+  clipLayout?: ClipLayoutItem[];
+}) {
+  const fallbackColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7'];
 
-function ProjectThumbnail({ trackCount }: { trackCount: number }) {
+  if (clipLayout && clipLayout.length > 0) {
+    const maxTrackIdx = Math.max(...clipLayout.map((c) => c.trackIndex));
+    const laneCount = Math.min(maxTrackIdx + 1, 6);
+    const laneHeight = Math.max(2, Math.floor(48 / laneCount));
+
+    return (
+      <div
+        data-testid="project-thumbnail"
+        className="w-full h-16 bg-daw-bg rounded border border-daw-border/50 overflow-hidden relative"
+      >
+        {clipLayout.map((clip, i) => (
+          <div
+            key={i}
+            className="absolute rounded-sm opacity-70"
+            style={{
+              backgroundColor: clip.color,
+              top: `${(clip.trackIndex / laneCount) * 100}%`,
+              left: `${clip.startNorm * 100}%`,
+              width: `${Math.max(clip.widthNorm * 100, 2)}%`,
+              height: `${laneHeight}px`,
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
   const lanes = Math.min(trackCount, 6);
-  const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7'];
   return (
     <div
       data-testid="project-thumbnail"
@@ -44,7 +71,7 @@ function ProjectThumbnail({ trackCount }: { trackCount: number }) {
           key={i}
           className="rounded-sm opacity-60"
           style={{
-            backgroundColor: colors[i % colors.length],
+            backgroundColor: fallbackColors[i % fallbackColors.length],
             height: `${Math.max(2, 12 / lanes)}px`,
             width: `${40 + ((i * 17) % 50)}%`,
           }}
@@ -102,6 +129,12 @@ export function NewProjectDialog() {
     }
   };
 
+  const handleDeleteRecent = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteProject(id);
+    setRecentProjects((prev) => prev.filter((p) => p.id !== id));
+  };
+
   const handleUseTemplate = async (templateId: string) => {
     const template = await loadTemplate(templateId);
     if (template) {
@@ -136,20 +169,34 @@ export function NewProjectDialog() {
               <h3 className="text-xs font-medium text-zinc-400 mb-3">Recent Projects</h3>
               <div className="grid grid-cols-3 gap-2">
                 {recentProjects.slice(0, 6).map((p) => (
-                  <button
+                  <div
                     key={p.id}
                     data-project-id={p.id}
+                    className="relative text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2 group cursor-pointer"
                     onClick={() => handleOpenRecent(p.id)}
-                    className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2 group"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && handleOpenRecent(p.id)}
                   >
-                    <ProjectThumbnail trackCount={p.trackCount} />
+                    <ProjectThumbnail trackCount={p.trackCount} clipLayout={p.clipLayout} />
                     <p className="text-xs text-zinc-200 truncate mt-1.5 group-hover:text-white">
                       {p.name}
                     </p>
                     <p className="text-[10px] text-zinc-500">
-                      {p.trackCount} track{p.trackCount !== 1 ? 's' : ''} &middot; {formatDate(p.updatedAt)}
+                      {p.trackCount} track{p.trackCount !== 1 ? 's' : ''}
+                      {' · '}{p.bpm} BPM · {p.keyScale}
                     </p>
-                  </button>
+                    <p className="text-[10px] text-zinc-600">
+                      {formatRelativeTime(p.updatedAt)}
+                    </p>
+                    <button
+                      onClick={(e) => handleDeleteRecent(e, p.id)}
+                      className="absolute top-1 right-1 text-zinc-600 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                      title="Remove from recent"
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>

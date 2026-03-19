@@ -9,11 +9,13 @@ import type { ProjectSummary } from '../../src/services/projectStorage';
 const mockListProjects = vi.fn<() => Promise<ProjectSummary[]>>();
 const mockLoadProject = vi.fn();
 const mockSaveProject = vi.fn();
+const mockDeleteProject = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/services/projectStorage', () => ({
   listProjects: (...args: unknown[]) => mockListProjects(...(args as [])),
   loadProject: (...args: unknown[]) => mockLoadProject(...(args as [])),
   saveProject: (...args: unknown[]) => mockSaveProject(...(args as [])),
+  deleteProject: (...args: unknown[]) => mockDeleteProject(...(args as [])),
   listTemplates: vi.fn().mockResolvedValue([]),
   loadTemplate: vi.fn().mockResolvedValue(null),
   deleteTemplate: vi.fn().mockResolvedValue(undefined),
@@ -33,9 +35,9 @@ vi.mock('../../src/hooks/useToast', () => ({
 }));
 
 const recentProjects: ProjectSummary[] = [
-  { id: 'p1', name: 'My Song', createdAt: 1710000000000, updatedAt: 1710100000000, trackCount: 3 },
-  { id: 'p2', name: 'Demo Beat', createdAt: 1709000000000, updatedAt: 1709900000000, trackCount: 5 },
-  { id: 'p3', name: 'Chill Vibes', createdAt: 1708000000000, updatedAt: 1708800000000, trackCount: 2 },
+  { id: 'p1', name: 'My Song', createdAt: 1710000000000, updatedAt: 1710100000000, trackCount: 3, bpm: 120, keyScale: 'C major', clipLayout: [] },
+  { id: 'p2', name: 'Demo Beat', createdAt: 1709000000000, updatedAt: 1709900000000, trackCount: 5, bpm: 140, keyScale: 'G minor', clipLayout: [] },
+  { id: 'p3', name: 'Chill Vibes', createdAt: 1708000000000, updatedAt: 1708800000000, trackCount: 2, bpm: 90, keyScale: 'F major', clipLayout: [] },
 ];
 
 function openDialog() {
@@ -50,6 +52,7 @@ describe('NewProjectDialog — recent projects (#212)', () => {
     mockListProjects.mockReset();
     mockLoadProject.mockReset();
     mockSaveProject.mockReset();
+    mockDeleteProject.mockReset().mockResolvedValue(undefined);
   });
 
   it('shows "Recent Projects" heading when saved projects exist', async () => {
@@ -73,10 +76,21 @@ describe('NewProjectDialog — recent projects (#212)', () => {
       expect(screen.getByText('Chill Vibes')).toBeInTheDocument();
     });
 
-    // Track counts should appear somewhere
     expect(screen.getByText(/3 track/)).toBeInTheDocument();
     expect(screen.getByText(/5 track/)).toBeInTheDocument();
     expect(screen.getByText(/2 track/)).toBeInTheDocument();
+  });
+
+  it('shows BPM and key info for recent projects', async () => {
+    mockListProjects.mockResolvedValue(recentProjects);
+    openDialog();
+    render(<NewProjectDialog />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/120 BPM · C major/)).toBeInTheDocument();
+      expect(screen.getByText(/140 BPM · G minor/)).toBeInTheDocument();
+      expect(screen.getByText(/90 BPM · F major/)).toBeInTheDocument();
+    });
   });
 
   it('clicking a recent project loads it and closes the dialog', async () => {
@@ -109,7 +123,6 @@ describe('NewProjectDialog — recent projects (#212)', () => {
 
     await waitFor(() => {
       expect(mockLoadProject).toHaveBeenCalledWith('p1');
-      // Dialog should close
       expect(useUIStore.getState().showNewProjectDialog).toBe(false);
     });
   });
@@ -119,7 +132,6 @@ describe('NewProjectDialog — recent projects (#212)', () => {
     openDialog();
     render(<NewProjectDialog />);
 
-    // Wait for async load to finish
     await waitFor(() => {
       expect(mockListProjects).toHaveBeenCalled();
     });
@@ -132,7 +144,6 @@ describe('NewProjectDialog — recent projects (#212)', () => {
     openDialog();
     render(<NewProjectDialog />);
 
-    // The new project form elements should still be present
     expect(screen.getByText('New Project')).toBeInTheDocument();
     expect(screen.getByText('Create')).toBeInTheDocument();
   });
@@ -160,8 +171,26 @@ describe('NewProjectDialog — recent projects (#212)', () => {
       expect(screen.getByText('My Song')).toBeInTheDocument();
     });
 
-    // Each card should have a thumbnail area
     const thumbnails = container.querySelectorAll('[data-testid="project-thumbnail"]');
     expect(thumbnails.length).toBe(3);
+  });
+
+  it('delete button removes a recent project', async () => {
+    mockListProjects.mockResolvedValue(recentProjects);
+    openDialog();
+    const { container } = render(<NewProjectDialog />);
+
+    await waitFor(() => {
+      expect(screen.getByText('My Song')).toBeInTheDocument();
+    });
+
+    const deleteButtons = container.querySelectorAll('[title="Remove from recent"]');
+    expect(deleteButtons.length).toBe(3);
+    fireEvent.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(mockDeleteProject).toHaveBeenCalledWith('p1');
+      expect(screen.queryByText('My Song')).not.toBeInTheDocument();
+    });
   });
 });

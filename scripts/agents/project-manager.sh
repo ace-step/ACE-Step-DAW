@@ -1,37 +1,57 @@
 #!/bin/bash
-# Project Manager — Wake, decide, dispatch, EXIT
-# Uses Codex for intelligence (exits when done, doesn't linger)
+# Project Manager — Wake, see everything, decide, dispatch, EXIT
 set -e
 cd /Users/junmingong/.openclaw/workspace/acestep-daw
 REPO="ace-step/ACE-Step-DAW"
 
-# Gather state (pure bash, fast)
-ISSUES=$(gh issue list --repo $REPO --state open --json number,title,labels --jq '.' 2>/dev/null)
-PRS=$(gh pr list --repo $REPO --state open --json number,title,isDraft,mergeable,statusCheckRollup --jq '.' 2>/dev/null)
-CC=$(ps aux | grep 'claude.*print' | grep -v grep | wc -l | tr -d ' ')
-CX=$(ps aux | grep 'codex exec' | grep -v grep | wc -l | tr -d ' ')
+# ── Gather FULL team status ──
 
-# One-shot Codex decision — it will think, act, then EXIT
-codex exec -s danger-full-access "You are the PM for ACE-Step DAW. Make decisions and execute them NOW. Then exit.
+# Issues
+ISSUES=$(gh issue list --repo $REPO --state open --limit 30 --json number,title,labels --jq '[.[] | {num:.number, title:.title[:50], labels:[.labels[].name]}]' 2>/dev/null)
 
-STATE:
-- Open issues: $ISSUES
-- Open PRs: $PRS
-- Claude Code running: $CC
-- Codex running: $CX
+# PRs + their CI status
+PRS=$(gh pr list --repo $REPO --state open --limit 20 --json number,title,isDraft,mergeable,headRefName,statusCheckRollup --jq '[.[] | {num:.number, title:.title[:40], draft:.isDraft, merge:.mergeable, checks:[.statusCheckRollup[] | "\(.name):\(.conclusion // "pending")"]}]' 2>/dev/null)
 
-DO THESE IN ORDER, THEN EXIT:
+# Running agents — WHO is doing WHAT
+CC_DETAIL=$(ps aux | grep 'claude.*print' | grep -v grep | awk '{for(i=11;i<=NF;i++) printf "%s ",$i; print ""}' | grep -oE 'issue.#[0-9]+|Issue #[0-9]+|#[0-9]+' | sort -u | tr '\n' ',' | sed 's/,$//')
+CX_DETAIL=$(ps aux | grep 'codex exec' | grep -v grep | awk '{for(i=11;i<=NF;i++) printf "%s ",$i; print ""}' | grep -oE 'issue-[0-9]+|#[0-9]+' | sort -u | tr '\n' ',' | sed 's/,$//')
+CC_COUNT=$(ps aux | grep 'claude.*print' | grep -v grep | wc -l | tr -d ' ')
+CX_COUNT=$(ps aux | grep 'codex exec' | grep -v grep | wc -l | tr -d ' ')
 
-1. MERGE: For each non-draft, mergeable PR with all CI checks passing:
+# Recent merges
+RECENT=$(gh pr list --repo $REPO --state merged --limit 5 --json number,title,mergedAt --jq '[.[] | "\(.number): \(.title[:40])"]' 2>/dev/null)
+
+# One-shot Codex decision
+codex exec -s danger-full-access "You are the Project Manager. See the full team status below. Make decisions, execute, EXIT.
+
+═══ TEAM STATUS ═══
+
+OPEN ISSUES (backlog):
+$ISSUES
+
+OPEN PRs (pipeline):
+$PRS
+
+RUNNING AGENTS:
+- Claude Code CLI: $CC_COUNT running → working on: $CC_DETAIL
+- Codex CLI: $CX_COUNT running → working on: $CX_DETAIL
+- Max capacity: Claude Code 5, Codex 10
+
+RECENTLY MERGED:
+$RECENT
+
+═══ YOUR DECISIONS ═══
+
+1. MERGE: For each non-draft PR where all checks pass and mergeable=MERGEABLE:
    gh pr merge NUMBER --squash --admin --repo $REPO
 
-2. BALANCE: If there are unworked issues and capacity available:
-   - Codex slots = 10 - $CX available
-   - Claude Code slots = 5 - $CC available  
-   - Prefer Codex (cheaper). Launch via:
-     codex exec -s danger-full-access 'cd /tmp/daw-worktrees/agent-ISSUE && git fetch origin && git checkout -B fix/issue-ISSUE origin/main && [implement] && git push && gh pr create' &
-   - Only use Claude Code if Codex full
+2. REBASE: For CONFLICTING PRs, checkout branch, rebase, push.
 
-3. CONFLICTS: If PR is conflicting, rebase it.
+3. STAFF: Look at which issues already have agents vs which don't.
+   - DON'T assign agents to issues that already have one working
+   - Prefer Codex (cheaper): codex exec -s danger-full-access 'cd /tmp/daw-worktrees/agent-ISSUE && ...' &
+   - Only use Claude Code if Codex is at 10
 
-4. EXIT immediately after dispatching. Do NOT stay running."
+4. BALANCE: If Claude Code > 5, don't add more. If Codex < 10 and there are unworked issues, add Codex.
+
+5. EXIT when done. Print summary of what you did."

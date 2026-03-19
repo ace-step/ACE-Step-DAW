@@ -245,7 +245,7 @@ export function SettingsDialog() {
                   onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
                   min={40}
                   max={300}
-                  className="flex-1 min-w-0 px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+                  className="flex-1 min-w-[3.5rem] px-2 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
                 />
                 <button
                   type="button"

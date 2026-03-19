@@ -79,9 +79,7 @@ export type DAWStore<T> = StoreApi<T> & { getState: () => T };
 export type AgentProjectState = ProjectState & Pick<
   UIState,
   'activePianoRollTool'
-  | 'activePianoRollChordShape'
   | 'setActivePianoRollTool'
-  | 'setActivePianoRollChordShape'
   | 'togglePianoRollPencilTool'
   | 'showGenerationPanel'
   | 'setShowGenerationPanel'
@@ -95,7 +93,10 @@ export type AgentProjectState = ProjectState & Pick<
   | 'lastSubmittedRequest'
   | 'variationSession'
   | 'submitGenerationRequest'
->;
+> & {
+  activePianoRollChordShape: UIState['activeChordShape'];
+  setActivePianoRollChordShape: UIState['setActiveChordShape'];
+};
 
 // ---------------------------------------------------------------------------
 // Global window augmentation for agent/automation access

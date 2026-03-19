@@ -21,6 +21,7 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  TakeItem,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -117,6 +118,13 @@ interface ProjectState {
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
   batchDuplicateClips: (clipIds: string[], timeOffset: number) => void;
   batchMoveClips: (clipIds: string[], timeOffset: number) => void;
+
+  /** Add a take to a clip's takes array. */
+  addTake: (clipId: string, audioKey: string) => void;
+  /** Select a take by id (deselects all others). */
+  selectTake: (clipId: string, takeId: string) => void;
+  /** Toggle the take lanes panel visibility for a track. */
+  toggleTakeLanes: (trackId: string) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -926,6 +934,68 @@ export const useProjectStore = create<ProjectState>()(
         })),
         assets: (state.project.assets ?? []).map((a) =>
           a.clipId === clipId ? { ...a, starred: newStarred } : a,
+        ),
+      },
+    });
+  },
+
+  addTake: (clipId, audioKey) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const newTake: TakeItem = { id: uuidv4(), audioKey, selected: false };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === clipId
+              ? { ...c, takes: [...(c.takes ?? []), newTake] }
+              : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  selectTake: (clipId, takeId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === clipId
+              ? {
+                  ...c,
+                  takes: (c.takes ?? []).map((tk) => ({
+                    ...tk,
+                    selected: tk.id === takeId,
+                  })),
+                }
+              : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  toggleTakeLanes: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, showTakeLanes: !t.showTakeLanes } : t,
         ),
       },
     });

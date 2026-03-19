@@ -94,6 +94,15 @@ export interface InferredMetas {
   ditModel?: string;
 }
 
+/** A single recording take stored under a clip for comping workflows. */
+export interface TakeItem {
+  id: string;
+  /** Storage key for this take's audio (e.g. isolatedAudioKey). */
+  audioKey: string;
+  /** Whether this take is the currently selected/active take. */
+  selected: boolean;
+}
+
 /** A snapshot of a clip's audio state, stored as part of version history. */
 export interface ClipVersion {
   id: string;
@@ -152,6 +161,8 @@ export interface Clip {
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
+  /** Recording takes for comping workflows. */
+  takes?: TakeItem[];
 }
 
 export interface SequencerStep {
@@ -228,6 +239,8 @@ export interface Track {
   localCaption?: string;
   /** Per-track lane height in pixels (default 64, min 40, max 200). */
   laneHeight?: number;
+  /** Whether take lanes are expanded for this track. */
+  showTakeLanes?: boolean;
   /** Sends to return tracks (mixer bus routing). */
   sends?: Send[];
 }

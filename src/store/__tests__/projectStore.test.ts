@@ -345,4 +345,54 @@ describe('projectStore', () => {
       expect(track.effects).toHaveLength(0);
     });
   });
+
+  describe('take lanes (comping workflow)', () => {
+    let trackId: string;
+    let clipId: string;
+
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+      const track = useProjectStore.getState().addTrack('vocals');
+      trackId = track.id;
+      const clip = useProjectStore.getState().addClip(trackId, {
+        startTime: 0,
+        duration: 10,
+        prompt: 'vocal take',
+        lyrics: '',
+      });
+      clipId = clip.id;
+    });
+
+    it('addTake appends a take to the clip', () => {
+      useProjectStore.getState().addTake(clipId, 'audio-key-1');
+      useProjectStore.getState().addTake(clipId, 'audio-key-2');
+      const clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.takes).toHaveLength(2);
+      expect(clip!.takes![0].audioKey).toBe('audio-key-1');
+      expect(clip!.takes![0].selected).toBe(false);
+      expect(clip!.takes![1].audioKey).toBe('audio-key-2');
+    });
+
+    it('selectTake marks only the selected take as selected', () => {
+      useProjectStore.getState().addTake(clipId, 'audio-key-1');
+      useProjectStore.getState().addTake(clipId, 'audio-key-2');
+      const clip = useProjectStore.getState().getClipById(clipId);
+      const [take1] = clip!.takes!;
+      useProjectStore.getState().selectTake(clipId, take1.id);
+      const updated = useProjectStore.getState().getClipById(clipId);
+      expect(updated!.takes![0].selected).toBe(true);
+      expect(updated!.takes![1].selected).toBe(false);
+    });
+
+    it('toggleTakeLanes flips showTakeLanes on the track', () => {
+      const before = useProjectStore.getState().project!.tracks.find((t) => t.id === trackId);
+      expect(before!.showTakeLanes).toBeUndefined();
+      useProjectStore.getState().toggleTakeLanes(trackId);
+      const after = useProjectStore.getState().project!.tracks.find((t) => t.id === trackId);
+      expect(after!.showTakeLanes).toBe(true);
+      useProjectStore.getState().toggleTakeLanes(trackId);
+      const after2 = useProjectStore.getState().project!.tracks.find((t) => t.id === trackId);
+      expect(after2!.showTakeLanes).toBe(false);
+    });
+  });
 });

@@ -178,7 +178,7 @@ export function TrackHeader({
           />
         ) : (
           <span
-            className="text-[11px] font-medium text-zinc-200 truncate cursor-text leading-tight"
+            className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
             title={track.displayName}
             onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
           >

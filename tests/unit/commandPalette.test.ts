@@ -7,10 +7,12 @@ import {
 } from '../../src/services/commandPalette';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useTransportStore } from '../../src/store/transportStore';
+import { useUIStore } from '../../src/store/uiStore';
 
 function createContext(): CommandPaletteContext {
   const projectStore = useProjectStore.getState();
   const transportStore = useTransportStore.getState();
+  const uiStore = useUIStore.getState();
 
   return {
     project: projectStore.project,
@@ -46,6 +48,8 @@ function createContext(): CommandPaletteContext {
       toggleLoopBrowser: () => {},
       toggleTempoLane: () => {},
       toggleAIAssistant: () => {},
+      zoomTimelineToSelection: uiStore.zoomTimelineToSelection,
+      zoomTimelineToProject: uiStore.zoomTimelineToProject,
       setBatchGenerateMode: () => {},
       addTrack: projectStore.addTrack,
       addTrackEffect: projectStore.addTrackEffect,
@@ -55,6 +59,7 @@ function createContext(): CommandPaletteContext {
       updateTrackEffect: projectStore.updateTrackEffect,
       duplicateClip: () => {},
       splitClip: () => {},
+      splitClipAtZeroCrossing: async () => {},
       removeClip: () => {},
       setEditingClip: () => {},
       deselectAll: () => {},
@@ -67,6 +72,7 @@ describe('commandPalette', () => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useTransportStore.setState(useTransportStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Palette Test', bpm: 120 });
   });
 
@@ -149,5 +155,37 @@ describe('commandPalette', () => {
     expect(volumeEntry?.kind).toBe('parameter');
     expect(volumeEntry?.searchText).toContain('vocals');
     expect(volumeEntry?.searchText).toContain('volume');
+  });
+
+  it('builds command palette entries for zooming to selection and fitting the project', () => {
+    const commands = buildCommandPaletteCommands(createContext());
+    const zoomSelection = commands.find((command) => command.id === 'view:zoom-to-selection');
+    const fitProject = commands.find((command) => command.id === 'view:zoom-to-fit-project');
+
+    expect(zoomSelection).toBeTruthy();
+    expect(zoomSelection?.shortcut).toEqual(['Z']);
+    expect(fitProject).toBeTruthy();
+    expect(fitProject?.shortcut).toEqual(['Shift', 'Z']);
+  });
+
+  it('executes zoom-to-selection and fit-project through the shared UI action path', async () => {
+    const commands = buildCommandPaletteCommands(createContext());
+    const zoomSelection = commands.find((command) => command.id === 'view:zoom-to-selection');
+    const fitProject = commands.find((command) => command.id === 'view:zoom-to-fit-project');
+
+    expect(zoomSelection).toBeTruthy();
+    expect(fitProject).toBeTruthy();
+
+    await zoomSelection?.execute();
+    expect(useUIStore.getState().timelineZoomRequest).toEqual({
+      id: 1,
+      mode: 'selection',
+    });
+
+    await fitProject?.execute();
+    expect(useUIStore.getState().timelineZoomRequest).toEqual({
+      id: 2,
+      mode: 'project',
+    });
   });
 });

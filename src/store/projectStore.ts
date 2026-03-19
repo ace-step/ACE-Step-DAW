@@ -77,6 +77,7 @@ import type { StemCount } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile } from '../utils/midi';
+import { clampClipFadeDurations } from '../utils/clipFade';
 import { toastError, toastSuccess } from '../hooks/useToast';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
@@ -1680,7 +1681,18 @@ export const useProjectStore = create<ProjectState>()(
   },
 
   setClipFade: (clipId, fade) => {
-    get().updateClip(clipId, fade);
+    const clip = get().getClipById(clipId);
+    if (!clip) return;
+    const nextFade = clampClipFadeDurations({
+      clipDuration: clip.duration,
+      fadeInDuration: fade.fadeInDuration ?? clip.fadeInDuration,
+      fadeOutDuration: fade.fadeOutDuration ?? clip.fadeOutDuration,
+    });
+    get().updateClip(clipId, {
+      ...fade,
+      fadeInDuration: nextFade.fadeInDuration,
+      fadeOutDuration: nextFade.fadeOutDuration,
+    });
   },
 
   setClipTimeStretch: (clipId, rate) => {

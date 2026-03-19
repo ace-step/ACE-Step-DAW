@@ -12,6 +12,7 @@ import { ClipContextMenu } from './ClipContextMenu';
 import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
+import { FADE_HANDLE_KEYBOARD_STEP, getClipFadeBounds } from '../../utils/clipFade';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -19,6 +20,7 @@ interface ClipBlockProps {
 }
 
 const EDGE_HANDLE_PX = 6;
+const FADE_HANDLE_HIT_TARGET_PX = 14;
 const MIN_CLIP_DURATION = 0.5;
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
@@ -55,6 +57,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     return job?.progress ?? null;
   });
   const updateClip = useProjectStore((s) => s.updateClip);
+  const setClipFade = useProjectStore((s) => s.setClipFade);
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
@@ -65,6 +68,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
   const isMidiClip = Boolean(clip.midiData);
+  const hasAudioBody = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey || clip.waveformPeaks);
 
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -85,6 +89,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = selectedClipIds.has(clip.id);
+  const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
+  const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
+  const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
 
   const dragRef = useRef(false);
 
@@ -308,6 +315,67 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     }
   }, []);
 
+  const updateFadeFromPointer = useCallback((edge: 'in' | 'out', clientX: number) => {
+    const rect = clipBlockRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    if (edge === 'in') {
+      const nextFade = Math.max(0, Math.min((clientX - rect.left) / pixelsPerSecond, clip.duration));
+      setClipFade(clip.id, { fadeInDuration: nextFade });
+      return;
+    }
+
+    const nextFade = Math.max(0, Math.min((rect.right - clientX) / pixelsPerSecond, clip.duration));
+    setClipFade(clip.id, { fadeOutDuration: nextFade });
+  }, [clip.duration, clip.id, pixelsPerSecond, setClipFade]);
+
+  const handleFadeMouseDown = useCallback((edge: 'in' | 'out') => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    beginDrag();
+    updateFadeFromPointer(edge, e.clientX);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      updateFadeFromPointer(edge, ev.clientX);
+    };
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      endDrag();
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [beginDrag, endDrag, updateFadeFromPointer]);
+
+  const handleFadeKeyDown = useCallback((edge: 'in' | 'out') => (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const growKey = edge === 'in' ? 'ArrowRight' : 'ArrowLeft';
+    const shrinkKey = edge === 'in' ? 'ArrowLeft' : 'ArrowRight';
+
+    if (e.key === 'Home') {
+      e.preventDefault();
+      setClipFade(clip.id, edge === 'in' ? { fadeInDuration: 0 } : { fadeOutDuration: 0 });
+      return;
+    }
+
+    if (e.key !== growKey && e.key !== shrinkKey) return;
+
+    e.preventDefault();
+    const delta = (e.shiftKey ? FADE_HANDLE_KEYBOARD_STEP * 5 : FADE_HANDLE_KEYBOARD_STEP) * (e.key === growKey ? 1 : -1);
+    if (edge === 'in') {
+      setClipFade(clip.id, { fadeInDuration: fadeInDuration + delta });
+      return;
+    }
+    setClipFade(clip.id, { fadeOutDuration: fadeOutDuration + delta });
+  }, [clip.id, fadeInDuration, fadeOutDuration, setClipFade]);
+
+  const handleFadeReset = useCallback((edge: 'in' | 'out') => (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setClipFade(clip.id, edge === 'in' ? { fadeInDuration: 0 } : { fadeOutDuration: 0 });
+  }, [clip.id, setClipFade]);
+
   const statusStyles: Record<string, string> = {
     empty: 'opacity-60',
     queued: 'opacity-70',
@@ -359,6 +427,69 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           width={width}
           color={track.color}
         />
+
+        {!isMidiClip && hasAudioBody && (
+          <>
+            {fadeInWidth > 0 && (
+              <div
+                className="absolute inset-y-0 left-0 pointer-events-none"
+                style={{
+                  width: fadeInWidth,
+                  background: 'linear-gradient(90deg, rgba(10, 12, 18, 0.72) 0%, rgba(10, 12, 18, 0.18) 100%)',
+                  clipPath: 'polygon(0 100%, 0 0, 100% 100%)',
+                }}
+              />
+            )}
+            {fadeOutWidth > 0 && (
+              <div
+                className="absolute inset-y-0 right-0 pointer-events-none"
+                style={{
+                  width: fadeOutWidth,
+                  background: 'linear-gradient(270deg, rgba(10, 12, 18, 0.72) 0%, rgba(10, 12, 18, 0.18) 100%)',
+                  clipPath: 'polygon(0 100%, 100% 0, 100% 100%)',
+                }}
+              />
+            )}
+            <button
+              type="button"
+              role="slider"
+              aria-label={`Fade in handle for clip ${clip.id}`}
+              aria-valuemin={0}
+              aria-valuemax={clip.duration}
+              aria-valuenow={fadeInDuration}
+              className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              style={{
+                left: Math.max(EDGE_HANDLE_PX, fadeInWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
+                width: FADE_HANDLE_HIT_TARGET_PX,
+              }}
+              data-fade-handle="in"
+              onMouseDown={handleFadeMouseDown('in')}
+              onKeyDown={handleFadeKeyDown('in')}
+              onDoubleClick={handleFadeReset('in')}
+            >
+              <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
+            </button>
+            <button
+              type="button"
+              role="slider"
+              aria-label={`Fade out handle for clip ${clip.id}`}
+              aria-valuemin={0}
+              aria-valuemax={clip.duration}
+              aria-valuenow={fadeOutDuration}
+              className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              style={{
+                left: Math.max(EDGE_HANDLE_PX, width - fadeOutWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
+                width: FADE_HANDLE_HIT_TARGET_PX,
+              }}
+              data-fade-handle="out"
+              onMouseDown={handleFadeMouseDown('out')}
+              onKeyDown={handleFadeKeyDown('out')}
+              onDoubleClick={handleFadeReset('out')}
+            >
+              <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
+            </button>
+          </>
+        )}
 
         {clip.gainEnvelope && clip.gainEnvelope.length > 0 && (
           <ClipGainEnvelope

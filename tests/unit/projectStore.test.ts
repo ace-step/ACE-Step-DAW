@@ -418,6 +418,22 @@ describe('setClipFade', () => {
     expect(updated.fadeOutDuration).toBe(0.8);
   });
 
+  it('clamps overlapping fades to the clip duration', () => {
+    const track = useProjectStore.getState().addTrack('drums');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0, duration: 1, prompt: 'beat', lyrics: '',
+    });
+
+    useProjectStore.getState().setClipFade(clip.id, {
+      fadeInDuration: 0.8,
+      fadeOutDuration: 0.7,
+    });
+
+    const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(updated.fadeInDuration).toBe(0.3);
+    expect(updated.fadeOutDuration).toBe(0.7);
+  });
+
   describe('quantizeAudioClip / clearAudioQuantize', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

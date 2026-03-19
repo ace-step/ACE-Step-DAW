@@ -16,6 +16,8 @@ interface TransportState {
   punchInTime: number | null;
   punchOutTime: number | null;
   punchEnabled: boolean;
+  loopRecordingEnabled: boolean;
+  loopCycleCount: number;
 
   play: () => void;
   pause: () => void;
@@ -36,6 +38,9 @@ interface TransportState {
   setPunchIn: (time: number) => void;
   setPunchOut: (time: number) => void;
   togglePunch: () => void;
+  toggleLoopRecording: () => void;
+  setLoopCycleCount: (count: number) => void;
+  incrementLoopCycle: () => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -54,10 +59,12 @@ export const useTransportStore = create<TransportState>((set) => ({
   punchInTime: null,
   punchOutTime: null,
   punchEnabled: false,
+  loopRecordingEnabled: false,
+  loopCycleCount: 0,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
-  stop: () => set({ isPlaying: false, currentTime: 0 }),
+  stop: () => set({ isPlaying: false, currentTime: 0, loopCycleCount: 0 }),
   setIsRecording: (v) => set({ isRecording: v }),
   setCountIn: (active, beat = 0) => set({ countInActive: active, countInBeat: beat }),
   armTrack: (id) => set((s) => (
@@ -70,10 +77,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleArmTrack: (id, exclusive = true) => set((s) => {
     const isArmed = s.armedTrackIds.includes(id);
     if (isArmed) {
-      // Always disarm when already armed
       return { armedTrackIds: s.armedTrackIds.filter((tid) => tid !== id) };
     }
-    // Arm: exclusive by default (Ableton convention), additive with modifier
     return { armedTrackIds: exclusive ? [id] : [...s.armedTrackIds, id] };
   }),
   seek: (time) => set({ currentTime: Math.max(0, time) }),
@@ -86,4 +91,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   setPunchIn: (time) => set({ punchInTime: time }),
   setPunchOut: (time) => set({ punchOutTime: time }),
   togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
+  toggleLoopRecording: () => set((s) => ({ loopRecordingEnabled: !s.loopRecordingEnabled })),
+  setLoopCycleCount: (count) => set({ loopCycleCount: count }),
+  incrementLoopCycle: () => set((s) => ({ loopCycleCount: s.loopCycleCount + 1 })),
 }));

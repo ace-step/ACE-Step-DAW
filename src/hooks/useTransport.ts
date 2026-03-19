@@ -61,7 +61,7 @@ export function useTransport() {
   const { isPlaying, currentTime } = useTransportStore();
   const isRecording = useTransportStore((s) => s.isRecording);
   const project = useProjectStore((s) => s.project);
-  const { stopRecording } = useRecording();
+  const { stopRecording, onLoopCycle } = useRecording();
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
@@ -317,10 +317,13 @@ export function useTransport() {
   useEffect(() => {
     const engine = getAudioEngine();
     engine.setOnEndedCallback(() => {
-      const { loopEnabled } = useTransportStore.getState();
+      const { loopEnabled, isRecording, loopRecordingEnabled, loopStart } = useTransportStore.getState();
       if (loopEnabled) {
-        useTransportStore.getState().setCurrentTime(0);
-        play(0);
+        if (isRecording && loopRecordingEnabled) {
+          void onLoopCycle();
+        }
+        useTransportStore.getState().setCurrentTime(loopStart);
+        play(loopStart);
       } else {
         useTransportStore.getState().stop();
       }
@@ -328,7 +331,7 @@ export function useTransport() {
     return () => {
       engine.setOnEndedCallback(() => {});
     };
-  }, [play]);
+  }, [play, onLoopCycle]);
 
   // Sync mixer params to audio engine TrackNodes during playback
   useEffect(() => {

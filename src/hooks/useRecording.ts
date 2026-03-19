@@ -8,6 +8,9 @@ import { saveAudioBlob } from '../services/audioFileManager';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { audioBufferToWavBlob } from '../utils/wav';
 
+/** Map of trackId to clipId used during loop recording to accumulate takes. */
+const loopRecordingClipIds = new Map<string, string>();
+
 export function useRecording() {
   const isRecording = useTransportStore((s) => s.isRecording);
   const armedTrackIds = useTransportStore((s) => s.armedTrackIds);
@@ -20,6 +23,7 @@ export function useRecording() {
   const addClip = useProjectStore((s) => s.addClip);
   const updateClipStatus = useProjectStore((s) => s.updateClipStatus);
   const updateTrack = useProjectStore((s) => s.updateTrack);
+  const addTake = useProjectStore((s) => s.addTake);
   const [hasPermission, setHasPermission] = useState(recordingEngine.hasPermission);
 
   const armTrack = useCallback((id: string) => {
@@ -34,11 +38,6 @@ export function useRecording() {
     updateTrack(id, { armed: false });
   }, [storeDisarmTrack, updateTrack]);
 
-  /**
-   * Toggle arm on a track.
-   * exclusive=true (default): Ableton convention — disarms all other tracks first.
-   * exclusive=false: additive (Cmd/Ctrl+click behavior).
-   */
   const toggleArmTrack = useCallback((id: string, exclusive = true) => {
     const state = useTransportStore.getState();
     const isArmed = state.armedTrackIds.includes(id);
@@ -48,7 +47,6 @@ export function useRecording() {
       return;
     }
 
-    // Exclusive arm: disarm all others first
     if (exclusive) {
       for (const prevId of state.armedTrackIds) {
         recordingEngine.setMonitoring(prevId, false);
@@ -57,10 +55,58 @@ export function useRecording() {
       storeDisarmAll();
     }
 
-    storeToggleArmTrack(id, false); // false = additive since we already cleared
+    storeToggleArmTrack(id, false);
     recordingEngine.setMonitoring(id, true);
     updateTrack(id, { armed: true });
   }, [disarmTrack, storeToggleArmTrack, storeDisarmAll, updateTrack]);
+
+  const onLoopCycle = useCallback(async () => {
+    const project = useProjectStore.getState().project;
+    if (!project) return;
+
+    const transport = useTransportStore.getState();
+    const armedIds = transport.armedTrackIds;
+
+    const results = await recordingEngine.stopAllRecordings();
+
+    for (const [trackId, result] of results.entries()) {
+      let clipId = loopRecordingClipIds.get(trackId);
+
+      if (!clipId) {
+        const clip = addClip(trackId, {
+          startTime: transport.loopStart,
+          duration: transport.loopEnd - transport.loopStart,
+          prompt: 'Recording',
+          lyrics: '',
+          source: 'uploaded',
+        });
+        clipId = clip.id;
+        loopRecordingClipIds.set(trackId, clipId);
+
+        const wavBlob = audioBufferToWavBlob(result.audioBuffer);
+        const isolatedAudioKey = await saveAudioBlob(project.id, clipId, 'isolated', wavBlob);
+        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+        updateClipStatus(clipId, 'ready', {
+          isolatedAudioKey,
+          waveformPeaks,
+          audioDuration: result.duration,
+          audioOffset: 0,
+          source: 'uploaded',
+        });
+      } else {
+        const wavBlob = audioBufferToWavBlob(result.audioBuffer);
+        const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
+        addTake(clipId, audioKey);
+      }
+    }
+
+    useTransportStore.getState().incrementLoopCycle();
+
+    const transportTime = transport.loopStart;
+    for (const trackId of armedIds) {
+      await recordingEngine.startRecording(trackId, uuidv4(), transportTime);
+    }
+  }, [addClip, addTake, updateClipStatus]);
 
   const stopRecording = useCallback(async () => {
     const project = useProjectStore.getState().project;
@@ -78,36 +124,50 @@ export function useRecording() {
     }
 
     const results = await recordingEngine.stopAllRecordings();
+    const isLoopRec = loopRecordingClipIds.size > 0;
     let createdCount = 0;
 
     for (const [trackId, result] of results.entries()) {
-      const clip = addClip(trackId, {
-        startTime: sessionStartTimes.get(trackId) ?? useTransportStore.getState().currentTime,
-        duration: result.duration,
-        prompt: 'Recording',
-        lyrics: '',
-        source: 'uploaded',
-      });
-      const wavBlob = audioBufferToWavBlob(result.audioBuffer);
-      const isolatedAudioKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-      const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+      if (isLoopRec) {
+        const clipId = loopRecordingClipIds.get(trackId);
+        if (clipId) {
+          const wavBlob = audioBufferToWavBlob(result.audioBuffer);
+          const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
+          addTake(clipId, audioKey);
+          createdCount += 1;
+        }
+      } else {
+        const clip = addClip(trackId, {
+          startTime: sessionStartTimes.get(trackId) ?? useTransportStore.getState().currentTime,
+          duration: result.duration,
+          prompt: 'Recording',
+          lyrics: '',
+          source: 'uploaded',
+        });
+        const wavBlob = audioBufferToWavBlob(result.audioBuffer);
+        const isolatedAudioKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
+        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
 
-      updateClipStatus(clip.id, 'ready', {
-        isolatedAudioKey,
-        waveformPeaks,
-        audioDuration: result.duration,
-        audioOffset: 0,
-        source: 'uploaded',
-      });
-      createdCount += 1;
+        updateClipStatus(clip.id, 'ready', {
+          isolatedAudioKey,
+          waveformPeaks,
+          audioDuration: result.duration,
+          audioOffset: 0,
+          source: 'uploaded',
+        });
+        createdCount += 1;
+      }
     }
+
+    loopRecordingClipIds.clear();
+    useTransportStore.getState().setLoopCycleCount(0);
 
     setIsRecording(false);
 
     if (createdCount > 0) {
-      toastSuccess('Recording saved');
+      toastSuccess(isLoopRec ? 'Loop recording saved' : 'Recording saved');
     }
-  }, [addClip, setIsRecording, updateClipStatus]);
+  }, [addClip, addTake, setIsRecording, updateClipStatus]);
 
   const toggleRecord = useCallback(async () => {
     if (useTransportStore.getState().isRecording) {
@@ -128,7 +188,6 @@ export function useRecording() {
       return;
     }
 
-    // Play count-in if configured (default: 1 bar)
     const project = useProjectStore.getState().project;
     const bpm = project?.bpm ?? 120;
     const beatsPerBar = (typeof project?.timeSignature === 'number' ? project.timeSignature : 4);
@@ -166,6 +225,7 @@ export function useRecording() {
     armedTrackIds,
     toggleRecord,
     stopRecording,
+    onLoopCycle,
     armTrack,
     disarmTrack,
     toggleArmTrack,

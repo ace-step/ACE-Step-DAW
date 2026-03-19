@@ -15,6 +15,7 @@ import { ExportDialog } from '../dialogs/ExportDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { ProjectListDialog } from '../dialogs/ProjectListDialog';
 import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
+import { ShortcutEditorDialog } from '../dialogs/ShortcutEditorDialog';
 import { ShareDialog } from '../dialogs/ShareDialog';
 import { AIAssistantPanel } from '../dialogs/AIAssistantPanel';
 import { MixerPanel } from '../mixer/MixerPanel';
@@ -103,6 +104,7 @@ export function AppShell() {
       <SettingsDialog />
       <ProjectListDialog />
       <KeyboardShortcutsDialog />
+      <ShortcutEditorDialog />
       <CoverModal />
       <RepaintModal />
       <Vocal2BGMModal />

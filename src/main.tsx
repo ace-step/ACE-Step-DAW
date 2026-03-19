@@ -7,6 +7,7 @@ import { useProjectStore } from './store/projectStore';
 import { useUIStore } from './store/uiStore';
 import { useTransportStore } from './store/transportStore';
 import { useCollaborationStore } from './store/collaborationStore';
+import { useShortcutsStore } from './store/shortcutsStore';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 
 // Expose stores globally for agent/automation access
@@ -17,6 +18,7 @@ import { generateProjectSummary, generateProjectStructure } from './utils/dawSta
 (window as unknown as Record<string, unknown>).__transportStore = useTransportStore;
 (window as unknown as Record<string, unknown>).__collaborationStore = useCollaborationStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
+(window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
 
 // Expose DAW state summary for LLM agents
 // Agents can call: window.__dawSummary() for natural language, window.__dawStructure() for JSON

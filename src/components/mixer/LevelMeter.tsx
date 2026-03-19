@@ -63,7 +63,7 @@ export function LevelMeter({ trackId, masterStage }: LevelMeterProps) {
 
   const label = masterStage
     ? `Master ${masterStage} level meter`
-    : `Track level meter for ${trackId}`;
+    : `Mixer level meter for ${trackId}`;
   const clipResetLabel = masterStage
     ? `Reset clip indicator for master ${masterStage}`
     : `Reset clip indicator for ${trackId}`;

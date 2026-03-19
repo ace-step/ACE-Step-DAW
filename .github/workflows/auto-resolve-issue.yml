@@ -2,12 +2,15 @@ name: Auto-Resolve Issue
 
 on:
   issues:
-    types: [opened, assigned]
+    types: [opened, assigned, labeled]
 
 jobs:
   resolve:
     runs-on: self-hosted
-    if: contains(github.event.issue.labels.*.name, 'role: developer') || contains(github.event.issue.labels.*.name, 'priority: P0') || contains(github.event.issue.labels.*.name, 'priority: P1')
+    if: |
+      contains(github.event.issue.labels.*.name, 'role: developer') ||
+      contains(github.event.issue.labels.*.name, 'priority: P0') ||
+      contains(github.event.issue.labels.*.name, 'priority: P1')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,30 +20,28 @@ jobs:
       - name: Resolve issue with Claude Code CLI
         run: |
           ISSUE_NUM=${{ github.event.issue.number }}
-          ISSUE_TITLE="${{ github.event.issue.title }}"
-          ISSUE_BODY=$(gh issue view $ISSUE_NUM --repo ${{ github.repository }} --json body --jq .body | head -50)
+          ISSUE_TITLE=$(gh issue view $ISSUE_NUM --repo ${{ github.repository }} --json title --jq .title)
+          ISSUE_BODY=$(gh issue view $ISSUE_NUM --repo ${{ github.repository }} --json body --jq .body | head -80)
           
-          echo "Resolving issue #$ISSUE_NUM: $ISSUE_TITLE"
+          echo "Auto-resolving issue #$ISSUE_NUM: $ISSUE_TITLE"
+          
+          cd /Users/junmingong/.openclaw/workspace/acestep-daw
+          git fetch origin && git reset --hard origin/main
           
           ~/.local/bin/claude --print --permission-mode bypassPermissions \
-            "You are a developer for ACE-Step DAW.
+            "You are a senior developer for ACE-Step DAW.
           
           Fix issue #$ISSUE_NUM: $ISSUE_TITLE
           
-          Details:
-          $ISSUE_BODY
+          Details: $ISSUE_BODY
           
-          Steps:
-          1. cd /Users/junmingong/.openclaw/workspace/acestep-daw && git fetch origin && git reset --hard origin/main
-          2. Understand the issue and find relevant files
-          3. Implement the fix/feature
-          4. npm run build (must pass)
-          5. npx vitest run tests/unit/ (must pass)
-          6. git checkout -b fix/issue-$ISSUE_NUM
-          7. git add -A && git -c user.name=ChuxiJ -c user.email=junmin@acestudio.ai commit -m 'fix: resolve #$ISSUE_NUM — $ISSUE_TITLE'
-          8. git push origin fix/issue-$ISSUE_NUM
-          9. Create PR: gh pr create --repo ace-step/ACE-Step-DAW --title 'fix: resolve #$ISSUE_NUM' --body 'Closes #$ISSUE_NUM' --base main
-          10. Request Copilot review: gh api repos/ace-step/ACE-Step-DAW/pulls/\$(gh pr view fix/issue-$ISSUE_NUM --json number --jq .number)/requested_reviewers -f 'reviewers[]=copilot[bot]'
-          "
+          1. Understand the issue, find relevant files
+          2. Implement the fix/feature with tests
+          3. npm run build && npx vitest run tests/unit/
+          4. git checkout -b fix/issue-$ISSUE_NUM
+          5. git -c user.name=ChuxiJ -c user.email=junmin@acestudio.ai add -A && git commit -m 'fix: resolve #$ISSUE_NUM'
+          6. git push origin fix/issue-$ISSUE_NUM  
+          7. gh pr create --repo ${{ github.repository }} --title 'fix: #$ISSUE_NUM — $ISSUE_TITLE' --body 'Closes #$ISSUE_NUM' --base main
+          8. Request review: gh api repos/${{ github.repository }}/pulls/\$(gh pr view --json number --jq .number)/requested_reviewers -f reviewers[]=copilot[bot]"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

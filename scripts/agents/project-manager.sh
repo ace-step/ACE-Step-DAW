@@ -1,49 +1,45 @@
 #!/bin/bash
-# Project Manager — Dynamic Load Balancer
-# Runs on self-hosted runner, triggered by events or scheduled
+# Project Manager — Intelligent Agent Orchestrator
+# Runs as a dedicated Claude Code CLI brain, not just a bash script
 set -e
 cd /Users/junmingong/.openclaw/workspace/acestep-daw
 REPO="ace-step/ACE-Step-DAW"
 
-echo "=== Project Manager Check $(date) ==="
-
-# Count current state
-OPEN_ISSUES=$(gh issue list --repo $REPO --state open --json number --jq length)
-OPEN_PRS=$(gh pr list --repo $REPO --state open --json number --jq length)
+# Gather state
+OPEN_ISSUES=$(gh issue list --repo $REPO --state open --json number,title,labels --jq '.')
+OPEN_PRS=$(gh pr list --repo $REPO --state open --json number,title,isDraft,mergeable,statusCheckRollup --jq '.')
+RECENT_MERGED=$(gh pr list --repo $REPO --state merged --limit 5 --json number,title,mergedAt --jq '.')
 RUNNING_CLI=$(ps aux | grep 'claude.*print' | grep -v grep | wc -l | tr -d ' ')
 
-echo "Issues: $OPEN_ISSUES | PRs: $OPEN_PRS | CLI agents: $RUNNING_CLI"
+# Launch the PM brain as Claude Code CLI — it makes all decisions
+~/.local/bin/claude --print --permission-mode bypassPermissions --allowedTools 'Edit,Write,Read,Bash,WebSearch,WebFetch' \
+  "You are the Project Manager for ACE-Step DAW. You are the brain of the entire agent team.
 
-# Dynamic load balancing
-if [ "$OPEN_ISSUES" -lt 3 ]; then
-  echo "DECISION: Issues low → launching PM + QA to create more"
-  ~/.local/bin/claude --print --permission-mode bypassPermissions \
-    "You are the Product Manager for ACE-Step DAW. Read docs/design/UX_IMPROVEMENT_CHECKLIST.md and docs/research-notes/. Create 5 new GitHub Issues for features we're missing compared to Ableton/Logic/FL Studio. Use labels: role:developer, priority:P1. Use gh issue create --repo ace-step/ACE-Step-DAW." &
-  ~/.local/bin/claude --print --permission-mode bypassPermissions \
-    "You are QA for ACE-Step DAW. Run npx playwright test and npm test. For any failures, create a bug issue: gh issue create --repo ace-step/ACE-Step-DAW --title 'bug: ...' --label 'role:developer,priority:P0'" &
+Current state:
+- Open issues: $OPEN_ISSUES
+- Open PRs: $OPEN_PRS  
+- Recently merged: $RECENT_MERGED
+- Running CLI agents: $RUNNING_CLI
 
-elif [ "$OPEN_ISSUES" -gt 8 ] && [ "$RUNNING_CLI" -lt 3 ]; then
-  echo "DECISION: Many issues, few devs → launching more developers"
-  # Pick top 3 unworked issues
-  ISSUES=$(gh issue list --repo $REPO --state open --label "role: developer" --json number,title --jq '.[0:3][] | "\(.number)|\(.title)"')
-  echo "$ISSUES" | while IFS='|' read -r NUM TITLE; do
-    [ -z "$NUM" ] && continue
-    echo "  Launching dev for #$NUM: $TITLE"
-    ~/.local/bin/claude --print --permission-mode bypassPermissions \
-      "Implement issue #$NUM ($TITLE) in /Users/junmingong/.openclaw/workspace/acestep-daw. git fetch origin && git reset --hard origin/main. Build, test, create PR on fix/issue-$NUM branch. Use git identity ChuxiJ <junmin@acestudio.ai>." &
-    sleep 2
-  done
+Your decisions:
 
-elif [ "$OPEN_PRS" -gt 5 ]; then
-  echo "DECISION: Many PRs → launching reviewers"
-  ~/.local/bin/claude --print --permission-mode bypassPermissions \
-    "You are the PR Reviewer for ACE-Step DAW. Review and merge open PRs:
-    gh pr list --repo ace-step/ACE-Step-DAW --state open --limit 10
-    For each: check CI (gh pr checks), review diff (gh pr diff), merge if green (gh pr merge --squash --admin).
-    For conflicts: rebase. For CI failures: fix and push." &
+1. MERGE ready PRs: For each non-draft PR where all CI checks pass and mergeable=MERGEABLE:
+   gh pr merge NUMBER --squash --admin --repo $REPO
 
-else
-  echo "DECISION: Balanced — no action needed"
-fi
+2. FIX failing PRs: For PRs with CI failures, checkout the branch, fix errors, push.
 
-echo "=== PM Check Done ==="
+3. REBASE conflicting PRs: checkout branch, git rebase origin/main, fix conflicts, push --force-with-lease.
+
+4. CLOSE duplicates: If multiple PRs solve the same issue, keep the best one.
+
+5. BALANCE the team:
+   - Count open issues vs running developers
+   - If issues > developers * 2: launch more devs (print the commands)
+   - If issues < 3: identify features we're missing vs Ableton/Logic, create new issues
+   - If PRs waiting review > 3: prioritize reviewing over new development
+
+6. QA direction: Check if recently merged PRs have QA tests. If not, create test issues.
+
+7. Update docs/design/UX_IMPROVEMENT_CHECKLIST.md with completed items.
+
+Make your decisions and execute them. Print a summary."

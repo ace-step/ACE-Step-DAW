@@ -113,6 +113,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const duplicateClipToTrack = useProjectStore((s) => s.duplicateClipToTrack);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
+  const undo = useProjectStore((s) => s.undo);
   const clipBlockRef = useRef<HTMLDivElement>(null);
 
   const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
@@ -245,9 +246,35 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       }
     };
 
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+      setDragGhost(null);
+      if (dragRef.current) {
+        // Restore original state for multi-select batch moves
+        if (isMultiSelected && lastBatchOffset !== 0) {
+          batchMoveClips([...selectedClipIds], -lastBatchOffset);
+        } else if (mode === 'move') {
+          updateClip(clip.id, { startTime: origStart });
+        } else if (mode === 'resize-left') {
+          updateClip(clip.id, { startTime: origStart, duration: origDuration, audioOffset: origAudioOffset });
+        } else if (mode === 'resize-right') {
+          updateClip(clip.id, { duration: origDuration });
+        } else if (mode === 'slip') {
+          updateClip(clip.id, { audioOffset: origAudioOffset });
+        }
+        endDrag();
+        undo();
+      }
+      dragRef.current = false;
+    };
+
     const onMouseUp = (ev: MouseEvent) => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
       setDragGhost(null);
       endDrag();
 
@@ -284,7 +311,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, snapClipEdgeToZeroCrossing]);
+    window.addEventListener('keydown', onKeyDown);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -346,15 +374,25 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const onMouseMove = (ev: MouseEvent) => {
       updateFadeFromPointer(edge, ev.clientX);
     };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+      endDrag();
+      undo();
+    };
     const onMouseUp = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
       endDrag();
     };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [beginDrag, endDrag, updateFadeFromPointer]);
+    window.addEventListener('keydown', onKeyDown);
+  }, [beginDrag, endDrag, undo, updateFadeFromPointer]);
 
   const handleFadeKeyDown = useCallback((edge: 'in' | 'out') => (e: React.KeyboardEvent<HTMLButtonElement>) => {
     const growKey = edge === 'in' ? 'ArrowRight' : 'ArrowLeft';

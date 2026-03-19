@@ -43,3 +43,22 @@ Your decisions:
 7. Update docs/design/UX_IMPROVEMENT_CHECKLIST.md with completed items.
 
 Make your decisions and execute them. Print a summary."
+
+# Periodic: trigger refactorer (every ~20 PRs merged)
+TOTAL_COMMITS=$(git rev-list --count HEAD)
+if [ $((TOTAL_COMMITS % 20)) -eq 0 ]; then
+  echo "DECISION: Triggering refactorer (every 20 commits)"
+  bash scripts/agents/refactorer.sh &
+fi
+
+# Release evaluation: check if enough features accumulated
+LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+if [ -n "$LAST_TAG" ]; then
+  COMMITS_SINCE=$(git log ${LAST_TAG}..HEAD --oneline | wc -l | tr -d ' ')
+  FEATS_SINCE=$(git log ${LAST_TAG}..HEAD --oneline --grep='feat:' | wc -l | tr -d ' ')
+  echo "Since $LAST_TAG: $COMMITS_SINCE commits, $FEATS_SINCE features"
+  if [ "$FEATS_SINCE" -ge 5 ]; then
+    echo "DECISION: Enough features for release → launching Release Manager"
+    bash scripts/agents/release-manager.sh &
+  fi
+fi

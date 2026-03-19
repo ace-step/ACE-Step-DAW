@@ -172,11 +172,25 @@ export function Timeline() {
         e.preventDefault();
         const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
         const currentIdx = ZOOM_LEVELS.findIndex((z) => z >= pixelsPerSecond);
+        let nextPixelsPerSecond = pixelsPerSecond;
+
         if (e.deltaY < 0 && currentIdx < ZOOM_LEVELS.length - 1) {
-          setPixelsPerSecond(ZOOM_LEVELS[currentIdx + 1]);
+          nextPixelsPerSecond = ZOOM_LEVELS[currentIdx + 1];
         } else if (e.deltaY > 0 && currentIdx > 0) {
-          setPixelsPerSecond(ZOOM_LEVELS[currentIdx - 1]);
+          nextPixelsPerSecond = ZOOM_LEVELS[currentIdx - 1];
         }
+
+        if (nextPixelsPerSecond === pixelsPerSecond) {
+          return;
+        }
+
+        const container = e.currentTarget;
+        const rect = container.getBoundingClientRect();
+        const cursorOffsetX = e.clientX - rect.left;
+        const timeAtCursor = (container.scrollLeft + cursorOffsetX) / pixelsPerSecond;
+
+        setPixelsPerSecond(nextPixelsPerSecond);
+        container.scrollLeft = Math.max(0, timeAtCursor * nextPixelsPerSecond - cursorOffsetX);
       }
     },
     [pixelsPerSecond, setPixelsPerSecond],

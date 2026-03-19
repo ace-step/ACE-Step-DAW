@@ -25,18 +25,21 @@ describe.skip('SessionView', () => {
       prompt: 'Lead hook',
       globalCaption: '',
       lyrics: '',
-      midiData: { notes: [], grid: '1/16' },
+      midiData: {
+        notes: [{ id: 'note-1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 }],
+        grid: '1/16',
+      },
       source: 'uploaded',
     });
 
     render(<SessionView />);
 
-    expect(screen.getByRole('grid', { name: 'Session clip launcher grid' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Launch Scene 1' })).toBeInTheDocument();
+    expect(screen.getByText('Session View clip launcher')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Launch scene 1' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Launch Scene 1 clip on/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Lead hook on Synth in scene 1' }));
 
-    expect(screen.getByText('Active')).toBeInTheDocument();
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[track.id]).toBeTruthy();
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+    expect(useTransportStore.getState().launchedSessionClips[track.id]?.clipId).toBeTruthy();
   });
 });

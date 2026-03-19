@@ -10,3 +10,15 @@ dist
 test-results/
 playwright-report/
 scripts/metrics-latest.json
+
+# Agent worktrees (never commit)
+.claude/worktrees/
+/tmp/daw-worktrees/
+
+# Codex artifacts
+.codex/
+
+# Test artifacts
+test-screenshots/
+playwright-report/
+test-results/

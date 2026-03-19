@@ -159,6 +159,17 @@ export function useRecording() {
       }
     }
 
+    // Auto-show take lanes on armed tracks after loop recording
+    if (isLoopRec) {
+      const armedIds = useTransportStore.getState().armedTrackIds;
+      for (const trackId of armedIds) {
+        const track = useProjectStore.getState().project?.tracks.find((t) => t.id === trackId);
+        if (track && !track.showTakeLanes) {
+          useProjectStore.getState().toggleTakeLanes(trackId);
+        }
+      }
+    }
+
     loopRecordingClipIds.clear();
     useTransportStore.getState().setLoopCycleCount(0);
 

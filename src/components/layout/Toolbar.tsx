@@ -14,6 +14,9 @@ function LCDDisplay() {
   const countInActive = useTransportStore((s) => s.countInActive);
   const countInBeat = useTransportStore((s) => s.countInBeat);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
+  const isRecording = useTransportStore((s) => s.isRecording);
+  const loopRecordingEnabled = useTransportStore((s) => s.loopRecordingEnabled);
+  const loopCycleCount = useTransportStore((s) => s.loopCycleCount);
   const project = useProjectStore((s) => s.project);
   const barsBeats = project
     ? formatBarsBeats(currentTime, project.bpm, project.timeSignature)
@@ -22,6 +25,8 @@ function LCDDisplay() {
   // During count-in: show negative beat count in cyan (Ableton convention)
   const displayBarsBeats = countInActive ? `${countInBeat}` : barsBeats;
   const barsBeatsColor = countInActive ? 'text-cyan-400 animate-pulse' : 'text-green-400';
+
+  const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
     <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center">
@@ -38,6 +43,15 @@ function LCDDisplay() {
       )}
       {!countInActive && sessionArrangementRecording && (
         <span className="text-[11px] font-mono text-red-400 animate-pulse">SESSION REC</span>
+      )}
+      {showLoopCycleBadge && (
+        <span
+          className="text-[10px] font-mono font-semibold text-orange-400 bg-orange-900/30 rounded px-1.5 py-0.5"
+          title={`Loop recording pass ${loopCycleCount}`}
+          data-testid="loop-cycle-badge"
+        >
+          Pass {loopCycleCount}
+        </span>
       )}
     </div>
   );
@@ -105,6 +119,8 @@ export function Toolbar() {
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const isRecording = useTransportStore((s) => s.isRecording);
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
+  const loopRecordingEnabled = useTransportStore((s) => s.loopRecordingEnabled);
+  const toggleLoopRecording = useTransportStore((s) => s.toggleLoopRecording);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
   const zoomIn = useUIStore((s) => s.zoomIn);
@@ -282,6 +298,15 @@ export function Toolbar() {
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
             <path d="M2 11h7a3 3 0 0 0 0-6" />
+          </svg>
+        </ControlBarButton>
+        <ControlBarButton active={loopRecordingEnabled} onClick={toggleLoopRecording} title="Overdub / Loop Recording (Shift+L)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 1l2 2-2 2" />
+            <path d="M4 13l-2-2 2-2" />
+            <path d="M12 3H5a3 3 0 0 0 0 6" />
+            <path d="M2 11h7a3 3 0 0 0 0-6" />
+            <circle cx="7" cy="7" r="2" fill="currentColor" stroke="none" />
           </svg>
         </ControlBarButton>
         <ControlBarButton active={metronomeEnabled} onClick={toggleMetronome} title="Metronome (K)">

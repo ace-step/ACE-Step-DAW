@@ -119,7 +119,13 @@ export const useTransportStore = create<TransportState>((set) => ({
   setPunchIn: (time) => set({ punchInTime: time }),
   setPunchOut: (time) => set({ punchOutTime: time }),
   togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
-  toggleLoopRecording: () => set((s) => ({ loopRecordingEnabled: !s.loopRecordingEnabled })),
+  toggleLoopRecording: () =>
+    set((s) => {
+      const next = !s.loopRecordingEnabled;
+      return next
+        ? { loopRecordingEnabled: true, loopEnabled: true }
+        : { loopRecordingEnabled: false };
+    }),
   setLoopCycleCount: (count) => set({ loopCycleCount: count }),
   incrementLoopCycle: () => set((s) => ({ loopCycleCount: s.loopCycleCount + 1 })),
   launchSessionClip: (trackId, clipId, sceneIndex, launchedAt) => set((s) => {

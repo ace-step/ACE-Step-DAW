@@ -43,10 +43,10 @@ describe('Loop Recording — Overdub Mode', () => {
       expect(useTransportStore.getState().loopCycleCount).toBe(0);
     });
 
-    it('loopRecordingEnabled can be set independently of loopEnabled', () => {
+    it('enabling loopRecordingEnabled also enables loopEnabled', () => {
       useTransportStore.getState().toggleLoopRecording();
       expect(useTransportStore.getState().loopRecordingEnabled).toBe(true);
-      expect(useTransportStore.getState().loopEnabled).toBe(false);
+      expect(useTransportStore.getState().loopEnabled).toBe(true);
     });
   });
 

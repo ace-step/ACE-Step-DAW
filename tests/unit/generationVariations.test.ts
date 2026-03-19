@@ -3,12 +3,8 @@ import { useGenerationStore } from '../../src/store/generationStore';
 
 describe('Generation Variation Session', () => {
   beforeEach(() => {
-    useGenerationStore.setState({
-      jobs: [],
-      isGenerating: false,
-      promptHistory: [],
-      variationSession: null,
-    });
+    localStorage.clear();
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
   });
 
   describe('startVariationSession', () => {
@@ -53,7 +49,7 @@ describe('Generation Variation Session', () => {
       });
     });
 
-    it('clamps variation count between 2 and 4', () => {
+    it('clamps variation count between 1 and 4', () => {
       useGenerationStore.getState().startVariationSession({
         prompt: 'test',
         trackId: 'track-1',
@@ -63,7 +59,7 @@ describe('Generation Variation Session', () => {
         duration: 30,
         guidanceScale: 7.0,
       });
-      expect(useGenerationStore.getState().variationSession!.variations).toHaveLength(2);
+      expect(useGenerationStore.getState().variationSession!.variations).toHaveLength(1);
 
       useGenerationStore.getState().startVariationSession({
         prompt: 'test',

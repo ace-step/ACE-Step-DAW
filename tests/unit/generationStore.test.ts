@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useGenerationStore, type GenerationJob } from '../../src/store/generationStore';
+import {
+  useGenerationStore,
+  type GenerationJob,
+  getGenerationValidationError,
+} from '../../src/store/generationStore';
 
 function makeJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
   return {
@@ -14,8 +18,8 @@ function makeJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
 
 describe('generationStore', () => {
   beforeEach(() => {
-    const initial = useGenerationStore.getInitialState?.() ?? { jobs: [], isGenerating: false };
-    useGenerationStore.setState(initial, true);
+    localStorage.clear();
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
   });
 
   describe('job management', () => {
@@ -55,26 +59,52 @@ describe('generationStore', () => {
 
       const remaining = useGenerationStore.getState().jobs;
       expect(remaining).toHaveLength(2);
-      expect(remaining.map((j) => j.id).sort()).toEqual(['j3', 'j4']);
+      expect(remaining.map((job) => job.id).sort()).toEqual(['j3', 'j4']);
     });
   });
 
-  describe('isGenerating flag', () => {
-    it('tracks generation state', () => {
-      expect(useGenerationStore.getState().isGenerating).toBe(false);
-      useGenerationStore.getState().setIsGenerating(true);
-      expect(useGenerationStore.getState().isGenerating).toBe(true);
-      useGenerationStore.getState().setIsGenerating(false);
-      expect(useGenerationStore.getState().isGenerating).toBe(false);
+  describe('panel form state', () => {
+    it('stores generation form controls for agent access', () => {
+      const store = useGenerationStore.getState();
+
+      store.setGenerationPrompt('brooding techno groove');
+      store.toggleGenerationStyleTag('Electronic');
+      store.setGenerationBpm(126);
+      store.setGenerationKeyScale('E minor');
+      store.setGenerationLengthSeconds(48);
+      store.setGenerationTemperature(0.45);
+      store.setGenerationVariationCount(4);
+      store.setGenerationTargetTrack('track-42');
+
+      expect(useGenerationStore.getState().generationForm).toMatchObject({
+        prompt: 'brooding techno groove',
+        styleTags: ['Electronic'],
+        bpm: 126,
+        keyScale: 'E minor',
+        lengthSeconds: 48,
+        temperature: 0.45,
+        variationCount: 4,
+        selectedTrackId: 'track-42',
+      });
+    });
+
+    it('returns actionable validation feedback for invalid requests', () => {
+      expect(getGenerationValidationError({
+        prompt: '',
+        selectedTrackId: '',
+        bpm: 120,
+        lengthSeconds: 30,
+        temperature: 0.7,
+        variationCount: 2,
+      })).toBe('Add a prompt that describes the material you want to generate.');
+
+      useGenerationStore.getState().setGenerationPrompt('focused piano ostinato');
+      useGenerationStore.getState().setGenerationTargetTrack('track-1');
+      expect(useGenerationStore.getState().canSubmitGeneration()).toBe(true);
     });
   });
-});
 
   describe('prompt history', () => {
-    beforeEach(() => {
-      useGenerationStore.setState({ promptHistory: [] });
-    });
-
     it('adds a prompt to history', () => {
       useGenerationStore.getState().addPromptToHistory('lo-fi hip hop beat', { trackName: 'drums' });
       const history = useGenerationStore.getState().promptHistory;
@@ -86,17 +116,17 @@ describe('generationStore', () => {
     it('moves duplicate prompts to front instead of adding twice', () => {
       useGenerationStore.getState().addPromptToHistory('jazz piano');
       useGenerationStore.getState().addPromptToHistory('rock guitar');
-      useGenerationStore.getState().addPromptToHistory('jazz piano'); // duplicate
+      useGenerationStore.getState().addPromptToHistory('jazz piano');
 
       const history = useGenerationStore.getState().promptHistory;
       expect(history).toHaveLength(2);
-      expect(history[0].prompt).toBe('jazz piano'); // moved to front
+      expect(history[0].prompt).toBe('jazz piano');
       expect(history[1].prompt).toBe('rock guitar');
     });
 
     it('limits history to 50 entries', () => {
-      for (let i = 0; i < 60; i++) {
-        useGenerationStore.getState().addPromptToHistory(`prompt ${i}`);
+      for (let index = 0; index < 60; index += 1) {
+        useGenerationStore.getState().addPromptToHistory(`prompt ${index}`);
       }
       expect(useGenerationStore.getState().promptHistory).toHaveLength(50);
     });
@@ -107,3 +137,4 @@ describe('generationStore', () => {
       expect(useGenerationStore.getState().promptHistory).toHaveLength(0);
     });
   });
+});

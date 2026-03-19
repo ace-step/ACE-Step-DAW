@@ -61,6 +61,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const consolidateClips = useProjectStore((s) => s.consolidateClips);
+  const snapClipEdgeToZeroCrossing = useProjectStore((s) => s.snapClipEdgeToZeroCrossing);
   const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
   const createQuickSamplerFromClip = useProjectStore((s) => s.createQuickSamplerFromClip);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
@@ -250,6 +251,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       setDragGhost(null);
       endDrag();
 
+      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current) {
+        void snapClipEdgeToZeroCrossing(clip.id, mode === 'resize-left' ? 'left' : 'right');
+      }
+
       if (mode === 'move' && dragRef.current) {
         const closest = findClosestLane(ev.clientY);
         const deltaSec = (ev.clientX - startX) / pixelsPerSecond;
@@ -279,7 +284,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, snapClipEdgeToZeroCrossing]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

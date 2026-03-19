@@ -355,6 +355,7 @@ interface ProjectState {
   slipClip: (clipId: string, deltaSeconds: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
+  snapClipEdgeToZeroCrossing: (clipId: string, edge: 'left' | 'right') => Promise<void>;
   consolidateClips: (trackId: string, clipIds: string[]) => Promise<Clip | undefined>;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
@@ -2828,6 +2829,68 @@ export const useProjectStore = create<ProjectState>()(
       get().splitClip(clipId, snappedSplitTime);
     } catch {
       get().splitClip(clipId, splitTime);
+    }
+  },
+
+  snapClipEdgeToZeroCrossing: async (clipId, edge) => {
+    const state = get();
+    if (!state.project) return;
+
+    let clip: Clip | undefined;
+    for (const t of state.project.tracks) {
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { clip = c; break; }
+    }
+    if (!clip) return;
+
+    const audioKey = clip.isolatedAudioKey ?? clip.cumulativeMixKey;
+    if (!audioKey) return;
+
+    try {
+      const blob = await loadAudioBlobByKey(audioKey);
+      if (!blob) return;
+
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(blob);
+      const samples = buffer.getChannelData(0);
+      const audioOffset = clip.audioOffset ?? 0;
+
+      if (edge === 'left') {
+        // The left edge corresponds to audioOffset in the buffer
+        const snappedOffset = snapTimeToZeroCrossing(
+          samples,
+          buffer.sampleRate,
+          audioOffset,
+        );
+        const delta = snappedOffset - audioOffset;
+        if (delta === 0) return;
+
+        const newStart = clip.startTime + delta;
+        const newDuration = clip.duration - delta;
+        if (newDuration < 0.1) return;
+
+        _pushHistory(state.project);
+        get().updateClip(clipId, {
+          startTime: newStart,
+          duration: newDuration,
+          audioOffset: snappedOffset,
+        });
+      } else {
+        // The right edge corresponds to audioOffset + duration in the buffer
+        const rightBufferTime = audioOffset + clip.duration;
+        const snappedRight = snapTimeToZeroCrossing(
+          samples,
+          buffer.sampleRate,
+          rightBufferTime,
+        );
+        const newDuration = snappedRight - audioOffset;
+        if (newDuration < 0.1) return;
+
+        _pushHistory(state.project);
+        get().updateClip(clipId, { duration: newDuration });
+      }
+    } catch {
+      // If audio loading fails, keep the current position
     }
   },
 

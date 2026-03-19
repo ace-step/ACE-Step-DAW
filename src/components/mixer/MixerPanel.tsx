@@ -99,7 +99,7 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
             onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}
             aria-label={`${track.displayName} volume fader`}
             className="appearance-none bg-transparent cursor-pointer"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 28, height: faderHeight, accentColor: track.color }}
+            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 28, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: track.color }}
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
@@ -140,7 +140,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         {showSpectrum && <SpectrumAnalyzer width={220} height={120} />}
         <MasteringPanel />
       </div>
-      <div data-testid="master-fader-region" className="mt-1 flex min-h-0 flex-1 flex-col items-center justify-end gap-1 self-stretch pb-1">
+      <div data-testid="master-fader-region" className="mt-1 flex min-h-[96px] flex-1 flex-col items-center justify-end gap-1 self-stretch pb-1">
         <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" />
           <LevelMeter masterStage="output" />
@@ -149,7 +149,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
             onChange={(e) => handleChange(parseFloat(e.target.value))}
             aria-label="Master volume fader"
             className="appearance-none bg-transparent cursor-pointer"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: faderHeight, accentColor: '#4a90d9' }}
+            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4a90d9' }}
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>

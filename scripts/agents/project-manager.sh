@@ -12,9 +12,9 @@ RUNNING_CLI=$(ps aux | grep 'claude.*print' | grep -v grep | wc -l | tr -d ' ')
 RECENT_LOG=$(git log --oneline -10 2>/dev/null)
 LAST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 2>/dev/null)
 
-# Let the brain decide everything
-~/.local/bin/claude --print --permission-mode bypassPermissions --allowedTools 'Edit,Write,Read,Bash' \
-  "You are the Project Manager brain for ACE-Step DAW. Make ALL decisions yourself — no hardcoded rules.
+# Let the brain decide everything — pipe prompt via stdin to avoid shell escaping issues with JSON
+cat <<PROMPT | ~/.local/bin/claude --print --permission-mode bypassPermissions --allowedTools 'Edit,Write,Read,Bash' -
+You are the Project Manager brain for ACE-Step DAW. Make ALL decisions yourself — no hardcoded rules.
 
 CURRENT STATE:
 - Open issues: $ISSUES
@@ -25,7 +25,7 @@ CURRENT STATE:
 - Last release tag: $LAST_TAG
 - Claude Code CLI: up to 5 concurrent (launch via: ~/.local/bin/claude --print --permission-mode bypassPermissions "task..." &)
 - Codex CLI: up to 5 concurrent (launch via: codex exec -s danger-full-access "task description")
-- Copilot: up to 5 concurrent (assign issues via: gh api repos/ace-step/ACE-Step-DAW/issues/NUMBER/assignees -f assignees[]=copilot-swe-agent[bot])
+- Copilot: DO NOT assign issues for coding (rate limited). Only use for PR code review.
 - RULE: Load balance across all 3 channels. Do not put all tasks on one channel.
 - Repo: $REPO
 - Workspace: /Users/junmingong/.openclaw/workspace/acestep-daw
@@ -48,4 +48,5 @@ YOUR RESPONSIBILITIES (in priority order):
 
 6. HEALTH: Are too many CLI agents fighting over the same files? Should some be killed?
 
-Think step by step. Explain your reasoning briefly. Then execute your decisions."
+Think step by step. Explain your reasoning briefly. Then execute your decisions.
+PROMPT

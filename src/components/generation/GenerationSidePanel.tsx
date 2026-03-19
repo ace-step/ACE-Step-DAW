@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   getGenerationValidationError,
@@ -10,6 +10,8 @@ import { KEY_SCALES } from '../../constants/tracks';
 import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/defaults';
 import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generationPresets';
 import type { PresetCategory } from '../../constants/generationPresets';
+import { usePromptAutocomplete } from '../../hooks/usePromptAutocomplete';
+import { PromptAutocomplete } from './PromptAutocomplete';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -59,6 +61,9 @@ export function GenerationSidePanel() {
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
+
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const autocomplete = usePromptAutocomplete();
 
   const stemsTracks = project?.tracks.filter((track) => track.trackType === 'stems') ?? [];
 
@@ -212,17 +217,52 @@ export function GenerationSidePanel() {
               </button>
             )}
           </div>
-          <textarea
-            id="generation-prompt-input"
-            value={generationForm.prompt}
-            onChange={(event) => setGenerationPrompt(event.target.value)}
-            placeholder="Describe the music you want to generate..."
-            className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-            rows={4}
-            disabled={isSessionActive}
-            aria-label="Generation prompt"
-            data-testid="generation-prompt-input"
-          />
+          <div className="relative">
+            <textarea
+              ref={promptTextareaRef}
+              id="generation-prompt-input"
+              value={generationForm.prompt}
+              onChange={(event) => {
+                setGenerationPrompt(event.target.value);
+                autocomplete.handleInputChange(
+                  event.target.value,
+                  event.target.selectionStart ?? event.target.value.length,
+                );
+              }}
+              onKeyDown={(event) => {
+                const newText = autocomplete.handleKeyDown(event);
+                if (newText !== null) {
+                  setGenerationPrompt(newText);
+                }
+              }}
+              onBlur={() => autocomplete.dismiss()}
+              placeholder="Describe the music you want to generate..."
+              className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+              rows={4}
+              disabled={isSessionActive}
+              aria-label="Generation prompt"
+              data-testid="generation-prompt-input"
+              role="combobox"
+              aria-expanded={autocomplete.isOpen}
+              aria-controls="prompt-autocomplete-list"
+              aria-activedescendant={
+                autocomplete.isOpen ? `prompt-suggestion-${autocomplete.selectedIndex}` : undefined
+              }
+              aria-autocomplete="list"
+            />
+            <PromptAutocomplete
+              suggestions={autocomplete.suggestions}
+              selectedIndex={autocomplete.selectedIndex}
+              isOpen={autocomplete.isOpen}
+              onSelect={(index) => {
+                const newText = autocomplete.accept(index);
+                if (newText !== null) {
+                  setGenerationPrompt(newText);
+                  promptTextareaRef.current?.focus();
+                }
+              }}
+            />
+          </div>
 
           {showHistory && promptHistory.length > 0 && (
             <div className="max-h-32 overflow-y-auto rounded border border-[#444] bg-[#2a2a2a]">

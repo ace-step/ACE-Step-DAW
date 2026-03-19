@@ -7,9 +7,10 @@ export const PIANO_ROLL_KEY_HEIGHT = 14;
 export const PIANO_KEYBOARD_WIDTH = 56;
 export const VELOCITY_LANE_HEIGHT = 60;
 
-interface PianoRollVisualState {
-  isSelected: boolean;
-  isSlide: boolean;
+export interface PianoRollVisualState {
+  isSelected?: boolean;
+  isSlide?: boolean;
+  isMuted?: boolean;
 }
 
 interface PianoRollNoteVisualStyle {
@@ -74,7 +75,7 @@ export function velocityToBarColor(velocity: number): string {
 
 export function getPianoRollNoteVisualStyle(
   velocity: number,
-  { isSelected, isSlide }: PianoRollVisualState,
+  { isSelected = false, isSlide = false, isMuted = false }: PianoRollVisualState = {},
 ): PianoRollNoteVisualStyle {
   const normalizedVelocity = normalizeMidiVelocity(velocity);
   const velocityRatio = normalizedVelocity / 127;
@@ -84,7 +85,7 @@ export function getPianoRollNoteVisualStyle(
       fillStyle: 'rgba(251, 191, 36, 0.92)',
       strokeStyle: isSelected ? '#fff7d6' : 'rgba(251,191,36,0.9)',
       strokeWidth: isSelected ? 1.5 : 0.5,
-      globalAlpha: isSelected ? 1 : 0.8,
+      globalAlpha: isMuted ? 0.45 : isSelected ? 1 : 0.8,
       velocityAccentOpacity: 0,
     };
   }
@@ -93,24 +94,32 @@ export function getPianoRollNoteVisualStyle(
     fillStyle: velocityToColor(velocity),
     strokeStyle: isSelected ? '#fff' : 'rgba(255,255,255,0.3)',
     strokeWidth: isSelected ? 1.5 : 0.5,
-    globalAlpha: isSelected ? 1 : 0.8,
+    globalAlpha: isMuted ? 0.45 : isSelected ? 1 : 0.8,
     velocityAccentOpacity: 0.35 + velocityRatio * 0.2,
   };
 }
 
 export function getVelocityLaneBarVisualStyle(
   velocity: number,
-  { isSelected, isSlide }: PianoRollVisualState,
+  { isSelected = false, isSlide = false, isMuted = false }: PianoRollVisualState = {},
 ): VelocityLaneBarVisualStyle {
   return {
     fillStyle: isSlide ? 'rgba(251,191,36,0.85)' : velocityToBarColor(velocity),
-    globalAlpha: isSelected ? 1 : 0.6,
+    globalAlpha: isMuted ? 0.35 : isSelected ? 1 : 0.6,
     highlightAlpha: isSelected ? 0.95 : 0.45,
   };
 }
 
-export const getPianoRollNoteVisuals = getPianoRollNoteVisualStyle;
-export const getVelocityLaneBarVisuals = getVelocityLaneBarVisualStyle;
+export function getPianoRollNoteVisuals(velocity: number, state: PianoRollVisualState = {}): PianoRollNoteVisualStyle {
+  return getPianoRollNoteVisualStyle(velocity, state);
+}
+
+export function getVelocityLaneBarVisuals(
+  velocity: number,
+  state: PianoRollVisualState = {},
+): VelocityLaneBarVisualStyle {
+  return getVelocityLaneBarVisualStyle(velocity, state);
+}
 
 export function getPianoRollToolShortcut(tool: PianoRollTool): string {
   switch (tool) {

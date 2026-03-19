@@ -8,6 +8,7 @@ import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
 
 function getBarDurationSec(bpm: number, timeSignature: number): number {
@@ -293,6 +294,7 @@ export function TrackLane({ track }: TrackLaneProps) {
           {track.clips.map((clip) => (
             <ClipBlock key={clip.id} clip={clip} track={track} />
           ))}
+          <CrossfadeOverlay track={track} />
 
           {isSequencer && !hasClips && (
             <div

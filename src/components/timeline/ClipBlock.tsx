@@ -11,6 +11,7 @@ import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
 import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
+import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
 import { FADE_HANDLE_KEYBOARD_STEP, getClipFadeBounds } from '../../utils/clipFade';
 
@@ -520,6 +521,15 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             width={width}
             gainEnvelope={clip.gainEnvelope}
             color={track.color}
+          />
+        )}
+
+        {clip.warpMarkers && clip.warpMarkers.length > 0 && (
+          <ClipWarpMarkers
+            clipId={clip.id}
+            clipDuration={clip.duration}
+            width={width}
+            markers={clip.warpMarkers}
           />
         )}
 

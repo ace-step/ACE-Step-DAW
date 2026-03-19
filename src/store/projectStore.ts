@@ -336,6 +336,18 @@ export interface ProjectState {
   quantizeAudioClip: (clipId: string, warpMarkers: AudioWarpMarker[]) => void;
   clearAudioQuantize: (clipId: string) => void;
   applyAudioQuantize: (clipId: string, options?: { gridDivision?: number; strength?: number; sensitivity?: number }) => void;
+  /** Set all warp markers on a clip. */
+  setWarpMarkers: (clipId: string, markers: AudioWarpMarker[]) => void;
+  /** Add a single warp marker, maintaining sort order by originalTime. */
+  addWarpMarker: (clipId: string, marker: AudioWarpMarker) => void;
+  /** Remove a warp marker by index. */
+  removeWarpMarker: (clipId: string, markerIndex: number) => void;
+  /** Reset all warp/stretch state on a clip. */
+  resetWarp: (clipId: string) => void;
+  /** Stretch clip to fit a target duration in seconds (adjusts timeStretchRate). */
+  stretchClipToFit: (clipId: string, targetDuration: number) => void;
+  /** Create a crossfade between two overlapping clips on the same track. */
+  createCrossfade: (clipAId: string, clipBId: string) => void;
   setClipGainEnvelope: (clipId: string, points: GainEnvelopePoint[]) => void;
   addClipGainPoint: (clipId: string, point: GainEnvelopePoint) => void;
   removeClipGainPoint: (clipId: string, pointIndex: number) => void;
@@ -2516,6 +2528,61 @@ export const useProjectStore = create<ProjectState>()(
     if (markers.length === 0) return;
 
     get().updateClip(clipId, { warpMarkers: markers });
+  },
+
+  setWarpMarkers: (clipId, markers) => {
+    get().updateClip(clipId, { warpMarkers: [...markers] });
+  },
+
+  addWarpMarker: (clipId, marker) => {
+    const clip = get().getClipById(clipId);
+    if (!clip) return;
+    const markers = [...(clip.warpMarkers ?? []), marker];
+    markers.sort((a, b) => a.originalTime - b.originalTime);
+    get().updateClip(clipId, { warpMarkers: markers });
+  },
+
+  removeWarpMarker: (clipId, markerIndex) => {
+    const clip = get().getClipById(clipId);
+    if (!clip || !clip.warpMarkers) return;
+    const markers = clip.warpMarkers.filter((_, i) => i !== markerIndex);
+    get().updateClip(clipId, { warpMarkers: markers.length > 0 ? markers : undefined });
+  },
+
+  resetWarp: (clipId) => {
+    get().updateClip(clipId, {
+      warpMarkers: undefined,
+      timeStretchRate: undefined,
+      pitchShift: undefined,
+      stretchMode: undefined,
+    });
+  },
+
+  stretchClipToFit: (clipId, targetDuration) => {
+    const clip = get().getClipById(clipId);
+    if (!clip || targetDuration <= 0) return;
+    const rate = clip.duration / targetDuration;
+    get().updateClip(clipId, { timeStretchRate: rate });
+  },
+
+  createCrossfade: (clipAId, clipBId) => {
+    const state = get();
+    if (!state.project) return;
+    const clipA = state.getClipById(clipAId);
+    const clipB = state.getClipById(clipBId);
+    if (!clipA || !clipB) return;
+
+    // Determine overlap: A should end after B starts
+    const aEnd = clipA.startTime + clipA.duration;
+    const bStart = clipB.startTime;
+    const overlap = aEnd - bStart;
+    if (overlap <= 0) return;
+
+    // Batch as single undo entry
+    get().beginDrag();
+    get().setClipFade(clipAId, { fadeOutDuration: overlap });
+    get().setClipFade(clipBId, { fadeInDuration: overlap });
+    get().endDrag();
   },
 
   slipClip: (clipId, deltaSeconds) => {

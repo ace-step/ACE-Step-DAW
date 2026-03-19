@@ -1,11 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useGenerationStore, type VariationSessionParams } from '../../src/store/generationStore';
-import { generateVariationSession } from '../../src/services/generationPipeline';
+import {
+  generateVariationSession,
+  streamGenerationVariations,
+  type VariationGenerationDependencies,
+} from '../../src/services/generationPipeline';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('generateVariationSession', () => {
   beforeEach(() => {
@@ -118,5 +132,92 @@ describe('generateVariationSession', () => {
     ]);
     expect(useGenerationStore.getState().variationSession?.status).toBe('done');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+});
+
+describe('streamGenerationVariations', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+  });
+
+  it('reveals completed variations incrementally and preserves successes when siblings fail', async () => {
+    useProjectStore.getState().createProject();
+    const trackId = useProjectStore.getState().addTrack('drums').id;
+
+    const first = createDeferred<{ succeeded: boolean; errorMessage?: string }>();
+    const second = createDeferred<{ succeeded: boolean; errorMessage?: string }>();
+    const runVariationClip = vi.fn<
+      VariationGenerationDependencies['runVariationClip']
+    >((clipId, index, report) => {
+      report({
+        status: 'generating',
+        progress: `Submitting variation ${index + 1}`,
+      });
+      return index === 0 ? first.promise : second.promise;
+    });
+
+    const batchPromise = streamGenerationVariations(
+      {
+        prompt: 'glass piano with soft pulses',
+        trackId,
+        variationCount: 2,
+        bpm: 124,
+        keyScale: 'D minor',
+        duration: 16,
+        guidanceScale: 0.6,
+        temperature: 0.6,
+      },
+      {
+        createVariationClip: (_params, index) => `clip-${index + 1}`,
+        runVariationClip,
+        saveVariationClipVersion: vi.fn(),
+      },
+    );
+
+    await Promise.resolve();
+
+    let session = useGenerationStore.getState().variationSession;
+    expect(session).not.toBeNull();
+    expect(session?.variations.map((variation) => variation.status)).toEqual(['generating', 'generating']);
+    expect(session?.variations.map((variation) => variation.clipId)).toEqual(['clip-1', 'clip-2']);
+
+    first.resolve({ succeeded: true });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    session = useGenerationStore.getState().variationSession;
+    expect(session?.status).toBe('generating');
+    expect(session?.variations[0]).toMatchObject({
+      status: 'done',
+      clipId: 'clip-1',
+      progress: 'Ready to review',
+    });
+    expect(session?.variations[1]).toMatchObject({
+      status: 'generating',
+      clipId: 'clip-2',
+    });
+    expect(useGenerationStore.getState().isGenerating).toBe(true);
+
+    second.resolve({
+      succeeded: false,
+      errorMessage: 'Generation failed: choose a shorter length or retry this variation.',
+    });
+    await batchPromise;
+
+    session = useGenerationStore.getState().variationSession;
+    expect(session?.status).toBe('done');
+    expect(session?.variations[0]).toMatchObject({
+      status: 'done',
+      clipId: 'clip-1',
+    });
+    expect(session?.variations[1]).toMatchObject({
+      status: 'error',
+      clipId: 'clip-2',
+      error: 'Generation failed: choose a shorter length or retry this variation.',
+    });
+    expect(useGenerationStore.getState().isGenerating).toBe(false);
+    expect(runVariationClip).toHaveBeenCalledTimes(2);
   });
 });

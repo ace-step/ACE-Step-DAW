@@ -674,7 +674,10 @@ export const useGenerationStore = create<GenerationState>()(
             ...s.variationSession,
             variations,
             activeVariationIndex: nextActiveVariationIndex,
-            status: allTerminal ? 'done' : s.variationSession.status,
+            status:
+              s.variationSession.status === 'cancelled'
+                ? s.variationSession.status
+                : (allTerminal ? 'done' : s.variationSession.status),
           },
         };
       }),

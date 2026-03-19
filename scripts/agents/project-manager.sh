@@ -23,7 +23,10 @@ CURRENT STATE:
 - Running CLI agents: $RUNNING_CLI
 - Recent commits: $RECENT_LOG
 - Last release tag: $LAST_TAG
-- Max recommended CLI concurrency: 5
+- Claude Code CLI: up to 5 concurrent (launch via: ~/.local/bin/claude --print --permission-mode bypassPermissions "task..." &)
+- Codex CLI: up to 5 concurrent (launch via: codex --yolo "task..." — NEEDS pty:true)
+- Copilot: up to 5 concurrent (assign issues via: gh api repos/ace-step/ACE-Step-DAW/issues/NUMBER/assignees -f assignees[]=copilot-swe-agent[bot])
+- RULE: Load balance across all 3 channels. Do not put all tasks on one channel.
 - Repo: $REPO
 - Workspace: /Users/junmingong/.openclaw/workspace/acestep-daw
 

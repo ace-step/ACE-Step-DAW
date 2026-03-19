@@ -53,7 +53,7 @@ echo "You are on branch fix/issue-$ISSUE_NUM. Implement, then: npx tsc --noEmit 
 # Write wrapper
 cat > "$WT/run-agent.sh" << 'WEOF'
 #!/bin/bash
-WT="$1"; TOOL="$2"; ISSUE="$3"; REPO="ace-step/ACE-Step-DAW"
+WT="$1"; TOOL="$2"; ISSUE="$3"; TITLE="$4"; REPO="ace-step/ACE-Step-DAW"
 cd "$WT" || exit 1
 PROMPT=$(cat "$WT/agent-prompt.txt")
 
@@ -71,10 +71,10 @@ npm run build 2>/dev/null || exit 0
 git fetch origin main 2>/dev/null
 git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; exit 0; }
 git push origin "fix/issue-$ISSUE" --force-with-lease 2>/dev/null || exit 0
-gh pr create --repo "$REPO" --title "feat: #$ISSUE" --body "Closes #$ISSUE" --base main --head "fix/issue-$ISSUE" 2>/dev/null
+gh pr create --repo "$REPO" --title "feat: #$ISSUE — $TITLE" --body "Closes #$ISSUE" --base main --head "fix/issue-$ISSUE" 2>/dev/null
 WEOF
 chmod +x "$WT/run-agent.sh"
 
 # Launch
-nohup bash "$WT/run-agent.sh" "$WT" "$TOOL" "$ISSUE_NUM" > "/tmp/daw-worktrees/agent-$ISSUE_NUM.$TOOL.log" 2>&1 &
+nohup bash "$WT/run-agent.sh" "$WT" "$TOOL" "$ISSUE_NUM" "$TITLE" > "/tmp/daw-worktrees/agent-$ISSUE_NUM.$TOOL.log" 2>&1 &
 echo "$TOOL-$ISSUE_NUM: PID $!"

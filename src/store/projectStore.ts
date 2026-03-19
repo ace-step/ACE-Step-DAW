@@ -32,6 +32,7 @@ import {
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
+import { getNextTrackColor } from '../constants/colorPalette';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -415,7 +416,7 @@ export const useProjectStore = create<ProjectState>()(
       trackType: resolvedType,
       trackName,
       displayName,
-      color: info.color,
+      color: getNextTrackColor(state.project.tracks.map((t) => t.color)),
       order: maxOrder + 1,
       volume: 0.8,
       muted: false,

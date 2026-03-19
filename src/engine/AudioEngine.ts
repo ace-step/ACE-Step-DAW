@@ -47,6 +47,9 @@ export interface ClipScheduleInfo {
  * Core audio engine managing AudioContext, track routing, and playback scheduling.
  */
 export class AudioEngine {
+  /** Lookahead time in seconds — audio events are scheduled this far ahead of playback. */
+  static readonly LOOK_AHEAD = 0.1;
+
   ctx: AudioContext;
   masterGain: GainNode;
   trackNodes: Map<string, TrackNode> = new Map();
@@ -102,6 +105,8 @@ export class AudioEngine {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
     Tone.setContext(this.ctx as unknown as Tone.BaseContext);
+    // Configure Tone.js lookahead for stable scheduling under UI load
+    try { Tone.getContext().lookAhead = AudioEngine.LOOK_AHEAD; } catch { /* test env */ }
     this.masterInputGain = this.ctx.createGain();
     this.masterDryGain = this.ctx.createGain();
     this.masterProcessedGain = this.ctx.createGain();
@@ -645,15 +650,15 @@ export class AudioEngine {
         return;
       }
 
-      // Fire any MIDI events whose time has been reached
-      for (const evt of this._midiEvents) {
-        if (!evt.fired && currentTime >= evt.time) {
-          evt.fired = true;
-          evt.callback();
-        }
-      }
+      // Fire MIDI events with lookahead — schedule them ahead of the
+      // playback cursor so audio thread has time to process them.
+      this.fireMidiEventsForTime(currentTime);
 
-      this._onTimeUpdate?.(currentTime);
+      // Send latency-compensated time to the visual playhead so it
+      // aligns with what the listener actually hears through speakers.
+      const latency = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
+      const compensatedTime = Math.max(0, currentTime - latency);
+      this._onTimeUpdate?.(compensatedTime);
       this._rafId = requestAnimationFrame(tick);
     };
     this._rafId = requestAnimationFrame(tick);
@@ -683,6 +688,35 @@ export class AudioEngine {
   getCurrentTime(): number {
     if (!this._playing) return this._offset;
     return this._offset + (this.ctx.currentTime - this._startedAt);
+  }
+
+  /** Returns the configured lookahead time in seconds. */
+  getLookAhead(): number {
+    return AudioEngine.LOOK_AHEAD;
+  }
+
+  /**
+   * Returns the current playback time compensated for output latency,
+   * so the visual playhead matches what the listener actually hears.
+   */
+  getCompensatedTime(): number {
+    const raw = this.getCurrentTime();
+    const latency = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
+    return Math.max(0, raw - latency);
+  }
+
+  /**
+   * Fire scheduled MIDI events whose time falls within the lookahead window.
+   * Called from the RAF tick with the current timeline position.
+   */
+  fireMidiEventsForTime(currentTime: number) {
+    const threshold = currentTime + AudioEngine.LOOK_AHEAD;
+    for (const evt of this._midiEvents) {
+      if (!evt.fired && threshold >= evt.time) {
+        evt.fired = true;
+        evt.callback();
+      }
+    }
   }
 
   /**

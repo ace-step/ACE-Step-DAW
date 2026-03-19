@@ -69,3 +69,41 @@ describe('generationStore', () => {
     });
   });
 });
+
+  describe('prompt history', () => {
+    beforeEach(() => {
+      useGenerationStore.setState({ promptHistory: [] });
+    });
+
+    it('adds a prompt to history', () => {
+      useGenerationStore.getState().addPromptToHistory('lo-fi hip hop beat', { trackName: 'drums' });
+      const history = useGenerationStore.getState().promptHistory;
+      expect(history).toHaveLength(1);
+      expect(history[0].prompt).toBe('lo-fi hip hop beat');
+      expect(history[0].trackName).toBe('drums');
+    });
+
+    it('moves duplicate prompts to front instead of adding twice', () => {
+      useGenerationStore.getState().addPromptToHistory('jazz piano');
+      useGenerationStore.getState().addPromptToHistory('rock guitar');
+      useGenerationStore.getState().addPromptToHistory('jazz piano'); // duplicate
+
+      const history = useGenerationStore.getState().promptHistory;
+      expect(history).toHaveLength(2);
+      expect(history[0].prompt).toBe('jazz piano'); // moved to front
+      expect(history[1].prompt).toBe('rock guitar');
+    });
+
+    it('limits history to 50 entries', () => {
+      for (let i = 0; i < 60; i++) {
+        useGenerationStore.getState().addPromptToHistory(`prompt ${i}`);
+      }
+      expect(useGenerationStore.getState().promptHistory).toHaveLength(50);
+    });
+
+    it('clears prompt history', () => {
+      useGenerationStore.getState().addPromptToHistory('test');
+      useGenerationStore.getState().clearPromptHistory();
+      expect(useGenerationStore.getState().promptHistory).toHaveLength(0);
+    });
+  });

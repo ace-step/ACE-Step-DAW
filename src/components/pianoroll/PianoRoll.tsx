@@ -20,11 +20,9 @@ const PIANO_ROLL_TOOL_BUTTONS = [
   { tool: 'pencil', label: 'Pencil', icon: '✏' },
   { tool: 'paint', label: 'Paint', icon: '▦' },
   { tool: 'erase', label: 'Erase', icon: '⌫' },
-  { tool: 'slide', label: 'Slide', icon: '⇢' },
 ] as const satisfies ReadonlyArray<{ tool: PianoRollTool; label: string; icon: string }>;
 
 export function PianoRoll() {
-  const [activeTool, setActiveTool] = useState<PianoRollTool>('select');
   const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
@@ -44,9 +42,12 @@ export function PianoRoll() {
 
   const openTrackId = useUIStore((s) => s.openPianoRollTrackId);
   const openClipId = useUIStore((s) => s.openPianoRollClipId);
+  const activeTool = useUIStore((s) => s.activePianoRollTool);
   const pianoRollHeight = useUIStore((s) => s.pianoRollHeight);
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
+  const setActivePianoRollTool = useUIStore((s) => s.setActivePianoRollTool);
+  const togglePianoRollPencilTool = useUIStore((s) => s.togglePianoRollPencilTool);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
@@ -54,26 +55,27 @@ export function PianoRoll() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const ui = useUIStore.getState();
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName;
       if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
+      if (ui.keyboardContext.scope !== 'pianoRoll' || !ui.openPianoRollTrackId) return;
 
       if (event.key === 'b' || event.key === 'B') {
         event.preventDefault();
-        setActiveTool((tool) => (tool === 'pencil' ? 'select' : 'pencil'));
+        togglePianoRollPencilTool();
         return;
       }
 
-      if (event.key === '1') setActiveTool('select');
-      if (event.key === '2') setActiveTool('pencil');
-      if (event.key === '3') setActiveTool('paint');
-      if (event.key === '4') setActiveTool('erase');
-      if (event.key === '5') setActiveTool('slide');
+      if (event.key === '1') setActivePianoRollTool('select');
+      if (event.key === '2') setActivePianoRollTool('pencil');
+      if (event.key === '3') setActivePianoRollTool('paint');
+      if (event.key === '4') setActivePianoRollTool('erase');
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [setActivePianoRollTool, togglePianoRollPencilTool]);
 
   const track = useMemo(
     () => project?.tracks.find((candidate) => candidate.id === openTrackId) ?? null,
@@ -107,6 +109,8 @@ export function PianoRoll() {
 
   const samplerConfig = track?.samplerConfig ?? null;
   const sampleDuration = Math.max(0.01, track?.sampler?.sampleDuration ?? samplerConfig?.trimEnd ?? 1);
+  const activeToolLabel = PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label
+    ?? (activeTool === 'slide' ? 'Slide' : 'Select');
 
   const applySamplerConfig = useCallback((updates: Partial<SamplerConfig>) => {
     if (!track?.sampler?.audioKey || !samplerConfig) return;
@@ -209,7 +213,7 @@ export function PianoRoll() {
               className={`px-2 py-1 rounded text-[10px] transition-colors ${
                 active ? 'bg-violet-600/50 text-violet-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
               }`}
-              onClick={() => setActiveTool(tool)}
+              onClick={() => setActivePianoRollTool(tool)}
               title={`${label} tool (${getPianoRollToolShortcut(tool)})`}
             >
               {icon} {label}
@@ -223,7 +227,7 @@ export function PianoRoll() {
           data-active-tool={activeTool}
           className="px-2 py-1 rounded bg-black/20 border border-white/5 text-[10px] text-zinc-300"
         >
-          Tool: <span className="text-zinc-100">{PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label ?? 'Select'}</span>
+          Tool: <span className="text-zinc-100">{activeToolLabel}</span>
         </div>
 
         <button

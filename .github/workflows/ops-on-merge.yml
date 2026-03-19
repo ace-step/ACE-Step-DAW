@@ -1,0 +1,33 @@
+name: Ops — Event-Driven Agent Dispatch
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  dispatch-agents:
+    if: github.event.pull_request.merged == true || github.event_name == 'issues'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ops cycle
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Trigger: PR merged or issue created"
+          
+          # Run the ops cycle script
+          bash scripts/ops-cycle.sh
+          
+          # Launch Claude Code CLI for next task if available
+          OPEN_ISSUES=$(gh issue list --repo ${{ github.repository }} --state open --limit 5 --json number --jq '.[].number' | head -1)
+          if [ -n "$OPEN_ISSUES" ]; then
+            echo "Launching Claude Code CLI for issue #$OPEN_ISSUES"
+            ~/.local/bin/claude --print --permission-mode bypassPermissions \
+              "Check issue #$OPEN_ISSUES in ace-step/ACE-Step-DAW. If it needs coding, implement it. Build, test, create PR." &
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

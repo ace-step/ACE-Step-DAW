@@ -1,37 +1,34 @@
-name: Ops — Post-Merge Dispatch
+name: Ops — Post-Merge + Auto-Merge Chain
 
 on:
   pull_request:
     types: [closed]
     branches: [main]
+  check_suite:
+    types: [completed]
 
 jobs:
   post-merge:
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true || github.event_name == 'check_suite'
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-
-      - name: Merge next ready PR or start next issue
+      
+      - name: Auto-merge ready PRs + trigger PM
         run: |
-          echo "PR #${{ github.event.pull_request.number }} merged"
+          cd /Users/junmingong/.openclaw/workspace/acestep-daw
           
-          # Try to merge next ready PR
-          NEXT_PR=$(gh pr list --repo ${{ github.repository }} --state open --json number,isDraft,mergeable --jq '[.[] | select(.isDraft==false and .mergeable=="MERGEABLE")] | .[0].number // empty')
-          if [ -n "$NEXT_PR" ]; then
-            echo "Merging next ready PR #$NEXT_PR"
-            gh pr merge $NEXT_PR --repo ${{ github.repository }} --squash --admin || true
-          fi
+          # Auto-merge any PR that's ready + CI green
+          READY=$(gh pr list --repo ${{ github.repository }} --state open --json number,isDraft,mergeable --jq '.[] | select(.isDraft==false and .mergeable=="MERGEABLE") | .number')
+          for PR in $READY; do
+            ALL_GREEN=$(gh pr checks $PR --repo ${{ github.repository }} 2>&1 | grep -c "fail" || true)
+            if [ "$ALL_GREEN" = "0" ]; then
+              echo "Auto-merging PR #$PR"
+              gh pr merge $PR --repo ${{ github.repository }} --squash --admin || true
+            fi
+          done
           
-          # Check if there are unworked issues
-          OPEN_ISSUES=$(gh issue list --repo ${{ github.repository }} --state open --label "role: developer" --json number,title --jq '.[0]')
-          if [ -n "$OPEN_ISSUES" ]; then
-            ISSUE_NUM=$(echo "$OPEN_ISSUES" | python3 -c "import json,sys; print(json.load(sys.stdin)['number'])")
-            ISSUE_TITLE=$(echo "$OPEN_ISSUES" | python3 -c "import json,sys; print(json.load(sys.stdin)['title'])")
-            echo "Starting work on issue #$ISSUE_NUM: $ISSUE_TITLE"
-            
-            ~/.local/bin/claude --print --permission-mode bypassPermissions \
-              "Implement issue #$ISSUE_NUM ($ISSUE_TITLE) in /Users/junmingong/.openclaw/workspace/acestep-daw. Build, test, create PR." &
-          fi
+          # Run Project Manager brain
+          bash scripts/agents/project-manager.sh &
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

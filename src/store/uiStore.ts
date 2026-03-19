@@ -101,6 +101,9 @@ interface UIState {
   showGeneratePatternDialog: boolean;
   generatePatternClipId: string | null;
 
+  // Command Palette
+  showCommandPalette: boolean;
+
   // AI Assistant
   showAIAssistant: boolean;
   aiChatMessages: AIChatMessage[];
@@ -189,6 +192,10 @@ interface UIState {
   setShowGeneratePatternDialog: (v: boolean) => void;
   openGeneratePatternDialog: (clipId: string) => void;
 
+  // Command Palette
+  setShowCommandPalette: (v: boolean) => void;
+  toggleCommandPalette: () => void;
+
   // AI Assistant
   toggleAIAssistant: () => void;
   setShowAIAssistant: (v: boolean) => void;
@@ -274,6 +281,8 @@ export const useUIStore = create<UIState>()(
 
   showGeneratePatternDialog: false,
   generatePatternClipId: null,
+
+  showCommandPalette: false,
 
   showAIAssistant: false,
   aiChatMessages: [],
@@ -413,6 +422,9 @@ export const useUIStore = create<UIState>()(
 
   setShowGeneratePatternDialog: (v) => set(v ? { showGeneratePatternDialog: v } : { showGeneratePatternDialog: false, generatePatternClipId: null }),
   openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),
+
+  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  toggleCommandPalette: () => set((s) => ({ showCommandPalette: !s.showCommandPalette })),
 
   toggleAIAssistant: () => set((state) => {
     const nextShow = !state.showAIAssistant;

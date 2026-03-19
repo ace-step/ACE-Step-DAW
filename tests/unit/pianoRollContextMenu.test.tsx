@@ -441,4 +441,37 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     expect(helpers?.velocityLaneTop).toBeTypeOf('number');
     expect(helpers?.velocityLaneHeight).toBeGreaterThan(0);
   });
+
+  it('selects a note before starting velocity-lane editing so UI state stays in sync (#449)', () => {
+    const clip = makeClip([makeNote()]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="select"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseDown(canvas, {
+      clientX: NOTE_HIT_CLIENT_X,
+      clientY: 560,
+    });
+
+    expect(setSelectedNoteIds).toHaveBeenCalledWith(new Set(['note-1']));
+    expect(mockBeginDrag).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMidiNote).toHaveBeenCalledWith(
+      'clip-1',
+      'note-1',
+      expect.objectContaining({
+        velocity: expect.any(Number),
+      }),
+    );
+  });
 });

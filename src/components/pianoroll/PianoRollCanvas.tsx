@@ -205,6 +205,22 @@ export function PianoRollCanvas({
     [notes, beatToX, pitchToY, pixelsPerBeat, keyHeight],
   );
 
+  const findVelocityLaneNoteAt = useCallback(
+    (x: number) => {
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const note = notes[i];
+        const noteX = beatToX(note.startBeat);
+        const noteWidth = Math.max(note.durationBeats * pixelsPerBeat, 4);
+        if (x >= noteX && x <= noteX + noteWidth) {
+          return note;
+        }
+      }
+
+      return null;
+    },
+    [notes, beatToX, pixelsPerBeat],
+  );
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -483,11 +499,9 @@ export function PianoRollCanvas({
       if (y > noteAreaHeight + 3) {
         const velAreaTop = noteAreaHeight + 3;
         const velAreaHeight = velocityHeight - 6;
-        for (const note of notes) {
-          const noteX = beatToX(note.startBeat);
-          const noteWidth = Math.max(note.durationBeats * pixelsPerBeat, 4);
-          if (x < noteX || x > noteX + noteWidth) continue;
-
+        const note = findVelocityLaneNoteAt(x);
+        if (note) {
+          setSelectedNoteIds(new Set([note.id]));
           beginDrag();
           updateMidiNote(clip.id, note.id, {
             velocity: Math.round(Math.max(1, Math.min(127, ((velAreaTop + velAreaHeight - y) / velAreaHeight) * 127))),
@@ -611,9 +625,9 @@ export function PianoRollCanvas({
       createNoteAt,
       deleteNoteById,
       findNoteAt,
+      findVelocityLaneNoteAt,
       getCellKey,
       notes,
-      pixelsPerBeat,
       previewEnabled,
       previewNoteAtPitch,
       selectedNoteIds,

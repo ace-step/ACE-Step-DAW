@@ -412,4 +412,33 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     expect(mockRemoveMidiNote).toHaveBeenCalledTimes(1);
     expect(mockRemoveMidiNote).toHaveBeenCalledWith('clip-1', 'note-1');
   });
+
+  it('exposes velocity lane geometry through the piano roll helper for agent workflows', () => {
+    const clip = makeClip([makeNote()]);
+
+    render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="select"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const helpers = (
+      window as Window & {
+        __pianoRollHelpers?: {
+          velocityLaneTop?: number;
+          velocityLaneHeight?: number;
+        };
+      }
+    ).__pianoRollHelpers;
+
+    expect(helpers?.velocityLaneTop).toBeTypeOf('number');
+    expect(helpers?.velocityLaneHeight).toBeGreaterThan(0);
+  });
 });

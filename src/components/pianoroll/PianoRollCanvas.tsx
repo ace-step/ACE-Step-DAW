@@ -14,6 +14,7 @@ import {
   isBlackKey,
   MIDI_MAX_NOTE,
   midiNoteToName,
+  normalizeMidiVelocity,
   PIANO_KEYBOARD_WIDTH,
   PIANO_ROLL_KEY_HEIGHT,
   type PianoRollTool,
@@ -319,6 +320,8 @@ export function PianoRollCanvas({
 
       const isSelected = selectedNoteIds.has(note.id);
       const isSlide = note.isSlide === true;
+      const normalizedVelocity = normalizeMidiVelocity(note.velocity);
+      const velocityRatio = normalizedVelocity / 127;
 
       // Draw ghost of original position when preview is active
       if (hasPreview) {
@@ -367,6 +370,11 @@ export function PianoRollCanvas({
         ctx.font = `${Math.min(9, noteHeight * 0.7)}px "Geist Mono", monospace`;
         ctx.textBaseline = 'middle';
         ctx.fillText(isSlide ? `${midiNoteToName(note.pitch)} SL` : midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
+      }
+
+      if (!isSlide && noteWidth > 8 && noteHeight > 6) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillRect(noteX + 2, noteY + noteHeight - 3, Math.max((noteWidth - 4) * velocityRatio, 2), 1.5);
       }
 
       if (isSelected && noteWidth > 10) {
@@ -1029,8 +1037,11 @@ export function PianoRollCanvas({
         prScrollX: number;
         prScrollY: number;
         activeTool: PianoRollTool;
+        velocityLaneTop: number;
+        velocityLaneHeight: number;
       };
     };
+    const containerHeight = containerRef.current?.getBoundingClientRect().height ?? 0;
 
     globalWindow.__pianoRollHelpers = {
       beatToX,
@@ -1042,6 +1053,8 @@ export function PianoRollCanvas({
       prScrollX,
       prScrollY,
       activeTool,
+      velocityLaneTop: Math.max(0, containerHeight - velocityHeight + 3),
+      velocityLaneHeight: Math.max(0, velocityHeight - 6),
     };
 
     return () => {

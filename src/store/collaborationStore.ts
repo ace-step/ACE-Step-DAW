@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { CloudProjectSummary } from '../services/cloudStorageService';
 
 export interface Collaborator {
   id: string;
@@ -21,6 +22,12 @@ export interface CollaborationState {
   collaborators: Collaborator[];
   /** Whether the project has unsaved cloud changes (Phase 2). */
   hasCloudChanges: boolean;
+  /** Whether the current project is saved to the cloud. */
+  isCloudProject: boolean;
+  /** List of cloud project summaries. */
+  cloudProjects: CloudProjectSummary[];
+  /** Whether a cloud operation is in progress. */
+  cloudBusy: boolean;
 
   // Actions
   setViewerMode: (v: boolean) => void;
@@ -30,6 +37,9 @@ export interface CollaborationState {
   addCollaborator: (collaborator: Collaborator) => void;
   removeCollaborator: (id: string) => void;
   setHasCloudChanges: (v: boolean) => void;
+  setIsCloudProject: (v: boolean) => void;
+  setCloudProjects: (projects: CloudProjectSummary[]) => void;
+  setCloudBusy: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -40,7 +50,11 @@ const initialState = {
   activeShareUrl: null as string | null,
   collaborators: [] as Collaborator[],
   hasCloudChanges: false,
+  isCloudProject: false,
+  cloudProjects: [] as CloudProjectSummary[],
+  cloudBusy: false,
 };
+
 
 export const useCollaborationStore = create<CollaborationState>()((set) => ({
   ...initialState,
@@ -54,5 +68,8 @@ export const useCollaborationStore = create<CollaborationState>()((set) => ({
   removeCollaborator: (id) =>
     set((s) => ({ collaborators: s.collaborators.filter((c) => c.id !== id) })),
   setHasCloudChanges: (v) => set({ hasCloudChanges: v }),
+  setIsCloudProject: (v) => set({ isCloudProject: v }),
+  setCloudProjects: (projects) => set({ cloudProjects: projects }),
+  setCloudBusy: (v) => set({ cloudBusy: v }),
   reset: () => set(initialState),
 }));

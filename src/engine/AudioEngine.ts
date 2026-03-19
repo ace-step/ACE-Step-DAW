@@ -63,6 +63,11 @@ export class AudioEngine {
   private readonly masterInputAnalyserData: Uint8Array<ArrayBuffer>;
   private readonly masterOutputAnalyserData: Uint8Array<ArrayBuffer>;
 
+  // High-resolution spectrum analyser for the SpectrumAnalyzer component & LUFS metering
+  private readonly spectrumAnalyser: AnalyserNode;
+  private readonly spectrumFloatData: Float32Array<ArrayBuffer>;
+  private readonly spectrumTimeDomainData: Float32Array<ArrayBuffer>;
+
   private _playing = false;
   private _startedAt = 0;
   private _offset = 0;
@@ -129,6 +134,13 @@ export class AudioEngine {
     this.masterInputAnalyserData = new Uint8Array(this.masterInputAnalyser.frequencyBinCount);
     this.masterOutputAnalyserData = new Uint8Array(this.masterOutputAnalyser.frequencyBinCount);
 
+    // High-resolution spectrum analyser (connected after limiter, before output)
+    this.spectrumAnalyser = this.ctx.createAnalyser();
+    this.spectrumAnalyser.fftSize = 2048;
+    this.spectrumAnalyser.smoothingTimeConstant = 0.7;
+    this.spectrumFloatData = new Float32Array(this.spectrumAnalyser.frequencyBinCount);
+    this.spectrumTimeDomainData = new Float32Array(this.spectrumAnalyser.fftSize);
+
     this.masterInputGain.connect(this.masterInputAnalyser);
     this.masterInputAnalyser.connect(this.masterDryGain);
     this.masterDryGain.connect(this.masterOutputGain);
@@ -150,7 +162,8 @@ export class AudioEngine {
     this.masterLimiter.connect(this.masterOutputAnalyser);
     this.masterOutputAnalyser.connect(this.masterProcessedGain);
     this.masterProcessedGain.connect(this.masterOutputGain);
-    this.masterOutputGain.connect(this.ctx.destination);
+    this.masterOutputGain.connect(this.spectrumAnalyser);
+    this.spectrumAnalyser.connect(this.ctx.destination);
 
     this._setMasterWidth(1);
     this.applyMastering(null);
@@ -207,6 +220,28 @@ export class AudioEngine {
       stage === 'input' ? this.masterInputAnalyser : this.masterOutputAnalyser,
       stage === 'input' ? this.masterInputAnalyserData : this.masterOutputAnalyserData,
     );
+  }
+
+  /** Get high-resolution spectrum data (dB) for the master output. */
+  getMasterSpectrum(): Float32Array<ArrayBuffer> {
+    this.spectrumAnalyser.getFloatFrequencyData(this.spectrumFloatData);
+    return this.spectrumFloatData;
+  }
+
+  /** Get time-domain samples from the master output (for LUFS calculation). */
+  getMasterTimeDomainData(): Float32Array<ArrayBuffer> {
+    this.spectrumAnalyser.getFloatTimeDomainData(this.spectrumTimeDomainData);
+    return this.spectrumTimeDomainData;
+  }
+
+  /** Sample rate of the audio context. */
+  get sampleRate(): number {
+    return this.ctx.sampleRate;
+  }
+
+  /** Number of frequency bins in the spectrum analyser. */
+  get spectrumBinCount(): number {
+    return this.spectrumAnalyser.frequencyBinCount;
   }
 
   applyMastering(mastering: MasteringState | null | undefined) {

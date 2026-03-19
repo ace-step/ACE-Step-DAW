@@ -5,6 +5,7 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
+import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import type { Track } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -109,13 +110,28 @@ interface MasterStripProps { faderHeight: number; }
 function MasterStrip({ faderHeight }: MasterStripProps) {
   const project = useProjectStore((s) => s.project);
   const updateProject = useProjectStore((s) => s.updateProject);
+  const showSpectrum = useUIStore((s) => s.showSpectrumAnalyzer);
+  const toggleSpectrum = useUIStore((s) => s.toggleSpectrumAnalyzer);
   if (!project) return null;
   const masterVol = project.masterVolume ?? 1.0;
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
 
   return (
     <div className="flex h-full min-h-0 flex-col items-center gap-1.5 border-l-2 border-[#555] bg-[#252525] px-4 py-2 min-w-[250px]">
-      <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Master</span>
+      <div className="flex items-center gap-2 w-full">
+        <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Master</span>
+        <button
+          onClick={toggleSpectrum}
+          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition-colors ml-auto ${
+            showSpectrum ? 'bg-blue-600 text-white' : 'bg-[#444] text-zinc-400 hover:bg-[#555]'
+          }`}
+          title="Toggle spectrum analyzer & LUFS meter"
+          data-testid="spectrum-toggle"
+        >
+          SPEC
+        </button>
+      </div>
+      {showSpectrum && <SpectrumAnalyzer width={220} height={120} />}
       <MasteringPanel />
       <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-1 w-full pb-1">
         <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>

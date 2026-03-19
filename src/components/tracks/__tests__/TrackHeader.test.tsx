@@ -19,6 +19,12 @@ vi.mock('../../../services/freezeTrack', () => ({
   flattenTrackToAudio: vi.fn(),
 }));
 
+vi.mock('../../../hooks/useAudioEngine', () => ({
+  getAudioEngine: () => ({
+    getTrackLevel: () => 0,
+  }),
+}));
+
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {
     id: 'track-1',

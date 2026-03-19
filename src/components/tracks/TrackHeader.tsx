@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TRACK_CATALOG } from '../../constants/tracks';
 import { TrackEditModal } from './TrackEditModal';
+import { TrackHeaderMeter } from './TrackHeaderMeter';
 import { useRecording } from '../../hooks/useRecording';
 import { freezeTrackToAudio, flattenTrackToAudio } from '../../services/freezeTrack';
 
@@ -250,6 +251,9 @@ export function TrackHeader({
             />
           </div>
         )}
+
+        {/* Level meter with peak hold + clip indicator */}
+        <TrackHeaderMeter trackId={track.id} />
       </div>
 
       {/* Primary and secondary track actions */}

@@ -27,6 +27,12 @@ vi.mock('../../src/hooks/useRecording', () => ({
   }),
 }));
 
+vi.mock('../../src/hooks/useAudioEngine', () => ({
+  getAudioEngine: () => ({
+    getTrackLevel: () => 0,
+  }),
+}));
+
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {
     id: 'track-1',

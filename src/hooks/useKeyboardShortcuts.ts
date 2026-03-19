@@ -8,14 +8,15 @@ import { useShortcutsStore } from '../store/shortcutsStore';
 import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import { getMidiCaptureService } from '../services/midiCaptureService';
+import {
+  executeCoreDawShortcut,
+  isEditableShortcutTarget,
+  registerCoreDawShortcutRuntime,
+} from '../services/coreDawShortcuts';
 import type { KeyCombo } from '../types/shortcuts';
 
 function isInputFocused(event: KeyboardEvent): boolean {
-  return (
-    event.target instanceof HTMLInputElement ||
-    event.target instanceof HTMLTextAreaElement ||
-    event.target instanceof HTMLSelectElement
-  );
+  return isEditableShortcutTarget(event.target);
 }
 
 const NUDGE_SECONDS = 5;
@@ -101,24 +102,6 @@ function focusTrack(delta: number) {
   }
 }
 
-function toggleFocusedTrackFlag(flag: 'muted' | 'soloed') {
-  const trackId = resolveFocusedTrackId();
-  const projectStore = useProjectStore.getState();
-  const project = projectStore.project;
-  if (!project || !trackId) return;
-
-  const track = project.tracks.find((candidate) => candidate.id === trackId);
-  if (!track) return;
-
-  if (track.isGroup) {
-    if (flag === 'muted') projectStore.setGroupMuted(trackId, !track.muted);
-    else projectStore.setGroupSoloed(trackId, !track.soloed);
-  } else {
-    projectStore.updateTrack(trackId, { [flag]: !track[flag] });
-  }
-  useUIStore.getState().setKeyboardContext(useUIStore.getState().keyboardContext.scope, trackId);
-}
-
 function shouldDeferToPianoRollTools(event: KeyboardEvent): boolean {
   const ui = useUIStore.getState();
   if (ui.keyboardContext.scope !== 'pianoRoll') return false;
@@ -131,6 +114,12 @@ export function useKeyboardShortcuts() {
   const { toggleRecord } = useRecording();
 
   useEffect(() => {
+    const unregisterRuntime = registerCoreDawShortcutRuntime({
+      play,
+      pause,
+      toggleRecord,
+    });
+
     const handler = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       const getCombo = useShortcutsStore.getState().getCombo;
@@ -325,14 +314,13 @@ export function useKeyboardShortcuts() {
 
       if (matches('transport.playPause')) {
         event.preventDefault();
-        if (transport.isPlaying) pause();
-        else play();
+        void executeCoreDawShortcut('transport.playPause');
         return;
       }
       if (matches('transport.stop')) { event.preventDefault(); stop(); return; }
-      if (matches('transport.loop')) { event.preventDefault(); transport.toggleLoop(); return; }
+      if (matches('transport.loop')) { event.preventDefault(); void executeCoreDawShortcut('transport.loop'); return; }
       if (matches('transport.metronome')) { event.preventDefault(); transport.toggleMetronome(); return; }
-      if (matches('transport.record')) { event.preventDefault(); void toggleRecord(); return; }
+      if (matches('transport.record')) { event.preventDefault(); void executeCoreDawShortcut('transport.record'); return; }
       if (matches('transport.home')) { event.preventDefault(); seek(0); return; }
       if (matches('transport.end')) {
         event.preventDefault();
@@ -357,8 +345,8 @@ export function useKeyboardShortcuts() {
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }
 
-      if (matches('tracks.mute')) { event.preventDefault(); toggleFocusedTrackFlag('muted'); return; }
-      if (matches('tracks.solo')) { event.preventDefault(); toggleFocusedTrackFlag('soloed'); return; }
+      if (matches('tracks.mute')) { event.preventDefault(); void executeCoreDawShortcut('tracks.mute'); return; }
+      if (matches('tracks.solo')) { event.preventDefault(); void executeCoreDawShortcut('tracks.solo'); return; }
 
       if (matches('navigation.previousTrack')) { event.preventDefault(); focusTrack(-1); return; }
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
@@ -395,13 +383,13 @@ export function useKeyboardShortcuts() {
       // Z fits the current selection, Shift+Z resets to the full project.
       if (matches('view.zoomToSelection')) {
         event.preventDefault();
-        ui.zoomTimelineToSelection();
+        void executeCoreDawShortcut('view.zoomToSelection');
         return;
       }
 
       if (matches('view.zoomToFit')) {
         event.preventDefault();
-        ui.zoomTimelineToProject();
+        void executeCoreDawShortcut('view.zoomToFit');
         return;
       }
 
@@ -450,6 +438,9 @@ export function useKeyboardShortcuts() {
     };
 
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    return () => {
+      unregisterRuntime();
+      window.removeEventListener('keydown', handler);
+    };
   }, [pause, play, seek, stop, toggleRecord]);
 }

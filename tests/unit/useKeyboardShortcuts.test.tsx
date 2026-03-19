@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { useKeyboardShortcuts } from '../../src/hooks/useKeyboardShortcuts';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
@@ -109,6 +109,7 @@ describe('useKeyboardShortcuts', () => {
   });
 
   it('routes Z and Shift+Z to arrangement zoom requests', () => {
+    useUIStore.getState().setKeyboardContext('timeline');
     render(<Harness />);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ' }));
@@ -122,5 +123,34 @@ describe('useKeyboardShortcuts', () => {
       id: 2,
       mode: 'project',
     });
+  });
+
+  it('suppresses single-key shortcuts while typing in editable controls', () => {
+    const drums = useProjectStore.getState().addTrack('drums');
+    useUIStore.getState().setKeyboardContext('timeline', drums.id);
+
+    const { getByTestId } = render(
+      <>
+        <Harness />
+        <input data-testid="text-input" />
+        <div data-testid="editable" contentEditable />
+      </>,
+    );
+
+    const input = getByTestId('text-input');
+    input.focus();
+    fireEvent.keyDown(input, { code: 'KeyM' });
+    fireEvent.keyDown(input, { code: 'KeyZ' });
+
+    let track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
+    expect(track?.muted).toBe(false);
+    expect(useUIStore.getState().timelineZoomRequest).toBeNull();
+
+    const editable = getByTestId('editable');
+    editable.focus();
+    fireEvent.keyDown(editable, { code: 'KeyS' });
+
+    track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
+    expect(track?.soloed).toBe(false);
   });
 });

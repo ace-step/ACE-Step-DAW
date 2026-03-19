@@ -39,7 +39,7 @@ export function KeyboardShortcutsDialog() {
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Keyboard Shortcuts</h2>
             <p className="text-[11px] text-zinc-500 mt-1">
-              Transport always responds unless you are typing in a form field.
+              Core single-key shortcuts stay active across panels, but they are suppressed while typing in inputs or editable text fields.
             </p>
           </div>
           <button

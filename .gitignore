@@ -9,3 +9,4 @@ dist
 # Playwright test artifacts
 test-results/
 playwright-report/
+scripts/metrics-latest.json

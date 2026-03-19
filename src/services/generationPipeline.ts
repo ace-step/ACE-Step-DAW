@@ -63,12 +63,26 @@ export interface ClipInternalOptions {
   chunkMaskMode?: 'explicit' | 'auto';
   /** Override the default repainting range (clip.startTime → clip.startTime + clip.duration) */
   repaintRange?: { start: number; end: number };
+  /** Manual override for the backend guidance scale. */
+  guidanceScaleOverride?: number;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
 }
 
 export interface VariationGenerationDependencies {
   generateClip?: (clipId: string, previousCumulativeBlob: Blob | null, options?: ClipInternalOptions) => Promise<GenerationOutcome>;
+}
+
+export interface GenerationPanelRequest {
+  prompt: string;
+  trackId: string;
+  styleTags: string[];
+  bpm: number;
+  keyScale: string;
+  lengthSeconds: number;
+  temperature: number;
+  variationCount: number;
+  lyrics?: string;
 }
 
 async function withGenerationToast(label: string, action: () => Promise<boolean>): Promise<void> {
@@ -430,7 +444,7 @@ async function generateClipInternal(
       key_scale: resolvedKey,
       time_signature: resolvedTimeSig,
       inference_steps: project.generationDefaults.inferenceSteps,
-      guidance_scale: project.generationDefaults.guidanceScale,
+      guidance_scale: options.guidanceScaleOverride ?? project.generationDefaults.guidanceScale,
       shift: project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
@@ -839,6 +853,135 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       }
 
       return outcome.succeeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
+    }
+  });
+}
+
+function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {
+  const trimmedPrompt = prompt.trim();
+  const normalizedStyleTags = styleTags
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+  if (normalizedStyleTags.length === 0) {
+    return trimmedPrompt;
+  }
+
+  return `${trimmedPrompt}\nStyle tags: ${normalizedStyleTags.join(', ')}`;
+}
+
+function getTrackInsertStartTime(trackId: string) {
+  const project = useProjectStore.getState().project;
+  if (!project) return 0;
+
+  const targetTrack = project.tracks.find((track) => track.id === trackId);
+  if (!targetTrack) return project.totalDuration;
+
+  return targetTrack.clips.reduce((maxEnd, clip) => {
+    return Math.max(maxEnd, clip.startTime + clip.duration);
+  }, 0);
+}
+
+export async function generateFromGenerationPanel(request: GenerationPanelRequest): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  const projectStore = useProjectStore.getState();
+  const project = projectStore.project;
+
+  if (!project || genStore.isGenerating) return;
+
+  const targetTrack = project.tracks.find((track) => track.id === request.trackId);
+  if (!targetTrack) {
+    throw new Error(`Track '${request.trackId}' not found.`);
+  }
+  if ((targetTrack.trackType ?? 'stems') !== 'stems') {
+    throw new Error(`Track '${targetTrack.displayName}' does not support AI generation.`);
+  }
+
+  const prompt = buildGenerationPanelPrompt(request.prompt, request.styleTags);
+  const lyrics = request.lyrics?.trim() ?? '';
+  const insertStart = getTrackInsertStartTime(request.trackId);
+
+  genStore.startVariationSession({
+    prompt: request.prompt.trim(),
+    trackId: request.trackId,
+    variationCount: request.variationCount,
+    bpm: request.bpm,
+    keyScale: request.keyScale,
+    duration: request.lengthSeconds,
+    guidanceScale: request.temperature,
+    temperature: request.temperature,
+    styleTags: request.styleTags,
+    lyrics: lyrics || undefined,
+    globalCaption: project.globalCaption || undefined,
+  });
+
+  const normalizedParams = useGenerationStore.getState().variationSession?.params;
+  const variationCount = normalizedParams?.variationCount ?? request.variationCount;
+  const bpm = normalizedParams?.bpm ?? request.bpm;
+  const keyScale = normalizedParams?.keyScale ?? request.keyScale;
+  const lengthSeconds = normalizedParams?.duration ?? request.lengthSeconds;
+  const temperature = normalizedParams?.temperature ?? normalizedParams?.guidanceScale ?? request.temperature;
+
+  await withGenerationToast('AI generation', async () => {
+    genStore.setIsGenerating(true);
+
+    try {
+      let allSucceeded = true;
+
+      for (let variationIndex = 0; variationIndex < variationCount; variationIndex += 1) {
+        const clipStartTime = insertStart + (variationIndex * lengthSeconds);
+        const clip = projectStore.addClip(request.trackId, {
+          startTime: clipStartTime,
+          duration: lengthSeconds,
+          prompt,
+          globalCaption: project.globalCaption || '',
+          lyrics,
+          source: 'generated',
+        });
+
+        projectStore.updateClip(clip.id, {
+          bpm,
+          keyScale,
+        });
+
+        genStore.updateVariation(variationIndex, {
+          clipId: clip.id,
+          status: 'generating',
+          progress: 'Submitting...',
+          startedAt: Date.now(),
+          error: undefined,
+        });
+
+        const outcome = await generateClipInternal(clip.id, null, {
+          forceSilence: true,
+          localDescription: prompt,
+          globalCaptionOverride: project.globalCaption || '',
+          lyricsOverride: lyrics || undefined,
+          guidanceScaleOverride: temperature,
+        });
+
+        if (outcome.succeeded) {
+          useProjectStore.getState().saveClipVersion(clip.id);
+          genStore.updateVariation(variationIndex, {
+            status: 'done',
+            progress: 'Done',
+            completedAt: Date.now(),
+          });
+          continue;
+        }
+
+        allSucceeded = false;
+        genStore.updateVariation(variationIndex, {
+          status: 'error',
+          progress: outcome.errorMessage ?? 'Generation failed.',
+          error: outcome.errorMessage ?? 'Generation failed.',
+          completedAt: Date.now(),
+        });
+      }
+
+      return allSucceeded;
     } finally {
       useGenerationStore.getState().setIsGenerating(false);
     }

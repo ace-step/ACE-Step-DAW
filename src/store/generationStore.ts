@@ -269,20 +269,20 @@ function normalizeStyleTags(tags: string[]) {
 
 function normalizeVariationSessionParams(
   params: VariationSessionParams,
-  fallbackStyleTags: string[],
+  fallbackPresetId: string | null = null,
 ): VariationSessionParams {
-  const normalizedTemperature = clampTemperature(params.temperature ?? params.guidanceScale);
   return {
     ...params,
     prompt: params.prompt.trim(),
     variationCount: clampVariationCount(params.variationCount),
     bpm: clampBpm(params.bpm),
     duration: clampLengthSeconds(params.duration),
-    guidanceScale: normalizedTemperature,
-    temperature: normalizedTemperature,
-    styleTags: normalizeStyleTags(params.styleTags ?? fallbackStyleTags),
+    guidanceScale: clampTemperature(params.guidanceScale),
+    temperature: clampTemperature(params.temperature ?? params.guidanceScale),
+    styleTags: normalizeStyleTags(params.styleTags ?? []),
     lyrics: params.lyrics?.trim() || undefined,
     globalCaption: params.globalCaption?.trim() || undefined,
+    presetId: params.presetId ?? fallbackPresetId ?? undefined,
   };
 }
 
@@ -584,7 +584,7 @@ export const useGenerationStore = create<GenerationState>()(
           lyrics: generationForm.lyrics.trim() || undefined,
           globalCaption: context?.globalCaption?.trim() || undefined,
           presetId: generationForm.presetId ?? undefined,
-        }, generationForm.styleTags);
+        }, generationForm.presetId);
 
         set({
           lastSubmittedRequest: {
@@ -608,7 +608,7 @@ export const useGenerationStore = create<GenerationState>()(
       },
 
       startVariationSession: (params) => {
-        const normalizedParams = normalizeVariationSessionParams(params, get().generationForm.styleTags);
+        const normalizedParams = normalizeVariationSessionParams(params, get().generationForm.presetId);
         const count = normalizedParams.variationCount;
         const variations: Variation[] = Array.from({ length: count }, (_, i) => ({
           index: i,
@@ -638,7 +638,7 @@ export const useGenerationStore = create<GenerationState>()(
             ...get().generationForm,
             prompt: normalizedParams.prompt,
             selectedTrackId: normalizedParams.trackId,
-            variationCount: normalizedParams.variationCount,
+            variationCount: count,
             bpm: normalizedParams.bpm,
             keyScale: normalizedParams.keyScale,
             lengthSeconds: normalizedParams.duration,

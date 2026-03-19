@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
   Project,
   Track,
@@ -115,6 +116,8 @@ interface ProjectState {
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
+  setTrackHeightPreset: (trackId: string, preset: TrackHeightPreset) => void;
+  setAllTracksHeightPreset: (preset: TrackHeightPreset) => void;
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
@@ -706,6 +709,41 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+
+  setTrackHeightPreset: (trackId, preset) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    const trackType = track.trackType ?? 'stems';
+    const laneHeight = getTrackHeightForPreset(preset, trackType);
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, laneHeight } : t,
+        ),
+      },
+    });
+  },
+
+  setAllTracksHeightPreset: (preset) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          laneHeight: getTrackHeightForPreset(preset, t.trackType ?? 'stems'),
+        })),
+      },
+    });
+  },
   renameTrack: (trackId, newName) => {
     const state = get();
     if (!state.project) return;

@@ -31,6 +31,8 @@ export function TrackHeader({
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+  const setTrackHeightPreset = useProjectStore((s) => s.setTrackHeightPreset);
+  const setAllTracksHeightPreset = useProjectStore((s) => s.setAllTracksHeightPreset);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
   const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
 
@@ -44,6 +46,7 @@ export function TrackHeader({
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [heightSubmenu, setHeightSubmenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isFreezing, setIsFreezing] = useState(false);
 
@@ -419,6 +422,42 @@ export function TrackHeader({
           >
             Track Settings...
           </button>
+          {/* Track Height submenu */}
+          <div
+            className="relative"
+            onMouseEnter={() => setHeightSubmenu(true)}
+            onMouseLeave={() => setHeightSubmenu(false)}
+          >
+            <button
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors flex items-center justify-between"
+            >
+              Track Height
+              <span className="text-zinc-500 text-[9px] ml-2">&#8250;</span>
+            </button>
+            {heightSubmenu && (
+              <div className="absolute left-full top-0 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[130px] z-50">
+                {(['small', 'medium', 'large', 'auto'] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => { setCtxMenu(null); setHeightSubmenu(false); setTrackHeightPreset(track.id, preset); }}
+                    className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors capitalize"
+                  >
+                    {preset}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-[#555]" />
+                {(['small', 'medium', 'large', 'auto'] as const).map((preset) => (
+                  <button
+                    key={`all-${preset}`}
+                    onClick={() => { setCtxMenu(null); setHeightSubmenu(false); setAllTracksHeightPreset(preset); }}
+                    className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-400 hover:bg-daw-accent hover:text-white transition-colors capitalize"
+                  >
+                    All Tracks {preset}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"

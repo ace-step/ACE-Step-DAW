@@ -4,6 +4,7 @@ import {
   useGenerationStore,
   deriveGenerationJobProgress,
   type VariationSessionParams,
+  type VariationStatus,
 } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, CoverTaskParams, TaskResultEntry, TaskResultItem } from '../types/api';
@@ -69,6 +70,23 @@ export interface ClipInternalOptions {
 
 export interface VariationGenerationDependencies {
   generateClip?: (clipId: string, previousCumulativeBlob: Blob | null, options?: ClipInternalOptions) => Promise<GenerationOutcome>;
+  createVariationClip?: (params: VariationSessionParams, index: number) => string;
+  runVariationClip?: (
+    clipId: string,
+    index: number,
+    report: (updates: VariationProgressUpdate) => void,
+  ) => Promise<VariationGenerationResult>;
+  saveVariationClipVersion?: (clipId: string) => void;
+}
+
+type VariationProgressUpdate = {
+  status?: Extract<VariationStatus, 'generating' | 'processing'>;
+  progress?: string;
+};
+
+export interface VariationGenerationResult {
+  succeeded: boolean;
+  errorMessage?: string;
 }
 
 async function withGenerationToast(label: string, action: () => Promise<boolean>): Promise<void> {
@@ -675,6 +693,136 @@ export interface BatchTrackEntry {
   localDescription: string;
   /** Lyrics override for vocals/backing_vocals tracks */
   lyrics?: string;
+}
+
+function getNextVariationStartTime(trackId: string): number {
+  const track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === trackId);
+  if (!track || track.clips.length === 0) return 0;
+  return track.clips.reduce((maxEnd, clip) => Math.max(maxEnd, clip.startTime + clip.duration), 0);
+}
+
+function createVariationClipAtTime(params: VariationSessionParams, index: number, baseStartTime: number): string {
+  const startTime = baseStartTime + (index * params.duration);
+  const clip = useProjectStore.getState().addClip(params.trackId, {
+    startTime,
+    duration: params.duration,
+    prompt: params.prompt,
+    globalCaption: params.globalCaption ?? '',
+    lyrics: params.lyrics ?? '',
+    source: 'generated',
+  });
+  return clip.id;
+}
+
+async function runVariationClip(
+  clipId: string,
+  _index: number,
+  _report: (updates: VariationProgressUpdate) => void,
+): Promise<VariationGenerationResult> {
+  const previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
+  const outcome = await generateClipInternal(clipId, previousCumulativeBlob);
+  return {
+    succeeded: outcome.succeeded,
+    errorMessage: outcome.errorMessage,
+  };
+}
+
+function getVariationErrorMessage(errorMessage?: string) {
+  return errorMessage?.trim() || 'Generation failed: retry this variation or adjust the prompt.';
+}
+
+function updateVariationIfCurrent(
+  sessionId: string,
+  index: number,
+  updates: Partial<{
+    clipId: string | null;
+    status: VariationStatus;
+    progress: string;
+    error: string;
+    startedAt: number;
+    completedAt: number;
+  }>,
+) {
+  const session = useGenerationStore.getState().variationSession;
+  if (!session || session.id !== sessionId || session.status === 'cancelled') return;
+  useGenerationStore.getState().updateVariation(index, updates);
+}
+
+export async function streamGenerationVariations(
+  params: VariationSessionParams,
+  dependencies: VariationGenerationDependencies = {},
+): Promise<void> {
+  if (useGenerationStore.getState().isGenerating) return;
+
+  if (!useGenerationStore.getState().variationSession) {
+    useGenerationStore.getState().startVariationSession(params);
+  }
+
+  const session = useGenerationStore.getState().variationSession;
+  if (!session) return;
+
+  const sessionId = session.id;
+  const baseStartTime = getNextVariationStartTime(params.trackId);
+  const createClip = dependencies.createVariationClip
+    ?? ((request: VariationSessionParams, index: number) => createVariationClipAtTime(request, index, baseStartTime));
+  const runClip = dependencies.runVariationClip ?? runVariationClip;
+  const saveClipVersion = dependencies.saveVariationClipVersion
+    ?? ((clipId: string) => useProjectStore.getState().saveClipVersion(clipId));
+
+  useGenerationStore.getState().setIsGenerating(true);
+
+  try {
+    await Promise.all(session.variations.map(async (variation) => {
+      const clipId = createClip(params, variation.index);
+      updateVariationIfCurrent(sessionId, variation.index, {
+        clipId,
+        status: 'generating',
+        progress: 'Submitting...',
+        error: undefined,
+        startedAt: Date.now(),
+        completedAt: undefined,
+      });
+
+      try {
+        const result = await runClip(clipId, variation.index, (updates) => {
+          updateVariationIfCurrent(sessionId, variation.index, {
+            clipId,
+            ...updates,
+          });
+        });
+
+        if (result.succeeded) {
+          saveClipVersion(clipId);
+          updateVariationIfCurrent(sessionId, variation.index, {
+            clipId,
+            status: 'done',
+            progress: 'Ready to review',
+            error: undefined,
+            completedAt: Date.now(),
+          });
+          return;
+        }
+
+        updateVariationIfCurrent(sessionId, variation.index, {
+          clipId,
+          status: 'error',
+          progress: 'Variation failed',
+          error: getVariationErrorMessage(result.errorMessage),
+          completedAt: Date.now(),
+        });
+      } catch (error) {
+        updateVariationIfCurrent(sessionId, variation.index, {
+          clipId,
+          status: 'error',
+          progress: 'Variation failed',
+          error: getVariationErrorMessage(error instanceof Error ? error.message : undefined),
+          completedAt: Date.now(),
+        });
+      }
+    }));
+  } finally {
+    useGenerationStore.getState().setIsGenerating(false);
+  }
 }
 
 export interface GenerateBatchOptions {

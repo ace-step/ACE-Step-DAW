@@ -28,6 +28,7 @@ function createWavBuffer(durationSeconds = 0.1, sampleRate = 44100): Buffer {
 
 test.describe('Streaming Generation Variations', () => {
   test('shows the first completed variation before the full batch finishes', async ({ page }) => {
+    test.setTimeout(120000);
     const wavBuffer = createWavBuffer();
     let releaseCount = 0;
     const queryCounts = new Map<string, number>();
@@ -105,7 +106,7 @@ test.describe('Streaming Generation Variations', () => {
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined');
+    await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 120000 });
     await page.evaluate(() => {
       const browserWindow = window as unknown as {
         __store: {

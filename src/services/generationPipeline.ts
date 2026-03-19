@@ -939,6 +939,93 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// regenerateTimelineRegion — regenerates clips within a selected timeline region
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RegionRegenerateOptions {
+  /** Start time of the region in seconds */
+  startTime: number;
+  /** End time of the region in seconds */
+  endTime: number;
+  /** Track IDs to regenerate within the region */
+  trackIds: string[];
+  /** Prompt describing the desired result */
+  prompt: string;
+  /** Optional global song description override */
+  globalCaption?: string;
+}
+
+/**
+ * Regenerate all clips that overlap the specified timeline region.
+ * Each affected clip is repainted for the intersection of its bounds with the
+ * selection region. Original audio is preserved as a version entry.
+ */
+export async function regenerateTimelineRegion(opts: RegionRegenerateOptions): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  if (genStore.isGenerating) return;
+
+  await withGenerationToast('AI region regeneration', async () => {
+    genStore.setIsGenerating(true);
+
+    try {
+      const store = useProjectStore.getState();
+      const project = store.project;
+      if (!project) return false;
+
+      const trackIdSet = new Set(opts.trackIds);
+      const affectedClips: Array<{ clipId: string; repaintStart: number; repaintEnd: number }> = [];
+
+      for (const track of project.tracks) {
+        if (!trackIdSet.has(track.id)) continue;
+        for (const clip of track.clips) {
+          const clipEnd = clip.startTime + clip.duration;
+          const overlapStart = Math.max(opts.startTime, clip.startTime);
+          const overlapEnd = Math.min(opts.endTime, clipEnd);
+          if (overlapEnd > overlapStart && clip.generationStatus === 'ready') {
+            affectedClips.push({
+              clipId: clip.id,
+              repaintStart: overlapStart,
+              repaintEnd: overlapEnd,
+            });
+          }
+        }
+      }
+
+      if (affectedClips.length === 0) return false;
+
+      let allSucceeded = true;
+      for (const { clipId, repaintStart, repaintEnd } of affectedClips) {
+        const clip = store.getClipById(clipId);
+        if (!clip) continue;
+
+        store.saveClipVersion(clipId);
+
+        let srcBlob: Blob | null = null;
+        if (clip.cumulativeMixKey) {
+          srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
+        }
+
+        const outcome = await generateClipInternal(clipId, srcBlob, {
+          forceSilence: !srcBlob,
+          localDescription: opts.prompt,
+          globalCaptionOverride: opts.globalCaption,
+          repaintRange: { start: repaintStart, end: repaintEnd },
+        });
+
+        allSucceeded = allSucceeded && outcome.succeeded;
+        if (outcome.succeeded) {
+          useProjectStore.getState().saveClipVersion(clipId);
+        }
+      }
+
+      return allSucceeded;
+    } finally {
+      useGenerationStore.getState().setIsGenerating(false);
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // generateVocal2BGM — generates accompaniment from a vocal reference clip
 // ─────────────────────────────────────────────────────────────────────────────
 

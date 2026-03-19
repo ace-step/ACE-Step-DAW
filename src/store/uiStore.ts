@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AIChatMessage } from '../types/aiAssistant';
+import type { InlineSuggestion } from '../types/suggestions';
 import { useProjectStore } from './projectStore';
 import { useTransportStore } from './transportStore';
 import type { AIChatContext } from '../utils/aiAssistantContext';
@@ -99,6 +100,11 @@ interface UIState {
   aiAssistantSuggestions: string[];
   aiAssistantError: string | null;
 
+  // Inline AI regeneration & suggestions
+  regionRegenerateTarget: { startTime: number; endTime: number; trackIds: string[] } | null;
+  inlineSuggestions: InlineSuggestion[];
+  suggestionFrequency: 'off' | 'subtle' | 'active';
+
   setPixelsPerSecond: (pps: number) => void;
   toggleSnap: () => void;
   zoomIn: () => void;
@@ -179,6 +185,13 @@ interface UIState {
   updateAIChatMessage: (id: string, updater: (message: AIChatMessage) => AIChatMessage) => void;
   refreshAIAssistantSuggestions: () => void;
   askAIAssistant: (question: string, options?: { delayMs?: number }) => Promise<void>;
+
+  // Inline AI regeneration & suggestions
+  setRegionRegenerateTarget: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
+  setInlineSuggestions: (v: InlineSuggestion[]) => void;
+  dismissInlineSuggestion: (id: string) => void;
+  clearInlineSuggestions: () => void;
+  setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -251,6 +264,10 @@ export const useUIStore = create<UIState>()(
   aiAssistantStreaming: false,
   aiAssistantSuggestions: [],
   aiAssistantError: null,
+
+  regionRegenerateTarget: null,
+  inlineSuggestions: [],
+  suggestionFrequency: 'subtle',
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
@@ -431,6 +448,14 @@ export const useUIStore = create<UIState>()(
       }));
     }
   },
+
+  setRegionRegenerateTarget: (v) => set({ regionRegenerateTarget: v }),
+  setInlineSuggestions: (v) => set({ inlineSuggestions: v }),
+  dismissInlineSuggestion: (id) => set((s) => ({
+    inlineSuggestions: s.inlineSuggestions.filter((sg) => sg.id !== id),
+  })),
+  clearInlineSuggestions: () => set({ inlineSuggestions: [] }),
+  setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
 }),
     {
       name: 'ace-step-daw-ui',
@@ -459,6 +484,8 @@ export const useUIStore = create<UIState>()(
         loopBrowserCategory: state.loopBrowserCategory,
         // AI Assistant
         showAIAssistant: state.showAIAssistant,
+        // Inline suggestions
+        suggestionFrequency: state.suggestionFrequency,
       }),
     },
   ),

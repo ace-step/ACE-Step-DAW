@@ -7,6 +7,9 @@ import { Playhead } from './Playhead';
 import { GridOverlay } from './GridOverlay';
 import { snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
+import { RegionRegenerateModal } from '../generation/RegionRegenerateModal';
+import { RegionContextMenu } from './RegionContextMenu';
+import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
@@ -70,7 +73,12 @@ export function Timeline() {
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
   const selectClips = useUIStore((s) => s.selectClips);
+  const setRegionRegenerateTarget = useUIStore((s) => s.setRegionRegenerateTarget);
+  const regionRegenerateTarget = useUIStore((s) => s.regionRegenerateTarget);
+  const inlineSuggestions = useUIStore((s) => s.inlineSuggestions);
+  const suggestionFrequency = useUIStore((s) => s.suggestionFrequency);
 
+  const [regionCtxMenu, setRegionCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
   const [normalDrag, setNormalDrag] = useState<DragRect | null>(null);
@@ -379,7 +387,7 @@ export function Timeline() {
             {/* Committed select window overlay — Apple Purple (#AF52DE) */}
             {selLeft !== null && selWidth !== null && selVRange && (
               <div
-                className="absolute pointer-events-none z-10"
+                className="absolute z-10"
                 style={{
                   left: selLeft,
                   width: selWidth,
@@ -391,9 +399,14 @@ export function Timeline() {
                   borderTop: '2px solid rgba(175, 82, 222, 0.35)',
                   borderBottom: '2px solid rgba(175, 82, 222, 0.35)',
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRegionCtxMenu({ x: e.clientX, y: e.clientY });
+                }}
               >
                 <span
-                  className="absolute top-0.5 right-1 text-[9px] font-mono select-none"
+                  className="absolute top-0.5 right-1 text-[9px] font-mono select-none pointer-events-none"
                   style={{ color: '#AF52DE', background: 'rgba(20,20,35,0.75)', padding: '0 4px', borderRadius: 3 }}
                 >
                   select window
@@ -461,6 +474,15 @@ export function Timeline() {
                 Add a track to begin
               </div>
             )}
+
+            {/* Inline AI suggestion badges */}
+            {suggestionFrequency !== 'off' && inlineSuggestions.map((s) => (
+              <InlineSuggestionBadge
+                key={s.id}
+                suggestion={s}
+                pixelsPerSecond={pixelsPerSecond}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -474,6 +496,36 @@ export function Timeline() {
           }}
         />
       )}
+
+      {/* Region context menu — right-click on select window */}
+      {regionCtxMenu && selectWindow && (
+        <RegionContextMenu
+          x={regionCtxMenu.x}
+          y={regionCtxMenu.y}
+          onRegenerateRegion={() => {
+            setRegionCtxMenu(null);
+            setRegionRegenerateTarget({
+              startTime: selectWindow.startTime,
+              endTime: selectWindow.endTime,
+              trackIds: selectWindow.trackIds,
+            });
+          }}
+          onClose={() => setRegionCtxMenu(null)}
+          hasReadyClips={
+            project.tracks.some((t) =>
+              selectWindow.trackIds.includes(t.id) &&
+              t.clips.some((c) => {
+                const clipEnd = c.startTime + c.duration;
+                return Math.min(selectWindow.endTime, clipEnd) > Math.max(selectWindow.startTime, c.startTime)
+                  && c.generationStatus === 'ready';
+              }),
+            )
+          }
+        />
+      )}
+
+      {/* Region regeneration modal */}
+      {regionRegenerateTarget && <RegionRegenerateModal />}
     </>
   );
 }

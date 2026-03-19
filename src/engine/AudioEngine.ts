@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
-import type { SequencerPattern } from '../types/project';
+import type { GainEnvelopePoint, SequencerPattern } from '../types/project';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -24,6 +24,7 @@ export interface ClipScheduleInfo {
   audioOffset: number;   // offset into the buffer (crop start)
   clipDuration: number;  // how long to play (crop length)
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
+  gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
 }
 
 /**
@@ -124,7 +125,17 @@ export class AudioEngine {
       const trackNode = this.getOrCreateTrackNode(clip.trackId);
       const source = this.ctx.createBufferSource();
       source.buffer = clip.buffer;
-      source.connect(trackNode.inputGain);
+
+      // Insert per-clip gain envelope node if envelope exists
+      const envelope = clip.gainEnvelope;
+      if (envelope && envelope.length > 0) {
+        const gainNode = this.ctx.createGain();
+        source.connect(gainNode);
+        gainNode.connect(trackNode.inputGain);
+        this._scheduleGainEnvelope(gainNode, envelope, clip, fromTime);
+      } else {
+        source.connect(trackNode.inputGain);
+      }
 
       // Apply time-stretch via playback rate
       const rate = clip.timeStretchRate ?? 1;
@@ -252,6 +263,53 @@ export class AudioEngine {
 
   clearMidiEvents() {
     this._midiEvents = [];
+  }
+
+
+  /**
+   * Schedule Web Audio gain automation for a clip's gain envelope.
+   * Uses linearRampToValueAtTime between envelope points.
+   */
+  private _scheduleGainEnvelope(
+    gainNode: GainNode,
+    points: GainEnvelopePoint[],
+    clip: ClipScheduleInfo,
+    fromTime: number,
+  ) {
+    const contextNow = this.ctx.currentTime;
+    const clipStart = clip.startTime;
+    const seekOffset = Math.max(0, fromTime - clipStart);
+    const delay = Math.max(0, clipStart - fromTime);
+    const sorted = [...points].sort((a, b) => a.time - b.time);
+
+    const clamp = (v: number) => Math.max(0, Math.min(2, v));
+
+    // Compute initial gain at seek position
+    let initialGain = 1;
+    if (sorted.length === 1) {
+      initialGain = clamp(sorted[0].gain);
+    } else if (seekOffset <= sorted[0].time) {
+      initialGain = clamp(sorted[0].gain);
+    } else if (seekOffset >= sorted[sorted.length - 1].time) {
+      initialGain = clamp(sorted[sorted.length - 1].gain);
+    } else {
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (seekOffset >= sorted[i].time && seekOffset <= sorted[i + 1].time) {
+          const t = (seekOffset - sorted[i].time) / (sorted[i + 1].time - sorted[i].time);
+          initialGain = clamp(sorted[i].gain + t * (sorted[i + 1].gain - sorted[i].gain));
+          break;
+        }
+      }
+    }
+
+    gainNode.gain.setValueAtTime(initialGain, contextNow + delay);
+
+    // Schedule ramps for each point after the seek position
+    for (const pt of sorted) {
+      const ptContextTime = contextNow + delay + (pt.time - seekOffset);
+      if (ptContextTime <= contextNow + delay) continue;
+      gainNode.gain.linearRampToValueAtTime(clamp(pt.gain), ptContextTime);
+    }
   }
 
   private _startTimeUpdate(totalDuration: number) {

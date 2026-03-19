@@ -1,5 +1,6 @@
 import { get, set, del, keys } from 'idb-keyval';
 import type { Project, ProjectTemplate } from '../types/project';
+import { buildClipLayout, type ClipLayoutItem } from '../utils/clipLayout';
 
 const PROJECT_PREFIX = 'project:';
 const TEMPLATE_PREFIX = 'template:';
@@ -12,6 +13,9 @@ export interface ProjectSummary {
   createdAt: number;
   updatedAt: number;
   trackCount: number;
+  bpm: number;
+  keyScale: string;
+  clipLayout: ClipLayoutItem[];
 }
 
 export interface TemplateSummary {
@@ -55,6 +59,9 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
         trackCount: project.tracks.length,
+        bpm: project.bpm,
+        keyScale: project.keyScale,
+        clipLayout: buildClipLayout(project.tracks, project.totalDuration),
       });
     }
   }

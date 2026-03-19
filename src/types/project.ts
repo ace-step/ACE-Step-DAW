@@ -469,6 +469,8 @@ export interface Track {
   frozenAudioKey?: string;
   /** Whether take lanes are visible for comping on this track. */
   showTakeLanes?: boolean;
+  /** WAP plugin instances on this track (effect & instrument plugins). */
+  plugins?: import('./plugin').PluginInstance[];
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */

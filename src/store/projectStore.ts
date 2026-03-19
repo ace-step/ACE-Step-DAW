@@ -45,6 +45,8 @@ import type {
   DrumKitName,
   SamplerConfig,
 } from '../types/project';
+import type { PluginInstance, PluginParamValue } from '../types/plugin';
+import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
 import {
@@ -254,6 +256,13 @@ interface ProjectState {
   removeTrackEffect: (trackId: string, effectId: string) => void;
   reorderTrackEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
   setSidechainSource: (trackId: string, effectId: string, sourceTrackId: string | undefined) => void;
+
+  // WAP Plugins
+  addPlugin: (trackId: string, plugin: PluginInstance) => void;
+  removePlugin: (trackId: string, pluginInstanceId: string) => void;
+  updatePluginParam: (trackId: string, pluginInstanceId: string, paramId: string, value: PluginParamValue) => void;
+  togglePlugin: (trackId: string, pluginInstanceId: string) => void;
+  loadPlugin: (trackId: string, pluginId: string) => string | undefined;
 
   // MIDI effects
   addMidiEffect: (trackId: string, type: MidiEffectType) => string | undefined;
@@ -3044,6 +3053,125 @@ export const useProjectStore = create<ProjectState>()(
         }),
       },
     });
+  },
+
+  // ─── WAP Plugins ──────────────────────────────────────────────────────────
+
+  addPlugin: (trackId, plugin) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, plugins: [...(track.plugins ?? []), plugin] }
+            : track,
+        ),
+      },
+    });
+  },
+
+  removePlugin: (trackId, pluginInstanceId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, plugins: (track.plugins ?? []).filter((p) => p.id !== pluginInstanceId) }
+            : track,
+        ),
+      },
+    });
+  },
+
+  updatePluginParam: (trackId, pluginInstanceId, paramId, value) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          return {
+            ...track,
+            plugins: (track.plugins ?? []).map((p) =>
+              p.id === pluginInstanceId
+                ? { ...p, params: { ...p.params, [paramId]: value } }
+                : p,
+            ),
+          };
+        }),
+      },
+    });
+  },
+
+  togglePlugin: (trackId, pluginInstanceId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          return {
+            ...track,
+            plugins: (track.plugins ?? []).map((p) =>
+              p.id === pluginInstanceId
+                ? { ...p, enabled: !p.enabled }
+                : p,
+            ),
+          };
+        }),
+      },
+    });
+  },
+
+  loadPlugin: (trackId, pluginId) => {
+    // This action creates a PluginInstance in the store.
+    // The actual audio node creation happens in usePluginSync hook.
+    const state = get();
+    if (!state.project) return undefined;
+
+    const manifest = pluginRegistry.getManifest(pluginId);
+    if (!manifest) return undefined;
+
+    const id = uuidv4();
+    const defaultParams: Record<string, string | number | boolean> = {};
+    for (const desc of manifest.parameters) {
+      defaultParams[desc.id] = desc.defaultValue;
+    }
+
+    const instance: PluginInstance = {
+      id,
+      pluginId,
+      enabled: true,
+      params: defaultParams,
+      manifest: { ...manifest },
+    };
+
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, plugins: [...(track.plugins ?? []), instance] }
+            : track,
+        ),
+      },
+    });
+    return id;
   },
 
   // ─── MIDI Effects ──────────────────────────────────────────────────────────

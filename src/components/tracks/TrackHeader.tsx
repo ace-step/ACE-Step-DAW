@@ -238,7 +238,7 @@ export function TrackHeader({
       </div>
 
       {/* M/S/Delete buttons */}
-      <div className="flex items-center gap-px flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {/* Mute - speaker icon */}
         <button
           onClick={() => updateTrack(track.id, { muted: !track.muted })}
@@ -293,7 +293,7 @@ export function TrackHeader({
           </svg>
         </button>
         {/* Secondary buttons — visible on hover or when active */}
-        <div className={`flex items-center gap-px transition-opacity ${
+        <div data-secondary-actions className={`flex items-center gap-1 transition-opacity ${
           monitorMode !== 'off' || track.frozen || isFreezing || (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
             ? 'opacity-100'
             : 'opacity-0 group-hover:opacity-100'
@@ -311,7 +311,7 @@ export function TrackHeader({
             title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
             aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
           >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+            <svg data-icon="microphone" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
               <rect x="4" y="1" width="4" height="6" rx="2" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
               <path d="M3 7a3 3 0 006 0" />
               <path d="M6 10v1.5M4.5 11.5h3" />

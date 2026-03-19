@@ -107,6 +107,12 @@ export interface ClipVersion {
   generatedAt: number;
 }
 
+export interface Take {
+  id: string;
+  audioKey: string;
+  selected: boolean;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -239,6 +245,8 @@ export interface Track {
   laneHeight?: number;
   /** Sends to return tracks (mixer bus routing). */
   sends?: Send[];
+  frozen?: boolean;
+  frozenAudioKey?: string;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */
@@ -287,6 +295,8 @@ export interface Project {
   automationLanes?: AutomationLane[];
   /** Shared effect return tracks (mixer buses). */
   returnTracks?: ReturnTrack[];
+  /** Timeline markers (sorted by time). */
+  markers?: Marker[];
 }
 
 // ─── Automation Types ────────────────────────────────────────────────────────
@@ -316,4 +326,13 @@ export function automationParamEquals(a: AutomationParameter, b: AutomationParam
 export function normalizedToMixerValue(param: 'volume' | 'pan', normalized: number): number {
   if (param === 'volume') return normalized; // 0–1
   return normalized * 2 - 1;                // -1..+1
+}
+
+// ─── Marker Types ─────────────────────────────────────────────────────────────
+
+export interface Marker {
+  id: string;
+  time: number;
+  name: string;
+  color: string;
 }

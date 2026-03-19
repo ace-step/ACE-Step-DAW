@@ -22,6 +22,8 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  Marker,
+  Take,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -181,6 +183,11 @@ interface ProjectState {
   moveTrackToGroup: (trackId: string, groupId: string | null) => void;
   toggleGroupCollapse: (groupId: string) => void;
   getGroupVolume: (groupId: string) => number;
+
+  // Comping / takes
+  addTake: (clipId: string, audioKey: string) => void;
+  selectTake: (clipId: string, takeId: string) => void;
+  toggleTakeLanes: (trackId: string) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
@@ -2190,6 +2197,105 @@ export const useProjectStore = create<ProjectState>()(
         }),
       },
     });
+  },
+
+
+  // ── Comping / takes ─────────────────────────────────────────────────────────
+
+  addTake: (clipId, audioKey) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const take: Take = { id: uuidv4(), audioKey, selected: false };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === clipId ? { ...c, takes: [...(c.takes ?? []), take] } : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  selectTake: (clipId, takeId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === clipId
+              ? {
+                  ...c,
+                  takes: (c.takes ?? []).map((tk) => ({
+                    ...tk,
+                    selected: tk.id === takeId,
+                  })),
+                }
+              : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  toggleTakeLanes: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, showTakeLanes: !track?.showTakeLanes } : t,
+        ),
+      },
+    });
+  },
+
+  // ── Markers ──────────────────────────────────────────────────────────────
+  addMarker: (time, name) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const MARKER_COLORS = ['#FF5733', '#33B5FF', '#28C76F', '#FFB347', '#C471ED', '#FF6B81'];
+    const existing = state.project.markers ?? [];
+    const marker: Marker = {
+      id: uuidv4(),
+      time,
+      name,
+      color: MARKER_COLORS[existing.length % MARKER_COLORS.length],
+    };
+    const markers = [...existing, marker].sort((a, b) => a.time - b.time);
+    set({ project: { ...state.project, markers } });
+  },
+
+  removeMarker: (id) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const markers = (state.project.markers ?? []).filter((m) => m.id !== id);
+    set({ project: { ...state.project, markers } });
+  },
+
+  updateMarker: (id, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const markers = (state.project.markers ?? [])
+      .map((m) => (m.id === id ? { ...m, ...updates } : m))
+      .sort((a, b) => a.time - b.time);
+    set({ project: { ...state.project, markers } });
   },
 
   getTrackById: (trackId) => {

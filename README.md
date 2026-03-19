@@ -103,11 +103,54 @@ See [docs/dev-process.md](docs/dev-process.md) for competitive research index an
 | Key | Action |
 |-----|--------|
 | `Space` | Play / Pause |
-| `Ctrl/Cmd + Scroll` | Zoom timeline |
-| `B` | Toggle draw mode (Piano Roll) |
+| `Enter` | Stop (return to start) |
+| `R` | Toggle recording |
+| `L` | Toggle loop |
+| `K` | Toggle metronome |
+| `N` | Toggle snap to grid |
+| `Z` | Zoom to fit project |
+| `Home` / `End` | Seek to start / end |
+| `←` / `→` | Nudge playhead ±5s |
+| `X` | Toggle mixer |
+| `B` | Toggle smart controls |
+| `O` | Toggle loop browser |
+| `Y` | Toggle library |
+| `E` | Edit selected clip |
+| `S` | Split clip at playhead |
+| `Q` | Quantize selected notes |
 | `Delete` | Delete selected clip/notes |
-| `Ctrl/Cmd + A` | Select all |
-| `Escape` | Deselect |
+| `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo |
+| `Cmd+A` | Select all clips |
+| `Cmd+D` | Duplicate clip |
+| `Cmd+Scroll` | Zoom timeline |
+| `Cmd+Shift+I` | Add track |
+| `Cmd+Shift+E` | Export WAV |
+| `?` | Keyboard shortcuts dialog |
+
+## Development Stats
+
+| Metric | Value |
+|--------|-------|
+| Source code | ~24,000 LOC |
+| Unit tests | 94 |
+| E2E tests | 21 |
+| Test suites | 18 |
+| Components | 60+ |
+| Keyboard shortcuts | 25+ |
+| CI pipeline | type-check → unit-test → build → e2e-test → Copilot review |
+
+## Architecture
+
+```
+Frontend (React 19 + TypeScript)
+├── Store (Zustand) — projectStore, transportStore, uiStore, generationStore
+├── Engine (Web Audio + Tone.js) — AudioEngine, SynthEngine, DrumEngine, EffectsEngine
+├── Components — Timeline, Mixer, PianoRoll, Sequencer, EffectChain
+├── Hooks — useTransport, useRecording, useEffectsSync, useKeyboardShortcuts
+└── Utils — dragMath, chords, dawStateSummary, time, wav, waveformPeaks
+```
+
+Agent-friendly: Every feature accessible via `window.__store.getState().actionName()` and `window.__dawSummary()`.
 
 ## License
 

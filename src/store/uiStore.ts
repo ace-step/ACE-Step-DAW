@@ -101,9 +101,6 @@ interface UIState {
   showGeneratePatternDialog: boolean;
   generatePatternClipId: string | null;
 
-  // Command Palette
-  showCommandPalette: boolean;
-
   // AI Assistant
   showAIAssistant: boolean;
   aiChatMessages: AIChatMessage[];
@@ -281,8 +278,6 @@ export const useUIStore = create<UIState>()(
 
   showGeneratePatternDialog: false,
   generatePatternClipId: null,
-
-  showCommandPalette: false,
 
   showAIAssistant: false,
   aiChatMessages: [],

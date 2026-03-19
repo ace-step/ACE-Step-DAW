@@ -120,4 +120,38 @@ describe('Undo / Redo', () => {
     useProjectStore.getState().undo();
     expect(useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes[0].startBeat).toBe(0.3);
   });
+
+  it('undoes clip consolidation', async () => {
+    const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+    const clipA = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 1,
+      prompt: 'part-a',
+      globalCaption: '',
+      lyrics: '',
+      midiData: {
+        grid: '1/16',
+        notes: [{ id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 }],
+      },
+      source: 'uploaded',
+    });
+    const clipB = useProjectStore.getState().addClip(track.id, {
+      startTime: 1,
+      duration: 1,
+      prompt: 'part-b',
+      globalCaption: '',
+      lyrics: '',
+      midiData: {
+        grid: '1/16',
+        notes: [{ id: 'n2', pitch: 64, startBeat: 0, durationBeats: 1, velocity: 0.7 }],
+      },
+      source: 'uploaded',
+    });
+
+    await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
+    expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(1);
+
+    useProjectStore.getState().undo();
+    expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(2);
+  });
 });

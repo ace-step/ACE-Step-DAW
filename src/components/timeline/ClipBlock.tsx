@@ -60,6 +60,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setClipFade = useProjectStore((s) => s.setClipFade);
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
+  const consolidateClips = useProjectStore((s) => s.consolidateClips);
   const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
@@ -389,6 +390,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const peaks = clip.waveformPeaks;
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
+  const selectedActionClipIds = selectedClipIds.has(clip.id) ? [...selectedClipIds] : [clip.id];
+  const selectedActionClips = selectedActionClipIds
+    .map((clipId) => project?.tracks.flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
+    .filter((candidate): candidate is Clip => Boolean(candidate));
+  const canConsolidate = selectedActionClips.length === selectedActionClipIds.length
+    && selectedActionClips.every((candidate) => candidate.trackId === track.id)
+    && new Set(selectedActionClips.map((candidate) => Boolean(candidate.midiData))).size <= 1;
+
+  const handleConsolidate = async () => {
+    const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
+    closeCtxMenu();
+    if (consolidatedClip) {
+      selectClip(consolidatedClip.id, false);
+    }
+  };
 
   return (
     <>
@@ -567,6 +583,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onOpenMidi={() => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); }}
           onExportMidi={() => { closeCtxMenu(); exportMidiClip(clip.id); }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
+          onConsolidate={() => { void handleConsolidate(); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
           onAddLayer={() => { closeCtxMenu(); setAddLayerOpen(true); }}
           onCreateCover={() => {
@@ -606,6 +623,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           isMidiClip={isMidiClip}
           isVocalTrack={track.trackName === 'vocals' || track.trackName === 'backing_vocals'}
           hasAudio={!!(clip.isolatedAudioKey || clip.cumulativeMixKey)}
+          canConsolidate={canConsolidate}
         />
       )}
 

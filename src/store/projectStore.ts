@@ -81,6 +81,7 @@ import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile } from '../utils/midi';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { toastError, toastSuccess } from '../hooks/useToast';
+import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -89,6 +90,11 @@ function getBarDurationSec(bpm: number, timeSig: number): number {
 function sanitizeFileNameSegment(value: string) {
   const trimmed = value.trim().replace(/[\\/:*?"<>|]/g, ' ');
   return trimmed.replace(/\s+/g, ' ').trim() || 'untitled';
+}
+
+function buildConsolidatedPrompt(clips: Clip[], fallback: string) {
+  const prompts = [...new Set(clips.map((clip) => clip.prompt.trim()).filter(Boolean))];
+  return prompts.length === 1 ? prompts[0] : fallback;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -215,6 +221,7 @@ interface ProjectState {
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
+  consolidateClips: (trackId: string, clipIds: string[]) => Promise<Clip | undefined>;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
@@ -1837,6 +1844,119 @@ export const useProjectStore = create<ProjectState>()(
         tracks: newTracks,
       },
     });
+  },
+
+  consolidateClips: async (trackId, clipIds) => {
+    const state = get();
+    if (!state.project) {
+      toastError('Create or open a project before consolidating clips');
+      return undefined;
+    }
+
+    if (clipIds.length === 0) {
+      toastError('Select at least one clip to consolidate');
+      return undefined;
+    }
+
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) {
+      toastError('Track not found for consolidate');
+      return undefined;
+    }
+
+    const selectedClips = clipIds
+      .map((clipId) => track.clips.find((clip) => clip.id === clipId))
+      .filter((clip): clip is Clip => Boolean(clip));
+
+    if (selectedClips.length !== clipIds.length) {
+      toastError('Select clips from a single track before consolidating');
+      return undefined;
+    }
+
+    let validatedSelection;
+    try {
+      validatedSelection = validateClipConsolidation(trackId, selectedClips);
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected clips');
+      return undefined;
+    }
+
+    const { clips, mediaType } = validatedSelection;
+    const startTime = clips[0].startTime;
+    const endTime = Math.max(...clips.map((clip) => clip.startTime + clip.duration));
+    const prompt = buildConsolidatedPrompt(clips, mediaType === 'midi' ? 'Consolidated MIDI Clip' : 'Consolidated Audio Clip');
+    const lyrics = clips.map((clip) => clip.lyrics.trim()).filter(Boolean).join('\n');
+    const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
+
+    _pushHistory(state.project);
+
+    let consolidatedClip: Clip;
+    if (mediaType === 'midi') {
+      const merged = buildConsolidatedMidiClipData(state.project, clips);
+      consolidatedClip = {
+        id: uuidv4(),
+        trackId,
+        startTime: merged.startTime,
+        duration: merged.duration,
+        prompt,
+        globalCaption: clips.map((clip) => clip.globalCaption?.trim()).filter(Boolean).join('\n'),
+        lyrics,
+        generationStatus: 'ready',
+        generationJobId: null,
+        cumulativeMixKey: null,
+        isolatedAudioKey: null,
+        waveformPeaks: null,
+        source,
+        midiData: merged.midiData,
+      };
+    } else {
+      try {
+        const rendered = await renderConsolidatedAudioClip(state.project, clips);
+        consolidatedClip = {
+          id: rendered.id,
+          trackId,
+          startTime,
+          duration: rendered.duration,
+          prompt,
+          globalCaption: clips.map((clip) => clip.globalCaption?.trim()).filter(Boolean).join('\n'),
+          lyrics,
+          generationStatus: 'ready',
+          generationJobId: null,
+          cumulativeMixKey: null,
+          isolatedAudioKey: rendered.isolatedAudioKey,
+          waveformPeaks: rendered.waveformPeaks,
+          source,
+          audioDuration: rendered.audioDuration,
+          audioOffset: 0,
+        };
+      } catch (error) {
+        _history.pop();
+        toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
+        return undefined;
+      }
+    }
+
+    const clipIdSet = new Set(clips.map((clip) => clip.id));
+    const nextTracks = state.project.tracks.map((candidate) => {
+      if (candidate.id !== trackId) return candidate;
+      const remainingClips = candidate.clips.filter((clip) => !clipIdSet.has(clip.id));
+      return {
+        ...candidate,
+        clips: [...remainingClips, consolidatedClip].sort((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id)),
+      };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(nextTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: nextTracks,
+      },
+    });
+
+    toastSuccess(mediaType === 'midi' ? 'Consolidated MIDI clips' : 'Consolidated audio clips');
+    return consolidatedClip;
   },
 
   updateClipStatus: (clipId, status, extra) => {

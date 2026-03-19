@@ -7,6 +7,7 @@ interface ClipContextMenuProps {
   onOpenMidi: () => void;
   onExportMidi: () => void;
   onDuplicate: () => void;
+  onConsolidate: () => void;
   onDelete: () => void;
   onAddLayer: () => void;
   onCreateCover: () => void;
@@ -21,6 +22,7 @@ interface ClipContextMenuProps {
   isMidiClip: boolean;
   isVocalTrack: boolean;
   hasAudio: boolean;
+  canConsolidate: boolean;
 }
 
 export function ClipContextMenu({
@@ -32,6 +34,7 @@ export function ClipContextMenu({
   onOpenMidi,
   onExportMidi,
   onDuplicate,
+  onConsolidate,
   onDelete,
   onAddLayer,
   onCreateCover,
@@ -46,6 +49,7 @@ export function ClipContextMenu({
   isMidiClip,
   isVocalTrack,
   hasAudio,
+  canConsolidate,
 }: ClipContextMenuProps) {
   const clampedX = Math.min(x, window.innerWidth - 210);
   const clampedY = Math.min(y, window.innerHeight - 300);
@@ -116,6 +120,13 @@ export function ClipContextMenu({
         <div className="my-1 border-t border-[#555]" />
         <button onClick={onDuplicate} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
           Duplicate
+        </button>
+        <button
+          onClick={onConsolidate}
+          disabled={!canConsolidate}
+          className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
+        >
+          Consolidate
         </button>
         {!isMidiClip && (
           <button onClick={onAddLayer} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">

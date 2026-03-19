@@ -173,6 +173,25 @@ export function useKeyboardShortcuts() {
         }
         return;
       }
+      if (mod && e.code === 'KeyJ' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        if (!anyModalOpen && ui.selectedClipIds.size > 0 && project.project) {
+          const selectedIds = [...ui.selectedClipIds];
+          const selectedClips = project.project.tracks
+            .flatMap((track) => track.clips)
+            .filter((clip) => selectedIds.includes(clip.id));
+          const trackIds = [...new Set(selectedClips.map((clip) => clip.trackId))];
+          if (trackIds.length === 1) {
+            void (async () => {
+              const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
+              if (consolidatedClip) {
+                ui.selectClip(consolidatedClip.id, false);
+              }
+            })();
+          }
+        }
+        return;
+      }
       if (matches('clips.generate')) {
         e.preventDefault();
         if (!anyModalOpen && !gen.isGenerating) {

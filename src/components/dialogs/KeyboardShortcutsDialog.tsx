@@ -29,6 +29,7 @@ const SECTIONS: Section[] = [
     rows: [
       { keys: ['Delete', 'Backspace'],  description: 'Delete selected clips' },
       { keys: [`${mod}`, 'D'],          description: 'Duplicate selected clip' },
+      { keys: [`${mod}`, 'J'],          description: 'Consolidate selected clips' },
       { keys: ['S'],                    description: 'Split clip at playhead' },
       { keys: [`${mod}`, 'A'],          description: 'Select all clips' },
       { keys: ['E'],                    description: 'Edit selected clip' },

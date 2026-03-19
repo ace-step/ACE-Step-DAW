@@ -7,6 +7,59 @@ vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
 
+const mockLoadAudioBlobByKey = vi.fn();
+const mockSaveAudioBlob = vi.fn();
+const mockToastSuccess = vi.fn();
+const mockToastError = vi.fn();
+
+vi.mock('../../src/services/audioFileManager', async () => {
+  const actual = await vi.importActual<typeof import('../../src/services/audioFileManager')>('../../src/services/audioFileManager');
+  return {
+    ...actual,
+    loadAudioBlobByKey: (...args: unknown[]) => mockLoadAudioBlobByKey(...args),
+    saveAudioBlob: (...args: unknown[]) => mockSaveAudioBlob(...args),
+  };
+});
+
+vi.mock('../../src/hooks/useToast', () => ({
+  toastSuccess: (...args: unknown[]) => mockToastSuccess(...args),
+  toastError: (...args: unknown[]) => mockToastError(...args),
+}));
+
+function createMockAudioBuffer(channelData: number[][], sampleRate = 4): AudioBuffer {
+  const channels = channelData.map((values) => Float32Array.from(values));
+  const length = channels[0]?.length ?? 0;
+  return {
+    numberOfChannels: channels.length,
+    length,
+    sampleRate,
+    duration: length / sampleRate,
+    getChannelData: (channel: number) => channels[channel],
+  } as AudioBuffer;
+}
+
+const mockAudioContext = {
+  createBuffer: vi.fn((numberOfChannels: number, length: number, sampleRate: number) => {
+    const channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+    return {
+      numberOfChannels,
+      length,
+      sampleRate,
+      duration: length / sampleRate,
+      getChannelData: (channel: number) => channels[channel],
+    } as AudioBuffer;
+  }),
+};
+
+const mockDecodeAudioData = vi.fn();
+
+vi.mock('../../src/hooks/useAudioEngine', () => ({
+  getAudioEngine: () => ({
+    ctx: mockAudioContext,
+    decodeAudioData: (...args: unknown[]) => mockDecodeAudioData(...args),
+  }),
+}));
+
 function makeProject(): Project {
   return {
     id: 'project-1',
@@ -37,6 +90,12 @@ describe('projectStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
+    mockLoadAudioBlobByKey.mockReset();
+    mockSaveAudioBlob.mockReset();
+    mockToastSuccess.mockReset();
+    mockToastError.mockReset();
+    mockDecodeAudioData.mockReset();
+    mockAudioContext.createBuffer.mockClear();
   });
 
   describe('setProject / project getter', () => {
@@ -49,8 +108,9 @@ describe('projectStore', () => {
         ...project,
         mastering: createDefaultMasteringState(),
       });
-    });
   });
+});
+});
 
   describe('addTrack / removeTrack', () => {
     beforeEach(() => {
@@ -296,7 +356,92 @@ describe('projectStore', () => {
       createObjectURL.mockRestore();
     });
   });
-});
+
+  describe('consolidateClips', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('merges selected MIDI clips on one track into a single clip', async () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clipA = useProjectStore.getState().addClip(track.id, {
+        startTime: 0,
+        duration: 1,
+        prompt: 'phrase-a',
+        globalCaption: '',
+        lyrics: '',
+        midiData: {
+          grid: '1/16',
+          notes: [{ id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 }],
+        },
+        source: 'uploaded',
+      });
+      const clipB = useProjectStore.getState().addClip(track.id, {
+        startTime: 1,
+        duration: 1,
+        prompt: 'phrase-b',
+        globalCaption: '',
+        lyrics: '',
+        midiData: {
+          grid: '1/16',
+          notes: [{ id: 'n2', pitch: 64, startBeat: 0.5, durationBeats: 0.5, velocity: 0.7 }],
+        },
+        source: 'uploaded',
+      });
+
+      const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
+
+      expect(consolidated).toBeDefined();
+      expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
+      expect(consolidated?.midiData?.notes).toHaveLength(2);
+      expect(consolidated?.midiData?.notes.map((note) => note.startBeat)).toEqual([0, 2.5]);
+    });
+
+    it('renders selected audio clips into one replacement clip', async () => {
+      const track = useProjectStore.getState().addTrack('drums', 'sample');
+      const clipA = useProjectStore.getState().addClip(track.id, {
+        startTime: 0,
+        duration: 0.5,
+        prompt: 'kick-a',
+        globalCaption: '',
+        lyrics: '',
+        source: 'uploaded',
+      });
+      const clipB = useProjectStore.getState().addClip(track.id, {
+        startTime: 1,
+        duration: 0.5,
+        prompt: 'kick-b',
+        globalCaption: '',
+        lyrics: '',
+        source: 'uploaded',
+      });
+
+      useProjectStore.getState().updateClip(clipA.id, {
+        generationStatus: 'ready',
+        isolatedAudioKey: 'audio-a',
+        gainEnvelope: [{ time: 0, gain: 0.5 }],
+      });
+      useProjectStore.getState().updateClip(clipB.id, {
+        generationStatus: 'ready',
+        isolatedAudioKey: 'audio-b',
+      });
+
+      mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['wav'], { type: 'audio/wav' }));
+      mockSaveAudioBlob.mockResolvedValue('merged-audio-key');
+      mockDecodeAudioData
+        .mockResolvedValueOnce(createMockAudioBuffer([[1, 1]], 4))
+        .mockResolvedValueOnce(createMockAudioBuffer([[1, 1]], 4));
+
+      const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
+
+      expect(consolidated).toBeDefined();
+      expect(consolidated?.isolatedAudioKey).toBe('merged-audio-key');
+      expect(consolidated?.generationStatus).toBe('ready');
+      expect(consolidated?.duration).toBe(1.5);
+      expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
+      expect(mockSaveAudioBlob).toHaveBeenCalledTimes(1);
+    });
+  });
 
   describe('duplicateTrack', () => {
     beforeEach(() => {

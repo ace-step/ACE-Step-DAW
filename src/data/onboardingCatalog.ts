@@ -512,10 +512,10 @@ export const ONBOARDING_TUTORIAL_STEPS: OnboardingTutorialStep[] = [
     body: 'Toggle the mixer with X to balance level, pan, and effects once the first ideas are in place.',
   },
   {
-    id: 'assistant',
-    selector: '[data-onboarding-target="assistant-button"]',
-    title: 'Help In Context',
-    body: 'Open the in-DAW assistant with Cmd+/ when you need workflow, arrangement, or mixing guidance.',
+    id: 'command-palette',
+    selector: '[data-onboarding-target="command-palette-button"]',
+    title: 'Command Palette',
+    body: 'Press Cmd+K to search actions, settings, and workflow shortcuts without leaving the arrangement.',
   },
 ];
 

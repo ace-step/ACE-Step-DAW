@@ -176,7 +176,7 @@ export function FirstRunOnboarding() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">What happens next</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-zinc-300">
                   <li>First launch opens into the selected starter, not an empty DAW.</li>
-                  <li>A skippable 5-step tutorial points out timeline, transport, genr, mixer, and help.</li>
+                  <li>A skippable 5-step tutorial points out timeline, transport, genr, mixer, and Cmd+K search.</li>
                   <li>Contextual tips stay dismissible and do not return once removed.</li>
                 </ul>
               </div>

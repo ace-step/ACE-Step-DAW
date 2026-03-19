@@ -58,6 +58,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
+  const setClipFade = useProjectStore((s) => s.setClipFade);
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
   const isMidiClip = Boolean(clip.midiData);
@@ -286,6 +287,42 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
+  // ── Fade handle drag ────────────────────────────────────────────────────────
+  /** Drag handler for fade-in / fade-out triangle handles at clip bottom corners. */
+  const handleFadeDragMouseDown = useCallback((
+    e: React.MouseEvent,
+    side: 'in' | 'out',
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const origFade = side === 'in' ? (clip.fadeIn ?? 0) : (clip.fadeOut ?? 0);
+    const maxFade = clip.duration / 2;
+
+    beginDrag();
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = (ev.clientX - startX) / pixelsPerSecond;
+      let newFade: number;
+      if (side === 'in') {
+        newFade = Math.max(0, Math.min(origFade + dx, maxFade));
+        setClipFade(clip.id, newFade || undefined, clip.fadeOut, clip.fadeCurve);
+      } else {
+        newFade = Math.max(0, Math.min(origFade - dx, maxFade));
+        setClipFade(clip.id, clip.fadeIn, newFade || undefined, clip.fadeCurve);
+      }
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      endDrag();
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [clip.id, clip.fadeIn, clip.fadeOut, clip.fadeCurve, clip.duration, pixelsPerSecond, setClipFade, beginDrag, endDrag]);
+
   const handleMouseMoveLocal = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = e.clientX - rect.left;
@@ -310,6 +347,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const peaks = clip.waveformPeaks;
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
+  const fadeInPx  = Math.min((clip.fadeIn  ?? 0) * pixelsPerSecond, width / 2);
+  const fadeOutPx = Math.min((clip.fadeOut ?? 0) * pixelsPerSecond, width / 2);
 
   return (
     <>
@@ -339,6 +378,64 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       >
         <div className="absolute top-0 bottom-0 left-0 w-[6px] cursor-col-resize z-10" />
         <div className="absolute top-0 bottom-0 right-0 w-[6px] cursor-col-resize z-10" />
+
+        {/* Fade-in overlay */}
+        {fadeInPx > 0 && (
+          <div
+            className="absolute top-0 bottom-0 left-0 pointer-events-none z-[5]"
+            style={{
+              width: fadeInPx,
+              background: `linear-gradient(to right, rgba(0,0,0,0.65) 0%, transparent 100%)`,
+            }}
+            aria-label="fade-in overlay"
+          />
+        )}
+
+        {/* Fade-out overlay */}
+        {fadeOutPx > 0 && (
+          <div
+            className="absolute top-0 bottom-0 right-0 pointer-events-none z-[5]"
+            style={{
+              width: fadeOutPx,
+              background: `linear-gradient(to left, rgba(0,0,0,0.65) 0%, transparent 100%)`,
+            }}
+            aria-label="fade-out overlay"
+          />
+        )}
+
+        {/* Fade-in drag handle (bottom-left triangle) */}
+        <div
+          className="absolute bottom-0 left-0 z-20 cursor-ew-resize"
+          style={{ width: Math.max(fadeInPx, 8), height: 10 }}
+          title={`Fade in: ${(clip.fadeIn ?? 0).toFixed(2)}s — drag to adjust`}
+          aria-label="fade-in handle"
+          onMouseDown={(e) => handleFadeDragMouseDown(e, 'in')}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg width={Math.max(fadeInPx, 8)} height={10} style={{ display: 'block' }}>
+            <polygon
+              points={`0,10 ${Math.max(fadeInPx, 8)},10 0,0`}
+              fill="rgba(255,255,255,0.30)"
+            />
+          </svg>
+        </div>
+
+        {/* Fade-out drag handle (bottom-right triangle) */}
+        <div
+          className="absolute bottom-0 right-0 z-20 cursor-ew-resize"
+          style={{ width: Math.max(fadeOutPx, 8), height: 10 }}
+          title={`Fade out: ${(clip.fadeOut ?? 0).toFixed(2)}s — drag to adjust`}
+          aria-label="fade-out handle"
+          onMouseDown={(e) => handleFadeDragMouseDown(e, 'out')}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg width={Math.max(fadeOutPx, 8)} height={10} style={{ display: 'block', float: 'right' }}>
+            <polygon
+              points={`0,10 ${Math.max(fadeOutPx, 8)},10 ${Math.max(fadeOutPx, 8)},0`}
+              fill="rgba(255,255,255,0.30)"
+            />
+          </svg>
+        </div>
 
         <ClipWaveform
           peaks={peaks}
@@ -440,6 +537,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             setAnalysisPanel(clip.id);
           }}
           onClose={closeCtxMenu}
+          onSetFadeIn={(seconds) => setClipFade(clip.id, seconds, clip.fadeOut, clip.fadeCurve)}
+          onSetFadeOut={(seconds) => setClipFade(clip.id, clip.fadeIn, seconds, clip.fadeCurve)}
+          onClearFades={() => setClipFade(clip.id, undefined, undefined, clip.fadeCurve)}
+          hasFades={!!(clip.fadeIn || clip.fadeOut)}
           hasPrompt={!!clip.prompt}
           isReady={clip.generationStatus === 'ready'}
           isMidiClip={isMidiClip}

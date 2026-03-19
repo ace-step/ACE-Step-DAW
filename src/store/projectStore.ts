@@ -110,6 +110,8 @@ interface ProjectState {
   setActiveVersion: (clipId: string, idx: number) => void;
 
   splitClip: (clipId: string, splitTime: number) => void;
+  /** Set fade-in and/or fade-out durations for a clip. Pass undefined to clear a fade. */
+  setClipFade: (clipId: string, fadeIn: number | undefined, fadeOut: number | undefined, fadeCurve?: 'linear' | 'equal-power') => void;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
@@ -884,6 +886,24 @@ export const useProjectStore = create<ProjectState>()(
                   generationStatus: 'ready',
                 }
               : c,
+          ),
+        })),
+      },
+    });
+  },
+
+  setClipFade: (clipId, fadeIn, fadeOut, fadeCurve) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id !== clipId ? c : { ...c, fadeIn, fadeOut, fadeCurve: fadeCurve ?? c.fadeCurve },
           ),
         })),
       },

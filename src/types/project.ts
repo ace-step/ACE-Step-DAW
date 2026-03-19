@@ -144,6 +144,12 @@ export interface Clip {
   starred?: boolean;
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
+  /** Fade-in duration in seconds (0 or undefined = no fade). */
+  fadeIn?: number;
+  /** Fade-out duration in seconds (0 or undefined = no fade). */
+  fadeOut?: number;
+  /** Gain-curve shape used for fades (default: 'equal-power'). */
+  fadeCurve?: 'linear' | 'equal-power';
 }
 
 export interface SequencerStep {

@@ -132,6 +132,9 @@ export function useTransport() {
           buffer,
           audioOffset: clip.audioOffset ?? 0,
           clipDuration: clip.duration,
+          fadeIn: clip.fadeIn,
+          fadeOut: clip.fadeOut,
+          fadeCurve: clip.fadeCurve,
         });
       }
     }

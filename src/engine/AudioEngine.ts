@@ -23,6 +23,12 @@ export interface ClipScheduleInfo {
   buffer: AudioBuffer;
   audioOffset: number;   // offset into the buffer (crop start)
   clipDuration: number;  // how long to play (crop length)
+  /** Fade-in duration in seconds applied to the gain node (0 = no fade). */
+  fadeIn?: number;
+  /** Fade-out duration in seconds applied to the gain node (0 = no fade). */
+  fadeOut?: number;
+  /** Curve shape for fades (default 'equal-power'). */
+  fadeCurve?: 'linear' | 'equal-power';
 }
 
 /**
@@ -51,6 +57,20 @@ export class AudioEngine {
   // Metronome
   private _metronomeGain: GainNode;
   private _metronomeSources: OscillatorNode[] = [];
+
+  // Cached equal-power fade curves (128 samples, sin/cos shapes).
+  private static readonly _EP_FADE_IN  = AudioEngine._buildEPCurve('in');
+  private static readonly _EP_FADE_OUT = AudioEngine._buildEPCurve('out');
+
+  private static _buildEPCurve(direction: 'in' | 'out'): Float32Array {
+    const STEPS = 128;
+    const values = new Float32Array(STEPS);
+    for (let i = 0; i < STEPS; i++) {
+      const t = i / (STEPS - 1);
+      values[i] = direction === 'in' ? Math.sin(t * Math.PI / 2) : Math.cos(t * Math.PI / 2);
+    }
+    return values;
+  }
 
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
@@ -123,12 +143,63 @@ export class AudioEngine {
       const trackNode = this.getOrCreateTrackNode(clip.trackId);
       const source = this.ctx.createBufferSource();
       source.buffer = clip.buffer;
-      source.connect(trackNode.inputGain);
 
       const clipEnd = clip.startTime + clip.clipDuration;
       if (clipEnd <= fromTime) continue;
 
       const contextNow = this.ctx.currentTime;
+
+      // Build per-clip fade gain node so fades are independent of the track fader.
+      const fadeIn  = clip.fadeIn  ?? 0;
+      const fadeOut = clip.fadeOut ?? 0;
+      const curve   = clip.fadeCurve ?? 'equal-power';
+
+      if (fadeIn > 0 || fadeOut > 0) {
+        const fadeGain = this.ctx.createGain();
+        source.connect(fadeGain);
+        fadeGain.connect(trackNode.inputGain);
+
+        if (clip.startTime >= fromTime) {
+          // Clip hasn't started yet.
+          const clipContextStart = contextNow + (clip.startTime - fromTime);
+          const clipContextEnd   = contextNow + (clipEnd - fromTime);
+
+          if (fadeIn > 0) {
+            const fadeInEnd = clipContextStart + Math.min(fadeIn, clip.clipDuration);
+            fadeGain.gain.setValueAtTime(0, clipContextStart);
+            this._rampGain(fadeGain.gain, curve, 0, 1, clipContextStart, fadeInEnd);
+          }
+
+          if (fadeOut > 0) {
+            const fadeOutStart = clipContextEnd - Math.min(fadeOut, clip.clipDuration);
+            fadeGain.gain.setValueAtTime(1, fadeOutStart);
+            this._rampGain(fadeGain.gain, curve, 1, 0, fadeOutStart, clipContextEnd);
+          }
+        } else {
+          // Clip already started: seek into it.
+          const seekOffset  = fromTime - clip.startTime;
+          const contextEnd  = contextNow + (clipEnd - fromTime);
+
+          // Fade-in: compute gain at the seek point.
+          if (fadeIn > 0 && seekOffset < fadeIn) {
+            const t = seekOffset / fadeIn;
+            const startGain = curve === 'equal-power' ? Math.sin(t * Math.PI / 2) : t;
+            const fadeInEnd = contextNow + (fadeIn - seekOffset);
+            fadeGain.gain.setValueAtTime(startGain, contextNow);
+            this._rampGain(fadeGain.gain, curve, startGain, 1, contextNow, fadeInEnd);
+          }
+
+          // Fade-out.
+          if (fadeOut > 0) {
+            const fadeOutStart = contextEnd - Math.min(fadeOut, clip.clipDuration);
+            fadeGain.gain.setValueAtTime(1, fadeOutStart);
+            this._rampGain(fadeGain.gain, curve, 1, 0, fadeOutStart, contextEnd);
+          }
+        }
+      } else {
+        source.connect(trackNode.inputGain);
+      }
+
       if (clip.startTime >= fromTime) {
         // Clip hasn't started: schedule with delay, start from audioOffset
         const delay = clip.startTime - fromTime;
@@ -226,6 +297,35 @@ export class AudioEngine {
           });
         }
       }
+    }
+  }
+
+  /**
+   * Apply a gain ramp (linear or equal-power) between two AudioContext times.
+   * Equal-power uses a sine/cosine curve approximated with a value array for smooth
+   * DAW-style crossfades.
+   */
+  private _rampGain(
+    gain: AudioParam,
+    curve: 'linear' | 'equal-power',
+    fromValue: number,
+    toValue: number,
+    startTime: number,
+    endTime: number,
+  ) {
+    const duration = endTime - startTime;
+    if (duration <= 0) {
+      gain.setValueAtTime(toValue, startTime);
+      return;
+    }
+    if (curve === 'linear') {
+      gain.linearRampToValueAtTime(toValue, endTime);
+    } else {
+      // Equal-power curve: use pre-computed sin/cos lookup for perceptually constant loudness.
+      const cachedCurve = fromValue < toValue
+        ? AudioEngine._EP_FADE_IN
+        : AudioEngine._EP_FADE_OUT;
+      gain.setValueCurveAtTime(cachedCurve, startTime, duration);
     }
   }
 

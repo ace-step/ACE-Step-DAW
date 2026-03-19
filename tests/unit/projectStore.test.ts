@@ -282,3 +282,74 @@ describe('projectStore', () => {
       expect(orderAfter).toEqual(orderBefore);
     });
   });
+
+  describe('setClipFade', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('sets fadeIn and fadeOut on a clip', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0,
+        duration: 10,
+        prompt: 'drums',
+        lyrics: '',
+      });
+
+      useProjectStore.getState().setClipFade(clip.id, 1.5, 0.5);
+
+      const stored = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(stored.fadeIn).toBe(1.5);
+      expect(stored.fadeOut).toBe(0.5);
+    });
+
+    it('clears fades when undefined is passed', () => {
+      const track = useProjectStore.getState().addTrack('bass');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0,
+        duration: 8,
+        prompt: 'bass',
+        lyrics: '',
+      });
+
+      useProjectStore.getState().setClipFade(clip.id, 1, 1);
+      useProjectStore.getState().setClipFade(clip.id, undefined, undefined);
+
+      const stored = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(stored.fadeIn).toBeUndefined();
+      expect(stored.fadeOut).toBeUndefined();
+    });
+
+    it('sets fadeCurve when provided', () => {
+      const track = useProjectStore.getState().addTrack('vocals');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 2,
+        duration: 12,
+        prompt: 'vocals',
+        lyrics: '',
+      });
+
+      useProjectStore.getState().setClipFade(clip.id, 2, 2, 'linear');
+
+      const stored = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(stored.fadeCurve).toBe('linear');
+    });
+
+    it('is undoable', () => {
+      const track = useProjectStore.getState().addTrack('guitar');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0,
+        duration: 16,
+        prompt: 'guitar',
+        lyrics: '',
+      });
+
+      useProjectStore.getState().setClipFade(clip.id, 1, 1);
+      useProjectStore.getState().undo();
+
+      const stored = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(stored.fadeIn).toBeUndefined();
+      expect(stored.fadeOut).toBeUndefined();
+    });
+  });

@@ -13,6 +13,10 @@ interface ClipContextMenuProps {
   onVocal2BGM: () => void;
   onAnalyze: () => void;
   onClose: () => void;
+  onSetFadeIn: (seconds: number) => void;
+  onSetFadeOut: (seconds: number) => void;
+  onClearFades: () => void;
+  hasFades: boolean;
   hasPrompt: boolean;
   isReady: boolean;
   isMidiClip: boolean;
@@ -34,6 +38,10 @@ export function ClipContextMenu({
   onVocal2BGM,
   onAnalyze,
   onClose,
+  onSetFadeIn,
+  onSetFadeOut,
+  onClearFades,
+  hasFades,
   hasPrompt,
   isReady,
   isMidiClip,
@@ -85,6 +93,26 @@ export function ClipContextMenu({
           </>
         )}
 
+        <div className="my-1 border-t border-[#555]" />
+        {/* Fade controls */}
+        <div className="px-3 py-1 text-[9px] text-zinc-500 uppercase tracking-wide">Fades</div>
+        <button onClick={() => { onSetFadeIn(0.5); onClose(); }} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
+          Fade In (0.5s)
+        </button>
+        <button onClick={() => { onSetFadeIn(1); onClose(); }} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
+          Fade In (1s)
+        </button>
+        <button onClick={() => { onSetFadeOut(0.5); onClose(); }} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
+          Fade Out (0.5s)
+        </button>
+        <button onClick={() => { onSetFadeOut(1); onClose(); }} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
+          Fade Out (1s)
+        </button>
+        {hasFades && (
+          <button onClick={() => { onClearFades(); onClose(); }} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-daw-accent hover:text-white transition-colors">
+            Clear Fades
+          </button>
+        )}
         <div className="my-1 border-t border-[#555]" />
         <button onClick={onDuplicate} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
           Duplicate

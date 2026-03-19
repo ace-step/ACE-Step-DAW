@@ -255,6 +255,14 @@ export interface GenerationDefaults {
   model: string;
 }
 
+export interface Marker {
+  id: string;
+  /** Position in seconds from the start of the project. */
+  time: number;
+  name: string;
+  color: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -278,6 +286,8 @@ export interface Project {
   automationLanes?: AutomationLane[];
   /** Shared effect return tracks (mixer buses). */
   returnTracks?: ReturnTrack[];
+  /** Timeline markers for navigation and section labeling. */
+  markers?: Marker[];
 }
 
 // ─── Automation Types ────────────────────────────────────────────────────────

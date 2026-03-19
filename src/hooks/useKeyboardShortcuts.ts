@@ -326,6 +326,19 @@ export function useKeyboardShortcuts() {
           ui.setShowLibrary(!ui.showLibrary);
           break;
 
+        // Add marker at current playhead position (M)
+        case 'KeyM':
+          e.preventDefault();
+          if (project.project) {
+            const markerCount = (project.project.markers ?? []).length;
+            project.addMarker({
+              time: transport.currentTime,
+              name: `Marker ${markerCount + 1}`,
+              color: '#f59e0b',
+            });
+          }
+          break;
+
         // Help
         case 'Slash':
           // ? key (Shift+/ on most keyboards)

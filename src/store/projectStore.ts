@@ -21,6 +21,7 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  Marker,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -157,6 +158,11 @@ interface ProjectState {
   removeAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
   updateAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number, updates: Partial<AutomationPoint>) => void;
   clearAutomationLane: (trackId: string, parameter: AutomationParameter) => void;
+
+  // Markers
+  addMarker: (marker: Omit<Marker, 'id'>) => Marker;
+  removeMarker: (markerId: string) => void;
+  updateMarker: (markerId: string, updates: Partial<Omit<Marker, 'id'>>) => void;
 
   // Return tracks (sends/returns mixer buses)
   addReturnTrack: (name?: string) => ReturnTrack;
@@ -1935,6 +1941,36 @@ export const useProjectStore = create<ProjectState>()(
       (l: AutomationLane) => !(l.trackId === trackId && automationParamEquals(l.parameter, parameter)),
     );
     set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  // -- Markers --
+
+  addMarker: (markerData) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    _pushHistory(state.project);
+    const marker: Marker = { id: uuidv4(), ...markerData };
+    const markers = [...(state.project.markers ?? []), marker].sort((a, b) => a.time - b.time);
+    set({ project: { ...state.project, updatedAt: Date.now(), markers } });
+    return marker;
+  },
+
+  removeMarker: (markerId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const markers = (state.project.markers ?? []).filter((m: Marker) => m.id !== markerId);
+    set({ project: { ...state.project, updatedAt: Date.now(), markers } });
+  },
+
+  updateMarker: (markerId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const markers = (state.project.markers ?? [])
+      .map((m: Marker) => (m.id === markerId ? { ...m, ...updates } : m))
+      .sort((a: Marker, b: Marker) => a.time - b.time);
+    set({ project: { ...state.project, updatedAt: Date.now(), markers } });
   },
 
   // -- Track grouping / folder tracks --

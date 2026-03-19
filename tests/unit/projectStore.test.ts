@@ -328,3 +328,48 @@ describe('setClipFade', () => {
     expect(updated.fadeOutDuration).toBe(0.8);
   });
 });
+
+describe('markers', () => {
+  beforeEach(() => {
+    useProjectStore.getState().createProject();
+  });
+
+  it('addMarker adds a marker and keeps the list sorted by time', () => {
+    useProjectStore.getState().addMarker({ time: 10, name: 'Chorus', color: '#f59e0b' });
+    useProjectStore.getState().addMarker({ time: 5, name: 'Verse', color: '#3b82f6' });
+
+    const markers = useProjectStore.getState().project!.markers!;
+    expect(markers).toHaveLength(2);
+    expect(markers[0].time).toBe(5);
+    expect(markers[0].name).toBe('Verse');
+    expect(markers[1].time).toBe(10);
+    expect(markers[1].name).toBe('Chorus');
+  });
+
+  it('removeMarker removes only the targeted marker', () => {
+    const introMarker = useProjectStore.getState().addMarker({ time: 4, name: 'Intro', color: '#22c55e' });
+    useProjectStore.getState().addMarker({ time: 20, name: 'Outro', color: '#ef4444' });
+
+    useProjectStore.getState().removeMarker(introMarker.id);
+
+    const markers = useProjectStore.getState().project!.markers!;
+    expect(markers).toHaveLength(1);
+    expect(markers[0].name).toBe('Outro');
+  });
+
+  it('updateMarker updates name, time, and color without affecting other markers', () => {
+    const bridgeMarker = useProjectStore.getState().addMarker({ time: 8, name: 'Bridge', color: '#a855f7' });
+    useProjectStore.getState().addMarker({ time: 16, name: 'Solo', color: '#f97316' });
+
+    useProjectStore.getState().updateMarker(bridgeMarker.id, { name: 'Bridge (updated)', color: '#ec4899', time: 6 });
+
+    const markers = useProjectStore.getState().project!.markers!;
+    const updated = markers.find((m) => m.id === bridgeMarker.id)!;
+    expect(updated.name).toBe('Bridge (updated)');
+    expect(updated.color).toBe('#ec4899');
+    expect(updated.time).toBe(6);
+    // Other marker untouched
+    const other = markers.find((m) => m.name === 'Solo')!;
+    expect(other.time).toBe(16);
+  });
+});

@@ -72,6 +72,25 @@ export function calcClipResizeLeft(
 /**
  * Convert pixel X to time (seconds) on the timeline.
  */
+/**
+ * Calculate new audioOffset after a slip-edit drag.
+ * Slip editing moves the audio content within clip boundaries
+ * without changing clip startTime or duration.
+ */
+export function calcClipSlip(
+  origAudioOffset: number,
+  deltaPx: number,
+  pixelsPerSecond: number,
+  audioDuration: number,
+  clipDuration: number,
+): number {
+  const maxOffset = Math.max(0, audioDuration - clipDuration);
+  if (maxOffset <= 0) return origAudioOffset;
+  const deltaSec = deltaPx / pixelsPerSecond;
+  const raw = origAudioOffset + deltaSec;
+  return Math.max(0, Math.min(raw, maxOffset));
+}
+
 export function pxToTime(px: number, pixelsPerSecond: number): number {
   return px / pixelsPerSecond;
 }

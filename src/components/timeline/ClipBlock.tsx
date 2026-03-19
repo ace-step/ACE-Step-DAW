@@ -20,7 +20,7 @@ interface ClipBlockProps {
 const EDGE_HANDLE_PX = 6;
 const MIN_CLIP_DURATION = 0.5;
 
-type DragMode = 'move' | 'resize-left' | 'resize-right';
+type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
 
 interface DragGhostInfo {
   x: number;
@@ -91,6 +91,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const relX = e.clientX - rect.left;
     if (relX <= EDGE_HANDLE_PX) return 'resize-left';
     if (relX >= rect.width - EDGE_HANDLE_PX) return 'resize-right';
+    if (e.altKey) return 'slip';
     return 'move';
   }, []);
 
@@ -216,6 +217,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         const newDuration = origDuration + (origStart - newStart);
         updateClip(clip.id, { startTime: newStart, duration: newDuration, audioOffset: newAudioOffset });
+      } else if (mode === 'slip') {
+        const maxOffset = Math.max(0, origAudioDuration - origDuration);
+        if (maxOffset > 0) {
+          const newOffset = Math.max(0, Math.min(origAudioOffset + deltaSec, maxOffset));
+          updateClip(clip.id, { audioOffset: newOffset });
+        }
       } else {
         let newDuration = snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
@@ -293,7 +300,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     if (relX <= EDGE_HANDLE_PX || relX >= rect.width - EDGE_HANDLE_PX) {
       el.style.cursor = 'col-resize';
     } else {
-      el.style.cursor = 'grab';
+      el.style.cursor = e.altKey ? 'ew-resize' : 'grab';
     }
   }, []);
 

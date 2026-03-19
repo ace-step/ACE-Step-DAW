@@ -131,6 +131,8 @@ interface ProjectState {
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
 
+  /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
+  slipClip: (clipId: string, deltaSeconds: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
@@ -917,6 +919,22 @@ export const useProjectStore = create<ProjectState>()(
 
   setClipPitchShift: (clipId, semitones) => {
     get().updateClip(clipId, { pitchShift: semitones });
+  },
+
+  slipClip: (clipId, deltaSeconds) => {
+    const state = get();
+    if (!state.project) return;
+    for (const track of state.project.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (!clip) continue;
+      const audioDuration = clip.audioDuration;
+      if (audioDuration == null) return;
+      const origOffset = clip.audioOffset ?? 0;
+      const maxOffset = Math.max(0, audioDuration - clip.duration);
+      const newOffset = Math.max(0, Math.min(origOffset + deltaSeconds, maxOffset));
+      get().updateClip(clipId, { audioOffset: newOffset });
+      return;
+    }
   },
 
   splitClip: (clipId, splitTime) => {

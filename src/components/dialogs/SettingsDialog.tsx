@@ -15,6 +15,7 @@ export function SettingsDialog() {
   const project = useProjectStore((s) => s.project);
 
   const [bpm, setBpm] = useState(120);
+  const [bpmText, setBpmText] = useState('120');
   const tapTimesRef = useRef<number[]>([]);
   const tapResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,7 +42,9 @@ export function SettingsDialog() {
       }
       const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const calculatedBpm = Math.round(60000 / avgInterval);
-      setBpm(Math.min(300, Math.max(40, calculatedBpm)));
+      const clamped = Math.min(300, Math.max(40, calculatedBpm));
+      setBpm(clamped);
+      setBpmText(String(clamped));
     }
   }, []);
 
@@ -119,7 +122,9 @@ export function SettingsDialog() {
   useEffect(() => {
     if (show && !prevShow.current) {
       const gen = project?.generationDefaults ?? DEFAULT_GENERATION;
-      setBpm(project?.bpm ?? 120);
+      const projectBpm = project?.bpm ?? 120;
+      setBpm(projectBpm);
+      setBpmText(String(projectBpm));
       setKeyScale(project?.keyScale ?? '');
       setTimeSignature(project?.timeSignature ?? 4);
       setMeasures(project?.measures ?? DEFAULT_MEASURES);
@@ -241,8 +246,14 @@ export function SettingsDialog() {
               <div className="flex gap-1.5">
                 <input
                   type="number"
-                  value={bpm}
-                  onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
+                  value={bpmText}
+                  onChange={(e) => setBpmText(e.target.value)}
+                  onBlur={() => {
+                    const parsed = parseInt(bpmText);
+                    const valid = isNaN(parsed) ? 120 : Math.min(300, Math.max(30, parsed));
+                    setBpm(valid);
+                    setBpmText(String(valid));
+                  }}
                   min={40}
                   max={300}
                   className="flex-1 min-w-[3.5rem] px-2 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"

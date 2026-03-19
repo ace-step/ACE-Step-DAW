@@ -18,6 +18,7 @@ export function NewProjectDialog() {
 
   const [name, setName] = useState(DEFAULT_PROJECT_NAME);
   const [bpm, setBpm] = useState(DEFAULT_BPM);
+  const [bpmText, setBpmText] = useState(String(DEFAULT_BPM));
   const [keyScale, setKeyScale] = useState(DEFAULT_KEY_SCALE);
   const [timeSignature, setTimeSignature] = useState(DEFAULT_TIME_SIGNATURE);
 
@@ -26,6 +27,7 @@ export function NewProjectDialog() {
     if (show) {
       setName(DEFAULT_PROJECT_NAME);
       setBpm(DEFAULT_BPM);
+      setBpmText(String(DEFAULT_BPM));
       setKeyScale(DEFAULT_KEY_SCALE);
       setTimeSignature(DEFAULT_TIME_SIGNATURE);
     }
@@ -66,8 +68,14 @@ export function NewProjectDialog() {
             <label className="block text-xs text-zinc-400 mb-1">BPM</label>
             <input
               type="number"
-              value={bpm}
-              onChange={(e) => setBpm(Math.min(MAX_BPM, Math.max(MIN_BPM, parseInt(e.target.value) || MIN_BPM)))}
+              value={bpmText}
+              onChange={(e) => setBpmText(e.target.value)}
+              onBlur={() => {
+                const parsed = parseInt(bpmText);
+                const valid = isNaN(parsed) ? DEFAULT_BPM : Math.min(MAX_BPM, Math.max(MIN_BPM, parsed));
+                setBpm(valid);
+                setBpmText(String(valid));
+              }}
               min={MIN_BPM}
               max={MAX_BPM}
               className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"

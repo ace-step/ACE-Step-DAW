@@ -10,6 +10,7 @@ import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
+import { ArrangementMarkers } from './ArrangementMarkers';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -343,6 +344,7 @@ export function Timeline() {
         )}
         <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
           <TimeRuler />
+          <ArrangementMarkers />
           {showTempoLane && <TempoLane />}
 
           <div ref={trackAreaRef} className="relative">

@@ -88,6 +88,10 @@ export function useTransport() {
       buffer: AudioBuffer;
       audioOffset: number;
       clipDuration: number;
+      fadeInDuration?: number;
+      fadeOutDuration?: number;
+      fadeInCurve?: import('../types/project').Clip['fadeInCurve'];
+      fadeOutCurve?: import('../types/project').Clip['fadeOutCurve'];
       timeStretchRate?: number;
       gainEnvelope?: import('../types/project').GainEnvelopePoint[];
     }
@@ -155,6 +159,10 @@ export function useTransport() {
           buffer,
           audioOffset: clip.audioOffset ?? 0,
           clipDuration: clip.duration,
+          fadeInDuration: clip.fadeInDuration,
+          fadeOutDuration: clip.fadeOutDuration,
+          fadeInCurve: clip.fadeInCurve,
+          fadeOutCurve: clip.fadeOutCurve,
           timeStretchRate: clip.timeStretchRate,
           gainEnvelope: clip.gainEnvelope,
         });

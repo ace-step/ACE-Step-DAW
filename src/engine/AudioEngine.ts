@@ -8,6 +8,7 @@ import type {
   TimeSignatureEvent,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
+import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBarAtBeat } from '../utils/tempoMap';
 
 export interface ScheduledSource {
@@ -31,6 +32,10 @@ export interface ClipScheduleInfo {
   buffer: AudioBuffer;
   audioOffset: number;   // offset into the buffer (crop start)
   clipDuration: number;  // how long to play (crop length)
+  fadeInDuration?: number;
+  fadeOutDuration?: number;
+  fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
+  fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
 }
@@ -357,16 +362,26 @@ export class AudioEngine {
       const source = this.ctx.createBufferSource();
       source.buffer = clip.buffer;
 
-      // Insert per-clip gain envelope node if envelope exists
+      // Insert per-clip fade and gain envelope nodes when needed.
       const envelope = clip.gainEnvelope;
-      if (envelope && envelope.length > 0) {
-        const gainNode = this.ctx.createGain();
-        source.connect(gainNode);
-        gainNode.connect(trackNode.inputGain);
-        this._scheduleGainEnvelope(gainNode, envelope, clip, fromTime);
-      } else {
-        source.connect(trackNode.inputGain);
+      const hasFades = (clip.fadeInDuration ?? 0) > 0 || (clip.fadeOutDuration ?? 0) > 0;
+      const hasEnvelope = Boolean(envelope && envelope.length > 0);
+      let outputNode: AudioNode = source;
+
+      if (hasFades) {
+        const fadeNode = this.ctx.createGain();
+        outputNode.connect(fadeNode);
+        outputNode = fadeNode;
+        this._scheduleClipFade(fadeNode, clip, fromTime);
       }
+      if (hasEnvelope) {
+        const gainNode = this.ctx.createGain();
+        outputNode.connect(gainNode);
+        outputNode = gainNode;
+        this._scheduleGainEnvelope(gainNode, envelope!, clip, fromTime);
+      }
+
+      outputNode.connect(trackNode.inputGain);
 
       // Apply time-stretch via playback rate
       const rate = clip.timeStretchRate ?? 1;
@@ -541,6 +556,21 @@ export class AudioEngine {
       if (ptContextTime <= contextNow + delay) continue;
       gainNode.gain.linearRampToValueAtTime(clamp(pt.gain), ptContextTime);
     }
+  }
+
+  private _scheduleClipFade(
+    gainNode: GainNode,
+    clip: ClipScheduleInfo,
+    fromTime: number,
+  ) {
+    applyClipFadeAutomation(gainNode.gain, {
+      startTime: clip.startTime,
+      duration: clip.clipDuration,
+      fadeInDuration: clip.fadeInDuration,
+      fadeOutDuration: clip.fadeOutDuration,
+      fadeInCurve: clip.fadeInCurve,
+      fadeOutCurve: clip.fadeOutCurve,
+    }, this.ctx.currentTime, fromTime);
   }
 
   private _startTimeUpdate(totalDuration: number) {

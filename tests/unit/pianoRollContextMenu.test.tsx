@@ -342,4 +342,74 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     const lastSelection = setSelectedNoteIds.mock.calls.at(-1)?.[0];
     expect(lastSelection).toEqual(new Set(['note-1', 'note-2']));
   });
+
+  it('does not paint notes on hover without the primary mouse button pressed (#394)', () => {
+    const clip = makeClip([]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="paint"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    fireEvent.mouseMove(window, {
+      clientX: 120,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 0,
+    });
+
+    expect(mockAddMidiNote).not.toHaveBeenCalled();
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseMove(canvas, {
+      clientX: 120,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+
+    expect(mockAddMidiNote).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not erase notes on hover without the primary mouse button pressed (#394)', () => {
+    const note = makeNote();
+    const clip = makeClip([note]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="erase"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    fireEvent.mouseMove(window, {
+      clientX: NOTE_HIT_CLIENT_X,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 0,
+    });
+
+    expect(mockRemoveMidiNote).not.toHaveBeenCalled();
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseMove(canvas, {
+      clientX: NOTE_HIT_CLIENT_X,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+
+    expect(mockRemoveMidiNote).toHaveBeenCalledTimes(1);
+    expect(mockRemoveMidiNote).toHaveBeenCalledWith('clip-1', 'note-1');
+  });
 });

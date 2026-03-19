@@ -633,7 +633,9 @@ export function PianoRollCanvas({
       const noteAreaHeight = rect.height - velocityHeight;
       const drag = dragRef.current;
 
-      if (!drag && y <= noteAreaHeight && x >= PIANO_KEYBOARD_WIDTH) {
+      const isPrimaryButtonDown = (e.buttons & 1) === 1;
+
+      if (!drag && isPrimaryButtonDown && y <= noteAreaHeight && x >= PIANO_KEYBOARD_WIDTH) {
         if (activeTool === 'erase') {
           const hit = findNoteAt(x, y);
           if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {

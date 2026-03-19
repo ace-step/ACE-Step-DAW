@@ -1,4 +1,5 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 
 interface KnobProps {
   value: number;
@@ -36,35 +37,38 @@ export function Knob({
 }: KnobProps) {
   const dragStart = useRef<{ y: number; value: number } | null>(null);
   const knobRef = useRef<HTMLDivElement>(null);
+  const [showPrecisionInput, setShowPrecisionInput] = useState(false);
 
-  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  const clamp = (v: number) => clampValue(v, min, max);
+  const applyStep = useCallback((nextValue: number) => clamp(roundToStep(nextValue, step)), [clamp, step]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
     e.preventDefault();
+    e.stopPropagation();
     dragStart.current = { y: e.clientY, value };
+    knobRef.current?.requestPointerLock?.();
 
     const onMove = (mv: MouseEvent) => {
       if (!dragStart.current) return;
       const range = max - min;
-      // 1 px = range / 200 (200 px for full sweep — feels natural)
-      const delta = -(mv.clientY - dragStart.current.y) * (range / 200);
-      let newVal = dragStart.current.value + delta;
-      if (step !== undefined) {
-        newVal = Math.round(newVal / step) * step;
-      }
-      onChange(clamp(newVal));
+      const movementY = mv.movementY || (dragStart.current.y - mv.clientY);
+      const delta = movementY * (range / 200);
+      const newVal = applyStep(dragStart.current.value + delta);
+      dragStart.current = { y: mv.clientY, value: newVal };
+      onChange(newVal);
     };
 
     const onUp = () => {
       dragStart.current = null;
+      document.exitPointerLock?.();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [value, min, max, onChange, step, disabled]);
+  }, [value, min, max, onChange, disabled, applyStep]);
 
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
@@ -76,14 +80,18 @@ export function Knob({
   const onWheel = useCallback((e: React.WheelEvent) => {
     if (disabled) return;
     e.preventDefault();
+    e.stopPropagation();
     const range = max - min;
     const delta = -e.deltaY * (range / 500);
-    let newVal = value + delta;
-    if (step !== undefined) {
-      newVal = Math.round(newVal / step) * step;
-    }
-    onChange(clamp(newVal));
-  }, [value, min, max, onChange, step, disabled]);
+    onChange(applyStep(value + delta));
+  }, [value, min, max, onChange, disabled, applyStep]);
+
+  const onContextMenu = useCallback((e: React.MouseEvent) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setShowPrecisionInput(true);
+  }, [disabled]);
 
   const angle = valueToAngle(value, min, max, arc);
   const radius = size / 2;
@@ -129,6 +137,8 @@ export function Knob({
         onMouseDown={onMouseDown}
         onDoubleClick={onDoubleClick}
         onWheel={onWheel}
+        onContextMenu={onContextMenu}
+        aria-label={`${label ?? 'Control'} knob`}
         className={`relative ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
         style={{ width: size, height: size }}
       >
@@ -170,6 +180,20 @@ export function Knob({
           />
         </svg>
       </div>
+      {showPrecisionInput && (
+        <PrecisionInput
+          ariaLabel={`${label ?? 'Control'} exact value`}
+          initialValue={value}
+          min={min}
+          max={max}
+          step={step}
+          onSubmit={(nextValue) => {
+            onChange(nextValue);
+            setShowPrecisionInput(false);
+          }}
+          onCancel={() => setShowPrecisionInput(false)}
+        />
+      )}
       {label && (
         <span className="text-[9px] text-zinc-500 leading-none uppercase tracking-wide">
           {label}

@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Knob } from '../ui/Knob';
+import { PrecisionInput, clampValue, roundToStep } from '../ui/PrecisionInput';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -48,13 +49,17 @@ interface HSliderProps {
   onChange: (v: number) => void;
   min?: number;
   max?: number;
+  defaultValue?: number;
   label?: string;
   displayValue?: string;
   color?: string;
   width?: number;
 }
-export function HSlider({ value, onChange, min = 0, max = 1, label, displayValue, color = '#a855f7', width = 80 }: HSliderProps) {
+export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min, label, displayValue, color = '#a855f7', width = 80 }: HSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [showPrecisionInput, setShowPrecisionInput] = useState(false);
+  const clamp = useCallback((nextValue: number) => clampValue(nextValue, min, max), [min, max]);
+  const step = (max - min) / 100;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -64,8 +69,8 @@ export function HSlider({ value, onChange, min = 0, max = 1, label, displayValue
 
     const update = (clientX: number) => {
       const rect = track.getBoundingClientRect();
-      const norm = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      onChange(min + norm * (max - min));
+      const norm = clampValue((clientX - rect.left) / rect.width, 0, 1);
+      onChange(clamp(min + norm * (max - min)));
     };
     update(e.clientX);
 
@@ -73,7 +78,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, label, displayValue
     const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [onChange, min, max]);
+  }, [clamp, onChange, min, max]);
 
   const norm = (value - min) / (max - min);
 
@@ -90,6 +95,17 @@ export function HSlider({ value, onChange, min = 0, max = 1, label, displayValue
         className="relative cursor-pointer rounded-full"
         style={{ width, height: 6 }}
         onMouseDown={handleMouseDown}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onChange(clamp(defaultValue));
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowPrecisionInput(true);
+        }}
+        aria-label={`${label ?? 'Control'} slider`}
       >
         <div className="absolute inset-0 rounded-full bg-white/5 border border-white/10" />
         <div
@@ -101,6 +117,21 @@ export function HSlider({ value, onChange, min = 0, max = 1, label, displayValue
           style={{ left: `calc(${norm * 100}% - 6px)` }}
         />
       </div>
+      {showPrecisionInput && (
+        <PrecisionInput
+          ariaLabel={`${label ?? 'Control'} exact value`}
+          initialValue={value}
+          min={min}
+          max={max}
+          step={step}
+          onSubmit={(nextValue) => {
+            onChange(clamp(roundToStep(nextValue, step)));
+            setShowPrecisionInput(false);
+          }}
+          onCancel={() => setShowPrecisionInput(false)}
+          className="mt-1 w-20 rounded border border-white/20 bg-[#111426] px-1.5 py-1 text-[10px] text-white outline-none"
+        />
+      )}
     </div>
   );
 }

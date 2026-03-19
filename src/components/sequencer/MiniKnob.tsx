@@ -1,4 +1,5 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
+import { PrecisionInput, clampValue } from '../ui/PrecisionInput';
 
 interface MiniKnobProps {
   value: number;
@@ -26,6 +27,8 @@ export function MiniKnob({
   bipolar = false,
 }: MiniKnobProps) {
   const dragRef = useRef<{ startY: number; startVal: number } | null>(null);
+  const knobRef = useRef<HTMLDivElement>(null);
+  const [showPrecisionInput, setShowPrecisionInput] = useState(false);
 
   const norm = (value - min) / (max - min);
   const r = size / 2;
@@ -71,16 +74,19 @@ export function MiniKnob({
       e.preventDefault();
       e.stopPropagation();
       dragRef.current = { startY: e.clientY, startVal: value };
+      knobRef.current?.requestPointerLock?.();
       const onMove = (ev: MouseEvent) => {
         if (!dragRef.current) return;
-        const dy = dragRef.current.startY - ev.clientY;
         const range = max - min;
         const sensitivity = ev.shiftKey ? 0.001 : 0.005;
-        const newVal = Math.max(min, Math.min(max, dragRef.current.startVal + dy * range * sensitivity));
+        const movementY = ev.movementY || (dragRef.current.startY - ev.clientY);
+        const newVal = clampValue(dragRef.current.startVal + movementY * range * sensitivity, min, max);
+        dragRef.current = { startY: ev.clientY, startVal: newVal };
         onChange(newVal);
       };
       const onUp = () => {
         dragRef.current = null;
+        document.exitPointerLock?.();
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       };
@@ -99,16 +105,40 @@ export function MiniKnob({
     [bipolar, min, max, onChange],
   );
 
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const range = max - min;
+      const sensitivity = e.shiftKey ? 0.0005 : 0.001;
+      onChange(clampValue(value - e.deltaY * range * sensitivity, min, max));
+    },
+    [value, min, max, onChange],
+  );
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowPrecisionInput(true);
+    },
+    [],
+  );
+
   const displayVal = bipolar
     ? `${value > 0 ? '+' : ''}${Math.round(value * 100)}`
     : `${Math.round(norm * 100)}`;
 
   return (
     <div
+      ref={knobRef}
       className="flex flex-col items-center gap-0 cursor-ns-resize"
       title={label ? `${label}: ${displayVal}%` : `${displayVal}%`}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
+      onWheel={handleWheel}
+      onContextMenu={handleContextMenu}
+      aria-label={`${label ?? 'Control'} mini knob`}
     >
       <svg width={size} height={size} className="shrink-0">
         <path d={bgPath} fill="none" stroke="#404040" strokeWidth={strokeW} strokeLinecap="round" />
@@ -117,6 +147,21 @@ export function MiniKnob({
         ) : null}
         <circle cx={indInner.x} cy={indInner.y} r={1.5} fill="#e0e0e0" />
       </svg>
+      {showPrecisionInput && (
+        <PrecisionInput
+          ariaLabel={`${label ?? 'Control'} exact value`}
+          initialValue={value}
+          min={min}
+          max={max}
+          step={(max - min) / 100}
+          onSubmit={(nextValue) => {
+            onChange(nextValue);
+            setShowPrecisionInput(false);
+          }}
+          onCancel={() => setShowPrecisionInput(false)}
+          className="mt-1 w-14 rounded border border-white/20 bg-[#1a1a1a] px-1 py-0.5 text-[9px] text-white outline-none"
+        />
+      )}
       {label && (
         <span className="text-[7px] text-[#808080] leading-none mt-0.5 select-none">{label}</span>
       )}

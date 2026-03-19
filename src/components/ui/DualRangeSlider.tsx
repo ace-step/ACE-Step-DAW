@@ -1,4 +1,5 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 
 interface DualRangeSliderProps {
   min: number;
@@ -27,8 +28,9 @@ export function DualRangeSlider({
   step = 0.1,
 }: DualRangeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [editingHandle, setEditingHandle] = useState<'start' | 'end' | null>(null);
 
-  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const clamp = (v: number, lo: number, hi: number) => clampValue(v, lo, hi);
   const round = (v: number) => Math.round(v / step) * step;
 
   const pxToValue = useCallback(
@@ -68,6 +70,16 @@ export function DualRangeSlider({
     [pxToValue, min, max, startValue, endValue, minSpan, onChange],
   );
 
+  const updateExactValue = useCallback((which: 'start' | 'end', rawValue: number) => {
+    const nextValue = roundToStep(rawValue, step);
+    if (which === 'start') {
+      onChange(clamp(nextValue, min, endValue - minSpan), endValue);
+    } else {
+      onChange(startValue, clamp(nextValue, startValue + minSpan, max));
+    }
+    setEditingHandle(null);
+  }, [clamp, endValue, max, min, minSpan, onChange, startValue, step]);
+
   return (
     <div className="w-full select-none">
       {/* Track */}
@@ -87,6 +99,12 @@ export function DualRangeSlider({
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
           style={{ left: `${startPct}%` }}
           onMouseDown={makeDragHandler('start')}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditingHandle('start');
+          }}
+          aria-label="Range start handle"
         />
 
         {/* End thumb */}
@@ -94,6 +112,12 @@ export function DualRangeSlider({
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
           style={{ left: `${endPct}%` }}
           onMouseDown={makeDragHandler('end')}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setEditingHandle('end');
+          }}
+          aria-label="Range end handle"
         />
       </div>
 
@@ -119,6 +143,19 @@ export function DualRangeSlider({
       <div className="text-center text-[9px] text-zinc-500 mt-0.5">
         duration: {fmt(endValue - startValue)}
       </div>
+      {editingHandle && (
+        <div className="mt-1 flex justify-center">
+          <PrecisionInput
+            ariaLabel={editingHandle === 'start' ? 'Start exact value' : 'End exact value'}
+            initialValue={editingHandle === 'start' ? startValue : endValue}
+            min={editingHandle === 'start' ? min : startValue + minSpan}
+            max={editingHandle === 'start' ? endValue - minSpan : max}
+            step={step}
+            onSubmit={(nextValue) => updateExactValue(editingHandle, nextValue)}
+            onCancel={() => setEditingHandle(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -235,6 +235,10 @@ export interface Track {
   laneHeight?: number;
   /** Sends to return tracks (mixer bus routing). */
   sends?: Send[];
+  /** Whether the track is frozen (bounced to audio for CPU savings). */
+  frozen?: boolean;
+  /** IndexedDB key of the frozen audio bounce. */
+  frozenAudioKey?: string;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */

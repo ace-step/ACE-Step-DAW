@@ -47,6 +47,7 @@ export interface CompressorParams {
   attack: number;
   release: number;
   knee: number;
+  sidechainSourceTrackId?: string;
 }
 
 export interface ReverbParams {

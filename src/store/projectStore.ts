@@ -18,6 +18,7 @@ import type {
   PianoRollGrid,
   TrackEffect,
   TrackEffectType,
+  CompressorParams,
   AutomationParameter,
   AutomationPoint,
   AutomationLane,
@@ -165,6 +166,7 @@ interface ProjectState {
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
   removeTrackEffect: (trackId: string, effectId: string) => void;
   reorderTrackEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
+  setSidechainSource: (trackId: string, effectId: string, sourceTrackId: string | undefined) => void;
 
   // Automation
   addAutomationPoint: (trackId: string, parameter: AutomationParameter, point: AutomationPoint) => void;
@@ -1994,6 +1996,34 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+
+  setSidechainSource: (trackId, effectId, sourceTrackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          return {
+            ...track,
+            effects: (track.effects ?? []).map((effect) => {
+              if (effect.id !== effectId || effect.type !== 'compressor') return effect;
+              const params = { ...effect.params } as CompressorParams;
+              if (sourceTrackId === undefined) {
+                delete params.sidechainSourceTrackId;
+              } else {
+                params.sidechainSourceTrackId = sourceTrackId;
+              }
+              return { ...effect, params } as TrackEffect;
+            }),
+          };
+        }),
+      },
+    });
+  },
   // ─── Automation ───────────────────────────────────────────────────────────
 
   addAutomationPoint: (trackId, parameter, point) => {

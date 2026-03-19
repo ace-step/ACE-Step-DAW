@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMidiFile } from '../../src/utils/midi';
+import { encodeMidiFile, parseMidiFile } from '../../src/utils/midi';
 
 function textBytes(value: string) {
   return [...new TextEncoder().encode(value)];
@@ -100,5 +100,33 @@ describe('parseMidiFile', () => {
     expect(parsed.tracks[1].channel).toBe(1);
     expect(parsed.tracks[0].notes[0]).toMatchObject({ pitch: 60, startBeat: 0, durationBeats: 1 });
     expect(parsed.tracks[1].notes[0]).toMatchObject({ pitch: 67, startBeat: 0, durationBeats: 1 });
+  });
+});
+
+describe('encodeMidiFile', () => {
+  it('round-trips MIDI notes with tempo, time signature, and track name metadata', () => {
+    const bytes = encodeMidiFile([
+      { pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 },
+      { pitch: 67, startBeat: 1.5, durationBeats: 0.5, velocity: 96 },
+    ], {
+      bpm: 132,
+      timeSignature: { numerator: 3, denominator: 4 },
+      trackName: 'Exported Piano',
+      clipDurationBeats: 4,
+    });
+
+    const parsed = parseMidiFile(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+
+    expect(parsed.format).toBe(0);
+    expect(parsed.ticksPerQuarterNote).toBe(96);
+    expect(parsed.bpm).toBe(132);
+    expect(parsed.timeSignature).toEqual({ bar: 1, numerator: 3, denominator: 4 });
+    expect(parsed.tracks).toHaveLength(1);
+    expect(parsed.tracks[0].name).toBe('Exported Piano');
+    expect(parsed.tracks[0].notes).toHaveLength(2);
+    expect(parsed.tracks[0].notes[0]).toMatchObject({ pitch: 60, startBeat: 0, durationBeats: 1 });
+    expect(parsed.tracks[0].notes[1]).toMatchObject({ pitch: 67, startBeat: 1.5, durationBeats: 0.5 });
+    expect(parsed.tracks[0].notes[0].velocity).toBeCloseTo(0.8, 1);
+    expect(parsed.tracks[0].notes[1].velocity).toBeCloseTo(96 / 127, 1);
   });
 });

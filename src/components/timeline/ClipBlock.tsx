@@ -58,6 +58,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const removeClip = useProjectStore((s) => s.removeClip);
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
+  const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
@@ -433,6 +434,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onGenerate={() => { closeCtxMenu(); generateClip(clip.id); }}
           onRegenerate={() => { closeCtxMenu(); regenerateClip(clip.id); }}
           onOpenMidi={() => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); }}
+          onExportMidi={() => { closeCtxMenu(); exportMidiClip(clip.id); }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
           onAddLayer={() => { closeCtxMenu(); setAddLayerOpen(true); }}

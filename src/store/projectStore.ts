@@ -74,10 +74,27 @@ import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
+import { encodeMidiFile } from '../utils/midi';
+import { toastError, toastSuccess } from '../hooks/useToast';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
 }
+
+function sanitizeFileNameSegment(value: string) {
+  const trimmed = value.trim().replace(/[\\/:*?"<>|]/g, ' ');
+  return trimmed.replace(/\s+/g, ' ').trim() || 'untitled';
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE); // 64 bars @ 120 BPM 4/4 = 128s
 const TIMELINE_PADDING = 10; // seconds beyond last clip
 
@@ -304,6 +321,7 @@ interface ProjectState {
   saveProjectAsTemplate: (name: string, description?: string) => ProjectTemplate;
   /** Create a new project from a template. */
   createProjectFromTemplate: (template: ProjectTemplate, projectName?: string) => void;
+  exportMidiClip: (clipId: string) => void;
 }
 
 function computeTotalDuration(
@@ -3664,12 +3682,10 @@ export const useProjectStore = create<ProjectState>()(
       if (clips.length === 0) continue;
 
       const wavBlob = await exportStemToWav(clips, totalDuration);
-      const url = URL.createObjectURL(wavBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project.name}_${track.displayName}.wav`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(
+        wavBlob,
+        `${sanitizeFileNameSegment(project.name)}_${sanitizeFileNameSegment(track.displayName)}.wav`,
+      );
     }
   },
 
@@ -3756,6 +3772,53 @@ export const useProjectStore = create<ProjectState>()(
     };
 
     set({ project });
+  },
+
+  exportMidiClip: (clipId: string) => {
+    const project = get().project;
+    if (!project) {
+      toastError('Create or open a project before exporting MIDI');
+      return;
+    }
+
+    const track = project.tracks.find((candidate) => candidate.clips.some((clip) => clip.id === clipId));
+    const clip = track?.clips.find((candidate) => candidate.id === clipId);
+
+    if (!track || !clip?.midiData) {
+      toastError('Select a MIDI clip to export');
+      return;
+    }
+
+    if (clip.midiData.notes.length === 0) {
+      toastError('MIDI clip has no notes to export');
+      return;
+    }
+
+    const numerator = project.timeSignatureMap?.[0]?.numerator ?? project.timeSignature;
+    const denominator = project.timeSignatureMap?.[0]?.denominator ?? 4;
+    const clipDurationBeats = Math.max(
+      clip.duration * (project.bpm / 60),
+      clip.midiData.notes.reduce((max, note) => Math.max(max, note.startBeat + note.durationBeats), 0),
+    );
+
+    const bytes = encodeMidiFile(clip.midiData.notes, {
+      bpm: project.bpm,
+      timeSignature: { numerator, denominator },
+      trackName: track.displayName,
+      clipDurationBeats,
+    });
+
+    const fileName = [
+      sanitizeFileNameSegment(project.name),
+      sanitizeFileNameSegment(track.displayName),
+      sanitizeFileNameSegment(clip.prompt || 'midi-clip'),
+    ].join('_');
+
+    downloadBlob(
+      new Blob([Uint8Array.from(bytes)], { type: 'audio/midi' }),
+      `${fileName}.mid`,
+    );
+    toastSuccess(`Exported MIDI clip from ${track.displayName}`);
   },
 }),
     {

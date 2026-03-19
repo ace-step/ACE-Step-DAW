@@ -5,6 +5,7 @@ interface ClipContextMenuProps {
   onGenerate: () => void;
   onRegenerate: () => void;
   onOpenMidi: () => void;
+  onExportMidi: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onAddLayer: () => void;
@@ -29,6 +30,7 @@ export function ClipContextMenu({
   onGenerate,
   onRegenerate,
   onOpenMidi,
+  onExportMidi,
   onDuplicate,
   onDelete,
   onAddLayer,
@@ -59,9 +61,18 @@ export function ClipContextMenu({
           Edit Clip
         </button>
         {isMidiClip ? (
-          <button onClick={onOpenMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-200 hover:bg-daw-accent hover:text-white transition-colors">
-            Open Piano Roll
-          </button>
+          <>
+            <button onClick={onOpenMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-200 hover:bg-daw-accent hover:text-white transition-colors">
+              Open Piano Roll
+            </button>
+            <button
+              onClick={onExportMidi}
+              aria-label="Export MIDI Clip"
+              className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              Export MIDI Clip…
+            </button>
+          </>
         ) : isReady ? (
           <button onClick={onRegenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
             Regenerate

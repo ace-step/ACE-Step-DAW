@@ -15,6 +15,18 @@ export interface ParsedMidiFile {
   timeSignature?: TimeSignatureEvent;
 }
 
+export interface MidiExportOptions {
+  bpm?: number;
+  timeSignature?: {
+    numerator: number;
+    denominator: number;
+  };
+  ticksPerQuarterNote?: number;
+  channel?: number;
+  trackName?: string;
+  clipDurationBeats?: number;
+}
+
 interface ParsedTrackState {
   name?: string;
   notesByChannel: Map<number, Array<Omit<MidiNote, 'id'>>>;
@@ -50,6 +62,63 @@ function readVariableLength(data: Uint8Array, offset: number): { value: number; 
 
 function decodeText(bytes: Uint8Array) {
   return new TextDecoder('utf-8').decode(bytes).replace(/\0/g, '').trim();
+}
+
+function encodeText(value: string) {
+  return [...new TextEncoder().encode(value)];
+}
+
+function encodeVariableLength(value: number) {
+  const safeValue = Math.max(0, Math.floor(value));
+  const buffer = [safeValue & 0x7f];
+  let remaining = safeValue >> 7;
+
+  while (remaining > 0) {
+    buffer.unshift((remaining & 0x7f) | 0x80);
+    remaining >>= 7;
+  }
+
+  return buffer;
+}
+
+function writeUint16(value: number) {
+  return [
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+}
+
+function writeUint32(value: number) {
+  return [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+}
+
+function normalizeVelocity(velocity: number) {
+  if (!Number.isFinite(velocity)) return 100;
+
+  if (velocity <= 1) {
+    return Math.max(1, Math.min(127, Math.round(velocity * 127)));
+  }
+
+  return Math.max(1, Math.min(127, Math.round(velocity)));
+}
+
+function buildMetaEvent(deltaTicks: number, type: number, data: number[]) {
+  return [...encodeVariableLength(deltaTicks), 0xff, type, ...encodeVariableLength(data.length), ...data];
+}
+
+function buildMidiEvent(deltaTicks: number, status: number, data: number[]) {
+  return [...encodeVariableLength(deltaTicks), status, ...data];
+}
+
+interface EncodedEvent {
+  tick: number;
+  order: number;
+  bytes: number[];
 }
 
 function getOrCreateActiveNotes(
@@ -249,4 +318,89 @@ export function parseMidiFile(arrayBuffer: ArrayBuffer): ParsedMidiFile {
     bpm: firstTempoBpm !== undefined ? Math.round(firstTempoBpm * 100) / 100 : undefined,
     timeSignature: firstTimeSignature,
   };
+}
+
+export function encodeMidiFile(
+  notes: Array<MidiNote | Omit<MidiNote, 'id'>>,
+  options: MidiExportOptions = {},
+): Uint8Array {
+  const ticksPerQuarterNote = options.ticksPerQuarterNote ?? 96;
+  const bpm = options.bpm ?? 120;
+  const channel = Math.max(0, Math.min(15, options.channel ?? 0));
+  const trackName = options.trackName?.trim() || 'ACE-Step MIDI Clip';
+  const timeSignature = options.timeSignature ?? { numerator: 4, denominator: 4 };
+  const safeDenominator = Math.max(1, timeSignature.denominator);
+  const denominatorPower = Math.round(Math.log2(safeDenominator));
+  const clipDurationBeats = options.clipDurationBeats ?? 0;
+
+  const events: EncodedEvent[] = [
+    {
+      tick: 0,
+      order: 0,
+      bytes: buildMetaEvent(0, 0x03, encodeText(trackName)),
+    },
+    {
+      tick: 0,
+      order: 1,
+      bytes: buildMetaEvent(0, 0x51, writeUint32(Math.round(60000000 / bpm)).slice(1)),
+    },
+    {
+      tick: 0,
+      order: 2,
+      bytes: buildMetaEvent(0, 0x58, [timeSignature.numerator, denominatorPower, 24, 8]),
+    },
+  ];
+
+  let finalTick = Math.max(0, Math.round(clipDurationBeats * ticksPerQuarterNote));
+
+  for (const note of notes) {
+    const startTick = Math.max(0, Math.round(note.startBeat * ticksPerQuarterNote));
+    const endTick = Math.max(startTick, Math.round((note.startBeat + note.durationBeats) * ticksPerQuarterNote));
+    if (endTick <= startTick) continue;
+
+    finalTick = Math.max(finalTick, endTick);
+
+    events.push({
+      tick: startTick,
+      order: 4,
+      bytes: buildMidiEvent(0, 0x90 | channel, [note.pitch, normalizeVelocity(note.velocity)]),
+    });
+    events.push({
+      tick: endTick,
+      order: 3,
+      bytes: buildMidiEvent(0, 0x80 | channel, [note.pitch, 0]),
+    });
+  }
+
+  events.sort((a, b) => a.tick - b.tick || a.order - b.order);
+
+  const trackData: number[] = [];
+  let previousTick = 0;
+  for (const event of events) {
+    const delta = event.tick - previousTick;
+    const eventBytes = [...event.bytes];
+    eventBytes.splice(0, encodeVariableLength(0).length, ...encodeVariableLength(delta));
+    trackData.push(...eventBytes);
+    previousTick = event.tick;
+  }
+  trackData.push(...buildMetaEvent(finalTick - previousTick, 0x2f, []));
+
+  const trackChunk = [
+    ...encodeText('MTrk'),
+    ...writeUint32(trackData.length),
+    ...trackData,
+  ];
+
+  const headerChunk = [
+    ...encodeText('MThd'),
+    0x00, 0x00, 0x00, 0x06,
+    0x00, 0x00,
+    0x00, 0x01,
+    ...writeUint16(ticksPerQuarterNote),
+  ];
+
+  return Uint8Array.from([
+    ...headerChunk,
+    ...trackChunk,
+  ]);
 }

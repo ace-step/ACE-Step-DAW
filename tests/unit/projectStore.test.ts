@@ -257,6 +257,45 @@ describe('projectStore', () => {
       expect(effect?.params.bands).toHaveLength(4);
     });
   });
+
+  describe('exportMidiClip', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject({ name: 'MIDI Export Test' });
+    });
+
+    it('downloads a .mid file for a MIDI clip through the store API', () => {
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mid');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const click = vi.fn();
+      const anchor = { click, href: '', download: '' } as unknown as HTMLAnchorElement;
+      const originalCreateElement = document.createElement.bind(document);
+      const createElement = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+        if (tagName === 'a') return anchor;
+        return originalCreateElement(tagName);
+      }) as typeof document.createElement);
+
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+      useProjectStore.getState().updateTrack(track.id, { displayName: 'Lead Keys' });
+      useProjectStore.getState().updateClip(clip.id, { prompt: 'Main Hook' });
+      useProjectStore.getState().addMidiNote(clip.id, {
+        pitch: 60,
+        startBeat: 0,
+        durationBeats: 1,
+        velocity: 0.8,
+      });
+
+      useProjectStore.getState().exportMidiClip(clip.id);
+
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(anchor.download).toBe('MIDI Export Test_Lead Keys_Main Hook.mid');
+      expect(click).toHaveBeenCalledOnce();
+
+      createElement.mockRestore();
+      revokeObjectURL.mockRestore();
+      createObjectURL.mockRestore();
+    });
+  });
 });
 
   describe('duplicateTrack', () => {

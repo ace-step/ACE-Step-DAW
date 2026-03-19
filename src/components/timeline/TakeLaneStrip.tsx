@@ -11,7 +11,11 @@ export function TakeLaneStrip({ clip, track }: TakeLaneStripProps) {
   if (takes.length === 0) return null;
 
   return (
-    <div className="bg-[#171717] px-3 py-2">
+    <div
+      className="bg-[#171717] px-3 py-2 border-l-[3px]"
+      style={{ borderLeftColor: track.color }}
+      data-take-lane-for={clip.id}
+    >
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
           Take Lanes
@@ -20,7 +24,6 @@ export function TakeLaneStrip({ clip, track }: TakeLaneStripProps) {
           {track.displayName}
         </span>
       </div>
-
       <div className="space-y-1">
         {takes.map((take, index) => (
           <div

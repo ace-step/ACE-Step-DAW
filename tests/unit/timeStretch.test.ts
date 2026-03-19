@@ -71,4 +71,43 @@ describe('Time Stretch & Pitch Shift', () => {
     const clip = useProjectStore.getState().project!.tracks[0].clips[0];
     expect(clip.pitchShift).toBe(-3);
   });
+
+  describe('tempoMatchClip', () => {
+    it('sets timeStretchRate based on source vs project BPM', () => {
+      useProjectStore.getState().tempoMatchClip('clip-1', 100);
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.timeStretchRate).toBeCloseTo(1.2);
+    });
+
+    it('sets rate to 1.0 when source BPM matches project BPM', () => {
+      useProjectStore.getState().tempoMatchClip('clip-1', 120);
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.timeStretchRate).toBe(1);
+    });
+
+    it('handles half-time tempo matching', () => {
+      useProjectStore.getState().tempoMatchClip('clip-1', 240);
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.timeStretchRate).toBeCloseTo(0.5);
+    });
+
+    it('no-ops for invalid clip id', () => {
+      useProjectStore.getState().tempoMatchClip('nonexistent', 100);
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.timeStretchRate).toBeUndefined();
+    });
+  });
+
+  describe('setClipStretchMode', () => {
+    it('sets stretch mode on clip', () => {
+      useProjectStore.getState().setClipStretchMode('clip-1', 'repitch');
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.stretchMode).toBe('repitch');
+    });
+
+    it('defaults to repitch when not set', () => {
+      const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(clip.stretchMode).toBeUndefined();
+    });
+  });
 });

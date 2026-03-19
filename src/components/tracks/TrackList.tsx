@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
 import { AddTrackButton } from './AddTrackButton';
+import { TrackHeightPresetSelector } from './TrackHeightPresetSelector';
 
 export function TrackList() {
   const project = useProjectStore((s) => s.project);
@@ -79,8 +80,9 @@ export function TrackList() {
       }}
     >
       {/* Header spacer aligned with TimeRuler */}
-      <div className="h-6 border-b border-[#3a3a3a] shrink-0 bg-[#333] flex items-center px-2">
+      <div className="h-6 border-b border-[#3a3a3a] shrink-0 bg-[#333] flex items-center px-2 justify-between">
         <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Tracks</span>
+        <TrackHeightPresetSelector />
       </div>
 
       <div className="flex-1 overflow-y-auto">

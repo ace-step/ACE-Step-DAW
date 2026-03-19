@@ -327,4 +327,39 @@ describe('setClipFade', () => {
     expect(updated.fadeInCurve).toBe('linear');
     expect(updated.fadeOutDuration).toBe(0.8);
   });
+
+  describe('quantizeAudioClip / clearAudioQuantize', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('stores warp markers on a clip', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: 4, prompt: 'beat', lyrics: '',
+      });
+      const markers = [
+        { originalTime: 0.48, quantizedTime: 0.5 },
+        { originalTime: 1.03, quantizedTime: 1.0 },
+      ];
+      useProjectStore.getState().quantizeAudioClip(clip.id, markers);
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(updated.warpMarkers).toEqual(markers);
+    });
+
+    it('clears warp markers from a clip', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: 4, prompt: 'beat', lyrics: '',
+      });
+      useProjectStore.getState().quantizeAudioClip(clip.id, [
+        { originalTime: 0.48, quantizedTime: 0.5 },
+      ]);
+      useProjectStore.getState().clearAudioQuantize(clip.id);
+
+      const updated = useProjectStore.getState().project!.tracks[0].clips[0];
+      expect(updated.warpMarkers).toBeUndefined();
+    });
+  });
 });

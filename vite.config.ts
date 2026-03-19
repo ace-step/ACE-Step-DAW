@@ -16,6 +16,14 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
         timeout: 5 * 60 * 1000,
         proxyTimeout: 5 * 60 * 1000,
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Backend unavailable' }));
+            }
+          });
+        },
       },
     },
   },

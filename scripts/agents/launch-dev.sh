@@ -83,10 +83,6 @@ git rebase origin/main 2>/dev/null || {
   exit 0
 }
 
-  const p = await b.newPage();
-" 2>/dev/null || true
-}
-
 # ENFORCED: push (force-with-lease to not overwrite others)
 git -c user.name=ChuxiJ -c user.email=junmin@acestudio.ai push origin fix/issue-$ISSUE_NUM --force-with-lease 2>/dev/null || {
   echo 'WARN: push failed (force-with-lease rejected)'

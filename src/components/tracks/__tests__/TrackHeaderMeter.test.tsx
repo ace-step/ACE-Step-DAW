@@ -38,16 +38,14 @@ describe('TrackHeaderMeter', () => {
 
   it('renders with an accessible label', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
-    expect(
-      screen.getByLabelText('Track header level meter for track-1'),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Track header level meter for track-1')).toBeInTheDocument();
   });
 
   it('shows a level bar that reflects the current audio level', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
     act(() => tickFrame(0.5));
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const levelBar = meter.querySelector('[data-testid="meter-level"]') as HTMLElement;
     expect(levelBar).toBeTruthy();
     // Width should reflect the level (50%)
@@ -58,7 +56,7 @@ describe('TrackHeaderMeter', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
     act(() => tickFrame(0.8));
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const peakHold = meter.querySelector('[data-testid="meter-peak"]') as HTMLElement;
     expect(peakHold).toBeTruthy();
     // Peak should be at 80%
@@ -72,7 +70,7 @@ describe('TrackHeaderMeter', () => {
     // Drop to 0.2
     act(() => tickFrame(0.2));
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const peakHold = meter.querySelector('[data-testid="meter-peak"]') as HTMLElement;
     // Peak should still be at 90% (held)
     expect(peakHold.style.left).toBe('90%');
@@ -116,7 +114,7 @@ describe('TrackHeaderMeter', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
     act(() => tickFrame(0.15)); // ~-16 dB, below -12 dB threshold
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const levelBar = meter.querySelector('[data-testid="meter-level"]') as HTMLElement;
     // jsdom converts hex to rgb
     expect(levelBar.style.background).toContain('rgb(34, 197, 94)');
@@ -126,7 +124,7 @@ describe('TrackHeaderMeter', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
     act(() => tickFrame(0.35));
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const levelBar = meter.querySelector('[data-testid="meter-level"]') as HTMLElement;
     expect(levelBar.style.background).toContain('rgb(250, 204, 21)');
   });
@@ -135,7 +133,7 @@ describe('TrackHeaderMeter', () => {
     render(<TrackHeaderMeter trackId="track-1" />);
     act(() => tickFrame(0.85));
 
-    const meter = screen.getByLabelText('Track header level meter for track-1');
+    const meter = screen.getByLabelText(/level meter/i);
     const levelBar = meter.querySelector('[data-testid="meter-level"]') as HTMLElement;
     expect(levelBar.style.background).toContain('rgb(239, 68, 68)');
   });

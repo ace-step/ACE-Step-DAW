@@ -1,16 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-function mergeNoProxyValue(value: string | undefined) {
-  const entries = new Set(
-    (value ?? '')
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean),
-  );
-  entries.add('127.0.0.1');
-  entries.add('localhost');
-  return Array.from(entries).join(',');
-}
+import {
+  applyPlaywrightProxySafeEnv,
+  createPlaywrightProxySafeEnv,
+} from './tests/support/playwrightProxyEnv';
 
 function deriveWorktreePort() {
   return Array.from(process.cwd()).reduce((hash, character) => {
@@ -18,13 +11,10 @@ function deriveWorktreePort() {
   }, 0);
 }
 
-const noProxyValue = mergeNoProxyValue(process.env.NO_PROXY ?? process.env.no_proxy);
-
-process.env.NO_PROXY = noProxyValue;
-process.env.no_proxy = noProxyValue;
-process.env.GLOBAL_AGENT_NO_PROXY = noProxyValue;
-
 const e2ePort = Number(process.env.E2E_PORT) || 5274 + deriveWorktreePort();
+const safeProcessEnv = createPlaywrightProxySafeEnv(process.env);
+
+applyPlaywrightProxySafeEnv(process.env);
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -36,6 +26,9 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${e2ePort}`,
     trace: 'on-first-retry',
+    launchOptions: {
+      env: safeProcessEnv,
+    },
   },
   projects: [
     {
@@ -49,9 +42,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60000,
     env: {
+      ...safeProcessEnv,
       VITE_PORT: String(e2ePort),
-      NO_PROXY: '127.0.0.1,localhost',
-      no_proxy: '127.0.0.1,localhost',
     },
   },
 });

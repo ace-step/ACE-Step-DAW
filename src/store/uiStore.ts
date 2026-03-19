@@ -31,17 +31,19 @@ interface UIState {
   expandedTrackId: string | null;
   /** Track whose sequencer editor is currently open (bottom panel). */
   openSequencerTrackId: string | null;
+  openDrumMachineTrackId: string | null;
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
   openEffectChainTrackId: string | null;
   openMidiEffectChainTrackId: string | null;
+  drumMachineEditorHeight: number;
   sequencerEditorHeight: number;
   pianoRollHeight: number;
   effectChainHeight: number;
   showSmartControls: boolean;
   showLibrary: boolean;
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
-  activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | null;
+  activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null;
 
   // Tempo lane
   showTempoLane: boolean;
@@ -94,15 +96,17 @@ interface UIState {
   setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setExpandedTrackId: (id: string | null) => void;
   setOpenSequencerTrackId: (id: string | null) => void;
+  setOpenDrumMachineTrackId: (id: string | null) => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
   setOpenMidiEffectChainTrackId: (id: string | null) => void;
+  setDrumMachineEditorHeight: (v: number) => void;
   setSequencerEditorHeight: (v: number) => void;
   setPianoRollHeight: (v: number) => void;
   setEffectChainHeight: (v: number) => void;
   setShowSmartControls: (v: boolean) => void;
   setShowLibrary: (v: boolean) => void;
-  setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | null) => void;
+  setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null) => void;
 
   // Tempo lane
   toggleTempoLane: () => void;
@@ -156,10 +160,12 @@ export const useUIStore = create<UIState>()(
   selectWindow: null,
   expandedTrackId: null,
   openSequencerTrackId: null,
+  openDrumMachineTrackId: null,
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
   openEffectChainTrackId: null,
   openMidiEffectChainTrackId: null,
+  drumMachineEditorHeight: 400,
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
   effectChainHeight: 320,
@@ -240,6 +246,7 @@ export const useUIStore = create<UIState>()(
   setSelectWindow: (v) => set({ selectWindow: v }),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),
   setOpenSequencerTrackId: (id) => set({ openSequencerTrackId: id, activeBottomPanel: id ? 'editor' : null }),
+  setOpenDrumMachineTrackId: (id) => set({ openDrumMachineTrackId: id, activeBottomPanel: id ? 'drumMachine' : null }),
   setOpenPianoRoll: (trackId, clipId = null) => set({
     openPianoRollTrackId: trackId,
     openPianoRollClipId: clipId,
@@ -253,6 +260,7 @@ export const useUIStore = create<UIState>()(
     openMidiEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
   }),
+  setDrumMachineEditorHeight: (v) => set({ drumMachineEditorHeight: Math.min(600, Math.max(300, v)) }),
   setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),
   setPianoRollHeight: (v) => set({ pianoRollHeight: Math.min(700, Math.max(220, v)) }),
   setEffectChainHeight: (v) => set({ effectChainHeight: Math.min(520, Math.max(180, v)) }),
@@ -289,6 +297,7 @@ export const useUIStore = create<UIState>()(
         showSmartControls: state.showSmartControls,
         // Panel sizes
         mixerHeight: state.mixerHeight,
+        drumMachineEditorHeight: state.drumMachineEditorHeight,
         sequencerEditorHeight: state.sequencerEditorHeight,
         pianoRollHeight: state.pianoRollHeight,
         effectChainHeight: state.effectChainHeight,

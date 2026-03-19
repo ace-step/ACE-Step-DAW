@@ -44,6 +44,7 @@ export const TRACK_TYPE_CATALOG: Record<TrackType, TrackTypeInfo> = {
   sample:    { type: 'sample',    label: 'Sample',     abbr: 'SMP', emoji: '📁', color: '#f97316', description: 'User-imported audio clips' },
   sequencer: { type: 'sequencer', label: 'Sequencer',  abbr: 'SEQ', emoji: '🎹', color: '#22c55e', description: 'Step-based drum pattern editor' },
   pianoRoll: { type: 'pianoRoll', label: 'Piano Roll', abbr: 'PNO', emoji: '🎵', color: '#a855f7', description: 'MIDI note editor with built-in synth presets' },
+  drumMachine: { type: 'drumMachine', label: 'Drum Machine', abbr: 'DRM', emoji: '🥁', color: '#ef4444', description: 'MPC-style 16-pad sample trigger instrument' },
 };
 
 export interface DrumKitSample {

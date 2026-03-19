@@ -38,6 +38,8 @@ import type {
   LoudnessTarget,
   MasteringPreset,
   MasteringState,
+  DrumMachineConfig,
+  DrumKitName,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
@@ -205,6 +207,14 @@ interface ProjectState {
   setSequencerRowColor: (trackId: string, rowId: string, color: string) => void;
   fillSequencerRow: (trackId: string, rowId: string, every: number) => void;
   batchSetSequencerSteps: (trackId: string, ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[]) => void;
+
+  // Drum machine actions
+  initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
+  setDrumPadSample: (trackId: string, padIndex: number, sampleKey: string) => void;
+  setDrumPadVolume: (trackId: string, padIndex: number, volume: number) => void;
+  setDrumPadPan: (trackId: string, padIndex: number, pan: number) => void;
+  renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
+  setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
@@ -439,6 +449,39 @@ function createDefaultSequencerPattern(): SequencerPattern {
   };
 }
 
+const DRUM_PAD_DEFAULTS: { name: string; sampleKey: string; color: string }[] = [
+  { name: 'Kick',       sampleKey: 'kick',       color: '#ef4444' },
+  { name: 'Snare',      sampleKey: 'snare',      color: '#f97316' },
+  { name: 'Closed HH',  sampleKey: 'closed_hh',  color: '#eab308' },
+  { name: 'Open HH',    sampleKey: 'open_hh',    color: '#84cc16' },
+  { name: 'Clap',       sampleKey: 'clap',       color: '#22c55e' },
+  { name: 'Rim',        sampleKey: 'rim',        color: '#06b6d4' },
+  { name: 'Tom High',   sampleKey: 'high_tom',   color: '#3b82f6' },
+  { name: 'Tom Low',    sampleKey: 'low_tom',    color: '#8b5cf6' },
+  { name: 'Crash',      sampleKey: 'crash',      color: '#ec4899' },
+  { name: 'Ride',       sampleKey: 'ride',       color: '#f59e0b' },
+  { name: 'Shaker',     sampleKey: 'shaker',     color: '#10b981' },
+  { name: 'Cowbell',    sampleKey: 'cowbell',     color: '#14b8a6' },
+  { name: 'Conga',      sampleKey: 'conga',      color: '#0ea5e9' },
+  { name: 'Bongo',      sampleKey: 'bongo',      color: '#6366f1' },
+  { name: 'Tambourine', sampleKey: 'tambourine', color: '#d946ef' },
+  { name: 'Perc',       sampleKey: 'perc',       color: '#a855f7' },
+];
+
+function createDefaultDrumMachineConfig(kit: DrumKitName = '808'): DrumMachineConfig {
+  return {
+    kitName: kit,
+    pads: DRUM_PAD_DEFAULTS.map((d) => ({
+      id: uuidv4(),
+      name: d.name,
+      sampleKey: d.sampleKey,
+      color: d.color,
+      volume: 0.8,
+      pan: 0,
+    })),
+  };
+}
+
 function getDefaultTrackSynthPreset(trackName: TrackName): Track['synthPreset'] {
   return trackName === 'bass' ? 'bass'
     : trackName === 'strings' ? 'strings'
@@ -481,9 +524,9 @@ function createTrackFromTemplate(
   const track: Track = {
     color: info.color,
     volume: 0.8,
-    laneHeight: trackType === 'sequencer' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
+    laneHeight: trackType === 'sequencer' ? 80 : trackType === 'drumMachine' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
     synthPreset: getDefaultTrackSynthPreset(trackName),
-    drumKit: trackName === 'drums' || trackType === 'sequencer' ? '808' : undefined,
+    drumKit: trackName === 'drums' || trackType === 'sequencer' || trackType === 'drumMachine' ? '808' : undefined,
     ...trackOverrides,
     id: uuidv4(),
     trackType,
@@ -510,6 +553,10 @@ function createTrackFromTemplate(
       : createDefaultSequencerPattern();
   } else {
     delete track.sequencerPattern;
+  }
+
+  if (track.trackType === 'drumMachine') {
+    track.drumMachine = createDefaultDrumMachineConfig(track.drumKit ?? '808');
   }
 
   return track;
@@ -2293,6 +2340,138 @@ export const useProjectStore = create<ProjectState>()(
                 };
               }),
             },
+          };
+        }),
+      },
+    });
+  },
+
+  // ─── Drum Machine Actions ──────────────────────────────────────────────────
+  initDrumMachine: (trackId, kit) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, drumMachine: createDefaultDrumMachineConfig(kit ?? t.drumKit ?? '808') } : t,
+        ),
+      },
+    });
+  },
+
+  setDrumPadSample: (trackId, padIndex, sampleKey) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, sampleKey } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadVolume: (trackId, padIndex, volume) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, volume: Math.max(0, Math.min(1, volume)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadPan: (trackId, padIndex, pan) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, pan: Math.max(-1, Math.min(1, pan)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  renameDrumPad: (trackId, padIndex, name) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, name } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumMachineKit: (trackId, kit) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumKit: kit,
+            drumMachine: { ...t.drumMachine, kitName: kit },
           };
         }),
       },

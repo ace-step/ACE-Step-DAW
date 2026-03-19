@@ -20,6 +20,7 @@ import { MixerPanel } from '../mixer/MixerPanel';
 import { AssetsPanel } from '../assets/AssetsPanel';
 import { LoopBrowser } from '../assets/LoopBrowser';
 import { SequencerEditor } from '../sequencer/SequencerEditor';
+import { DrumMachineEditor } from '../sequencer/DrumMachineEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
 import { EffectChain } from '../mixer/EffectChain';
@@ -86,6 +87,7 @@ export function AppShell() {
 
       {project && <SmartControlsPanel />}
       {project && <SequencerEditor />}
+      {project && <DrumMachineEditor />}
       {project && <PianoRoll />}
       {project && <EffectChain />}
       {project && <MixerPanel />}

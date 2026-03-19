@@ -4,13 +4,27 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll';
+export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 /** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
 export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
+
+export interface DrumPad {
+  id: string;
+  name: string;
+  sampleKey: string;       // built-in drum name or user sample IndexedDB key
+  color: string;
+  volume: number;          // 0–1
+  pan: number;             // -1 to +1
+}
+
+export interface DrumMachineConfig {
+  pads: DrumPad[];
+  kitName: DrumKitName;
+}
 
 export type ClipGenerationStatus =
   | 'empty' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
@@ -371,6 +385,7 @@ export interface Track {
   effects?: TrackEffect[];
   midiEffects?: MidiEffect[];
   drumKit?: DrumKitName;
+  drumMachine?: DrumMachineConfig;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   panMode?: 'stereo' | 'dual-mono';  // default 'stereo'

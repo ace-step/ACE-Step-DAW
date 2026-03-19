@@ -3,6 +3,7 @@ import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { ClipBlock } from './ClipBlock';
+import { TakeLaneStrip } from './TakeLaneStrip';
 import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { snapToGrid } from '../../utils/time';
@@ -74,6 +75,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const setOpenSequencerTrackId = useUIStore((s) => s.setOpenSequencerTrackId);
+  const setOpenDrumMachineTrackId = useUIStore((s) => s.setOpenDrumMachineTrackId);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
@@ -117,6 +119,7 @@ export function TrackLane({ track }: TrackLaneProps) {
 
   const trackType = track.trackType ?? 'stems';
   const isSequencer = trackType === 'sequencer';
+  const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
@@ -145,6 +148,11 @@ export function TrackLane({ track }: TrackLaneProps) {
     if (e.target !== e.currentTarget) return;
 
     // For sequencer tracks, double-click opens the editor
+    if (isDrumMachine) {
+      e.stopPropagation();
+      setOpenDrumMachineTrackId(track.id);
+      return;
+    }
     if (isSequencer) {
       e.stopPropagation();
       setOpenSequencerTrackId(track.id);
@@ -304,6 +312,15 @@ export function TrackLane({ track }: TrackLaneProps) {
           onMouseDown={onResizeMouseDown}
         />
       </div>
+
+      {/* Take Lanes — rendered below the track lane when showTakeLanes is enabled */}
+      {track.showTakeLanes && track.clips.map((clip) =>
+        clip.takes && clip.takes.length > 0 ? (
+          <div key={`takes-${clip.id}`} className="relative border-b border-[#2a2a2a]" style={{ width: totalWidth }}>
+            <TakeLaneStrip clip={clip} track={track} />
+          </div>
+        ) : null,
+      )}
 
       {/* Automation Lanes — rendered below the track lane when present */}
       {automationLanes.map((lane) => (

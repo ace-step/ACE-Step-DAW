@@ -11,6 +11,7 @@ import { useShortcutsStore } from './store/shortcutsStore';
 import { useGenerationStore } from './store/generationStore';
 import { useSessionStore } from './store/sessionStore';
 import { projectActionApi } from './services/actionApi';
+import { getDAWApi } from './api/dawApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
@@ -75,6 +76,10 @@ const agentProjectStore = {
   execute: (commandId: string) => useUIStore.getState().executeCommandPaletteCommand(commandId),
   open: (query?: string) => useUIStore.getState().openCommandPalette(query),
   close: () => useUIStore.getState().closeCommandPalette(),
+};
+(window as unknown as Record<string, unknown>).__keyboardCommands = {
+  execute: (actionId: Parameters<ReturnType<typeof getDAWApi>['commands']['executeCoreShortcut']>[0]) =>
+    getDAWApi().commands.executeCoreShortcut(actionId),
 };
 
 // Expose DAW state summary for LLM agents

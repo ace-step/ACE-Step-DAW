@@ -87,6 +87,7 @@ describe('Typed DAW Action API', () => {
     expect(api.collaboration).toBeDefined();
     expect(api.session).toBeDefined();
     expect(api.shortcuts).toBeDefined();
+    expect(api.commands).toBeDefined();
   });
 
   it('getDAWApi().project exposes store actions', async () => {
@@ -108,5 +109,12 @@ describe('Typed DAW Action API', () => {
     const state = api.transport.getState();
     expect(typeof state.play).toBe('function');
     expect(typeof state.stop).toBe('function');
+  });
+
+  it('getDAWApi().commands exposes the core shortcut executor', async () => {
+    const { getDAWApi } = await import('../../src/api/dawApi');
+    const api = getDAWApi();
+
+    expect(typeof api.commands.executeCoreShortcut).toBe('function');
   });
 });

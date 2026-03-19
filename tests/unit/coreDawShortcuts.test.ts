@@ -28,8 +28,12 @@ describe('coreDawShortcuts', () => {
       const transport = useTransportStore.getState();
       transport.setIsRecording(!transport.isRecording);
     });
+    const toggleArmTrack = vi.fn((trackId: string, exclusive = true) => {
+      useTransportStore.getState().toggleArmTrack(trackId, exclusive);
+      useProjectStore.getState().updateTrack(trackId, { armed: true });
+    });
 
-    const unregister = registerCoreDawShortcutRuntime({ play, pause, toggleRecord });
+    const unregister = registerCoreDawShortcutRuntime({ play, pause, toggleRecord, toggleArmTrack });
 
     const track = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', track.id);
@@ -41,6 +45,11 @@ describe('coreDawShortcuts', () => {
     expect(await executeCoreDawShortcut('transport.playPause')).toBe(true);
     expect(pause).toHaveBeenCalledTimes(1);
     expect(useTransportStore.getState().isPlaying).toBe(false);
+
+    expect(await executeCoreDawShortcut('transport.record')).toBe(true);
+    expect(toggleArmTrack).toHaveBeenCalledWith(track.id, true);
+    expect(toggleRecord).toHaveBeenCalledTimes(0);
+    expect(useTransportStore.getState().armedTrackIds).toEqual([track.id]);
 
     expect(await executeCoreDawShortcut('transport.record')).toBe(true);
     expect(toggleRecord).toHaveBeenCalledTimes(1);

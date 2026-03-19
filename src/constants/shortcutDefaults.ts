@@ -5,7 +5,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.stop',        category: 'transport', label: 'Stop + Return to 0',         defaultCombo: { code: 'Enter' }, contexts: ['global'] },
   { id: 'transport.loop',        category: 'transport', label: 'Toggle Loop',                 defaultCombo: { code: 'KeyL' }, contexts: ['global'] },
   { id: 'transport.metronome',   category: 'transport', label: 'Toggle Metronome',            defaultCombo: { code: 'KeyK' }, contexts: ['global'] },
-  { id: 'transport.record',      category: 'transport', label: 'Toggle Record',               defaultCombo: { code: 'KeyR' }, contexts: ['global'] },
+  { id: 'transport.record',      category: 'transport', label: 'Arm Focused Track / Toggle Record', defaultCombo: { code: 'KeyR' }, contexts: ['global'] },
   { id: 'transport.home',        category: 'transport', label: 'Jump to Start',               defaultCombo: { code: 'Home' }, contexts: ['global'] },
   { id: 'transport.end',         category: 'transport', label: 'Jump to End',                 defaultCombo: { code: 'End' }, contexts: ['global'] },
   { id: 'transport.nudgeLeft',   category: 'transport', label: 'Nudge Playhead Left',         defaultCombo: { code: 'ArrowLeft' }, contexts: ['timeline'] },

@@ -9,14 +9,15 @@ import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import { getMidiCaptureService } from '../services/midiCaptureService';
 import {
-  executeCoreDawShortcut,
   isEditableShortcutTarget,
   registerCoreDawShortcutRuntime,
 } from '../services/coreDawShortcuts';
+import { executeCoreKeyboardAction } from '../services/coreKeyboardActions';
+import { resolveFocusedTrackId } from '../services/focusResolution';
 import type { KeyCombo } from '../types/shortcuts';
 
 function isInputFocused(event: KeyboardEvent): boolean {
-  return isEditableShortcutTarget(event.target);
+  return isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement);
 }
 
 const NUDGE_SECONDS = 5;
@@ -53,42 +54,13 @@ function getBounceTargetTrackId(): string | null {
     ?? null;
 }
 
-function resolveFocusedTrackId(): string | null {
-  const ui = useUIStore.getState();
-  const project = useProjectStore.getState().project;
-  if (!project) return null;
-
-  const inProject = (trackId: string | null | undefined) =>
-    trackId ? project.tracks.find((track) => track.id === trackId)?.id ?? null : null;
-
-  const keyboardTrackId = inProject(ui.keyboardContext.trackId);
-  if (keyboardTrackId) return keyboardTrackId;
-
-  const editorTrackId = inProject(ui.openPianoRollTrackId)
-    ?? inProject(ui.openSequencerTrackId)
-    ?? inProject(ui.openDrumMachineTrackId)
-    ?? inProject(ui.expandedTrackId);
-  if (editorTrackId) return editorTrackId;
-
-  if (ui.selectedClipIds.size > 0) {
-    const selectedClipIds = new Set(ui.selectedClipIds);
-    for (const track of project.tracks) {
-      if (track.clips.some((clip) => selectedClipIds.has(clip.id))) {
-        return track.id;
-      }
-    }
-  }
-
-  return project.tracks[0]?.id ?? null;
-}
-
 function focusTrack(delta: number) {
   const ui = useUIStore.getState();
   const project = useProjectStore.getState().project;
   if (!project || project.tracks.length === 0) return;
 
   const orderedTracks = [...project.tracks].sort((a, b) => a.order - b.order);
-  const currentId = resolveFocusedTrackId();
+  const currentId = resolveFocusedTrackId() ?? orderedTracks[0]?.id ?? null;
   const currentIndex = Math.max(0, orderedTracks.findIndex((track) => track.id === currentId));
   const nextIndex = Math.min(orderedTracks.length - 1, Math.max(0, currentIndex + delta));
   const nextTrack = orderedTracks[nextIndex];
@@ -111,13 +83,14 @@ function shouldDeferToPianoRollTools(event: KeyboardEvent): boolean {
 
 export function useKeyboardShortcuts() {
   const { play, pause, stop, seek } = useTransport();
-  const { toggleRecord } = useRecording();
+  const { toggleRecord, toggleArmTrack } = useRecording();
 
   useEffect(() => {
     const unregisterRuntime = registerCoreDawShortcutRuntime({
       play,
       pause,
       toggleRecord,
+      toggleArmTrack,
     });
 
     const handler = (event: KeyboardEvent) => {
@@ -314,13 +287,28 @@ export function useKeyboardShortcuts() {
 
       if (matches('transport.playPause')) {
         event.preventDefault();
-        void executeCoreDawShortcut('transport.playPause');
+        void executeCoreKeyboardAction('transport.playPause', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
       if (matches('transport.stop')) { event.preventDefault(); stop(); return; }
-      if (matches('transport.loop')) { event.preventDefault(); void executeCoreDawShortcut('transport.loop'); return; }
+      if (matches('transport.loop')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('transport.loop', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
       if (matches('transport.metronome')) { event.preventDefault(); transport.toggleMetronome(); return; }
-      if (matches('transport.record')) { event.preventDefault(); void executeCoreDawShortcut('transport.record'); return; }
+      if (matches('transport.record')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('transport.record', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
+      if (matches('transport.stop')) { event.preventDefault(); stop(); return; }
+      if (matches('transport.loop')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('transport.loop', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
+      if (matches('transport.metronome')) { event.preventDefault(); transport.toggleMetronome(); return; }
       if (matches('transport.home')) { event.preventDefault(); seek(0); return; }
       if (matches('transport.end')) {
         event.preventDefault();
@@ -345,8 +333,16 @@ export function useKeyboardShortcuts() {
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }
 
-      if (matches('tracks.mute')) { event.preventDefault(); void executeCoreDawShortcut('tracks.mute'); return; }
-      if (matches('tracks.solo')) { event.preventDefault(); void executeCoreDawShortcut('tracks.solo'); return; }
+      if (matches('tracks.mute')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('tracks.mute', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
+      if (matches('tracks.solo')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('tracks.solo', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
 
       if (matches('navigation.previousTrack')) { event.preventDefault(); focusTrack(-1); return; }
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
@@ -383,13 +379,13 @@ export function useKeyboardShortcuts() {
       // Z fits the current selection, Shift+Z resets to the full project.
       if (matches('view.zoomToSelection')) {
         event.preventDefault();
-        void executeCoreDawShortcut('view.zoomToSelection');
+        void executeCoreKeyboardAction('view.zoomToSelection', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
 
       if (matches('view.zoomToFit')) {
         event.preventDefault();
-        void executeCoreDawShortcut('view.zoomToFit');
+        void executeCoreKeyboardAction('view.zoomToFit', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
 
@@ -442,5 +438,5 @@ export function useKeyboardShortcuts() {
       unregisterRuntime();
       window.removeEventListener('keydown', handler);
     };
-  }, [pause, play, seek, stop, toggleRecord]);
+  }, [pause, play, seek, stop, toggleArmTrack, toggleRecord]);
 }

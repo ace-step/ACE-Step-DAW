@@ -15,6 +15,7 @@ export interface CoreDawShortcutRuntime {
   play: () => void;
   pause: () => void;
   toggleRecord: () => void | Promise<void>;
+  toggleArmTrack?: (trackId: string, exclusive?: boolean) => void;
 }
 
 let runtime: CoreDawShortcutRuntime | null = null;
@@ -99,6 +100,14 @@ export async function executeCoreDawShortcut(actionId: CoreDawShortcutActionId):
       return true;
     case 'transport.record':
       if (!runtime) return false;
+      if (!transport.isRecording) {
+        const focusedTrackId = resolveFocusedTrackId();
+        if (focusedTrackId && !transport.armedTrackIds.includes(focusedTrackId)) {
+          runtime.toggleArmTrack?.(focusedTrackId, true);
+          ui.setKeyboardContext(ui.keyboardContext.scope, focusedTrackId);
+          return true;
+        }
+      }
       await runtime.toggleRecord();
       return true;
     case 'transport.loop':
@@ -140,5 +149,5 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
     return true;
   }
 
-  return target.closest('[contenteditable="true"]') !== null;
+  return target.closest('[contenteditable="true"], [role="textbox"]') !== null;
 }

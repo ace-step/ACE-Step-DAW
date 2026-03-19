@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { useKeyboardShortcuts } from '../../src/hooks/useKeyboardShortcuts';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
+import { useTransportStore } from '../../src/store/transportStore';
 
 const transportSpies = {
   play: vi.fn(),
@@ -38,6 +39,7 @@ describe('useKeyboardShortcuts', () => {
     vi.clearAllMocks();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    useTransportStore.setState(useTransportStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Shortcut Test' });
   });
 
@@ -125,32 +127,30 @@ describe('useKeyboardShortcuts', () => {
     });
   });
 
-  it('suppresses single-key shortcuts while typing in editable controls', () => {
+  it('suppresses single-key shortcuts while typing in editable fields', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);
+    render(<Harness />);
 
-    const { getByTestId } = render(
-      <>
-        <Harness />
-        <input data-testid="text-input" />
-        <div data-testid="editable" contentEditable />
-      </>,
-    );
-
-    const input = getByTestId('text-input');
+    const input = document.createElement('input');
+    document.body.appendChild(input);
     input.focus();
-    fireEvent.keyDown(input, { code: 'KeyM' });
-    fireEvent.keyDown(input, { code: 'KeyZ' });
 
-    let track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
+    input.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
+
+    const contentEditable = document.createElement('div');
+    contentEditable.setAttribute('contenteditable', 'true');
+    document.body.appendChild(contentEditable);
+    contentEditable.focus();
+    contentEditable.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', bubbles: true }));
+
+    const track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
     expect(track?.muted).toBe(false);
-    expect(useUIStore.getState().timelineZoomRequest).toBeNull();
-
-    const editable = getByTestId('editable');
-    editable.focus();
-    fireEvent.keyDown(editable, { code: 'KeyS' });
-
-    track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
     expect(track?.soloed).toBe(false);
+    expect(transportSpies.play).not.toHaveBeenCalled();
+
+    contentEditable.remove();
+    input.remove();
   });
 });

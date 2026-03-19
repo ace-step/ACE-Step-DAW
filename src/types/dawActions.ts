@@ -20,6 +20,7 @@ import type { CollaborationState } from '../store/collaborationStore';
 import type { SessionState } from '../store/sessionStore';
 import type { ShortcutsState } from '../store/shortcutsStore';
 import type { CoreDawShortcutActionId } from '../services/coreDawShortcuts';
+import type { CoreKeyboardActionId } from '../services/coreKeyboardActions';
 
 // ---------------------------------------------------------------------------
 // Helper: extract only function-typed keys from a state interface
@@ -112,6 +113,10 @@ export interface CoreDawShortcutsGlobal {
   execute: (actionId: CoreDawShortcutActionId) => Promise<boolean>;
 }
 
+export interface KeyboardCommandsGlobal {
+  execute: (actionId: CoreKeyboardActionId) => Promise<boolean>;
+}
+
 /** Type declarations for all globals exposed on `window` for agent/automation use. */
 export interface DAWGlobals {
   __store: DAWStore<AgentProjectState>;
@@ -125,6 +130,7 @@ export interface DAWGlobals {
   __coreDawShortcuts: CoreDawShortcutsGlobal;
   __getAudioEngine: () => unknown;
   __commandPalette: CommandPaletteGlobal;
+  __keyboardCommands: KeyboardCommandsGlobal;
   __dawSummary: () => string;
   __dawStructure: () => unknown;
   __midiCaptureService: unknown;

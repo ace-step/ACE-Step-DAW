@@ -39,7 +39,7 @@ export function KeyboardShortcutsDialog() {
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Keyboard Shortcuts</h2>
             <p className="text-[11px] text-zinc-500 mt-1">
-              Core single-key shortcuts stay active across panels, but they are suppressed while typing in inputs or editable text fields.
+              Core single-key shortcuts ignore focused text fields and contenteditable editors. R arms the focused track first, then toggles recording.
             </p>
           </div>
           <button

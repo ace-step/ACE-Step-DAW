@@ -18,6 +18,7 @@ import { useGenerationStore } from '../store/generationStore';
 import { useCollaborationStore } from '../store/collaborationStore';
 import { useSessionStore } from '../store/sessionStore';
 import { useShortcutsStore } from '../store/shortcutsStore';
+import { createCoreKeyboardActions } from '../services/coreKeyboardActions';
 import type { DAWStore } from '../types/dawActions';
 import type { ProjectState } from '../store/projectStore';
 import type { TransportState } from '../store/transportStore';
@@ -26,6 +27,10 @@ import type { GenerationState } from '../store/generationStore';
 import type { CollaborationState } from '../store/collaborationStore';
 import type { SessionState } from '../store/sessionStore';
 import type { ShortcutsState } from '../store/shortcutsStore';
+
+export interface DAWCommandApi {
+  executeCoreShortcut: ReturnType<typeof createCoreKeyboardActions>['execute'];
+}
 
 /** Typed references to all DAW Zustand stores. */
 export interface DAWApi {
@@ -36,10 +41,22 @@ export interface DAWApi {
   collaboration: DAWStore<CollaborationState>;
   session: DAWStore<SessionState>;
   shortcuts: DAWStore<ShortcutsState>;
+  commands: DAWCommandApi;
 }
 
 /** Returns typed references to all DAW Zustand stores. */
 export function getDAWApi(): DAWApi {
+  const coreKeyboardActions = createCoreKeyboardActions({
+    play: () => useTransportStore.getState().play(),
+    pause: () => useTransportStore.getState().pause(),
+    toggleRecord: () => useTransportStore.getState().setIsRecording(!useTransportStore.getState().isRecording),
+    toggleArmTrack: (trackId, exclusive = true) => {
+      useTransportStore.getState().toggleArmTrack(trackId, exclusive);
+      const isArmed = useTransportStore.getState().armedTrackIds.includes(trackId);
+      useProjectStore.getState().updateTrack(trackId, { armed: isArmed });
+    },
+  });
+
   return {
     project: useProjectStore,
     transport: useTransportStore,
@@ -48,6 +65,9 @@ export function getDAWApi(): DAWApi {
     collaboration: useCollaborationStore,
     session: useSessionStore,
     shortcuts: useShortcutsStore,
+    commands: {
+      executeCoreShortcut: coreKeyboardActions.execute,
+    },
   };
 }
 

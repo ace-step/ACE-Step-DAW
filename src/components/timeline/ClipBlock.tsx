@@ -56,7 +56,11 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const job = [...s.jobs].reverse().find(
       (j) => j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing'),
     );
-    return job?.progress ?? null;
+    if (!job) return null;
+    if (job.progressPercent != null) {
+      return `${job.stage ?? job.progress} ${Math.round(job.progressPercent)}%`;
+    }
+    return job.stage ?? job.progress;
   });
   const updateClip = useProjectStore((s) => s.updateClip);
   const setClipFade = useProjectStore((s) => s.setClipFade);

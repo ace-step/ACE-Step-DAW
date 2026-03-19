@@ -10,7 +10,137 @@ export interface GenerationJob {
   trackName: string;
   status: 'queued' | 'generating' | 'processing' | 'done' | 'error';
   progress: string;
+  stage?: string | null;
+  progressPercent?: number | null;
+  etaSeconds?: number | null;
+  etaConfidence?: 'none' | 'low' | 'medium' | 'high';
+  startedAt?: number;
+  completedAt?: number;
+  lastUpdatedAt?: number;
+  actionableMessage?: string;
   error?: string;
+}
+
+export interface GenerationJobProgressInput {
+  status: GenerationJob['status'];
+  progress: string;
+  stage?: string | null;
+  progressPercent?: number | null;
+  error?: string;
+  now?: number;
+}
+
+function normalizeStageLabel(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function inferStageLabel(status: GenerationJob['status'], progress: string): string | null {
+  const trimmed = progress.trim();
+  if (trimmed) {
+    const withoutPercent = trimmed.replace(/\s*\d{1,3}(?:\.\d+)?%\s*$/u, '').trim();
+    if (withoutPercent && withoutPercent !== trimmed) return withoutPercent.replace(/[.:\-–]+$/u, '').trim();
+    if (/submitt/i.test(trimmed)) return 'Submitting request';
+    if (/download/i.test(trimmed)) return 'Downloading audio';
+    if (/queue/i.test(trimmed)) return 'Queued';
+  }
+
+  switch (status) {
+    case 'queued':
+      return 'Queued';
+    case 'generating':
+      return 'Generating audio';
+    case 'processing':
+      return 'Processing audio';
+    case 'done':
+      return 'Complete';
+    case 'error':
+      return 'Generation failed';
+    default:
+      return null;
+  }
+}
+
+function normalizeProgressPercent(
+  progressPercent: number | null | undefined,
+  progress: string,
+): number | null {
+  const parsed = typeof progressPercent === 'number' && Number.isFinite(progressPercent)
+    ? progressPercent
+    : Number(progress.match(/(\d{1,3}(?:\.\d+)?)%/u)?.[1] ?? Number.NaN);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function buildActionableGenerationMessage(status: GenerationJob['status'], error?: string): string | undefined {
+  if (status !== 'error') return undefined;
+  const message = error?.trim();
+  if (!message) {
+    return 'Generation failed. Retry the request. If it keeps failing, verify the backend is healthy.';
+  }
+  const lower = message.toLowerCase();
+  if (lower.includes('timed out')) {
+    return 'Generation timed out while waiting for the backend. Retry the request or check the backend status before trying again.';
+  }
+  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort')) {
+    return 'Generation lost connection to the backend. Check the backend URL or health, then retry.';
+  }
+  return `${message} Retry the request. If it keeps failing, try a shorter duration or check the backend logs.`;
+}
+
+export function deriveGenerationJobProgress(
+  previous: GenerationJob | undefined,
+  input: GenerationJobProgressInput,
+): Partial<GenerationJob> {
+  const now = input.now ?? Date.now();
+  const normalizedPercent = normalizeProgressPercent(input.progressPercent, input.progress);
+  const previousPercent = previous?.progressPercent ?? null;
+  const monotonicPercent = normalizedPercent == null
+    ? previousPercent
+    : Math.max(previousPercent ?? 0, normalizedPercent);
+  const startedAt = previous?.startedAt ?? now;
+  const stage = normalizeStageLabel(input.stage) ?? inferStageLabel(input.status, input.progress);
+
+  let etaSeconds: number | null = null;
+  let etaConfidence: GenerationJob['etaConfidence'] = 'none';
+
+  if ((input.status === 'generating' || input.status === 'processing') && monotonicPercent != null && monotonicPercent > 0 && monotonicPercent < 100) {
+    const elapsedSeconds = Math.max(0, (now - startedAt) / 1000);
+    if (elapsedSeconds >= 4 && monotonicPercent >= 8) {
+      const remainingSeconds = (elapsedSeconds * (100 - monotonicPercent)) / monotonicPercent;
+      if (Number.isFinite(remainingSeconds)) {
+        etaConfidence = monotonicPercent >= 35 && elapsedSeconds >= 10
+          ? 'high'
+          : monotonicPercent >= 15 && elapsedSeconds >= 6
+            ? 'medium'
+            : 'low';
+        etaSeconds = etaConfidence === 'low' ? null : Math.max(1, Math.round(remainingSeconds));
+      }
+    }
+  }
+
+  if (input.status === 'done') {
+    etaSeconds = 0;
+    etaConfidence = 'high';
+  }
+
+  if (input.status === 'error') {
+    etaSeconds = null;
+    etaConfidence = 'none';
+  }
+
+  return {
+    progress: input.progress,
+    stage,
+    progressPercent: input.status === 'done' ? 100 : monotonicPercent,
+    etaSeconds,
+    etaConfidence,
+    startedAt,
+    lastUpdatedAt: now,
+    completedAt: input.status === 'done' ? now : previous?.completedAt,
+    actionableMessage: buildActionableGenerationMessage(input.status, input.error),
+    error: input.error,
+  };
 }
 
 export interface PromptHistoryEntry {
@@ -240,7 +370,21 @@ export const useGenerationStore = create<GenerationState>()(
       generationForm: createDefaultGenerationFormState(),
       lastSubmittedRequest: null,
 
-      addJob: (job) => set((s) => ({ jobs: [...s.jobs, job] })),
+      addJob: (job) => set((s) => ({
+        jobs: [
+          ...s.jobs,
+          {
+            ...job,
+            stage: job.stage ?? inferStageLabel(job.status, job.progress),
+            progressPercent: job.progressPercent ?? normalizeProgressPercent(null, job.progress),
+            etaSeconds: job.etaSeconds ?? null,
+            etaConfidence: job.etaConfidence ?? 'none',
+            startedAt: job.startedAt ?? Date.now(),
+            lastUpdatedAt: job.lastUpdatedAt ?? Date.now(),
+            actionableMessage: job.actionableMessage,
+          },
+        ],
+      })),
 
       updateJob: (jobId, updates) =>
         set((s) => ({

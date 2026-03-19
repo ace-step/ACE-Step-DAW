@@ -3,6 +3,7 @@ import {
   useGenerationStore,
   type GenerationJob,
   getGenerationValidationError,
+  deriveGenerationJobProgress,
 } from '../../src/store/generationStore';
 
 function makeJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
@@ -12,6 +13,10 @@ function makeJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
     trackName: 'Track 1',
     status: 'queued',
     progress: 'Queued',
+    stage: 'Queued',
+    progressPercent: null,
+    etaSeconds: null,
+    etaConfidence: 'none',
     ...overrides,
   };
 }
@@ -38,6 +43,52 @@ describe('generationStore', () => {
       const updated = useGenerationStore.getState().jobs[0];
       expect(updated.status).toBe('generating');
       expect(updated.progress).toBe('50%');
+    });
+
+    it('derives monotonic progress and ETA only when runtime data is strong enough', () => {
+      const initial = makeJob({ id: 'j1', status: 'generating', progress: 'Generating... 12%', startedAt: 0 });
+
+      const first = deriveGenerationJobProgress(initial, {
+        status: 'generating',
+        progress: 'Diffusion warmup 12%',
+        progressPercent: 12,
+        now: 2_000,
+      });
+      expect(first.progressPercent).toBe(12);
+      expect(first.stage).toBe('Diffusion warmup');
+      expect(first.etaConfidence).toBe('none');
+      expect(first.etaSeconds).toBeNull();
+
+      const second = deriveGenerationJobProgress({ ...initial, ...first }, {
+        status: 'generating',
+        progress: 'Diffusion pass 40%',
+        progressPercent: 40,
+        now: 16_000,
+      });
+      expect(second.progressPercent).toBe(40);
+      expect(second.etaConfidence).toBe('high');
+      expect(second.etaSeconds).toBe(24);
+
+      const third = deriveGenerationJobProgress({ ...initial, ...first, ...second }, {
+        status: 'generating',
+        progress: 'Diffusion pass 30%',
+        progressPercent: 30,
+        now: 20_000,
+      });
+      expect(third.progressPercent).toBe(40);
+    });
+
+    it('builds actionable timeout guidance for failed jobs', () => {
+      const updates = deriveGenerationJobProgress(undefined, {
+        status: 'error',
+        progress: 'Generation timed out',
+        error: 'Generation timed out',
+        now: 12_000,
+      });
+
+      expect(updates.actionableMessage).toContain('timed out');
+      expect(updates.actionableMessage).toContain('Retry');
+      expect(updates.etaConfidence).toBe('none');
     });
 
     it('removes a job by id', () => {

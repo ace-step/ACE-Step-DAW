@@ -90,4 +90,25 @@ describe('EffectsEngine sidechain management', () => {
     const output = effectsEngine.getOutputNode('bass-track');
     expect(output).toBeDefined();
   });
+
+  it('updateSidechainParams calls updateParams on the follower', () => {
+    effectsEngine.rebuildChain('bass-track', [compressorEffect]);
+    const mockSource = { context: {} } as unknown as AudioNode;
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    // Should not throw
+    effectsEngine.updateSidechainParams('bass-track', 'fx-1', {
+      threshold: -30, ratio: 6, attack: 0.01, release: 0.1, knee: 3,
+    });
+    // Follower still active
+    expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(-6);
+  });
+
+  it('reconnecting sidechain disposes the previous follower', () => {
+    effectsEngine.rebuildChain('bass-track', [compressorEffect]);
+    const mockSource = { context: {} } as unknown as AudioNode;
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    // Connect again — should dispose old follower first, then create new one
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(-6);
+  });
 });

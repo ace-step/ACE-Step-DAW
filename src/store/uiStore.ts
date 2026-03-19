@@ -657,6 +657,7 @@ function buildCommandPaletteContext(state: UIState) {
         projectStore.duplicateClip(clipId);
       },
       splitClip: projectStore.splitClip,
+      splitClipAtZeroCrossing: projectStore.splitClipAtZeroCrossing,
       removeClip: projectStore.removeClip,
       setEditingClip: state.setEditingClip,
       deselectAll: state.deselectAll,

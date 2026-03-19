@@ -370,7 +370,7 @@ export function useKeyboardShortcuts() {
         const selected = [...ui.selectedClipIds];
         if (selected.length === 1) {
           event.preventDefault();
-          project.splitClip(selected[0], transport.currentTime);
+          project.splitClipAtZeroCrossing(selected[0], transport.currentTime);
         }
         return;
       }

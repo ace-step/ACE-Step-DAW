@@ -75,6 +75,7 @@ export interface CommandPaletteContext {
     updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
     duplicateClip: (clipId: string) => void;
     splitClip: (clipId: string, splitTime: number) => void;
+    splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
     removeClip: (clipId: string) => void;
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
@@ -657,7 +658,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
         'action',
         ['clip', 'split', 'selected', 'playhead'],
         ['cut selected clip', 'split current clip'],
-        () => context.actions.splitClip(selectedClipId, context.currentTime),
+        () => context.actions.splitClipAtZeroCrossing(selectedClipId, context.currentTime),
         ['S'],
         'Selected clip action',
       ),

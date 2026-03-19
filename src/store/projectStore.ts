@@ -88,6 +88,7 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import { audioBufferToWavBlob } from '../utils/wav';
 import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS, renderTrackForBounceInPlace } from '../services/bounceInPlace';
 import type { MidiCaptureService } from '../services/midiCaptureService';
+import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -334,6 +335,7 @@ interface ProjectState {
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
+  splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
   consolidateClips: (trackId: string, clipIds: string[]) => Promise<Clip | undefined>;
   toggleClipStar: (clipId: string) => void;
   moveClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => void;
@@ -2254,6 +2256,53 @@ export const useProjectStore = create<ProjectState>()(
         tracks: newTracks,
       },
     });
+  },
+
+  splitClipAtZeroCrossing: async (clipId, splitTime) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    for (const t of state.project.tracks) {
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) {
+        sourceClip = c;
+        break;
+      }
+    }
+    if (!sourceClip) return;
+
+    const audioKey = sourceClip.isolatedAudioKey ?? sourceClip.cumulativeMixKey;
+    if (!audioKey) {
+      get().splitClip(clipId, splitTime);
+      return;
+    }
+
+    try {
+      const blob = await loadAudioBlobByKey(audioKey);
+      if (!blob) {
+        get().splitClip(clipId, splitTime);
+        return;
+      }
+
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(blob);
+      const samples = buffer.getChannelData(0);
+
+      const audioOffset = sourceClip.audioOffset ?? 0;
+      const bufferTime = audioOffset + (splitTime - sourceClip.startTime);
+      const snappedBufferTime = snapTimeToZeroCrossing(
+        samples,
+        buffer.sampleRate,
+        bufferTime,
+      );
+      const snappedSplitTime =
+        sourceClip.startTime + (snappedBufferTime - audioOffset);
+
+      get().splitClip(clipId, snappedSplitTime);
+    } catch {
+      get().splitClip(clipId, splitTime);
+    }
   },
 
   consolidateClips: async (trackId, clipIds) => {

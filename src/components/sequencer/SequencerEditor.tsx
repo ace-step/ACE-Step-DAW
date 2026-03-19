@@ -250,7 +250,20 @@ export function SequencerEditor() {
     return () => window.removeEventListener('keydown', handler, true);
   }, [trackId, closeEditor, stopPreview]);
 
-  if (!trackId || !track || !project || !pattern) return null;
+  if (!trackId || !track || !project) return null;
+
+  // Pattern is being initialized (e.g. for projects loaded from storage without a pattern).
+  // Show a placeholder so the user never sees a blank black box.
+  if (!pattern) {
+    return (
+      <div
+        className="flex items-center justify-center shrink-0"
+        style={{ height: editorHeight, background: FL.bg, borderTop: `1px solid ${FL.border}` }}
+      >
+        <span style={{ color: FL.textDim, fontSize: 11 }}>Initializing pattern...</span>
+      </div>
+    );
+  }
 
   const { stepH, stepW } = ROW_SIZES[rowSize];
   const currentStep = isPreviewPlaying ? previewStep : -1;
@@ -394,7 +407,7 @@ export function SequencerEditor() {
   };
 
   return (
-    <div className="flex flex-col select-none" style={{ height: editorHeight, background: FL.bg }} tabIndex={-1}>
+    <div className="flex flex-col select-none shrink-0" style={{ height: editorHeight, background: FL.bg }} tabIndex={-1}>
       <div className="h-1 cursor-ns-resize shrink-0" style={{ background: FL.headerBg }} onMouseDown={onResizeStart}>
         <div className="mx-auto mt-px" style={{ width: 40, height: 2, borderRadius: 1, background: FL.borderLight }} />
       </div>

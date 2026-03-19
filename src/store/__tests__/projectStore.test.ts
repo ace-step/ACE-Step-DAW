@@ -345,4 +345,125 @@ describe('projectStore', () => {
       expect(track.effects).toHaveLength(0);
     });
   });
+
+  describe('setProject migration — sequencerPattern backfill', () => {
+    it('initializes sequencerPattern for a sequencer track that is missing it', () => {
+      const rawProject = {
+        id: 'proj-1',
+        name: 'Old Project',
+        createdAt: 1,
+        updatedAt: 1,
+        bpm: 120,
+        keyScale: 'C major',
+        timeSignature: 4,
+        totalDuration: 128,
+        measures: 64,
+        tracks: [
+          {
+            id: 'track-1',
+            trackType: 'sequencer' as const,
+            trackName: 'drums' as const,
+            displayName: 'Drums',
+            color: '#ef4444',
+            order: 1,
+            volume: 0.8,
+            muted: false,
+            soloed: false,
+            clips: [],
+            effects: [],
+            drumKit: '808' as const,
+            synthPreset: 'piano' as const,
+            // sequencerPattern intentionally missing (simulates old project)
+          },
+        ],
+        generationDefaults: {
+          inferenceSteps: 20,
+          guidanceScale: 7.5,
+          shift: 0,
+          thinking: false,
+          model: 'test-model',
+        },
+        globalCaption: '',
+        automationLanes: [],
+        assets: [],
+      };
+
+      useProjectStore.getState().setProject(rawProject as any);
+
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.sequencerPattern).toBeDefined();
+      expect(track.sequencerPattern!.rows.length).toBeGreaterThan(0);
+      expect(track.sequencerPattern!.stepsPerBar).toBe(16);
+      expect(track.sequencerPattern!.bars).toBe(1);
+    });
+
+    it('preserves an existing valid sequencerPattern when loading a project', () => {
+      const existingPattern = {
+        id: 'pat-1',
+        name: 'Pattern 1',
+        rows: [
+          {
+            id: 'row-1',
+            name: 'Kick',
+            sampleKey: 'kick',
+            steps: Array.from({ length: 16 }, () => ({ active: false, velocity: 0.8 })),
+            volume: 0.8,
+            pan: 0,
+            muted: false,
+            color: '#ef4444',
+          },
+        ],
+        stepsPerBar: 16,
+        bars: 1,
+        swing: 0,
+      };
+
+      const rawProject = {
+        id: 'proj-2',
+        name: 'New Project',
+        createdAt: 1,
+        updatedAt: 1,
+        bpm: 120,
+        keyScale: 'C major',
+        timeSignature: 4,
+        totalDuration: 128,
+        measures: 64,
+        tracks: [
+          {
+            id: 'track-1',
+            trackType: 'sequencer' as const,
+            trackName: 'drums' as const,
+            displayName: 'Drums',
+            color: '#ef4444',
+            order: 1,
+            volume: 0.8,
+            muted: false,
+            soloed: false,
+            clips: [],
+            effects: [],
+            drumKit: '808' as const,
+            synthPreset: 'piano' as const,
+            sequencerPattern: existingPattern,
+          },
+        ],
+        generationDefaults: {
+          inferenceSteps: 20,
+          guidanceScale: 7.5,
+          shift: 0,
+          thinking: false,
+          model: 'test-model',
+        },
+        globalCaption: '',
+        automationLanes: [],
+        assets: [],
+      };
+
+      useProjectStore.getState().setProject(rawProject as any);
+
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.sequencerPattern!.id).toBe('pat-1');
+      expect(track.sequencerPattern!.rows).toHaveLength(1);
+      expect(track.sequencerPattern!.rows[0].id).toBe('row-1');
+    });
+  });
 });

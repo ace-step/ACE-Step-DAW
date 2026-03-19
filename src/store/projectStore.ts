@@ -239,6 +239,31 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
   }
 }
 
+function buildDefaultSequencerPattern(): SequencerPattern {
+  const stepsPerBar = 16;
+  const bars = 1;
+  const totalSteps = stepsPerBar * bars;
+  const emptyStep = (): SequencerStep => ({ active: false, velocity: 0.8 });
+  const rows: SequencerRow[] = DEFAULT_DRUM_KIT.map((kit) => ({
+    id: uuidv4(),
+    name: kit.name,
+    sampleKey: kit.id,
+    steps: Array.from({ length: totalSteps }, emptyStep),
+    volume: 0.8,
+    pan: 0,
+    muted: false,
+    color: kit.color,
+  }));
+  return {
+    id: uuidv4(),
+    name: 'Pattern 1',
+    rows,
+    stepsPerBar,
+    bars,
+    swing: 0,
+  };
+}
+
 function ensureTrackDefaults(track: Track): Track {
   const defaultSynthPreset =
     track.trackName === 'bass' ? 'bass'
@@ -247,7 +272,7 @@ function ensureTrackDefaults(track: Track): Track {
           : track.trackName === 'keyboard' ? 'organ'
             : 'piano';
 
-  return {
+  const ensuredTrack: Track = {
     ...track,
     synthPreset: track.synthPreset ?? defaultSynthPreset,
     effects: track.effects ?? [],
@@ -262,6 +287,33 @@ function ensureTrackDefaults(track: Track): Track {
         : undefined,
     })),
   };
+
+  // Ensure sequencer tracks always have a pattern with valid rows
+  if (ensuredTrack.trackType === 'sequencer' && (!ensuredTrack.sequencerPattern || ensuredTrack.sequencerPattern.rows.length === 0)) {
+    ensuredTrack.sequencerPattern = buildDefaultSequencerPattern();
+  }
+
+  return ensuredTrack;
+}
+
+/**
+ * Applies all project migrations (trackType backfill + track defaults) to a project's tracks.
+ * Used by both setProject (IDB load) and onRehydrateStorage (localStorage load).
+ */
+function migrateProjectTracks(project: Project): Project {
+  return {
+    ...project,
+    tracks: project.tracks.map((t) => {
+      if (t.trackType) return ensureTrackDefaults(t);
+      const inferred: TrackType =
+        t.trackName === 'custom' && t.clips.some((c) => c.source === 'uploaded')
+          ? 'sample'
+          : t.trackName === 'custom'
+            ? 'sample'
+            : 'stems';
+      return ensureTrackDefaults({ ...t, trackType: inferred });
+    }),
+  };
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -272,21 +324,8 @@ export const useProjectStore = create<ProjectState>()(
   setProject: (project) => {
     _history.length = 0;
     _future.length = 0;
-    // Migration: backfill trackType for projects created before the field existed
-    const migrated: Project = {
-      ...project,
-      tracks: project.tracks.map((t) => {
-        if (t.trackType) return t;
-        const inferred: TrackType =
-          t.trackName === 'custom' && t.clips.some((c) => c.source === 'uploaded')
-            ? 'sample'
-            : t.trackName === 'custom'
-              ? 'sample'
-              : 'stems';
-        return { ...t, trackType: inferred };
-      }).map(ensureTrackDefaults),
-    };
-    set({ project: migrated });
+    // Apply all migrations: backfill trackType and initialize missing sequencerPatterns.
+    set({ project: migrateProjectTracks(project) });
   },
 
   undo: () => {
@@ -1967,6 +2006,13 @@ export const useProjectStore = create<ProjectState>()(
     {
       name: 'ace-step-daw-project',
       partialize: (state) => ({ project: state.project }),
+      onRehydrateStorage: () => (state) => {
+        // After rehydration from localStorage, apply the same migrations as setProject
+        // so that sequencer tracks always have a valid sequencerPattern.
+        if (state?.project) {
+          state.project = migrateProjectTracks(state.project);
+        }
+      },
     },
   ),
 );

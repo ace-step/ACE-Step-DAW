@@ -10,7 +10,10 @@ TITLE=$(gh issue view $ISSUE_NUM --repo $REPO --json title --jq .title 2>/dev/nu
 BODY=$(gh issue view $ISSUE_NUM --repo $REPO --json body --jq .body 2>/dev/null | head -80)
 
 # ── ALWAYS start fresh from latest main ──
-rm -rf "$WT" 2>/dev/null
+# Safe cleanup: only remove if path is under /tmp/daw-worktrees/
+if [ -n "$WT" ] && [[ "$WT" == /tmp/daw-worktrees/* ]]; then
+  rm -rf "$WT"
+fi
 cd "$DAW"
 git fetch origin main 2>/dev/null
 git worktree prune 2>/dev/null

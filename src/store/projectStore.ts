@@ -2205,6 +2205,69 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateMidiEffect: (trackId, effectId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                midiEffects: (track.midiEffects ?? []).map((e) =>
+                  e.id === effectId ? { ...e, ...updates } : e,
+                ),
+              }
+            : track,
+        ),
+      },
+    });
+  },
+
+  toggleMidiEffect: (trackId, effectId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                midiEffects: (track.midiEffects ?? []).map((e) =>
+                  e.id === effectId ? { ...e, enabled: !e.enabled } : e,
+                ),
+              }
+            : track,
+        ),
+      },
+    });
+  },
+
+  reorderMidiEffect: (trackId, fromIndex, toIndex) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          const effects = [...(track.midiEffects ?? [])];
+          const [moved] = effects.splice(fromIndex, 1);
+          if (moved) effects.splice(toIndex, 0, moved);
+          return { ...track, midiEffects: effects };
+        }),
+      },
+    });
+  },
+
   // ─── Automation ───────────────────────────────────────────────────────────
 
   addAutomationPoint: (trackId, parameter, point) => {

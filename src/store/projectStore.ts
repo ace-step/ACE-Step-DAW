@@ -123,6 +123,19 @@ interface ProjectState {
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
+  separateStems: (
+    sourceClipId: string,
+    stems: Array<{
+      stemKey: string;
+      displayName: string;
+      trackName?: TrackName;
+      color?: string;
+      isolatedAudioKey: string;
+      waveformPeaks: number[];
+      duration?: number;
+      prompt?: string;
+    }>,
+  ) => Track[];
   ensureMidiClip: (trackId: string, startTime?: number, duration?: number) => Clip;
   updateClip: (clipId: string, updates: Partial<Clip>) => void;
   removeClip: (clipId: string) => void;
@@ -349,6 +362,42 @@ function ensureTrackDefaults(track: Track): Track {
           }
         : undefined,
     })),
+  };
+}
+
+function createTrackRecord(
+  trackName: TrackName,
+  trackType: TrackType,
+  existingTracks: Track[],
+  overrides?: Partial<Track>,
+): Track {
+  const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG.custom;
+  const existingOrders = existingTracks.map((t) => t.order);
+  const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+  const sameNameCount = existingTracks.filter((t) => t.trackName === trackName).length;
+  const displayName = sameNameCount === 0 ? info.displayName : `${info.displayName} ${sameNameCount + 1}`;
+
+  return {
+    id: uuidv4(),
+    trackType,
+    trackName,
+    displayName,
+    color: info.color,
+    order: maxOrder + 1,
+    volume: 0.8,
+    muted: false,
+    soloed: false,
+    clips: [],
+    laneHeight: trackType === 'sequencer' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
+    synthPreset:
+      trackName === 'bass' ? 'bass'
+        : trackName === 'strings' ? 'strings'
+          : trackName === 'synth' ? 'lead'
+            : trackName === 'keyboard' ? 'organ'
+              : 'piano',
+    effects: [],
+    drumKit: trackName === 'drums' || trackType === 'sequencer' ? '808' : undefined,
+    ...overrides,
   };
 }
 
@@ -594,34 +643,7 @@ export const useProjectStore = create<ProjectState>()(
     _pushHistory(state.project);
 
     const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
-    const info = TRACK_CATALOG[trackName] ?? TRACK_CATALOG['custom'];
-    const existingOrders = state.project.tracks.map((t) => t.order);
-    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
-
-    const sameNameCount = state.project.tracks.filter((t) => t.trackName === trackName).length;
-    const displayName = sameNameCount === 0 ? info.displayName : `${info.displayName} ${sameNameCount + 1}`;
-
-    const track: Track = {
-      id: uuidv4(),
-      trackType: resolvedType,
-      trackName,
-      displayName,
-      color: info.color,
-      order: maxOrder + 1,
-      volume: 0.8,
-      muted: false,
-      soloed: false,
-      clips: [],
-      laneHeight: resolvedType === 'sequencer' ? 80 : resolvedType === 'pianoRoll' ? 88 : undefined,
-      synthPreset:
-        trackName === 'bass' ? 'bass'
-          : trackName === 'strings' ? 'strings'
-            : trackName === 'synth' ? 'lead'
-              : trackName === 'keyboard' ? 'organ'
-                : 'piano',
-      effects: [],
-      drumKit: trackName === 'drums' || resolvedType === 'sequencer' ? '808' : undefined,
-    };
+    const track = createTrackRecord(trackName, resolvedType, state.project.tracks);
 
     // Auto-initialize sequencer pattern for sequencer tracks
     if (resolvedType === 'sequencer') {
@@ -658,6 +680,73 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return track;
+  },
+
+  separateStems: (sourceClipId, stems) => {
+    const state = get();
+    if (!state.project || stems.length === 0) return [];
+
+    let sourceClip: Clip | undefined;
+    for (const track of state.project.tracks) {
+      const clip = track.clips.find((candidate) => candidate.id === sourceClipId);
+      if (clip) {
+        sourceClip = clip;
+        break;
+      }
+    }
+    if (!sourceClip) return [];
+
+    _pushHistory(state.project);
+
+    const tracksToAppend: Track[] = [];
+    let workingTracks = [...state.project.tracks];
+
+    for (const stem of stems) {
+      const stemTrackName = stem.trackName ?? 'custom';
+      const track = createTrackRecord(stemTrackName, 'sample', workingTracks, {
+        displayName: stem.displayName,
+        color: stem.color ?? (TRACK_CATALOG[stemTrackName] ?? TRACK_CATALOG.custom).color,
+        synthPreset: undefined,
+        drumKit: undefined,
+      });
+
+      const clip: Clip = {
+        id: uuidv4(),
+        trackId: track.id,
+        startTime: sourceClip.startTime,
+        duration: stem.duration ?? sourceClip.duration,
+        prompt: stem.prompt ?? `Separated: ${stem.displayName}`,
+        globalCaption: sourceClip.globalCaption || '',
+        lyrics: '',
+        generationStatus: 'ready',
+        generationJobId: null,
+        cumulativeMixKey: null,
+        isolatedAudioKey: stem.isolatedAudioKey,
+        waveformPeaks: stem.waveformPeaks,
+        bpm: sourceClip.bpm ?? null,
+        keyScale: sourceClip.keyScale ?? null,
+        timeSignature: sourceClip.timeSignature ?? null,
+        audioDuration: stem.duration ?? sourceClip.duration,
+        audioOffset: 0,
+        source: 'uploaded',
+      };
+
+      track.clips = [clip];
+      tracksToAppend.push(track);
+      workingTracks = [...workingTracks, track];
+    }
+
+    const newTracks = [...state.project.tracks, ...tracksToAppend];
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature),
+        tracks: newTracks,
+      },
+    });
+
+    return tracksToAppend;
   },
 
   removeTrack: (trackId) => {

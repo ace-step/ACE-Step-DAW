@@ -103,6 +103,79 @@ describe('projectStore', () => {
     });
   });
 
+  describe('separateStems', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('creates aligned sample tracks for separated stems', () => {
+      const sourceTrack = useProjectStore.getState().addTrack('custom', 'sample');
+      const sourceClip = useProjectStore.getState().addClip(sourceTrack.id, {
+        startTime: 12,
+        duration: 8,
+        prompt: 'Imported: reference mix',
+        lyrics: '',
+        source: 'uploaded',
+      });
+      useProjectStore.getState().updateClipStatus(sourceClip.id, 'ready', {
+        isolatedAudioKey: 'source-audio',
+        waveformPeaks: [0.1, 0.5],
+        audioDuration: 8,
+      });
+
+      const createdTracks = useProjectStore.getState().separateStems(sourceClip.id, [
+        {
+          stemKey: 'vocals',
+          displayName: 'Vocals',
+          trackName: 'vocals',
+          color: '#f43f5e',
+          isolatedAudioKey: 'vocals-key',
+          waveformPeaks: [0.2, 0.3],
+          duration: 8,
+        },
+        {
+          stemKey: 'drums',
+          displayName: 'Drums',
+          trackName: 'drums',
+          color: '#ef4444',
+          isolatedAudioKey: 'drums-key',
+          waveformPeaks: [0.6, 0.4],
+          duration: 8,
+        },
+      ]);
+
+      expect(createdTracks).toHaveLength(2);
+      expect(createdTracks.map((track) => track.displayName)).toEqual(['Vocals', 'Drums']);
+
+      const project = useProjectStore.getState().project!;
+      expect(project.tracks).toHaveLength(3);
+
+      const vocalsTrack = project.tracks.find((track) => track.displayName === 'Vocals');
+      const drumsTrack = project.tracks.find((track) => track.displayName === 'Drums');
+
+      expect(vocalsTrack).toBeDefined();
+      expect(drumsTrack).toBeDefined();
+      expect(vocalsTrack?.trackType).toBe('sample');
+      expect(drumsTrack?.trackType).toBe('sample');
+      expect(vocalsTrack?.clips[0]).toMatchObject({
+        startTime: 12,
+        duration: 8,
+        generationStatus: 'ready',
+        isolatedAudioKey: 'vocals-key',
+        prompt: 'Separated: Vocals',
+        source: 'uploaded',
+      });
+      expect(drumsTrack?.clips[0]).toMatchObject({
+        startTime: 12,
+        duration: 8,
+        generationStatus: 'ready',
+        isolatedAudioKey: 'drums-key',
+        prompt: 'Separated: Drums',
+        source: 'uploaded',
+      });
+    });
+  });
+
   describe('automation lane operations', () => {
     const parameter = { type: 'mixer', param: 'volume' } as const;
 

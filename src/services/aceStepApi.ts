@@ -2,6 +2,7 @@ import type {
   LegoTaskParams,
   CoverTaskParams,
   RepaintTaskParams,
+  StemSeparationTaskParams,
   ApiEnvelope,
   ReleaseTaskResponse,
   TaskResultEntry,
@@ -11,7 +12,7 @@ import type {
   InitModelResponse,
 } from '../types/api';
 
-export type AceStepTaskParams = LegoTaskParams | CoverTaskParams | RepaintTaskParams;
+export type AceStepTaskParams = LegoTaskParams | CoverTaskParams | RepaintTaskParams | StemSeparationTaskParams;
 import { downsampleWavBlob } from '../utils/audioDownsample';
 
 const BACKEND_URL_KEY = 'ace-step-daw-backend-url';

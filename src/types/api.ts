@@ -1,3 +1,12 @@
+export type StemCount = 2 | 4 | 6;
+
+export interface StemSeparationTaskParams {
+  task_type: 'separate_stems';
+  stem_count: StemCount;
+  audio_duration: number;
+  audio_format: 'wav';
+}
+
 /** Parameters for cover generation — transforms source audio into a new style */
 export interface CoverTaskParams {
   task_type: 'cover';

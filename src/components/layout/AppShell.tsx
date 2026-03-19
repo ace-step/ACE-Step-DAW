@@ -8,6 +8,7 @@ import { CoverModal } from '../generation/CoverModal';
 import { RepaintModal } from '../generation/RepaintModal';
 import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
 import { AudioAnalysisPanel } from '../generation/AudioAnalysisPanel';
+import { StemSeparationModal } from '../generation/StemSeparationModal';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
 import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -100,6 +101,7 @@ export function AppShell() {
       <RepaintModal />
       <Vocal2BGMModal />
       <AudioAnalysisPanel />
+      <StemSeparationModal />
     </div>
   );
 }

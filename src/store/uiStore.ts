@@ -60,6 +60,7 @@ interface UIState {
   // Vocal2BGM / Audio Analysis
   vocal2bgmClipId: string | null;
   analysisClipId: string | null;
+  stemSeparationClipId: string | null;
 
   setPixelsPerSecond: (pps: number) => void;
   toggleSnap: () => void;
@@ -114,6 +115,7 @@ interface UIState {
   // Vocal2BGM / Audio Analysis
   setVocal2BGMModal: (clipId: string | null) => void;
   setAnalysisPanel: (clipId: string | null) => void;
+  setStemSeparationModal: (clipId: string | null) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -168,6 +170,7 @@ export const useUIStore = create<UIState>()(
 
   vocal2bgmClipId: null,
   analysisClipId: null,
+  stemSeparationClipId: null,
 
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
@@ -256,6 +259,7 @@ export const useUIStore = create<UIState>()(
 
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
+  setStemSeparationModal: (clipId) => set({ stemSeparationClipId: clipId }),
 }),
     {
       name: 'ace-step-daw-ui',

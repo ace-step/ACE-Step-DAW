@@ -45,6 +45,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setRepaintModal = useUIStore((s) => s.setRepaintModal);
   const setVocal2BGMModal = useUIStore((s) => s.setVocal2BGMModal);
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
+  const setStemSeparationModal = useUIStore((s) => s.setStemSeparationModal);
 
   const generatingProgress = useGenerationStore((s) => {
     const job = s.jobs.find(
@@ -446,11 +447,16 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             closeCtxMenu();
             setAnalysisPanel(clip.id);
           }}
+          onSeparateStems={() => {
+            closeCtxMenu();
+            setStemSeparationModal(clip.id);
+          }}
           onClose={closeCtxMenu}
           hasPrompt={!!clip.prompt}
           isReady={clip.generationStatus === 'ready'}
           isMidiClip={isMidiClip}
           isVocalTrack={track.trackName === 'vocals' || track.trackName === 'backing_vocals'}
+          hasAudio={Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey)}
         />
       )}
 

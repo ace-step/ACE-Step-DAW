@@ -12,11 +12,13 @@ interface ClipContextMenuProps {
   onRepaint: () => void;
   onVocal2BGM: () => void;
   onAnalyze: () => void;
+  onSeparateStems: () => void;
   onClose: () => void;
   hasPrompt: boolean;
   isReady: boolean;
   isMidiClip: boolean;
   isVocalTrack: boolean;
+  hasAudio: boolean;
 }
 
 export function ClipContextMenu({
@@ -33,11 +35,13 @@ export function ClipContextMenu({
   onRepaint,
   onVocal2BGM,
   onAnalyze,
+  onSeparateStems,
   onClose,
   hasPrompt,
   isReady,
   isMidiClip,
   isVocalTrack,
+  hasAudio,
 }: ClipContextMenuProps) {
   const clampedX = Math.min(x, window.innerWidth - 210);
   const clampedY = Math.min(y, window.innerHeight - 300);
@@ -82,6 +86,11 @@ export function ClipContextMenu({
             <button onClick={onAnalyze} className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-300 hover:bg-daw-accent hover:text-white transition-colors">
               Analyze Audio…
             </button>
+            {hasAudio && (
+              <button onClick={onSeparateStems} className="w-full text-left px-3 py-1.5 text-[11px] text-sky-300 hover:bg-daw-accent hover:text-white transition-colors">
+                Separate Stems…
+              </button>
+            )}
           </>
         )}
 

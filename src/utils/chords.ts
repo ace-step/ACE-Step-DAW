@@ -8,6 +8,8 @@ export interface ChordShape {
   intervals: number[]; // semitones from root
 }
 
+export const DEFAULT_CHORD_SHAPE_ABBR = 'maj';
+
 export const CHORD_SHAPES: ChordShape[] = [
   { name: 'Major', abbr: 'maj', intervals: [0, 4, 7] },
   { name: 'Minor', abbr: 'min', intervals: [0, 3, 7] },
@@ -28,6 +30,10 @@ export const CHORD_SHAPES: ChordShape[] = [
  */
 export function chordPitches(rootPitch: number, shape: ChordShape): number[] {
   return shape.intervals.map((interval) => rootPitch + interval).filter((p) => p <= 127);
+}
+
+export function getChordShapeByAbbr(abbr: string): ChordShape | undefined {
+  return CHORD_SHAPES.find((shape) => shape.abbr === abbr);
 }
 
 /**

@@ -7,6 +7,7 @@ import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
 import { drawVelocityLane } from './VelocityLane';
+import { DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import {
   generateNoteId,
   getPianoRollToolShortcut,
@@ -50,6 +51,7 @@ interface PianoRollCanvasProps {
   clip: Clip;
   track: Track;
   activeTool: PianoRollTool;
+  activeChordShapeAbbr: string;
   gridSize: PianoRollGrid;
   prZoomX: number;
   onZoomXChange: React.Dispatch<React.SetStateAction<number>>;
@@ -62,6 +64,7 @@ export function PianoRollCanvas({
   clip,
   track,
   activeTool,
+  activeChordShapeAbbr,
   gridSize,
   prZoomX,
   onZoomXChange,
@@ -86,6 +89,7 @@ export function PianoRollCanvas({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const addMidiNote = useProjectStore((s) => s.addMidiNote);
+  const stampChord = useProjectStore((s) => s.stampChord);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
@@ -111,6 +115,10 @@ export function PianoRollCanvas({
   const keyHeight = PIANO_ROLL_KEY_HEIGHT * prZoomY;
   const pixelsPerBeat = 40 * prZoomX;
   const gridBeats = gridSizeToBeats(gridSize);
+  const activeChordShape = useMemo(
+    () => getChordShapeByAbbr(activeChordShapeAbbr) ?? getChordShapeByAbbr(DEFAULT_CHORD_SHAPE_ABBR)!,
+    [activeChordShapeAbbr],
+  );
 
   const canvasCursor = activeTool === 'select'
     ? 'default'
@@ -184,6 +192,44 @@ export function PianoRollCanvas({
       return newNote;
     },
     [addMidiNote, clip.id, gridBeats, previewEnabled, previewNoteAtPitch, setSelectedNoteIds, snapBeat, xToBeat, yToPitch],
+  );
+
+  const stampChordAt = useCallback(
+    (x: number, y: number) => {
+      const beat = snapBeat(xToBeat(x), false);
+      const pitch = yToPitch(y);
+      if (pitch < 0 || pitch > MIDI_MAX_NOTE) return [];
+
+      const noteIds = stampChord(
+        clip.id,
+        pitch,
+        activeChordShape.intervals,
+        Math.max(0, beat),
+        gridBeats,
+        100,
+      );
+
+      if (noteIds.length > 0) {
+        setSelectedNoteIds(new Set(noteIds));
+        if (previewEnabled) {
+          previewNoteAtPitch(pitch, 100, 0.4);
+        }
+      }
+
+      return noteIds;
+    },
+    [
+      activeChordShape.intervals,
+      clip.id,
+      gridBeats,
+      previewEnabled,
+      previewNoteAtPitch,
+      setSelectedNoteIds,
+      snapBeat,
+      stampChord,
+      xToBeat,
+      yToPitch,
+    ],
   );
 
   const deleteNoteById = useCallback(
@@ -548,6 +594,10 @@ export function PianoRollCanvas({
 
       const hit = findNoteAt(x, y);
 
+      if (e.shiftKey && activeTool !== 'select') {
+        return;
+      }
+
       if (activeTool === 'erase') {
         if (hit) {
           toolStrokeRef.current.noteIds.add(hit.note.id);
@@ -659,6 +709,7 @@ export function PianoRollCanvas({
       previewEnabled,
       previewNoteAtPitch,
       selectedNoteIds,
+      stampChordAt,
       updateMidiNote,
       velocityHeight,
       yToPitch,
@@ -692,6 +743,26 @@ export function PianoRollCanvas({
       findNoteAt,
       velocityHeight,
     ],
+  );
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !e.shiftKey) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const noteAreaHeight = rect.height - velocityHeight;
+
+      if (x < PIANO_KEYBOARD_WIDTH || y > noteAreaHeight) return;
+
+      const hit = findNoteAt(x, y);
+      if (hit && activeTool === 'select') return;
+
+      stampChordAt(x, y);
+    },
+    [activeTool, findNoteAt, stampChordAt, velocityHeight],
   );
 
   useEffect(() => {
@@ -1075,6 +1146,7 @@ export function PianoRollCanvas({
         pitchToY: (pitch: number) => number;
         yToPitch: (y: number) => number;
         applyToolStroke: (points: Array<{ x: number; y: number }>) => void;
+        stampChordAt: (x: number, y: number) => string[];
         selectNoteAt: (x: number, y: number, additive?: boolean) => string | null;
         eraseNoteAt: (x: number, y: number) => string | null;
         pixelsPerBeat: number;
@@ -1164,6 +1236,7 @@ export function PianoRollCanvas({
       pitchToY,
       yToPitch,
       applyToolStroke,
+      stampChordAt,
       selectNoteAt,
       eraseNoteAt,
       pixelsPerBeat,
@@ -1192,6 +1265,7 @@ export function PianoRollCanvas({
     prScrollY,
     setSelectedNoteIds,
     snapBeat,
+    stampChordAt,
     xToBeat,
     yToPitch,
   ]);
@@ -1207,6 +1281,7 @@ export function PianoRollCanvas({
           cursor: canvasCursor,
         }}
         title={canvasTitle}
+        onClick={handleClick}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}

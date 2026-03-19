@@ -602,6 +602,27 @@ describe('projectStore', () => {
       const clip = useProjectStore.getState().getClipById(clipId);
       expect(clip!.midiData!.notes.find((note) => note.id === noteId)?.isSlide).toBe(true);
     });
+
+    it('stamps a chord as one undoable piano-roll action', () => {
+      const historyBefore = useProjectStore.getState().getUndoHistory('pianoRoll', { clipId }).length;
+
+      const noteIds = useProjectStore.getState().stampChord(clipId, 60, [0, 4, 7, 10], 2, 0.5, 88);
+
+      expect(noteIds).toHaveLength(4);
+      const clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes).toHaveLength(4);
+      expect(clip!.midiData!.notes.map((note) => note.pitch)).toEqual([60, 64, 67, 70]);
+      expect(clip!.midiData!.notes.map((note) => note.startBeat)).toEqual([2, 2, 2, 2]);
+      expect(clip!.midiData!.notes.map((note) => note.durationBeats)).toEqual([0.5, 0.5, 0.5, 0.5]);
+      expect(clip!.midiData!.notes.map((note) => note.velocity)).toEqual([88, 88, 88, 88]);
+
+      const history = useProjectStore.getState().getUndoHistory('pianoRoll', { clipId });
+      expect(history).toHaveLength(historyBefore + 1);
+      expect(history.at(-1)?.label).toBe('Stamp chord');
+
+      useProjectStore.getState().undo('pianoRoll', { clipId });
+      expect(useProjectStore.getState().getClipById(clipId)!.midiData!.notes).toHaveLength(0);
+    });
   });
 
   describe('effects', () => {

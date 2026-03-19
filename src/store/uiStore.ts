@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AIChatMessage } from '../types/aiAssistant';
 import type { InlineSuggestion } from '../types/suggestions';
 import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
+import { DEFAULT_CHORD_SHAPE_ABBR } from '../utils/chords';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
@@ -76,6 +77,7 @@ export interface UIState {
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
   activePianoRollTool: PianoRollTool;
+  activePianoRollChordShape: string;
   openEffectChainTrackId: string | null;
   openMidiEffectChainTrackId: string | null;
   drumMachineEditorHeight: number;
@@ -192,6 +194,7 @@ export interface UIState {
   setOpenDrumMachineTrackId: (id: string | null) => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
+  setActivePianoRollChordShape: (shape: string) => void;
   togglePianoRollPencilTool: () => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
   setOpenMidiEffectChainTrackId: (id: string | null) => void;
@@ -356,6 +359,7 @@ export const useUIStore = create<UIState>()(
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
   activePianoRollTool: 'select',
+  activePianoRollChordShape: DEFAULT_CHORD_SHAPE_ABBR,
   openEffectChainTrackId: null,
   openMidiEffectChainTrackId: null,
   drumMachineEditorHeight: 400,
@@ -568,6 +572,7 @@ export const useUIStore = create<UIState>()(
     historyFocusClipId: clipId,
   })),
   setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
+  setActivePianoRollChordShape: (shape) => set({ activePianoRollChordShape: shape }),
   togglePianoRollPencilTool: () => set((state) => ({
     activePianoRollTool: state.activePianoRollTool === 'pencil' ? 'select' : 'pencil',
   })),
@@ -764,6 +769,7 @@ export const useUIStore = create<UIState>()(
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
+        activePianoRollChordShape: state.activePianoRollChordShape,
         // Panel sizes
         mixerHeight: state.mixerHeight,
         drumMachineEditorHeight: state.drumMachineEditorHeight,

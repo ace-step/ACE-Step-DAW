@@ -18,7 +18,9 @@ const agentProjectStore = {
   getState: () => ({
     ...useProjectStore.getState(),
     activePianoRollTool: useUIStore.getState().activePianoRollTool,
+    activePianoRollChordShape: useUIStore.getState().activePianoRollChordShape,
     setActivePianoRollTool: useUIStore.getState().setActivePianoRollTool,
+    setActivePianoRollChordShape: useUIStore.getState().setActivePianoRollChordShape,
     togglePianoRollPencilTool: useUIStore.getState().togglePianoRollPencilTool,
     showGenerationPanel: useUIStore.getState().showGenerationPanel,
     setShowGenerationPanel: useUIStore.getState().setShowGenerationPanel,
@@ -35,7 +37,9 @@ const agentProjectStore = {
   getInitialState: () => ({
     ...useProjectStore.getInitialState(),
     activePianoRollTool: useUIStore.getInitialState().activePianoRollTool,
+    activePianoRollChordShape: useUIStore.getInitialState().activePianoRollChordShape,
     setActivePianoRollTool: useUIStore.getInitialState().setActivePianoRollTool,
+    setActivePianoRollChordShape: useUIStore.getInitialState().setActivePianoRollChordShape,
     togglePianoRollPencilTool: useUIStore.getInitialState().togglePianoRollPencilTool,
     showGenerationPanel: useUIStore.getInitialState().showGenerationPanel,
     setShowGenerationPanel: useUIStore.getInitialState().setShowGenerationPanel,

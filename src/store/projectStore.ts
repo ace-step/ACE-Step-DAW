@@ -320,6 +320,27 @@ function _pushHistory(project: Project | null, options: HistoryOptions = {}) {
   _future[entry.scope][key] = [];
 }
 
+function _appendMidiNotesToClip(project: Project, clipId: string, newNotes: MidiNote[]): Project {
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) =>
+        clip.id === clipId
+          ? {
+              ...clip,
+              midiData: {
+                notes: [...(clip.midiData?.notes ?? []), ...newNotes],
+                grid: clip.midiData?.grid ?? '1/16',
+              },
+            }
+          : clip,
+      ),
+    })),
+  };
+}
+
 /** Call before starting a drag/continuous operation. Captures undo snapshot once. */
 function _beginDrag(project: Project | null, options: HistoryOptions = {}) {
   if (!project || _isDragging) return;
@@ -4446,27 +4467,9 @@ export const useProjectStore = create<ProjectState>()(
     if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
     const noteId = note.id ?? uuidv4();
+    const noteWithId: MidiNote = { ...note, id: noteId };
     _pushHistory(state.project, { scope: 'pianoRoll', label: 'Add MIDI note', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId
-              ? {
-                  ...clip,
-                  midiData: {
-                    notes: [...(clip.midiData?.notes ?? []), { ...note, id: noteId }],
-                    grid: clip.midiData?.grid ?? '1/16',
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
+    set({ project: _appendMidiNotesToClip(state.project, clipId, [noteWithId]) });
     return noteId;
   },
 
@@ -4559,46 +4562,23 @@ export const useProjectStore = create<ProjectState>()(
 
   stampChord: (clipId, rootPitch, intervals, startBeat, durationBeats, velocity = 100) => {
     const state = get();
+    if (_isViewerMode()) return [];
     if (!state.project) return [];
     _pushHistory(state.project, { scope: 'pianoRoll', label: 'Stamp chord', clipId });
-    const noteIds: string[] = [];
-    const pitches = intervals.map((i) => rootPitch + i).filter((p) => p <= 127);
-    for (const pitch of pitches) {
-      const id = crypto.randomUUID();
-      noteIds.push(id);
-      // Use addMidiNote internally (but we batch in one history push)
-    }
-    // Batch add all chord notes in one state update
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: [
-                      ...clip.midiData.notes,
-                      ...pitches.map((pitch, i) => ({
-                        id: noteIds[i],
-                        pitch,
-                        startBeat,
-                        durationBeats,
-                        velocity,
-                      })),
-                    ],
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-    return noteIds;
+    const newNotes: MidiNote[] = intervals
+      .map((interval) => rootPitch + interval)
+      .filter((pitch) => pitch >= 0 && pitch <= 127)
+      .map((pitch) => ({
+        id: uuidv4(),
+        pitch,
+        startBeat,
+        durationBeats,
+        velocity,
+      }));
+    if (newNotes.length === 0) return [];
+
+    set({ project: _appendMidiNotesToClip(state.project, clipId, newNotes) });
+    return newNotes.map((note) => note.id);
   },
 
   populateMidiPattern: (clipId, options) => {

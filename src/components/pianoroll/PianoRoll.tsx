@@ -10,6 +10,7 @@ import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
 import { TransformMenu } from './TransformMenu';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
+import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -43,10 +44,12 @@ export function PianoRoll() {
   const openTrackId = useUIStore((s) => s.openPianoRollTrackId);
   const openClipId = useUIStore((s) => s.openPianoRollClipId);
   const activeTool = useUIStore((s) => s.activePianoRollTool);
+  const activeChordShapeAbbr = useUIStore((s) => s.activePianoRollChordShape);
   const pianoRollHeight = useUIStore((s) => s.pianoRollHeight);
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setActivePianoRollTool = useUIStore((s) => s.setActivePianoRollTool);
+  const setActivePianoRollChordShape = useUIStore((s) => s.setActivePianoRollChordShape);
   const togglePianoRollPencilTool = useUIStore((s) => s.togglePianoRollPencilTool);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
@@ -111,6 +114,7 @@ export function PianoRoll() {
   const sampleDuration = Math.max(0.01, track?.sampler?.sampleDuration ?? samplerConfig?.trimEnd ?? 1);
   const activeToolLabel = PIANO_ROLL_TOOL_BUTTONS.find(({ tool }) => tool === activeTool)?.label
     ?? (activeTool === 'slide' ? 'Slide' : 'Select');
+  const activeChordShape = getChordShapeByAbbr(activeChordShapeAbbr) ?? getChordShapeByAbbr(DEFAULT_CHORD_SHAPE_ABBR)!;
 
   const applySamplerConfig = useCallback((updates: Partial<SamplerConfig>) => {
     if (!track?.sampler?.audioKey || !samplerConfig) return;
@@ -230,6 +234,28 @@ export function PianoRoll() {
           Tool: <span className="text-zinc-100">{activeToolLabel}</span>
         </div>
 
+        <select
+          aria-label="Piano roll chord shape"
+          value={activeChordShape.abbr}
+          onChange={(e) => setActivePianoRollChordShape(e.target.value)}
+          className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300"
+          title="Chord stamp shape for Shift+click placement"
+        >
+          {CHORD_SHAPES.map((shape) => (
+            <option key={shape.abbr} value={shape.abbr}>
+              {shape.abbr}
+            </option>
+          ))}
+        </select>
+
+        <div className="px-2 py-1 rounded bg-black/20 border border-white/5 text-[10px] text-zinc-300">
+          Chord stamp: <span className="text-zinc-100">{activeChordShape.abbr}</span>
+        </div>
+
+        <div className="px-2 py-1 rounded bg-black/20 border border-white/5 text-[10px] text-zinc-400">
+          Shift+click stamps root position for one grid step
+        </div>
+
         <button
           className={`px-2 py-1 rounded text-[10px] transition-colors ${
             showGhostNotes ? 'bg-cyan-600/50 text-cyan-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
@@ -344,6 +370,7 @@ export function PianoRoll() {
           clip={clip}
           track={track}
           activeTool={activeTool}
+          activeChordShapeAbbr={activeChordShape.abbr}
           gridSize={gridSize}
           prZoomX={prZoomX}
           onZoomXChange={setPrZoomX}

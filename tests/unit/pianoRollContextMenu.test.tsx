@@ -5,6 +5,7 @@ import { PianoRollCanvas } from '../../src/components/pianoroll/PianoRollCanvas'
 import type { Clip, MidiNote, Track } from '../../src/types/project';
 
 const mockAddMidiNote = vi.fn();
+const mockStampChord = vi.fn();
 const mockRemoveMidiNote = vi.fn();
 const mockUpdateMidiNote = vi.fn();
 const mockQuantizeMidiNotes = vi.fn();
@@ -17,6 +18,7 @@ vi.mock('../../src/store/projectStore', () => ({
   useProjectStore: vi.fn((selector) => {
     const state: Record<string, unknown> = {
       addMidiNote: mockAddMidiNote,
+      stampChord: mockStampChord,
       removeMidiNote: mockRemoveMidiNote,
       updateMidiNote: mockUpdateMidiNote,
       quantizeMidiNotes: mockQuantizeMidiNotes,
@@ -129,6 +131,8 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
 
   beforeEach(() => {
     mockAddMidiNote.mockReset();
+    mockStampChord.mockReset();
+    mockStampChord.mockReturnValue(['chord-note-1', 'chord-note-2', 'chord-note-3']);
     mockRemoveMidiNote.mockReset();
     mockUpdateMidiNote.mockReset();
     mockQuantizeMidiNotes.mockReset();
@@ -158,6 +162,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -187,6 +192,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -218,6 +224,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -249,6 +256,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="slide"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -272,6 +280,35 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     });
   });
 
+  it('routes Shift-click chord stamping through the shared store action', () => {
+    const clip = makeClip([]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="select"
+        activeChordShapeAbbr="min"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+
+    fireEvent.click(canvas, {
+      clientX: 160,
+      clientY: NOTE_HIT_CLIENT_Y,
+      shiftKey: true,
+    });
+
+    expect(mockStampChord).toHaveBeenCalledWith(clip.id, 60, [0, 3, 7], 3, 1, 100);
+    expect(setSelectedNoteIds).toHaveBeenCalledWith(new Set(['chord-note-1', 'chord-note-2', 'chord-note-3']));
+  });
+
   it('starts marquee selection when dragging empty space in select mode without Shift (#393)', () => {
     const note = makeNote();
     const clip = makeClip([note]);
@@ -281,6 +318,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -318,6 +356,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -351,6 +390,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="paint"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -385,6 +425,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="paint"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -425,6 +466,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="erase"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -460,6 +502,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}
@@ -489,6 +532,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
         clip={clip}
         track={makeTrack()}
         activeTool="select"
+        activeChordShapeAbbr="maj"
         gridSize="1/4"
         prZoomX={1}
         onZoomXChange={vi.fn()}

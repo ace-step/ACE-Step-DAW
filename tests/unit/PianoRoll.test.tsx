@@ -14,8 +14,12 @@ vi.mock('../../src/hooks/useAudioImport', () => ({
 }));
 
 vi.mock('../../src/components/pianoroll/PianoRollCanvas', () => ({
-  PianoRollCanvas: ({ activeTool }: { activeTool: string }) => (
-    <div aria-label="Piano roll canvas stub" data-active-tool={activeTool}>
+  PianoRollCanvas: ({ activeTool, activeChordShapeAbbr }: { activeTool: string; activeChordShapeAbbr: string }) => (
+    <div
+      aria-label="Piano roll canvas stub"
+      data-active-tool={activeTool}
+      data-active-chord-shape={activeChordShapeAbbr}
+    >
       canvas
     </div>
   ),
@@ -82,5 +86,18 @@ describe('PianoRoll', () => {
     useUIStore.getState().setKeyboardContext('pianoRoll', useUIStore.getState().openPianoRollTrackId);
     fireEvent.keyDown(window, { key: '4', code: 'Digit4' });
     expect(useUIStore.getState().activePianoRollTool).toBe('erase');
+  });
+
+  it('lets the user select the active chord stamp shape for Shift-click placement', () => {
+    render(<PianoRoll />);
+
+    const chordShapeSelect = screen.getByLabelText('Piano roll chord shape');
+    expect(chordShapeSelect).toHaveValue('maj');
+
+    fireEvent.change(chordShapeSelect, { target: { value: '7' } });
+
+    expect(useUIStore.getState().activePianoRollChordShape).toBe('7');
+    expect(screen.getByText('Chord stamp:', { exact: false })).toBeInTheDocument();
+    expect(screen.getByLabelText('Piano roll canvas stub')).toHaveAttribute('data-active-chord-shape', '7');
   });
 });

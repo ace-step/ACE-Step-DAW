@@ -4,11 +4,14 @@ import tailwindcss from '@tailwindcss/vite';
 
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8001';
 
+const serverPort = Number(process.env.VITE_PORT) || 5174;
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: '127.0.0.1',
-    port: 5174,
+    port: serverPort,
+    strictPort: true,
     proxy: {
       '/api': {
         target: apiTarget,

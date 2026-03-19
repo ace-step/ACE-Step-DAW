@@ -212,7 +212,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           });
         }
       } else if (mode === 'resize-left') {
-        let newStart = snapToGrid(origStart + deltaSec, bpm, 1);
+        let newStart = ev.altKey ? origStart + deltaSec : snapToGrid(origStart + deltaSec, bpm, 1);
         newStart = Math.max(0, newStart);
         const maxStart = origStart + origDuration - MIN_CLIP_DURATION;
         newStart = Math.min(newStart, maxStart);
@@ -238,7 +238,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           updateClip(clip.id, { audioOffset: newOffset });
         }
       } else {
-        let newDuration = snapToGrid(origDuration + deltaSec, bpm, 1);
+        let newDuration = ev.altKey ? origDuration + deltaSec : snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
         updateClip(clip.id, { duration: newDuration });

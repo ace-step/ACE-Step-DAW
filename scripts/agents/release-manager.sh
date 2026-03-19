@@ -38,6 +38,16 @@ If ready to release:
 
 If NOT ready: print what's missing and what needs to happen first."
 
+# Safe worktree removal
+safe_rm_worktree() {
+  local dir="$1"
+  if [[ -n "$dir" && "$dir" =~ ^/tmp/daw-worktrees/ ]]; then
+    rm -rf "$dir"
+  else
+    echo "WARN: refusing to rm unsafe path: $dir" >> /tmp/pm-activity.log
+  fi
+}
+
 # Cleanup
-cd /tmp && rm -rf "$WT"
+cd /tmp && safe_rm_worktree "$WT"
 git -C "$DAW" worktree prune 2>/dev/null

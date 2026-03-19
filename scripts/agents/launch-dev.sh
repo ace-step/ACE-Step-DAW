@@ -8,6 +8,24 @@ WT="/tmp/daw-worktrees/agent-$ISSUE_NUM"
 LOCKDIR="/tmp/daw-claude-launch.lock"
 MAX_CLAUDE=3
 
+# Cleanup stale worktrees older than 24h
+cleanup_stale_worktrees() {
+  for wt in /tmp/daw-worktrees/agent-*; do
+    [ -d "$wt" ] || continue
+    local age=$(( $(date +%s) - $(stat -f %m "$wt" 2>/dev/null || echo 0) ))
+    if [ "$age" -gt 86400 ]; then
+      local issue_num=$(basename "$wt" | sed 's/agent-//')
+      # Only clean if no active process
+      if ! pgrep -f "run-agent.sh.*$wt" > /dev/null 2>&1; then
+        echo "[$(date)] Cleaning stale worktree: $wt (${age}s old)" >> /tmp/pm-activity.log
+        rm -rf "$wt"
+        cd "$DAW" && git worktree prune 2>/dev/null
+      fi
+    fi
+  done
+}
+cleanup_stale_worktrees
+
 # Skip if already running — check for active run-agent.sh process for this exact issue
 if pgrep -f "run-agent.sh.*/tmp/daw-worktrees/agent-$ISSUE_NUM " > /dev/null 2>&1; then
   echo "SKIP: #$ISSUE_NUM already running"
@@ -118,9 +136,9 @@ run_claude() {
         "$prompt" 2>&1)
     fi
 
-    if echo "$output" | grep -qi "403.*forbidden\|Request not allowed\|authentication_failed"; then
+    if echo "$output" | grep -qiE "403.*forbidden|Request not allowed|authentication_failed|500|502|503|overloaded|rate.limit|timeout|ETIMEDOUT|ECONNRESET"; then
       retries=$((retries + 1))
-      log "Claude 403, retry $retries/3"
+      log "Claude transient error, retry $retries/3"
       sleep $((retries * 15))
     else
       echo "$output"
@@ -229,6 +247,15 @@ $reviews
   echo "$feedback"
 }
 
+# Detect stale session — if file is older than 2 hours, session is likely dead
+if [ -f "$SESSION_FILE" ]; then
+  SESSION_AGE=$(( $(date +%s) - $(stat -f %m "$SESSION_FILE" 2>/dev/null || echo 0) ))
+  if [ "$SESSION_AGE" -gt 7200 ]; then
+    log "Session file is ${SESSION_AGE}s old (>2hr), starting fresh"
+    rm -f "$SESSION_FILE"
+  fi
+fi
+
 # ═══════════════════════════════════════════
 # Phase 1: Initial implementation
 # ═══════════════════════════════════════════
@@ -236,13 +263,17 @@ PROMPT=$(cat "$WT/agent-prompt.txt")
 log "Phase 1: initial implementation for #$ISSUE"
 run_agent "$PROMPT"
 
-# Post-agent: verify + rebase + push + PR
+# Post-agent: verify + push + rebase + push + PR
 cd "$WT" || exit 0
 AHEAD=$(git rev-list origin/main..HEAD --count 2>/dev/null)
 [ "$AHEAD" = "0" ] && { log "No commits produced, exiting"; exit 0; }
+# Push raw commits first (safety net — work is on remote even if rebase fails)
+git push origin "$BRANCH" --force-with-lease 2>/dev/null
+# Then rebase for clean history
 git fetch origin main 2>/dev/null
-git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; exit 0; }
-git push origin "$BRANCH" --force-with-lease 2>/dev/null || exit 0
+git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Rebase conflict, raw commits preserved on remote"; }
+# Push rebased version
+git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
 
 # Create PR (or get existing PR number)
 gh pr create --repo "$REPO" --title "feat: #$ISSUE — $TITLE" \
@@ -304,9 +335,13 @@ Do NOT push."
 
   # Push the fix
   cd "$WT" || exit 0
+  # Push raw commits first (safety net — work is on remote even if rebase fails)
+  git push origin "$BRANCH" --force-with-lease 2>/dev/null
+  # Then rebase for clean history
   git fetch origin main 2>/dev/null
-  git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Rebase conflict round $ROUND"; exit 0; }
-  git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed round $ROUND"; exit 0; }
+  git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Rebase conflict, raw commits preserved on remote"; }
+  # Push rebased version
+  git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
   log "Fix pushed (round $ROUND), looping back to wait for CI"
 done
 

@@ -9,25 +9,38 @@ LOG="/tmp/pm-activity.log"
 
 log() { echo "[$(date)] [PM] $*" >> "$LOG"; }
 
+# ── Mutex: skip if previous tick still running ──
+LOCKFILE="/tmp/pm-tick.lock"
+exec 200>"$LOCKFILE"
+flock -n 200 || { echo "[$(date)] PM tick skipped — previous tick still running" >> "$LOG"; exit 0; }
+
 # ── Gather FULL team status ──
+
+GH_ERRORS=0
 
 ISSUES=$(gh issue list --repo $REPO --state open --limit 30 \
   --json number,title,labels,assignees \
-  --jq '[.[] | {num:.number, title:.title[:50], labels:[.labels[].name], assignees:[.assignees[].login]}]' 2>/dev/null)
+  --jq '[.[] | {num:.number, title:.title[:50], labels:[.labels[].name], assignees:[.assignees[].login]}]' 2>&1) || { log "WARN: gh issue list failed"; GH_ERRORS=$((GH_ERRORS+1)); ISSUES="[]"; }
 
 PRS=$(gh pr list --repo $REPO --state open --limit 20 \
   --json number,title,isDraft,mergeable,headRefName,statusCheckRollup,reviewDecision \
-  --jq '[.[] | {num:.number, title:.title[:40], draft:.isDraft, merge:.mergeable, branch:.headRefName, review:.reviewDecision, checks:[.statusCheckRollup[] | "\(.name):\(.conclusion // "pending")"]}]' 2>/dev/null)
+  --jq '[.[] | {num:.number, title:.title[:40], draft:.isDraft, merge:.mergeable, branch:.headRefName, review:.reviewDecision, checks:[.statusCheckRollup[] | "\(.name):\(.conclusion // "pending")"]}]' 2>&1) || { log "WARN: gh pr list (open) failed"; GH_ERRORS=$((GH_ERRORS+1)); PRS="[]"; }
 
 # PRs with failed CI — dev agents should be fixing these
 FAILED_PRS=$(gh pr list --repo $REPO --state open --limit 20 \
   --json number,headRefName,statusCheckRollup \
-  --jq '[.[] | select(.statusCheckRollup[]?.conclusion == "FAILURE") | {num:.number, branch:.headRefName}]' 2>/dev/null)
+  --jq '[.[] | select(.statusCheckRollup[]?.conclusion == "FAILURE") | {num:.number, branch:.headRefName}]' 2>&1) || { log "WARN: gh pr list (failed CI) failed"; GH_ERRORS=$((GH_ERRORS+1)); FAILED_PRS="[]"; }
 
 # PRs with unresolved review comments
 REVIEW_BLOCKED_PRS=$(gh pr list --repo $REPO --state open --limit 20 \
   --json number,reviewDecision \
-  --jq '[.[] | select(.reviewDecision == "CHANGES_REQUESTED") | .number]' 2>/dev/null)
+  --jq '[.[] | select(.reviewDecision == "CHANGES_REQUESTED") | .number]' 2>&1) || { log "WARN: gh pr list (review blocked) failed"; GH_ERRORS=$((GH_ERRORS+1)); REVIEW_BLOCKED_PRS="[]"; }
+
+# If all gh commands failed, GitHub is likely unreachable — skip tick
+if [ "$GH_ERRORS" -ge 3 ]; then
+  log "ERROR: GitHub unreachable ($GH_ERRORS failures), skipping tick"
+  exit 0
+fi
 
 # Running agents — WHO is doing WHAT
 CC_DETAIL=$(ps aux | grep -E 'claude.*(--print|bypassPermissions|dangerously)' | grep -v grep | awk '{for(i=11;i<=NF;i++) printf "%s ",$i; print ""}' | grep -oE 'issue.#[0-9]+|Issue #[0-9]+|#[0-9]+|issue-[0-9]+' | sort -u | tr '\n' ',' | sed 's/,$//')
@@ -40,7 +53,7 @@ ACTIVE_WORKTREES=$(ls -d /tmp/daw-worktrees/agent-* 2>/dev/null | sed 's|.*/agen
 
 # Recent merges
 RECENT=$(gh pr list --repo $REPO --state merged --limit 5 \
-  --json number,title,mergedAt --jq '[.[] | "\(.number): \(.title[:40])"]' 2>/dev/null)
+  --json number,title,mergedAt --jq '[.[] | "\(.number): \(.title[:40])"]' 2>&1) || { log "WARN: gh pr list (merged) failed"; GH_ERRORS=$((GH_ERRORS+1)); RECENT="[]"; }
 
 # Own recent decisions (external memory — survives session loss)
 PREV_DECISIONS=""
@@ -96,6 +109,15 @@ $PREV_DECISIONS
 5. After all decisions, write a concise summary of EACH action you took.
    This will be saved as memory for your next tick."
 
+# Detect stale session — if file is older than 30 min, session is likely dead
+if [ -f "$SESSION_FILE" ]; then
+  SESSION_AGE=$(( $(date +%s) - $(stat -f %m "$SESSION_FILE" 2>/dev/null || echo 0) ))
+  if [ "$SESSION_AGE" -gt 1800 ]; then
+    log "Session file is ${SESSION_AGE}s old (>30min), starting fresh"
+    rm -f "$SESSION_FILE"
+  fi
+fi
+
 # ── Resume or start PM session ──
 if [ -f "$SESSION_FILE" ]; then
   SESSION_ID=$(cat "$SESSION_FILE")
@@ -124,3 +146,8 @@ if [ -f /tmp/pm-last-output.txt ]; then
 fi
 
 log "PM tick complete"
+
+# Trim activity log to prevent disk fillup
+if [ -f "$LOG" ]; then
+  tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi

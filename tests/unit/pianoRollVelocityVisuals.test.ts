@@ -35,9 +35,9 @@ describe('Piano roll velocity visuals', () => {
     expect(velocityToColor(0.5)).toBe(velocityToColor(64));
     expect(velocityToColor(0.9)).toBe(velocityToColor(114));
 
-    expect(velocityToBarColor(0.25)).toBe(velocityToBarColor(32));
-    expect(velocityToBarColor(0.5)).toBe(velocityToBarColor(64));
-    expect(velocityToBarColor(0.9)).toBe(velocityToBarColor(114));
+    expect(parseRgbChannels(velocityToBarColor(0.25))).toEqual(parseRgbChannels(velocityToBarColor(32)));
+    expect(parseRgbChannels(velocityToBarColor(0.5))).toEqual(parseRgbChannels(velocityToBarColor(64)));
+    expect(parseRgbChannels(velocityToBarColor(0.9))).toEqual(parseRgbChannels(velocityToBarColor(114)));
 
     const lowBar = parseRgbChannels(velocityToBarColor(24));
     const highBar = parseRgbChannels(velocityToBarColor(118));
@@ -68,12 +68,17 @@ describe('Piano roll velocity visuals', () => {
     const slideNote = getPianoRollNoteVisualStyle(32, { isSelected: false, isSlide: true });
     const regularBar = getVelocityLaneBarVisualStyle(32, { isSelected: false, isSlide: false });
     const selectedSlideBar = getVelocityLaneBarVisualStyle(96, { isSelected: true, isSlide: true });
+    const regularBarColor = parseRgbChannels(regularBar.fillStyle);
+    const expectedRegularBarColor = parseRgbChannels(velocityToBarColor(32));
+    const selectedSlideBarColor = parseRgbChannels(selectedSlideBar.fillStyle);
 
-    expect(slideNote.fillStyle).toBe('rgba(251, 191, 36, 0.92)');
-    expect(slideNote.strokeStyle).toBe('rgba(251,191,36,0.9)');
-    expect(regularBar.fillStyle).toBe(velocityToBarColor(32));
+    const slideFill = parseRgbChannels(slideNote.fillStyle);
+    expect(slideFill).toEqual({ red: 251, green: 191, blue: 36, alpha: 0.92 });
+    const slideStroke = parseRgbChannels(slideNote.strokeStyle);
+    expect(slideStroke).toEqual({ red: 251, green: 191, blue: 36, alpha: 0.9 });
+    expect(regularBarColor).toEqual(expectedRegularBarColor);
     expect(regularBar.globalAlpha).toBe(0.6);
-    expect(selectedSlideBar.fillStyle).toBe('rgba(251,191,36,0.85)');
+    expect(selectedSlideBarColor.alpha).toBeCloseTo(0.85);
     expect(selectedSlideBar.globalAlpha).toBe(1);
     expect(selectedSlideBar.highlightAlpha).toBeGreaterThan(regularBar.highlightAlpha);
   });

@@ -9,6 +9,7 @@ export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
+export type SessionFollowAction = 'loop' | 'next' | 'stop';
 /** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
 export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
@@ -367,6 +368,10 @@ export interface Clip {
   warpMarkers?: AudioWarpMarker[];
   /** Per-clip gain envelope for non-destructive volume automation. */
   gainEnvelope?: GainEnvelopePoint[];
+  /** Session View scene index for this clip slot. */
+  sessionSceneIndex?: number;
+  /** Session View follow action applied after each loop cycle. */
+  sessionFollowAction?: SessionFollowAction;
 }
 
 /** A warp marker on a clip mapping an original transient time to a grid-snapped position. */
@@ -569,6 +574,43 @@ export interface ProjectTemplateTrack {
   sequencerPattern?: SequencerPattern;
 }
 
+export interface SessionTrackPlayback {
+  clipId: string;
+  sceneIndex: number;
+  startedAt: number;
+  lastCycleAt: number;
+}
+
+export interface SessionQueuedLaunch {
+  trackId: string;
+  clipId: string | null;
+  sceneIndex: number | null;
+  launchAt: number;
+}
+
+export interface SessionPerformanceEvent {
+  trackId: string;
+  clipId: string;
+  sceneIndex: number;
+  startTime: number;
+  endTime: number | null;
+}
+
+export interface SessionSelection {
+  trackId: string;
+  sceneIndex: number;
+}
+
+export interface SessionState {
+  sceneCount: number;
+  queuedLaunches: SessionQueuedLaunch[];
+  activeTrackPlaybacks: Record<string, SessionTrackPlayback | undefined>;
+  selectedCell: SessionSelection | null;
+  isRecordingToArrangement: boolean;
+  recordStartTime: number | null;
+  performanceEvents: SessionPerformanceEvent[];
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -604,6 +646,8 @@ export interface Project {
   tempoMap?: TempoEvent[];
   /** Time signature map: changes sorted by bar. Empty = use project.timeSignature everywhere. */
   timeSignatureMap?: TimeSignatureEvent[];
+  /** Session View / clip launcher state. */
+  session?: SessionState;
 }
 
 // ─── Tempo & Time Signature Map Types ────────────────────────────────────────

@@ -307,6 +307,36 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      if (ui.mainView === 'session') {
+        if (event.code === 'ArrowUp') {
+          event.preventDefault();
+          project.moveSessionSelection(-1, 0);
+          return;
+        }
+        if (event.code === 'ArrowDown') {
+          event.preventDefault();
+          project.moveSessionSelection(1, 0);
+          return;
+        }
+        if (event.code === 'ArrowLeft') {
+          event.preventDefault();
+          project.moveSessionSelection(0, -1);
+          return;
+        }
+        if (event.code === 'ArrowRight') {
+          event.preventDefault();
+          project.moveSessionSelection(0, 1);
+          return;
+        }
+        if (event.code === 'Enter') {
+          const selection = project.project?.session?.selectedCell;
+          if (selection) {
+            event.preventDefault();
+            project.launchClip(selection.trackId, selection.sceneIndex);
+            return;
+          }
+        }
+      }
       if (matches('transport.playPause')) {
         event.preventDefault();
         if (transport.isPlaying) pause();

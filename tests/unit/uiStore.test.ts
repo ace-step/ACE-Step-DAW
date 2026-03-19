@@ -83,6 +83,18 @@ describe('uiStore', () => {
     });
   });
 
+  describe('arrangement view toggle', () => {
+    it('switches between arrangement and session views', () => {
+      expect(useUIStore.getState().arrangementView).toBe('arrangement');
+
+      useUIStore.getState().toggleArrangementView();
+      expect(useUIStore.getState().arrangementView).toBe('session');
+
+      useUIStore.getState().setArrangementView('arrangement');
+      expect(useUIStore.getState().arrangementView).toBe('arrangement');
+    });
+  });
+
   describe('selectedClipIds', () => {
     it('adds, removes, and clears selected clip ids', () => {
       useUIStore.getState().selectClip('clip-a');

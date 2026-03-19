@@ -94,6 +94,8 @@ export function Toolbar() {
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
   const showAIAssistant = useUIStore((s) => s.showAIAssistant);
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
+  const arrangementView = useUIStore((s) => s.arrangementView);
+  const toggleArrangementView = useUIStore((s) => s.toggleArrangementView);
   const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { openFilePicker } = useAudioImport();
@@ -181,6 +183,9 @@ export function Toolbar() {
 
       {/* Left-center: Project actions */}
       <div className="flex items-center gap-0.5">
+        <button onClick={toggleArrangementView} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Toggle Arrangement / Session (Tab)">
+          {arrangementView === 'arrangement' ? 'Session' : 'Arrange'}
+        </button>
         <button onClick={() => setShowProjectListDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />

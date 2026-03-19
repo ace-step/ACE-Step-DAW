@@ -29,6 +29,7 @@ function createAssistantMessage(role: AIChatMessage['role'], content: string): A
 interface UIState {
   mainView: 'arrangement' | 'session';
   keyboardContext: { scope: ShortcutContext; trackId: string | null };
+  arrangementView: 'arrangement' | 'session';
   pixelsPerSecond: number;
   snapEnabled: boolean;
   scrollX: number;
@@ -129,6 +130,8 @@ interface UIState {
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
   setKeyboardContext: (scope: ShortcutContext, trackId?: string | null) => void;
+  toggleArrangementView: () => void;
+  setArrangementView: (view: 'arrangement' | 'session') => void;
   toggleSnap: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -242,6 +245,7 @@ export const useUIStore = create<UIState>()(
     (set, get) => ({
   mainView: 'arrangement',
   keyboardContext: { scope: 'timeline', trackId: null },
+  arrangementView: 'arrangement',
   pixelsPerSecond: 50,
   snapEnabled: true,
   scrollX: 0,
@@ -320,8 +324,11 @@ export const useUIStore = create<UIState>()(
   inlineSuggestions: [],
   suggestionFrequency: 'subtle',
 
-  setMainView: (mainView) => set({ mainView }),
-  toggleMainView: () => set((s) => ({ mainView: s.mainView === 'arrangement' ? 'session' : 'arrangement' })),
+  setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
+  toggleMainView: () => set((s) => {
+    const nextView = s.mainView === 'arrangement' ? 'session' : 'arrangement';
+    return { mainView: nextView, arrangementView: nextView };
+  }),
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   setKeyboardContext: (scope, trackId = null) => set((state) => ({
     keyboardContext: {
@@ -329,6 +336,11 @@ export const useUIStore = create<UIState>()(
       trackId: trackId ?? state.keyboardContext.trackId,
     },
   })),
+  toggleArrangementView: () => set((state) => {
+    const nextView = state.arrangementView === 'arrangement' ? 'session' : 'arrangement';
+    return { arrangementView: nextView, mainView: nextView };
+  }),
+  setArrangementView: (view) => set({ arrangementView: view, mainView: view }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
 
   zoomIn: () =>
@@ -580,6 +592,7 @@ export const useUIStore = create<UIState>()(
         assetsPanelWidth: state.assetsPanelWidth,
         trackListWidth: state.trackListWidth,
         // Zoom level
+        arrangementView: state.arrangementView,
         mainView: state.mainView,
         pixelsPerSecond: state.pixelsPerSecond,
         // Snap

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../../src/types/project';
 import { useProjectStore } from '../../src/store/projectStore';
+import { useTransportStore } from '../../src/store/transportStore';
 import { createDefaultMasteringState } from '../../src/utils/mastering';
 
 vi.mock('../../src/services/projectStorage', () => ({
@@ -90,6 +91,7 @@ describe('projectStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useTransportStore.setState(useTransportStore.getInitialState(), true);
     mockLoadAudioBlobByKey.mockReset();
     mockSaveAudioBlob.mockReset();
     mockToastSuccess.mockReset();
@@ -107,6 +109,15 @@ describe('projectStore', () => {
       expect(useProjectStore.getState().project).toEqual({
         ...project,
         mastering: createDefaultMasteringState(),
+        session: {
+          activeTrackPlaybacks: {},
+          isRecordingToArrangement: false,
+          performanceEvents: [],
+          queuedLaunches: [],
+          recordStartTime: null,
+          sceneCount: 8,
+          selectedCell: null,
+        },
       });
   });
 });
@@ -254,6 +265,102 @@ describe('projectStore', () => {
 
       useProjectStore.getState().removeTrackEffect(track.id, effectId!);
       expect(useProjectStore.getState().project?.automationLanes).toEqual([]);
+    });
+  });
+
+  describe('session view clip launching', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject({ name: 'Session Test', bpm: 120 });
+    });
+
+    it('queues launches to the next bar while transport is running and commits them on time', () => {
+      const drums = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(drums.id, {
+        startTime: 0,
+        duration: 2,
+        prompt: 'Kick Loop',
+        lyrics: '',
+        source: 'generated',
+      });
+
+      useTransportStore.setState({ isPlaying: true, currentTime: 0.25 });
+      useProjectStore.getState().launchClip(drums.id, clip.sessionSceneIndex ?? 0);
+
+      const queued = useProjectStore.getState().project?.session?.queuedLaunches[0];
+      expect(queued?.trackId).toBe(drums.id);
+      expect(queued?.launchAt).toBeCloseTo(2);
+
+      useProjectStore.getState().commitQueuedSessionLaunches(2);
+
+      expect(useProjectStore.getState().project?.session?.activeTrackPlaybacks[drums.id]).toMatchObject({
+        clipId: clip.id,
+        sceneIndex: clip.sessionSceneIndex,
+        startedAt: 2,
+      });
+    });
+
+    it('advances to the next scene when a clip follow action is set to next', () => {
+      useTransportStore.setState({ isPlaying: false, currentTime: 0 });
+      const bass = useProjectStore.getState().addTrack('bass', 'pianoRoll');
+      const firstClip = useProjectStore.getState().addClip(bass.id, {
+        startTime: 0,
+        duration: 1,
+        prompt: 'Bass A',
+        lyrics: '',
+        source: 'uploaded',
+        midiData: { notes: [], grid: '1/16' },
+        sessionSceneIndex: 0,
+      });
+      const secondClip = useProjectStore.getState().addClip(bass.id, {
+        startTime: 4,
+        duration: 1,
+        prompt: 'Bass B',
+        lyrics: '',
+        source: 'uploaded',
+        midiData: { notes: [], grid: '1/16' },
+        sessionSceneIndex: 1,
+      });
+
+      useProjectStore.getState().setClipFollowAction(firstClip.id, 'next');
+      useProjectStore.getState().launchClip(bass.id, firstClip.sessionSceneIndex ?? 0);
+      useProjectStore.getState().commitQueuedSessionLaunches(0);
+      useProjectStore.getState().advanceSessionPlaybacks(1.05);
+      useProjectStore.getState().commitQueuedSessionLaunches(1.05);
+
+      expect(useProjectStore.getState().project?.session?.activeTrackPlaybacks[bass.id]).toMatchObject({
+        clipId: secondClip.id,
+        sceneIndex: secondClip.sessionSceneIndex,
+      });
+    });
+
+    it('records a session performance back into the arrangement', () => {
+      useTransportStore.setState({ isPlaying: false, currentTime: 0 });
+      const synth = useProjectStore.getState().addTrack('synth', 'pianoRoll');
+      const clip = useProjectStore.getState().addClip(synth.id, {
+        startTime: 0,
+        duration: 2,
+        prompt: 'Lead Jam',
+        lyrics: '',
+        source: 'uploaded',
+        midiData: { notes: [], grid: '1/16' },
+        sessionSceneIndex: 0,
+      });
+
+      useProjectStore.getState().setSessionRecording(true, 0);
+      useProjectStore.getState().launchClip(synth.id, clip.sessionSceneIndex ?? 0);
+      useProjectStore.getState().commitQueuedSessionLaunches(0);
+      useTransportStore.setState({ currentTime: 2 });
+      useProjectStore.getState().stopSessionTrack(synth.id);
+      useProjectStore.getState().commitQueuedSessionLaunches(2);
+      useProjectStore.getState().commitSessionRecording(2);
+
+      const clips = useProjectStore.getState().project?.tracks.find((track) => track.id === synth.id)?.clips ?? [];
+      expect(clips).toHaveLength(2);
+      expect(clips[1]).toMatchObject({
+        startTime: 0,
+        duration: 2,
+        sessionSceneIndex: undefined,
+      });
     });
   });
 

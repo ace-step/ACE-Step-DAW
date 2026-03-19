@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { TrackList } from '../tracks/TrackList';
@@ -38,14 +38,27 @@ import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useShareLink } from '../../hooks/useShareLink';
+import { useTransportStore } from '../../store/transportStore';
+import { useTransport } from '../../hooks/useTransport';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
   const project = useProjectStore((s) => s.project);
+  const commitQueuedSessionLaunches = useProjectStore((s) => s.commitQueuedSessionLaunches);
+  const advanceSessionPlaybacks = useProjectStore((s) => s.advanceSessionPlaybacks);
+  const commitSessionRecording = useProjectStore((s) => s.commitSessionRecording);
+  const mainView = useUIStore((s) => s.mainView);
+  const currentTime = useTransportStore((s) => s.currentTime);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
-  const mainView = useUIStore((s) => s.mainView);
+  const { seek } = useTransport();
   const [audioResumed, setAudioResumed] = useState(false);
+  const sessionPlaybackSignature = useMemo(() => JSON.stringify({
+    view: mainView,
+    active: project?.session?.activeTrackPlaybacks ?? {},
+    queued: project?.session?.queuedLaunches ?? [],
+  }), [mainView, project?.session?.activeTrackPlaybacks, project?.session?.queuedLaunches]);
 
   const handleClick = useCallback(async () => {
     await resumeOnGesture();
@@ -73,6 +86,23 @@ export function AppShell() {
   useKeyboardShortcuts();
   useEffectsSync(); // Keep effects chain synced with store — always, not just when Mixer is open
   useShareLink(); // Check URL for share parameters on mount
+
+  useEffect(() => {
+    if (!project?.session || !isPlaying) return;
+    commitQueuedSessionLaunches(currentTime);
+    advanceSessionPlaybacks(currentTime);
+  }, [advanceSessionPlaybacks, commitQueuedSessionLaunches, currentTime, isPlaying, project?.session]);
+
+  useEffect(() => {
+    if (!isPlaying || mainView !== 'session') return;
+    seek(useTransportStore.getState().currentTime);
+  }, [isPlaying, mainView, seek, sessionPlaybackSignature]);
+
+  useEffect(() => {
+    if (!project?.session?.isRecordingToArrangement && !project?.session?.performanceEvents.length) return;
+    if (isPlaying) return;
+    commitSessionRecording(currentTime);
+  }, [commitSessionRecording, currentTime, isPlaying, project?.session?.isRecordingToArrangement, project?.session?.performanceEvents.length]);
 
   return (
     <div

@@ -7,6 +7,7 @@ import type { Clip, MidiNote, Track } from '../../src/types/project';
 const mockAddMidiNote = vi.fn();
 const mockRemoveMidiNote = vi.fn();
 const mockUpdateMidiNote = vi.fn();
+const mockResizeMidiNote = vi.fn();
 const mockQuantizeMidiNotes = vi.fn();
 const mockBeginDrag = vi.fn();
 const mockEndDrag = vi.fn();
@@ -19,6 +20,7 @@ vi.mock('../../src/store/projectStore', () => ({
       addMidiNote: mockAddMidiNote,
       removeMidiNote: mockRemoveMidiNote,
       updateMidiNote: mockUpdateMidiNote,
+      resizeMidiNote: mockResizeMidiNote,
       quantizeMidiNotes: mockQuantizeMidiNotes,
       beginDrag: mockBeginDrag,
       endDrag: mockEndDrag,
@@ -131,6 +133,7 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
     mockAddMidiNote.mockReset();
     mockRemoveMidiNote.mockReset();
     mockUpdateMidiNote.mockReset();
+    mockResizeMidiNote.mockReset();
     mockQuantizeMidiNotes.mockReset();
     mockBeginDrag.mockReset();
     mockEndDrag.mockReset();
@@ -510,6 +513,69 @@ describe('PianoRollCanvas — context menu accessibility (#298)', () => {
       'note-1',
       expect.objectContaining({
         velocity: expect.any(Number),
+      }),
+    );
+  });
+
+  it('shows a resize cursor when hovering a note edge', () => {
+    const clip = makeClip([makeNote()]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="select"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseMove(canvas, {
+      clientX: 94,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 0,
+    });
+
+    expect(canvas.style.cursor).toBe('col-resize');
+  });
+
+  it('routes note-edge drags through the shared resize action', () => {
+    const clip = makeClip([makeNote()]);
+
+    const { container } = render(
+      <PianoRollCanvas
+        clip={clip}
+        track={makeTrack()}
+        activeTool="select"
+        gridSize="1/4"
+        prZoomX={1}
+        onZoomXChange={vi.fn()}
+        selectedNoteIds={new Set<string>()}
+        onSelectedNoteIdsChange={setSelectedNoteIds}
+      />,
+    );
+
+    const canvas = container.querySelector('canvas')!;
+    fireEvent.mouseDown(canvas, {
+      clientX: 94,
+      clientY: NOTE_HIT_CLIENT_Y,
+    });
+    fireEvent.mouseMove(window, {
+      clientX: 134,
+      clientY: NOTE_HIT_CLIENT_Y,
+      buttons: 1,
+    });
+
+    expect(mockResizeMidiNote).toHaveBeenCalledWith(
+      'clip-1',
+      'note-1',
+      expect.objectContaining({
+        edge: 'right',
+        endBeat: expect.any(Number),
       }),
     );
   });

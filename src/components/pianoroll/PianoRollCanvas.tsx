@@ -84,10 +84,12 @@ export function PianoRollCanvas({
   const [prScrollX, setPrScrollX] = useState(0);
   const [prScrollY, setPrScrollY] = useState(780);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [hoverCursor, setHoverCursor] = useState<string | null>(null);
 
   const addMidiNote = useProjectStore((s) => s.addMidiNote);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
+  const resizeMidiNote = useProjectStore((s) => s.resizeMidiNote);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
@@ -112,13 +114,14 @@ export function PianoRollCanvas({
   const pixelsPerBeat = 40 * prZoomX;
   const gridBeats = gridSizeToBeats(gridSize);
 
-  const canvasCursor = activeTool === 'select'
+  const defaultCanvasCursor = activeTool === 'select'
     ? 'default'
     : activeTool === 'erase'
       ? 'not-allowed'
       : activeTool === 'slide'
         ? 'alias'
         : 'crosshair';
+  const canvasCursor = hoverCursor ?? defaultCanvasCursor;
   const canvasTitle = activeTool === 'select'
     ? 'Select notes, drag a marquee, or resize existing notes'
     : activeTool === 'pencil'
@@ -519,7 +522,7 @@ export function PianoRollCanvas({
         const note = findVelocityLaneNoteAt(x);
         if (note) {
           setSelectedNoteIds(new Set([note.id]));
-          beginDrag();
+          beginDrag({ scope: 'pianoRoll', label: 'Edit MIDI velocity', clipId: clip.id });
           updateMidiNote(clip.id, note.id, {
             velocity: Math.round(Math.max(1, Math.min(127, ((velAreaTop + velAreaHeight - y) / velAreaHeight) * 127))),
           });
@@ -579,7 +582,7 @@ export function PianoRollCanvas({
         const newNote = createNoteAt(x, y, { isSlide: activeTool === 'slide' });
         if (!newNote) return;
 
-        beginDrag();
+        beginDrag({ scope: 'pianoRoll', label: 'Resize MIDI note', clipId: clip.id });
         toolStrokeRef.current.noteIds.add(newNote.id);
         toolStrokeRef.current.cells.add(getCellKey(newNote.startBeat, newNote.pitch));
         dragRef.current = {
@@ -607,7 +610,11 @@ export function PianoRollCanvas({
           setSelectedNoteIds(new Set([hit.note.id]));
         }
 
-        beginDrag();
+        beginDrag({
+          scope: 'pianoRoll',
+          label: hit.edge === 'body' ? 'Edit MIDI note' : 'Resize MIDI note',
+          clipId: clip.id,
+        });
         dragRef.current = {
           mode: hit.edge === 'right' ? 'resize-right' : hit.edge === 'left' ? 'resize-left' : 'move',
           noteId: hit.note.id,
@@ -785,12 +792,10 @@ export function PianoRollCanvas({
       if (drag.mode === 'resize-left') {
         const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
         const snappedStart = Math.max(0, snapBeat(drag.originalStartBeat + beatDelta, e.altKey));
-        const originalEnd = drag.originalStartBeat + drag.originalDurationBeats;
-        const maxStart = originalEnd - gridBeats * 0.5;
-        const newStartBeat = Math.min(snappedStart, maxStart);
-        updateMidiNote(clip.id, drag.noteId, {
-          startBeat: newStartBeat,
-          durationBeats: Math.max(gridBeats * 0.5, originalEnd - newStartBeat),
+        resizeMidiNote(clip.id, drag.noteId, {
+          edge: 'left',
+          startBeat: snappedStart,
+          minDurationBeats: gridBeats * 0.5,
         });
         return;
       }
@@ -798,8 +803,10 @@ export function PianoRollCanvas({
       if (drag.mode === 'resize-right') {
         const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
         const endBeat = snapBeat(drag.originalStartBeat + drag.originalDurationBeats + beatDelta, e.altKey);
-        updateMidiNote(clip.id, drag.noteId, {
-          durationBeats: Math.max(gridBeats * 0.5, endBeat - drag.originalStartBeat),
+        resizeMidiNote(clip.id, drag.noteId, {
+          edge: 'right',
+          endBeat,
+          minDurationBeats: gridBeats * 0.5,
         });
       }
     };
@@ -864,6 +871,7 @@ export function PianoRollCanvas({
     pixelsPerBeat,
     previewEnabled,
     previewNoteAtPitch,
+    resizeMidiNote,
     snapBeat,
     undo,
     updateMidiNote,
@@ -1067,6 +1075,32 @@ export function PianoRollCanvas({
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
+  const handleCanvasMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (activeTool !== 'select' || dragRef.current) {
+        if (hoverCursor !== null) setHoverCursor(null);
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const hit = findNoteAt(e.clientX - rect.left, e.clientY - rect.top);
+      const nextCursor = hit?.edge === 'left' || hit?.edge === 'right' ? 'col-resize' : null;
+      if (nextCursor !== hoverCursor) {
+        setHoverCursor(nextCursor);
+      }
+    },
+    [activeTool, findNoteAt, hoverCursor],
+  );
+
+  const handleCanvasMouseLeave = useCallback(() => {
+    if (hoverCursor !== null) {
+      setHoverCursor(null);
+    }
+  }, [hoverCursor]);
+
   useEffect(() => {
     const globalWindow = window as Window & {
       __pianoRollHelpers?: {
@@ -1211,6 +1245,8 @@ export function PianoRollCanvas({
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}
         onContextMenu={handleContextMenu}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseLeave={handleCanvasMouseLeave}
       />
       {contextMenu && (
         <>

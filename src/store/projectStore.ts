@@ -418,7 +418,7 @@ export interface ProjectState {
   getRedoHistory: (scope?: HistoryScope, target?: HistoryTarget) => ProjectHistoryEntry[];
   jumpToHistoryEntry: (entryId: string, scope?: HistoryScope, target?: HistoryTarget) => void;
   /** Call before starting a drag/continuous operation to capture a single undo snapshot. */
-  beginDrag: () => void;
+  beginDrag: (options?: HistoryOptions) => void;
   /** Call when a drag/continuous operation ends to re-enable normal history. */
   endDrag: () => void;
 
@@ -561,6 +561,12 @@ export interface ProjectState {
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
+  resizeMidiNote: (clipId: string, noteId: string, input: {
+    edge: 'left' | 'right';
+    startBeat?: number;
+    endBeat?: number;
+    minDurationBeats?: number;
+  }) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
@@ -1556,9 +1562,9 @@ export const useProjectStore = create<ProjectState>()(
     set({ project: _applyHistorySnapshot(state.project, destination.snapshot, destination) });
   },
 
-  beginDrag: () => {
+  beginDrag: (options) => {
     const state = get();
-    _beginDrag(state.project);
+    _beginDrag(state.project, options);
   },
 
   endDrag: () => {
@@ -4494,6 +4500,57 @@ export const useProjectStore = create<ProjectState>()(
                 }
               : clip,
           ),
+        })),
+      },
+    });
+  },
+
+  resizeMidiNote: (clipId, noteId, input) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const minDurationBeats = Math.max(0.001, input.minDurationBeats ?? 0.125);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Resize MIDI note', clipId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId || !clip.midiData) {
+              return clip;
+            }
+
+            return {
+              ...clip,
+              midiData: {
+                ...clip.midiData,
+                notes: clip.midiData.notes.map((note) => {
+                  if (note.id !== noteId) {
+                    return note;
+                  }
+
+                  const originalEndBeat = note.startBeat + note.durationBeats;
+                  if (input.edge === 'left') {
+                    const requestedStartBeat = Math.max(0, input.startBeat ?? note.startBeat);
+                    const nextStartBeat = Math.min(requestedStartBeat, originalEndBeat - minDurationBeats);
+                    return {
+                      ...note,
+                      startBeat: nextStartBeat,
+                      durationBeats: Math.max(minDurationBeats, originalEndBeat - nextStartBeat),
+                    };
+                  }
+
+                  const requestedEndBeat = input.endBeat ?? originalEndBeat;
+                  return {
+                    ...note,
+                    durationBeats: Math.max(minDurationBeats, requestedEndBeat - note.startBeat),
+                  };
+                }),
+              },
+            };
+          }),
         })),
       },
     });

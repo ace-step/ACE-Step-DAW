@@ -14,6 +14,8 @@ import type {
   ExportMidiClipActionInput,
   ExportMidiSuccess,
   ProjectActionApi,
+  ResizeMidiNoteActionInput,
+  ResizeMidiNoteSuccess,
   SaveTrackPresetActionInput,
   SeparateStemsActionInput,
   ToggleSequencerStepActionInput,
@@ -217,6 +219,70 @@ export function createProjectActionApi(store: ProjectStore): ProjectActionApi {
 
       const value: AddMidiNoteSuccess = { clipId, noteId };
       return capture(ok(value));
+    },
+
+    resizeMidiNote: ({ clipId, noteId, edge, startBeat, endBeat, minDurationBeats }: ResizeMidiNoteActionInput) => {
+      const state = store.getState();
+      const project = state.project;
+      if (!project) {
+        return capture(err(getProjectRequiredError('resizeMidiNote')));
+      }
+
+      const clip = project.tracks.flatMap((track) => track.clips).find((candidate) => candidate.id === clipId);
+      if (!clip) {
+        return capture(err(buildError(
+          'CLIP_NOT_FOUND',
+          `Clip '${clipId}' not found.`,
+          { action: 'resizeMidiNote', clipId, noteId, edge },
+          [
+            { action: 'listClips', label: 'Inspect available clip IDs' },
+          ],
+        )));
+      }
+
+      if (!clip.midiData) {
+        return capture(err(buildError(
+          'MIDI_CLIP_REQUIRED',
+          `Clip '${clipId}' is not a MIDI clip.`,
+          { action: 'resizeMidiNote', clipId, noteId, edge },
+          [
+            { action: 'ensureMidiClip', label: 'Create or convert to a MIDI clip', params: { trackId: clip.trackId } },
+          ],
+        )));
+      }
+
+      const note = clip.midiData.notes.find((candidate) => candidate.id === noteId);
+      if (!note) {
+        return capture(err(buildError(
+          'MIDI_NOTES_REQUIRED',
+          `MIDI note '${noteId}' not found in clip '${clipId}'.`,
+          { action: 'resizeMidiNote', clipId, noteId, edge },
+          [
+            { action: 'inspectMidiNotes', label: 'Inspect available MIDI note IDs', params: { clipId } },
+          ],
+        )));
+      }
+
+      try {
+        state.resizeMidiNote(clipId, noteId, { edge, startBeat, endBeat, minDurationBeats });
+        const resizedNote = store.getState().project?.tracks
+          .flatMap((track) => track.clips)
+          .find((candidate) => candidate.id === clipId)
+          ?.midiData?.notes.find((candidate) => candidate.id === noteId);
+        if (!resizedNote) {
+          return capture(withUnexpectedError('resizeMidiNote', { clipId, noteId, edge }, new Error('Unable to resize MIDI note')));
+        }
+
+        const value: ResizeMidiNoteSuccess = {
+          clipId,
+          noteId,
+          startBeat: resizedNote.startBeat,
+          durationBeats: resizedNote.durationBeats,
+        };
+        return capture(ok(value));
+      } catch (error) {
+        return capture(withUnexpectedError('resizeMidiNote', { clipId, noteId, edge }, error));
+      }
     },
 
     saveTrackPreset: ({ trackId, presetName }: SaveTrackPresetActionInput) => {

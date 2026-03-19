@@ -136,4 +136,35 @@ describe('project action API', () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
   });
+
+  it('resizes MIDI notes through the shared action API', () => {
+    useProjectStore.getState().createProject({ name: 'Resize API Test' });
+    const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+    const clip = useProjectStore.getState().ensureMidiClip(track.id, 0, 4);
+    const noteId = useProjectStore.getState().addMidiNote(clip.id, {
+      pitch: 60,
+      startBeat: 1,
+      durationBeats: 2,
+      velocity: 0.8,
+    });
+
+    const result = actionApi.resizeMidiNote({
+      clipId: clip.id,
+      noteId: noteId!,
+      edge: 'left',
+      startBeat: 0.5,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('Expected a successful MIDI resize action result');
+    }
+
+    expect(result.value).toEqual({
+      clipId: clip.id,
+      noteId: noteId!,
+      startBeat: 0.5,
+      durationBeats: 2.5,
+    });
+  });
 });

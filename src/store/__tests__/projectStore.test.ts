@@ -591,6 +591,54 @@ describe('projectStore', () => {
       expect(clip!.midiData!.notes[0].pitch).toBe(72);
     });
 
+    it('resizes a MIDI note from the left edge and restores it with a single undo', () => {
+      const noteId = useProjectStore.getState().addMidiNote(clipId, {
+        pitch: 60,
+        startBeat: 1,
+        durationBeats: 2,
+        velocity: 0.8,
+      });
+
+      useProjectStore.getState().resizeMidiNote(clipId, noteId!, {
+        edge: 'left',
+        startBeat: 0.5,
+      });
+
+      let clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes[0]).toMatchObject({
+        startBeat: 0.5,
+        durationBeats: 2.5,
+      });
+
+      useProjectStore.getState().undo('pianoRoll', { clipId });
+
+      clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes[0]).toMatchObject({
+        startBeat: 1,
+        durationBeats: 2,
+      });
+    });
+
+    it('resizes a MIDI note from the right edge without moving the start', () => {
+      const noteId = useProjectStore.getState().addMidiNote(clipId, {
+        pitch: 60,
+        startBeat: 1,
+        durationBeats: 2,
+        velocity: 0.8,
+      });
+
+      useProjectStore.getState().resizeMidiNote(clipId, noteId!, {
+        edge: 'right',
+        endBeat: 4.5,
+      });
+
+      const clip = useProjectStore.getState().getClipById(clipId);
+      expect(clip!.midiData!.notes[0]).toMatchObject({
+        startBeat: 1,
+        durationBeats: 3.5,
+      });
+    });
+
     it('stores slide-note metadata', () => {
       const noteId = useProjectStore.getState().addMidiNote(clipId, {
         pitch: 67,

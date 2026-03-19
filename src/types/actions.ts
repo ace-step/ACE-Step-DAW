@@ -50,6 +50,15 @@ export interface AddMidiNoteActionInput {
   note: Omit<MidiNote, 'id'> & { id?: string };
 }
 
+export interface ResizeMidiNoteActionInput {
+  clipId: string;
+  noteId: string;
+  edge: 'left' | 'right';
+  startBeat?: number;
+  endBeat?: number;
+  minDurationBeats?: number;
+}
+
 export interface SaveTrackPresetActionInput {
   trackId: string;
   presetName: string;
@@ -89,6 +98,13 @@ export interface AddMidiNoteSuccess {
   noteId: string;
 }
 
+export interface ResizeMidiNoteSuccess {
+  clipId: string;
+  noteId: string;
+  startBeat: number;
+  durationBeats: number;
+}
+
 export interface ToggleSequencerStepSuccess {
   trackId: string;
   rowId: string;
@@ -100,6 +116,7 @@ export interface ProjectActionApi {
   addClip: (input: AddClipActionInput) => DawActionResult<Clip>;
   toggleSequencerStep: (input: ToggleSequencerStepActionInput) => DawActionResult<ToggleSequencerStepSuccess>;
   addMidiNote: (input: AddMidiNoteActionInput) => DawActionResult<AddMidiNoteSuccess>;
+  resizeMidiNote: (input: ResizeMidiNoteActionInput) => DawActionResult<ResizeMidiNoteSuccess>;
   saveTrackPreset: (input: SaveTrackPresetActionInput) => DawActionResult<TrackPreset>;
   applyTrackPreset: (input: ApplyTrackPresetActionInput) => DawActionResult<Track>;
   consolidateClips: (input: ConsolidateClipsActionInput) => Promise<DawActionResult<Clip>>;

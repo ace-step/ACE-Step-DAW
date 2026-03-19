@@ -32,6 +32,9 @@ import { EffectChain } from '../mixer/EffectChain';
 import { SessionView } from '../session/SessionView';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
+import { FirstRunOnboarding } from '../onboarding/FirstRunOnboarding';
+import { GuidedTutorialOverlay } from '../onboarding/GuidedTutorialOverlay';
+import { ContextualTips } from '../onboarding/ContextualTips';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -53,6 +56,10 @@ export function AppShell() {
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const { seek } = useTransport();
+  const showOnboarding = useUIStore((s) => s.showOnboarding);
+  const onboardingCompleted = useUIStore((s) => s.onboardingCompleted);
+  const onboardingSkipped = useUIStore((s) => s.onboardingSkipped);
+  const setShowOnboarding = useUIStore((s) => s.setShowOnboarding);
   const [audioResumed, setAudioResumed] = useState(false);
   const sessionPlaybackSignature = useMemo(() => JSON.stringify({
     view: mainView,
@@ -67,9 +74,15 @@ export function AppShell() {
 
   useEffect(() => {
     if (!project) {
-      setShowNewProjectDialog(true);
+      if (!onboardingCompleted && !onboardingSkipped) {
+        setShowOnboarding(true);
+        setShowNewProjectDialog(false);
+      } else {
+        setShowOnboarding(false);
+        setShowNewProjectDialog(true);
+      }
     }
-  }, []);
+  }, [onboardingCompleted, onboardingSkipped, project, setShowNewProjectDialog, setShowOnboarding]);
 
   // Warn before closing tab with unsaved project
   useEffect(() => {
@@ -147,6 +160,9 @@ export function AppShell() {
       <StatusBar />
       <ToastContainer />
       <UndoHistoryPanel />
+      {project && !showOnboarding && <ContextualTips />}
+      <GuidedTutorialOverlay />
+      <FirstRunOnboarding />
 
       {/* Modals */}
       <NewProjectDialog />

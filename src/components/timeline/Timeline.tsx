@@ -343,6 +343,7 @@ export function Timeline() {
         data-keyboard-context="timeline"
         role="grid"
         tabIndex={0}
+        data-onboarding-target="timeline"
         className="flex-1 overflow-auto bg-[#242424] relative"
         onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}

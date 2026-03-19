@@ -120,6 +120,14 @@ interface UIState {
   aiAssistantStreaming: boolean;
   aiAssistantSuggestions: string[];
   aiAssistantError: string | null;
+  showOnboarding: boolean;
+  onboardingCompleted: boolean;
+  onboardingSkipped: boolean;
+  workspaceComplexity: 'simple' | 'standard' | 'advanced';
+  activeTutorialStep: number | null;
+  tutorialCompleted: boolean;
+  tutorialSkipped: boolean;
+  dismissedOnboardingTipIds: string[];
 
   // Inline AI regeneration & suggestions
   regionRegenerateTarget: { startTime: number; endTime: number; trackIds: string[] } | null;
@@ -236,9 +244,58 @@ interface UIState {
   dismissInlineSuggestion: (id: string) => void;
   clearInlineSuggestions: () => void;
   setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
+  setShowOnboarding: (v: boolean) => void;
+  applyWorkspaceComplexity: (tier: 'simple' | 'standard' | 'advanced') => void;
+  completeOnboarding: () => void;
+  skipOnboarding: () => void;
+  startTutorial: () => void;
+  nextTutorialStep: () => void;
+  finishTutorial: () => void;
+  skipTutorial: () => void;
+  dismissOnboardingTip: (id: string) => void;
 }
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
+const TUTORIAL_STEP_COUNT = 5;
+
+function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
+  switch (tier) {
+    case 'simple':
+      return {
+        workspaceComplexity: tier,
+        showMixer: false,
+        showLibrary: false,
+        loopBrowserOpen: false,
+        showSmartControls: true,
+        showTempoLane: false,
+        trackListWidth: 200,
+        pixelsPerSecond: 50,
+      };
+    case 'advanced':
+      return {
+        workspaceComplexity: tier,
+        showMixer: true,
+        showLibrary: true,
+        loopBrowserOpen: true,
+        showSmartControls: false,
+        showTempoLane: true,
+        trackListWidth: 250,
+        pixelsPerSecond: 100,
+      };
+    case 'standard':
+    default:
+      return {
+        workspaceComplexity: tier,
+        showMixer: false,
+        showLibrary: false,
+        loopBrowserOpen: false,
+        showSmartControls: false,
+        showTempoLane: false,
+        trackListWidth: 220,
+        pixelsPerSecond: 50,
+      };
+  }
+}
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -319,6 +376,14 @@ export const useUIStore = create<UIState>()(
   aiAssistantStreaming: false,
   aiAssistantSuggestions: [],
   aiAssistantError: null,
+  showOnboarding: false,
+  onboardingCompleted: false,
+  onboardingSkipped: false,
+  workspaceComplexity: 'standard',
+  activeTutorialStep: null,
+  tutorialCompleted: false,
+  tutorialSkipped: false,
+  dismissedOnboardingTipIds: [],
 
   regionRegenerateTarget: null,
   inlineSuggestions: [],
@@ -564,7 +629,6 @@ export const useUIStore = create<UIState>()(
       }));
     }
   },
-
   setRegionRegenerateTarget: (v) => set({ regionRegenerateTarget: v }),
   setInlineSuggestions: (v) => set({ inlineSuggestions: v }),
   dismissInlineSuggestion: (id) => set((s) => ({
@@ -572,6 +636,49 @@ export const useUIStore = create<UIState>()(
   })),
   clearInlineSuggestions: () => set({ inlineSuggestions: [] }),
   setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
+  setShowOnboarding: (v) => set({ showOnboarding: v }),
+  applyWorkspaceComplexity: (tier) => set(getComplexityDefaults(tier)),
+  completeOnboarding: () => set({
+    onboardingCompleted: true,
+    onboardingSkipped: false,
+    showOnboarding: false,
+  }),
+  skipOnboarding: () => set({
+    onboardingSkipped: true,
+    showOnboarding: false,
+    activeTutorialStep: null,
+    tutorialSkipped: true,
+  }),
+  startTutorial: () => set((state) => (
+    state.tutorialCompleted || state.tutorialSkipped
+      ? {}
+      : { activeTutorialStep: 0 }
+  )),
+  nextTutorialStep: () => set((state) => {
+    if (state.activeTutorialStep === null) return {};
+    if (state.activeTutorialStep >= TUTORIAL_STEP_COUNT - 1) {
+      return {
+        activeTutorialStep: null,
+        tutorialCompleted: true,
+        tutorialSkipped: false,
+      };
+    }
+    return { activeTutorialStep: state.activeTutorialStep + 1 };
+  }),
+  finishTutorial: () => set({
+    activeTutorialStep: null,
+    tutorialCompleted: true,
+    tutorialSkipped: false,
+  }),
+  skipTutorial: () => set({
+    activeTutorialStep: null,
+    tutorialSkipped: true,
+  }),
+  dismissOnboardingTip: (id) => set((state) => (
+    state.dismissedOnboardingTipIds.includes(id)
+      ? {}
+      : { dismissedOnboardingTipIds: [...state.dismissedOnboardingTipIds, id] }
+  )),
 }),
     {
       name: 'ace-step-daw-ui',
@@ -605,6 +712,13 @@ export const useUIStore = create<UIState>()(
         showGenerationPanel: state.showGenerationPanel,
         // AI Assistant
         showAIAssistant: state.showAIAssistant,
+        // Onboarding
+        onboardingCompleted: state.onboardingCompleted,
+        onboardingSkipped: state.onboardingSkipped,
+        workspaceComplexity: state.workspaceComplexity,
+        tutorialCompleted: state.tutorialCompleted,
+        tutorialSkipped: state.tutorialSkipped,
+        dismissedOnboardingTipIds: state.dismissedOnboardingTipIds,
         // Inline suggestions
         suggestionFrequency: state.suggestionFrequency,
         // Command palette

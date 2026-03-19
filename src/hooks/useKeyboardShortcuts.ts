@@ -165,6 +165,9 @@ export function useKeyboardShortcuts() {
         } else if (ui.showUndoHistoryPanel) {
           event.preventDefault();
           ui.setShowUndoHistoryPanel(false);
+        } else if (ui.activeTutorialStep !== null) {
+          event.preventDefault();
+          ui.skipTutorial();
         } else if (ui.showAIAssistant) {
           event.preventDefault();
           ui.setShowAIAssistant(false);
@@ -195,6 +198,8 @@ export function useKeyboardShortcuts() {
         } else if (ui.showProjectListDialog) {
           event.preventDefault();
           ui.setShowProjectListDialog(false);
+        } else if (ui.showOnboarding) {
+          event.preventDefault();
         } else if (ui.selectWindow !== null) {
           event.preventDefault();
           ui.setSelectWindow(null);
@@ -218,7 +223,9 @@ export function useKeyboardShortcuts() {
         ui.showSettingsDialog ||
         ui.showExportDialog ||
         ui.showProjectListDialog ||
-        ui.showNewProjectDialog;
+        ui.showNewProjectDialog ||
+        ui.showOnboarding ||
+        ui.activeTutorialStep !== null;
 
       if (matches('view.zoomIn')) { event.preventDefault(); ui.zoomIn(); return; }
       if (matches('view.zoomOut')) { event.preventDefault(); ui.zoomOut(); return; }

@@ -62,12 +62,14 @@ function ControlBarButton({
   onClick,
   title,
   disabled,
+  dataTarget,
   children,
 }: {
   active?: boolean;
   onClick: () => void | Promise<void>;
   title: string;
   disabled?: boolean;
+  dataTarget?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -75,6 +77,8 @@ function ControlBarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={title.replace(/\s*\(.+?\)$/, '')}
+      data-onboarding-target={dataTarget}
       className={`w-8 h-7 flex items-center justify-center rounded transition-colors ${
         active
           ? 'bg-daw-accent text-white shadow-sm'
@@ -98,6 +102,7 @@ export function Toolbar() {
   const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
   const mainView = useUIStore((s) => s.mainView);
   const setMainView = useUIStore((s) => s.setMainView);
+  const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const showMixer = useUIStore((s) => s.showMixer);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
@@ -202,6 +207,16 @@ export function Toolbar() {
         <button onClick={toggleArrangementView} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Toggle Arrangement / Session (Tab)">
           {arrangementView === 'arrangement' ? 'Session' : 'Arrange'}
         </button>
+        <button
+          onClick={() => setBatchGenerateMode('silence')}
+          disabled={!project}
+          data-onboarding-target="genr-button"
+          aria-label="Open genr"
+          className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-cyan-200 uppercase transition-colors hover:bg-cyan-400/20 disabled:opacity-30"
+          title="genr (Cmd+G)"
+        >
+          genr
+        </button>
         <button onClick={() => setShowProjectListDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -231,7 +246,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Center: Transport controls */}
-      <div className="flex items-center gap-0.5" data-testid="transport-bar">
+      <div className="flex items-center gap-0.5" data-testid="transport-bar" data-onboarding-target="transport">
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
           <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
@@ -327,6 +342,7 @@ export function Toolbar() {
           onClick={() => setShowMixer(!showMixer)}
           title="Mixer (X)"
           disabled={!project}
+          dataTarget="mixer-button"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <line x1="3" y1="2" x2="3" y2="12" />
@@ -342,6 +358,7 @@ export function Toolbar() {
           onClick={toggleLoopBrowser}
           title="Loop Browser (O)"
           disabled={!project}
+          dataTarget="loop-browser-button"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <circle cx="6" cy="6" r="4" />
@@ -352,6 +369,7 @@ export function Toolbar() {
           active={showAIAssistant}
           onClick={toggleAIAssistant}
           title="AI Assistant (Cmd+/)"
+          dataTarget="assistant-button"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
             <circle cx="7" cy="7" r="5.5" />

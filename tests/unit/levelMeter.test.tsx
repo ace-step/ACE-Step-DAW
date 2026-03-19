@@ -57,6 +57,7 @@ describe('LevelMeter', () => {
     runFrame();
     runFrame();
 
+    expect(screen.getByLabelText('Mixer level meter for track-1')).toBeInTheDocument();
     expect(screen.getByTestId('meter-level-fill')).toHaveStyle({ height: '20%' });
     expect(screen.getByTestId('meter-peak-hold')).toHaveStyle({ bottom: 'calc(80% - 1px)' });
   });

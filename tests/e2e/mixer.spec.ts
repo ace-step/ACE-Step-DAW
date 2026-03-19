@@ -172,7 +172,7 @@ test.describe('Mixer Operations', () => {
       return firstTrackId;
     });
 
-    await expect(page.getByLabel(`Track level meter for ${trackId}`)).toBeVisible();
+    await expect(page.getByLabel(`Mixer level meter for ${trackId}`)).toBeVisible();
 
     const resetButton = page.getByRole('button', { name: `Reset clip indicator for ${trackId}` });
     await expect(resetButton).toBeVisible();

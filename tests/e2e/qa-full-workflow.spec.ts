@@ -1016,8 +1016,8 @@ test.describe('QA Test Suite: Full Workflow', () => {
     test('7g. Double-create project does not corrupt state', async ({ page }) => {
       await createProjectViaUI(page, 'First Project');
 
-      // Try to create another project via Cmd+N
-      await page.keyboard.press('Meta+n');
+      // Try to create another project via the browser-safe shortcut
+      await page.keyboard.press('Shift+KeyN');
       await page.waitForTimeout(500);
 
       const dialogVisible = await page.locator('text=New Project').first().isVisible().catch(() => false);

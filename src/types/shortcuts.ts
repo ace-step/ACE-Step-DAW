@@ -48,3 +48,26 @@ export interface ShortcutPreset {
   description: string;
   map: ShortcutMap;
 }
+
+export interface BrowserShortcutRule {
+  id: string;
+  combo: KeyCombo;
+  reason: string;
+  severity: 'warning' | 'error';
+  suggestion?: KeyCombo;
+}
+
+export interface ShortcutImportExportPayload {
+  version: 1;
+  presetId: string;
+  exportedAt: string;
+  overrides: ShortcutMap;
+  bindings: ShortcutMap;
+}
+
+export interface ShortcutImportResult {
+  importedCount: number;
+  blockedActionIds: string[];
+  skippedActionIds: string[];
+  activePresetId: string;
+}

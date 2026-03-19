@@ -10,7 +10,7 @@ const abletonMap: ShortcutMap = {
   // Ableton Live-style bindings
   'transport.playPause':  { code: 'Space' },
   'transport.stop':       { code: 'Space' },           // Ableton: space toggles, no separate stop
-  'transport.loop':       { code: 'KeyL', mod: true },  // Ctrl/Cmd+L in Ableton
+  'transport.loop':       { code: 'KeyL', shift: true }, // Browser-safe alternative to Cmd/Ctrl+L
   'transport.record':     { code: 'F9' },               // F9 = record in Ableton
   'transport.nudgeLeft':  { code: 'ArrowLeft' },
   'transport.nudgeRight': { code: 'ArrowRight' },
@@ -23,9 +23,9 @@ const abletonMap: ShortcutMap = {
   'view.toggleSnap':      { code: 'KeyB', mod: true },  // Cmd+B = snap in Ableton
   'panels.mixer':         { code: 'KeyM', mod: true },  // Cmd+M = mixer in Ableton
   'panels.library':       { code: 'KeyL', mod: true, alt: true }, // Cmd+Alt+L
-  'project.new':          { code: 'KeyN', mod: true },
+  'project.new':          { code: 'KeyN', shift: true },
   'project.export':       { code: 'KeyE', mod: true, shift: true },
-  'project.settings':     { code: 'Comma', mod: true },
+  'project.settings':     { code: 'Comma', alt: true },
 };
 
 const logicProMap: ShortcutMap = {
@@ -38,7 +38,7 @@ const logicProMap: ShortcutMap = {
   'transport.home':         { code: 'Home' },
   'clips.delete':           { code: 'Backspace' },
   'clips.duplicate':        { code: 'KeyD', mod: true },
-  'clips.split':            { code: 'KeyT', mod: true },  // Cmd+T = split in Logic
+  'clips.split':            { code: 'KeyT', shift: true }, // Browser-safe analogue to Cmd+T
   'clips.selectAll':        { code: 'KeyA', mod: true },
   'clips.edit':             { code: 'KeyE' },
   'view.zoomIn':            { code: 'Equal', mod: true },
@@ -48,8 +48,8 @@ const logicProMap: ShortcutMap = {
   'panels.mixer':           { code: 'KeyX' },
   'panels.smartControls':   { code: 'KeyB' },
   'panels.library':         { code: 'KeyY' },
-  'project.new':            { code: 'KeyN', mod: true },
-  'project.settings':       { code: 'Comma', mod: true },
+  'project.new':            { code: 'KeyN', shift: true },
+  'project.settings':       { code: 'Comma', alt: true },
   'project.export':         { code: 'KeyE', mod: true },  // Cmd+E = bounce in Logic
 };
 
@@ -57,9 +57,9 @@ const flStudioMap: ShortcutMap = {
   // FL Studio-style bindings
   'transport.playPause':    { code: 'Space' },
   'transport.stop':         { code: 'Space', mod: true },  // Ctrl+Space = stop in FL
-  'transport.loop':         { code: 'KeyL', mod: true },
+  'transport.loop':         { code: 'KeyL', shift: true },
   'transport.metronome':    { code: 'KeyM', mod: true },   // Ctrl+M = metronome in FL
-  'transport.record':       { code: 'KeyR', mod: true },   // Ctrl+R = record mode in FL
+  'transport.record':       { code: 'KeyR', shift: true }, // Browser-safe analogue to Ctrl+R
   'clips.delete':           { code: 'Delete' },
   'clips.duplicate':        { code: 'KeyB', mod: true },   // Ctrl+B = duplicate in FL
   'clips.split':            { code: 'KeyS', mod: true, shift: true },
@@ -69,8 +69,8 @@ const flStudioMap: ShortcutMap = {
   'view.toggleSnap':        { code: 'KeyS', alt: true },   // Alt+S in FL
   'panels.mixer':           { code: 'F9' },                // F9 = mixer in FL
   'panels.library':         { code: 'F8' },                // F8 = plugin picker in FL
-  'project.new':            { code: 'KeyN', mod: true },
-  'project.export':         { code: 'KeyR', mod: true, shift: true },
+  'project.new':            { code: 'KeyN', shift: true },
+  'project.export':         { code: 'KeyR', alt: true, shift: true },
   'project.settings':       { code: 'F11' },
 };
 
@@ -91,9 +91,9 @@ const proToolsMap: ShortcutMap = {
   'view.zoomToFit':         { code: 'KeyA', alt: true },    // Alt+A = zoom to fit in Pro Tools
   'view.toggleSnap':        { code: 'KeyN' },
   'panels.mixer':           { code: 'Equal', mod: true },   // Cmd+= = mix window in PT
-  'project.new':            { code: 'KeyN', mod: true },
+  'project.new':            { code: 'KeyN', shift: true },
   'project.export':         { code: 'KeyB', mod: true, shift: true, alt: true },
-  'project.settings':       { code: 'Comma', mod: true },
+  'project.settings':       { code: 'Comma', alt: true },
 };
 
 export const SHORTCUT_PRESETS: ShortcutPreset[] = [

@@ -47,9 +47,9 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.aiAssistant',    category: 'panels',    label: 'Toggle AI Assistant',       defaultCombo: { code: 'Slash', mod: true } },
 
   // ── Project ────────────────────────────────────────────────────
-  { id: 'project.new',           category: 'project',   label: 'New Project',               defaultCombo: { code: 'KeyN', mod: true } },
-  { id: 'project.open',          category: 'project',   label: 'Open Project List',         defaultCombo: { code: 'KeyO', mod: true } },
-  { id: 'project.settings',      category: 'project',   label: 'Settings',                  defaultCombo: { code: 'Comma', mod: true } },
+  { id: 'project.new',           category: 'project',   label: 'New Project',               defaultCombo: { code: 'KeyN', shift: true } },
+  { id: 'project.open',          category: 'project',   label: 'Open Project List',         defaultCombo: { code: 'KeyO', shift: true } },
+  { id: 'project.settings',      category: 'project',   label: 'Settings',                  defaultCombo: { code: 'Comma', alt: true } },
   { id: 'project.export',        category: 'project',   label: 'Export',                    defaultCombo: { code: 'KeyE', mod: true, shift: true } },
   { id: 'project.addTrack',      category: 'project',   label: 'Add Track',                 defaultCombo: { code: 'KeyI', mod: true, shift: true } },
   { id: 'project.help',          category: 'project',   label: 'Keyboard Shortcuts Help',   defaultCombo: { code: 'Slash', shift: true } },

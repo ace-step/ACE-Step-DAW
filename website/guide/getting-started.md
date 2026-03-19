@@ -26,7 +26,7 @@ This starts the Vite development server. Open [http://localhost:5173](http://loc
 
 ## Your First Project
 
-1. **Create a new project** — Press `Cmd/Ctrl + N` or use the project menu.
+1. **Create a new project** — Press `Shift + N` or use the project menu.
 2. **Add a track** — Press `Cmd/Ctrl + Shift + I` to open the instrument picker. Choose from 12 named instruments (Drums, Bass, Guitar, Vocals, etc.) or create a custom track.
 3. **Choose a track type** — Each track can be a Stems, Sample, Sequencer, or Piano Roll track.
 4. **Add content** — Depending on your track type:
@@ -50,7 +50,7 @@ Your projects are saved automatically to IndexedDB in your browser. Each project
 - Undo/redo history (up to 50 states)
 
 ::: tip
-Projects persist across browser sessions. Use `Cmd/Ctrl + O` to browse and switch between saved projects.
+Projects persist across browser sessions. Use `Shift + O` to browse and switch between saved projects.
 :::
 
 ## Next Steps

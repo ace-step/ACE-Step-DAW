@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useShortcutsStore } from '../../store/shortcutsStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
+import { SHORTCUT_PRESETS } from '../../constants/shortcutPresets';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 
 function modelSupportsThinking(modelName: string): boolean {
@@ -12,7 +14,11 @@ function modelSupportsThinking(modelName: string): boolean {
 export function SettingsDialog() {
   const show = useUIStore((s) => s.showSettingsDialog);
   const setShow = useUIStore((s) => s.setShowSettingsDialog);
+  const setShowShortcutEditorDialog = useUIStore((s) => s.setShowShortcutEditorDialog);
   const project = useProjectStore((s) => s.project);
+  const activeShortcutPresetId = useShortcutsStore((s) => s.activePresetId);
+  const applyShortcutPreset = useShortcutsStore((s) => s.applyPreset);
+  const resetShortcuts = useShortcutsStore((s) => s.resetAll);
 
   const [bpm, setBpm] = useState(120);
   const [bpmText, setBpmText] = useState('120');
@@ -66,6 +72,7 @@ export function SettingsDialog() {
   const [selectedLmModel, setSelectedLmModel] = useState('');
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
+  const [shortcutPresetId, setShortcutPresetId] = useState('ace-step');
   const prevShow = useRef(false);
 
   const handleModelChange = (newModel: string) => {
@@ -138,10 +145,11 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
+      setShortcutPresetId(activeShortcutPresetId === 'custom' ? 'ace-step' : activeShortcutPresetId);
       void refreshModels(gen.model);
     }
     prevShow.current = show;
-  }, [show, project]);
+  }, [activeShortcutPresetId, show, project]);
 
   if (!show) return null;
 
@@ -163,6 +171,11 @@ export function SettingsDialog() {
           },
         },
       });
+    }
+    if (shortcutPresetId === 'ace-step') {
+      resetShortcuts();
+    } else {
+      applyShortcutPreset(shortcutPresetId);
     }
     setBackendUrl(backendUrl);
     setShow(false);
@@ -438,6 +451,38 @@ export function SettingsDialog() {
           {initMessage && !initError && (
             <p className="text-[10px] text-emerald-400">{initMessage}</p>
           )}
+
+          <h3 className="text-xs font-medium text-zinc-300 pt-2">Keyboard Shortcuts</h3>
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">Migration Preset</label>
+            <select
+              value={shortcutPresetId}
+              onChange={(e) => setShortcutPresetId(e.target.value)}
+              aria-label="Shortcut migration preset"
+              className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+            >
+              {SHORTCUT_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] text-zinc-500">
+                Presets remap the global keyboard handler. Import/export and per-action rebinding live in the Shortcut Editor.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShow(false);
+                  setShowShortcutEditorDialog(true);
+                }}
+                className="shrink-0 px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
+              >
+                Open Editor
+              </button>
+            </div>
+          </div>
 
           {/* Custom Models inventory */}
           {availableModels.length > 0 && (

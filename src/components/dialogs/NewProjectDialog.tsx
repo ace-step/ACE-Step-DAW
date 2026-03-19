@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { useShortcutsStore } from '../../store/shortcutsStore';
 import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
+import { SHORTCUT_PRESETS } from '../../constants/shortcutPresets';
 import {
   DEFAULT_BPM,
   DEFAULT_KEY_SCALE,
@@ -63,12 +65,16 @@ export function NewProjectDialog() {
   const createProject = useProjectStore((s) => s.createProject);
   const setProject = useProjectStore((s) => s.setProject);
   const createProjectFromTemplate = useProjectStore((s) => s.createProjectFromTemplate);
+  const activeShortcutPresetId = useShortcutsStore((s) => s.activePresetId);
+  const applyShortcutPreset = useShortcutsStore((s) => s.applyPreset);
+  const resetShortcuts = useShortcutsStore((s) => s.resetAll);
 
   const [name, setName] = useState(DEFAULT_PROJECT_NAME);
   const [bpm, setBpm] = useState(DEFAULT_BPM);
   const [bpmText, setBpmText] = useState(String(DEFAULT_BPM));
   const [keyScale, setKeyScale] = useState(DEFAULT_KEY_SCALE);
   const [timeSignature, setTimeSignature] = useState(DEFAULT_TIME_SIGNATURE);
+  const [shortcutPresetId, setShortcutPresetId] = useState('ace-step');
 
   const [recentProjects, setRecentProjects] = useState<ProjectSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
@@ -81,14 +87,20 @@ export function NewProjectDialog() {
       setBpmText(String(DEFAULT_BPM));
       setKeyScale(DEFAULT_KEY_SCALE);
       setTimeSignature(DEFAULT_TIME_SIGNATURE);
+      setShortcutPresetId(activeShortcutPresetId === 'custom' ? 'ace-step' : activeShortcutPresetId);
       listProjects().then((list) => setRecentProjects(list));
       listTemplates().then((list) => setTemplates(list));
     }
-  }, [show]);
+  }, [activeShortcutPresetId, show]);
 
   if (!show) return null;
 
   const handleCreate = () => {
+    if (shortcutPresetId === 'ace-step') {
+      resetShortcuts();
+    } else {
+      applyShortcutPreset(shortcutPresetId);
+    }
     createProject({ name, bpm, keyScale, timeSignature });
     setShow(false);
   };
@@ -247,6 +259,25 @@ export function NewProjectDialog() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">Shortcut Migration Preset</label>
+              <select
+                value={shortcutPresetId}
+                onChange={(e) => setShortcutPresetId(e.target.value)}
+                aria-label="Shortcut migration preset"
+                className="w-full px-3 py-1.5 text-sm bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+              >
+                {SHORTCUT_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Choose the closest DAW muscle-memory map now, then fine-tune it later in Settings → Shortcut Editor.
+              </p>
             </div>
 
             <p className="text-[10px] text-zinc-500">

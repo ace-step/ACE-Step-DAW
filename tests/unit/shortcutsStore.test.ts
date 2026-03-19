@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useShortcutsStore, comboEquals } from '../../src/store/shortcutsStore';
 import { SHORTCUT_ACTIONS, SHORTCUT_ACTION_MAP } from '../../src/constants/shortcutDefaults';
 import { SHORTCUT_PRESETS, SHORTCUT_PRESET_MAP } from '../../src/constants/shortcutPresets';
+import { findBrowserShortcutConflict } from '../../src/constants/shortcutConflicts';
 import type { KeyCombo } from '../../src/types/shortcuts';
 
 beforeEach(() => {
@@ -131,6 +132,71 @@ describe('findConflict', () => {
   });
 });
 
+// ── findBrowserConflict ─────────────────────────────────────────
+
+describe('findBrowserConflict', () => {
+  it('blocks hard browser-reserved shortcuts', () => {
+    const conflict = useShortcutsStore.getState().findBrowserConflict({ code: 'KeyN', mod: true });
+    expect(conflict?.severity).toBe('error');
+    expect(conflict?.suggestion).toEqual({ code: 'KeyN', shift: true });
+  });
+
+  it('marks browser preference shortcuts as warnings', () => {
+    const conflict = useShortcutsStore.getState().findBrowserConflict({ code: 'Comma', mod: true });
+    expect(conflict?.severity).toBe('warning');
+  });
+});
+
+// ── export/import ───────────────────────────────────────────────
+
+describe('exportBindings / importBindings', () => {
+  it('exports current overrides and effective bindings', () => {
+    useShortcutsStore.getState().setBinding('transport.record', { code: 'F5' });
+
+    const payload = useShortcutsStore.getState().exportBindings();
+    expect(payload.version).toBe(1);
+    expect(payload.overrides['transport.record']).toEqual({ code: 'F5' });
+    expect(payload.bindings['transport.record']).toEqual({ code: 'F5' });
+    expect(payload.bindings['transport.playPause']).toEqual(
+      SHORTCUT_ACTION_MAP['transport.playPause'].defaultCombo,
+    );
+  });
+
+  it('imports valid overrides and blocks browser-reserved combos', () => {
+    const result = useShortcutsStore.getState().importBindings({
+      version: 1,
+      presetId: 'custom',
+      exportedAt: new Date().toISOString(),
+      overrides: {
+        'transport.record': { code: 'F5' },
+        'project.new': { code: 'KeyN', mod: true },
+      },
+      bindings: {},
+    });
+
+    expect(result.importedCount).toBe(1);
+    expect(result.blockedActionIds).toContain('project.new');
+    expect(useShortcutsStore.getState().overrides['transport.record']).toEqual({ code: 'F5' });
+    expect(useShortcutsStore.getState().overrides['project.new']).toBeUndefined();
+  });
+
+  it('skips unknown actions during import', () => {
+    const result = useShortcutsStore.getState().importBindings({
+      version: 1,
+      presetId: 'custom',
+      exportedAt: new Date().toISOString(),
+      overrides: {
+        'transport.record': { code: 'F5' },
+        'unknown.action': { code: 'F7' },
+      },
+      bindings: {},
+    });
+
+    expect(result.skippedActionIds).toContain('unknown.action');
+    expect(result.importedCount).toBe(1);
+  });
+});
+
 // ── SHORTCUT_ACTIONS ─────────────────────────────────────────────
 
 describe('SHORTCUT_ACTIONS', () => {
@@ -148,6 +214,12 @@ describe('SHORTCUT_ACTIONS', () => {
       expect(action.label.length).toBeGreaterThan(0);
       expect(action.defaultCombo.code.length).toBeGreaterThan(0);
     }
+  });
+
+  it('ships browser-safe defaults for project navigation shortcuts', () => {
+    expect(SHORTCUT_ACTION_MAP['project.new'].defaultCombo).toEqual({ code: 'KeyN', shift: true });
+    expect(SHORTCUT_ACTION_MAP['project.open'].defaultCombo).toEqual({ code: 'KeyO', shift: true });
+    expect(SHORTCUT_ACTION_MAP['project.settings'].defaultCombo).toEqual({ code: 'Comma', alt: true });
   });
 });
 
@@ -179,6 +251,14 @@ describe('SHORTCUT_PRESETS', () => {
     for (const preset of SHORTCUT_PRESETS) {
       for (const [, combo] of Object.entries(preset.map)) {
         expect(combo.code.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('preset entries avoid browser-blocked shortcuts', () => {
+    for (const preset of SHORTCUT_PRESETS) {
+      for (const [, combo] of Object.entries(preset.map)) {
+        expect(findBrowserShortcutConflict(combo)?.severity).not.toBe('error');
       }
     }
   });

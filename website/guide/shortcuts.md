@@ -44,9 +44,9 @@ A complete reference of all keyboard shortcuts in ACE-Step DAW.
 
 | Shortcut | Action |
 |---|---|
-| `Cmd/Ctrl + N` | New project |
-| `Cmd/Ctrl + O` | Open project list |
-| `Cmd/Ctrl + ,` | Settings |
+| `Shift + N` | New project |
+| `Shift + O` | Open project list |
+| `Alt/Option + ,` | Settings |
 | `Cmd/Ctrl + Shift + E` | Export to WAV |
 
 ## Tracks

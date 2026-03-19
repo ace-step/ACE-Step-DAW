@@ -1,8 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { KeyCombo, ShortcutMap } from '../types/shortcuts';
+import type {
+  BrowserShortcutRule,
+  KeyCombo,
+  ShortcutImportExportPayload,
+  ShortcutImportResult,
+  ShortcutMap,
+} from '../types/shortcuts';
 import { SHORTCUT_ACTIONS, SHORTCUT_ACTION_MAP } from '../constants/shortcutDefaults';
 import { SHORTCUT_PRESET_MAP } from '../constants/shortcutPresets';
+import { comboEquals, findBrowserShortcutConflict, normalizeCombo } from '../constants/shortcutConflicts';
 
 interface ShortcutsState {
   /** User overrides keyed by actionId. Missing keys fall back to defaults. */
@@ -23,18 +30,24 @@ interface ShortcutsState {
   resetAll: () => void;
   /** Check whether a combo is already used by another action. */
   findConflict: (combo: KeyCombo, excludeActionId?: string) => string | null;
-}
-
-function comboEquals(a: KeyCombo, b: KeyCombo): boolean {
-  return (
-    a.code === b.code &&
-    !!a.mod === !!b.mod &&
-    !!a.shift === !!b.shift &&
-    !!a.alt === !!b.alt
-  );
+  /** Check whether a combo clashes with a browser-reserved binding. */
+  findBrowserConflict: (combo: KeyCombo) => BrowserShortcutRule | null;
+  /** Export the current shortcuts as a portable JSON payload. */
+  exportBindings: () => ShortcutImportExportPayload;
+  /** Import shortcut bindings from a portable JSON payload. */
+  importBindings: (payload: unknown) => ShortcutImportResult;
 }
 
 export { comboEquals };
+
+function buildEffectiveBindings(overrides: ShortcutMap): ShortcutMap {
+  return Object.fromEntries(
+    SHORTCUT_ACTIONS.map((action) => [
+      action.id,
+      normalizeCombo(overrides[action.id] ?? action.defaultCombo),
+    ]),
+  );
+}
 
 export const useShortcutsStore = create<ShortcutsState>()(
   persist(
@@ -52,7 +65,7 @@ export const useShortcutsStore = create<ShortcutsState>()(
 
       setBinding: (actionId, combo) =>
         set((s) => ({
-          overrides: { ...s.overrides, [actionId]: combo },
+          overrides: { ...s.overrides, [actionId]: normalizeCombo(combo) },
           activePresetId: 'custom',
         })),
 
@@ -66,7 +79,13 @@ export const useShortcutsStore = create<ShortcutsState>()(
       applyPreset: (presetId) => {
         const preset = SHORTCUT_PRESET_MAP[presetId];
         if (!preset) return;
-        set({ overrides: { ...preset.map }, activePresetId: presetId });
+        const safeOverrides = Object.fromEntries(
+          Object.entries(preset.map).filter(([, combo]) => {
+            const browserConflict = findBrowserShortcutConflict(combo);
+            return browserConflict?.severity !== 'error';
+          }),
+        );
+        set({ overrides: safeOverrides, activePresetId: presetId });
       },
 
       resetAll: () => set({ overrides: {}, activePresetId: 'ace-step' }),
@@ -81,6 +100,94 @@ export const useShortcutsStore = create<ShortcutsState>()(
           }
         }
         return null;
+      },
+
+      findBrowserConflict: (combo) => findBrowserShortcutConflict(combo),
+
+      exportBindings: () => {
+        const state = get();
+        return {
+          version: 1,
+          presetId: state.activePresetId,
+          exportedAt: new Date().toISOString(),
+          overrides: { ...state.overrides },
+          bindings: buildEffectiveBindings(state.overrides),
+        };
+      },
+
+      importBindings: (payload) => {
+        const blockedActionIds: string[] = [];
+        const skippedActionIds: string[] = [];
+        const nextOverrides: ShortcutMap = {};
+
+        if (!payload || typeof payload !== 'object') {
+          return {
+            importedCount: 0,
+            blockedActionIds,
+            skippedActionIds: ['invalid-payload'],
+            activePresetId: get().activePresetId,
+          };
+        }
+
+        const data = payload as Partial<ShortcutImportExportPayload> & {
+          bindings?: ShortcutMap;
+          overrides?: ShortcutMap;
+        };
+        const source = data.overrides && typeof data.overrides === 'object'
+          ? data.overrides
+          : data.bindings && typeof data.bindings === 'object'
+            ? data.bindings
+            : null;
+
+        if (!source) {
+          return {
+            importedCount: 0,
+            blockedActionIds,
+            skippedActionIds: ['missing-bindings'],
+            activePresetId: get().activePresetId,
+          };
+        }
+
+        for (const [actionId, rawCombo] of Object.entries(source)) {
+          const action = SHORTCUT_ACTION_MAP[actionId];
+          if (!action || !rawCombo || typeof rawCombo !== 'object') {
+            skippedActionIds.push(actionId);
+            continue;
+          }
+
+          const combo = normalizeCombo(rawCombo as KeyCombo);
+          if (!combo.code) {
+            skippedActionIds.push(actionId);
+            continue;
+          }
+
+          const browserConflict = findBrowserShortcutConflict(combo);
+          if (browserConflict?.severity === 'error') {
+            blockedActionIds.push(actionId);
+            continue;
+          }
+
+          if (!comboEquals(combo, action.defaultCombo)) {
+            nextOverrides[actionId] = combo;
+          }
+        }
+
+        const importedPresetId =
+          typeof data.presetId === 'string' && data.presetId in SHORTCUT_PRESET_MAP
+            ? data.presetId
+            : 'custom';
+
+        set({
+          overrides: nextOverrides,
+          activePresetId: Object.keys(nextOverrides).length === 0 ? 'ace-step' : importedPresetId,
+        });
+
+        return {
+          importedCount: Object.keys(nextOverrides).length,
+          blockedActionIds,
+          skippedActionIds,
+          activePresetId: get().activePresetId,
+        };
       },
     }),
     {

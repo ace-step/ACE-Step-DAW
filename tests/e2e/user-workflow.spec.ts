@@ -10,7 +10,9 @@ test.describe('Core User Workflow: Create → Add → Edit → Play → Export',
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
-      () => typeof (window as any).__store !== 'undefined',
+      () =>
+        typeof (window as any).__store !== 'undefined' &&
+        typeof (window as any).__shortcutsStore !== 'undefined',
       null,
       { timeout: 10000 },
     );
@@ -121,6 +123,27 @@ test.describe('Core User Workflow: Create → Add → Edit → Play → Export',
       (window as any).__store.getState().project?.tracks?.length ?? 0
     );
     expect(trackCount).toBe(1);
+  });
+
+  test('User can pick a migration preset during onboarding and use the remapped shortcut', async ({ page }) => {
+    const presetSelect = page.getByLabel('Shortcut migration preset').first();
+    if (await presetSelect.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await presetSelect.selectOption('logic-pro');
+      await page.locator('button:has-text("Create")').first().click();
+    } else {
+      await page.evaluate(() => {
+        (window as any).__shortcutsStore.getState().applyPreset('logic-pro');
+        (window as any).__store.getState().createProject({ name: 'Logic Migration Test' });
+      });
+    }
+
+    await page.keyboard.press('KeyC');
+    await page.waitForTimeout(200);
+
+    const loopEnabled = await page.evaluate(() =>
+      (window as any).__transportStore.getState().loopEnabled
+    );
+    expect(loopEnabled).toBe(true);
   });
 
   test('App does not crash on basic interactions', async ({ page }) => {

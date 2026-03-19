@@ -363,8 +363,8 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       ).toBeVisible({ timeout: 3000 });
     });
 
-    test('4g. Cmd+N opens new project dialog', async ({ page }) => {
-      await page.keyboard.press('Meta+n');
+    test('4g. Shift+N opens new project dialog', async ({ page }) => {
+      await page.keyboard.press('Shift+KeyN');
       await page.waitForTimeout(500);
 
       await expect(

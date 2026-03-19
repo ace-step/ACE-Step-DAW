@@ -1,6 +1,30 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const e2ePort = Number(process.env.E2E_PORT) || 5274;
+function mergeNoProxyValue(value: string | undefined) {
+  const entries = new Set(
+    (value ?? '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  entries.add('127.0.0.1');
+  entries.add('localhost');
+  return Array.from(entries).join(',');
+}
+
+function deriveWorktreePort() {
+  return Array.from(process.cwd()).reduce((hash, character) => {
+    return (hash * 33 + character.charCodeAt(0)) % 200;
+  }, 0);
+}
+
+const noProxyValue = mergeNoProxyValue(process.env.NO_PROXY ?? process.env.no_proxy);
+
+process.env.NO_PROXY = noProxyValue;
+process.env.no_proxy = noProxyValue;
+process.env.GLOBAL_AGENT_NO_PROXY = noProxyValue;
+
+const e2ePort = Number(process.env.E2E_PORT) || 5274 + deriveWorktreePort();
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -22,7 +46,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: `http://127.0.0.1:${e2ePort}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 60000,
     env: {
       VITE_PORT: String(e2ePort),

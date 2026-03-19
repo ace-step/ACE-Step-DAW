@@ -9,17 +9,19 @@ import { drawPianoRollKeyboard } from './PianoRollKeyboard';
 import { drawVelocityLane } from './VelocityLane';
 import {
   generateNoteId,
+  getPianoRollToolShortcut,
   gridSizeToBeats,
   isBlackKey,
   MIDI_MAX_NOTE,
   midiNoteToName,
   PIANO_KEYBOARD_WIDTH,
   PIANO_ROLL_KEY_HEIGHT,
+  type PianoRollTool,
   velocityToColor,
   VELOCITY_LANE_HEIGHT,
 } from './PianoRollConstants';
 
-type NoteDragMode = null | 'move' | 'resize-right' | 'velocity';
+type NoteDragMode = null | 'move' | 'resize-left' | 'resize-right' | 'velocity';
 
 interface NoteDragState {
   mode: NoteDragMode;
@@ -45,7 +47,7 @@ export interface GhostNote {
 interface PianoRollCanvasProps {
   clip: Clip;
   track: Track;
-  drawMode: boolean;
+  activeTool: PianoRollTool;
   gridSize: PianoRollGrid;
   prZoomX: number;
   onZoomXChange: React.Dispatch<React.SetStateAction<number>>;
@@ -57,7 +59,7 @@ interface PianoRollCanvasProps {
 export function PianoRollCanvas({
   clip,
   track,
-  drawMode,
+  activeTool,
   gridSize,
   prZoomX,
   onZoomXChange,
@@ -70,6 +72,10 @@ export function PianoRollCanvas({
   const animRef = useRef<number>(0);
   const dragRef = useRef<NoteDragState | null>(null);
   const dividerDragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const toolStrokeRef = useRef<{
+    noteIds: Set<string>;
+    cells: Set<string>;
+  }>({ noteIds: new Set(), cells: new Set() });
 
   const [velocityHeight, setVelocityHeight] = useState(VELOCITY_LANE_HEIGHT);
   const [prZoomY, setPrZoomY] = useState(1);
@@ -130,8 +136,49 @@ export function PianoRollCanvas({
     [gridBeats],
   );
 
+  const getCellKey = useCallback(
+    (beat: number, pitch: number) => `${Math.round(beat / gridBeats)}:${pitch}`,
+    [gridBeats],
+  );
+
+  const createNoteAt = useCallback(
+    (x: number, y: number, options?: { isSlide?: boolean; select?: boolean; velocity?: number }) => {
+      const beat = snapBeat(xToBeat(x), false);
+      const pitch = yToPitch(y);
+      if (pitch < 0 || pitch > MIDI_MAX_NOTE) return null;
+
+      const newNote: MidiNote = {
+        id: generateNoteId(),
+        pitch,
+        startBeat: Math.max(0, beat),
+        durationBeats: gridBeats,
+        velocity: options?.velocity ?? 100,
+        isSlide: options?.isSlide,
+      };
+      addMidiNote(clip.id, newNote);
+      if (options?.select !== false) {
+        setSelectedNoteIds(new Set([newNote.id]));
+      }
+      if (previewEnabled) previewNoteAtPitch(pitch, newNote.velocity, 0.3);
+      return newNote;
+    },
+    [addMidiNote, clip.id, gridBeats, previewEnabled, previewNoteAtPitch, setSelectedNoteIds, snapBeat, xToBeat, yToPitch],
+  );
+
+  const deleteNoteById = useCallback(
+    (noteId: string) => {
+      removeMidiNote(clip.id, noteId);
+      setSelectedNoteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(noteId);
+        return next;
+      });
+    },
+    [clip.id, removeMidiNote, setSelectedNoteIds],
+  );
+
   const findNoteAt = useCallback(
-    (x: number, y: number): { note: MidiNote; edge: 'body' | 'right' } | null => {
+    (x: number, y: number): { note: MidiNote; edge: 'body' | 'left' | 'right' } | null => {
       for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
         const noteX = beatToX(note.startBeat);
@@ -140,9 +187,11 @@ export function PianoRollCanvas({
         const noteHeight = keyHeight - 1;
 
         if (x >= noteX && x <= noteX + noteWidth && y >= noteY && y <= noteY + noteHeight) {
+          const nearLeft = x < noteX + 8 && noteWidth > 10;
+          const nearRight = x > noteX + noteWidth - 8 && noteWidth > 10;
           return {
             note,
-            edge: x > noteX + noteWidth - 8 && noteWidth > 10 ? 'right' : 'body',
+            edge: nearLeft ? 'left' : nearRight ? 'right' : 'body',
           };
         }
       }
@@ -260,29 +309,41 @@ export function PianoRollCanvas({
       if (noteY + noteHeight < 0 || noteY > noteAreaHeight) continue;
 
       const isSelected = selectedNoteIds.has(note.id);
+      const isSlide = note.isSlide === true;
 
-      ctx.fillStyle = velocityToColor(note.velocity);
+      ctx.fillStyle = isSlide ? 'rgba(251, 191, 36, 0.92)' : velocityToColor(note.velocity);
       ctx.globalAlpha = isSelected ? 1.0 : 0.8;
       ctx.beginPath();
       ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
       ctx.fill();
 
-      ctx.strokeStyle = isSelected ? '#fff' : 'rgba(255,255,255,0.3)';
+      ctx.strokeStyle = isSlide ? (isSelected ? '#fff7d6' : 'rgba(251,191,36,0.9)') : (isSelected ? '#fff' : 'rgba(255,255,255,0.3)');
       ctx.lineWidth = isSelected ? 1.5 : 0.5;
       ctx.beginPath();
       ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
       ctx.stroke();
       ctx.globalAlpha = 1.0;
 
+      if (isSlide && noteWidth > 10) {
+        ctx.strokeStyle = 'rgba(24,24,27,0.75)';
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.moveTo(noteX + 3, noteY + noteHeight - 3);
+        ctx.lineTo(noteX + noteWidth - 6, noteY + 3);
+        ctx.lineTo(noteX + noteWidth - 3, noteY + 6);
+        ctx.stroke();
+      }
+
       if (noteWidth > 30 && noteHeight > 8) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = isSlide ? 'rgba(24,24,27,0.85)' : 'rgba(0,0,0,0.6)';
         ctx.font = `${Math.min(9, noteHeight * 0.7)}px "Geist Mono", monospace`;
         ctx.textBaseline = 'middle';
-        ctx.fillText(midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
+        ctx.fillText(isSlide ? `${midiNoteToName(note.pitch)} SL` : midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
       }
 
       if (isSelected && noteWidth > 10) {
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillRect(noteX + 1, noteY + 2, 3, noteHeight - 4);
         ctx.fillRect(noteX + noteWidth - 4, noteY + 2, 3, noteHeight - 4);
       }
     }
@@ -333,19 +394,19 @@ export function PianoRollCanvas({
       pixelsPerBeat,
     });
 
-    if (drawMode) {
+    if (activeTool !== 'select') {
       ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
-      ctx.fillRect(width - 60, 4, 56, 16);
+      ctx.fillRect(width - 86, 4, 82, 16);
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
       ctx.font = '9px "Geist", sans-serif';
       ctx.textBaseline = 'middle';
-      ctx.fillText('✏ Draw', width - 55, 12);
+      ctx.fillText(`${activeTool.toUpperCase()} ${getPianoRollToolShortcut(activeTool)}`, width - 80, 12);
     }
   }, [
+    activeTool,
     beatToX,
     bpm,
     clip,
-    drawMode,
     gridBeats,
     keyHeight,
     notes,
@@ -419,40 +480,38 @@ export function PianoRollCanvas({
 
       const hit = findNoteAt(x, y);
 
-      if (drawMode) {
+      if (activeTool === 'erase') {
         if (hit) {
-          removeMidiNote(clip.id, hit.note.id);
-          setSelectedNoteIds((prev) => {
-            const next = new Set(prev);
-            next.delete(hit.note.id);
-            return next;
-          });
+          toolStrokeRef.current.noteIds.add(hit.note.id);
+          deleteNoteById(hit.note.id);
+        }
+        return;
+      }
+
+      if (activeTool === 'pencil' || activeTool === 'paint' || activeTool === 'slide') {
+        if (hit && activeTool !== 'slide') {
+          deleteNoteById(hit.note.id);
+          if (activeTool === 'paint') {
+            toolStrokeRef.current.noteIds.add(hit.note.id);
+          }
           return;
         }
 
-        const beat = snapBeat(xToBeat(x), e.altKey);
-        const pitch = yToPitch(y);
-        if (pitch < 0 || pitch > MIDI_MAX_NOTE) return;
+        const newNote = createNoteAt(x, y, { isSlide: activeTool === 'slide' });
+        if (!newNote) return;
 
-        const newNote = {
-          id: generateNoteId(),
-          pitch,
-          startBeat: Math.max(0, beat),
-          durationBeats: gridBeats,
-          velocity: 100,
-        };
-        addMidiNote(clip.id, newNote);
-        if (previewEnabled) previewNoteAtPitch(pitch, 100, 0.3);
         beginDrag();
+        toolStrokeRef.current.noteIds.add(newNote.id);
+        toolStrokeRef.current.cells.add(getCellKey(newNote.startBeat, newNote.pitch));
         dragRef.current = {
           mode: 'resize-right',
           noteId: newNote.id,
           startMouseX: x,
           startMouseY: y,
-          originalPitch: pitch,
+          originalPitch: newNote.pitch,
           originalStartBeat: newNote.startBeat,
           originalDurationBeats: newNote.durationBeats,
-          originalVelocity: 100,
+          originalVelocity: newNote.velocity,
         };
         return;
       }
@@ -471,7 +530,7 @@ export function PianoRollCanvas({
 
         beginDrag();
         dragRef.current = {
-          mode: hit.edge === 'right' ? 'resize-right' : 'move',
+          mode: hit.edge === 'right' ? 'resize-right' : hit.edge === 'left' ? 'resize-left' : 'move',
           noteId: hit.note.id,
           startMouseX: x,
           startMouseY: y,
@@ -503,54 +562,23 @@ export function PianoRollCanvas({
         return;
       }
 
-      // Single click on empty = create note (regardless of draw mode)
-      {
-        const beat = snapBeat(xToBeat(x), e.altKey);
-        const pitch = yToPitch(y);
-        if (pitch < 0 || pitch > MIDI_MAX_NOTE) return;
-
-        const newNote = {
-          id: generateNoteId(),
-          pitch,
-          startBeat: Math.max(0, beat),
-          durationBeats: gridBeats,
-          velocity: 100,
-        };
-        addMidiNote(clip.id, newNote);
-        setSelectedNoteIds(new Set([newNote.id]));
-        if (previewEnabled) previewNoteAtPitch(pitch, 100, 0.3);
-
-        beginDrag();
-        dragRef.current = {
-          mode: 'resize-right',
-          noteId: newNote.id,
-          startMouseX: x,
-          startMouseY: y,
-          originalPitch: pitch,
-          originalStartBeat: newNote.startBeat,
-          originalDurationBeats: newNote.durationBeats,
-          originalVelocity: 100,
-        };
-      }
+      setSelectedNoteIds(new Set());
     },
     [
-      addMidiNote,
+      activeTool,
       beatToX,
       beginDrag,
-      clip.id,
-      drawMode,
+      createNoteAt,
+      deleteNoteById,
       findNoteAt,
-      gridBeats,
+      getCellKey,
       notes,
       pixelsPerBeat,
       previewEnabled,
       previewNoteAtPitch,
-      removeMidiNote,
       selectedNoteIds,
-      snapBeat,
       updateMidiNote,
       velocityHeight,
-      xToBeat,
       yToPitch,
     ],
   );
@@ -558,7 +586,7 @@ export function PianoRollCanvas({
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
-      if (!canvas || drawMode) return;
+      if (!canvas || activeTool !== 'select') return;
 
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -569,43 +597,18 @@ export function PianoRollCanvas({
 
       const hit = findNoteAt(x, y);
       if (hit) {
-        removeMidiNote(clip.id, hit.note.id);
-        setSelectedNoteIds((prev) => {
-          const next = new Set(prev);
-          next.delete(hit.note.id);
-          return next;
-        });
+        deleteNoteById(hit.note.id);
         return;
       }
 
-      const beat = snapBeat(xToBeat(x), e.altKey);
-      const pitch = yToPitch(y);
-      if (pitch < 0 || pitch > MIDI_MAX_NOTE) return;
-
-      const newNote = {
-        id: generateNoteId(),
-        pitch,
-        startBeat: Math.max(0, beat),
-        durationBeats: gridBeats,
-        velocity: 100,
-      };
-      addMidiNote(clip.id, newNote);
-      setSelectedNoteIds(new Set([newNote.id]));
-      if (previewEnabled) previewNoteAtPitch(pitch, 100, 0.3);
+      createNoteAt(x, y);
     },
     [
-      addMidiNote,
-      clip.id,
-      drawMode,
+      activeTool,
+      createNoteAt,
+      deleteNoteById,
       findNoteAt,
-      gridBeats,
-      previewEnabled,
-      previewNoteAtPitch,
-      removeMidiNote,
-      snapBeat,
       velocityHeight,
-      xToBeat,
-      yToPitch,
     ],
   );
 
@@ -617,15 +620,40 @@ export function PianoRollCanvas({
         return;
       }
 
-      const drag = dragRef.current;
-      if (!drag) return;
-
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
+      const noteAreaHeight = rect.height - velocityHeight;
+      const drag = dragRef.current;
+
+      if (!drag && y <= noteAreaHeight && x >= PIANO_KEYBOARD_WIDTH) {
+        if (activeTool === 'erase') {
+          const hit = findNoteAt(x, y);
+          if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
+            toolStrokeRef.current.noteIds.add(hit.note.id);
+            deleteNoteById(hit.note.id);
+          }
+        }
+        if (activeTool === 'paint') {
+          const pitch = yToPitch(y);
+          if (pitch >= 0 && pitch <= MIDI_MAX_NOTE) {
+            const beat = Math.max(0, snapBeat(xToBeat(x), e.altKey));
+            const cellKey = getCellKey(beat, pitch);
+            const hit = findNoteAt(x, y);
+            if (!hit && !toolStrokeRef.current.cells.has(cellKey)) {
+              const newNote = createNoteAt(x, y, { select: false });
+              if (newNote) {
+                toolStrokeRef.current.noteIds.add(newNote.id);
+                toolStrokeRef.current.cells.add(cellKey);
+              }
+            }
+          }
+        }
+      }
+      if (!drag) return;
 
       if (drag.isBoxSelect) {
         drag.startMouseX = x;
@@ -650,7 +678,6 @@ export function PianoRollCanvas({
       }
 
       if (drag.mode === 'velocity') {
-        const noteAreaHeight = rect.height - velocityHeight;
         const velAreaTop = noteAreaHeight + 3;
         const velAreaHeight = velocityHeight - 6;
         updateMidiNote(clip.id, drag.noteId, {
@@ -671,6 +698,19 @@ export function PianoRollCanvas({
         return;
       }
 
+      if (drag.mode === 'resize-left') {
+        const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
+        const snappedStart = Math.max(0, snapBeat(drag.originalStartBeat + beatDelta, e.altKey));
+        const originalEnd = drag.originalStartBeat + drag.originalDurationBeats;
+        const maxStart = originalEnd - gridBeats * 0.5;
+        const newStartBeat = Math.min(snappedStart, maxStart);
+        updateMidiNote(clip.id, drag.noteId, {
+          startBeat: newStartBeat,
+          durationBeats: Math.max(gridBeats * 0.5, originalEnd - newStartBeat),
+        });
+        return;
+      }
+
       if (drag.mode === 'resize-right') {
         const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
         const endBeat = snapBeat(drag.originalStartBeat + drag.originalDurationBeats + beatDelta, e.altKey);
@@ -683,6 +723,7 @@ export function PianoRollCanvas({
     const handleGlobalUp = () => {
       dividerDragRef.current = null;
       if (dragRef.current) endDrag();
+      toolStrokeRef.current = { noteIds: new Set(), cells: new Set() };
       dragRef.current = null;
     };
 
@@ -693,9 +734,14 @@ export function PianoRollCanvas({
       window.removeEventListener('mouseup', handleGlobalUp);
     };
   }, [
+    activeTool,
     beatToX,
     clip.id,
+    createNoteAt,
+    deleteNoteById,
     endDrag,
+    findNoteAt,
+    getCellKey,
     gridBeats,
     keyHeight,
     notes,
@@ -706,6 +752,7 @@ export function PianoRollCanvas({
     snapBeat,
     updateMidiNote,
     velocityHeight,
+    xToBeat,
     yToPitch,
   ]);
 
@@ -902,7 +949,16 @@ export function PianoRollCanvas({
         ref={canvasRef}
         aria-label="Piano roll editor"
         className="absolute inset-0"
-        style={{ cursor: drawMode ? 'crosshair' : 'default' }}
+        style={{
+          cursor:
+            activeTool === 'select'
+              ? 'default'
+              : activeTool === 'erase'
+                ? 'not-allowed'
+                : activeTool === 'slide'
+                  ? 'alias'
+                  : 'crosshair',
+        }}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
         onWheel={handleWheel}

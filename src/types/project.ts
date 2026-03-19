@@ -58,6 +58,7 @@ export interface MidiNote {
   startBeat: number;
   durationBeats: number;
   velocity: number;
+  isSlide?: boolean;
 }
 
 export interface MidiClipData {

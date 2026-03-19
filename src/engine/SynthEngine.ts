@@ -107,6 +107,30 @@ class SynthEngine {
     synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
 
+  async playSlideNote(
+    trackId: string,
+    fromPitch: number,
+    toPitch: number,
+    velocity: number,
+    duration: number,
+    preset: SynthPreset,
+  ) {
+    await this.ensureStarted();
+    const synth = this.ensureTrackSynth(trackId, preset) as unknown as {
+      set: (options: Record<string, unknown>) => void;
+      triggerAttack: (note: number, time?: string | number, velocity?: number) => void;
+      triggerRelease: (note: number, time?: string | number) => void;
+      triggerAttackRelease: (note: number, duration: number, time?: string | number, velocity?: number) => void;
+    };
+    const glideTime = Math.max(0.03, Math.min(0.12, duration * 0.35));
+    const fromFreq = Tone.Frequency(fromPitch, 'midi').toFrequency();
+    const toFreq = Tone.Frequency(toPitch, 'midi').toFrequency();
+    synth.set({ portamento: glideTime });
+    synth.triggerAttack(fromFreq, undefined, velocity / 127);
+    synth.triggerRelease(fromFreq, `+${glideTime}`);
+    synth.triggerAttackRelease(toFreq, Math.max(0.04, duration), `+${glideTime}`, velocity / 127);
+  }
+
   /** Trigger note on for a track synth (for live playing / recording). */
   noteOn(trackId: string, pitch: number, velocity = 100) {
     const instance = this.synths.get(trackId);

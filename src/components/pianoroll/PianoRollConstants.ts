@@ -1,5 +1,7 @@
 import type { PianoRollGrid } from '../../types/project';
 
+export type PianoRollTool = 'select' | 'pencil' | 'paint' | 'erase' | 'slide';
+
 export const MIDI_MAX_NOTE = 127;
 export const PIANO_ROLL_KEY_HEIGHT = 14;
 export const PIANO_KEYBOARD_WIDTH = 56;
@@ -43,6 +45,21 @@ export function velocityToBarColor(velocity: number): string {
   const g = Math.round(80 + t * 40);
   const b = Math.round(200 - t * 100);
   return `rgba(${r},${g},${b},0.8)`;
+}
+
+export function getPianoRollToolShortcut(tool: PianoRollTool): string {
+  switch (tool) {
+    case 'select':
+      return '1';
+    case 'pencil':
+      return '2';
+    case 'paint':
+      return '3';
+    case 'erase':
+      return '4';
+    case 'slide':
+      return '5';
+  }
 }
 
 export function generateNoteId(): string {

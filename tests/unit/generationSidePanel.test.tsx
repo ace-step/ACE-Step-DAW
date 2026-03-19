@@ -35,7 +35,7 @@ describe('GenerationSidePanel', () => {
   it('persists prompt, style tags, key, bpm, length, temperature, and variation count through the store', () => {
     render(<GenerationSidePanel />);
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Generation prompt' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation prompt' }), {
       target: { value: 'warm synthwave with gated drums' },
     });
     fireEvent.click(within(screen.getByTestId('generation-style-tags')).getByRole('button', { name: 'Electronic' }));
@@ -81,7 +81,7 @@ describe('GenerationSidePanel', () => {
   it('starts a variation session from the shared store form state', () => {
     render(<GenerationSidePanel />);
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Generation prompt' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation prompt' }), {
       target: { value: 'cinematic strings with pulsing bass' },
     });
     fireEvent.click(within(screen.getByTestId('generation-style-tags')).getByRole('button', { name: 'Ambient' }));

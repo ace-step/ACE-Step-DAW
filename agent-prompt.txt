@@ -49,37 +49,29 @@ You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 - This may happen multiple times. Each round, fix all issues and pass quality gates.
 - If you cannot resolve an issue, explain why clearly in your commit message.
 ---
-IMPLEMENT ISSUE #461: feat: add zoom-to-selection and fit-project shortcuts
+IMPLEMENT ISSUE #479: feat: add prompt autocomplete for genres, instruments, moods, and techniques
 ## User Story
-As a user, I want `Z` to zoom to my current clip or region selection and `Shift+Z` to fit the full project, so that I can move between detailed editing and full-song context instantly.
-
-## Source
-Unchecked item from `docs/design/UX_IMPROVEMENT_CHECKLIST.md`:
-- Timeline & Navigation
-- Zoom to selection
+As a user, I want prompt autocomplete suggestions while typing, so that I can build useful generation prompts faster and discover supported musical descriptors.
 
 ## Problem
-The checklist calls for fast navigation shortcuts, but there is no dedicated zoom-to-selection / fit-project workflow tracked as a developer task.
+Prompt autocomplete is called out in the UX checklist, but it is not yet tracked as a standalone implementation task.
 
 ## Scope
-- Add `Z` to zoom horizontally to the selected clips or selected region.
-- Add `Shift+Z` to fit the full project in view.
-- Define fallback behavior when nothing is selected.
-- Keep behavior available through the same Zustand action path used by keyboard shortcuts and future agent automation.
-- Add ARIA-visible affordances or command registration if the app exposes shortcuts in UI.
+- Suggest genres, instruments, moods, and production techniques as the user types.
+- Support keyboard navigation and mouse selection.
+- Rank suggestions by prefix/fuzzy relevance.
+- Keep the suggestion model usable from both the UI and agent-facing APIs.
 
 ## Acceptance Criteria
-- Pressing `Z` with a valid selection updates the visible timeline range to fit the selection with small padding.
-- Pressing `Shift+Z` fits the full project contents in view.
-- With no selection, `Z` uses a documented fallback and does not fail silently.
-- The action is reachable through the shared store/action API, not only DOM event handlers.
-- No regression to existing zoom gestures.
+- Typing in the prompt field opens relevant autocomplete suggestions.
+- Arrow keys + Enter can select a suggestion without leaving the keyboard.
+- Suggestions do not interfere with normal text editing or IME input.
+- Suggestion state is testable through accessible DOM and/or store state.
 
 ## Verification
-- `npx tsc --noEmit`
 - `npm run build`
-- Manual workflow: create clips across multiple bars, select a subset, press `Z`, verify the viewport fits the selection; press `Shift+Z`, verify the full arrangement fits again.
-- Agent workflow: trigger the same action through `window.__store` or the shared action layer and confirm viewport state changes.
+- Browser test: type partial prompt tokens such as `lof`, `warm`, or `analog` and verify suggestions appear and insert correctly.
+- Agent test: drive the prompt input through automation and confirm autocomplete options are discoverable via accessibility labels.
 
 
-You are on branch fix/issue-461. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #461'. Do NOT push.
+You are on branch fix/issue-479. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #479'. Do NOT push.

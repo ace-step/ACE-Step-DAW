@@ -102,6 +102,8 @@ interface ProjectState {
   addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
   removeTrack: (trackId: string) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
+  freezeTrack: (trackId: string) => void;
+  unfreezeTrack: (trackId: string) => void;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
@@ -566,6 +568,36 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return clonedTrack;
+  },
+
+  freezeTrack: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, frozen: true } : t,
+        ),
+      },
+    });
+  },
+
+  unfreezeTrack: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, frozen: false, frozenAudioKey: undefined } : t,
+        ),
+      },
+    });
   },
 
   updateTrack: (trackId, updates) => {

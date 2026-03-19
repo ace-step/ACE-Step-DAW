@@ -8,7 +8,7 @@ export interface Collaborator {
   joinedAt: number;
 }
 
-interface CollaborationState {
+export interface CollaborationState {
   /** Whether the current session is in read-only viewer mode. */
   isViewerMode: boolean;
   /** Whether a share dialog is currently open. */

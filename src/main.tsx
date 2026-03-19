@@ -14,7 +14,7 @@ import { projectActionApi } from './services/actionApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 
-// Expose stores globally for agent/automation access
+// Expose stores globally for agent/automation access (typed via src/globals.d.ts)
 // Agents can call: window.__store.getState() / window.__store.setState(...)
 (window as unknown as Record<string, unknown>).__store = useProjectStore;
 (window as unknown as Record<string, unknown>).__actionApi = projectActionApi;
@@ -36,11 +36,11 @@ import { getMidiCaptureService } from './services/midiCaptureService';
 
 // Expose DAW state summary for LLM agents
 // Agents can call: window.__dawSummary() for natural language, window.__dawStructure() for JSON
-(window as unknown as Record<string, unknown>).__dawSummary = () =>
+window.__dawSummary = () =>
   generateProjectSummary(useProjectStore.getState().project);
-(window as unknown as Record<string, unknown>).__dawStructure = () =>
+window.__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
-(window as unknown as Record<string, unknown>).__midiCaptureService = getMidiCaptureService();
+window.__midiCaptureService = getMidiCaptureService();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

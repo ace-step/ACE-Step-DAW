@@ -14,7 +14,7 @@ export interface SessionArrangementRecordEvent {
   endTime: number | null;
 }
 
-interface TransportState {
+export interface TransportState {
   isPlaying: boolean;
   isRecording: boolean;
   armedTrackIds: string[];

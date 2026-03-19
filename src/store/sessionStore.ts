@@ -16,7 +16,7 @@ export interface SessionRecordedEvent {
   timestamp: number;
 }
 
-interface SessionState {
+export interface SessionState {
   slots: SessionClipSlot[];
   scenes: SessionScene[];
   sceneCount: number;

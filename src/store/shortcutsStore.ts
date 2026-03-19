@@ -5,7 +5,7 @@ import { SHORTCUT_ACTIONS, SHORTCUT_ACTION_MAP } from '../constants/shortcutDefa
 import { SHORTCUT_PRESET_MAP } from '../constants/shortcutPresets';
 import { getUnsafeBrowserComboReason, parseShortcutBindings, serializeShortcutBindings } from '../utils/shortcutUtils';
 
-interface ShortcutsState {
+export interface ShortcutsState {
   /** User overrides keyed by actionId. Missing keys fall back to defaults. */
   overrides: ShortcutMap;
   /** The currently active preset id (for display purposes). */

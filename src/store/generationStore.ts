@@ -57,7 +57,7 @@ export interface VariationSession {
 
 const MAX_PROMPT_HISTORY = 50;
 
-interface GenerationState {
+export interface GenerationState {
   jobs: GenerationJob[];
   isGenerating: boolean;
   promptHistory: PromptHistoryEntry[];

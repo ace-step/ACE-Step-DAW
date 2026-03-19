@@ -1032,6 +1032,9 @@ export function PianoRollCanvas({
         xToBeat: (x: number) => number;
         pitchToY: (pitch: number) => number;
         yToPitch: (y: number) => number;
+        applyToolStroke: (points: Array<{ x: number; y: number }>) => void;
+        selectNoteAt: (x: number, y: number, additive?: boolean) => string | null;
+        eraseNoteAt: (x: number, y: number) => string | null;
         pixelsPerBeat: number;
         keyHeight: number;
         prScrollX: number;
@@ -1043,11 +1046,84 @@ export function PianoRollCanvas({
     };
     const containerHeight = containerRef.current?.getBoundingClientRect().height ?? 0;
 
+    const selectNoteAt = (x: number, y: number, additive = false) => {
+      const hit = findNoteAt(x, y);
+      if (!hit) {
+        if (!additive) {
+          setSelectedNoteIds(new Set());
+        }
+        return null;
+      }
+
+      setSelectedNoteIds((prev) => {
+        if (!additive) {
+          return new Set([hit.note.id]);
+        }
+        const next = new Set(prev);
+        next.add(hit.note.id);
+        return next;
+      });
+      return hit.note.id;
+    };
+
+    const eraseNoteAt = (x: number, y: number) => {
+      const hit = findNoteAt(x, y);
+      if (!hit) return null;
+      deleteNoteById(hit.note.id);
+      return hit.note.id;
+    };
+
+    const applyToolStroke = (points: Array<{ x: number; y: number }>) => {
+      if (points.length === 0) return;
+
+      toolStrokeRef.current = { noteIds: new Set(), cells: new Set() };
+
+      if (activeTool === 'select') {
+        selectNoteAt(points[0].x, points[0].y, false);
+        return;
+      }
+
+      if (activeTool === 'erase') {
+        for (const point of points) {
+          const hit = findNoteAt(point.x, point.y);
+          if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
+            toolStrokeRef.current.noteIds.add(hit.note.id);
+            deleteNoteById(hit.note.id);
+          }
+        }
+        return;
+      }
+
+      if (activeTool === 'paint') {
+        points.forEach((point, index) => {
+          const pitch = yToPitch(point.y);
+          if (pitch < 0 || pitch > MIDI_MAX_NOTE) return;
+
+          const beat = Math.max(0, snapBeat(xToBeat(point.x), false));
+          const cellKey = getCellKey(beat, pitch);
+          const hit = findNoteAt(point.x, point.y);
+          if (hit || toolStrokeRef.current.cells.has(cellKey)) return;
+
+          const newNote = createNoteAt(point.x, point.y, { select: index === 0 });
+          if (!newNote) return;
+          toolStrokeRef.current.noteIds.add(newNote.id);
+          toolStrokeRef.current.cells.add(cellKey);
+        });
+        return;
+      }
+
+      const firstPoint = points[0];
+      createNoteAt(firstPoint.x, firstPoint.y, { isSlide: activeTool === 'slide' });
+    };
+
     globalWindow.__pianoRollHelpers = {
       beatToX,
       xToBeat,
       pitchToY,
       yToPitch,
+      applyToolStroke,
+      selectNoteAt,
+      eraseNoteAt,
       pixelsPerBeat,
       keyHeight,
       prScrollX,
@@ -1060,7 +1136,23 @@ export function PianoRollCanvas({
     return () => {
       delete globalWindow.__pianoRollHelpers;
     };
-  }, [activeTool, beatToX, keyHeight, pitchToY, pixelsPerBeat, prScrollX, prScrollY, xToBeat, yToPitch]);
+  }, [
+    activeTool,
+    beatToX,
+    createNoteAt,
+    deleteNoteById,
+    findNoteAt,
+    getCellKey,
+    keyHeight,
+    pitchToY,
+    pixelsPerBeat,
+    prScrollX,
+    prScrollY,
+    setSelectedNoteIds,
+    snapBeat,
+    xToBeat,
+    yToPitch,
+  ]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">

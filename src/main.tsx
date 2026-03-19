@@ -14,9 +14,26 @@ import { projectActionApi } from './services/actionApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 
+const agentProjectStore = {
+  getState: () => ({
+    ...useProjectStore.getState(),
+    activePianoRollTool: useUIStore.getState().activePianoRollTool,
+    setActivePianoRollTool: useUIStore.getState().setActivePianoRollTool,
+    togglePianoRollPencilTool: useUIStore.getState().togglePianoRollPencilTool,
+  }),
+  setState: useProjectStore.setState,
+  subscribe: useProjectStore.subscribe,
+  getInitialState: () => ({
+    ...useProjectStore.getInitialState(),
+    activePianoRollTool: useUIStore.getInitialState().activePianoRollTool,
+    setActivePianoRollTool: useUIStore.getInitialState().setActivePianoRollTool,
+    togglePianoRollPencilTool: useUIStore.getInitialState().togglePianoRollPencilTool,
+  }),
+};
+
 // Expose stores globally for agent/automation access (typed via src/globals.d.ts)
 // Agents can call: window.__store.getState() / window.__store.setState(...)
-(window as unknown as Record<string, unknown>).__store = useProjectStore;
+(window as unknown as Record<string, unknown>).__store = agentProjectStore;
 (window as unknown as Record<string, unknown>).__actionApi = projectActionApi;
 (window as unknown as Record<string, unknown>).__uiStore = useUIStore;
 (window as unknown as Record<string, unknown>).__assistantStore = useUIStore;

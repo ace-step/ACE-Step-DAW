@@ -49,32 +49,35 @@ You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 - This may happen multiple times. Each round, fix all issues and pass quality gates.
 - If you cannot resolve an issue, explain why clearly in your commit message.
 ---
-IMPLEMENT ISSUE #382: feat: add playback latency calibration and manual override
+IMPLEMENT ISSUE #463: feat: add chord stamp workflow in the piano roll
 ## User Story
-As a user, I want ACE-Step DAW to detect and expose playback latency automatically, so that timing feels accurate on my device without manual guesswork.
+As a user, I want to place common chord shapes with a quick stamp gesture in the piano roll, so that I can sketch harmony faster than drawing each note manually.
 
 ## Source
-- `docs/design/UX_IMPROVEMENT_CHECKLIST.md`
-- Section: `P0 — Critical (Must Ship) > Core Audio & Transport`
-- Checklist item: `Latency calibration`
+Unchecked item from `docs/design/UX_IMPROVEMENT_CHECKLIST.md`:
+- Piano Roll
+- Chord stamp
 
 ## Problem
-The app does not yet auto-detect output latency from the Web Audio stack or expose a manual correction path. That creates timing drift between what users hear and what they see, especially across different audio devices and browsers.
+The checklist defines a chord stamping workflow, including common chord types and a fast placement gesture, but there is no tracked feature issue for implementation.
 
 ## Scope
-- Detect `audioContext.outputLatency` and `audioContext.baseLatency` on first use when available
-- Surface detected latency in settings UI
-- Allow manual override when browser-reported values are missing or inaccurate
-- Persist the chosen latency value
-- Make the value available to playback and visual compensation systems
+- Add a chord stamp mode or gesture based on the checklist (`Shift` + click).
+- Support at least common chord shapes such as major, minor, seventh, and diminished.
+- Insert stamped notes through a shared piano-roll action path so the feature is agent-usable.
+- Define how stamped note length and inversion/default voicing are chosen.
 
 ## Acceptance Criteria
-- On first audio-enabled session, the DAW captures available latency values
-- Settings displays detected latency in milliseconds
-- Users can manually override the value and save it
-- Reloading restores the saved override
-- Playback systems can consume a single normalized latency setting
-- Missing browser support degrades gracefully with a clear fallback state
+- Holding `Shift` and clicking in the piano roll places the active chord shape at the target root note.
+- Supported chord presets include at least maj, min, 7th, and dim.
+- The resulting notes appear as a single undoable action.
+- The same insertion path is reachable through store actions for agent automation.
+
+## Verification
+- `npx tsc --noEmit`
+- `npm run build`
+- Manual workflow: select a chord type, `Shift`+click different root notes, verify correct pitch sets are inserted.
+- Agent workflow: invoke the shared chord insertion action and confirm matching notes appear in the clip.
 
 
-You are on branch fix/issue-382. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #382'. Do NOT push.
+You are on branch fix/issue-463. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #463'. Do NOT push.

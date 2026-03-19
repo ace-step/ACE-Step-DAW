@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { chordPitches, pitchToNoteName, CHORD_SHAPES } from '../../src/utils/chords';
 import { useProjectStore } from '../../src/store/projectStore';
+import { useUIStore } from '../../src/store/uiStore';
 
 describe('chords', () => {
   describe('chordPitches', () => {
@@ -69,6 +70,91 @@ describe('chords', () => {
       useProjectStore.getState().undo();
 
       expect(useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes).toHaveLength(0);
+    });
+
+    it('does not push history when every generated pitch is out of range', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+
+      const before = useProjectStore.getState().getUndoHistory('pianoRoll', { clipId: clip.id }).length;
+      const noteIds = useProjectStore.getState().stampChord(clip.id, 128, [0, 4, 7], 0, 1);
+
+      expect(noteIds).toEqual([]);
+      expect(useProjectStore.getState().getUndoHistory('pianoRoll', { clipId: clip.id })).toHaveLength(before);
+      expect(useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes).toHaveLength(0);
+    });
+  });
+
+  describe('activeChordShape (UI store)', () => {
+    it('defaults to "maj"', () => {
+      expect(useUIStore.getState().activeChordShape).toBe('maj');
+    });
+
+    it('can be changed via setActiveChordShape', () => {
+      useUIStore.getState().setActiveChordShape('min');
+      expect(useUIStore.getState().activeChordShape).toBe('min');
+
+      useUIStore.getState().setActiveChordShape('7');
+      expect(useUIStore.getState().activeChordShape).toBe('7');
+    });
+
+    it('clamps invalid chord shapes back to the default abbreviation', () => {
+      useUIStore.getState().setActiveChordShape('invalid-shape');
+      expect(useUIStore.getState().activeChordShape).toBe('maj');
+    });
+  });
+
+  describe('stampChord with chord shape integration', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('stamps a diminished chord', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+      const dim = CHORD_SHAPES.find((s) => s.abbr === 'dim')!;
+
+      const noteIds = useProjectStore.getState().stampChord(
+        clip.id, 60, dim.intervals, 2, 0.5, 80
+      );
+
+      expect(noteIds).toHaveLength(3);
+      const notes = useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes;
+      expect(notes.map((n) => n.pitch).sort()).toEqual([60, 63, 66]);
+      expect(notes.every((n) => n.startBeat === 2)).toBe(true);
+      expect(notes.every((n) => n.durationBeats === 0.5)).toBe(true);
+      expect(notes.every((n) => n.velocity === 80)).toBe(true);
+    });
+
+    it('stamps a 7th chord (4 notes)', () => {
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+      const dom7 = CHORD_SHAPES.find((s) => s.abbr === '7')!;
+
+      const noteIds = useProjectStore.getState().stampChord(
+        clip.id, 60, dom7.intervals, 0, 1
+      );
+
+      expect(noteIds).toHaveLength(4);
+      const notes = useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes;
+      expect(notes.map((n) => n.pitch).sort()).toEqual([60, 64, 67, 70]);
+    });
+
+    it('uses activeChordShape from UI store to look up intervals', () => {
+      useUIStore.getState().setActiveChordShape('min');
+      const abbr = useUIStore.getState().activeChordShape;
+      const shape = CHORD_SHAPES.find((s) => s.abbr === abbr)!;
+
+      const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+      const clip = useProjectStore.getState().ensureMidiClip(track.id);
+
+      const noteIds = useProjectStore.getState().stampChord(
+        clip.id, 60, shape.intervals, 0, 1
+      );
+
+      expect(noteIds).toHaveLength(3);
+      const notes = useProjectStore.getState().project!.tracks[0].clips[0].midiData!.notes;
+      expect(notes.map((n) => n.pitch).sort()).toEqual([60, 63, 67]);
     });
   });
 });

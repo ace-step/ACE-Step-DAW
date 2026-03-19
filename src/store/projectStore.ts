@@ -4657,19 +4657,20 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (_isViewerMode()) return [];
     if (!state.project) return [];
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Stamp chord', clipId });
     const newNotes: MidiNote[] = intervals
       .map((interval) => rootPitch + interval)
       .filter((pitch) => pitch >= 0 && pitch <= 127)
       .map((pitch) => ({
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         pitch,
         startBeat,
         durationBeats,
         velocity,
       }));
+
     if (newNotes.length === 0) return [];
 
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Stamp chord', clipId });
     set({ project: _appendMidiNotesToClip(state.project, clipId, newNotes) });
     return newNotes.map((note) => note.id);
   },

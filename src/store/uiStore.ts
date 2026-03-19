@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AIChatMessage } from '../types/aiAssistant';
 import type { InlineSuggestion } from '../types/suggestions';
 import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
-import { DEFAULT_CHORD_SHAPE_ABBR } from '../utils/chords';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
@@ -11,6 +10,7 @@ import type { AIChatContext } from '../utils/aiAssistantContext';
 import { buildAssistantContext } from '../utils/aiAssistantContext';
 import { getAssistantSuggestions, streamAssistantResponse } from '../services/aiAssistantService';
 import type { ShortcutContext } from '../types/shortcuts';
+import { CHORD_SHAPES } from '../utils/chords';
 import {
   buildCommandPaletteCommands,
   buildCommandPaletteRegistry,
@@ -27,6 +27,17 @@ function createAssistantMessage(role: AIChatMessage['role'], content: string): A
     content,
     timestamp: Date.now(),
   };
+}
+
+export type PianoRollChordShape = (typeof CHORD_SHAPES)[number]['abbr'];
+
+const DEFAULT_PIANO_ROLL_CHORD_SHAPE: PianoRollChordShape = 'maj';
+const VALID_PIANO_ROLL_CHORD_SHAPES = new Set<string>(CHORD_SHAPES.map((shape) => shape.abbr));
+
+function clampPianoRollChordShape(abbr: string): PianoRollChordShape {
+  return VALID_PIANO_ROLL_CHORD_SHAPES.has(abbr)
+    ? (abbr as PianoRollChordShape)
+    : DEFAULT_PIANO_ROLL_CHORD_SHAPE;
 }
 
 export interface UIState {
@@ -78,7 +89,8 @@ export interface UIState {
   openPianoRollClipId: string | null;
   selectedPianoRollNoteIds: string[];
   activePianoRollTool: PianoRollTool;
-  activePianoRollChordShape: string;
+  /** Abbreviation of the currently selected chord shape for chord stamp (e.g. 'maj', 'min', '7', 'dim'). */
+  activeChordShape: PianoRollChordShape;
   openEffectChainTrackId: string | null;
   openMidiEffectChainTrackId: string | null;
   drumMachineEditorHeight: number;
@@ -196,7 +208,7 @@ export interface UIState {
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
-  setActivePianoRollChordShape: (shape: string) => void;
+  setActiveChordShape: (abbr: PianoRollChordShape | string) => void;
   togglePianoRollPencilTool: () => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
   setOpenMidiEffectChainTrackId: (id: string | null) => void;
@@ -362,7 +374,7 @@ export const useUIStore = create<UIState>()(
   openPianoRollClipId: null,
   selectedPianoRollNoteIds: [],
   activePianoRollTool: 'select',
-  activePianoRollChordShape: DEFAULT_CHORD_SHAPE_ABBR,
+  activeChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   openEffectChainTrackId: null,
   openMidiEffectChainTrackId: null,
   drumMachineEditorHeight: 400,
@@ -577,7 +589,7 @@ export const useUIStore = create<UIState>()(
   })),
   setSelectedPianoRollNoteIds: (noteIds) => set({ selectedPianoRollNoteIds: [...noteIds] }),
   setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
-  setActivePianoRollChordShape: (shape) => set({ activePianoRollChordShape: shape }),
+  setActiveChordShape: (abbr) => set({ activeChordShape: clampPianoRollChordShape(abbr) }),
   togglePianoRollPencilTool: () => set((state) => ({
     activePianoRollTool: state.activePianoRollTool === 'pencil' ? 'select' : 'pencil',
   })),
@@ -774,7 +786,7 @@ export const useUIStore = create<UIState>()(
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
-        activePianoRollChordShape: state.activePianoRollChordShape,
+        activeChordShape: state.activeChordShape,
         // Panel sizes
         mixerHeight: state.mixerHeight,
         drumMachineEditorHeight: state.drumMachineEditorHeight,

@@ -705,14 +705,17 @@ export function PianoRollCanvas({
       setSelectedNoteIds(new Set());
     },
     [
+      activeChordShape,
       activeTool,
       beatToX,
       beginDrag,
+      clip.id,
       createNoteAt,
       deleteNoteById,
       findNoteAt,
       findVelocityLaneNoteAt,
       getCellKey,
+      gridBeats,
       notes,
       previewEnabled,
       previewNoteAtPitch,
@@ -720,6 +723,7 @@ export function PianoRollCanvas({
       stampChordAt,
       updateMidiNote,
       velocityHeight,
+      xToBeat,
       yToPitch,
     ],
   );

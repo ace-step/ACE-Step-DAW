@@ -294,6 +294,7 @@ interface ProjectState {
     rootNote?: number;
     trackId?: string;
   }) => Track | undefined;
+  createQuickSamplerFromClip: (trackId: string, clipId: string) => Track | undefined;
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
@@ -1626,12 +1627,12 @@ export const useProjectStore = create<ProjectState>()(
       'keyboard',
       'pianoRoll',
       {
-        displayName: input.sampleName || 'Quick Sampler',
         synthPreset: 'sampler',
         sampler,
         samplerConfig,
       },
     );
+    track.displayName = input.sampleName || 'Quick Sampler';
 
     const newTracks = [...state.project.tracks, track];
     set({
@@ -1643,6 +1644,29 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return track;
+  },
+
+  createQuickSamplerFromClip: (trackId, clipId) => {
+    const state = get();
+    if (!state.project) return undefined;
+
+    const sourceTrack = state.project.tracks.find((t) => t.id === trackId);
+    if (!sourceTrack) return undefined;
+
+    const clip = sourceTrack.clips.find((c) => c.id === clipId);
+    if (!clip) return undefined;
+
+    const audioKey = clip.isolatedAudioKey ?? clip.cumulativeMixKey;
+    if (!audioKey) return undefined;
+
+    const sampleDuration = clip.audioDuration ?? clip.duration;
+    const sampleName = clip.prompt?.replace(/^Imported:\s*/, '') || sourceTrack.displayName;
+
+    return get().createQuickSamplerTrack({
+      audioKey,
+      sampleName,
+      sampleDuration,
+    });
   },
 
   deleteTrackPreset: (presetId) => {

@@ -84,7 +84,7 @@ export function Timeline() {
   const [normalDrag, setNormalDrag] = useState<DragRect | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const dragCounterRef = useRef(0);
-  const { importMultipleFiles, importLoopToTrack, importAssetToTrack } = useAudioImport();
+  const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     const types = e.dataTransfer.types;
@@ -124,19 +124,25 @@ export function Timeline() {
       return;
     }
 
-    // Handle asset drop -> create new sample track
+    // Handle asset drop -> create Quick Sampler track
     const assetId = e.dataTransfer.getData('application/x-asset-id');
     if (assetId) {
-      const newTrack = addTrack('custom', 'sample');
-      await importAssetToTrack(assetId, newTrack.id, 0);
+      await importAssetAsQuickSampler(assetId);
       return;
     }
 
+    // Audio files -> Quick Sampler, MIDI files -> piano roll tracks
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      await importMultipleFiles(files);
+      for (const file of Array.from(files)) {
+        if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
+          await importAudioFileAsNewQuickSampler(file);
+        } else if (/\.(mid|midi)$/i.test(file.name)) {
+          await importMultipleFiles([file]);
+        }
+      }
     }
-  }, [addTrack, importMultipleFiles, importLoopToTrack, importAssetToTrack]);
+  }, [addTrack, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
 
   // Safety net: if a child (e.g. TrackLane) stops propagation on drop,
   // the Timeline's own handleDrop never fires. Listen globally to clear the overlay.

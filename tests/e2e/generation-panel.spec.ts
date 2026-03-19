@@ -14,8 +14,14 @@ test.describe('Generation Panel', () => {
             setShowGenerationPanel: (value: boolean) => void;
           };
         };
+        __uiStore: {
+          getState: () => {
+            skipOnboarding: () => void;
+          };
+        };
       };
 
+      browserWindow.__uiStore.getState().skipOnboarding();
       browserWindow.__store.getState().createProject({
         name: 'Generation Panel Test',
         bpm: 128,
@@ -35,12 +41,10 @@ test.describe('Generation Panel', () => {
     await page.getByRole('combobox', { name: 'Generation key' }).selectOption('G minor');
     await page.getByRole('spinbutton', { name: 'Generation BPM' }).fill('140');
     await page.getByRole('spinbutton', { name: 'Generation length' }).fill('48');
-    await page.getByTestId('generation-temperature-slider').evaluate((node, value) => {
-      const input = node as HTMLInputElement;
-      input.value = String(value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }, '0.45');
+    await page.getByTestId('generation-temperature-slider').focus();
+    for (let index = 0; index < 5; index += 1) {
+      await page.keyboard.press('ArrowLeft');
+    }
     await page.getByRole('combobox', { name: 'Generation variation count' }).selectOption('4');
     await page.getByTestId('generation-generate-btn').click();
 

@@ -5,6 +5,8 @@ TOOL=${2:-"codex"}
 REPO="ace-step/ACE-Step-DAW"
 DAW="/Users/junmingong/.openclaw/workspace/acestep-daw"
 WT="/tmp/daw-worktrees/agent-$ISSUE_NUM"
+LOCKDIR="/tmp/daw-claude-launch.lock"
+MAX_CLAUDE=3
 
 # Skip if already running — check for active run-agent.sh process for this exact issue
 if pgrep -f "run-agent.sh.*/tmp/daw-worktrees/agent-$ISSUE_NUM " > /dev/null 2>&1; then
@@ -12,22 +14,44 @@ if pgrep -f "run-agent.sh.*/tmp/daw-worktrees/agent-$ISSUE_NUM " > /dev/null 2>&
   exit 0
 fi
 
-# Get issue info (with timeout)
-# Concurrent limit: max 4 Claude at once (MAX plan limit)
-if [ "$TOOL" = "claude" ]; then
-  CC_COUNT=$(ps aux | grep "claude.*print" | grep -v grep | wc -l | tr -d " ")
-  if [ "$CC_COUNT" -ge 4 ]; then
-    echo "WARN: Claude at capacity ($CC_COUNT), using Codex for #$ISSUE_NUM" >> /tmp/pm-activity.log
-    TOOL="codex"
-  fi
-fi
+# Count ALL running Claude Code CLI processes (match multiple invocation patterns)
+count_claude() {
+  ps aux | grep -E "claude.*(--print|bypassPermissions|dangerously)" | grep -v grep | wc -l | tr -d " "
+}
 
-# Auth check: if Claude requested but auth fails, fallback to Codex
+# Concurrent limit with mkdir-based lock (macOS compatible, atomic)
+acquire_lock() {
+  local attempts=0
+  while [ $attempts -lt 15 ]; do
+    if mkdir "$LOCKDIR" 2>/dev/null; then
+      trap 'rmdir "$LOCKDIR" 2>/dev/null' EXIT
+      return 0
+    fi
+    sleep 2
+    attempts=$((attempts + 1))
+  done
+  return 1
+}
+
 if [ "$TOOL" = "claude" ]; then
-  AUTH_TEST=$(~/.local/bin/claude --print -p "ok" 2>&1 | head -1)
-  if echo "$AUTH_TEST" | grep -qi "403\|forbidden\|authenticate"; then
-    echo "WARN: Claude auth failed, falling back to Codex for #$ISSUE_NUM" >> /tmp/pm-activity.log
+  if ! acquire_lock; then
+    echo "WARN: Could not acquire Claude launch lock for #$ISSUE_NUM, using Codex" >> /tmp/pm-activity.log
     TOOL="codex"
+  else
+    CC_COUNT=$(count_claude)
+    if [ "$CC_COUNT" -ge "$MAX_CLAUDE" ]; then
+      echo "WARN: Claude at capacity ($CC_COUNT/$MAX_CLAUDE), using Codex for #$ISSUE_NUM" >> /tmp/pm-activity.log
+      TOOL="codex"
+    else
+      # Stagger launches: wait 3s between Claude starts to let Anthropic register sessions
+      sleep 3
+      # Re-check after sleep (another launch-dev.sh may have started one)
+      CC_COUNT=$(count_claude)
+      if [ "$CC_COUNT" -ge "$MAX_CLAUDE" ]; then
+        echo "WARN: Claude filled during wait ($CC_COUNT/$MAX_CLAUDE), using Codex for #$ISSUE_NUM" >> /tmp/pm-activity.log
+        TOOL="codex"
+      fi
+    fi
   fi
 fi
 
@@ -63,7 +87,26 @@ PROMPT=$(cat "$WT/agent-prompt.txt")
 if [ "$TOOL" = "codex" ]; then
   codex exec -C "$WT" -s danger-full-access "$PROMPT"
 else
-  ~/.local/bin/claude --print --permission-mode bypassPermissions --fallback-model sonnet "$PROMPT"
+  # Retry loop: if Claude returns 403, wait and retry up to 3 times
+  MAX_RETRIES=3
+  RETRY=0
+  while [ $RETRY -lt $MAX_RETRIES ]; do
+    OUTPUT=$(~/.local/bin/claude --print --permission-mode bypassPermissions --fallback-model sonnet "$PROMPT" 2>&1)
+    EXIT_CODE=$?
+    if echo "$OUTPUT" | grep -qi "403.*forbidden\|Request not allowed\|authentication_failed"; then
+      RETRY=$((RETRY + 1))
+      WAIT=$((RETRY * 15))
+      echo "[$(date)] Claude 403 for #$ISSUE, retry $RETRY/$MAX_RETRIES in ${WAIT}s" >> /tmp/pm-activity.log
+      sleep $WAIT
+    else
+      echo "$OUTPUT"
+      break
+    fi
+  done
+  if [ $RETRY -ge $MAX_RETRIES ]; then
+    echo "[$(date)] Claude failed $MAX_RETRIES times for #$ISSUE, falling back to Codex" >> /tmp/pm-activity.log
+    codex exec -C "$WT" -s danger-full-access "$PROMPT"
+  fi
 fi
 
 # Post-agent: verify + rebase + push + PR

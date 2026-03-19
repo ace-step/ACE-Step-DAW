@@ -28,6 +28,7 @@ import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
 import { EffectChain } from '../mixer/EffectChain';
 import { ToastContainer } from '../ui/Toast';
+import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -39,6 +40,7 @@ export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const [audioResumed, setAudioResumed] = useState(false);
 
   const handleClick = useCallback(async () => {
@@ -82,7 +84,7 @@ export function AppShell() {
       )}
       <Toolbar />
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0" onMouseDownCapture={() => setHistoryFocusScope('arrangement')}>
         {project && <TrackList />}
         <Timeline />
         {project && <LoopBrowser />}
@@ -97,6 +99,7 @@ export function AppShell() {
       {project && <GenerationPanel />}
       <StatusBar />
       <ToastContainer />
+      <UndoHistoryPanel />
 
       {/* Modals */}
       <NewProjectDialog />

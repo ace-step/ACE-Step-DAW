@@ -18,6 +18,7 @@ export function SequencerEditor() {
   const editorHeight = useUIStore((s) => s.sequencerEditorHeight);
   const setEditorHeight = useUIStore((s) => s.setSequencerEditorHeight);
   const closeEditor = useUIStore((s) => s.setOpenSequencerTrackId);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
 
   const project = useProjectStore((s) => s.project);
   const track = useMemo(() => project?.tracks.find((t) => t.id === trackId) ?? null, [project, trackId]);
@@ -394,7 +395,13 @@ export function SequencerEditor() {
   };
 
   return (
-    <div className="flex flex-col select-none" style={{ height: editorHeight, background: FL.bg }} tabIndex={-1}>
+    <div
+      className="flex flex-col select-none"
+      style={{ height: editorHeight, background: FL.bg }}
+      tabIndex={-1}
+      onMouseDownCapture={() => setHistoryFocusScope('track')}
+      onFocusCapture={() => setHistoryFocusScope('track')}
+    >
       <div className="h-1 cursor-ns-resize shrink-0" style={{ background: FL.headerBg }} onMouseDown={onResizeStart}>
         <div className="mx-auto mt-px" style={{ width: 40, height: 2, borderRadius: 1, background: FL.borderLight }} />
       </div>

@@ -48,6 +48,7 @@ export function PianoRoll() {
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -177,6 +178,8 @@ export function PianoRoll() {
     <div
       className="border-t border-[#1a1a1a] bg-[#0a0a1e] flex flex-col select-none shrink-0"
       style={{ height: pianoRollHeight }}
+      onMouseDownCapture={() => setHistoryFocusScope('pianoRoll')}
+      onFocusCapture={() => setHistoryFocusScope('pianoRoll')}
     >
       <div
         aria-label="Resize piano roll"

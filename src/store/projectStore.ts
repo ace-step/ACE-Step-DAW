@@ -110,28 +110,128 @@ const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, 
 const TIMELINE_PADDING = 10; // seconds beyond last clip
 
 // ── Undo/Redo history ───────────────────────────────────────────────────────
+export type HistoryScope = 'arrangement' | 'track' | 'pianoRoll' | 'mixer';
+
+export interface ProjectHistoryEntry {
+  id: string;
+  label: string;
+  scope: HistoryScope;
+  timestamp: number;
+  order: number;
+  trackId?: string;
+  clipId?: string;
+  snapshot: Project;
+}
+
+type HistoryBuckets<T> = Record<HistoryScope, T>;
+type HistoryOptions = Partial<Pick<ProjectHistoryEntry, 'label' | 'scope' | 'trackId' | 'clipId'>>;
+
+const HISTORY_SCOPES: HistoryScope[] = ['arrangement', 'track', 'pianoRoll', 'mixer'];
+const DEFAULT_HISTORY_LABEL: Record<HistoryScope, string> = {
+  arrangement: 'Arrange project',
+  track: 'Edit track',
+  pianoRoll: 'Edit MIDI',
+  mixer: 'Adjust mixer',
+};
+const MIXER_TRACK_KEYS = new Set(['volume', 'muted', 'soloed', 'pan', 'eqLowGain', 'eqMidGain', 'eqHighGain', 'compressorEnabled', 'compressorThreshold', 'compressorRatio']);
+
+function getTrackUpdateHistoryOptions(trackId: string, updates: Partial<Track>): HistoryOptions {
+  const keys = Object.keys(updates);
+  const scope: HistoryScope = keys.some((key) => MIXER_TRACK_KEYS.has(key)) ? 'mixer' : 'track';
+  const label =
+    scope === 'mixer'
+      ? 'Adjust channel strip'
+      : keys.includes('displayName')
+        ? 'Rename track'
+        : keys.includes('synthPreset') || keys.includes('sampler') || keys.includes('samplerConfig')
+          ? 'Configure instrument'
+          : 'Edit track';
+  return { scope, label, trackId };
+}
+
+function createHistoryBuckets<T>(factory: () => T): HistoryBuckets<T> {
+  return {
+    arrangement: factory(),
+    track: factory(),
+    pianoRoll: factory(),
+    mixer: factory(),
+  };
+}
+
 // Module-level, not persisted, not reactive (no point in re-rendering for history changes)
-const _history: Project[] = [];
-const _future: Project[] = [];
+const _history = createHistoryBuckets<ProjectHistoryEntry[]>(() => []);
+const _future = createHistoryBuckets<ProjectHistoryEntry[]>(() => []);
 const MAX_HISTORY = 50;
 let _isDragging = false;
+let _historyOrder = 0;
 
-function _pushHistory(project: Project | null) {
+function _trimHistory(scope: HistoryScope) {
+  if (_history[scope].length > MAX_HISTORY) _history[scope].shift();
+}
+
+function _createHistoryEntry(project: Project, options: HistoryOptions = {}): ProjectHistoryEntry {
+  const scope = options.scope ?? 'arrangement';
+  return {
+    id: uuidv4(),
+    label: options.label ?? DEFAULT_HISTORY_LABEL[scope],
+    scope,
+    timestamp: Date.now(),
+    order: ++_historyOrder,
+    trackId: options.trackId,
+    clipId: options.clipId,
+    snapshot: structuredClone(project),
+  };
+}
+
+function _clearHistory() {
+  for (const scope of HISTORY_SCOPES) {
+    _history[scope].length = 0;
+    _future[scope].length = 0;
+  }
+}
+
+function _resolveHistoryScope(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope?: HistoryScope): HistoryScope | null {
+  if (scope) return buckets[scope].length > 0 ? scope : null;
+  let candidate: HistoryScope | null = null;
+  let latestOrder = -1;
+  for (const key of HISTORY_SCOPES) {
+    const entry = buckets[key][buckets[key].length - 1];
+    if (entry && entry.order > latestOrder) {
+      latestOrder = entry.order;
+      candidate = key;
+    }
+  }
+  return candidate;
+}
+
+function _getHistoryEntries(buckets: HistoryBuckets<ProjectHistoryEntry[]>, scope?: HistoryScope) {
+  if (scope) {
+    return buckets[scope].map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
+  }
+  return HISTORY_SCOPES
+    .flatMap((key) => buckets[key])
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => ({ ...entry, snapshot: structuredClone(entry.snapshot) }));
+}
+
+function _pushHistory(project: Project | null, options: HistoryOptions = {}) {
   if (!project) return;
   // During drag operations, history is already captured by beginDrag — skip intermediate states
   if (_isDragging) return;
-  _history.push(structuredClone(project));
-  if (_history.length > MAX_HISTORY) _history.shift();
-  _future.length = 0;
+  const entry = _createHistoryEntry(project, options);
+  _history[entry.scope].push(entry);
+  _trimHistory(entry.scope);
+  _future[entry.scope].length = 0;
 }
 
 /** Call before starting a drag/continuous operation. Captures undo snapshot once. */
-function _beginDrag(project: Project | null) {
+function _beginDrag(project: Project | null, options: HistoryOptions = {}) {
   if (!project || _isDragging) return;
   _isDragging = true;
-  _history.push(structuredClone(project));
-  if (_history.length > MAX_HISTORY) _history.shift();
-  _future.length = 0;
+  const entry = _createHistoryEntry(project, options);
+  _history[entry.scope].push(entry);
+  _trimHistory(entry.scope);
+  _future[entry.scope].length = 0;
 }
 
 /** Call when drag/continuous operation ends. Re-enables normal history tracking. */
@@ -149,8 +249,11 @@ interface ProjectState {
     keyScale?: string;
     timeSignature?: number;
   }) => void;
-  undo: () => void;
-  redo: () => void;
+  undo: (scope?: HistoryScope) => void;
+  redo: (scope?: HistoryScope) => void;
+  getUndoHistory: (scope?: HistoryScope) => ProjectHistoryEntry[];
+  getRedoHistory: (scope?: HistoryScope) => ProjectHistoryEntry[];
+  jumpToHistoryEntry: (entryId: string, scope?: HistoryScope) => void;
   /** Call before starting a drag/continuous operation to capture a single undo snapshot. */
   beginDrag: () => void;
   /** Call when a drag/continuous operation ends to re-enable normal history. */
@@ -788,8 +891,7 @@ export const useProjectStore = create<ProjectState>()(
   project: null,
 
   setProject: (project) => {
-    _history.length = 0;
-    _future.length = 0;
+    _clearHistory();
     // Migration: backfill trackType for projects created before the field existed
     const migrated: Project = {
       ...project,
@@ -809,20 +911,74 @@ export const useProjectStore = create<ProjectState>()(
     set({ project: migrated });
   },
 
-  undo: () => {
+  undo: (scope) => {
     const state = get();
-    if (_history.length === 0) return;
-    if (state.project) _future.push(structuredClone(state.project));
-    const prev = _history.pop()!;
-    set({ project: prev });
+    const resolvedScope = _resolveHistoryScope(_history, scope);
+    if (!resolvedScope) return;
+    const prev = _history[resolvedScope].pop()!;
+    if (state.project) {
+      _future[resolvedScope].push({
+        ...prev,
+        id: uuidv4(),
+        timestamp: Date.now(),
+        order: ++_historyOrder,
+        snapshot: structuredClone(state.project),
+      });
+    }
+    set({ project: structuredClone(prev.snapshot) });
   },
 
-  redo: () => {
+  redo: (scope) => {
     const state = get();
-    if (_future.length === 0) return;
-    if (state.project) _history.push(structuredClone(state.project));
-    const next = _future.pop()!;
-    set({ project: next });
+    const resolvedScope = _resolveHistoryScope(_future, scope);
+    if (!resolvedScope) return;
+    const next = _future[resolvedScope].pop()!;
+    if (state.project) {
+      _history[resolvedScope].push({
+        ...next,
+        id: uuidv4(),
+        timestamp: Date.now(),
+        order: ++_historyOrder,
+        snapshot: structuredClone(state.project),
+      });
+      _trimHistory(resolvedScope);
+    }
+    set({ project: structuredClone(next.snapshot) });
+  },
+
+  getUndoHistory: (scope) => _getHistoryEntries(_history, scope),
+
+  getRedoHistory: (scope) => _getHistoryEntries(_future, scope),
+
+  jumpToHistoryEntry: (entryId, scope) => {
+    const state = get();
+    const resolvedScope = scope ?? HISTORY_SCOPES.find((candidate) => _history[candidate].some((entry) => entry.id === entryId));
+    if (!resolvedScope) return;
+    const stack = _history[resolvedScope];
+    const idx = stack.findIndex((entry) => entry.id === entryId);
+    if (idx === -1) return;
+
+    const target = stack[idx];
+    if (state.project) {
+      _future[resolvedScope].push({
+        ...target,
+        id: uuidv4(),
+        timestamp: Date.now(),
+        order: ++_historyOrder,
+        snapshot: structuredClone(state.project),
+      });
+    }
+    for (let pointer = stack.length - 1; pointer > idx; pointer -= 1) {
+      const entry = stack[pointer];
+      _future[resolvedScope].push({
+        ...entry,
+        id: uuidv4(),
+        timestamp: Date.now(),
+        order: ++_historyOrder,
+      });
+    }
+    stack.splice(idx);
+    set({ project: structuredClone(target.snapshot) });
   },
 
   beginDrag: () => {
@@ -835,6 +991,7 @@ export const useProjectStore = create<ProjectState>()(
   },
 
   createProject: (params) => {
+    _clearHistory();
     const bpm = params?.bpm ?? DEFAULT_BPM;
     const timeSig = params?.timeSignature ?? DEFAULT_TIME_SIGNATURE;
     const measures = DEFAULT_MEASURES;
@@ -860,7 +1017,7 @@ export const useProjectStore = create<ProjectState>()(
   updateProject: (updates) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Update project settings' });
     const merged = { ...state.project, ...updates, updatedAt: Date.now() };
     // Recompute totalDuration when measures/bpm/timeSignature change
     if ('measures' in updates || 'bpm' in updates || 'timeSignature' in updates) {
@@ -899,7 +1056,7 @@ export const useProjectStore = create<ProjectState>()(
     const chain = buildMasteringChain(analysis, latestMastering.preset, latestMastering.loudnessTarget);
     const outputLufs = estimateMasteredLufs(analysis, chain);
 
-    _pushHistory(latestState.project);
+    _pushHistory(latestState.project, { scope: 'mixer', label: 'Analyze mastering' });
     set({
       project: {
         ...latestState.project,
@@ -921,7 +1078,7 @@ export const useProjectStore = create<ProjectState>()(
   setMasteringPreset: (preset) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Set mastering preset' });
     const current = ensureMasteringState(state.project.mastering);
     const mastering = applyMasteringPreferences({
       ...current,
@@ -941,7 +1098,7 @@ export const useProjectStore = create<ProjectState>()(
   setMasteringLoudnessTarget: (target) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Set loudness target' });
     const current = ensureMasteringState(state.project.mastering);
     const mastering = applyMasteringPreferences({
       ...current,
@@ -961,7 +1118,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleMasteringPreview: () => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Toggle mastering preview' });
     const mastering = ensureMasteringState(state.project.mastering);
     set({
       project: {
@@ -978,7 +1135,7 @@ export const useProjectStore = create<ProjectState>()(
   setMasteringEnabled: (enabled) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: enabled ? 'Enable mastering' : 'Disable mastering' });
     const mastering = ensureMasteringState(state.project.mastering);
     set({
       project: {
@@ -996,7 +1153,7 @@ export const useProjectStore = create<ProjectState>()(
   removeMastering: () => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Remove mastering' });
     set({
       project: {
         ...state.project,
@@ -1009,7 +1166,7 @@ export const useProjectStore = create<ProjectState>()(
   updateTrackMixer: (trackId, updates) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Adjust mixer', trackId });
     set({
       project: {
         ...state.project,
@@ -1024,7 +1181,7 @@ export const useProjectStore = create<ProjectState>()(
   setPanMode: (trackId, mode) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Set pan mode', trackId });
     set({
       project: {
         ...state.project,
@@ -1039,7 +1196,7 @@ export const useProjectStore = create<ProjectState>()(
   setDualMonoPan: (trackId, left, right) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Adjust dual mono pan', trackId });
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     set({
       project: {
@@ -1055,7 +1212,7 @@ export const useProjectStore = create<ProjectState>()(
   setTrackLocalCaption: (trackId, caption) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Edit track caption', trackId });
     set({
       project: {
         ...state.project,
@@ -1070,7 +1227,7 @@ export const useProjectStore = create<ProjectState>()(
   setTrackReverb: (trackId, mix, roomSize) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Adjust reverb send', trackId });
     set({
       project: {
         ...state.project,
@@ -1085,7 +1242,7 @@ export const useProjectStore = create<ProjectState>()(
   freezeTrack: (trackId, frozenAudioKey?) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Add audio effect', trackId });
     set({
       project: {
         ...state.project,
@@ -1100,7 +1257,7 @@ export const useProjectStore = create<ProjectState>()(
   unfreezeTrack: (trackId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Edit audio effect', trackId });
     set({
       project: {
         ...state.project,
@@ -1117,7 +1274,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     const track = state.project.tracks.find((t) => t.id === trackId);
     if (!track) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Remove audio effect', trackId });
 
     const newClip: Clip = {
       id: uuidv4(),
@@ -1158,7 +1315,7 @@ export const useProjectStore = create<ProjectState>()(
   addTrack: (trackName, trackType) => {
     const state = get();
     if (!state.project) throw new Error('No project');
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Add track' });
 
     const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
     const track = createTrackFromTemplate(state.project.tracks, trackName, resolvedType);
@@ -1186,7 +1343,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!trimmedName) throw new Error('Preset name is required');
 
     const preset = createTrackPresetSnapshot(track, trimmedName);
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Reorder audio effects', trackId });
     set({
       project: {
         ...state.project,
@@ -1203,7 +1360,7 @@ export const useProjectStore = create<ProjectState>()(
     const preset = (state.project.trackPresets ?? []).find((candidate) => candidate.id === presetId);
     if (!preset) return undefined;
 
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Apply track preset' });
     const track = createTrackFromTemplate(
       state.project.tracks,
       preset.trackName,
@@ -1311,7 +1468,7 @@ export const useProjectStore = create<ProjectState>()(
   removeTrack: (trackId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Remove track', trackId });
     const newTracks = state.project.tracks.filter((t) => t.id !== trackId);
     set({
       project: {
@@ -1354,7 +1511,7 @@ export const useProjectStore = create<ProjectState>()(
   updateTrack: (trackId, updates) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, getTrackUpdateHistoryOptions(trackId, updates));
     set({
       project: {
         ...state.project,
@@ -1392,7 +1549,7 @@ export const useProjectStore = create<ProjectState>()(
   setTrackSampler: (trackId, sampler) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Update sampler settings', trackId });
     set({
       project: {
         ...state.project,
@@ -1416,7 +1573,7 @@ export const useProjectStore = create<ProjectState>()(
   clearTrackSampler: (trackId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Clear sampler source', trackId });
     set({
       project: {
         ...state.project,
@@ -1437,7 +1594,7 @@ export const useProjectStore = create<ProjectState>()(
   updateSamplerConfig: (trackId, config) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: config ? 'Configure sampler' : 'Clear sampler config', trackId });
     set({
       project: {
         ...state.project,
@@ -1468,7 +1625,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!track) return;
     const trackType = track.trackType ?? 'stems';
     const laneHeight = getTrackHeightForPreset(preset, trackType);
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Set track height', trackId });
     set({
       project: {
         ...state.project,
@@ -1483,7 +1640,7 @@ export const useProjectStore = create<ProjectState>()(
   setAllTracksHeightPreset: (preset) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Set all track heights' });
     set({
       project: {
         ...state.project,
@@ -1498,7 +1655,7 @@ export const useProjectStore = create<ProjectState>()(
   renameTrack: (trackId, newName) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Rename track', trackId });
     set({
       project: {
         ...state.project,
@@ -2319,7 +2476,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleSequencerStep: (trackId, rowId, stepIndex) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Toggle sequencer step', trackId });
     set({
       project: {
         ...state.project,
@@ -2754,7 +2911,7 @@ export const useProjectStore = create<ProjectState>()(
   batchSetSequencerSteps: (trackId, ops) => {
     const state = get();
     if (!state.project || ops.length === 0) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Paint sequencer steps', trackId });
     const lookup = new Map<string, Map<number, { active: boolean; velocity: number }>>();
     for (const op of ops) {
       let m = lookup.get(op.rowId);
@@ -2808,7 +2965,7 @@ export const useProjectStore = create<ProjectState>()(
   setDrumPadSample: (trackId, padIndex, sampleKey) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Swap drum pad sample', trackId });
     set({
       project: {
         ...state.project,
@@ -2832,7 +2989,7 @@ export const useProjectStore = create<ProjectState>()(
   setDrumPadVolume: (trackId, padIndex, volume) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad volume', trackId });
     set({
       project: {
         ...state.project,
@@ -2856,7 +3013,7 @@ export const useProjectStore = create<ProjectState>()(
   setDrumPadPan: (trackId, padIndex, pan) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad pan', trackId });
     set({
       project: {
         ...state.project,
@@ -2925,7 +3082,7 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.project) return undefined;
     const noteId = note.id ?? uuidv4();
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Add MIDI note', clipId });
     set({
       project: {
         ...state.project,
@@ -2952,7 +3109,7 @@ export const useProjectStore = create<ProjectState>()(
   updateMidiNote: (clipId, noteId, updates) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Edit MIDI note', clipId });
     set({
       project: {
         ...state.project,
@@ -2980,7 +3137,7 @@ export const useProjectStore = create<ProjectState>()(
   removeMidiNote: (clipId, noteId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Delete MIDI note', clipId });
     set({
       project: {
         ...state.project,
@@ -3010,7 +3167,7 @@ export const useProjectStore = create<ProjectState>()(
         ? { gridBeats: gridBeatsOrOptions, strength: 100, swing: 0, scope: 'start' }
         : gridBeatsOrOptions;
     if (!state.project || options.gridBeats <= 0) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Quantize MIDI notes', clipId });
     const noteIdSet = new Set(noteIds);
     set({
       project: {
@@ -3037,7 +3194,7 @@ export const useProjectStore = create<ProjectState>()(
   stampChord: (clipId, rootPitch, intervals, startBeat, durationBeats, velocity = 100) => {
     const state = get();
     if (!state.project) return [];
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Stamp chord', clipId });
     const noteIds: string[] = [];
     const pitches = intervals.map((i) => rootPitch + i).filter((p) => p <= 127);
     for (const pitch of pitches) {
@@ -3081,7 +3238,7 @@ export const useProjectStore = create<ProjectState>()(
   populateMidiPattern: (clipId, options) => {
     const state = get();
     if (!state.project) return [];
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Generate MIDI pattern', clipId });
 
     const generated = generatePattern(options);
     const noteIds: string[] = [];
@@ -3117,7 +3274,7 @@ export const useProjectStore = create<ProjectState>()(
   setMidiGrid: (clipId, grid) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Set MIDI grid', clipId });
     set({
       project: {
         ...state.project,
@@ -3143,7 +3300,7 @@ export const useProjectStore = create<ProjectState>()(
   transformMidiNotes: (clipId, noteIds, transform) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Transform MIDI notes', clipId });
     const noteIdSet = new Set(noteIds);
     set({
       project: {
@@ -3402,7 +3559,7 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.project) return undefined;
     const effect = createDefaultMidiEffect(type);
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Add MIDI effect', trackId });
     set({
       project: {
         ...state.project,
@@ -3420,7 +3577,7 @@ export const useProjectStore = create<ProjectState>()(
   removeMidiEffect: (trackId, effectId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Remove MIDI effect', trackId });
     set({
       project: {
         ...state.project,
@@ -3437,7 +3594,7 @@ export const useProjectStore = create<ProjectState>()(
   updateMidiEffect: (trackId, effectId, updates) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Edit MIDI effect', trackId });
     set({
       project: {
         ...state.project,
@@ -3459,7 +3616,7 @@ export const useProjectStore = create<ProjectState>()(
   toggleMidiEffect: (trackId, effectId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
+    _pushHistory(state.project, { scope: 'track', label: 'Toggle MIDI effect', trackId });
     set({
       project: {
         ...state.project,

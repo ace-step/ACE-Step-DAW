@@ -258,6 +258,7 @@ export function MixerPanel() {
   const showMixer = useUIStore((s) => s.showMixer);
   const mixerHeight = useUIStore((s) => s.mixerHeight);
   const setMixerHeight = useUIStore((s) => s.setMixerHeight);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const project = useProjectStore((s) => s.project);
 
   const dragState = useRef<{ startY: number; startH: number } | null>(null);
@@ -292,7 +293,12 @@ export function MixerPanel() {
   );
 
   return (
-    <div className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0" style={{ height: visibleMixerHeight }}>
+    <div
+      className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0"
+      style={{ height: visibleMixerHeight }}
+      onMouseDownCapture={() => setHistoryFocusScope('mixer')}
+      onFocusCapture={() => setHistoryFocusScope('mixer')}
+    >
       <div
         className="h-1.5 w-full cursor-ns-resize bg-[#444] hover:bg-daw-accent transition-colors flex-shrink-0"
         onMouseDown={onResizeMouseDown}

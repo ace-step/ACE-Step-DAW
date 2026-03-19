@@ -40,6 +40,7 @@ export function useKeyboardShortcuts() {
       const mod = e.metaKey || e.ctrlKey;
       const getCombo = useShortcutsStore.getState().getCombo;
       const ui = useUIStore.getState();
+      const activeHistoryScope = ui.historyFocusScope;
 
       if (mod && e.code === 'KeyK') {
         e.preventDefault();
@@ -56,16 +57,23 @@ export function useKeyboardShortcuts() {
         if (!isInputFocused(e)) {
           e.preventDefault();
           if (e.shiftKey) {
-            useProjectStore.getState().redo();
+            useProjectStore.getState().redo(activeHistoryScope);
           } else {
-            useProjectStore.getState().undo();
+            useProjectStore.getState().undo(activeHistoryScope);
           }
           return;
         }
       }
 
-      if (isInputFocused(e)) return;
+      if (mod && e.altKey && e.code === 'KeyZ') {
+        if (!isInputFocused(e)) {
+          e.preventDefault();
+          ui.setShowUndoHistoryPanel(!ui.showUndoHistoryPanel);
+          return;
+        }
+      }
 
+      if (isInputFocused(e)) return;
       const project = useProjectStore.getState();
       const transport = useTransportStore.getState();
       const gen = useGenerationStore.getState();
@@ -80,6 +88,9 @@ export function useKeyboardShortcuts() {
         if (ui.showCommandPalette) {
           e.preventDefault();
           ui.closeCommandPalette();
+        } else if (ui.showUndoHistoryPanel) {
+          e.preventDefault();
+          ui.setShowUndoHistoryPanel(false);
         } else if (ui.showAIAssistant) {
           e.preventDefault();
           ui.setShowAIAssistant(false);

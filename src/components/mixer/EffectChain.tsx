@@ -337,6 +337,7 @@ export function EffectChain() {
   const effectChainHeight = useUIStore((s) => s.effectChainHeight);
   const setEffectChainHeight = useUIStore((s) => s.setEffectChainHeight);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
 
   const track = project?.tracks.find((t) => t.id === openTrackId) ?? null;
 
@@ -399,6 +400,8 @@ export function EffectChain() {
     <div
       className="border-t border-[#1a1a1a] bg-[#0e0e24] flex flex-col select-none shrink-0"
       style={{ height: effectChainHeight }}
+      onMouseDownCapture={() => setHistoryFocusScope('mixer')}
+      onFocusCapture={() => setHistoryFocusScope('mixer')}
     >
       {/* Resize handle */}
       <div

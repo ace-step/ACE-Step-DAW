@@ -75,6 +75,8 @@ export function Toolbar() {
   const setShowProjectListDialog = useUIStore((s) => s.setShowProjectListDialog);
   const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
+  const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
+  const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
   const showMixer = useUIStore((s) => s.showMixer);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
@@ -159,6 +161,9 @@ export function Toolbar() {
         </button>
         <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
           Import
+        </button>
+        <button onClick={() => setShowUndoHistoryPanel(!showUndoHistoryPanel)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Undo History (Cmd/Ctrl+Alt+Z)">
+          History
         </button>
         <button onClick={() => setShowShareDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Share Project">
           Share

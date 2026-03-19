@@ -25,6 +25,7 @@ export function DrumMachineEditor() {
   const editorHeight = useUIStore((s) => s.drumMachineEditorHeight);
   const setEditorHeight = useUIStore((s) => s.setDrumMachineEditorHeight);
   const closeEditor = useUIStore((s) => s.setOpenDrumMachineTrackId);
+  const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
 
   const project = useProjectStore((s) => s.project);
   const track = useMemo(() => project?.tracks.find((t) => t.id === trackId) ?? null, [project, trackId]);
@@ -138,6 +139,8 @@ export function DrumMachineEditor() {
       className="flex flex-col border-t border-white/10 bg-[#1a1a2e]"
       style={{ height: editorHeight }}
       data-track-id={trackId}
+      onMouseDownCapture={() => setHistoryFocusScope('track')}
+      onFocusCapture={() => setHistoryFocusScope('track')}
     >
       {/* Resize handle */}
       <div

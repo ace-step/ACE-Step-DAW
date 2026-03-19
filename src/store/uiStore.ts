@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AIChatMessage } from '../types/aiAssistant';
 import type { InlineSuggestion } from '../types/suggestions';
 import { useProjectStore } from './projectStore';
+import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
 import type { AIChatContext } from '../utils/aiAssistantContext';
 import { buildAssistantContext } from '../utils/aiAssistantContext';
@@ -43,6 +44,8 @@ interface UIState {
   showCommandPalette: boolean;
   commandPaletteQuery: string;
   recentCommandIds: string[];
+  showUndoHistoryPanel: boolean;
+  historyFocusScope: HistoryScope;
   showMixer: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
@@ -137,6 +140,8 @@ interface UIState {
   setCommandPaletteQuery: (query: string) => void;
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
+  setShowUndoHistoryPanel: (v: boolean) => void;
+  setHistoryFocusScope: (scope: HistoryScope) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
@@ -230,6 +235,8 @@ export const useUIStore = create<UIState>()(
   showCommandPalette: false,
   commandPaletteQuery: '',
   recentCommandIds: [],
+  showUndoHistoryPanel: false,
+  historyFocusScope: 'arrangement',
   showMixer: false,
   mixerHeight: 420,
   showAssetsPanel: false,
@@ -359,6 +366,8 @@ export const useUIStore = create<UIState>()(
 
     return true;
   },
+  setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
+  setHistoryFocusScope: (scope) => set({ historyFocusScope: scope }),
   setShowMixer: (v) => set({ showMixer: v }),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
@@ -367,20 +376,23 @@ export const useUIStore = create<UIState>()(
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),
-  setOpenSequencerTrackId: (id) => set({ openSequencerTrackId: id, activeBottomPanel: id ? 'editor' : null }),
-  setOpenDrumMachineTrackId: (id) => set({ openDrumMachineTrackId: id, activeBottomPanel: id ? 'drumMachine' : null }),
+  setOpenSequencerTrackId: (id) => set({ openSequencerTrackId: id, activeBottomPanel: id ? 'editor' : null, historyFocusScope: id ? 'track' : 'arrangement' }),
+  setOpenDrumMachineTrackId: (id) => set({ openDrumMachineTrackId: id, activeBottomPanel: id ? 'drumMachine' : null, historyFocusScope: id ? 'track' : 'arrangement' }),
   setOpenPianoRoll: (trackId, clipId = null) => set({
     openPianoRollTrackId: trackId,
     openPianoRollClipId: clipId,
     activeBottomPanel: trackId ? 'pianoRoll' : null,
+    historyFocusScope: trackId ? 'pianoRoll' : 'arrangement',
   }),
   setOpenEffectChainTrackId: (id) => set({
     openEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
+    historyFocusScope: id ? 'mixer' : 'arrangement',
   }),
   setOpenMidiEffectChainTrackId: (id) => set({
     openMidiEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
+    historyFocusScope: id ? 'track' : 'arrangement',
   }),
   setDrumMachineEditorHeight: (v) => set({ drumMachineEditorHeight: Math.min(600, Math.max(300, v)) }),
   setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),

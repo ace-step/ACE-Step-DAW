@@ -88,6 +88,8 @@ interface ProjectState {
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
+  setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
+  setDualMonoPan: (trackId: string, left: number, right: number) => void;
   setTrackLocalCaption: (trackId: string, caption: string) => void;
   setTrackReverb: (trackId: string, mix: number, roomSize: number) => void;
 
@@ -362,6 +364,37 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId ? { ...t, ...updates } : t,
+        ),
+      },
+    });
+  },
+
+  setPanMode: (trackId, mode) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, panMode: mode } : t,
+        ),
+      },
+    });
+  },
+
+  setDualMonoPan: (trackId, left, right) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, panLeft: clamp(left), panRight: clamp(right) } : t,
         ),
       },
     });

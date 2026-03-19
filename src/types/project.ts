@@ -189,6 +189,9 @@ export interface Track {
   drumKit?: DrumKitName;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
+  panMode?: 'stereo' | 'dual-mono';  // default 'stereo'
+  panLeft?: number;            // dual-mono left channel pan, -1 to +1, default -1
+  panRight?: number;           // dual-mono right channel pan, -1 to +1, default 1
   eqLowGain?: number;         // dB ±15, low shelf at 250 Hz, default 0
   eqMidGain?: number;         // dB ±15, peak at 1 kHz, default 0
   eqHighGain?: number;        // dB ±15, high shelf at 8 kHz, default 0

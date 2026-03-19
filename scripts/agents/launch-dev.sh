@@ -1,75 +1,62 @@
 #!/bin/bash
-set -e
+# Launch a coding agent. Usage: launch-dev.sh <issue> <codex|claude>
 ISSUE_NUM=$1
 TOOL=${2:-"codex"}
 REPO="ace-step/ACE-Step-DAW"
 DAW="/Users/junmingong/.openclaw/workspace/acestep-daw"
 WT="/tmp/daw-worktrees/agent-$ISSUE_NUM"
 
-# CHECK: is an agent already running for this issue?
-if ps aux | grep -E "claude.*print|node.*codex exec" | grep -v grep | grep -q "issue-$ISSUE_NUM\|#$ISSUE_NUM"; then
-  echo "SKIP: agent already running for #$ISSUE_NUM"
-  exit 0
-fi
+# Skip if already running
+ps aux | grep -E "claude.*print|node.*codex exec" | grep -v grep | grep -q "issue-$ISSUE_NUM" && echo "SKIP: #$ISSUE_NUM already running" && exit 0
 
-TITLE=$(gh issue view $ISSUE_NUM --repo $REPO --json title --jq .title 2>/dev/null)
-BODY=$(gh issue view $ISSUE_NUM --repo $REPO --json body --jq .body 2>/dev/null | head -80)
+# Get issue info (with timeout)
+TITLE=$(timeout 10 gh issue view $ISSUE_NUM --repo $REPO --json title --jq .title 2>/dev/null || echo "issue $ISSUE_NUM")
 
-# ── STEP A: Fresh worktree from latest main (BASH enforced, not prompt) ──
-if [ -n "$WT" ] && [[ "$WT" == /tmp/daw-worktrees/* ]]; then
-  rm -rf "$WT"
-fi
+# Clean worktree
+[ -n "$WT" ] && [[ "$WT" == /tmp/daw-worktrees/* ]] && rm -rf "$WT"
+
+# Create fresh worktree
 cd "$DAW"
 git fetch origin main 2>/dev/null
 git worktree prune 2>/dev/null
-# Delete stale branch if exists
-git branch -D "fix/issue-$ISSUE_NUM" 2>/dev/null || true
-# Create worktree — if fails, abort with error
-git worktree add "$WT" origin/main --detach 2>/dev/null || {
-  echo "ERROR: failed to create worktree for #$ISSUE_NUM" >> /tmp/pm-activity.log
-  exit 1
-}
-cd "$WT" || exit 1
-git checkout -B "fix/issue-$ISSUE_NUM" origin/main 2>/dev/null || exit 1
+git branch -D "fix/issue-$ISSUE_NUM" 2>/dev/null
+git worktree add "$WT" origin/main --detach 2>/dev/null || { echo "ERROR: worktree fail #$ISSUE_NUM"; exit 1; }
+cd "$WT"
+git checkout -B "fix/issue-$ISSUE_NUM" origin/main 2>/dev/null
 
-CONTEXT=$(cat "$DAW/scripts/agents/AGENT_CONTEXT.md" 2>/dev/null)
+# Write prompt to file
+cat "$DAW/scripts/agents/AGENT_CONTEXT.md" > "$WT/agent-prompt.txt" 2>/dev/null
+echo "---" >> "$WT/agent-prompt.txt"
+echo "IMPLEMENT ISSUE #$ISSUE_NUM: $TITLE" >> "$WT/agent-prompt.txt"
+timeout 10 gh issue view $ISSUE_NUM --repo $REPO --json body --jq .body 2>/dev/null >> "$WT/agent-prompt.txt"
+echo "" >> "$WT/agent-prompt.txt"
+echo "You are on branch fix/issue-$ISSUE_NUM. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #$ISSUE_NUM'. Do NOT push." >> "$WT/agent-prompt.txt"
 
-# ── STEP B: Agent does the coding (prompt) ──
-PROMPT="$CONTEXT
----
-IMPLEMENT ISSUE #$ISSUE_NUM: $TITLE
-Details: $BODY
-
-You are on branch fix/issue-$ISSUE_NUM based on LATEST origin/main.
-Implement the feature/fix. Then:
-1. npx tsc --noEmit && npm run build && npx vitest run tests/unit/
-2. git add -A && git commit -m 'feat: resolve #$ISSUE_NUM — $TITLE'
-3. Done. Do NOT push or create PR — the wrapper script handles that."
-
-# ── STEP C: Wrapper handles push + rebase + PR (BASH enforced) ──
-# This runs AFTER the agent exits, guaranteeing rebase happens
-# Write prompt to file (avoid bash escaping issues)
-PROMPT_FILE="$WT/agent-prompt.txt"
-echo "$PROMPT" > "$PROMPT_FILE"
-
-# Write wrapper script
-cat > "$WT/run-agent.sh" << 'WRAPPER_EOF'
+# Write wrapper
+cat > "$WT/run-agent.sh" << 'WEOF'
 #!/bin/bash
-cd "$1"  # worktree path passed as arg
-PROMPT=$(cat "$1/agent-prompt.txt")
+WT="$1"; TOOL="$2"; ISSUE="$3"; REPO="ace-step/ACE-Step-DAW"
+cd "$WT" || exit 1
+PROMPT=$(cat "$WT/agent-prompt.txt")
 
-# Run the coding agent (30 min timeout)
-if [ "$2" = "codex" ]; then
-  codex exec -C "$1" -s danger-full-access "$PROMPT"
+if [ "$TOOL" = "codex" ]; then
+  codex exec -C "$WT" -s danger-full-access "$PROMPT"
 else
   ~/.local/bin/claude --print --permission-mode bypassPermissions "$PROMPT"
 fi
 
-WRAPPER_EOF
+# Post-agent: verify + rebase + push + PR
+cd "$WT" || exit 0
+AHEAD=$(git rev-list origin/main..HEAD --count 2>/dev/null)
+[ "$AHEAD" = "0" ] && echo "No commits" && exit 0
+npm run build 2>/dev/null || exit 0
+git fetch origin main 2>/dev/null
+git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; exit 0; }
+git push origin "fix/issue-$ISSUE" --force-with-lease 2>/dev/null || exit 0
+gh pr create --repo "$REPO" --title "feat: #$ISSUE" --body "Closes #$ISSUE" --base main --head "fix/issue-$ISSUE" 2>/dev/null
+WEOF
 chmod +x "$WT/run-agent.sh"
 
-chmod +x "$WT/run-agent.sh"
-# Kill agent after 30 min
-(sleep 1800 && kill $(cat "$WT/.agent-pid" 2>/dev/null) 2>/dev/null) &
-nohup bash "$WT/run-agent.sh" "$WT" "$TOOL" > "/tmp/daw-worktrees/agent-$ISSUE_NUM.${TOOL}.log" 2>&1 &
+# Launch
+nohup bash "$WT/run-agent.sh" "$WT" "$TOOL" "$ISSUE_NUM" > "/tmp/daw-worktrees/agent-$ISSUE_NUM.$TOOL.log" 2>&1 &
 echo "$TOOL-$ISSUE_NUM: PID $!"

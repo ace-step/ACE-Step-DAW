@@ -1,4 +1,6 @@
 import type { AIChatContext } from '../utils/aiAssistantContext';
+import type { InlineSuggestion } from '../types/suggestions';
+import type { Project } from '../types/project';
 
 const DEFAULT_STREAM_DELAY_MS = 18;
 
@@ -112,6 +114,92 @@ function buildIntro(context: AIChatContext): string {
     : '';
 
   return `${parts.join(' ')}.${panels}`;
+}
+
+/**
+ * Analyze the current arrangement and produce inline suggestions.
+ * Suggestions are passive — they are displayed but never auto-applied.
+ *
+ * Accepts either a Project directly or falls back to AIChatContext for
+ * basic project info.
+ */
+export function getArrangementSuggestions(
+  context: AIChatContext,
+  project?: Project | null,
+): InlineSuggestion[] {
+  if (!context.hasProject || !context.trackCount) return [];
+
+  const suggestions: InlineSuggestion[] = [];
+  let nextId = 1;
+  const mkId = () => `sug-${nextId++}-${Date.now()}`;
+
+  let latestClipEnd = 0;
+
+  if (project) {
+    // Directly inspect tracks and clips
+    for (const track of project.tracks) {
+      const trackClips = track.clips;
+      if (trackClips.length === 0) {
+        suggestions.push({
+          id: mkId(),
+          text: `${track.displayName ?? track.trackName} track is empty — try generating a clip to fill it`,
+          time: 0,
+          trackId: track.id,
+          type: 'fill',
+        });
+      }
+      for (const clip of trackClips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (clipEnd > latestClipEnd) latestClipEnd = clipEnd;
+      }
+    }
+  } else {
+    // Fall back to parsing summary
+    const trackLines = context.summary.split('\n').filter((l) => l.startsWith('  - '));
+    for (const line of trackLines) {
+      const clipMatch = line.match(/(\d+)\s*clip/);
+      const nameMatch = line.match(/^\s*-\s*(\S+)/);
+      const clipCount = clipMatch ? parseInt(clipMatch[1], 10) : 0;
+      const trackName = nameMatch ? nameMatch[1] : '';
+      if (clipCount === 0 && trackName) {
+        suggestions.push({
+          id: mkId(),
+          text: `${trackName} track is empty — try generating a clip to fill it`,
+          time: 0,
+          type: 'fill',
+        });
+      }
+    }
+  }
+
+  // "What comes next?" suggestion at the end of the arrangement
+  if (latestClipEnd > 0) {
+    suggestions.push({
+      id: mkId(),
+      text: 'What should come next? Consider adding a new section or variation.',
+      time: latestClipEnd,
+      type: 'next',
+    });
+  } else if (context.trackCount > 0) {
+    suggestions.push({
+      id: mkId(),
+      text: 'Start your arrangement — generate clips for your tracks.',
+      time: 0,
+      type: 'next',
+    });
+  }
+
+  // Energy/arrangement suggestion if there are multiple clips
+  if (latestClipEnd > 30) {
+    suggestions.push({
+      id: mkId(),
+      text: 'Consider adding a build-up or transition around the midpoint.',
+      time: Math.round(latestClipEnd / 2),
+      type: 'arrangement',
+    });
+  }
+
+  return suggestions;
 }
 
 function chunkResponse(response: string): string[] {

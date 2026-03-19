@@ -254,7 +254,7 @@ function _endDrag() {
   _isDragging = false;
 }
 
-interface ProjectState {
+export interface ProjectState {
   project: Project | null;
 
   setProject: (project: Project) => void;

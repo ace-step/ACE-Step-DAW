@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { projectActionApi } from '../../services/actionApi';
 import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS } from '../../services/bounceInPlace';
 import type { BounceInPlaceOptions } from '../../types/project';
 import { toastError } from '../../hooks/useToast';
@@ -10,7 +11,6 @@ const checkboxClass = 'h-4 w-4 rounded border border-daw-border bg-daw-surface-2
 export function BounceInPlaceDialog() {
   const trackId = useUIStore((state) => state.bounceInPlaceTrackId);
   const close = useUIStore((state) => state.closeBounceInPlaceDialog);
-  const bounceInPlace = useProjectStore((state) => state.bounceInPlace);
   const track = useProjectStore((state) =>
     trackId ? state.project?.tracks.find((candidate) => candidate.id === trackId) ?? null : null,
   );
@@ -28,11 +28,13 @@ export function BounceInPlaceDialog() {
   const handleBounce = async () => {
     setIsBouncing(true);
     try {
-      await bounceInPlace(trackId, options);
-      close();
-    } catch (error) {
-      console.error('Bounce in place failed', error);
-      toastError('Bounce in place failed');
+      const result = await projectActionApi.bounceInPlace({ trackId, options });
+      if (result.ok) {
+        close();
+      } else {
+        console.error('Bounce in place failed', result.error);
+        toastError(result.error.message);
+      }
     } finally {
       setIsBouncing(false);
     }

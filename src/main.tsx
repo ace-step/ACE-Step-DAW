@@ -10,12 +10,14 @@ import { useCollaborationStore } from './store/collaborationStore';
 import { useShortcutsStore } from './store/shortcutsStore';
 import { useGenerationStore } from './store/generationStore';
 import { useSessionStore } from './store/sessionStore';
+import { projectActionApi } from './services/actionApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 
 // Expose stores globally for agent/automation access
 // Agents can call: window.__store.getState() / window.__store.setState(...)
 (window as unknown as Record<string, unknown>).__store = useProjectStore;
+(window as unknown as Record<string, unknown>).__actionApi = projectActionApi;
 (window as unknown as Record<string, unknown>).__uiStore = useUIStore;
 (window as unknown as Record<string, unknown>).__assistantStore = useUIStore;
 (window as unknown as Record<string, unknown>).__transportStore = useTransportStore;

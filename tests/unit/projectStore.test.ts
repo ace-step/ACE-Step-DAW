@@ -237,3 +237,48 @@ describe('projectStore', () => {
       expect(result).toBeUndefined();
     });
   });
+
+  describe('reorderTrack', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('moves a track before another by updating order', () => {
+      const drums = useProjectStore.getState().addTrack('drums');
+      const bass = useProjectStore.getState().addTrack('bass');
+      const keys = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+
+      // Move keys before drums
+      useProjectStore.getState().reorderTrack(keys.id, drums.id, 'before');
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      const sorted = [...tracks].sort((a, b) => a.order - b.order);
+      expect(sorted.map((t) => t.displayName)).toEqual(['Keyboard', 'Drums', 'Bass']);
+    });
+
+    it('moves a track after another by updating order', () => {
+      const drums = useProjectStore.getState().addTrack('drums');
+      const bass = useProjectStore.getState().addTrack('bass');
+      const keys = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+
+      // Move drums after keys
+      useProjectStore.getState().reorderTrack(drums.id, keys.id, 'after');
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      const sorted = [...tracks].sort((a, b) => a.order - b.order);
+      expect(sorted.map((t) => t.displayName)).toEqual(['Bass', 'Keyboard', 'Drums']);
+    });
+
+    it('is undoable', () => {
+      const drums = useProjectStore.getState().addTrack('drums');
+      const bass = useProjectStore.getState().addTrack('bass');
+
+      const orderBefore = useProjectStore.getState().project!.tracks.map((t) => ({ id: t.id, order: t.order }));
+
+      useProjectStore.getState().reorderTrack(bass.id, drums.id, 'before');
+      useProjectStore.getState().undo();
+
+      const orderAfter = useProjectStore.getState().project!.tracks.map((t) => ({ id: t.id, order: t.order }));
+      expect(orderAfter).toEqual(orderBefore);
+    });
+  });

@@ -17,6 +17,7 @@ vi.mock('../../src/services/generationPipeline', () => ({
 
 describe('GenerationSidePanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     localStorage.clear();
     useUIStore.setState(useUIStore.getInitialState(), true);
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);

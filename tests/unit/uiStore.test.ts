@@ -49,6 +49,18 @@ describe('uiStore', () => {
     });
   });
 
+  describe('main view mode', () => {
+    it('toggles between arrangement and session views', () => {
+      expect(useUIStore.getState().mainView).toBe('arrangement');
+
+      useUIStore.getState().toggleMainView();
+      expect(useUIStore.getState().mainView).toBe('session');
+
+      useUIStore.getState().setMainView('arrangement');
+      expect(useUIStore.getState().mainView).toBe('arrangement');
+    });
+  });
+
   describe('panel toggles', () => {
     it('updates mixer, loop browser, and library panel visibility', () => {
       useUIStore.getState().setShowMixer(true);

@@ -24,6 +24,7 @@ function createAssistantMessage(role: AIChatMessage['role'], content: string): A
 }
 
 interface UIState {
+  mainView: 'arrangement' | 'session';
   pixelsPerSecond: number;
   snapEnabled: boolean;
   scrollX: number;
@@ -117,6 +118,8 @@ interface UIState {
   inlineSuggestions: InlineSuggestion[];
   suggestionFrequency: 'off' | 'subtle' | 'active';
 
+  setMainView: (view: 'arrangement' | 'session') => void;
+  toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
   toggleSnap: () => void;
   zoomIn: () => void;
@@ -224,6 +227,7 @@ const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
+  mainView: 'arrangement',
   pixelsPerSecond: 50,
   snapEnabled: true,
   scrollX: 0,
@@ -300,6 +304,8 @@ export const useUIStore = create<UIState>()(
   inlineSuggestions: [],
   suggestionFrequency: 'subtle',
 
+  setMainView: (mainView) => set({ mainView }),
+  toggleMainView: () => set((s) => ({ mainView: s.mainView === 'arrangement' ? 'session' : 'arrangement' })),
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
 
@@ -543,6 +549,7 @@ export const useUIStore = create<UIState>()(
         assetsPanelWidth: state.assetsPanelWidth,
         trackListWidth: state.trackListWidth,
         // Zoom level
+        mainView: state.mainView,
         pixelsPerSecond: state.pixelsPerSecond,
         // Snap
         snapEnabled: state.snapEnabled,

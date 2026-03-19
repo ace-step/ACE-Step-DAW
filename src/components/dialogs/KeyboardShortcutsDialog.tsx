@@ -20,6 +20,7 @@ const SECTIONS: Section[] = [
     rows: [
       { keys: ['Space'],          description: 'Play / Pause' },
       { keys: ['Enter'],          description: 'Stop + return to 0' },
+      { keys: ['R'],              description: 'Toggle audio recording' },
       { keys: ['L'],              description: 'Toggle Loop' },
       { keys: ['←', '→'],        description: 'Nudge playhead ±5 s' },
     ],
@@ -51,6 +52,7 @@ const SECTIONS: Section[] = [
   {
     title: 'View',
     rows: [
+      { keys: ['Tab'],           description: 'Toggle Arrangement / Session View' },
       { keys: [`${mod}`, '='],  description: 'Zoom in' },
       { keys: [`${mod}`, '−'],  description: 'Zoom out' },
       { keys: [`${mod}`, '0'],  description: 'Reset zoom' },

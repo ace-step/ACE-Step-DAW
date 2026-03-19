@@ -7,6 +7,8 @@ describe('transportStore', () => {
       isPlaying: false,
       isRecording: false,
       armedTrackIds: [],
+      countInActive: false,
+      countInBeat: 0,
       currentTime: 0,
       loopEnabled: false,
       loopStart: 0,
@@ -14,6 +16,15 @@ describe('transportStore', () => {
       metronomeEnabled: false,
       metronomeSound: 'click',
       metronomeVolume: 0.5,
+      punchInTime: null,
+      punchOutTime: null,
+      punchEnabled: false,
+      loopRecordingEnabled: false,
+      loopCycleCount: 0,
+      launchedSessionClips: {},
+      sessionArrangementRecording: false,
+      sessionArrangementRecordStartTime: null,
+      sessionArrangementRecordEvents: [],
     });
   });
 
@@ -134,6 +145,55 @@ describe('transportStore', () => {
       expect(useTransportStore.getState().isRecording).toBe(true);
       useTransportStore.getState().setIsRecording(false);
       expect(useTransportStore.getState().isRecording).toBe(false);
+    });
+  });
+
+  describe('session launch state', () => {
+    it('stores launched session clips per track', () => {
+      useTransportStore.getState().launchSessionClip('track-1', 'clip-1', 0, 12);
+
+      expect(useTransportStore.getState().launchedSessionClips['track-1']).toEqual({
+        clipId: 'clip-1',
+        sceneIndex: 0,
+        launchedAt: 12,
+      });
+    });
+
+    it('launches a scene across multiple tracks', () => {
+      useTransportStore.getState().launchSessionScene(2, [
+        { trackId: 'track-1', clipId: 'clip-a' },
+        { trackId: 'track-2', clipId: 'clip-b' },
+      ], 8);
+
+      expect(useTransportStore.getState().launchedSessionClips).toEqual({
+        'track-1': { clipId: 'clip-a', sceneIndex: 2, launchedAt: 8 },
+        'track-2': { clipId: 'clip-b', sceneIndex: 2, launchedAt: 8 },
+      });
+    });
+
+    it('captures session arrangement record events until stopped', () => {
+      useTransportStore.getState().launchSessionClip('track-1', 'clip-1', 0, 0);
+      useTransportStore.getState().startSessionArrangementRecording(4);
+      useTransportStore.getState().launchSessionClip('track-1', 'clip-2', 1, 6);
+      useTransportStore.getState().stopSessionArrangementRecording(10);
+
+      expect(useTransportStore.getState().sessionArrangementRecording).toBe(false);
+      expect(useTransportStore.getState().sessionArrangementRecordEvents).toEqual([
+        {
+          trackId: 'track-1',
+          clipId: 'clip-1',
+          sceneIndex: 0,
+          startTime: 4,
+          endTime: 6,
+        },
+        {
+          trackId: 'track-1',
+          clipId: 'clip-2',
+          sceneIndex: 1,
+          startTime: 6,
+          endTime: 10,
+        },
+      ]);
     });
   });
 });

@@ -267,6 +267,12 @@ export function useKeyboardShortcuts() {
       // -----------------------------------------------------------------------
       if (anyModalOpen) return;
 
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        ui.toggleMainView();
+        return;
+      }
+
       // Transport
       if (matches('transport.playPause')) {
         e.preventDefault();

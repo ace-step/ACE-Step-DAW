@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import * as Tone from 'tone';
 import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
+import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
@@ -10,6 +11,8 @@ import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
+import type { Clip, Project, Track } from '../types/project';
+import { toastInfo } from './useToast';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -59,11 +62,33 @@ function trimBuffer(
   return trimmed;
 }
 
+function isSessionPlayableClip(clip: Clip): boolean {
+  return clip.generationStatus === 'ready' || (clip.midiData?.notes.length ?? 0) > 0;
+}
+
+function getSessionTracks(project: Project): Array<{ track: Track; clip: Clip; launch: { sceneIndex: number; launchedAt: number } }> {
+  const launched = useTransportStore.getState().launchedSessionClips;
+  return project.tracks.flatMap((track) => {
+    const launch = launched[track.id];
+    if (!launch) return [];
+    const clip = track.clips.find((candidate) => candidate.id === launch.clipId);
+    if (!clip || !isSessionPlayableClip(clip)) return [];
+    return [{ track, clip, launch }];
+  });
+}
+
+function getSessionPlaybackEnd(project: Project, startFrom: number): number {
+  const launches = Object.values(useTransportStore.getState().launchedSessionClips);
+  if (launches.length === 0) return Math.max(project.totalDuration, startFrom + 30);
+  return Math.max(project.totalDuration, startFrom + 300);
+}
+
 export function useTransport() {
   const { isPlaying, currentTime } = useTransportStore();
   const isRecording = useTransportStore((s) => s.isRecording);
   const project = useProjectStore((s) => s.project);
   const { stopRecording, onLoopCycle } = useRecording();
+  const mainView = useUIStore((s) => s.mainView);
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
@@ -96,6 +121,8 @@ export function useTransport() {
       gainEnvelope?: import('../types/project').GainEnvelopePoint[];
     }
     const clipBuffers: ScheduleEntry[] = [];
+    const sessionTracks = mainView === 'session' ? getSessionTracks(proj) : [];
+    const sessionTrackMap = new Map(sessionTracks.map((entry) => [entry.track.id, entry]));
 
     for (const track of proj.tracks) {
       const trackNode = engine.getOrCreateTrackNode(track.id);
@@ -114,7 +141,7 @@ export function useTransport() {
       trackNode.setReverb(track.reverbMix ?? 0, track.reverbRoomSize ?? 0.5);
 
       // Frozen track: play frozen bounce instead of individual clips/MIDI
-      if (track.frozen && track.frozenAudioKey) {
+      if (track.frozen && track.frozenAudioKey && mainView !== 'session') {
         const frozenBlob = await loadAudioBlobByKey(track.frozenAudioKey);
         if (frozenBlob) {
           const frozenBuffer = await engine.decodeAudioData(frozenBlob);
@@ -130,7 +157,11 @@ export function useTransport() {
         continue; // skip individual clip loading
       }
 
-      for (const clip of track.clips) {
+      const clipsToSchedule = mainView === 'session'
+        ? (sessionTrackMap.get(track.id)?.clip ? [sessionTrackMap.get(track.id)!.clip] : [])
+        : track.clips.filter((clip) => clip.generationStatus === 'ready');
+
+      for (const clip of clipsToSchedule) {
         if (clip.generationStatus !== 'ready') continue;
 
         // Try isolated audio first (pre-trimmed to clip region at generation),
@@ -151,6 +182,30 @@ export function useTransport() {
         const buffer = alreadyTrimmed
           ? rawBuffer
           : trimBuffer(engine.ctx, rawBuffer, clip.startTime, clip.duration);
+
+        if (mainView === 'session') {
+          const launch = sessionTrackMap.get(track.id)?.launch;
+          if (!launch) continue;
+          const clipDuration = Math.max(clip.duration, 0.001);
+          const playbackEnd = getSessionPlaybackEnd(proj, fromTime ?? useTransportStore.getState().currentTime);
+          let loopIndex = Math.max(0, Math.floor(((fromTime ?? useTransportStore.getState().currentTime) - launch.launchedAt) / clipDuration));
+          while (true) {
+            const loopStart = launch.launchedAt + loopIndex * clipDuration;
+            if (loopStart >= playbackEnd) break;
+            clipBuffers.push({
+              clipId: `${clip.id}-session-${loopIndex}`,
+              trackId: track.id,
+              startTime: loopStart,
+              buffer,
+              audioOffset: clip.audioOffset ?? 0,
+              clipDuration,
+              timeStretchRate: clip.timeStretchRate,
+              gainEnvelope: clip.gainEnvelope,
+            });
+            loopIndex += 1;
+          }
+          continue;
+        }
 
         clipBuffers.push({
           clipId: clip.id,
@@ -175,8 +230,8 @@ export function useTransport() {
 
     // Loop end = last clip's endpoint (or full timeline if no clips)
     const { loopEnabled } = useTransportStore.getState();
-    let effectiveEnd = proj.totalDuration;
-    if (loopEnabled && clipBuffers.length > 0) {
+    let effectiveEnd = mainView === 'session' ? getSessionPlaybackEnd(proj, startFrom) : proj.totalDuration;
+    if (mainView !== 'session' && loopEnabled && clipBuffers.length > 0) {
       const lastClipEnd = clipBuffers.reduce(
         (max, cb) => Math.max(max, cb.startTime + cb.clipDuration), 0,
       );
@@ -232,57 +287,80 @@ export function useTransport() {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
 
-        for (const clip of track.clips) {
+        const midiClips = mainView === 'session'
+          ? (sessionTrackMap.get(track.id)?.clip ? [sessionTrackMap.get(track.id)!.clip] : [])
+          : track.clips;
+
+        for (const clip of midiClips) {
           const notes = [...(clip.midiData?.notes ?? [])].sort((a, b) => a.startBeat - b.startBeat);
           if (notes.length === 0) continue;
 
-          for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
-            const note = notes[noteIndex];
-            const noteStart = clip.startTime + beatToTime(note.startBeat, tempoMap, fallbackBpm);
-            const noteDuration = Math.max(0, beatToTime(note.startBeat + note.durationBeats, tempoMap, fallbackBpm) - beatToTime(note.startBeat, tempoMap, fallbackBpm));
-            const noteEnd = noteStart + noteDuration;
-            if (noteEnd <= startFrom || noteStart >= effectiveEnd || noteDuration <= 0) continue;
-
-            const scheduledStart = Math.max(noteStart, startFrom);
-            const scheduledDuration = noteEnd - scheduledStart;
-            const velocity = Math.max(0, Math.min(1, note.velocity));
-            const trackId = track.id;
-
-            if (useSampler) {
-              engine.scheduleMidiEvent(scheduledStart, () => {
-                samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
-              });
-            } else {
-              const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
-              const previousOverlap = note.isSlide
-                ? [...notes]
-                    .slice(0, noteIndex)
-                    .reverse()
-                    .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
-                : undefined;
-              engine.scheduleMidiEvent(scheduledStart, () => {
-                if (previousOverlap) {
-                  void synthEngine.playSlideNote(
-                    trackId,
-                    previousOverlap.pitch,
-                    note.pitch,
-                    Math.max(1, Math.round(velocity * 127)),
-                    scheduledDuration,
-                    preset,
-                  );
-                  return;
+          const loopStarts = mainView === 'session'
+            ? (() => {
+                const launch = sessionTrackMap.get(track.id)?.launch;
+                if (!launch) return [];
+                const clipDuration = Math.max(clip.duration, 0.001);
+                const starts: number[] = [];
+                let loopIndex = Math.max(0, Math.floor((startFrom - launch.launchedAt) / clipDuration));
+                while (true) {
+                  const loopStart = launch.launchedAt + loopIndex * clipDuration;
+                  if (loopStart >= effectiveEnd) break;
+                  starts.push(loopStart);
+                  loopIndex += 1;
                 }
-                const synth = synthEngine.getSynth(trackId);
-                if (synth) {
-                  synth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
-                }
-              });
+                return starts;
+              })()
+            : [clip.startTime];
+
+          for (const loopStart of loopStarts) {
+            for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
+              const note = notes[noteIndex];
+              const noteStart = loopStart + beatToTime(note.startBeat, tempoMap, fallbackBpm);
+              const noteDuration = Math.max(0, beatToTime(note.startBeat + note.durationBeats, tempoMap, fallbackBpm) - beatToTime(note.startBeat, tempoMap, fallbackBpm));
+              const noteEnd = noteStart + noteDuration;
+              if (noteEnd <= startFrom || noteStart >= effectiveEnd || noteDuration <= 0) continue;
+
+              const scheduledStart = Math.max(noteStart, startFrom);
+              const scheduledDuration = noteEnd - scheduledStart;
+              const velocity = Math.max(0, Math.min(1, note.velocity));
+              const trackId = track.id;
+
+              if (useSampler) {
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
+              } else {
+                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                const previousOverlap = note.isSlide
+                  ? [...notes]
+                      .slice(0, noteIndex)
+                      .reverse()
+                      .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
+                  : undefined;
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  if (previousOverlap) {
+                    void synthEngine.playSlideNote(
+                      trackId,
+                      previousOverlap.pitch,
+                      note.pitch,
+                      Math.max(1, Math.round(velocity * 127)),
+                      scheduledDuration,
+                      preset,
+                    );
+                    return;
+                  }
+                  const synth = synthEngine.getSynth(trackId);
+                  if (synth) {
+                    synth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
+                  }
+                });
+              }
             }
           }
         }
       }
 
-      if (track.trackType === 'sequencer' && track.sequencerPattern) {
+      if (track.trackType === 'sequencer' && track.sequencerPattern && mainView !== 'session') {
         if (track.muted) continue;
         if (anySoloed && !track.soloed) continue;
 
@@ -344,6 +422,44 @@ export function useTransport() {
     }
 
     useTransportStore.getState().play();
+  }, [mainView]);
+
+  const finalizeSessionArrangementRecording = useCallback((stopTime: number) => {
+    const transport = useTransportStore.getState();
+    if (!transport.sessionArrangementRecording) return;
+
+    const finalizedEvents = transport.sessionArrangementRecordEvents
+      .map((event) => ({
+        ...event,
+        endTime: event.endTime ?? stopTime,
+      }))
+      .filter((event) => (event.endTime ?? stopTime) > event.startTime);
+
+    for (const event of finalizedEvents) {
+      const sourceTrack = useProjectStore.getState().project?.tracks.find((track) => track.id === event.trackId);
+      const sourceClip = sourceTrack?.clips.find((clip) => clip.id === event.clipId);
+      if (!sourceClip) continue;
+
+      const segmentEnd = event.endTime ?? stopTime;
+      const baseDuration = Math.max(sourceClip.duration, 0.001);
+      let cursor = event.startTime;
+
+      while (cursor < segmentEnd - 0.0001) {
+        const remaining = segmentEnd - cursor;
+        const clip = useProjectStore.getState().duplicateClipToTrack(sourceClip.id, event.trackId, cursor);
+        if (!clip) break;
+        const duration = Math.min(baseDuration, remaining);
+        if (duration !== clip.duration) {
+          useProjectStore.getState().updateClip(clip.id, { duration });
+        }
+        cursor += duration;
+      }
+    }
+
+    useTransportStore.getState().stopSessionArrangementRecording(stopTime);
+    if (finalizedEvents.length > 0) {
+      toastInfo(`Recorded ${finalizedEvents.length} session pass${finalizedEvents.length === 1 ? '' : 'es'} to Arrangement`);
+    }
   }, []);
 
   const pause = useCallback(async () => {
@@ -352,25 +468,28 @@ export function useTransport() {
     }
     const engine = getAudioEngine();
     const time = engine.getCurrentTime();
+    finalizeSessionArrangementRecording(time);
     engine.stop();
     synthEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
     useTransportStore.getState().seek(time);
-  }, [isRecording, stopRecording]);
+  }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
 
   const stop = useCallback(async () => {
     if (isRecording) {
       await stopRecording();
     }
     const engine = getAudioEngine();
+    const time = engine.playing ? engine.getCurrentTime() : useTransportStore.getState().currentTime;
+    finalizeSessionArrangementRecording(time);
     engine.stop();
     synthEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     useTransportStore.getState().stop();
-  }, [isRecording, stopRecording]);
+  }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
 
   const seek = useCallback((time: number) => {
     const engine = getAudioEngine();
@@ -385,6 +504,51 @@ export function useTransport() {
     }
   }, [play]);
 
+  const launchSessionClip = useCallback(async (trackId: string, clipId: string, sceneIndex: number) => {
+    const transport = useTransportStore.getState();
+    useTransportStore.getState().launchSessionClip(trackId, clipId, sceneIndex, transport.currentTime);
+    if (transport.isPlaying && useUIStore.getState().mainView === 'session') {
+      await play(transport.currentTime);
+    }
+  }, [play]);
+
+  const stopSessionTrack = useCallback(async (trackId: string) => {
+    const transport = useTransportStore.getState();
+    useTransportStore.getState().stopSessionTrack(trackId, transport.currentTime);
+    if (transport.isPlaying && useUIStore.getState().mainView === 'session') {
+      await play(transport.currentTime);
+    }
+  }, [play]);
+
+  const stopAllSessionClips = useCallback(async () => {
+    const transport = useTransportStore.getState();
+    useTransportStore.getState().stopAllSessionClips(transport.currentTime);
+    if (transport.isPlaying && useUIStore.getState().mainView === 'session') {
+      await play(transport.currentTime);
+    }
+  }, [play]);
+
+  const launchSessionScene = useCallback(async (sceneIndex: number, clips: Array<{ trackId: string; clipId: string }>) => {
+    const transport = useTransportStore.getState();
+    useTransportStore.getState().launchSessionScene(sceneIndex, clips, transport.currentTime);
+    if (transport.isPlaying && useUIStore.getState().mainView === 'session') {
+      await play(transport.currentTime);
+    }
+  }, [play]);
+
+  const toggleSessionArrangementRecording = useCallback(async () => {
+    const transport = useTransportStore.getState();
+    if (transport.sessionArrangementRecording) {
+      finalizeSessionArrangementRecording(transport.currentTime);
+      return;
+    }
+
+    useTransportStore.getState().startSessionArrangementRecording(transport.currentTime);
+    if (!transport.isPlaying) {
+      await play(transport.currentTime);
+    }
+  }, [finalizeSessionArrangementRecording, play]);
+
   // Register the onEnded callback — respect loopEnabled
   useEffect(() => {
     const engine = getAudioEngine();
@@ -396,6 +560,9 @@ export function useTransport() {
         }
         useTransportStore.getState().setCurrentTime(loopStart);
         play(loopStart);
+      } else if (useUIStore.getState().mainView === 'session' && Object.keys(useTransportStore.getState().launchedSessionClips).length > 0) {
+        const now = useTransportStore.getState().currentTime;
+        play(now);
       } else {
         useTransportStore.getState().stop();
       }
@@ -432,5 +599,17 @@ export function useTransport() {
     engine.updateSoloState();
   }, [project, isPlaying]);
 
-  return { isPlaying, currentTime, play, pause, stop, seek };
+  return {
+    isPlaying,
+    currentTime,
+    play,
+    pause,
+    stop,
+    seek,
+    launchSessionClip,
+    stopSessionTrack,
+    stopAllSessionClips,
+    launchSessionScene,
+    toggleSessionArrangementRecording,
+  };
 }

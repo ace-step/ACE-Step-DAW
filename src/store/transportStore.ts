@@ -1,5 +1,19 @@
 import { create } from 'zustand';
 
+export interface SessionLaunchState {
+  clipId: string;
+  sceneIndex: number;
+  launchedAt: number;
+}
+
+export interface SessionArrangementRecordEvent {
+  trackId: string;
+  clipId: string;
+  sceneIndex: number;
+  startTime: number;
+  endTime: number | null;
+}
+
 interface TransportState {
   isPlaying: boolean;
   isRecording: boolean;
@@ -18,6 +32,10 @@ interface TransportState {
   punchEnabled: boolean;
   loopRecordingEnabled: boolean;
   loopCycleCount: number;
+  launchedSessionClips: Record<string, SessionLaunchState>;
+  sessionArrangementRecording: boolean;
+  sessionArrangementRecordStartTime: number | null;
+  sessionArrangementRecordEvents: SessionArrangementRecordEvent[];
 
   play: () => void;
   pause: () => void;
@@ -41,6 +59,12 @@ interface TransportState {
   toggleLoopRecording: () => void;
   setLoopCycleCount: (count: number) => void;
   incrementLoopCycle: () => void;
+  launchSessionClip: (trackId: string, clipId: string, sceneIndex: number, launchedAt?: number) => void;
+  stopSessionTrack: (trackId: string, stopTime?: number) => void;
+  stopAllSessionClips: (stopTime?: number) => void;
+  launchSessionScene: (sceneIndex: number, clips: Array<{ trackId: string; clipId: string }>, launchedAt?: number) => void;
+  startSessionArrangementRecording: (startTime: number) => void;
+  stopSessionArrangementRecording: (stopTime: number) => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -61,6 +85,10 @@ export const useTransportStore = create<TransportState>((set) => ({
   punchEnabled: false,
   loopRecordingEnabled: false,
   loopCycleCount: 0,
+  launchedSessionClips: {},
+  sessionArrangementRecording: false,
+  sessionArrangementRecordStartTime: null,
+  sessionArrangementRecordEvents: [],
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -94,4 +122,94 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleLoopRecording: () => set((s) => ({ loopRecordingEnabled: !s.loopRecordingEnabled })),
   setLoopCycleCount: (count) => set({ loopCycleCount: count }),
   incrementLoopCycle: () => set((s) => ({ loopCycleCount: s.loopCycleCount + 1 })),
+  launchSessionClip: (trackId, clipId, sceneIndex, launchedAt) => set((s) => {
+    const launchTime = launchedAt ?? s.currentTime;
+    const nextLaunch = { clipId, sceneIndex, launchedAt: launchTime };
+    const nextEvents = s.sessionArrangementRecording
+      ? [
+          ...s.sessionArrangementRecordEvents.map((event) => (
+            event.trackId === trackId && event.endTime === null
+              ? { ...event, endTime: launchTime }
+              : event
+          )),
+          { trackId, clipId, sceneIndex, startTime: launchTime, endTime: null },
+        ]
+      : s.sessionArrangementRecordEvents;
+
+    return {
+      launchedSessionClips: {
+        ...s.launchedSessionClips,
+        [trackId]: nextLaunch,
+      },
+      sessionArrangementRecordEvents: nextEvents,
+    };
+  }),
+  stopSessionTrack: (trackId, stopTime) => set((s) => {
+    if (!s.launchedSessionClips[trackId]) return s;
+    const effectiveStopTime = stopTime ?? s.currentTime;
+    const { [trackId]: _removed, ...remaining } = s.launchedSessionClips;
+    return {
+      launchedSessionClips: remaining,
+      sessionArrangementRecordEvents: s.sessionArrangementRecording
+        ? s.sessionArrangementRecordEvents.map((event) => (
+          event.trackId === trackId && event.endTime === null
+            ? { ...event, endTime: effectiveStopTime }
+            : event
+        ))
+        : s.sessionArrangementRecordEvents,
+    };
+  }),
+  stopAllSessionClips: (stopTime) => set((s) => {
+    const effectiveStopTime = stopTime ?? s.currentTime;
+    return {
+      launchedSessionClips: {},
+      sessionArrangementRecordEvents: s.sessionArrangementRecording
+        ? s.sessionArrangementRecordEvents.map((event) => (
+          event.endTime === null ? { ...event, endTime: effectiveStopTime } : event
+        ))
+        : s.sessionArrangementRecordEvents,
+    };
+  }),
+  launchSessionScene: (sceneIndex, clips, launchedAt) => set((s) => {
+    const launchTime = launchedAt ?? s.currentTime;
+    const nextLaunched = { ...s.launchedSessionClips };
+    let nextEvents = s.sessionArrangementRecordEvents;
+
+    for (const { trackId, clipId } of clips) {
+      nextLaunched[trackId] = { clipId, sceneIndex, launchedAt: launchTime };
+      if (s.sessionArrangementRecording) {
+        nextEvents = nextEvents.map((event) => (
+          event.trackId === trackId && event.endTime === null
+            ? { ...event, endTime: launchTime }
+            : event
+        ));
+        nextEvents = [...nextEvents, { trackId, clipId, sceneIndex, startTime: launchTime, endTime: null }];
+      }
+    }
+
+    return {
+      launchedSessionClips: nextLaunched,
+      sessionArrangementRecordEvents: nextEvents,
+    };
+  }),
+  startSessionArrangementRecording: (startTime) => set((s) => ({
+    sessionArrangementRecording: true,
+    sessionArrangementRecordStartTime: startTime,
+    sessionArrangementRecordEvents: [
+      ...Object.entries(s.launchedSessionClips).map(([trackId, launch]) => ({
+        trackId,
+        clipId: launch.clipId,
+        sceneIndex: launch.sceneIndex,
+        startTime,
+        endTime: null,
+      })),
+    ],
+  })),
+  stopSessionArrangementRecording: (stopTime) => set((s) => ({
+    sessionArrangementRecording: false,
+    sessionArrangementRecordStartTime: null,
+    sessionArrangementRecordEvents: s.sessionArrangementRecordEvents.map((event) => (
+      event.endTime === null ? { ...event, endTime: stopTime } : event
+    )),
+  })),
 }));

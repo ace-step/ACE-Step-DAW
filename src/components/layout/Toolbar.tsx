@@ -12,6 +12,7 @@ function LCDDisplay() {
   const currentTime = useTransportStore((s) => s.currentTime);
   const countInActive = useTransportStore((s) => s.countInActive);
   const countInBeat = useTransportStore((s) => s.countInBeat);
+  const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const project = useProjectStore((s) => s.project);
   const barsBeats = project
     ? formatBarsBeats(currentTime, project.bpm, project.timeSignature)
@@ -33,6 +34,9 @@ function LCDDisplay() {
       )}
       {countInActive && (
         <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>
+      )}
+      {!countInActive && sessionArrangementRecording && (
+        <span className="text-[11px] font-mono text-red-400 animate-pulse">SESSION REC</span>
       )}
     </div>
   );
@@ -77,6 +81,8 @@ export function Toolbar() {
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
   const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
+  const mainView = useUIStore((s) => s.mainView);
+  const setMainView = useUIStore((s) => s.setMainView);
   const showMixer = useUIStore((s) => s.showMixer);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
@@ -144,6 +150,33 @@ export function Toolbar() {
       </div>
 
       <div className="w-px h-6 bg-[#555]" />
+
+      <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5">
+        <button
+          onClick={() => setMainView('arrangement')}
+          className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+            mainView === 'arrangement'
+              ? 'bg-daw-accent text-white'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+          title="Arrangement View (Tab)"
+          aria-label="Switch to Arrangement View"
+        >
+          Arrangement
+        </button>
+        <button
+          onClick={() => setMainView('session')}
+          className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+            mainView === 'session'
+              ? 'bg-daw-accent text-white'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+          title="Session View (Tab)"
+          aria-label="Switch to Session View"
+        >
+          Session
+        </button>
+      </div>
 
       {/* Left-center: Project actions */}
       <div className="flex items-center gap-0.5">

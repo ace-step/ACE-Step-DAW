@@ -1319,14 +1319,17 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId
-            ? (() => {
-                const nextConfig = config ?? undefined;
-                return {
+            ? (config
+              ? {
                   ...t,
-                  synthPreset: nextConfig ? 'sampler' : t.synthPreset,
-                  ...syncSamplerState(t, { samplerConfig: nextConfig }),
-                };
-              })()
+                  synthPreset: 'sampler',
+                  ...syncSamplerState(t, { samplerConfig: config }),
+                }
+              : {
+                  ...t,
+                  sampler: undefined,
+                  samplerConfig: undefined,
+                })
             : t,
         ),
       },

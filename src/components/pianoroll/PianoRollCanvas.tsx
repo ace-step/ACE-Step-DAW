@@ -469,20 +469,55 @@ export function PianoRollCanvas({
         return;
       }
 
-      if (!e.shiftKey) setSelectedNoteIds(new Set());
-      dragRef.current = {
-        mode: null,
-        noteId: '',
-        startMouseX: x,
-        startMouseY: y,
-        originalPitch: 0,
-        originalStartBeat: 0,
-        originalDurationBeats: 0,
-        originalVelocity: 0,
-        isBoxSelect: true,
-        boxStartX: x,
-        boxStartY: y,
-      };
+      // Click on empty space: create a note (like FL Studio / Ableton)
+      // Shift+click or Shift+drag = box select
+      if (e.shiftKey) {
+        setSelectedNoteIds(new Set());
+        dragRef.current = {
+          mode: null,
+          noteId: '',
+          startMouseX: x,
+          startMouseY: y,
+          originalPitch: 0,
+          originalStartBeat: 0,
+          originalDurationBeats: 0,
+          originalVelocity: 0,
+          isBoxSelect: true,
+          boxStartX: x,
+          boxStartY: y,
+        };
+        return;
+      }
+
+      // Single click on empty = create note (regardless of draw mode)
+      {
+        const beat = snapBeat(xToBeat(x), e.altKey);
+        const pitch = yToPitch(y);
+        if (pitch < 0 || pitch > MIDI_MAX_NOTE) return;
+
+        const newNote = {
+          id: generateNoteId(),
+          pitch,
+          startBeat: Math.max(0, beat),
+          durationBeats: gridBeats,
+          velocity: 100,
+        };
+        addMidiNote(clip.id, newNote);
+        setSelectedNoteIds(new Set([newNote.id]));
+        if (previewEnabled) synthEngine.previewNote(pitch, 100, 0.3, synthPreset);
+
+        beginDrag();
+        dragRef.current = {
+          mode: 'resize-right',
+          noteId: newNote.id,
+          startMouseX: x,
+          startMouseY: y,
+          originalPitch: pitch,
+          originalStartBeat: newNote.startBeat,
+          originalDurationBeats: newNote.durationBeats,
+          originalVelocity: 100,
+        };
+      }
     },
     [
       addMidiNote,

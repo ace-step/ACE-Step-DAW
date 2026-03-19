@@ -36,6 +36,7 @@ interface UIState {
   scrollY: number;
   selectedClipIds: Set<string>;
   editingClipId: string | null;
+  showStartupDialog: boolean;
   showNewProjectDialog: boolean;
   showInstrumentPicker: boolean;
   showExportDialog: boolean;
@@ -149,6 +150,7 @@ interface UIState {
   selectClips: (clipIds: string[]) => void;
   deselectAll: () => void;
   setEditingClip: (clipId: string | null) => void;
+  setShowStartupDialog: (v: boolean) => void;
   setShowNewProjectDialog: (v: boolean) => void;
   setShowInstrumentPicker: (v: boolean) => void;
   setShowExportDialog: (v: boolean) => void;
@@ -309,6 +311,7 @@ export const useUIStore = create<UIState>()(
   scrollY: 0,
   selectedClipIds: new Set(),
   editingClipId: null,
+  showStartupDialog: false,
   showNewProjectDialog: false,
   showInstrumentPicker: false,
   showExportDialog: false,
@@ -441,6 +444,7 @@ export const useUIStore = create<UIState>()(
   deselectAll: () => set({ selectedClipIds: new Set() }),
 
   setEditingClip: (clipId) => set({ editingClipId: clipId }),
+  setShowStartupDialog: (v) => set({ showStartupDialog: v }),
   setShowNewProjectDialog: (v) => set({ showNewProjectDialog: v }),
   setShowInstrumentPicker: (v) => set({ showInstrumentPicker: v }),
   setShowExportDialog: (v) => set({ showExportDialog: v }),

@@ -11,6 +11,7 @@ import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
 import { AudioAnalysisPanel } from '../generation/AudioAnalysisPanel';
 import { StemSeparationModal } from '../generation/StemSeparationModal';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
+import { StartupDialog } from '../dialogs/StartupDialog';
 import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
@@ -41,11 +42,14 @@ import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useShareLink } from '../../hooks/useShareLink';
+import { listProjects } from '../../services/projectStorage';
+import { decideStartupDialog } from '../../utils/startupDialogUtils';
 
 export function AppShell() {
   const { resumeOnGesture } = useAudioEngine();
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
+  const setShowStartupDialog = useUIStore((s) => s.setShowStartupDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const showOnboarding = useUIStore((s) => s.showOnboarding);
   const onboardingCompleted = useUIStore((s) => s.onboardingCompleted);
@@ -60,16 +64,21 @@ export function AppShell() {
   }, [resumeOnGesture]);
 
   useEffect(() => {
-    if (!project) {
-      if (!onboardingCompleted && !onboardingSkipped) {
-        setShowOnboarding(true);
-        setShowNewProjectDialog(false);
-      } else {
-        setShowOnboarding(false);
-        setShowNewProjectDialog(true);
-      }
-    }
-  }, [onboardingCompleted, onboardingSkipped, project, setShowNewProjectDialog, setShowOnboarding]);
+    if (project) return;
+
+    listProjects().then((projects) => {
+      const decision = decideStartupDialog({
+        hasProject: false,
+        onboardingCompleted,
+        onboardingSkipped,
+        recentProjectCount: projects.length,
+      });
+
+      setShowOnboarding(decision === 'onboarding');
+      setShowStartupDialog(decision === 'startup');
+      setShowNewProjectDialog(decision === 'newProject');
+    });
+  }, [onboardingCompleted, onboardingSkipped, project, setShowNewProjectDialog, setShowOnboarding, setShowStartupDialog]);
 
   // Warn before closing tab with unsaved project
   useEffect(() => {
@@ -135,6 +144,7 @@ export function AppShell() {
       <FirstRunOnboarding />
 
       {/* Modals */}
+      <StartupDialog />
       <NewProjectDialog />
       <InstrumentPicker />
       <ExportDialog />

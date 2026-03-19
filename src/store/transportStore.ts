@@ -13,6 +13,9 @@ interface TransportState {
   metronomeEnabled: boolean;
   metronomeSound: 'click' | 'woodblock' | 'beep';
   metronomeVolume: number;
+  punchInTime: number | null;
+  punchOutTime: number | null;
+  punchEnabled: boolean;
 
   play: () => void;
   pause: () => void;
@@ -30,6 +33,9 @@ interface TransportState {
   toggleMetronome: () => void;
   setMetronomeSound: (sound: 'click' | 'woodblock' | 'beep') => void;
   setMetronomeVolume: (volume: number) => void;
+  setPunchIn: (time: number) => void;
+  setPunchOut: (time: number) => void;
+  togglePunch: () => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -45,6 +51,9 @@ export const useTransportStore = create<TransportState>((set) => ({
   metronomeEnabled: false,
   metronomeSound: 'click',
   metronomeVolume: 0.5,
+  punchInTime: null,
+  punchOutTime: null,
+  punchEnabled: false,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -74,4 +83,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   toggleMetronome: () => set((s) => ({ metronomeEnabled: !s.metronomeEnabled })),
   setMetronomeSound: (sound) => set({ metronomeSound: sound }),
   setMetronomeVolume: (volume) => set({ metronomeVolume: Math.max(0, Math.min(1, volume)) }),
+  setPunchIn: (time) => set({ punchInTime: time }),
+  setPunchOut: (time) => set({ punchOutTime: time }),
+  togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
 }));

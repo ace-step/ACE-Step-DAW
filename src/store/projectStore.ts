@@ -22,6 +22,7 @@ import type {
   AutomationPoint,
   AutomationLane,
   ReturnTrack,
+  Marker,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -183,6 +184,11 @@ interface ProjectState {
   moveTrackToGroup: (trackId: string, groupId: string | null) => void;
   toggleGroupCollapse: (groupId: string) => void;
   getGroupVolume: (groupId: string) => number;
+
+  // Markers
+  addMarker: (time: number, name: string) => void;
+  removeMarker: (id: string) => void;
+  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color'>>) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;

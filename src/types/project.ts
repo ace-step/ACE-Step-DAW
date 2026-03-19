@@ -107,6 +107,12 @@ export interface ClipVersion {
   generatedAt: number;
 }
 
+export interface Take {
+  id: string;
+  audioKey: string;
+  selected: boolean;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -157,6 +163,8 @@ export interface Clip {
   pitchShift?: number;
   /** Optional MIDI region data for piano roll tracks. */
   midiData?: MidiClipData;
+  /** Comping takes for this clip. */
+  takes?: Take[];
 }
 
 export interface SequencerStep {
@@ -268,6 +276,13 @@ export interface GenerationDefaults {
   model: string;
 }
 
+export interface Marker {
+  id: string;
+  time: number;
+  name: string;
+  color: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -291,6 +306,8 @@ export interface Project {
   automationLanes?: AutomationLane[];
   /** Shared effect return tracks (mixer buses). */
   returnTracks?: ReturnTrack[];
+  /** Timeline markers (sorted by time). */
+  markers?: Marker[];
 }
 
 // ─── Automation Types ────────────────────────────────────────────────────────

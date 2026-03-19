@@ -314,10 +314,16 @@ export function useKeyboardShortcuts() {
           ui.setShowSmartControls(!ui.showSmartControls);
           break;
 
-        // Loop Browser toggle (O)
+        // Punch In — set punch-in point at playhead (I)
+        case 'KeyI':
+          e.preventDefault();
+          transport.setPunchIn(transport.currentTime);
+          break;
+
+        // Punch Out — set punch-out point at playhead (O)
         case 'KeyO':
           e.preventDefault();
-          ui.toggleLoopBrowser();
+          transport.setPunchOut(transport.currentTime);
           break;
 
         // Library toggle (Y)

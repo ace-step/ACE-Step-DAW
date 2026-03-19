@@ -136,6 +136,26 @@ describe('Generation Variation Session', () => {
 
       expect(useGenerationStore.getState().variationSession!.status).toBe('done');
     });
+
+    it('preserves per-variation metadata needed for retrying or accepting a result', () => {
+      useGenerationStore.getState().updateVariation(1, {
+        status: 'done',
+        clipId: 'clip-variation-2',
+        jobId: 'job-2',
+        taskId: 'task-2',
+        resultAudioPath: '/v1/audio?path=variation-2.wav',
+        seed: '456',
+      });
+
+      expect(useGenerationStore.getState().variationSession!.variations[1]).toMatchObject({
+        status: 'done',
+        clipId: 'clip-variation-2',
+        jobId: 'job-2',
+        taskId: 'task-2',
+        resultAudioPath: '/v1/audio?path=variation-2.wav',
+        seed: '456',
+      });
+    });
   });
 
   describe('setActiveVariation', () => {

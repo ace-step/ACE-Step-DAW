@@ -12,6 +12,7 @@ import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generatio
 import type { PresetCategory } from '../../constants/generationPresets';
 import { usePromptAutocomplete } from '../../hooks/usePromptAutocomplete';
 import { PromptAutocomplete } from './PromptAutocomplete';
+import { generateVariationSession } from '../../services/generationPipeline';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -34,6 +35,7 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
 export function GenerationSidePanel() {
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
+  const selectClip = useUIStore((s) => s.selectClip);
   const project = useProjectStore((s) => s.project);
 
   const generationForm = useGenerationStore((s) => s.generationForm);
@@ -135,7 +137,9 @@ export function GenerationSidePanel() {
   const isSessionActive = isGenerating || variationSession?.status === 'generating';
 
   const handleGenerate = useCallback(() => {
-    submitGenerationRequest({ globalCaption: project?.globalCaption });
+    const params = submitGenerationRequest({ globalCaption: project?.globalCaption });
+    if (!params) return;
+    void generateVariationSession(params);
   }, [project?.globalCaption, submitGenerationRequest]);
 
   const handleHistorySelect = useCallback((historyPrompt: string) => {
@@ -576,7 +580,12 @@ export function GenerationSidePanel() {
               return (
                 <button
                   key={variation.index}
-                  onClick={() => setActiveVariation(variation.index)}
+                  onClick={() => {
+                    setActiveVariation(variation.index);
+                    if (variation.clipId) {
+                      selectClip(variation.clipId, false);
+                    }
+                  }}
                   className={`flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors ${
                     isActive
                       ? 'border-indigo-500/50 bg-indigo-900/40'
@@ -584,6 +593,7 @@ export function GenerationSidePanel() {
                   }`}
                   type="button"
                   data-testid={`variation-card-${variation.index}`}
+                  aria-label={`Variation ${variation.index + 1}`}
                 >
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold ${

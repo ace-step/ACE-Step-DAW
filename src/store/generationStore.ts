@@ -160,6 +160,10 @@ export interface Variation {
   clipId: string | null;
   progress: string;
   error?: string;
+  jobId?: string;
+  taskId?: string;
+  resultAudioPath?: string;
+  seed?: string;
   startedAt?: number;
   completedAt?: number;
 }
@@ -649,6 +653,7 @@ export const useGenerationStore = create<GenerationState>()(
 
       updateVariation: (index, updates) => set((s) => {
         if (!s.variationSession) return s;
+        const currentVariation = s.variationSession.variations.find((variation) => variation.index === index);
         const variations = s.variationSession.variations.map((v) =>
           v.index === index ? { ...v, ...updates } : v,
         );
@@ -656,10 +661,19 @@ export const useGenerationStore = create<GenerationState>()(
         const allTerminal = variations.every(
           (v) => v.status === 'done' || v.status === 'error' || v.status === 'cancelled',
         );
+        const activeVariation = variations[s.variationSession.activeVariationIndex];
+        const nextActiveVariationIndex =
+          updates.status === 'done'
+          && currentVariation
+          && activeVariation
+          && activeVariation.status !== 'done'
+            ? index
+            : s.variationSession.activeVariationIndex;
         return {
           variationSession: {
             ...s.variationSession,
             variations,
+            activeVariationIndex: nextActiveVariationIndex,
             status: allTerminal ? 'done' : s.variationSession.status,
           },
         };

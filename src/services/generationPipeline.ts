@@ -1,6 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectStore } from '../store/projectStore';
-import { useGenerationStore, deriveGenerationJobProgress } from '../store/generationStore';
+import {
+  useGenerationStore,
+  deriveGenerationJobProgress,
+  type VariationSessionParams,
+} from '../store/generationStore';
+import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, CoverTaskParams, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
@@ -31,10 +36,39 @@ function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null
   return { stage, progressPercent };
 }
 
-interface GenerationOutcome {
+export interface GenerationOutcome {
   cumulativeBlob: Blob | null;
   succeeded: boolean;
   errorMessage?: string;
+}
+
+export interface ClipInternalOptions {
+  /** Force src_audio to silence instead of previousCumulativeBlob */
+  forceSilence?: boolean;
+  /** Override the clip's prompt with this local description */
+  localDescription?: string;
+  /** Override the clip's globalCaption with this value */
+  globalCaptionOverride?: string;
+  /** Override the clip's lyrics (vocals/backing_vocals) */
+  lyricsOverride?: string;
+  /** Shared explicit seed — if set, use_random_seed=false is sent */
+  sharedSeed?: number;
+  /**
+   * Server-side absolute or relative path to the context audio file.
+   * When provided the blob upload is skipped entirely and the server reads
+   * the file directly from disk (requires client and server on the same host).
+   */
+  srcAudioPath?: string;
+  /** Chunk mask mode: "auto" = model auto-decides (value 2), "explicit" = 0/1 mask from repaint range */
+  chunkMaskMode?: 'explicit' | 'auto';
+  /** Override the default repainting range (clip.startTime → clip.startTime + clip.duration) */
+  repaintRange?: { start: number; end: number };
+  /** Optional variation index for progressive multi-variation sessions. */
+  variationIndex?: number;
+}
+
+export interface VariationGenerationDependencies {
+  generateClip?: (clipId: string, previousCumulativeBlob: Blob | null, options?: ClipInternalOptions) => Promise<GenerationOutcome>;
 }
 
 async function withGenerationToast(label: string, action: () => Promise<boolean>): Promise<void> {
@@ -151,6 +185,95 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
   });
 }
 
+export async function generateVariationSession(
+  params: VariationSessionParams,
+  dependencies: VariationGenerationDependencies = {},
+): Promise<boolean> {
+  const genStore = useGenerationStore.getState();
+  const store = useProjectStore.getState();
+  const project = store.project;
+  if (!project || genStore.isGenerating) return false;
+
+  const track = project.tracks.find((entry) => entry.id === params.trackId);
+  if (!track) {
+    useGenerationStore.getState().setGenerationRequestError(`Target track "${params.trackId}" was not found.`);
+    return false;
+  }
+
+  const sessionId = useGenerationStore.getState().variationSession?.id;
+  if (!sessionId) {
+    useGenerationStore.getState().setGenerationRequestError('Start a variation session before generating results.');
+    return false;
+  }
+
+  const generateClip = dependencies.generateClip ?? generateClipInternal;
+  const trackClipEnd = track.clips.reduce((maxEnd, clip) => Math.max(maxEnd, clip.startTime + clip.duration), 0);
+  const baseStartTime = Math.max(project.totalDuration, trackClipEnd);
+  const spacingSeconds = 0.25;
+
+  useGenerationStore.getState().setIsGenerating(true);
+
+  try {
+    const clipIds = Array.from({ length: params.variationCount }, (_, index) => {
+      const clip = store.addClip(params.trackId, {
+        startTime: baseStartTime + (index * (params.duration + spacingSeconds)),
+        duration: params.duration,
+        prompt: params.prompt,
+        globalCaption: params.globalCaption ?? '',
+        lyrics: params.lyrics ?? '',
+        source: 'generated',
+      });
+
+      useGenerationStore.getState().updateVariation(index, {
+        clipId: clip.id,
+        progress: 'Queued',
+      });
+
+      return clip.id;
+    });
+
+    const results = await Promise.allSettled(
+      clipIds.map((clipId, index) =>
+        generateClip(clipId, null, {
+          forceSilence: true,
+          localDescription: params.prompt,
+          globalCaptionOverride: params.globalCaption,
+          lyricsOverride: params.lyrics,
+          variationIndex: index,
+        }),
+      ),
+    );
+
+    const firstCompletedVariation = useGenerationStore.getState().variationSession?.variations.find(
+      (variation) => variation.status === 'done' && variation.clipId,
+    );
+    if (firstCompletedVariation?.clipId) {
+      useUIStore.getState().selectClip(firstCompletedVariation.clipId, false);
+    }
+
+    const currentSession = useGenerationStore.getState().variationSession;
+    if (currentSession?.id === sessionId && currentSession.status === 'generating') {
+      const allTerminal = currentSession.variations.every(
+        (variation) => variation.status === 'done' || variation.status === 'error' || variation.status === 'cancelled',
+      );
+      if (allTerminal) {
+        currentSession.variations.forEach((variation) => {
+          if ((variation.status === 'done' || variation.status === 'error') && variation.completedAt) return;
+          if (variation.status === 'done' || variation.status === 'error') {
+            useGenerationStore.getState().updateVariation(variation.index, { completedAt: Date.now() });
+          }
+        });
+      }
+    }
+
+    return results.every(
+      (result) => result.status === 'fulfilled' && result.value.succeeded,
+    );
+  } finally {
+    useGenerationStore.getState().setIsGenerating(false);
+  }
+}
+
 async function getPreviousCumulativeBlob(clipId: string): Promise<Blob | null> {
   const { project, getTracksInGenerationOrder } = useProjectStore.getState();
   if (!project) return null;
@@ -207,29 +330,6 @@ async function getPreviousCumulativeBlob(clipId: string): Promise<Blob | null> {
   return null;
 }
 
-interface ClipInternalOptions {
-  /** Force src_audio to silence instead of previousCumulativeBlob */
-  forceSilence?: boolean;
-  /** Override the clip's prompt with this local description */
-  localDescription?: string;
-  /** Override the clip's globalCaption with this value */
-  globalCaptionOverride?: string;
-  /** Override the clip's lyrics (vocals/backing_vocals) */
-  lyricsOverride?: string;
-  /** Shared explicit seed — if set, use_random_seed=false is sent */
-  sharedSeed?: number;
-  /**
-   * Server-side absolute or relative path to the context audio file.
-   * When provided the blob upload is skipped entirely and the server reads
-   * the file directly from disk (requires client and server on the same host).
-   */
-  srcAudioPath?: string;
-  /** Chunk mask mode: "auto" = model auto-decides (value 2), "explicit" = 0/1 mask from repaint range */
-  chunkMaskMode?: 'explicit' | 'auto';
-  /** Override the default repainting range (clip.startTime → clip.startTime + clip.duration) */
-  repaintRange?: { start: number; end: number };
-}
-
 async function generateClipInternal(
   clipId: string,
   previousCumulativeBlob: Blob | null,
@@ -252,6 +352,11 @@ async function generateClipInternal(
     return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Track type is not generatable' };
   }
 
+  const updateVariationProgress = (updates: Parameters<typeof genStore.updateVariation>[1]) => {
+    if (options.variationIndex === undefined) return;
+    genStore.updateVariation(options.variationIndex, updates);
+  };
+
   // Create generation job
   const jobId = uuidv4();
   genStore.addJob({
@@ -264,6 +369,13 @@ async function generateClipInternal(
     progressPercent: null,
     etaSeconds: null,
     etaConfidence: 'none',
+  });
+  updateVariationProgress({
+    clipId,
+    jobId,
+    status: 'generating',
+    progress: 'Submitting...',
+    startedAt: Date.now(),
   });
 
   store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
@@ -369,6 +481,11 @@ async function generateClipInternal(
 
     const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
     const taskId = releaseResp.task_id;
+    updateVariationProgress({
+      taskId,
+      status: 'generating',
+      progress: 'Generating...',
+    });
 
     // Poll for completion
     const startTime = Date.now();
@@ -394,6 +511,10 @@ async function generateClipInternal(
           }),
         });
       }
+      updateVariationProgress({
+        status: entry.status === 0 ? 'generating' : 'processing',
+        progress: entry.progress_text || 'Generating...',
+      });
 
       if (entry.status === 1) {
         // Done — result is a JSON string containing an array of {file, ...}
@@ -430,6 +551,10 @@ async function generateClipInternal(
       });
     }
     useProjectStore.getState().updateClipStatus(clipId, 'processing');
+    updateVariationProgress({
+      status: 'processing',
+      progress: 'Downloading audio...',
+    });
 
     const cumulativeBlob = await api.downloadAudio(resultAudioPath);
     console.log(`[GenerationPipeline] Downloaded cumulative audio: size=${cumulativeBlob.size}, type=${cumulativeBlob.type}, path=${resultAudioPath}`);
@@ -511,6 +636,13 @@ async function generateClipInternal(
         }),
       });
     }
+    updateVariationProgress({
+      status: 'done',
+      progress: 'Ready',
+      resultAudioPath,
+      seed: firstResult?.seed_value,
+      completedAt: Date.now(),
+    });
 
     return { cumulativeBlob, succeeded: true };
   } catch (error) {
@@ -528,6 +660,12 @@ async function generateClipInternal(
         }),
       });
     }
+    updateVariationProgress({
+      status: 'error',
+      progress: message,
+      error: message,
+      completedAt: Date.now(),
+    });
     return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: message };
   }
 }

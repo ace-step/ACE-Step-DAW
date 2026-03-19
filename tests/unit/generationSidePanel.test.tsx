@@ -5,9 +5,14 @@ import { GenerationSidePanel } from '../../src/components/generation/GenerationS
 import { useUIStore } from '../../src/store/uiStore';
 import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
+import { generateVariationSession } from '../../src/services/generationPipeline';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
+}));
+
+vi.mock('../../src/services/generationPipeline', () => ({
+  generateVariationSession: vi.fn(() => Promise.resolve(true)),
 }));
 
 describe('GenerationSidePanel', () => {
@@ -20,6 +25,7 @@ describe('GenerationSidePanel', () => {
     useProjectStore.getState().createProject({ name: 'AI Panel Test', bpm: 132, keyScale: 'D minor' });
     useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setShowGenerationPanel(true);
+    vi.mocked(generateVariationSession).mockClear();
   });
 
   it('hydrates core generation controls from store-backed project defaults', () => {
@@ -108,6 +114,10 @@ describe('GenerationSidePanel', () => {
       globalCaption: '',
     });
     expect(screen.getByTestId('variation-cards')).toBeInTheDocument();
+    expect(generateVariationSession).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'cinematic strings with pulsing bass',
+      variationCount: 3,
+    }));
   });
 
   it('surfaces variation errors as actionable feedback', () => {

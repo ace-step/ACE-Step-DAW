@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { Track } from '../../types/project';
+import type { Track, InputMonitoringMode } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TRACK_CATALOG } from '../../constants/tracks';
@@ -30,6 +30,7 @@ export function TrackHeader({
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+  const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
 
   // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
   const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
@@ -68,6 +69,11 @@ export function TrackHeader({
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const isCompact = laneHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
+  const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
+  const cycleMonitor = useCallback(() => {
+    const next: Record<InputMonitoringMode, InputMonitoringMode> = { off: 'auto', auto: 'on', on: 'off' };
+    setInputMonitoring(track.id, next[monitorMode]);
+  }, [track.id, monitorMode, setInputMonitoring]);
 
   const onHeightResizeDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -255,6 +261,25 @@ export function TrackHeader({
         >
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
             <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
+          </svg>
+        </button>
+        {/* Input monitoring — cycles off → auto → on */}
+        <button
+          onClick={cycleMonitor}
+          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+            monitorMode === 'on'
+              ? 'bg-cyan-600/90 text-white'
+              : monitorMode === 'auto'
+                ? 'bg-cyan-600/50 text-cyan-200'
+                : 'text-zinc-500 hover:text-cyan-400 hover:bg-[#444]'
+          }`}
+          title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
+          aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
+        >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+            <path d="M2 7V6a4 4 0 018 0v1" />
+            <rect x="1" y="7" width="2.5" height="3" rx="0.5" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
+            <rect x="8.5" y="7" width="2.5" height="3" rx="0.5" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
           </svg>
         </button>
         {/* Automation toggle */}

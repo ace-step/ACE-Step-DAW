@@ -8,6 +8,7 @@ import type {
   ClipVersion,
   TrackName,
   TrackType,
+  InputMonitoringMode,
   ClipGenerationStatus,
   AssetClip,
   SequencerPattern,
@@ -103,6 +104,7 @@ interface ProjectState {
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
   renameTrack: (trackId: string, newName: string) => void;
+  setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
@@ -591,6 +593,21 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId ? { ...t, displayName: newName } : t,
+        ),
+      },
+    });
+  },
+
+  setInputMonitoring: (trackId, mode) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, inputMonitoring: mode } : t,
         ),
       },
     });

@@ -183,6 +183,10 @@ export interface Track {
   soloed: boolean;
   armed?: boolean;
   clips: Clip[];
+  // Track grouping / folder tracks
+  parentTrackId?: string;
+  isGroup?: boolean;
+  collapsed?: boolean;
   sequencerPattern?: SequencerPattern;
   synthPreset?: SynthPreset;
   effects?: TrackEffect[];

@@ -156,6 +156,12 @@ interface ProjectState {
   updateAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number, updates: Partial<AutomationPoint>) => void;
   clearAutomationLane: (trackId: string, parameter: AutomationParameter) => void;
 
+  // Track grouping / folder tracks
+  createGroupTrack: (name: string) => Track;
+  moveTrackToGroup: (trackId: string, groupId: string | null) => void;
+  toggleGroupCollapse: (groupId: string) => void;
+  getGroupVolume: (groupId: string) => number;
+
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
   getTrackForClip: (clipId: string) => Track | undefined;
@@ -1917,6 +1923,79 @@ export const useProjectStore = create<ProjectState>()(
       (l: AutomationLane) => !(l.trackId === trackId && automationParamEquals(l.parameter, parameter)),
     );
     set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  createGroupTrack: (name) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    _pushHistory(state.project);
+    const existingOrders = state.project.tracks.map((t) => t.order);
+    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+    const track: Track = {
+      id: uuidv4(),
+      trackName: 'custom',
+      displayName: name,
+      color: '#71717a',
+      order: maxOrder + 1,
+      volume: 0.8,
+      muted: false,
+      soloed: false,
+      clips: [],
+      isGroup: true,
+      collapsed: false,
+      effects: [],
+    };
+    const newTracks = [...state.project.tracks, track];
+    set({ project: { ...state.project, updatedAt: Date.now(), tracks: newTracks } });
+    return track;
+  },
+
+  moveTrackToGroup: (trackId, groupId) => {
+    const state = get();
+    if (!state.project) return;
+    if (groupId !== null) {
+      const group = state.project.tracks.find((t) => t.id === groupId);
+      if (!group || !group.isGroup) return;
+    }
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track || track.isGroup) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, parentTrackId: groupId ?? undefined } : t,
+        ),
+      },
+    });
+  },
+
+  toggleGroupCollapse: (groupId) => {
+    const state = get();
+    if (!state.project) return;
+    const group = state.project.tracks.find((t) => t.id === groupId);
+    if (!group || !group.isGroup) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === groupId ? { ...t, collapsed: !t.collapsed } : t,
+        ),
+      },
+    });
+  },
+
+  getGroupVolume: (groupId) => {
+    const state = get();
+    if (!state.project) return 0;
+    const children = state.project.tracks.filter(
+      (t) => t.parentTrackId === groupId && !t.isGroup,
+    );
+    if (children.length === 0) return 0;
+    return children.reduce((sum, t) => sum + t.volume, 0) / children.length;
   },
 
   getTrackById: (trackId) => {

@@ -191,6 +191,16 @@ export interface Clip {
   midiData?: MidiClipData;
   /** Comping takes for this clip. */
   takes?: Take[];
+  /** Warp markers for audio quantize (transient-to-grid alignment). */
+  warpMarkers?: AudioWarpMarker[];
+}
+
+/** A warp marker on a clip mapping an original transient time to a grid-snapped position. */
+export interface AudioWarpMarker {
+  /** Original transient position in seconds (relative to clip audio start). */
+  originalTime: number;
+  /** Quantized position snapped to the beat grid in seconds. */
+  quantizedTime: number;
 }
 
 export interface SequencerStep {

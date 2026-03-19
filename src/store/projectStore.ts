@@ -30,6 +30,7 @@ import type {
   Marker,
   TempoEvent,
   TimeSignatureEvent,
+  AudioWarpMarker,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -133,6 +134,8 @@ interface ProjectState {
   setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
+  quantizeAudioClip: (clipId: string, warpMarkers: AudioWarpMarker[]) => void;
+  clearAudioQuantize: (clipId: string) => void;
 
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
@@ -957,6 +960,14 @@ export const useProjectStore = create<ProjectState>()(
 
   setClipPitchShift: (clipId, semitones) => {
     get().updateClip(clipId, { pitchShift: semitones });
+  },
+
+  quantizeAudioClip: (clipId, warpMarkers) => {
+    get().updateClip(clipId, { warpMarkers });
+  },
+
+  clearAudioQuantize: (clipId) => {
+    get().updateClip(clipId, { warpMarkers: undefined });
   },
 
   slipClip: (clipId, deltaSeconds) => {

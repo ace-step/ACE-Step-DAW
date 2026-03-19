@@ -7,6 +7,7 @@ import { useGenerationStore } from '../store/generationStore';
 import { useShortcutsStore } from '../store/shortcutsStore';
 import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
+import { getMidiCaptureService } from '../services/midiCaptureService';
 import type { KeyCombo } from '../types/shortcuts';
 
 function isInputFocused(e: KeyboardEvent): boolean {
@@ -305,6 +306,15 @@ export function useKeyboardShortcuts() {
       if (matches('transport.punchOut')) {
         e.preventDefault();
         transport.setPunchOut(transport.currentTime);
+        return;
+      }
+      if (matches('transport.captureMidi')) {
+        e.preventDefault();
+        const captureService = getMidiCaptureService();
+        const targetTrackId = transport.armedTrackIds[0];
+        if (targetTrackId) {
+          project.captureMidi(targetTrackId, transport.currentTime, captureService);
+        }
         return;
       }
 

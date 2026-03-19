@@ -6,6 +6,7 @@ import { useCollaborationStore } from '../../store/collaborationStore';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
+import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 
 function LCDDisplay() {
@@ -204,6 +205,24 @@ export function Toolbar() {
         </button>
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
           <div className={`w-3.5 h-3.5 rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-60'}`} />
+        </ControlBarButton>
+        <ControlBarButton
+          onClick={() => {
+            const armedTrackIds = useTransportStore.getState().armedTrackIds;
+            const targetTrackId = armedTrackIds[0];
+            if (targetTrackId) {
+              const captureService = getMidiCaptureService();
+              const currentTime = useTransportStore.getState().currentTime;
+              useProjectStore.getState().captureMidi(targetTrackId, currentTime, captureService);
+            }
+          }}
+          title="Capture MIDI (F)"
+          disabled={!project}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="7" cy="7" r="5" />
+            <polyline points="5,6 7,9 9,5" />
+          </svg>
         </ControlBarButton>
       </div>
 

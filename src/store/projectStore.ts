@@ -87,6 +87,7 @@ import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS, renderTrackForBounceInPlace } from '../services/bounceInPlace';
+import type { MidiCaptureService } from '../services/midiCaptureService';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -467,6 +468,13 @@ interface ProjectState {
   addGrooveTemplate: (template: GrooveTemplate) => void;
   deleteGrooveTemplate: (grooveId: string) => void;
   renameGrooveTemplate: (grooveId: string, name: string) => void;
+  /** Capture retroactive MIDI from a rolling buffer into a new clip on the given track. */
+  captureMidi: (
+    trackId: string,
+    captureTime: number,
+    captureService: MidiCaptureService,
+    options?: { bars?: number; quantize?: PianoRollGrid },
+  ) => string | undefined;
 }
 
 function computeTotalDuration(
@@ -4744,6 +4752,7 @@ export const useProjectStore = create<ProjectState>()(
     };
 
     _pushHistory(state.project);
+
     set({
       project: {
         ...state.project,
@@ -4752,6 +4761,80 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return template;
+  },
+
+  captureMidi: (trackId, captureTime, captureService, options) => {
+    const state = get();
+    if (!state.project) return undefined;
+
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track) return undefined;
+
+    const bpm = state.project.bpm;
+    const timeSig = state.project.timeSignature;
+    const bars = options?.bars ?? 4;
+
+    const result = captureService.drain(trackId, captureTime, bpm, timeSig, bars);
+    if (!result) return undefined;
+
+    _pushHistory(state.project);
+
+    const grid: PianoRollGrid = options?.quantize ?? '1/16';
+    const midiNotes: MidiNote[] = result.notes.map((n) => ({
+      id: uuidv4(),
+      pitch: n.pitch,
+      startBeat: n.startBeat,
+      durationBeats: n.durationBeats,
+      velocity: n.velocity,
+    }));
+
+    // Optionally quantize
+    let finalNotes = midiNotes;
+    if (options?.quantize) {
+      const gridMap: Record<PianoRollGrid, number> = { '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/32': 0.125 };
+      const gridBeats = gridMap[options.quantize];
+      const allIds = new Set(midiNotes.map((n) => n.id));
+      finalNotes = applyQuantize(midiNotes, allIds, { gridBeats, strength: 100, swing: 0, scope: 'preserveDuration' });
+    }
+
+    const clip: Clip = {
+      id: uuidv4(),
+      trackId,
+      startTime: result.clipStartTime,
+      duration: result.clipDuration,
+      prompt: 'Captured MIDI',
+      lyrics: '',
+      generationStatus: 'ready',
+      generationJobId: null,
+      cumulativeMixKey: null,
+      isolatedAudioKey: null,
+      waveformPeaks: null,
+      source: 'uploaded',
+      midiData: { notes: finalNotes, grid },
+    };
+
+    const newTracks = state.project.tracks.map((t) =>
+      t.id === trackId ? { ...t, clips: [...t.clips, clip] } : t,
+    );
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(
+          newTracks,
+          state.project.measures,
+          bpm,
+          timeSig,
+          state.project.tempoMap,
+          state.project.timeSignatureMap,
+        ),
+        tracks: newTracks,
+      },
+    });
+
+    toastSuccess('Captured MIDI from rolling buffer');
+    return clip.id;
   },
 
   applyGrooveToClip: (clipId, noteIds, grooveId, options) => {

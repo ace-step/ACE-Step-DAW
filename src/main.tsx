@@ -9,6 +9,7 @@ import { useTransportStore } from './store/transportStore';
 import { useCollaborationStore } from './store/collaborationStore';
 import { useShortcutsStore } from './store/shortcutsStore';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
+import { getMidiCaptureService } from './services/midiCaptureService';
 
 // Expose stores globally for agent/automation access
 // Agents can call: window.__store.getState() / window.__store.setState(...)
@@ -26,6 +27,7 @@ import { generateProjectSummary, generateProjectStructure } from './utils/dawSta
   generateProjectSummary(useProjectStore.getState().project);
 (window as unknown as Record<string, unknown>).__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
+(window as unknown as Record<string, unknown>).__midiCaptureService = getMidiCaptureService();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

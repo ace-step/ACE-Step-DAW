@@ -19,6 +19,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.nudgeRight',  category: 'transport', label: 'Nudge Playhead Right',     defaultCombo: { code: 'ArrowRight' } },
   { id: 'transport.punchIn',     category: 'transport', label: 'Set Punch-In Point',       defaultCombo: { code: 'KeyI' } },
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',      defaultCombo: { code: 'KeyO' } },
+  { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',             defaultCombo: { code: 'KeyF' } },
 
   // ── Clips ──────────────────────────────────────────────────────
   { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',    defaultCombo: { code: 'Delete' } },

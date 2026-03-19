@@ -14,7 +14,11 @@ test.describe('New Feature Verification', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => (window as any).__store !== undefined, null, { timeout: 5000 });
+    await page.waitForFunction(
+      () => (window as any).__store !== undefined && (window as any).__transportStore !== undefined,
+      null,
+      { timeout: 5000 },
+    );
     // Create a project
     await page.evaluate(() => {
       const s = (window as any).__store;
@@ -91,9 +95,9 @@ test.describe('New Feature Verification', () => {
       const s = (window as any).__store;
       const state = s.getState();
       // Add a track and clip
-      state.addTrack('Comp Track', 'audio');
+      state.addTrack('custom', 'stems');
       const track = s.getState().project.tracks[s.getState().project.tracks.length - 1];
-      state.addClip(track.id, { startTime: 0, duration: 4, audioKey: 'take1.wav' });
+      state.addClip(track.id, { startTime: 0, duration: 4, prompt: 'take1', lyrics: '' });
       const clip = s.getState().project.tracks.find((t: any) => t.id === track.id).clips[0];
 
       // Add takes
@@ -123,7 +127,7 @@ test.describe('New Feature Verification', () => {
     const result = await page.evaluate(() => {
       const s = (window as any).__store;
       const state = s.getState();
-      state.addTrack('Lanes Track', 'audio');
+      state.addTrack('custom', 'stems');
       const track = s.getState().project.tracks[s.getState().project.tracks.length - 1];
       const before = track.showTakeLanes;
       state.toggleTakeLanes(track.id);

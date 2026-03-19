@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
-import type { SequencerPattern } from '../types/project';
+import { ReturnBusNode } from './ReturnBusNode';
+import type { SequencerPattern, ReturnTrack, Track } from '../types/project';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -32,6 +33,7 @@ export class AudioEngine {
   ctx: AudioContext;
   masterGain: GainNode;
   trackNodes: Map<string, TrackNode> = new Map();
+  returnBusNodes: Map<string, ReturnBusNode> = new Map();
   scheduledSources: ScheduledSource[] = [];
 
   private _playing = false;
@@ -93,6 +95,82 @@ export class AudioEngine {
       this.trackNodes.delete(trackId);
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Return bus management
+  // -----------------------------------------------------------------------
+
+  getOrCreateReturnBus(returnBusId: string): ReturnBusNode {
+    let node = this.returnBusNodes.get(returnBusId);
+    if (!node) {
+      node = new ReturnBusNode(this.ctx, this.masterGain);
+      this.returnBusNodes.set(returnBusId, node);
+    }
+    return node;
+  }
+
+  removeReturnBus(returnBusId: string) {
+    const node = this.returnBusNodes.get(returnBusId);
+    if (node) {
+      // Disconnect all track sends to this bus
+      for (const trackNode of this.trackNodes.values()) {
+        trackNode.removeSend(returnBusId);
+      }
+      node.disconnect();
+      this.returnBusNodes.delete(returnBusId);
+    }
+  }
+
+  getReturnBusLevel(returnBusId: string): number {
+    return this.returnBusNodes.get(returnBusId)?.getLevel() ?? 0;
+  }
+
+  /**
+   * Sync all return buses and track sends from project state.
+   * Call this whenever returnTracks or track.sends changes.
+   */
+  syncReturnBuses(returnTracks: ReturnTrack[], tracks: Track[]) {
+    const activeReturnIds = new Set(returnTracks.map((r) => r.id));
+
+    // Remove return buses no longer in project
+    for (const id of this.returnBusNodes.keys()) {
+      if (!activeReturnIds.has(id)) {
+        this.removeReturnBus(id);
+      }
+    }
+
+    // Create/update return bus nodes
+    for (const rt of returnTracks) {
+      const bus = this.getOrCreateReturnBus(rt.id);
+      bus.volume = rt.volume;
+      bus.muted = rt.muted;
+      bus.pan = rt.pan ?? 0;
+    }
+
+    // Sync sends from tracks
+    for (const track of tracks) {
+      const trackNode = this.trackNodes.get(track.id);
+      if (!trackNode) continue;
+
+      const activeSendIds = new Set<string>();
+
+      for (const send of track.sends ?? []) {
+        const bus = this.returnBusNodes.get(send.returnTrackId);
+        if (!bus) continue;
+        trackNode.setSend(send.returnTrackId, bus.inputGain, send.amount);
+        activeSendIds.add(send.returnTrackId);
+      }
+
+      // Remove sends to return buses that are no longer configured for this track
+      for (const returnBusId of activeReturnIds) {
+        if (!activeSendIds.has(returnBusId)) {
+          trackNode.removeSend(returnBusId);
+        }
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------
 
   get masterVolume() { return this.masterGain.gain.value; }
   set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
@@ -367,6 +445,10 @@ export class AudioEngine {
       node.disconnect();
     }
     this.trackNodes.clear();
+    for (const node of this.returnBusNodes.values()) {
+      node.disconnect();
+    }
+    this.returnBusNodes.clear();
     this.ctx.close();
   }
 }

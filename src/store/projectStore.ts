@@ -20,6 +20,8 @@ import type {
   AutomationParameter,
   AutomationPoint,
   AutomationLane,
+  ReturnTrack,
+  SendConfig,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
@@ -155,6 +157,13 @@ interface ProjectState {
   removeAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
   updateAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number, updates: Partial<AutomationPoint>) => void;
   clearAutomationLane: (trackId: string, parameter: AutomationParameter) => void;
+
+  // Return tracks (aux buses)
+  addReturnTrack: () => ReturnTrack;
+  removeReturnTrack: (returnTrackId: string) => void;
+  updateReturnTrack: (returnTrackId: string, updates: Partial<Pick<ReturnTrack, 'displayName' | 'volume' | 'muted' | 'pan' | 'color'>>) => void;
+  /** Set the send amount (0–1) from a track to a return track. */
+  setTrackSend: (trackId: string, returnTrackId: string, amount: number) => void;
 
   getTrackById: (trackId: string) => Track | undefined;
   getClipById: (clipId: string) => Clip | undefined;
@@ -1917,6 +1926,71 @@ export const useProjectStore = create<ProjectState>()(
       (l: AutomationLane) => !(l.trackId === trackId && automationParamEquals(l.parameter, parameter)),
     );
     set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  addReturnTrack: () => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    _pushHistory(state.project);
+    const existingCount = (state.project.returnTracks ?? []).length;
+    const label = String.fromCharCode(65 + existingCount); // A, B, C …
+    const colors = ['#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+    const returnTrack: ReturnTrack = {
+      id: uuidv4(),
+      displayName: label,
+      color: colors[existingCount % colors.length],
+      volume: 1,
+      muted: false,
+      pan: 0,
+      effects: [],
+    };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        returnTracks: [...(state.project.returnTracks ?? []), returnTrack],
+      },
+    });
+    return returnTrack;
+  },
+
+  removeReturnTrack: (returnTrackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    // Remove from returnTracks list and strip sends from all tracks
+    const returnTracks = (state.project.returnTracks ?? []).filter((r) => r.id !== returnTrackId);
+    const tracks = state.project.tracks.map((t) => ({
+      ...t,
+      sends: (t.sends ?? []).filter((s: SendConfig) => s.returnTrackId !== returnTrackId),
+    }));
+    set({ project: { ...state.project, updatedAt: Date.now(), returnTracks, tracks } });
+  },
+
+  updateReturnTrack: (returnTrackId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const returnTracks = (state.project.returnTracks ?? []).map((r) =>
+      r.id === returnTrackId ? { ...r, ...updates } : r,
+    );
+    set({ project: { ...state.project, updatedAt: Date.now(), returnTracks } });
+  },
+
+  setTrackSend: (trackId, returnTrackId, amount) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const tracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const existingSends = t.sends ?? [];
+      const hasSend = existingSends.some((s) => s.returnTrackId === returnTrackId);
+      const sends: SendConfig[] = hasSend
+        ? existingSends.map((s) => s.returnTrackId === returnTrackId ? { ...s, amount } : s)
+        : [...existingSends, { returnTrackId, amount }];
+      return { ...t, sends };
+    });
+    set({ project: { ...state.project, updatedAt: Date.now(), tracks } });
   },
 
   getTrackById: (trackId) => {

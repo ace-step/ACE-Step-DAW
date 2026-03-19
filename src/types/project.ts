@@ -171,6 +171,24 @@ export interface SequencerPattern {
   swing: number;          // 0–1, 0 = straight, 0.67 = heavy swing
 }
 
+/** Amount of signal routed from a track to a specific return track (0–1). */
+export interface SendConfig {
+  returnTrackId: string;
+  amount: number;  // 0–1 post-fader send level, default 0
+}
+
+/** A return (aux) track that receives send signals from regular tracks. */
+export interface ReturnTrack {
+  id: string;
+  /** Short label, e.g. "A", "B", "Return 1" */
+  displayName: string;
+  color: string;
+  volume: number;   // 0–1, default 1
+  muted: boolean;
+  pan?: number;     // -1 to +1, default 0
+  effects?: TrackEffect[];
+}
+
 export interface Track {
   id: string;
   trackType?: TrackType;
@@ -198,6 +216,8 @@ export interface Track {
   // Reverb
   reverbMix?: number;          // 0–1 wet/dry, default 0
   reverbRoomSize?: number;     // 0–1, controls IR length, default 0.5
+  // Sends to return tracks
+  sends?: SendConfig[];
   // Track Inspector
   /** Default prompt for clips on this track; falls back to track display name if empty. */
   localCaption?: string;
@@ -249,6 +269,8 @@ export interface Project {
   assets?: AssetClip[];
   /** Per-track automation lanes. */
   automationLanes?: AutomationLane[];
+  /** Auxiliary return tracks for send buses. */
+  returnTracks?: ReturnTrack[];
 }
 
 // ─── Automation Types ────────────────────────────────────────────────────────

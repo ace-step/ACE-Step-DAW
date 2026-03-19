@@ -282,3 +282,100 @@ describe('projectStore', () => {
       expect(orderAfter).toEqual(orderBefore);
     });
   });
+
+  describe('Return tracks and sends', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('addReturnTrack creates a return track with default values', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+
+      expect(rt.id).toBeTruthy();
+      expect(rt.displayName).toBe('A');
+      expect(rt.volume).toBe(1);
+      expect(rt.muted).toBe(false);
+      expect(rt.effects).toEqual([]);
+
+      const returnTracks = useProjectStore.getState().project?.returnTracks ?? [];
+      expect(returnTracks).toHaveLength(1);
+      expect(returnTracks[0].id).toBe(rt.id);
+    });
+
+    it('addReturnTrack uses sequential labels A, B, C', () => {
+      useProjectStore.getState().addReturnTrack();
+      useProjectStore.getState().addReturnTrack();
+      const rtC = useProjectStore.getState().addReturnTrack();
+
+      expect(rtC.displayName).toBe('C');
+      const returnTracks = useProjectStore.getState().project?.returnTracks ?? [];
+      expect(returnTracks.map((r) => r.displayName)).toEqual(['A', 'B', 'C']);
+    });
+
+    it('removeReturnTrack removes the return track and cleans up sends', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+      useProjectStore.getState().setTrackSend(track.id, rt.id, 0.5);
+
+      useProjectStore.getState().removeReturnTrack(rt.id);
+
+      const returnTracks = useProjectStore.getState().project?.returnTracks ?? [];
+      expect(returnTracks).toHaveLength(0);
+
+      const updatedTrack = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id);
+      expect(updatedTrack?.sends ?? []).toHaveLength(0);
+    });
+
+    it('updateReturnTrack updates volume, mute, pan', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+
+      useProjectStore.getState().updateReturnTrack(rt.id, { volume: 0.7, muted: true, pan: -0.5 });
+
+      const updated = useProjectStore.getState().project?.returnTracks?.find((r) => r.id === rt.id);
+      expect(updated?.volume).toBe(0.7);
+      expect(updated?.muted).toBe(true);
+      expect(updated?.pan).toBe(-0.5);
+    });
+
+    it('setTrackSend creates a send entry on the track', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+
+      useProjectStore.getState().setTrackSend(track.id, rt.id, 0.8);
+
+      const sends = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id)?.sends ?? [];
+      expect(sends).toHaveLength(1);
+      expect(sends[0]).toEqual({ returnTrackId: rt.id, amount: 0.8 });
+    });
+
+    it('setTrackSend updates an existing send amount', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+
+      useProjectStore.getState().setTrackSend(track.id, rt.id, 0.5);
+      useProjectStore.getState().setTrackSend(track.id, rt.id, 0.9);
+
+      const sends = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id)?.sends ?? [];
+      expect(sends).toHaveLength(1);
+      expect(sends[0].amount).toBe(0.9);
+    });
+
+    it('setTrackSend is undoable', () => {
+      const rt = useProjectStore.getState().addReturnTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+
+      useProjectStore.getState().setTrackSend(track.id, rt.id, 0.6);
+      useProjectStore.getState().undo();
+
+      const sends = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id)?.sends ?? [];
+      expect(sends).toHaveLength(0);
+    });
+
+    it('addReturnTrack is undoable', () => {
+      useProjectStore.getState().addReturnTrack();
+      useProjectStore.getState().undo();
+
+      const returnTracks = useProjectStore.getState().project?.returnTracks ?? [];
+      expect(returnTracks).toHaveLength(0);
+    });
+  });

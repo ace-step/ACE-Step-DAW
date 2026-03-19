@@ -6,6 +6,8 @@
  *          → dryGain ─────────────────────────────────────┐
  *          → convolver → wetGain → reverbOut              |
  *                                       → sumGain → compressor → volumeGain → analyserNode → masterGain
+ *                                                                                           ↓ (post-fader sends)
+ *                                                                                      sendGain[A] → returnBus[A]
  */
 export class TrackNode {
   readonly inputGain: GainNode;
@@ -21,6 +23,9 @@ export class TrackNode {
   readonly volumeGain: GainNode;
   private readonly analyserNode: AnalyserNode;
   private readonly analyserData: Uint8Array<ArrayBuffer>;
+
+  /** Post-fader send gains: returnBusId → GainNode connected to the return bus inputGain. */
+  private readonly sendGains: Map<string, GainNode> = new Map();
 
   private _volume = 0.8;
   private _muted = false;
@@ -224,6 +229,41 @@ export class TrackNode {
   }
 
   // -----------------------------------------------------------------------
+  // Sends (post-fader)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Create or update a post-fader send to a return bus.
+   * @param returnBusId - Unique ID of the return track
+   * @param destination - The return bus inputGain node to send to
+   * @param amount - 0–1 send level
+   */
+  setSend(returnBusId: string, destination: GainNode, amount: number) {
+    let sendGain = this.sendGains.get(returnBusId);
+    if (!sendGain) {
+      sendGain = this.ctx.createGain();
+      this.analyserNode.connect(sendGain);
+      this.sendGains.set(returnBusId, sendGain);
+    }
+    sendGain.gain.value = Math.max(0, Math.min(1, amount));
+    // Disconnect before reconnecting to avoid duplicate connections.
+    // Web Audio API throws if the nodes aren't connected — this is the idiomatic pattern.
+    try { sendGain.disconnect(destination); } catch { /* not yet connected */ }
+    sendGain.connect(destination);
+  }
+
+  /**
+   * Remove a post-fader send to a return bus.
+   */
+  removeSend(returnBusId: string) {
+    const sendGain = this.sendGains.get(returnBusId);
+    if (sendGain) {
+      sendGain.disconnect();
+      this.sendGains.delete(returnBusId);
+    }
+  }
+
+  // -----------------------------------------------------------------------
 
   /**
    * Splice an external effects chain (from EffectsEngine) between eqHigh and dryGain/convolver.
@@ -256,6 +296,12 @@ export class TrackNode {
   // -----------------------------------------------------------------------
 
   disconnect() {
+    // Clean up send gains first
+    for (const sendGain of this.sendGains.values()) {
+      sendGain.disconnect();
+    }
+    this.sendGains.clear();
+
     this.inputGain.disconnect();
     this.panNode.disconnect();
     this.eqLow.disconnect();

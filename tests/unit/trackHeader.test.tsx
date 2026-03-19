@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TrackHeader } from '../../src/components/tracks/TrackHeader';
 import type { Track } from '../../src/types/project';
@@ -107,10 +107,10 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       const muteBtn = screen.getByTitle('Mute (M)');
       const soloBtn = screen.getByTitle('Solo (S)');
       const armBtn = screen.getByTitle('Record arm');
-      // These should not be inside a hidden container
-      expect(muteBtn.closest('.opacity-0')).toBeNull();
-      expect(soloBtn.closest('.opacity-0')).toBeNull();
-      expect(armBtn.closest('.opacity-0')).toBeNull();
+      const primaryRail = muteBtn.closest('[data-primary-actions]');
+      expect(primaryRail).not.toBeNull();
+      expect(soloBtn.closest('[data-primary-actions]')).toBe(primaryRail);
+      expect(armBtn.closest('[data-primary-actions]')).toBe(primaryRail);
     });
 
     it('secondary buttons (Monitor, Freeze, Automation) are in a hover-reveal container when inactive', () => {
@@ -122,6 +122,7 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       const container = monitorBtn.parentElement!;
       expect(container.classList.contains('opacity-0')).toBe(true);
       expect(container.classList.contains('group-hover:opacity-100')).toBe(true);
+      expect(container.classList.contains('pointer-events-none')).toBe(true);
       expect(freezeBtn.parentElement).toBe(container);
       expect(autoBtn.parentElement).toBe(container);
     });
@@ -132,6 +133,7 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       const container = monitorBtn.parentElement!;
       expect(container.classList.contains('opacity-100')).toBe(true);
       expect(container.classList.contains('opacity-0')).toBe(false);
+      expect(container.classList.contains('pointer-events-none')).toBe(false);
     });
 
     it('secondary buttons become visible when track is frozen', () => {
@@ -140,6 +142,20 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       const container = freezeBtn.parentElement!;
       expect(container.classList.contains('opacity-100')).toBe(true);
       expect(container.classList.contains('opacity-0')).toBe(false);
+    });
+  });
+
+  describe('layout clarity', () => {
+    it('uses a larger pill for the always-visible primary controls', () => {
+      renderHeader();
+      const muteBtn = screen.getByTitle('Mute (M)');
+      const soloBtn = screen.getByTitle('Solo (S)');
+      const armBtn = screen.getByTitle('Record arm');
+
+      for (const btn of [muteBtn, soloBtn, armBtn]) {
+        expect(btn.classList.contains('w-6')).toBe(true);
+        expect(btn.classList.contains('h-6')).toBe(true);
+      }
     });
   });
 

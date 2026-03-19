@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { TrackHeader } from '../TrackHeader';
 import { useProjectStore } from '../../../store/projectStore';
 import type { Track } from '../../../types/project';
@@ -88,18 +88,19 @@ describe('TrackHeader icon bar', () => {
     expect(soloBtn).toBeVisible();
     expect(armBtn).toBeVisible();
 
-    // Secondary buttons should be hidden by default (opacity-0 or similar)
+    // Secondary buttons should be rendered inside a separate quick-action rail
     const monitorBtn = screen.getByTitle(/Input monitoring/);
     const freezeBtn = screen.getByTitle(/Freeze/i);
     const autoBtn = screen.getByTitle(/automation/i);
+    const primaryRail = muteBtn.closest('[data-primary-actions]');
 
-    // They should have the secondary-action CSS class or be hidden
+    expect(primaryRail).not.toBeNull();
     expect(monitorBtn.closest('[data-secondary-actions]')).not.toBeNull();
     expect(freezeBtn.closest('[data-secondary-actions]')).not.toBeNull();
     expect(autoBtn.closest('[data-secondary-actions]')).not.toBeNull();
   });
 
-  it('has uniform button sizing with consistent gap', () => {
+  it('uses a larger primary action rail for the three always-visible controls', () => {
     render(<TrackHeader track={makeTrack()} {...defaultProps} />);
 
     const buttons = screen.getAllByRole('button');
@@ -109,8 +110,9 @@ describe('TrackHeader icon bar', () => {
 
     // All primary icon buttons should have consistent dimensions
     for (const btn of iconButtons) {
-      expect(btn.classList.contains('w-5')).toBe(true);
-      expect(btn.classList.contains('h-5')).toBe(true);
+      expect(btn.classList.contains('w-6')).toBe(true);
+      expect(btn.classList.contains('h-6')).toBe(true);
+      expect(btn.closest('[data-primary-actions]')).not.toBeNull();
     }
   });
 

@@ -36,9 +36,10 @@ export function TrackHeader({
   const setAllTracksHeightPreset = useProjectStore((s) => s.setAllTracksHeightPreset);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
   const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
+  const project = useProjectStore((s) => s.project);
 
   // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
-  const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
+  const anySoloed = project?.tracks.some((t) => t.soloed) ?? false;
   const isImpliedMute = anySoloed && !track.soloed;
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
@@ -99,6 +100,11 @@ export function TrackHeader({
   const isCompact = laneHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
   const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
+  const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
+  const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane;
+  const primaryButtonClass = 'w-6 h-6 flex items-center justify-center rounded-md transition-colors';
+  const secondaryButtonClass = 'w-5 h-5 flex items-center justify-center rounded-md transition-colors';
+
   const cycleMonitor = useCallback(() => {
     const next: Record<InputMonitoringMode, InputMonitoringMode> = { off: 'auto', auto: 'on', on: 'off' };
     setInputMonitoring(track.id, next[monitorMode]);
@@ -146,7 +152,7 @@ export function TrackHeader({
   return (
     <>
     <div
-      className={`relative flex items-center gap-1.5 px-1 border-b border-[#3a3a3a] group select-none ${
+      className={`relative flex items-center gap-2 px-2 border-b border-[#3a3a3a] group select-none ${
         isDragOver ? 'bg-[#383838]' : 'bg-[#2d2d2d]'
       }`}
       style={{
@@ -188,7 +194,7 @@ export function TrackHeader({
 
       {/* Drag handle */}
       <div
-        className="flex-shrink-0 ml-1.5 text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none"
+        className="flex-shrink-0 ml-1 text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none"
         title="Drag to reorder"
       >
         ⠿
@@ -204,7 +210,7 @@ export function TrackHeader({
       </div>
 
       {/* Name + controls column */}
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
+      <div className="flex-1 min-w-0 flex flex-col gap-1 py-1">
         {/* Name */}
         {isEditing ? (
           <input
@@ -246,144 +252,148 @@ export function TrackHeader({
         )}
       </div>
 
-      {/* M/S/Delete buttons */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        {/* Mute - speaker icon */}
-        <button
-          onClick={() => updateTrack(track.id, { muted: !track.muted })}
-          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
-            track.muted
-              ? 'bg-amber-600/90 text-white'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#444]'
-          }`}
-          title="Mute (M)"
+      {/* Primary and secondary track actions */}
+      <div className="flex items-center gap-1 flex-shrink-0 self-stretch py-1">
+        <div
+          data-primary-actions
+          className="flex items-center gap-0.5 rounded-lg border border-[#494949] bg-[#242424]/95 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
         >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            {track.muted ? (
-              <>
-                <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
-                <path d="M9 4l3 4M12 4L9 8" />
-              </>
-            ) : (
-              <>
-                <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
-                <path d="M9 3.5c1 .8 1 4.2 0 5" />
-              </>
-            )}
-          </svg>
-        </button>
-        {/* Solo - headphone icon */}
-        <button
-          onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
-          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
-            track.soloed
-              ? 'bg-emerald-600/90 text-white'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#444]'
+          <button
+            onClick={() => updateTrack(track.id, { muted: !track.muted })}
+            className={`${primaryButtonClass} ${
+              track.muted
+                ? 'bg-amber-600/90 text-white'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+            }`}
+            title="Mute (M)"
+            aria-label={`Mute ${track.displayName}`}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              {track.muted ? (
+                <>
+                  <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                  <path d="M9 4l3 4M12 4L9 8" />
+                </>
+              ) : (
+                <>
+                  <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                  <path d="M9 3.5c1 .8 1 4.2 0 5" />
+                </>
+              )}
+            </svg>
+          </button>
+          <button
+            onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
+            className={`${primaryButtonClass} ${
+              track.soloed
+                ? 'bg-emerald-600/90 text-white'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+            }`}
+            title="Solo (S)"
+            aria-label={`Solo ${track.displayName}`}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 5.5a4 4 0 018 0" />
+              <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
+            className={`${primaryButtonClass} ${
+              isArmed
+                ? 'bg-red-600/90 text-white'
+                : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+            }`}
+            title="Record arm"
+            aria-label={`Record arm ${track.displayName}`}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          data-secondary-actions
+          className={`flex items-center gap-0.5 rounded-lg border border-[#404040] bg-[#1f1f1f]/90 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all ${
+            showSecondaryActions
+              ? 'opacity-100 translate-x-0'
+              : 'opacity-0 pointer-events-none translate-x-1 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0'
           }`}
-          title="Solo (S)"
         >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-            <path d="M2 5.5a4 4 0 018 0" />
-            <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
-          </svg>
-        </button>
-        <button
-          onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
-          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
-            isArmed
-              ? 'bg-red-600/90 text-white'
-              : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
-          }`}
-          title="Record arm"
-          aria-label={`Record arm ${track.displayName}`}
-        >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
-          </svg>
-        </button>
-        {/* Secondary buttons — visible on hover or when active */}
-        <div data-secondary-actions className={`flex items-center gap-1 transition-opacity ${
-          monitorMode !== 'off' || track.frozen || isFreezing || (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
-            ? 'opacity-100'
-            : 'opacity-0 group-hover:opacity-100'
-        }`}>
-          {/* Input monitoring — microphone icon, cycles off → auto → on */}
           <button
             onClick={cycleMonitor}
-            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+            className={`${secondaryButtonClass} ${
               monitorMode === 'on'
                 ? 'bg-cyan-600/90 text-white'
                 : monitorMode === 'auto'
                   ? 'bg-cyan-600/50 text-cyan-200'
-                  : 'text-zinc-500 hover:text-cyan-400 hover:bg-[#444]'
+                  : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
             }`}
             title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
             aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
           >
-            <svg data-icon="microphone" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+            <svg data-icon="microphone" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
               <rect x="4" y="1" width="4" height="6" rx="2" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
               <path d="M3 7a3 3 0 006 0" />
               <path d="M6 10v1.5M4.5 11.5h3" />
             </svg>
           </button>
-          {/* Freeze toggle */}
           <button
             onClick={handleFreeze}
             disabled={isFreezing}
-            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+            className={`${secondaryButtonClass} ${
               track.frozen
                 ? 'bg-cyan-600/90 text-white'
                 : isFreezing
                   ? 'text-cyan-400 animate-pulse'
-                  : 'text-zinc-500 hover:text-cyan-400 hover:bg-[#444]'
+                  : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
             }`}
             title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
             aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
           >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-              <path d="M6 1v10M1 6h10M3 3l6 6M9 3L3 9" />
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 1.5v9" />
+              <path d="M2.5 3.25l7 5.5" />
+              <path d="M2.5 8.75l7-5.5" />
+              <path d="M1.75 6h8.5" />
+              <path d="M4.65 1.9L6 3.25l1.35-1.35" />
+              <path d="M4.65 10.1L6 8.75l1.35 1.35" />
             </svg>
           </button>
-          {/* Automation toggle */}
           <button
             onClick={() => {
-              const project = useProjectStore.getState().project;
-              if (!project) return;
-              const hasLane = (project.automationLanes ?? []).some((l) => l.trackId === track.id);
-              if (!hasLane) {
+              const currentProject = useProjectStore.getState().project;
+              if (!currentProject) return;
+              const laneExists = (currentProject.automationLanes ?? []).some((lane) => lane.trackId === track.id);
+              if (!laneExists) {
                 useProjectStore.getState().ensureAutomationLane(
                   track.id,
                   { type: 'mixer', param: 'volume' },
                   track.volume,
                 );
               } else {
-                // Clear all automation for this track
-                for (const lane of (project.automationLanes ?? []).filter((l) => l.trackId === track.id)) {
+                for (const lane of (currentProject.automationLanes ?? []).filter((candidate) => candidate.trackId === track.id)) {
                   useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
                 }
               }
             }}
-            className={`w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors ${
-              (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
+            className={`${secondaryButtonClass} ${
+              hasAutomationLane
                 ? 'bg-amber-600/80 text-white'
-                : 'text-zinc-500 hover:text-amber-400 hover:bg-[#444]'
+                : 'text-zinc-500 hover:text-amber-300 hover:bg-[#444]'
             }`}
             title="Toggle automation lane (A)"
             aria-label={`Toggle automation ${track.displayName}`}
           >
-            A
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1.5 8.5L4 6l2 2 4.5-4.5" />
+              <circle cx="4" cy="6" r="0.8" fill="currentColor" stroke="none" />
+              <circle cx="6" cy="8" r="0.8" fill="currentColor" stroke="none" />
+              <circle cx="10.5" cy="3.5" r="0.8" fill="currentColor" stroke="none" />
+            </svg>
           </button>
         </div>
-        {/* Delete - hidden by default, visible on hover */}
-        <button
-          onClick={() => removeTrack(track.id)}
-          className="w-5 h-5 flex items-center justify-center rounded text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-          title="Remove track"
-        >
-          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M1 1l6 6M7 1L1 7" />
-          </svg>
-        </button>
       </div>
 
       {/* Bottom-edge height resize handle */}

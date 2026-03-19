@@ -20,6 +20,7 @@ const abletonMap: ShortcutMap = {
   'clips.selectAll':      { code: 'KeyA', mod: true },
   'view.zoomIn':          { code: 'Equal', mod: true },
   'view.zoomOut':         { code: 'Minus', mod: true },
+  'view.zoomToSelection': { code: 'KeyZ' },
   'view.toggleSnap':      { code: 'KeyB', mod: true },  // Cmd+B = snap in Ableton
   'tracks.mute':          { code: 'Digit0' },            // 0 disables/activates selection in Ableton
   'panels.mixer':         { code: 'KeyM', mod: true },  // Cmd+M = mixer in Ableton
@@ -46,6 +47,7 @@ const logicProMap: ShortcutMap = {
   'clips.edit':             { code: 'KeyE' },
   'view.zoomIn':            { code: 'Equal', mod: true },
   'view.zoomOut':           { code: 'Minus', mod: true },
+  'view.zoomToSelection':   { code: 'KeyZ' },
   'view.zoomToFit':         { code: 'KeyZ' },
   'view.toggleSnap':        { code: 'KeyN' },
   'tracks.mute':            { code: 'KeyM' },
@@ -75,6 +77,7 @@ const flStudioMap: ShortcutMap = {
   'tracks.solo':            { code: 'KeyS' },
   'view.zoomIn':            { code: 'Equal', mod: true },
   'view.zoomOut':           { code: 'Minus', mod: true },
+  'view.zoomToSelection':   { code: 'KeyZ' },
   'view.toggleSnap':        { code: 'KeyS', alt: true },   // Alt+S in FL
   'panels.mixer':           { code: 'F9' },                // F9 = mixer in FL
   'panels.library':         { code: 'F8' },                // F8 = plugin picker in FL
@@ -101,6 +104,7 @@ const proToolsMap: ShortcutMap = {
   'tracks.solo':            { code: 'KeyS' },
   'view.zoomIn':            { code: 'KeyT' },               // T = zoom in on Pro Tools
   'view.zoomOut':           { code: 'KeyR' },               // R = zoom out on Pro Tools
+  'view.zoomToSelection':   { code: 'KeyZ' },
   'view.zoomToFit':         { code: 'KeyA', alt: true },    // Alt+A = zoom to fit in Pro Tools
   'view.toggleSnap':        { code: 'KeyN' },
   'panels.mixer':           { code: 'Equal', mod: true },   // Cmd+= = mix window in PT

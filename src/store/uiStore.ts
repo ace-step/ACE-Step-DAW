@@ -65,6 +65,8 @@ export interface UIState {
   contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Multi-track select window set by Cmd/Ctrl+drag on the timeline. */
   selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
+  /** Latest timeline viewport request consumed by the arrangement surface. */
+  timelineZoomRequest: { id: number; mode: 'selection' | 'project' } | null;
   /** Track whose inspector panel is currently expanded. */
   expandedTrackId: string | null;
   /** Track whose sequencer editor is currently open (bottom panel). */
@@ -181,6 +183,8 @@ export interface UIState {
   setTrackListWidth: (v: number) => void;
   setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
+  zoomTimelineToSelection: () => void;
+  zoomTimelineToProject: () => void;
   setExpandedTrackId: (id: string | null) => void;
   setOpenSequencerTrackId: (id: string | null) => void;
   setOpenDrumMachineTrackId: (id: string | null) => void;
@@ -340,6 +344,7 @@ export const useUIStore = create<UIState>()(
   trackListWidth: 220,
   contextWindow: null,
   selectWindow: null,
+  timelineZoomRequest: null,
   expandedTrackId: null,
   openSequencerTrackId: null,
   openDrumMachineTrackId: null,
@@ -520,6 +525,18 @@ export const useUIStore = create<UIState>()(
   setTrackListWidth: (v) => set({ trackListWidth: Math.min(400, Math.max(120, v)) }),
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
+  zoomTimelineToSelection: () => set((state) => ({
+    timelineZoomRequest: {
+      id: (state.timelineZoomRequest?.id ?? 0) + 1,
+      mode: 'selection',
+    },
+  })),
+  zoomTimelineToProject: () => set((state) => ({
+    timelineZoomRequest: {
+      id: (state.timelineZoomRequest?.id ?? 0) + 1,
+      mode: 'project',
+    },
+  })),
   setExpandedTrackId: (id) => set({ expandedTrackId: id }),
   setOpenSequencerTrackId: (id) => set({
     openSequencerTrackId: id,

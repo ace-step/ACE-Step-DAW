@@ -14,6 +14,8 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
+import { toastInfo } from '../../hooks/useToast';
+import { getTimelineFitViewport } from '../../utils/timelineZoom';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -70,6 +72,9 @@ export function Timeline() {
   const setContextWindow = useUIStore((s) => s.setContextWindow);
   const selectWindow = useUIStore((s) => s.selectWindow);
   const setSelectWindow = useUIStore((s) => s.setSelectWindow);
+  const selectedClipIds = useUIStore((s) => s.selectedClipIds);
+  const timelineZoomRequest = useUIStore((s) => s.timelineZoomRequest);
+  const setScrollX = useUIStore((s) => s.setScrollX);
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
@@ -165,6 +170,46 @@ export function Timeline() {
 
   const totalWidth = project ? project.totalDuration * pixelsPerSecond : 0;
 
+  useEffect(() => {
+    if (!project || !timelineZoomRequest || !scrollRef.current) return;
+
+    const container = scrollRef.current;
+    const viewportWidth = container.clientWidth || window.innerWidth || 1;
+    const projectRange = { startTime: 0, endTime: project.totalDuration };
+
+    let targetRange = projectRange;
+    let usedFallback = false;
+
+    if (timelineZoomRequest.mode === 'selection') {
+      const selectedClips = project.tracks
+        .flatMap((track) => track.clips)
+        .filter((clip) => selectedClipIds.has(clip.id));
+
+      if (selectedClips.length > 0) {
+        targetRange = {
+          startTime: Math.min(...selectedClips.map((clip) => clip.startTime)),
+          endTime: Math.max(...selectedClips.map((clip) => clip.startTime + clip.duration)),
+        };
+      } else if (selectWindow) {
+        targetRange = {
+          startTime: selectWindow.startTime,
+          endTime: selectWindow.endTime,
+        };
+      } else {
+        usedFallback = true;
+      }
+    }
+
+    const nextViewport = getTimelineFitViewport(targetRange, viewportWidth);
+    setPixelsPerSecond(nextViewport.pixelsPerSecond);
+    setScrollX(nextViewport.scrollLeft);
+    container.scrollLeft = nextViewport.scrollLeft;
+
+    if (usedFallback) {
+      toastInfo('Nothing is selected, so the timeline zoomed to the full project.');
+    }
+  }, [project, selectWindow, selectedClipIds, setPixelsPerSecond, setScrollX, timelineZoomRequest]);
+
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -189,10 +234,12 @@ export function Timeline() {
         const timeAtCursor = (container.scrollLeft + cursorOffsetX) / pixelsPerSecond;
 
         setPixelsPerSecond(nextPixelsPerSecond);
-        container.scrollLeft = Math.max(0, timeAtCursor * nextPixelsPerSecond - cursorOffsetX);
+        const nextScrollLeft = Math.max(0, timeAtCursor * nextPixelsPerSecond - cursorOffsetX);
+        setScrollX(nextScrollLeft);
+        container.scrollLeft = nextScrollLeft;
       }
     },
-    [pixelsPerSecond, setPixelsPerSecond],
+    [pixelsPerSecond, setPixelsPerSecond, setScrollX],
   );
 
   const handleMouseDownCapture = useCallback(

@@ -107,4 +107,20 @@ describe('useKeyboardShortcuts', () => {
     expect(drumTrack.sequencerPattern!.rows[0].steps[0].active).toBe(false);
     expect(bassTrack.sequencerPattern!.rows[0].steps[1].active).toBe(true);
   });
+
+  it('routes Z and Shift+Z to arrangement zoom requests', () => {
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ' }));
+    expect(useUIStore.getState().timelineZoomRequest).toEqual({
+      id: 1,
+      mode: 'selection',
+    });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ', shiftKey: true }));
+    expect(useUIStore.getState().timelineZoomRequest).toEqual({
+      id: 2,
+      mode: 'project',
+    });
+  });
 });

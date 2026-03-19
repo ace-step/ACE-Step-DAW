@@ -391,13 +391,17 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Arrangement navigation follows the DAW convention:
+      // Z fits the current selection, Shift+Z resets to the full project.
+      if (matches('view.zoomToSelection')) {
+        event.preventDefault();
+        ui.zoomTimelineToSelection();
+        return;
+      }
+
       if (matches('view.zoomToFit')) {
         event.preventDefault();
-        if (project.project && project.project.totalDuration > 0) {
-          const viewportWidth = window.innerWidth - 200;
-          const fitPixelsPerSecond = Math.max(10, Math.min(500, viewportWidth / project.project.totalDuration));
-          ui.setPixelsPerSecond(fitPixelsPerSecond);
-        }
+        ui.zoomTimelineToProject();
         return;
       }
 

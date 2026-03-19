@@ -32,7 +32,8 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'view.zoomIn',           category: 'view',      label: 'Zoom In',                     defaultCombo: { code: 'Equal', mod: true }, contexts: ['global'] },
   { id: 'view.zoomOut',          category: 'view',      label: 'Zoom Out',                    defaultCombo: { code: 'Minus', mod: true }, contexts: ['global'] },
   { id: 'view.zoomReset',        category: 'view',      label: 'Reset Zoom',                  defaultCombo: { code: 'Digit0', mod: true }, contexts: ['global'] },
-  { id: 'view.zoomToFit',        category: 'view',      label: 'Zoom to Fit Project',         defaultCombo: { code: 'KeyZ' }, contexts: ['timeline'] },
+  { id: 'view.zoomToSelection',  category: 'view',      label: 'Zoom to Selection',           defaultCombo: { code: 'KeyZ' }, contexts: ['timeline'] },
+  { id: 'view.zoomToFit',        category: 'view',      label: 'Zoom to Fit Full Project',    defaultCombo: { code: 'KeyZ', shift: true }, contexts: ['timeline'] },
   { id: 'view.toggleSnap',       category: 'view',      label: 'Toggle Snap',                 defaultCombo: { code: 'KeyN' }, contexts: ['timeline'] },
   { id: 'view.toggleSessionView', category: 'view',     label: 'Toggle Session View',         defaultCombo: { code: 'Tab' }, contexts: ['global'] },
 

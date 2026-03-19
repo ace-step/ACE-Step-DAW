@@ -160,6 +160,36 @@ describe('projectStore', () => {
         }),
       ]);
     });
+
+    it('creates a default effect automation lane once and removes it when the effect is deleted', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const effectId = useProjectStore.getState().addTrackEffect(track.id, 'filter');
+      expect(effectId).toBeDefined();
+
+      const filterParameter = {
+        type: 'effect',
+        effectId: effectId!,
+        effectType: 'filter',
+        param: 'frequency',
+      } as const;
+
+      useProjectStore.getState().ensureAutomationLane(track.id, filterParameter, 0.4);
+      useProjectStore.getState().ensureAutomationLane(track.id, filterParameter, 0.8);
+
+      expect(useProjectStore.getState().project?.automationLanes).toEqual([
+        expect.objectContaining({
+          trackId: track.id,
+          parameter: filterParameter,
+          points: [
+            { time: 0, value: 0.4 },
+            { time: useProjectStore.getState().project?.totalDuration, value: 0.4 },
+          ],
+        }),
+      ]);
+
+      useProjectStore.getState().removeTrackEffect(track.id, effectId!);
+      expect(useProjectStore.getState().project?.automationLanes).toEqual([]);
+    });
   });
 
   describe('quantizeMidiNotes', () => {

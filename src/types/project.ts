@@ -418,8 +418,17 @@ export interface AutomationPoint {
   curve?: number; // -1 (ease-in) to +1 (ease-out), 0 = linear
 }
 
+export type AutomatableEffectTarget =
+  | { effectType: 'eq3'; param: keyof EQ3Params }
+  | { effectType: 'compressor'; param: Exclude<keyof CompressorParams, 'sidechainSourceTrackId'> }
+  | { effectType: 'reverb'; param: keyof ReverbParams }
+  | { effectType: 'delay'; param: keyof DelayParams }
+  | { effectType: 'distortion'; param: Exclude<keyof DistortionParams, 'distortionType'> }
+  | { effectType: 'filter'; param: Exclude<keyof FilterParams, 'filterType' | 'lfoEnabled'> };
+
 export type AutomationParameter =
-  | { type: 'mixer'; param: 'volume' | 'pan' };
+  | { type: 'mixer'; param: 'volume' | 'pan' }
+  | ({ type: 'effect'; effectId: string } & AutomatableEffectTarget);
 
 export interface AutomationLane {
   id: string;
@@ -430,7 +439,14 @@ export interface AutomationLane {
 
 /** Compare two AutomationParameter values for equality */
 export function automationParamEquals(a: AutomationParameter, b: AutomationParameter): boolean {
-  return a.type === b.type && a.param === b.param;
+  if (a.type !== b.type) return false;
+  if (a.type === 'mixer' && b.type === 'mixer') {
+    return a.param === b.param;
+  }
+  if (a.type === 'effect' && b.type === 'effect') {
+    return a.effectId === b.effectId && a.effectType === b.effectType && a.param === b.param;
+  }
+  return false;
 }
 
 /** Map normalized 0–1 value to mixer parameter range */

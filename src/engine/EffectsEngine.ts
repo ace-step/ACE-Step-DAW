@@ -1,5 +1,6 @@
 import * as Tone from 'tone';
 import type {
+  AutomatableEffectTarget,
   TrackEffect,
   TrackEffectType,
   EQ3Params,
@@ -10,6 +11,8 @@ import type {
   DistortionParams,
   FilterParams,
 } from '../types/project';
+import { denormalizeEffectParamValue } from '../utils/effectAutomation';
+import { useProjectStore } from '../store/projectStore';
 import { SidechainFollower } from './sidechainFollower';
 
 type EffectNode = {
@@ -215,6 +218,7 @@ class EffectsEngine {
         const p = params as ReverbParams;
         const rev = effectNode.node as Tone.Reverb;
         rev.decay = p.decay;
+        rev.preDelay = p.preDelay;
         rev.wet.value = p.wet;
         break;
       }
@@ -260,6 +264,93 @@ class EffectsEngine {
           effectNode.lfo.frequency.value = p.lfoRate;
           effectNode.lfo.min = Math.max(20, p.frequency * (1 - p.lfoDepth));
           effectNode.lfo.max = Math.min(20000, p.frequency * (1 + p.lfoDepth));
+        }
+        break;
+      }
+    }
+  }
+
+  applyAutomationValue(
+    trackId: string,
+    effectId: string,
+    target: AutomatableEffectTarget,
+    normalized: number,
+  ) {
+    const nodes = this.chains.get(trackId);
+    if (!nodes) return;
+    const effectNode = nodes.find((node) => node.id === effectId && node.type === target.effectType);
+    if (!effectNode) return;
+
+    const value = denormalizeEffectParamValue(target.effectType, target.param, normalized);
+    if (value === null) return;
+
+    switch (target.effectType) {
+      case 'eq3': {
+        const eq = effectNode.node as Tone.EQ3;
+        if (target.param === 'low') eq.low.value = value;
+        if (target.param === 'mid') eq.mid.value = value;
+        if (target.param === 'high') eq.high.value = value;
+        if (target.param === 'lowFrequency') eq.lowFrequency.value = value;
+        if (target.param === 'highFrequency') eq.highFrequency.value = value;
+        break;
+      }
+      case 'compressor': {
+        const comp = effectNode.node as Tone.Compressor;
+        if (target.param === 'threshold') comp.threshold.value = value;
+        if (target.param === 'ratio') comp.ratio.value = value;
+        if (target.param === 'attack') comp.attack.value = value;
+        if (target.param === 'release') comp.release.value = value;
+        if (target.param === 'knee') comp.knee.value = value;
+        break;
+      }
+      case 'reverb': {
+        const rev = effectNode.node as Tone.Reverb;
+        if (target.param === 'decay') rev.decay = value;
+        if (target.param === 'preDelay') rev.preDelay = value;
+        if (target.param === 'wet') rev.wet.value = value;
+        break;
+      }
+      case 'delay': {
+        const delay = effectNode.node as Tone.FeedbackDelay;
+        if (target.param === 'time') delay.delayTime.value = value;
+        if (target.param === 'feedback') delay.feedback.value = value;
+        if (target.param === 'wet') delay.wet.value = value;
+        break;
+      }
+      case 'distortion': {
+        const dist = effectNode.node as Tone.Distortion;
+        if (target.param === 'amount') {
+          const effect = useProjectStore.getState().project?.tracks
+            .find((track) => track.id === trackId)
+            ?.effects?.find((trackEffect) => trackEffect.id === effectId && trackEffect.type === 'distortion');
+          const distortionType = effect?.type === 'distortion' ? effect.params.distortionType : 'soft';
+          dist.distortion =
+            distortionType === 'overdrive' ? value * 0.5 :
+            distortionType === 'fuzz' ? Math.min(1, value * 1.5) :
+            value;
+        }
+        if (target.param === 'wet') dist.wet.value = value;
+        break;
+      }
+      case 'filter': {
+        const filter = effectNode.node as Tone.Filter;
+        if (target.param === 'frequency') {
+          const currentFrequency = Number(filter.frequency.value);
+          filter.frequency.value = value;
+          if (effectNode.lfo) {
+            const depth = currentFrequency > 0
+              ? Math.max(0, Math.min(1, (effectNode.lfo.max - currentFrequency) / currentFrequency))
+              : 0;
+            effectNode.lfo.min = Math.max(20, value * (1 - depth));
+            effectNode.lfo.max = Math.min(20000, value * (1 + depth));
+          }
+        }
+        if (target.param === 'resonance') filter.Q.value = value;
+        if (target.param === 'lfoRate' && effectNode.lfo) effectNode.lfo.frequency.value = value;
+        if (target.param === 'lfoDepth' && effectNode.lfo) {
+          const freq = Number(filter.frequency.value);
+          effectNode.lfo.min = Math.max(20, freq * (1 - value));
+          effectNode.lfo.max = Math.min(20000, freq * (1 + value));
         }
         break;
       }

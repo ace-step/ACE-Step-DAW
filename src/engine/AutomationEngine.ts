@@ -1,6 +1,7 @@
 import type { AutomationLane, AutomationParameter } from '../types/project';
 import { automationParamEquals, normalizedToMixerValue } from '../types/project';
 import { getAudioEngine } from '../hooks/useAudioEngine';
+import { effectsEngine } from './EffectsEngine';
 
 /**
  * Automation playback engine.
@@ -12,6 +13,7 @@ export class AutomationEngine {
   private getTime: (() => number) | null = null;
   private trackVolumes: Map<string, number> = new Map();
   private trackPans: Map<string, number> = new Map();
+  private effectValues: Map<string, number> = new Map();
 
   /**
    * Start applying automation during playback
@@ -24,6 +26,7 @@ export class AutomationEngine {
     this.getTime = getCurrentTime;
     this.trackVolumes.clear();
     this.trackPans.clear();
+    this.effectValues.clear();
     this.tick();
   }
 
@@ -38,6 +41,7 @@ export class AutomationEngine {
     this.getTime = null;
     this.trackVolumes.clear();
     this.trackPans.clear();
+    this.effectValues.clear();
   }
 
   /**
@@ -105,6 +109,15 @@ export class AutomationEngine {
         const panValue = normalizedToMixerValue('pan', normalized);
         getAudioEngine().setTrackPan(trackId, panValue);
       }
+      return;
+    }
+
+    if (param.type === 'effect') {
+      const key = `${trackId}:${param.effectId}:${param.param}`;
+      const last = this.effectValues.get(key);
+      if (last !== undefined && Math.abs(last - normalized) < 0.001) return;
+      this.effectValues.set(key, normalized);
+      effectsEngine.applyAutomationValue(trackId, param.effectId, param, normalized);
     }
   }
 

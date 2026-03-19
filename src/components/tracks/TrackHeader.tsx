@@ -342,17 +342,13 @@ export function TrackHeader({
               if (!project) return;
               const hasLane = (project.automationLanes ?? []).some((l) => l.trackId === track.id);
               if (!hasLane) {
-                useProjectStore.getState().addAutomationPoint(
+                useProjectStore.getState().ensureAutomationLane(
                   track.id,
                   { type: 'mixer', param: 'volume' },
-                  { time: 0, value: track.volume },
-                );
-                useProjectStore.getState().addAutomationPoint(
-                  track.id,
-                  { type: 'mixer', param: 'volume' },
-                  { time: project.totalDuration, value: track.volume },
+                  track.volume,
                 );
               } else {
+                // Clear all automation for this track
                 for (const lane of (project.automationLanes ?? []).filter((l) => l.trackId === track.id)) {
                   useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
                 }

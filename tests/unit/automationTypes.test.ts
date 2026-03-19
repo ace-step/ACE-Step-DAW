@@ -32,5 +32,38 @@ describe('automation types', () => {
 
       expect(automationParamEquals(left, right)).toBe(false);
     });
+
+    it('matches identical effect automation params including effect identity', () => {
+      const param: AutomationParameter = {
+        type: 'effect',
+        effectId: 'fx-1',
+        effectType: 'filter',
+        param: 'frequency',
+      };
+
+      expect(automationParamEquals(param, {
+        type: 'effect',
+        effectId: 'fx-1',
+        effectType: 'filter',
+        param: 'frequency',
+      })).toBe(true);
+    });
+
+    it('treats different effects as different automation lanes even when the parameter name matches', () => {
+      const left: AutomationParameter = {
+        type: 'effect',
+        effectId: 'fx-1',
+        effectType: 'filter',
+        param: 'frequency',
+      };
+      const right: AutomationParameter = {
+        type: 'effect',
+        effectId: 'fx-2',
+        effectType: 'filter',
+        param: 'frequency',
+      };
+
+      expect(automationParamEquals(left, right)).toBe(false);
+    });
   });
 });

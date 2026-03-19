@@ -2,14 +2,10 @@ import { useRef, useCallback, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import type { AutomationLane, AutomationParameter, AutomationPoint } from '../../types/project';
+import { getEffectAutomationColor, getEffectAutomationLabel } from '../../utils/effectAutomation';
 
 const LANE_HEIGHT = 60;
 const POINT_RADIUS = 4;
-const COLORS: Record<string, string> = {
-  volume: '#22c55e',
-  pan: '#3b82f6',
-};
-
 interface AutomationLaneViewProps {
   trackId: string;
   lane: AutomationLane;
@@ -22,8 +18,13 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
   const addAutomationPoint = useProjectStore((s) => s.addAutomationPoint);
   const updateAutomationPoint = useProjectStore((s) => s.updateAutomationPoint);
   const removeAutomationPoint = useProjectStore((s) => s.removeAutomationPoint);
+  const effect = useProjectStore((s) =>
+    s.project?.tracks.find((track) => track.id === trackId)?.effects?.find((trackEffect) =>
+      lane.parameter.type === 'effect' && trackEffect.id === lane.parameter.effectId,
+    ) ?? null,
+  );
 
-  const color = lane.parameter.type === 'mixer' ? (COLORS[lane.parameter.param] ?? '#8b5cf6') : '#8b5cf6';
+  const color = getEffectAutomationColor(lane.parameter);
   const width = totalDuration * pixelsPerSecond;
 
   const timeToX = useCallback((time: number) => time * pixelsPerSecond, [pixelsPerSecond]);
@@ -57,7 +58,7 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
 
   const paramLabel = lane.parameter.type === 'mixer'
     ? lane.parameter.param.charAt(0).toUpperCase() + lane.parameter.param.slice(1)
-    : 'Param';
+    : `${effect?.type ?? lane.parameter.effectType} • ${getEffectAutomationLabel(lane.parameter.effectType, lane.parameter.param)}`;
 
   // Double-click to add a new point
   const handleDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {

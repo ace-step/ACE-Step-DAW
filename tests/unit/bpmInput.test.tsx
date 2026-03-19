@@ -14,6 +14,8 @@ vi.mock('../../src/services/aceStepApi', () => ({
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
+  listProjects: vi.fn().mockResolvedValue([]),
+  loadProject: vi.fn().mockResolvedValue(null),
 }));
 
 describe('BPM input — clamp on blur, not keystroke', () => {

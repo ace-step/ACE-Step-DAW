@@ -33,9 +33,19 @@ import type {
   AudioWarpMarker,
   StretchMode,
   GainEnvelopePoint,
+  LoudnessTarget,
+  MasteringPreset,
+  MasteringState,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
 import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
+import {
+  analyzeProjectForMastering,
+  buildMasteringChain,
+  createDefaultMasteringState,
+  ensureMasteringState,
+  estimateMasteredLufs,
+} from '../utils/mastering';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
 import {
   DEFAULT_BPM,
@@ -108,6 +118,12 @@ interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  analyzeMastering: () => Promise<void>;
+  setMasteringPreset: (preset: MasteringPreset) => void;
+  setMasteringLoudnessTarget: (target: LoudnessTarget) => void;
+  toggleMasteringPreview: () => void;
+  setMasteringEnabled: (enabled: boolean) => void;
+  removeMastering: () => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
   setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
   setDualMonoPan: (trackId: string, left: number, right: number) => void;
@@ -377,6 +393,17 @@ function ensureTrackDefaults(track: Track): Track {
   };
 }
 
+function applyMasteringPreferences(mastering: MasteringState): MasteringState {
+  const next = ensureMasteringState(mastering);
+  if (!next.analysis) return next;
+  const chain = buildMasteringChain(next.analysis, next.preset, next.loudnessTarget);
+  return {
+    ...next,
+    chain,
+    outputLufs: estimateMasteredLufs(next.analysis, chain),
+  };
+}
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
@@ -398,6 +425,7 @@ export const useProjectStore = create<ProjectState>()(
               : 'stems';
         return { ...t, trackType: inferred };
       }).map(ensureTrackDefaults),
+      mastering: ensureMasteringState(project.mastering),
     };
     set({ project: migrated });
   },
@@ -444,6 +472,7 @@ export const useProjectStore = create<ProjectState>()(
       tracks: [],
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
+      mastering: createDefaultMasteringState(),
     };
     set({ project });
   },
@@ -463,6 +492,138 @@ export const useProjectStore = create<ProjectState>()(
       );
     }
     set({ project: merged });
+  },
+
+  analyzeMastering: async () => {
+    const state = get();
+    if (!state.project) return;
+    const mastering = ensureMasteringState(state.project.mastering);
+
+    set({
+      project: {
+        ...state.project,
+        mastering: {
+          ...mastering,
+          status: 'analyzing',
+          error: undefined,
+        },
+      },
+    });
+
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 650));
+
+    const latestState = get();
+    if (!latestState.project) return;
+    const latestMastering = ensureMasteringState(latestState.project.mastering);
+    const analysis = analyzeProjectForMastering(latestState.project);
+    const chain = buildMasteringChain(analysis, latestMastering.preset, latestMastering.loudnessTarget);
+    const outputLufs = estimateMasteredLufs(analysis, chain);
+
+    _pushHistory(latestState.project);
+    set({
+      project: {
+        ...latestState.project,
+        updatedAt: Date.now(),
+        mastering: {
+          ...latestMastering,
+          enabled: true,
+          status: 'ready',
+          previewOriginal: false,
+          analysis,
+          chain,
+          outputLufs,
+          error: undefined,
+        },
+      },
+    });
+  },
+
+  setMasteringPreset: (preset) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const current = ensureMasteringState(state.project.mastering);
+    const mastering = applyMasteringPreferences({
+      ...current,
+      preset,
+      enabled: true,
+      status: current.analysis ? 'ready' : 'idle',
+    });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering,
+      },
+    });
+  },
+
+  setMasteringLoudnessTarget: (target) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const current = ensureMasteringState(state.project.mastering);
+    const mastering = applyMasteringPreferences({
+      ...current,
+      loudnessTarget: target,
+      enabled: true,
+      status: current.analysis ? 'ready' : 'idle',
+    });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering,
+      },
+    });
+  },
+
+  toggleMasteringPreview: () => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const mastering = ensureMasteringState(state.project.mastering);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: {
+          ...mastering,
+          previewOriginal: !mastering.previewOriginal,
+        },
+      },
+    });
+  },
+
+  setMasteringEnabled: (enabled) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const mastering = ensureMasteringState(state.project.mastering);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: {
+          ...mastering,
+          enabled,
+          previewOriginal: enabled ? mastering.previewOriginal : false,
+        },
+      },
+    });
+  },
+
+  removeMastering: () => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        mastering: createDefaultMasteringState(),
+      },
+    });
   },
 
   updateTrackMixer: (trackId, updates) => {

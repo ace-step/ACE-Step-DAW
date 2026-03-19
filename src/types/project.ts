@@ -86,6 +86,47 @@ export interface DelayParams {
   wet: number;
 }
 
+export type MasteringPreset = 'balanced' | 'loud' | 'warm' | 'bright';
+export type MasteringStatus = 'idle' | 'analyzing' | 'ready' | 'error';
+export type MasteringTonalBalance = 'warm' | 'balanced' | 'bright';
+export type LoudnessTarget = -14 | -11 | -8;
+
+export interface MasteringAnalysis {
+  inputLufs: number;
+  peakDb: number;
+  dynamicRangeDb: number;
+  stereoWidth: number;
+  tonalBalance: MasteringTonalBalance;
+  recommendedPreset: MasteringPreset;
+  trackCount: number;
+  activeTrackCount: number;
+  clipCount: number;
+  analyzedAt: number;
+}
+
+export interface MasteringChain {
+  lowShelfGain: number;
+  midGain: number;
+  highShelfGain: number;
+  compressorThreshold: number;
+  compressorRatio: number;
+  stereoWidth: number;
+  limiterThreshold: number;
+  makeupGain: number;
+}
+
+export interface MasteringState {
+  enabled: boolean;
+  status: MasteringStatus;
+  preset: MasteringPreset;
+  loudnessTarget: LoudnessTarget;
+  previewOriginal: boolean;
+  analysis: MasteringAnalysis | null;
+  chain: MasteringChain;
+  outputLufs: number | null;
+  error?: string;
+}
+
 export interface DistortionParams {
   amount: number;
   wet: number;
@@ -374,6 +415,8 @@ export interface Project {
   globalCaption?: string;
   /** Master output fader level (0–1), default 1.0 */
   masterVolume?: number;
+  /** AI mastering state for the master bus. */
+  mastering?: MasteringState;
   /** Persistent asset clips — survives clip/track removal. */
   assets?: AssetClip[];
   /** Per-track automation lanes. */

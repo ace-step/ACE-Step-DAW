@@ -18,10 +18,11 @@ function getMeterColor(level: number): string {
 }
 
 interface LevelMeterProps {
-  trackId: string;
+  trackId?: string;
+  masterStage?: 'input' | 'output';
 }
 
-export function LevelMeter({ trackId }: LevelMeterProps) {
+export function LevelMeter({ trackId, masterStage }: LevelMeterProps) {
   const rafRef = useRef<number>(0);
   const peakLevelRef = useRef(0);
   const peakHoldFramesRef = useRef(0);
@@ -32,7 +33,11 @@ export function LevelMeter({ trackId }: LevelMeterProps) {
     const engine = getAudioEngine();
 
     const tick = () => {
-      const nextLevel = engine.getTrackLevel(trackId);
+      const nextLevel = masterStage
+        ? engine.getMasterLevel(masterStage)
+        : trackId
+          ? engine.getTrackLevel(trackId)
+          : 0;
       setLevel(nextLevel);
 
       if (nextLevel >= peakLevelRef.current) {
@@ -50,11 +55,15 @@ export function LevelMeter({ trackId }: LevelMeterProps) {
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [trackId]);
+  }, [trackId, masterStage]);
+
+  const label = masterStage
+    ? `Master ${masterStage} level meter`
+    : `Track level meter for ${trackId}`;
 
   return (
     <div
-      aria-label={`Track level meter for ${trackId}`}
+      aria-label={label}
       className="relative h-full rounded-full border border-white/10 bg-[#111] overflow-hidden"
       style={{ width: METER_WIDTH }}
     >

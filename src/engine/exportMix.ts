@@ -1,7 +1,8 @@
 import { audioBufferToWavBlob } from '../utils/wav';
 import { encodeToMp3, encodeToFlac } from '../utils/audioEncoders';
 import type { ExportOptions } from '../utils/audioEncoders';
-import type { TrackEffect } from '../types/project';
+import type { MasteringState, TrackEffect } from '../types/project';
+import { ensureMasteringState } from '../utils/mastering';
 
 export interface ExportClip {
   startTime: number;
@@ -9,6 +10,63 @@ export interface ExportClip {
   volume: number;
   pan?: number;
   effects?: TrackEffect[];
+}
+
+function buildOfflineMasteringChain(
+  ctx: OfflineAudioContext,
+  mastering: MasteringState,
+): { input: AudioNode; output: AudioNode } | null {
+  const state = ensureMasteringState(mastering);
+  if (!state.enabled || state.previewOriginal || state.status !== 'ready' || !state.analysis) {
+    return null;
+  }
+
+  const input = ctx.createGain();
+  const low = ctx.createBiquadFilter();
+  low.type = 'lowshelf';
+  low.frequency.value = 120;
+  low.gain.value = state.chain.lowShelfGain;
+
+  const mid = ctx.createBiquadFilter();
+  mid.type = 'peaking';
+  mid.frequency.value = 1400;
+  mid.Q.value = 0.8;
+  mid.gain.value = state.chain.midGain;
+
+  const high = ctx.createBiquadFilter();
+  high.type = 'highshelf';
+  high.frequency.value = 6500;
+  high.gain.value = state.chain.highShelfGain;
+
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = state.chain.compressorThreshold;
+  compressor.ratio.value = state.chain.compressorRatio;
+  compressor.attack.value = 0.01;
+  compressor.release.value = 0.18;
+  compressor.knee.value = 8;
+
+  const width = ctx.createStereoPanner();
+  width.pan.value = Math.max(-0.2, Math.min(0.2, (state.chain.stereoWidth - 1) * 0.5));
+
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = state.chain.limiterThreshold;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.08;
+  limiter.knee.value = 0;
+
+  const makeup = ctx.createGain();
+  makeup.gain.value = Math.pow(10, state.chain.makeupGain / 20);
+
+  input.connect(low);
+  low.connect(mid);
+  mid.connect(high);
+  high.connect(compressor);
+  compressor.connect(width);
+  width.connect(limiter);
+  limiter.connect(makeup);
+
+  return { input, output: makeup };
 }
 
 /**
@@ -145,9 +203,11 @@ export async function exportMixToWav(
   clips: ExportClip[],
   totalDuration: number,
   sampleRate: number = 48000,
+  mastering?: MasteringState | null,
 ): Promise<Blob> {
   const length = Math.ceil(totalDuration * sampleRate);
   const offlineCtx = new OfflineAudioContext(2, length, sampleRate);
+  const masteringChain = mastering ? buildOfflineMasteringChain(offlineCtx, mastering) : null;
 
   for (const clip of clips) {
     const source = offlineCtx.createBufferSource();
@@ -179,8 +239,16 @@ export async function exportMixToWav(
       chainEnd = gain;
     }
 
-    chainEnd.connect(offlineCtx.destination);
+    if (masteringChain) {
+      chainEnd.connect(masteringChain.input);
+    } else {
+      chainEnd.connect(offlineCtx.destination);
+    }
     source.start(clip.startTime);
+  }
+
+  if (masteringChain) {
+    masteringChain.output.connect(offlineCtx.destination);
   }
 
   const rendered = await offlineCtx.startRendering();

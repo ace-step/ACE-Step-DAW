@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../../src/types/project';
 import { useProjectStore } from '../../src/store/projectStore';
+import { createDefaultMasteringState } from '../../src/utils/mastering';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -43,7 +44,10 @@ describe('projectStore', () => {
 
       useProjectStore.getState().setProject(project);
 
-      expect(useProjectStore.getState().project).toEqual(project);
+      expect(useProjectStore.getState().project).toEqual({
+        ...project,
+        mastering: createDefaultMasteringState(),
+      });
     });
   });
 

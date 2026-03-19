@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
-import type { GainEnvelopePoint, SequencerPattern } from '../types/project';
+import type { GainEnvelopePoint, MasteringState, SequencerPattern } from '../types/project';
+import { ensureMasteringState } from '../utils/mastering';
 
 export interface ScheduledSource {
   source: AudioBufferSourceNode;
@@ -35,6 +36,25 @@ export class AudioEngine {
   masterGain: GainNode;
   trackNodes: Map<string, TrackNode> = new Map();
   scheduledSources: ScheduledSource[] = [];
+  private readonly masterInputGain: GainNode;
+  private readonly masterDryGain: GainNode;
+  private readonly masterProcessedGain: GainNode;
+  private readonly masterOutputGain: GainNode;
+  private readonly masterInputAnalyser: AnalyserNode;
+  private readonly masterOutputAnalyser: AnalyserNode;
+  private readonly masterEqLow: BiquadFilterNode;
+  private readonly masterEqMid: BiquadFilterNode;
+  private readonly masterEqHigh: BiquadFilterNode;
+  private readonly masterCompressor: DynamicsCompressorNode;
+  private readonly masterLimiter: DynamicsCompressorNode;
+  private readonly widthSplitter: ChannelSplitterNode;
+  private readonly widthMerger: ChannelMergerNode;
+  private readonly widthLeftToLeft: GainNode;
+  private readonly widthRightToLeft: GainNode;
+  private readonly widthLeftToRight: GainNode;
+  private readonly widthRightToRight: GainNode;
+  private readonly masterInputAnalyserData: Uint8Array<ArrayBuffer>;
+  private readonly masterOutputAnalyserData: Uint8Array<ArrayBuffer>;
 
   private _playing = false;
   private _startedAt = 0;
@@ -58,8 +78,76 @@ export class AudioEngine {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     // Share our AudioContext with Tone.js so EffectsEngine nodes live on the same graph
     Tone.setContext(this.ctx as unknown as Tone.BaseContext);
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.connect(this.ctx.destination);
+    this.masterInputGain = this.ctx.createGain();
+    this.masterDryGain = this.ctx.createGain();
+    this.masterProcessedGain = this.ctx.createGain();
+    this.masterOutputGain = this.ctx.createGain();
+    this.masterGain = this.masterOutputGain;
+    this.masterInputAnalyser = this.ctx.createAnalyser();
+    this.masterOutputAnalyser = this.ctx.createAnalyser();
+    this.masterEqLow = this.ctx.createBiquadFilter();
+    this.masterEqMid = this.ctx.createBiquadFilter();
+    this.masterEqHigh = this.ctx.createBiquadFilter();
+    this.masterCompressor = this.ctx.createDynamicsCompressor();
+    this.masterLimiter = this.ctx.createDynamicsCompressor();
+    this.widthSplitter = this.ctx.createChannelSplitter(2);
+    this.widthMerger = this.ctx.createChannelMerger(2);
+    this.widthLeftToLeft = this.ctx.createGain();
+    this.widthRightToLeft = this.ctx.createGain();
+    this.widthLeftToRight = this.ctx.createGain();
+    this.widthRightToRight = this.ctx.createGain();
+
+    this.masterEqLow.type = 'lowshelf';
+    this.masterEqLow.frequency.value = 120;
+    this.masterEqMid.type = 'peaking';
+    this.masterEqMid.frequency.value = 1400;
+    this.masterEqMid.Q.value = 0.8;
+    this.masterEqHigh.type = 'highshelf';
+    this.masterEqHigh.frequency.value = 6500;
+    this.masterCompressor.threshold.value = -18;
+    this.masterCompressor.ratio.value = 1.5;
+    this.masterCompressor.attack.value = 0.01;
+    this.masterCompressor.release.value = 0.18;
+    this.masterCompressor.knee.value = 8;
+    this.masterLimiter.threshold.value = -1.2;
+    this.masterLimiter.ratio.value = 20;
+    this.masterLimiter.attack.value = 0.003;
+    this.masterLimiter.release.value = 0.08;
+    this.masterLimiter.knee.value = 0;
+
+    this.masterInputAnalyser.fftSize = 256;
+    this.masterInputAnalyser.smoothingTimeConstant = 0.6;
+    this.masterOutputAnalyser.fftSize = 256;
+    this.masterOutputAnalyser.smoothingTimeConstant = 0.6;
+    this.masterInputAnalyserData = new Uint8Array(this.masterInputAnalyser.frequencyBinCount);
+    this.masterOutputAnalyserData = new Uint8Array(this.masterOutputAnalyser.frequencyBinCount);
+
+    this.masterInputGain.connect(this.masterInputAnalyser);
+    this.masterInputAnalyser.connect(this.masterDryGain);
+    this.masterDryGain.connect(this.masterOutputGain);
+
+    this.masterInputAnalyser.connect(this.masterEqLow);
+    this.masterEqLow.connect(this.masterEqMid);
+    this.masterEqMid.connect(this.masterEqHigh);
+    this.masterEqHigh.connect(this.masterCompressor);
+    this.masterCompressor.connect(this.widthSplitter);
+    this.widthSplitter.connect(this.widthLeftToLeft, 0);
+    this.widthSplitter.connect(this.widthLeftToRight, 0);
+    this.widthSplitter.connect(this.widthRightToLeft, 1);
+    this.widthSplitter.connect(this.widthRightToRight, 1);
+    this.widthLeftToLeft.connect(this.widthMerger, 0, 0);
+    this.widthRightToLeft.connect(this.widthMerger, 0, 0);
+    this.widthLeftToRight.connect(this.widthMerger, 0, 1);
+    this.widthRightToRight.connect(this.widthMerger, 0, 1);
+    this.widthMerger.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.masterOutputAnalyser);
+    this.masterOutputAnalyser.connect(this.masterProcessedGain);
+    this.masterProcessedGain.connect(this.masterOutputGain);
+    this.masterOutputGain.connect(this.ctx.destination);
+
+    this._setMasterWidth(1);
+    this.applyMastering(null);
+
     this._metronomeGain = this.ctx.createGain();
     this._metronomeGain.gain.value = 0.35;
     this._metronomeGain.connect(this.ctx.destination);
@@ -82,7 +170,7 @@ export class AudioEngine {
   getOrCreateTrackNode(trackId: string): TrackNode {
     let node = this.trackNodes.get(trackId);
     if (!node) {
-      node = new TrackNode(this.ctx, this.masterGain);
+      node = new TrackNode(this.ctx, this.masterInputGain);
       this.trackNodes.set(trackId, node);
     }
     return node;
@@ -96,8 +184,8 @@ export class AudioEngine {
     }
   }
 
-  get masterVolume() { return this.masterGain.gain.value; }
-  set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
+  get masterVolume() { return this.masterOutputGain.gain.value; }
+  set masterVolume(v: number) { this.masterOutputGain.gain.value = Math.max(0, Math.min(2, v)); }
 
   getTrackLevel(trackId: string): number {
     return this.trackNodes.get(trackId)?.getLevel() ?? 0;
@@ -105,6 +193,52 @@ export class AudioEngine {
 
   getTrackSpectrum(trackId: string): Float32Array<ArrayBuffer> | null {
     return this.trackNodes.get(trackId)?.getSpectrumData() ?? null;
+  }
+
+  getMasterLevel(stage: 'input' | 'output'): number {
+    return this._getAnalyserLevel(
+      stage === 'input' ? this.masterInputAnalyser : this.masterOutputAnalyser,
+      stage === 'input' ? this.masterInputAnalyserData : this.masterOutputAnalyserData,
+    );
+  }
+
+  applyMastering(mastering: MasteringState | null | undefined) {
+    const state = mastering ? ensureMasteringState(mastering) : ensureMasteringState(undefined);
+    const active = state.enabled && !state.previewOriginal && state.status === 'ready' && state.analysis;
+
+    this.masterDryGain.gain.value = active ? 0 : 1;
+    this.masterProcessedGain.gain.value = active ? 1 : 0;
+
+    const chain = state.chain;
+    this.masterEqLow.gain.value = chain.lowShelfGain;
+    this.masterEqMid.gain.value = chain.midGain;
+    this.masterEqHigh.gain.value = chain.highShelfGain;
+    this.masterCompressor.threshold.value = chain.compressorThreshold;
+    this.masterCompressor.ratio.value = chain.compressorRatio;
+    this.masterLimiter.threshold.value = chain.limiterThreshold;
+    this._setMasterWidth(chain.stereoWidth);
+
+    const makeup = active ? Math.pow(10, chain.makeupGain / 20) : 1;
+    this.masterProcessedGain.gain.value = active ? makeup : 0;
+  }
+
+  private _setMasterWidth(width: number) {
+    const clamped = Math.max(0.5, Math.min(1.25, width));
+    const same = 0.5 * (1 + clamped);
+    const cross = 0.5 * (1 - clamped);
+    this.widthLeftToLeft.gain.value = same;
+    this.widthRightToLeft.gain.value = cross;
+    this.widthLeftToRight.gain.value = cross;
+    this.widthRightToRight.gain.value = same;
+  }
+
+  private _getAnalyserLevel(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>): number {
+    analyser.getByteFrequencyData(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] > peak) peak = data[i];
+    }
+    return peak / 255;
   }
 
   updateSoloState() {

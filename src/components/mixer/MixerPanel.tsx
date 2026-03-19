@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
+import { MasteringPanel } from './MasteringPanel';
 import type { Track } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -113,10 +114,13 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
 
   return (
-    <div className="flex h-full min-h-0 flex-col items-center gap-1.5 border-l-2 border-[#555] bg-[#252525] px-4 py-2 min-w-[120px]">
+    <div className="flex h-full min-h-0 flex-col items-center gap-1.5 border-l-2 border-[#555] bg-[#252525] px-4 py-2 min-w-[250px]">
       <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Master</span>
+      <MasteringPanel />
       <div className="flex min-h-0 flex-1 flex-col items-center justify-end gap-1 w-full pb-1">
-        <div className="relative flex justify-center" style={{ height: faderHeight }}>
+        <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
+          <LevelMeter masterStage="input" />
+          <LevelMeter masterStage="output" />
           <input
             type="range" min={0} max={1.5} step={0.01} value={masterVol}
             onChange={(e) => handleChange(parseFloat(e.target.value))}

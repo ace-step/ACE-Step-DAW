@@ -541,7 +541,32 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await expect(exportBtn).toBeEnabled();
     });
 
-    test('6e. Close (x) button closes the dialog', async ({ page }) => {
+    test('6e. Format controls switch between WAV, MP3, and FLAC', async ({ page }) => {
+      await page.evaluate(() => {
+        const store = (window as any).__store;
+        const track = store.getState().addTrack('keyboard', 'pianoRoll');
+        const clip = store.getState().ensureMidiClip(track.id);
+        store.getState().addMidiNote(clip.id, {
+          pitch: 60,
+          startBeat: 0,
+          durationBeats: 4,
+          velocity: 100,
+        });
+      });
+
+      await page.keyboard.press('Meta+Shift+KeyE');
+      await page.waitForTimeout(500);
+
+      await page.locator('select[aria-label="Export format"]').selectOption('mp3');
+      await expect(page.locator('select[aria-label="MP3 bitrate"]')).toBeVisible();
+      await expect(page.locator('button:has-text("Export MP3")')).toBeEnabled();
+
+      await page.locator('select[aria-label="Export format"]').selectOption('flac');
+      await expect(page.locator('select[aria-label="Export bit depth"]')).toBeVisible();
+      await expect(page.locator('button:has-text("Export FLAC")')).toBeEnabled();
+    });
+
+    test('6f. Close (x) button closes the dialog', async ({ page }) => {
       await page.keyboard.press('Meta+Shift+KeyE');
       await page.waitForTimeout(500);
 

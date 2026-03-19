@@ -31,11 +31,8 @@ import type {
   TempoEvent,
   TimeSignatureEvent,
   AudioWarpMarker,
-  StretchMode,
-  GainEnvelopePoint,
 } from '../types/project';
 import { automationParamEquals } from '../types/project';
-import { quantizeNotes as applyQuantize, type QuantizeOptions } from '../utils/midiQuantize';
 import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
 import {
   DEFAULT_BPM,
@@ -47,11 +44,9 @@ import {
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { exportStemToWav, type ExportClip } from '../engine/exportMix';
-import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
-import { convertClipAudioToMidi } from '../services/audioToMidi';
 
 function getBarDurationSec(bpm: number, timeSig: number): number {
   return (60 / bpm) * timeSig;
@@ -139,14 +134,8 @@ interface ProjectState {
   setClipFade: (clipId: string, fade: Partial<Pick<Clip, 'fadeInDuration' | 'fadeOutDuration' | 'fadeInCurve' | 'fadeOutCurve'>>) => void;
   setClipTimeStretch: (clipId: string, rate: number) => void;
   setClipPitchShift: (clipId: string, semitones: number) => void;
-  setClipStretchMode: (clipId: string, mode: StretchMode) => void;
-  tempoMatchClip: (clipId: string, sourceBpm: number) => void;
   quantizeAudioClip: (clipId: string, warpMarkers: AudioWarpMarker[]) => void;
   clearAudioQuantize: (clipId: string) => void;
-  setClipGainEnvelope: (clipId: string, points: GainEnvelopePoint[]) => void;
-  addClipGainPoint: (clipId: string, point: GainEnvelopePoint) => void;
-  removeClipGainPoint: (clipId: string, pointIndex: number) => void;
-  updateClipGainPoint: (clipId: string, pointIndex: number, updates: Partial<GainEnvelopePoint>) => void;
 
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
@@ -183,10 +172,9 @@ interface ProjectState {
   addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
   updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
-  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
+  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeats: number) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
-  transformMidiNotes: (clipId: string, noteIds: string[], transform: TransformOptions) => void;
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
   removeTrackEffect: (trackId: string, effectId: string) => void;
@@ -195,9 +183,9 @@ interface ProjectState {
 
   // MIDI effects
   addMidiEffect: (trackId: string, type: MidiEffectType) => string | undefined;
-  removeMidiEffect: (trackId: string, effectId: string) => void;
   updateMidiEffect: (trackId: string, effectId: string, updates: Partial<MidiEffect>) => void;
   toggleMidiEffect: (trackId: string, effectId: string) => void;
+  removeMidiEffect: (trackId: string, effectId: string) => void;
   reorderMidiEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
 
   // Automation
@@ -248,9 +236,6 @@ interface ProjectState {
   getTotalDuration: () => number;
   /** Actual audio duration without timeline padding: max(clip ends) */
   getAudioDuration: () => number;
-
-  /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
-  convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;
@@ -980,18 +965,6 @@ export const useProjectStore = create<ProjectState>()(
     get().updateClip(clipId, { pitchShift: semitones });
   },
 
-  setClipStretchMode: (clipId, mode) => {
-    get().updateClip(clipId, { stretchMode: mode });
-  },
-
-  tempoMatchClip: (clipId, sourceBpm) => {
-    const state = get();
-    if (!state.project || sourceBpm <= 0) return;
-    const projectBpm = state.project.bpm;
-    const rate = projectBpm / sourceBpm;
-    get().updateClip(clipId, { timeStretchRate: rate });
-  },
-
   quantizeAudioClip: (clipId, warpMarkers) => {
     get().updateClip(clipId, { warpMarkers });
   },
@@ -1014,37 +987,6 @@ export const useProjectStore = create<ProjectState>()(
       get().updateClip(clipId, { audioOffset: newOffset });
       return;
     }
-  },
-
-  setClipGainEnvelope: (clipId, points) => {
-    get().updateClip(clipId, { gainEnvelope: [...points] });
-  },
-
-  addClipGainPoint: (clipId, point) => {
-    const clip = get().getClipById(clipId);
-    if (!clip) return;
-    const envelope = [...(clip.gainEnvelope ?? []), point];
-    envelope.sort((a, b) => a.time - b.time);
-    get().updateClip(clipId, { gainEnvelope: envelope });
-  },
-
-  removeClipGainPoint: (clipId, pointIndex) => {
-    const clip = get().getClipById(clipId);
-    if (!clip || !clip.gainEnvelope) return;
-    if (pointIndex < 0 || pointIndex >= clip.gainEnvelope.length) return;
-    const envelope = clip.gainEnvelope.filter((_, i) => i !== pointIndex);
-    get().updateClip(clipId, { gainEnvelope: envelope });
-  },
-
-  updateClipGainPoint: (clipId, pointIndex, updates) => {
-    const clip = get().getClipById(clipId);
-    if (!clip || !clip.gainEnvelope) return;
-    if (pointIndex < 0 || pointIndex >= clip.gainEnvelope.length) return;
-    const envelope = clip.gainEnvelope.map((p, i) =>
-      i === pointIndex ? { ...p, ...updates } : p,
-    );
-    envelope.sort((a, b) => a.time - b.time);
-    get().updateClip(clipId, { gainEnvelope: envelope });
   },
 
   splitClip: (clipId, splitTime) => {
@@ -2019,13 +1961,9 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  quantizeMidiNotes: (clipId, noteIds, gridBeatsOrOptions) => {
+  quantizeMidiNotes: (clipId, noteIds, gridBeats) => {
     const state = get();
-    const options: QuantizeOptions =
-      typeof gridBeatsOrOptions === 'number'
-        ? { gridBeats: gridBeatsOrOptions, strength: 100, swing: 0, scope: 'start' }
-        : gridBeatsOrOptions;
-    if (!state.project || options.gridBeats <= 0) return;
+    if (!state.project || gridBeats <= 0) return;
     _pushHistory(state.project);
     const noteIdSet = new Set(noteIds);
     set({
@@ -2040,7 +1978,11 @@ export const useProjectStore = create<ProjectState>()(
                   ...clip,
                   midiData: {
                     ...clip.midiData,
-                    notes: applyQuantize(clip.midiData.notes, noteIdSet, options),
+                    notes: clip.midiData.notes.map((note) =>
+                      noteIdSet.has(note.id)
+                        ? { ...note, startBeat: Math.round(note.startBeat / gridBeats) * gridBeats }
+                        : note,
+                    ),
                   },
                 }
               : clip,
@@ -2115,32 +2057,6 @@ export const useProjectStore = create<ProjectState>()(
                 }
               : clip,
           ),
-        })),
-      },
-    });
-  },
-
-  transformMidiNotes: (clipId, noteIds, transform) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project);
-    const noteIdSet = new Set(noteIds);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) => {
-            if (clip.id !== clipId || !clip.midiData) return clip;
-            const selected = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
-            const unselected = clip.midiData.notes.filter((n) => !noteIdSet.has(n.id));
-            const transformed = applyTransform(selected, transform);
-            return {
-              ...clip,
-              midiData: { ...clip.midiData, notes: [...unselected, ...transformed] },
-            };
-          }),
         })),
       },
     });
@@ -2275,6 +2191,48 @@ export const useProjectStore = create<ProjectState>()(
     return effect.id;
   },
 
+  updateMidiEffect: (trackId, effectId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          return {
+            ...track,
+            midiEffects: (track.midiEffects ?? []).map((effect) =>
+              effect.id === effectId ? { ...effect, ...updates } as MidiEffect : effect,
+            ),
+          };
+        }),
+      },
+    });
+  },
+
+  toggleMidiEffect: (trackId, effectId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          return {
+            ...track,
+            midiEffects: (track.midiEffects ?? []).map((effect) =>
+              effect.id === effectId ? { ...effect, enabled: !effect.enabled } : effect,
+            ),
+          };
+        }),
+      },
+    });
+  },
+
   removeMidiEffect: (trackId, effectId) => {
     const state = get();
     if (!state.project) return;
@@ -2292,50 +2250,6 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  updateMidiEffect: (trackId, effectId, updates) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) =>
-          track.id === trackId
-            ? {
-                ...track,
-                midiEffects: (track.midiEffects ?? []).map((e) =>
-                  e.id === effectId ? ({ ...e, ...updates, id: e.id, type: e.type } as MidiEffect) : e,
-                ),
-              }
-            : track,
-        ),
-      },
-    });
-  },
-
-  toggleMidiEffect: (trackId, effectId) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) =>
-          track.id === trackId
-            ? {
-                ...track,
-                midiEffects: (track.midiEffects ?? []).map((e) =>
-                  e.id === effectId ? { ...e, enabled: !e.enabled } : e,
-                ),
-              }
-            : track,
-        ),
-      },
-    });
-  },
-
   reorderMidiEffect: (trackId, fromIndex, toIndex) => {
     const state = get();
     if (!state.project) return;
@@ -2346,11 +2260,13 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((track) => {
           if (track.id !== trackId) return track;
-          const effects = [...(track.midiEffects ?? [])];
-          if (fromIndex < 0 || fromIndex >= effects.length || toIndex < 0 || toIndex >= effects.length) return track;
-          const [moved] = effects.splice(fromIndex, 1);
-          effects.splice(toIndex, 0, moved);
-          return { ...track, midiEffects: effects };
+          const midiEffects = [...(track.midiEffects ?? [])];
+          if (fromIndex < 0 || toIndex < 0 || fromIndex >= midiEffects.length || toIndex >= midiEffects.length) {
+            return track;
+          }
+          const [moved] = midiEffects.splice(fromIndex, 1);
+          midiEffects.splice(toIndex, 0, moved);
+          return { ...track, midiEffects };
         }),
       },
     });
@@ -2802,44 +2718,6 @@ export const useProjectStore = create<ProjectState>()(
       }
     }
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
-  },
-
-  convertAudioToMidi: async (clipId, options) => {
-    const state = get();
-    if (!state.project) return undefined;
-    const sourceTrack = state.project.tracks.find((t) => t.clips.some((c) => c.id === clipId));
-    if (!sourceTrack) return undefined;
-    const clip = sourceTrack.clips.find((c) => c.id === clipId);
-    if (!clip) return undefined;
-
-    const audioKey = clip.isolatedAudioKey ?? clip.cumulativeMixKey;
-    if (!audioKey) return undefined;
-
-    const bpm = state.project.bpm;
-    const result = await convertClipAudioToMidi(audioKey, bpm, {
-      threshold: options?.threshold ?? 0.15,
-      minConfidence: options?.minConfidence ?? 0.5,
-      minNoteDuration: options?.minNoteDuration ?? 0.05,
-    });
-
-    if (result.notes.length === 0) return undefined;
-
-    // Create a new piano roll track
-    const newTrack = get().addTrack('custom', 'pianoRoll');
-
-    // Rename the track to indicate source
-    get().renameTrack(newTrack.id, `${sourceTrack.displayName} (MIDI)`);
-
-    // Create a MIDI clip on the new track at the same position
-    const newClip = get().addClip(newTrack.id, {
-      startTime: clip.startTime,
-      duration: clip.duration,
-      prompt: `Converted from ${sourceTrack.displayName}`,
-      lyrics: '',
-      midiData: { notes: result.notes, grid: '1/16' },
-    });
-
-    return { trackId: newTrack.id, clipId: newClip.id };
   },
 
   exportStems: async () => {

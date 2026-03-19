@@ -226,7 +226,11 @@ export function useKeyboardShortcuts() {
       // Transport
       if (matches('transport.playPause')) {
         e.preventDefault();
-        if (transport.isPlaying) pause(); else play();
+        if (transport.isPlaying) {
+          pause();
+        } else {
+          play();
+        }
         return;
       }
       if (matches('transport.stop')) {
@@ -308,6 +312,24 @@ export function useKeyboardShortcuts() {
       if (matches('panels.smartControls')) { e.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
       if (matches('panels.library')) { e.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }
       if (matches('panels.tempoLane')) { e.preventDefault(); ui.toggleTempoLane(); return; }
+
+      // Generation panel toggle remains fixed to G so agents and users have a direct entry point.
+      if (e.code === 'KeyG' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        ui.toggleGenerationPanel();
+        return;
+      }
+
+      // Variation switching uses the number row while a session is present.
+      if (/^Digit[1-4]$/.test(e.code)) {
+        const variationIdx = Number(e.code.slice(5)) - 1;
+        const session = gen.variationSession;
+        if (session && variationIdx < session.variations.length) {
+          e.preventDefault();
+          gen.setActiveVariation(variationIdx);
+          return;
+        }
+      }
     };
 
     window.addEventListener('keydown', handler);

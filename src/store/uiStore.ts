@@ -101,6 +101,9 @@ interface UIState {
   showGeneratePatternDialog: boolean;
   generatePatternClipId: string | null;
 
+  // Generation Side Panel
+  showGenerationPanel: boolean;
+
   // AI Assistant
   showAIAssistant: boolean;
   aiChatMessages: AIChatMessage[];
@@ -189,6 +192,10 @@ interface UIState {
   setShowGeneratePatternDialog: (v: boolean) => void;
   openGeneratePatternDialog: (clipId: string) => void;
 
+  // Generation Side Panel
+  toggleGenerationPanel: () => void;
+  setShowGenerationPanel: (v: boolean) => void;
+
   // AI Assistant
   toggleAIAssistant: () => void;
   setShowAIAssistant: (v: boolean) => void;
@@ -274,6 +281,8 @@ export const useUIStore = create<UIState>()(
 
   showGeneratePatternDialog: false,
   generatePatternClipId: null,
+
+  showGenerationPanel: false,
 
   showAIAssistant: false,
   aiChatMessages: [],
@@ -414,6 +423,9 @@ export const useUIStore = create<UIState>()(
   setShowGeneratePatternDialog: (v) => set(v ? { showGeneratePatternDialog: v } : { showGeneratePatternDialog: false, generatePatternClipId: null }),
   openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),
 
+  toggleGenerationPanel: () => set((s) => ({ showGenerationPanel: !s.showGenerationPanel })),
+  setShowGenerationPanel: (v) => set({ showGenerationPanel: v }),
+
   toggleAIAssistant: () => set((state) => {
     const nextShow = !state.showAIAssistant;
     return nextShow
@@ -525,6 +537,8 @@ export const useUIStore = create<UIState>()(
         showSpectrumAnalyzer: state.showSpectrumAnalyzer,
         // Loop Browser preference
         loopBrowserCategory: state.loopBrowserCategory,
+        // Generation panel
+        showGenerationPanel: state.showGenerationPanel,
         // AI Assistant
         showAIAssistant: state.showAIAssistant,
         // Inline suggestions

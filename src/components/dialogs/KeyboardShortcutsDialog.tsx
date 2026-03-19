@@ -61,6 +61,8 @@ const SECTIONS: Section[] = [
     rows: [
       { keys: [`${mod}`, 'G'],         description: 'Generate from Silence' },
       { keys: [`${mod}`, '⇧', 'G'],    description: 'Generate from Context' },
+      { keys: ['G'],                    description: 'Toggle Generation Panel' },
+      { keys: ['1–4'],                  description: 'Switch Variation (A/B compare)' },
     ],
   },
   {

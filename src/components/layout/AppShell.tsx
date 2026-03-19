@@ -4,6 +4,7 @@ import { StatusBar } from './StatusBar';
 import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
+import { GenerationSidePanel } from '../generation/GenerationSidePanel';
 import { CoverModal } from '../generation/CoverModal';
 import { RepaintModal } from '../generation/RepaintModal';
 import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
@@ -95,6 +96,7 @@ export function AppShell() {
       {project && <EffectChain />}
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
+      {project && <GenerationSidePanel />}
       <StatusBar />
       <ToastContainer />
 

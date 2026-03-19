@@ -18,13 +18,13 @@ test.describe('New Feature Verification', () => {
     // Create a project
     await page.evaluate(() => {
       const s = (window as any).__store;
-      if (s.getState().createProject) s.getState().createProject('Test Project', 120);
+      if (s.getState().createProject) s.getState().createProject({ name: 'Test Project', bpm: 120 });
     });
   });
 
   test('Punch in/out: can set punch times and toggle punch mode', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const s = (window as any).__store;
+      const s = (window as any).__transportStore;
       const state = s.getState();
       // Initial state
       const initial = {
@@ -57,7 +57,7 @@ test.describe('New Feature Verification', () => {
 
   test('Punch in/out: toggle punch off after enabling', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const s = (window as any).__store;
+      const s = (window as any).__transportStore;
       const state = s.getState();
       state.setPunchIn(2);
       state.setPunchOut(6);
@@ -74,11 +74,11 @@ test.describe('New Feature Verification', () => {
       const state = s.getState();
       state.addMarker(4.0, 'Verse 1');
       state.addMarker(8.0, 'Chorus');
-      const markers = s.getState().markers;
+      const markers = s.getState().project.markers;
       const count = markers.length;
       // Remove first marker
       state.removeMarker(markers[0].id);
-      const afterRemove = s.getState().markers;
+      const afterRemove = s.getState().project.markers;
       return { count, afterRemoveCount: afterRemove.length, remainingName: afterRemove[0]?.name };
     });
     expect(result.count).toBe(2);
@@ -91,15 +91,15 @@ test.describe('New Feature Verification', () => {
       const s = (window as any).__store;
       const state = s.getState();
       // Add a track and clip
-      state.addTrack({ name: 'Comp Track', type: 'audio' });
-      const track = s.getState().tracks[s.getState().tracks.length - 1];
+      state.addTrack('Comp Track', 'audio');
+      const track = s.getState().project.tracks[s.getState().project.tracks.length - 1];
       state.addClip(track.id, { startTime: 0, duration: 4, audioKey: 'take1.wav' });
-      const clip = s.getState().tracks.find((t: any) => t.id === track.id).clips[0];
+      const clip = s.getState().project.tracks.find((t: any) => t.id === track.id).clips[0];
 
       // Add takes
       state.addTake(clip.id, 'take2.wav');
       state.addTake(clip.id, 'take3.wav');
-      const updatedClip = s.getState().tracks.find((t: any) => t.id === track.id).clips[0];
+      const updatedClip = s.getState().project.tracks.find((t: any) => t.id === track.id).clips[0];
       const takeCount = updatedClip.takes?.length ?? 0;
 
       // Select a different take
@@ -107,7 +107,7 @@ test.describe('New Feature Verification', () => {
         state.selectTake(clip.id, updatedClip.takes[1].id);
       }
 
-      const finalClip = s.getState().tracks.find((t: any) => t.id === track.id).clips[0];
+      const finalClip = s.getState().project.tracks.find((t: any) => t.id === track.id).clips[0];
       const selectedTake = finalClip.takes?.find((t: any) => t.selected);
 
       return {
@@ -123,11 +123,11 @@ test.describe('New Feature Verification', () => {
     const result = await page.evaluate(() => {
       const s = (window as any).__store;
       const state = s.getState();
-      state.addTrack({ name: 'Lanes Track', type: 'audio' });
-      const track = s.getState().tracks[s.getState().tracks.length - 1];
+      state.addTrack('Lanes Track', 'audio');
+      const track = s.getState().project.tracks[s.getState().project.tracks.length - 1];
       const before = track.showTakeLanes;
       state.toggleTakeLanes(track.id);
-      const after = s.getState().tracks.find((t: any) => t.id === track.id).showTakeLanes;
+      const after = s.getState().project.tracks.find((t: any) => t.id === track.id).showTakeLanes;
       return { before, after };
     });
     expect(result.before).toBeFalsy();
@@ -138,7 +138,7 @@ test.describe('New Feature Verification', () => {
     const result = await page.evaluate(() => {
       const s = (window as any).__store;
       s.getState().addMarker(0, 'Start');
-      const markers = s.getState().markers;
+      const markers = s.getState().project.markers;
       return { count: markers.length, time: markers[0]?.time, name: markers[0]?.name };
     });
     expect(result.count).toBe(1);
@@ -149,7 +149,7 @@ test.describe('New Feature Verification', () => {
   test('Edge case: punch in time after punch out time', async ({ page }) => {
     // This tests whether the store handles invalid state gracefully
     const result = await page.evaluate(() => {
-      const s = (window as any).__store;
+      const s = (window as any).__transportStore;
       const state = s.getState();
       state.setPunchIn(10);
       state.setPunchOut(5); // out < in — potentially invalid
@@ -171,13 +171,13 @@ test.describe('New Feature Verification', () => {
       for (let i = 0; i < 50; i++) {
         state.addMarker(i * 0.5, `M${i}`);
       }
-      const count = s.getState().markers.length;
+      const count = s.getState().project.markers.length;
       // Remove all
-      const markers = s.getState().markers;
+      const markers = s.getState().project.markers;
       for (const m of markers) {
         s.getState().removeMarker(m.id);
       }
-      return { added: count, remaining: s.getState().markers.length };
+      return { added: count, remaining: s.getState().project.markers.length };
     });
     expect(result.added).toBe(50);
     expect(result.remaining).toBe(0);
@@ -189,8 +189,8 @@ test.describe('New Feature Verification', () => {
       const s = (window as any).__store;
       const state = s.getState();
       // Remove all tracks
-      while (s.getState().tracks.length > 0) {
-        state.removeTrack(s.getState().tracks[0].id);
+      while (s.getState().project.tracks.length > 0) {
+        state.removeTrack(s.getState().project.tracks[0].id);
       }
     });
 

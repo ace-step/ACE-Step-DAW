@@ -87,6 +87,31 @@ export type TrackEffect =
 
 export type TrackEffectType = TrackEffect['type'];
 
+// ─── MIDI Effect Types ──────────────────────────────────────────────────────
+
+export type MidiEffectType = 'arpeggiator' | 'chord-gen' | 'scale-lock';
+
+export interface ArpeggiatorParams {
+  rate: '1/4' | '1/8' | '1/16' | '1/32';
+  pattern: 'up' | 'down' | 'up-down' | 'random';
+  octaves: number;
+}
+
+export interface ChordGenParams {
+  chordType: 'major' | 'minor' | 'diminished' | 'augmented' | 'sus2' | 'sus4';
+  inversion: number;
+}
+
+export interface ScaleLockParams {
+  root: number;
+  scale: 'major' | 'minor' | 'pentatonic' | 'blues' | 'chromatic';
+}
+
+export type MidiEffect =
+  | EffectBase<'arpeggiator', ArpeggiatorParams>
+  | EffectBase<'chord-gen', ChordGenParams>
+  | EffectBase<'scale-lock', ScaleLockParams>;
+
 export interface InferredMetas {
   bpm?: number;
   keyScale?: string;
@@ -226,6 +251,7 @@ export interface Track {
   sequencerPattern?: SequencerPattern;
   synthPreset?: SynthPreset;
   effects?: TrackEffect[];
+  midiEffects?: MidiEffect[];
   drumKit?: DrumKitName;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0

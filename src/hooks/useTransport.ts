@@ -103,6 +103,23 @@ export function useTransport() {
       );
       trackNode.setReverb(track.reverbMix ?? 0, track.reverbRoomSize ?? 0.5);
 
+      // Frozen track: play frozen bounce instead of individual clips/MIDI
+      if (track.frozen && track.frozenAudioKey) {
+        const frozenBlob = await loadAudioBlobByKey(track.frozenAudioKey);
+        if (frozenBlob) {
+          const frozenBuffer = await engine.decodeAudioData(frozenBlob);
+          clipBuffers.push({
+            clipId: `frozen-${track.id}`,
+            trackId: track.id,
+            startTime: 0,
+            buffer: frozenBuffer,
+            audioOffset: 0,
+            clipDuration: frozenBuffer.duration,
+          });
+        }
+        continue; // skip individual clip loading
+      }
+
       for (const clip of track.clips) {
         if (clip.generationStatus !== 'ready') continue;
 
@@ -163,6 +180,9 @@ export function useTransport() {
     const anySoloed = proj.tracks.some((track) => track.soloed);
 
     for (const track of proj.tracks) {
+      // Skip MIDI/sequencer scheduling for frozen tracks
+      if (track.frozen && track.frozenAudioKey) continue;
+
       if (track.trackType === 'pianoRoll') {
         const preset = track.synthPreset ?? 'piano';
         synthEngine.removeTrackSynth(track.id);

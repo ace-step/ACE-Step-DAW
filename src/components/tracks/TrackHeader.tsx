@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import { TRACK_CATALOG } from '../../constants/tracks';
 import { TrackEditModal } from './TrackEditModal';
 import { useRecording } from '../../hooks/useRecording';
+import { freezeTrackToAudio, flattenTrackToAudio } from '../../services/freezeTrack';
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -31,6 +32,7 @@ export function TrackHeader({
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
+  const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
 
   // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
   const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
@@ -43,6 +45,29 @@ export function TrackHeader({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isFreezing, setIsFreezing] = useState(false);
+
+  const handleFreeze = useCallback(async () => {
+    if (track.frozen) {
+      unfreezeTrack(track.id);
+    } else {
+      setIsFreezing(true);
+      try {
+        await freezeTrackToAudio(track.id);
+      } finally {
+        setIsFreezing(false);
+      }
+    }
+  }, [track.frozen, track.id, unfreezeTrack]);
+
+  const handleFlatten = useCallback(async () => {
+    setIsFreezing(true);
+    try {
+      await flattenTrackToAudio(track.id);
+    } finally {
+      setIsFreezing(false);
+    }
+  }, [track.id]);
   const [editValue, setEditValue] = useState(track.displayName);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -188,6 +213,7 @@ export function TrackHeader({
             title={track.displayName}
             onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
           >
+            {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
             {track.displayName}
           </span>
         )}
@@ -280,6 +306,24 @@ export function TrackHeader({
             <path d="M2 7V6a4 4 0 018 0v1" />
             <rect x="1" y="7" width="2.5" height="3" rx="0.5" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
             <rect x="8.5" y="7" width="2.5" height="3" rx="0.5" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
+          </svg>
+        </button>
+        {/* Freeze toggle */}
+        <button
+          onClick={handleFreeze}
+          disabled={isFreezing}
+          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+            track.frozen
+              ? 'bg-cyan-600/90 text-white'
+              : isFreezing
+                ? 'text-cyan-400 animate-pulse'
+                : 'text-zinc-500 hover:text-cyan-400 hover:bg-[#444]'
+          }`}
+          title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
+          aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
+        >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+            <path d="M6 1v10M1 6h10M3 3l6 6M9 3L3 9" />
           </svg>
         </button>
         {/* Automation toggle */}
@@ -380,6 +424,19 @@ export function TrackHeader({
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
           >
             Duplicate Track
+          </button>
+          <div className="my-1 border-t border-[#555]" />
+          <button
+            onClick={() => { setCtxMenu(null); void handleFreeze(); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            {track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
+          </button>
+          <button
+            onClick={() => { setCtxMenu(null); void handleFlatten(); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+          >
+            Flatten Track
           </button>
           <div className="my-1 border-t border-[#555]" />
           <button

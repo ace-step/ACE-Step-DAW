@@ -19,6 +19,8 @@ import type {
   TrackEffect,
   TrackEffectType,
   CompressorParams,
+  MidiEffect,
+  MidiEffectType,
   AutomationParameter,
   AutomationPoint,
   AutomationLane,
@@ -101,8 +103,9 @@ interface ProjectState {
   setDualMonoPan: (trackId: string, left: number, right: number) => void;
   setTrackLocalCaption: (trackId: string, caption: string) => void;
   setTrackReverb: (trackId: string, mix: number, roomSize: number) => void;
-  freezeTrack: (trackId: string) => void;
+  freezeTrack: (trackId: string, frozenAudioKey?: string) => void;
   unfreezeTrack: (trackId: string) => void;
+  flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
 
   addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
   removeTrack: (trackId: string) => void;
@@ -167,6 +170,10 @@ interface ProjectState {
   removeTrackEffect: (trackId: string, effectId: string) => void;
   reorderTrackEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
   setSidechainSource: (trackId: string, effectId: string, sourceTrackId: string | undefined) => void;
+
+  // MIDI effects
+  addMidiEffect: (trackId: string, type: MidiEffectType) => string | undefined;
+  removeMidiEffect: (trackId: string, effectId: string) => void;
 
   // Automation
   addAutomationPoint: (trackId: string, parameter: AutomationParameter, point: AutomationPoint) => void;
@@ -279,6 +286,18 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
           lfoDepth: 0.25,
         },
       };
+  }
+}
+
+function createDefaultMidiEffect(type: MidiEffectType): MidiEffect {
+  const id = uuidv4();
+  switch (type) {
+    case 'arpeggiator':
+      return { id, type, enabled: true, params: { rate: '1/8', pattern: 'up', octaves: 1 } };
+    case 'chord-gen':
+      return { id, type, enabled: true, params: { chordType: 'major', inversion: 0 } };
+    case 'scale-lock':
+      return { id, type, enabled: true, params: { root: 0, scale: 'major' } };
   }
 }
 
@@ -471,7 +490,7 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  freezeTrack: (trackId) => {
+  freezeTrack: (trackId, frozenAudioKey?) => {
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project);
@@ -480,7 +499,7 @@ export const useProjectStore = create<ProjectState>()(
         ...state.project,
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, frozen: true } : t,
+          t.id === trackId ? { ...t, frozen: true, ...(frozenAudioKey ? { frozenAudioKey } : {}) } : t,
         ),
       },
     });
@@ -496,6 +515,48 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId ? { ...t, frozen: false, frozenAudioKey: undefined } : t,
+        ),
+      },
+    });
+  },
+
+  flattenTrack: (trackId, audioKey, waveformPeaks?, duration?) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    _pushHistory(state.project);
+
+    const newClip: Clip = {
+      id: uuidv4(),
+      trackId,
+      startTime: 0,
+      duration: duration ?? state.project.totalDuration,
+      prompt: '',
+      lyrics: '',
+      generationStatus: 'ready',
+      generationJobId: null,
+      cumulativeMixKey: null,
+      isolatedAudioKey: audioKey,
+      waveformPeaks: waveformPeaks ?? null,
+    };
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                trackType: 'sample' as TrackType,
+                frozen: false,
+                frozenAudioKey: undefined,
+                sequencerPattern: undefined,
+                synthPreset: undefined,
+                clips: [newClip],
+              }
+            : t,
         ),
       },
     });
@@ -2024,6 +2085,45 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
   },
+
+  // ─── MIDI Effects ──────────────────────────────────────────────────────────
+
+  addMidiEffect: (trackId, type) => {
+    const state = get();
+    if (!state.project) return undefined;
+    const effect = createDefaultMidiEffect(type);
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, midiEffects: [...(track.midiEffects ?? []), effect] }
+            : track,
+        ),
+      },
+    });
+    return effect.id;
+  },
+
+  removeMidiEffect: (trackId, effectId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, midiEffects: (track.midiEffects ?? []).filter((e) => e.id !== effectId) }
+            : track,
+        ),
+      },
+    });
+  },
+
   // ─── Automation ───────────────────────────────────────────────────────────
 
   addAutomationPoint: (trackId, parameter, point) => {

@@ -29,11 +29,13 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
   const compEnabled = track.compressorEnabled ?? false;
   const compThresh = track.compressorThreshold ?? -24;
   const compRatio = track.compressorRatio ?? 4;
+  const isFrozen = track.frozen ?? false;
 
   return (
-    <div className="flex flex-col items-center gap-1.5 px-3 py-2 bg-[#2a2a2a] border-r border-[#3a3a3a] min-w-[120px]">
+    <div className={`flex flex-col items-center gap-1.5 px-3 py-2 bg-[#2a2a2a] border-r border-[#3a3a3a] min-w-[120px] ${isFrozen ? 'opacity-70' : ''}`}>
       <div className="w-full h-1.5 rounded-full mb-0.5" style={{ backgroundColor: track.color }} />
       <span className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide" title={track.displayName}>
+        {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
         {track.displayName}
       </span>
 
@@ -56,13 +58,13 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
         </button>
       </div>
 
-      <Knob value={pan} min={-1} max={1} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { pan: v })} label="Pan" size={36} step={0.01} />
+      <Knob value={pan} min={-1} max={1} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { pan: v })} label="Pan" size={36} step={0.01} disabled={isFrozen} />
 
       <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">EQ</div>
       <div className="flex gap-1.5">
-        <Knob value={eqLow} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqLowGain: v })} label="Lo" unit="dB" size={34} step={0.5} />
-        <Knob value={eqMid} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqMidGain: v })} label="Mid" unit="dB" size={34} step={0.5} />
-        <Knob value={eqHigh} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqHighGain: v })} label="Hi" unit="dB" size={34} step={0.5} />
+        <Knob value={eqLow} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqLowGain: v })} label="Lo" unit="dB" size={34} step={0.5} disabled={isFrozen} />
+        <Knob value={eqMid} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqMidGain: v })} label="Mid" unit="dB" size={34} step={0.5} disabled={isFrozen} />
+        <Knob value={eqHigh} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqHighGain: v })} label="Hi" unit="dB" size={34} step={0.5} disabled={isFrozen} />
       </div>
 
       <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">Comp</div>
@@ -75,8 +77,8 @@ function ChannelStrip({ track, faderHeight }: ChannelStripProps) {
         {compEnabled ? 'ON' : 'OFF'}
       </button>
       <div className="flex gap-1.5">
-        <Knob value={compThresh} min={-60} max={0} defaultValue={-24} onChange={(v) => updateTrackMixer(track.id, { compressorThreshold: v })} label="Thr" unit="dB" size={34} step={1} disabled={!compEnabled} />
-        <Knob value={compRatio} min={1} max={20} defaultValue={4} onChange={(v) => updateTrackMixer(track.id, { compressorRatio: v })} label="Rat" size={34} step={0.5} disabled={!compEnabled} />
+        <Knob value={compThresh} min={-60} max={0} defaultValue={-24} onChange={(v) => updateTrackMixer(track.id, { compressorThreshold: v })} label="Thr" unit="dB" size={34} step={1} disabled={!compEnabled || isFrozen} />
+        <Knob value={compRatio} min={1} max={20} defaultValue={4} onChange={(v) => updateTrackMixer(track.id, { compressorRatio: v })} label="Rat" size={34} step={0.5} disabled={!compEnabled || isFrozen} />
       </div>
 
       <div className="flex-1 flex flex-col items-center gap-1 mt-1 min-h-0 w-full">

@@ -80,6 +80,8 @@ import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile } from '../utils/midi';
 import { clampClipFadeDurations } from '../utils/clipFade';
+import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
+import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 
@@ -350,6 +352,13 @@ interface ProjectState {
   /** Create a new project from a template. */
   createProjectFromTemplate: (template: ProjectTemplate, projectName?: string) => void;
   exportMidiClip: (clipId: string) => void;
+
+  // Groove pool
+  extractGrooveFromClip: (clipId: string, name: string, options: ExtractGrooveOptions) => GrooveTemplate | undefined;
+  applyGrooveToClip: (clipId: string, noteIds: string[], grooveId: string, options: ApplyGrooveOptions) => void;
+  addGrooveTemplate: (template: GrooveTemplate) => void;
+  deleteGrooveTemplate: (grooveId: string) => void;
+  renameGrooveTemplate: (grooveId: string, name: string) => void;
 }
 
 function computeTotalDuration(
@@ -4334,6 +4343,112 @@ export const useProjectStore = create<ProjectState>()(
       `${fileName}.mid`,
     );
     toastSuccess(`Exported MIDI clip from ${track.displayName}`);
+  },
+
+  // ── Groove Pool ─────────────────────────────────────────────────────────
+
+  extractGrooveFromClip: (clipId, name, options) => {
+    const state = get();
+    if (!state.project) return undefined;
+
+    let notes: MidiNote[] | undefined;
+    for (const track of state.project.tracks) {
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (clip?.midiData) {
+        notes = clip.midiData.notes;
+        break;
+      }
+    }
+    if (!notes || notes.length === 0) return undefined;
+
+    const extracted = extractGroove(notes, options);
+    const template: GrooveTemplate = {
+      id: uuidv4(),
+      name,
+      ...extracted,
+      createdAt: Date.now(),
+    };
+
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        groovePool: [...(state.project.groovePool ?? []), template],
+      },
+    });
+    return template;
+  },
+
+  applyGrooveToClip: (clipId, noteIds, grooveId, options) => {
+    const state = get();
+    if (!state.project) return;
+
+    const groove = state.project.groovePool?.find((g) => g.id === grooveId);
+    if (!groove) return;
+
+    const noteIdSet = new Set(noteIds);
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId || !clip.midiData) return clip;
+            const selected = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
+            const unselected = clip.midiData.notes.filter((n) => !noteIdSet.has(n.id));
+            const grooved = applyGroove(selected, groove, options);
+            return {
+              ...clip,
+              midiData: { ...clip.midiData, notes: [...unselected, ...grooved] },
+            };
+          }),
+        })),
+      },
+    });
+  },
+
+  addGrooveTemplate: (template) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        groovePool: [...(state.project.groovePool ?? []), template],
+      },
+    });
+  },
+
+  deleteGrooveTemplate: (grooveId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        groovePool: (state.project.groovePool ?? []).filter((g) => g.id !== grooveId),
+      },
+    });
+  },
+
+  renameGrooveTemplate: (grooveId, name) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        groovePool: (state.project.groovePool ?? []).map((g) =>
+          g.id === grooveId ? { ...g, name } : g,
+        ),
+      },
+    });
   },
 }),
     {

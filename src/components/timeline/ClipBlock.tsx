@@ -62,6 +62,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const consolidateClips = useProjectStore((s) => s.consolidateClips);
   const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
+  const createQuickSamplerFromClip = useProjectStore((s) => s.createQuickSamplerFromClip);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
@@ -616,6 +617,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onConvertToMidi={() => {
             closeCtxMenu();
             convertAudioToMidi(clip.id);
+          }}
+          onCreateQuickSampler={() => {
+            closeCtxMenu();
+            const samplerTrack = createQuickSamplerFromClip(track.id, clip.id);
+            if (samplerTrack) {
+              useUIStore.getState().setOpenPianoRoll(samplerTrack.id);
+            }
           }}
           onClose={closeCtxMenu}
           hasPrompt={!!clip.prompt}

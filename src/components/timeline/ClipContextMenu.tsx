@@ -16,6 +16,7 @@ interface ClipContextMenuProps {
   onAnalyze: () => void;
   onSeparateStems: () => void;
   onConvertToMidi: () => void;
+  onCreateQuickSampler: () => void;
   onClose: () => void;
   hasPrompt: boolean;
   isReady: boolean;
@@ -43,6 +44,7 @@ export function ClipContextMenu({
   onAnalyze,
   onSeparateStems,
   onConvertToMidi,
+  onCreateQuickSampler,
   onClose,
   hasPrompt,
   isReady,
@@ -112,9 +114,14 @@ export function ClipContextMenu({
         )}
 
         {!isMidiClip && hasAudio && (
-          <button onClick={onConvertToMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-300 hover:bg-daw-accent hover:text-white transition-colors">
-            Convert to MIDI…
-          </button>
+          <>
+            <button onClick={onConvertToMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-300 hover:bg-daw-accent hover:text-white transition-colors">
+              Convert to MIDI…
+            </button>
+            <button onClick={onCreateQuickSampler} className="w-full text-left px-3 py-1.5 text-[11px] text-orange-300 hover:bg-daw-accent hover:text-white transition-colors">
+              Create Quick Sampler
+            </button>
+          </>
         )}
 
         <div className="my-1 border-t border-[#555]" />

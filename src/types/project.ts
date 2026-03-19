@@ -83,6 +83,21 @@ export interface MidiClipData {
   grid: PianoRollGrid;
 }
 
+/** A timing/velocity groove template extracted from a MIDI clip. */
+export interface GrooveTemplate {
+  id: string;
+  name: string;
+  /** Normalized timing offsets per grid position (beat delta from quantized grid). */
+  timingOffsets: number[];
+  /** Normalized velocity multipliers per grid position (1.0 = original). */
+  velocityPattern: number[];
+  /** Grid size in beats used when extracting this groove. */
+  gridBeats: number;
+  /** Number of beats this groove pattern spans before looping. */
+  lengthBeats: number;
+  createdAt: number;
+}
+
 export interface EffectBase<T extends string, P> {
   id: string;
   type: T;
@@ -583,6 +598,8 @@ export interface Project {
   trackPresets?: TrackPreset[];
   /** Timeline markers (sorted by time). */
   markers?: Marker[];
+  /** Reusable groove templates (extracted timing/velocity patterns). */
+  groovePool?: GrooveTemplate[];
   /** Tempo map: discrete tempo changes sorted by beat. Empty = use project.bpm everywhere. */
   tempoMap?: TempoEvent[];
   /** Time signature map: changes sorted by bar. Empty = use project.timeSignature everywhere. */

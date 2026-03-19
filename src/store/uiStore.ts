@@ -34,6 +34,7 @@ interface UIState {
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
   openEffectChainTrackId: string | null;
+  openMidiEffectChainTrackId: string | null;
   sequencerEditorHeight: number;
   pianoRollHeight: number;
   effectChainHeight: number;
@@ -89,6 +90,7 @@ interface UIState {
   setOpenSequencerTrackId: (id: string | null) => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
+  setOpenMidiEffectChainTrackId: (id: string | null) => void;
   setSequencerEditorHeight: (v: number) => void;
   setPianoRollHeight: (v: number) => void;
   setEffectChainHeight: (v: number) => void;
@@ -145,6 +147,7 @@ export const useUIStore = create<UIState>()(
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
   openEffectChainTrackId: null,
+  openMidiEffectChainTrackId: null,
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
   effectChainHeight: 320,
@@ -228,6 +231,10 @@ export const useUIStore = create<UIState>()(
   }),
   setOpenEffectChainTrackId: (id) => set({
     openEffectChainTrackId: id,
+    activeBottomPanel: id ? 'effects' : null,
+  }),
+  setOpenMidiEffectChainTrackId: (id) => set({
+    openMidiEffectChainTrackId: id,
     activeBottomPanel: id ? 'effects' : null,
   }),
   setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),

@@ -1,38 +1,41 @@
-# ACE-Step DAW — Agent Context (READ THIS FIRST)
+# ACE-Step DAW — Agent Context
 
-You are working on ACE-Step DAW, a browser-based AI-native DAW.
-Before writing ANY code, you MUST understand these standards.
+## Identity
+You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 
-## Must-Read Files (in this repo)
-1. `CLAUDE.md` — Tech stack, commands, quality gates, TDD cycle, store API, interaction design standards
-2. `AGENTS.md` — Development process, PR workflow, competitive research depth, release standards
-3. `docs/design/INTERACTION_DESIGN_GUIDE.md` — Full UX/UI design guide (competitive analysis, patterns)
-4. `docs/design/UX_IMPROVEMENT_CHECKLIST.md` — Priority checklist of what to build
+## Must-Read Before Coding
+- `CLAUDE.md` — interaction design standards, quality gates
+- `AGENTS.md` — dev process, PR workflow, competitive research depth
 
-## Critical Rules
-- Every UI action must have a corresponding Zustand store action
-- Every feature needs unit tests (vitest) + must pass `npm run build`
-- Components must be < 600 lines
-- No TypeScript `any` types
-- Keyboard shortcuts: check existing in `useKeyboardShortcuts.ts` before adding
-- Follow progressive disclosure: default = simple, right-click = advanced
-- Visual feedback within 100ms for all interactions
-- All drag operations need `data-testid` attributes
+## Development SOP (mandatory)
 
-## Interaction Design Standards (from CLAUDE.md)
-- Timeline: snap to grid by default, Alt = free movement
-- Knobs: vertical drag, double-click = reset, right-click = precise input
-- Keyboard-first: every mouse action has a keyboard equivalent
-- Undo everything: every state change calls `_pushHistory()`
-- Color-blind safe: never use color alone to convey meaning
+### 1. Test-Driven Development
+- Write a failing test FIRST
+- Then implement the minimum code to pass
+- Then refactor
+- Every feature needs: unit test + build passes
 
-## Code Style
+### 2. UX/UI Standards (from CLAUDE.md)
+- Visual feedback within 100ms
+- Keyboard shortcut for every mouse action
+- Progressive disclosure: simple by default
+- Drag operations need data-testid attributes
+- Color-blind safe: never use color alone
+- Components < 600 lines
+
+### 3. Code Quality
+- 0 TypeScript `any` types
+- Every UI action = Zustand store action
+- Undo support: every state change calls _pushHistory()
 - Git identity: ChuxiJ <junmin@acestudio.ai>
-- Branch: fix/issue-NUMBER or feat/issue-NUMBER
-- Commit: conventional (feat:/fix:/test:/refactor:)
-- PR: title includes "closes #NUMBER"
 
-## Before Submitting
-1. `npx tsc --noEmit` — 0 errors
-2. `npx vitest run tests/unit/` — all pass
-3. `npm run build` — success
+### 4. Before Committing
+- npx tsc --noEmit (0 errors)
+- npm run build (success)
+- npx vitest run tests/unit/ (all pass)
+
+### 5. PR Standards
+- Title: "feat: #NUMBER — description" or "fix: #NUMBER — description"
+- Body: "Closes #NUMBER"
+- Must include tests for new functionality
+- Branch: fix/issue-NUMBER

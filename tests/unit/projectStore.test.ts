@@ -282,3 +282,100 @@ describe('projectStore', () => {
       expect(orderAfter).toEqual(orderBefore);
     });
   });
+
+  describe('createGroupTrack / setTrackParent / toggleGroupCollapsed', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('creates a group track with isGroup=true and collapsed=false', () => {
+      const group = useProjectStore.getState().createGroupTrack('My Group');
+
+      const project = useProjectStore.getState().project;
+      expect(project?.tracks).toHaveLength(1);
+      expect(group.isGroup).toBe(true);
+      expect(group.collapsed).toBe(false);
+      expect(group.displayName).toBe('My Group');
+    });
+
+    it('auto-names the first group "Group" and subsequent ones "Group 2"', () => {
+      const g1 = useProjectStore.getState().createGroupTrack();
+      const g2 = useProjectStore.getState().createGroupTrack();
+
+      expect(g1.displayName).toBe('Group');
+      expect(g2.displayName).toBe('Group 2');
+    });
+
+    it('setTrackParent assigns a child track to a group', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+
+      useProjectStore.getState().setTrackParent(track.id, group.id);
+
+      const stored = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id);
+      expect(stored?.parentId).toBe(group.id);
+    });
+
+    it('setTrackParent with null removes a track from its group', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+
+      useProjectStore.getState().setTrackParent(track.id, group.id);
+      useProjectStore.getState().setTrackParent(track.id, null);
+
+      const stored = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id);
+      expect(stored?.parentId).toBeUndefined();
+    });
+
+    it('toggleGroupCollapsed flips the collapsed state', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      expect(useProjectStore.getState().project?.tracks[0].collapsed).toBe(false);
+
+      useProjectStore.getState().toggleGroupCollapsed(group.id);
+      expect(useProjectStore.getState().project?.tracks[0].collapsed).toBe(true);
+
+      useProjectStore.getState().toggleGroupCollapsed(group.id);
+      expect(useProjectStore.getState().project?.tracks[0].collapsed).toBe(false);
+    });
+
+    it('removeTrack on a group also removes its children', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      const child1 = useProjectStore.getState().addTrack('drums');
+      const child2 = useProjectStore.getState().addTrack('bass');
+
+      useProjectStore.getState().setTrackParent(child1.id, group.id);
+      useProjectStore.getState().setTrackParent(child2.id, group.id);
+
+      expect(useProjectStore.getState().project?.tracks).toHaveLength(3);
+
+      useProjectStore.getState().removeTrack(group.id);
+
+      const project = useProjectStore.getState().project;
+      expect(project?.tracks).toHaveLength(0);
+    });
+
+    it('removeTrack on a group does not remove unrelated tracks', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      const child = useProjectStore.getState().addTrack('drums');
+      const unrelated = useProjectStore.getState().addTrack('bass');
+
+      useProjectStore.getState().setTrackParent(child.id, group.id);
+
+      useProjectStore.getState().removeTrack(group.id);
+
+      const project = useProjectStore.getState().project;
+      expect(project?.tracks).toHaveLength(1);
+      expect(project?.tracks[0].id).toBe(unrelated.id);
+    });
+
+    it('createGroupTrack and setTrackParent are undoable', () => {
+      const group = useProjectStore.getState().createGroupTrack();
+      const track = useProjectStore.getState().addTrack('drums');
+      useProjectStore.getState().setTrackParent(track.id, group.id);
+
+      useProjectStore.getState().undo();
+
+      const stored = useProjectStore.getState().project?.tracks.find((t) => t.id === track.id);
+      expect(stored?.parentId).toBeUndefined();
+    });
+  });

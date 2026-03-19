@@ -9,6 +9,7 @@ import { snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
+import { buildVisibleTracks } from '../../utils/trackTree';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -142,9 +143,8 @@ export function Timeline() {
     };
   }, []);
 
-  const sortedTracks = project
-    ? [...project.tracks].sort((a, b) => a.order - b.order)
-    : [];
+  const allTracks = project ? project.tracks : [];
+  const visibleTracks = buildVisibleTracks(allTracks);
 
   const totalWidth = project ? project.totalDuration * pixelsPerSecond : 0;
 
@@ -447,11 +447,11 @@ export function Timeline() {
               />
             )}
 
-            {sortedTracks.map((track) => (
+            {visibleTracks.map(({ track }) => (
               <TrackLane key={track.id} track={track} />
             ))}
 
-            {sortedTracks.length === 0 && (
+            {allTracks.length === 0 && (
               <div className="flex items-center justify-center h-32 text-zinc-600 text-xs">
                 Add a track to begin
               </div>

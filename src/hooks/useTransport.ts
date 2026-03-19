@@ -137,6 +137,8 @@ export function useTransport() {
     }
 
     engine.updateSoloState();
+    // Wire group bus routing so child tracks sum through their parent group nodes
+    engine.syncGroupRouting(proj.tracks);
 
     const startFrom = fromTime ?? useTransportStore.getState().currentTime;
 

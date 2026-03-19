@@ -97,6 +97,12 @@ interface ProjectState {
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'drumKit' | 'color'>>) => void;
   renameTrack: (trackId: string, newName: string) => void;
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
+  /** Create a new group/folder track. */
+  createGroupTrack: (name?: string) => Track;
+  /** Move a track into a group (or remove from group by passing null). */
+  setTrackParent: (trackId: string, parentId: string | null) => void;
+  /** Toggle the collapsed/expanded state of a group track. */
+  toggleGroupCollapsed: (groupId: string) => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
   ensureMidiClip: (trackId: string, startTime?: number, duration?: number) => Clip;
@@ -473,7 +479,13 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project);
-    const newTracks = state.project.tracks.filter((t) => t.id !== trackId);
+    // When removing a group, also remove all its children
+    const childIds = new Set(
+      state.project.tracks.filter((t) => t.parentId === trackId).map((t) => t.id),
+    );
+    const newTracks = state.project.tracks.filter(
+      (t) => t.id !== trackId && !childIds.has(t.id),
+    );
     set({
       project: {
         ...state.project,
@@ -567,6 +579,72 @@ export const useProjectStore = create<ProjectState>()(
         ...state.project,
         updatedAt: Date.now(),
         tracks: updatedTracks,
+      },
+    });
+  },
+
+  createGroupTrack: (name) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    _pushHistory(state.project);
+
+    const existingOrders = state.project.tracks.map((t) => t.order);
+    const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+    const groupCount = state.project.tracks.filter((t) => t.isGroup).length;
+    const track: Track = {
+      id: uuidv4(),
+      // Group tracks are not instrument tracks — they have no trackType or audio clips
+      trackType: undefined,
+      trackName: 'custom',
+      displayName: name ?? (groupCount === 0 ? 'Group' : `Group ${groupCount + 1}`),
+      color: '#6366f1',
+      order: maxOrder + 1,
+      volume: 1.0,
+      muted: false,
+      soloed: false,
+      clips: [],
+      effects: [],
+      isGroup: true,
+      collapsed: false,
+    };
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: [...state.project.tracks, track],
+      },
+    });
+
+    return track;
+  },
+
+  setTrackParent: (trackId, parentId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, parentId: parentId ?? undefined } : t,
+        ),
+      },
+    });
+  },
+
+  toggleGroupCollapsed: (groupId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === groupId && t.isGroup ? { ...t, collapsed: !t.collapsed } : t,
+        ),
       },
     });
   },

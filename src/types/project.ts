@@ -203,6 +203,13 @@ export interface Track {
   localCaption?: string;
   /** Per-track lane height in pixels (default 64, min 40, max 200). */
   laneHeight?: number;
+  // Track group / folder track support
+  /** If set, this track is a child of the given group track ID. */
+  parentId?: string;
+  /** If true, this track is a folder/group track that can contain child tracks. */
+  isGroup?: boolean;
+  /** If true (and isGroup), the group's children are hidden in the UI. */
+  collapsed?: boolean;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */

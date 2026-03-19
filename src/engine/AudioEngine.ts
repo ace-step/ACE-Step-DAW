@@ -94,6 +94,34 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Update audio routing so that tracks with a `parentId` feed into their
+   * group track's node (as a summing bus) instead of the master output.
+   * All top-level tracks (no parentId) route to masterGain as usual.
+   *
+   * Call this after syncing track nodes from project state.
+   */
+  syncGroupRouting(tracks: { id: string; parentId?: string; isGroup?: boolean }[]) {
+    for (const track of tracks) {
+      const node = this.trackNodes.get(track.id);
+      if (!node) continue;
+
+      if (track.parentId) {
+        // Route into the group's inputGain (pre-fader on the group bus)
+        const groupNode = this.trackNodes.get(track.parentId);
+        if (groupNode) {
+          node.rerouteToDestination(groupNode.inputGain);
+        } else {
+          // Group node not yet created — fall back to master
+          node.rerouteToDestination(this.masterGain);
+        }
+      } else {
+        // Top-level track (or group track itself) routes to master
+        node.rerouteToDestination(this.masterGain);
+      }
+    }
+  }
+
   get masterVolume() { return this.masterGain.gain.value; }
   set masterVolume(v: number) { this.masterGain.gain.value = Math.max(0, Math.min(2, v)); }
 

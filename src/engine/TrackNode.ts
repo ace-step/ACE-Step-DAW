@@ -30,6 +30,7 @@ export class TrackNode {
   private _reverbRoomSize = 0.5;
   private _effectsInput: AudioNode | null = null;
   private _effectsOutput: AudioNode | null = null;
+  private _destination: AudioNode;
 
   constructor(private ctx: AudioContext, destination: AudioNode) {
     this.inputGain  = ctx.createGain();
@@ -95,11 +96,25 @@ export class TrackNode {
     this.compressor.connect(this.volumeGain);
     this.volumeGain.connect(this.analyserNode);
     this.analyserNode.connect(destination);
+    this._destination = destination;
 
     this.volumeGain.gain.value = this._volume;
 
     // Generate default (silent) reverb IR so the convolver never stalls
     this._buildImpulseResponse(this._reverbRoomSize);
+  }
+
+  /**
+   * Re-route this node's output to a different destination (e.g. a group bus).
+   * Disconnects analyserNode from the old destination and connects to the new one.
+   */
+  rerouteToDestination(newDestination: AudioNode) {
+    if (this._destination === newDestination) return;
+    try { this.analyserNode.disconnect(this._destination); } catch {
+      // Ignore: disconnect throws if the connection doesn't exist (e.g. first routing call)
+    }
+    this.analyserNode.connect(newDestination);
+    this._destination = newDestination;
   }
 
   // -----------------------------------------------------------------------

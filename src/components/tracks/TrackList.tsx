@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
 import { AddTrackButton } from './AddTrackButton';
+import { buildVisibleTracks } from '../../utils/trackTree';
 
 export function TrackList() {
   const project = useProjectStore((s) => s.project);
@@ -66,7 +67,7 @@ export function TrackList() {
 
   if (!project) return null;
 
-  const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order);
+  const renderOrder = buildVisibleTracks(project.tracks);
 
   return (
     <div
@@ -84,13 +85,15 @@ export function TrackList() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {sortedTracks.map((track) => (
+        {renderOrder.map(({ track, depth }) => (
           <TrackHeader
             key={track.id}
             track={track}
+            depth={depth}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
             isDragOver={dragOverId === track.id}
             dragOverPosition={dragOverId === track.id ? dragOverPosition : null}
           />

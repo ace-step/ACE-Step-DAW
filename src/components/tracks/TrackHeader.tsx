@@ -11,18 +11,22 @@ const MAX_LANE_HEIGHT = 400;
 
 interface TrackHeaderProps {
   track: Track;
+  depth?: number;
   onDragStart: (id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
   onDrop: (e: React.DragEvent, id: string) => void;
+  onDragEnd?: () => void;
   isDragOver: boolean;
   dragOverPosition: 'before' | 'after' | null;
 }
 
 export function TrackHeader({
   track,
+  depth = 0,
   onDragStart,
   onDragOver,
   onDrop,
+  onDragEnd,
   isDragOver,
   dragOverPosition,
 }: TrackHeaderProps) {
@@ -30,6 +34,9 @@ export function TrackHeader({
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const removeTrack = useProjectStore((s) => s.removeTrack);
   const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+  const createGroupTrack = useProjectStore((s) => s.createGroupTrack);
+  const setTrackParent = useProjectStore((s) => s.setTrackParent);
+  const toggleGroupCollapsed = useProjectStore((s) => s.toggleGroupCollapsed);
 
   // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
   const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
@@ -104,10 +111,11 @@ export function TrackHeader({
     <>
     <div
       className={`relative flex items-center gap-1.5 px-1 border-b border-[#3a3a3a] group select-none ${
-        isDragOver ? 'bg-[#383838]' : 'bg-[#2d2d2d]'
+        isDragOver ? 'bg-[#383838]' : track.isGroup ? 'bg-[#252530]' : 'bg-[#2d2d2d]'
       }`}
       style={{
         height: laneHeight,
+        paddingLeft: depth > 0 ? `${depth * 12 + 4}px` : undefined,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,
         borderBottom: isDragOver && dragOverPosition === 'after' ? '2px solid var(--color-daw-accent)' : undefined,
         opacity: isImpliedMute ? 0.45 : undefined,
@@ -117,7 +125,7 @@ export function TrackHeader({
       onDragStart={() => onDragStart(track.id)}
       onDragOver={(e) => onDragOver(e, track.id)}
       onDrop={(e) => onDrop(e, track.id)}
-      onDragEnd={(e) => e.currentTarget.style.opacity = '1'}
+      onDragEnd={() => onDragEnd?.()}
       onDoubleClick={handleHeaderDoubleClick}
       onContextMenu={handleHeaderContextMenu}
     >
@@ -143,22 +151,55 @@ export function TrackHeader({
         }}
       />
 
-      {/* Drag handle */}
-      <div
-        className="flex-shrink-0 ml-1.5 text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none"
-        title="Drag to reorder"
-      >
-        ⠿
-      </div>
+      {/* Collapse/Expand button for group tracks */}
+      {track.isGroup && (
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleGroupCollapsed(track.id); }}
+          className="flex-shrink-0 w-4 h-4 flex items-center justify-center text-zinc-400 hover:text-zinc-100 transition-colors"
+          title={track.collapsed ? 'Expand group' : 'Collapse group'}
+          aria-label={track.collapsed ? `Expand group ${track.displayName}` : `Collapse group ${track.displayName}`}
+        >
+          <svg
+            width="8" height="8"
+            viewBox="0 0 8 8"
+            fill="currentColor"
+            style={{ transform: track.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}
+          >
+            <path d="M4 6L0.5 2h7z" />
+          </svg>
+        </button>
+      )}
 
-      {/* Instrument icon */}
-      <div
-        className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm"
-        style={{ backgroundColor: track.color + '20' }}
-        title={info.displayName}
-      >
-        {info.emoji}
-      </div>
+      {/* Drag handle */}
+      {!track.isGroup && (
+        <div
+          className="flex-shrink-0 ml-1.5 text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none"
+          title="Drag to reorder"
+        >
+          ⠿
+        </div>
+      )}
+
+      {/* Icon: folder for groups, instrument icon for regular tracks */}
+      {track.isGroup ? (
+        <div
+          className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm"
+          style={{ backgroundColor: track.color + '30' }}
+          title="Group track"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={track.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 4.5V13a1 1 0 001 1h12a1 1 0 001-1V5.5a1 1 0 00-1-1H7.5L6 3H2a1 1 0 00-1 1.5z" />
+          </svg>
+        </div>
+      ) : (
+        <div
+          className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm"
+          style={{ backgroundColor: track.color + '20' }}
+          title={info.displayName}
+        >
+          {info.emoji}
+        </div>
+      )}
 
       {/* Name + controls column */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-0.5">
@@ -178,7 +219,7 @@ export function TrackHeader({
           />
         ) : (
           <span
-            className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
+            className={`text-[11px] font-medium block truncate cursor-text leading-tight ${track.isGroup ? 'text-indigo-300' : 'text-zinc-200'}`}
             title={track.displayName}
             onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
           >
@@ -186,7 +227,7 @@ export function TrackHeader({
           </span>
         )}
 
-        {/* Volume slider + M/S buttons (only in non-compact mode) */}
+        {/* Volume slider (only in non-compact mode) */}
         {!isCompact && (
           <div className="flex items-center gap-1 w-full">
             <input
@@ -243,55 +284,58 @@ export function TrackHeader({
             <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
           </svg>
         </button>
-        <button
-          onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
-          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
-            isArmed
-              ? 'bg-red-600/90 text-white'
-              : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
-          }`}
-          title="Record arm"
-          aria-label={`Record arm ${track.displayName}`}
-        >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
-          </svg>
-        </button>
-        {/* Automation toggle */}
-        <button
-          onClick={() => {
-            const project = useProjectStore.getState().project;
-            if (!project) return;
-            const hasLane = (project.automationLanes ?? []).some((l) => l.trackId === track.id);
-            if (!hasLane) {
-              // Create a default volume automation lane with 2 points
-              useProjectStore.getState().addAutomationPoint(
-                track.id,
-                { type: 'mixer', param: 'volume' },
-                { time: 0, value: track.volume },
-              );
-              useProjectStore.getState().addAutomationPoint(
-                track.id,
-                { type: 'mixer', param: 'volume' },
-                { time: project.totalDuration, value: track.volume },
-              );
-            } else {
-              // Clear all automation for this track
-              for (const lane of (project.automationLanes ?? []).filter((l) => l.trackId === track.id)) {
-                useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
+        {/* Record arm — hidden for group tracks */}
+        {!track.isGroup && (
+          <button
+            onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
+            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+              isArmed
+                ? 'bg-red-600/90 text-white'
+                : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+            }`}
+            title="Record arm"
+            aria-label={`Record arm ${track.displayName}`}
+          >
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
+            </svg>
+          </button>
+        )}
+        {/* Automation toggle — hidden for group tracks */}
+        {!track.isGroup && (
+          <button
+            onClick={() => {
+              const project = useProjectStore.getState().project;
+              if (!project) return;
+              const hasLane = (project.automationLanes ?? []).some((l) => l.trackId === track.id);
+              if (!hasLane) {
+                useProjectStore.getState().addAutomationPoint(
+                  track.id,
+                  { type: 'mixer', param: 'volume' },
+                  { time: 0, value: track.volume },
+                );
+                useProjectStore.getState().addAutomationPoint(
+                  track.id,
+                  { type: 'mixer', param: 'volume' },
+                  { time: project.totalDuration, value: track.volume },
+                );
+              } else {
+                for (const lane of (project.automationLanes ?? []).filter((l) => l.trackId === track.id)) {
+                  useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
+                }
               }
-            }
-          }}
-          className={`w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors ${
-            (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
-              ? 'bg-amber-600/80 text-white'
-              : 'text-zinc-500 hover:text-amber-400 hover:bg-[#444]'
-          }`}
-          title="Toggle automation lane (A)"
-          aria-label={`Toggle automation ${track.displayName}`}
-        >
-          A
-        </button>
+            }}
+            className={`w-5 h-5 flex items-center justify-center rounded text-[9px] font-bold transition-colors ${
+              (useProjectStore.getState().project?.automationLanes ?? []).some((l) => l.trackId === track.id)
+                ? 'bg-amber-600/80 text-white'
+                : 'text-zinc-500 hover:text-amber-400 hover:bg-[#444]'
+            }`}
+            title="Toggle automation lane (A)"
+            aria-label={`Toggle automation ${track.displayName}`}
+          >
+            A
+          </button>
+        )}
         {/* Delete - hidden by default, visible on hover */}
         <button
           onClick={() => removeTrack(track.id)}
@@ -317,51 +361,118 @@ export function TrackHeader({
         <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
         <div
           className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[160px]"
-          style={{ left: Math.min(ctxMenu.x, window.innerWidth - 180), top: Math.min(ctxMenu.y, window.innerHeight - 100) }}
+          style={{ left: Math.min(ctxMenu.x, window.innerWidth - 180), top: Math.min(ctxMenu.y, window.innerHeight - 200) }}
         >
-          <button
-            onClick={() => {
-              setCtxMenu(null);
-              if (track.trackType === 'pianoRoll') {
-                const clip = track.clips.find((candidate) => candidate.midiData);
-                setOpenPianoRoll(track.id, clip?.id ?? null);
-              }
-            }}
-            disabled={track.trackType !== 'pianoRoll'}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:hover:bg-transparent disabled:hover:text-zinc-600"
-          >
-            Open Piano Roll...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); setOpenEffectChainTrackId(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Open Effect Chain...
-          </button>
+          {/* Group-specific options */}
+          {track.isGroup ? (
+            <>
+              <button
+                onClick={() => { setCtxMenu(null); toggleGroupCollapsed(track.id); }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+              >
+                {track.collapsed ? 'Expand Group' : 'Collapse Group'}
+              </button>
+              <div className="my-1 border-t border-[#555]" />
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setCtxMenu(null);
+                  if (track.trackType === 'pianoRoll') {
+                    const clip = track.clips.find((candidate) => candidate.midiData);
+                    setOpenPianoRoll(track.id, clip?.id ?? null);
+                  }
+                }}
+                disabled={track.trackType !== 'pianoRoll'}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:hover:bg-transparent disabled:hover:text-zinc-600"
+              >
+                Open Piano Roll...
+              </button>
+              <button
+                onClick={() => { setCtxMenu(null); setOpenEffectChainTrackId(track.id); }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+              >
+                Open Effect Chain...
+              </button>
+            </>
+          )}
           <button
             onClick={() => { setCtxMenu(null); startEditing(); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
           >
             Rename Track
           </button>
-          <button
-            onClick={() => { setCtxMenu(null); setEditModalOpen(true); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Track Settings...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Duplicate Track
-          </button>
+          {!track.isGroup && (
+            <button
+              onClick={() => { setCtxMenu(null); setEditModalOpen(true); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              Track Settings...
+            </button>
+          )}
+          {!track.isGroup && (
+            <button
+              onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              Duplicate Track
+            </button>
+          )}
+          <div className="my-1 border-t border-[#555]" />
+          {/* Group management */}
+          {!track.isGroup && (
+            <button
+              onClick={() => {
+                setCtxMenu(null);
+                const grp = createGroupTrack();
+                setTrackParent(track.id, grp.id);
+              }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              New Group with Track
+            </button>
+          )}
+          {!track.isGroup && (() => {
+            const groups = (useProjectStore.getState().project?.tracks ?? [])
+              .filter((t) => t.isGroup && t.id !== track.id);
+            if (groups.length === 0) return null;
+            return (
+              <div className="relative group/submenu">
+                <button
+                  className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors flex items-center justify-between"
+                >
+                  <span>Move to Group</span>
+                  <span className="text-zinc-500">▶</span>
+                </button>
+                <div className="absolute left-full top-0 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[140px] hidden group-hover/submenu:block z-50">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => { setCtxMenu(null); setTrackParent(track.id, g.id); }}
+                      className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+                    >
+                      {g.displayName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+          {!track.isGroup && track.parentId && (
+            <button
+              onClick={() => { setCtxMenu(null); setTrackParent(track.id, null); }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
+            >
+              Remove from Group
+            </button>
+          )}
           <div className="my-1 border-t border-[#555]" />
           <button
             onClick={() => { setCtxMenu(null); removeTrack(track.id); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-600 hover:text-white transition-colors"
           >
-            Delete Track
+            {track.isGroup ? 'Delete Group and Children' : 'Delete Track'}
           </button>
         </div>
       </>

@@ -13,6 +13,7 @@ import { useSessionStore } from './store/sessionStore';
 import { projectActionApi } from './services/actionApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
+import { executeCoreDawShortcut } from './services/coreDawShortcuts';
 
 const agentProjectStore = {
   getState: () => ({
@@ -61,6 +62,9 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
+(window as unknown as Record<string, unknown>).__coreDawShortcuts = {
+  execute: (actionId: Parameters<typeof executeCoreDawShortcut>[0]) => executeCoreDawShortcut(actionId),
+};
 (window as unknown as Record<string, unknown>).__commandPalette = {
   list: (query?: string) => useUIStore.getState().getCommandPaletteRegistry(query),
   search: (query?: string) => useUIStore.getState().searchCommandPalette(query),

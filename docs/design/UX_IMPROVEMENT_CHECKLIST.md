@@ -80,7 +80,7 @@
 - ⬜ **Prompt autocomplete** — Suggest genres, instruments, moods, techniques as user types.
 
 ### Keyboard Shortcuts
-- ⬜ **Single-key shortcuts** — `Space` play, `R` record, `L` loop, `S` solo, `M` mute, `Z` zoom-to-selection.
+- ✅ **Single-key shortcuts** — `Space` play, `R` record, `L` loop, `S` solo, `M` mute, `Z` zoom-to-selection. Shared command layer now ignores focused text-entry and editable fields.
 - ⬜ **Context-sensitive keys** — Arrow keys do different things in timeline vs piano roll vs mixer.
 - ⬜ **Shortcut customization** — Full editor in settings. Import/export presets. Conflict detection.
 - ⬜ **DAW migration presets** — Shortcut presets for Ableton, Logic, FL Studio, Pro Tools users.

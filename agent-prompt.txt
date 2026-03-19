@@ -49,32 +49,35 @@ You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 - This may happen multiple times. Each round, fix all issues and pass quality gates.
 - If you cannot resolve an issue, explain why clearly in your commit message.
 ---
-IMPLEMENT ISSUE #438: feat: add a dedicated AI generation control panel
+IMPLEMENT ISSUE #465: feat: add core DAW single-key shortcuts across panels
 ## User Story
-As a user, I want a dedicated AI generation panel with prompt, style, key, BPM, length, temperature, and variation controls, so that I can generate musical ideas without hidden settings.
+As a user, I want reliable single-key shortcuts for core DAW actions, so that transport and editing actions feel immediate without modifier-heavy key combos.
 
 ## Source
 Unchecked item from `docs/design/UX_IMPROVEMENT_CHECKLIST.md`:
-- P1 AI Generation UX: **Generation panel**
+- Keyboard Shortcuts
+- Single-key shortcuts
 
 ## Problem
-AI generation controls are not consolidated into a single, explicit workflow surface. The checklist calls for a structured sidebar so users can set generation intent before running requests.
+The checklist calls out single-key transport and core action shortcuts (`Space`, `R`, `L`, `S`, `M`, `Z`), but that work is not fully tracked as a feature issue.
 
 ## Scope
-Create a generation sidebar panel for core prompt and generation parameters.
+- Implement or normalize single-key shortcuts for play, record, loop, solo, mute, and zoom-to-selection.
+- Prevent shortcuts from firing while typing in text inputs, prompts, or editable fields.
+- Route shortcut handling through a shared command/action layer that is testable and agent-friendly.
+- Document shortcut behavior and context rules.
 
 ## Acceptance Criteria
-- The panel includes controls for prompt text, style tags, key, BPM, length, temperature, and variation count.
-- The panel state is accessible via typed Zustand actions and readable from `window.__store`.
-- Controls have ARIA labels and keyboard-focus support.
-- Reasonable defaults are provided so generation can start without excessive setup.
-- The design fits the existing DAW layout without obscuring core transport/timeline interactions.
-- Browser testing covers opening the panel, changing settings, triggering generation, and verifying submitted parameters.
+- `Space`, `R`, `L`, `S`, `M`, and `Z` perform the documented DAW actions in the correct panel context.
+- Shortcut handling is suppressed inside focused text-entry controls.
+- Shortcuts dispatch shared actions instead of performing one-off DOM mutations.
+- Behavior is covered by at least one automated test or equivalent command-layer verification.
 
 ## Verification
 - `npx tsc --noEmit`
 - `npm run build`
-- Browser test: configure the panel, run generation, and confirm the request payload/state matches the selected parameters.
+- Manual workflow: use the keyboard only to play, record-arm/toggle, loop, solo, mute, and zoom selection.
+- Agent workflow: verify the same command layer is callable directly without relying on browser key events.
 
 
-You are on branch fix/issue-438. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #438'. Do NOT push.
+You are on branch fix/issue-465. Implement, then: npx tsc --noEmit && npm run build && npx vitest run tests/unit/ && git add -A && git commit -m 'feat: resolve #465'. Do NOT push.

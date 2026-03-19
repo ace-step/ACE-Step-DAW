@@ -102,19 +102,11 @@ export function SequencerEditor() {
     }
   }, [inlineRenameRowId]);
 
-  if (!trackId || !track || !project || !track.sequencerPattern) return null;
-
-  const pattern = track.sequencerPattern;
-  const { stepH, stepW } = ROW_SIZES[rowSize];
-  const bpm = project.bpm;
-  const totalSteps = pattern.stepsPerBar * pattern.bars;
-  const stepDuration = (60 / bpm) / (pattern.stepsPerBar / 4);
+  const pattern = track?.sequencerPattern ?? null;
+  const bpm = project?.bpm ?? 120;
+  const totalSteps = pattern ? pattern.stepsPerBar * pattern.bars : 0;
+  const stepDuration = totalSteps > 0 ? (60 / bpm) / ((pattern?.stepsPerBar ?? 16) / 4) : 0;
   const patternDuration = stepDuration * totalSteps;
-  const currentStep = isPreviewPlaying ? previewStep : -1;
-  const gridWidth = totalSteps * stepW;
-  const stepsPerBeat = pattern.stepsPerBar / 4;
-
-  const isRowAudible = (rowId: string, muted: boolean) => (soloRowId ? rowId === soloRowId : !muted);
 
   const previewSample = useCallback(async (sampleKey: string, velocity: number) => {
     const engine = getAudioEngine();
@@ -131,16 +123,17 @@ export function SequencerEditor() {
   }, []);
 
   const startPreview = useCallback(async () => {
-    if (patternDuration <= 0) return;
+    if (!pattern || patternDuration <= 0) return;
     stopPreview();
 
     const engine = getAudioEngine();
     await engine.resume();
     const ctx = engine.ctx;
     const sampleBuffers = new Map<string, AudioBuffer>();
+    const isAudible = (rowId: string, muted: boolean) => (soloRowId ? rowId === soloRowId : !muted);
 
     for (const row of pattern.rows) {
-      if (!isRowAudible(row.id, row.muted)) continue;
+      if (!isAudible(row.id, row.muted)) continue;
       const buf = await getSample(ctx, row.sampleKey);
       if (buf) sampleBuffers.set(row.sampleKey, buf);
     }
@@ -150,7 +143,7 @@ export function SequencerEditor() {
     for (let loop = 0; loop < 2; loop++) {
       const loopOffset = loop * patternDuration;
       for (const row of pattern.rows) {
-        if (!isRowAudible(row.id, row.muted)) continue;
+        if (!isAudible(row.id, row.muted)) continue;
         const buffer = sampleBuffers.get(row.sampleKey);
         if (!buffer) continue;
         for (let stepIdx = 0; stepIdx < row.steps.length; stepIdx++) {
@@ -191,7 +184,7 @@ export function SequencerEditor() {
       previewRafRef.current = requestAnimationFrame(animate);
     };
     previewRafRef.current = requestAnimationFrame(animate);
-  }, [pattern, patternDuration, stepDuration, stopPreview]);
+  }, [pattern, patternDuration, stepDuration, soloRowId, stopPreview]);
 
   const togglePreview = useCallback(() => {
     if (isPreviewPlaying) stopPreview();
@@ -256,6 +249,15 @@ export function SequencerEditor() {
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   }, [trackId, closeEditor, stopPreview]);
+
+  if (!trackId || !track || !project || !pattern) return null;
+
+  const { stepH, stepW } = ROW_SIZES[rowSize];
+  const currentStep = isPreviewPlaying ? previewStep : -1;
+  const gridWidth = totalSteps * stepW;
+  const stepsPerBeat = pattern.stepsPerBar / 4;
+
+  const isRowAudible = (rowId: string, muted: boolean) => (soloRowId ? rowId === soloRowId : !muted);
 
   const handleBounce = async () => {
     setIsBouncing(true);

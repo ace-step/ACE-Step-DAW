@@ -175,17 +175,13 @@ export function TrackLane({ track }: TrackLaneProps) {
       return;
     }
 
+    // For stems/sample/audio tracks, double-click on empty space opens the Add Layer panel
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
     const clickTime = laneX / pixelsPerSecond;
     if (hitsClip(clickTime)) return;
-    const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
-    const remaining = project.totalDuration - startTime;
-    const duration = Math.max(10, Math.min(30, remaining));
-    setCtxMenu({ x: e.clientX, y: e.clientY, startTime, duration });
-    setAddLayerTarget(null);
+    useUIStore.getState().setAddLayerOpen(true);
   }, [isSequencer, isPianoRoll, pixelsPerSecond, project.bpm, project.totalDuration, project.timeSignature, hitsClip, track.id, setOpenSequencerTrackId, ensureMidiClip, setOpenPianoRoll]);
 
   const clearSel = useCallback(() => {

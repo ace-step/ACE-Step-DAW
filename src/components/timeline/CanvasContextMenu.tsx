@@ -25,12 +25,12 @@ export function CanvasContextMenu({ x, y, onClose }: CanvasContextMenuProps) {
   }, [onClose]);
 
   const handleAddLayer = useCallback(() => {
-    useUIStore.getState().setShowGenerationPanel(true);
+    useUIStore.getState().setAddLayerOpen(true);
     onClose();
   }, [onClose]);
 
   const handleMusicEnhancer = useCallback(() => {
-    useUIStore.getState().setShowGenerationPanel(true);
+    useUIStore.getState().setMusicEnhancerOpen(true);
     onClose();
   }, [onClose]);
 

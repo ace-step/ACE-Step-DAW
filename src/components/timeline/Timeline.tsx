@@ -569,30 +569,12 @@ export function Timeline() {
       {/* MultiTrackGenerateModal is now accessed via GENR button or toolbar —
            no longer auto-opens on selectWindow creation (#577) */}
 
-      {/* Region context menu — right-click on select window */}
+      {/* Region context menu — right-click on select window → same as canvas context menu with AI Tools */}
       {regionCtxMenu && selectWindow && (
-        <RegionContextMenu
+        <CanvasContextMenu
           x={regionCtxMenu.x}
           y={regionCtxMenu.y}
-          onRegenerateRegion={() => {
-            setRegionCtxMenu(null);
-            setRegionRegenerateTarget({
-              startTime: selectWindow.startTime,
-              endTime: selectWindow.endTime,
-              trackIds: selectWindow.trackIds,
-            });
-          }}
           onClose={() => setRegionCtxMenu(null)}
-          hasReadyClips={
-            project.tracks.some((t) =>
-              selectWindow.trackIds.includes(t.id) &&
-              t.clips.some((c) => {
-                const clipEnd = c.startTime + c.duration;
-                return Math.min(selectWindow.endTime, clipEnd) > Math.max(selectWindow.startTime, c.startTime)
-                  && c.generationStatus === 'ready';
-              }),
-            )
-          }
         />
       )}
 

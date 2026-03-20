@@ -749,10 +749,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
           onConsolidate={() => { void handleConsolidate(); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
-          onAddLayer={() => { closeCtxMenu(); setAddLayerOpen(true); }}
+          onAddLayer={() => { closeCtxMenu(); useUIStore.getState().setAddLayerOpen(true); }}
           onCreateCover={() => {
             closeCtxMenu();
-            setCoverModal(clip.id);
+            useUIStore.getState().setMusicEnhancerOpen(true);
           }}
           onRepaint={() => {
             closeCtxMenu();

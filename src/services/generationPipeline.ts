@@ -17,6 +17,7 @@ import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
+import { extractContextAudioLazy } from './lazyContextAudioExtractor';
 
 function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null; progressPercent: number | null } {
   let stage: string | null = null;
@@ -984,8 +985,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       let contextBlob: Blob | null = null;
 
       if (opts.contextWindow) {
-        const { extractContextAudio } = await import('./contextAudioExtractor');
-        contextBlob = await extractContextAudio(opts.contextWindow);
+        contextBlob = await extractContextAudioLazy(opts.contextWindow);
       }
 
       const outcome = await generateClipInternal(clip.id, contextBlob, {
@@ -1168,8 +1168,7 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
       let hasContextAudio = false;
       let contextBlob: Blob | null = null;
       if (opts.contextWindow) {
-        const { extractContextAudio } = await import('./contextAudioExtractor');
-        contextBlob = await extractContextAudio(opts.contextWindow);
+        contextBlob = await extractContextAudioLazy(opts.contextWindow);
         hasContextAudio = contextBlob !== null && contextBlob.size > 44;
       }
       const mode = hasContextAudio ? 'context' : 'silence';

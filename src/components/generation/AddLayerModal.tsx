@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { generateFromAddLayer, generateSingleClip } from '../../services/generationPipeline';
+import type { ContextWindow } from '../../services/contextAudioExtractor';
+import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
-import { extractContextAudio } from '../../services/contextAudioExtractor';
 
 const VOCAL_TRACKS = new Set(['vocals', 'backing_vocals']);
 
@@ -11,7 +12,7 @@ interface Props {
   trackId: string;
   startTime: number;
   duration: number;
-  contextWindow: { startTime: number; endTime: number } | null;
+  contextWindow: ContextWindow | null;
   onClose: () => void;
   /** When set, the modal operates in edit mode for the existing clip. */
   clipId?: string;
@@ -97,7 +98,7 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
     if (!contextWindow) return;
     setPreviewState('loading');
     try {
-      const blob = await extractContextAudio(contextWindow);
+      const blob = await extractContextAudioLazy(contextWindow);
       if (!blob) { setPreviewState('idle'); return; }
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;

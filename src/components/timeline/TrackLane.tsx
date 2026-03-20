@@ -6,7 +6,7 @@ import { ClipBlock } from './ClipBlock';
 import { TakeLaneStrip } from './TakeLaneStrip';
 import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
-import { snapToGrid } from '../../utils/time';
+import { getBarDuration, snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
@@ -16,10 +16,6 @@ import {
   ARRANGEMENT_ROW_BORDER_CLASS,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
-
-function getBarDurationSec(bpm: number, timeSignature: number): number {
-  return (60 / bpm) * timeSignature;
-}
 
 interface TrackLaneProps {
   track: Track;
@@ -62,9 +58,10 @@ export function TrackLane({ track }: TrackLaneProps) {
   const setOpenSequencerTrackId = useUIStore((s) => s.setOpenSequencerTrackId);
   const setOpenDrumMachineTrackId = useUIStore((s) => s.setOpenDrumMachineTrackId);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
+  const selectClip = useUIStore((s) => s.selectClip);
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
-  const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
+  const addClip = useProjectStore((s) => s.addClip);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; startTime: number; duration: number;
@@ -128,6 +125,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
   const totalWidth = project.totalDuration * pixelsPerSecond;
+  const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature) * 4;
 
   const hitsClip = useCallback((clickTime: number): boolean => {
     const GUARD = 8 / pixelsPerSecond;
@@ -143,12 +141,12 @@ export function TrackLane({ track }: TrackLaneProps) {
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
     const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
+    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
     const remaining = project.totalDuration - startTime;
     const duration = Math.max(10, Math.min(30, remaining));
     setCtxMenu({ x: e.clientX, y: e.clientY, startTime, duration });
     setAddLayerTarget(null);
-  }, [pixelsPerSecond, project.bpm, project.totalDuration]);
+  }, [pixelsPerSecond, project.bpm, project.tempoMap, project.totalDuration]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -169,20 +167,38 @@ export function TrackLane({ track }: TrackLaneProps) {
       const rect = e.currentTarget.getBoundingClientRect();
       const laneX = e.clientX - rect.left;
       const rawTime = laneX / pixelsPerSecond;
-      const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
-      const clip = ensureMidiClip(track.id, startTime, Math.max(4, getBarDurationSec(project.bpm, project.timeSignature)));
+      const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+      const clip = addClip(track.id, {
+        startTime,
+        duration: defaultClipDuration,
+        prompt: 'MIDI Clip',
+        globalCaption: '',
+        lyrics: '',
+        midiData: { notes: [], grid: '1/16' },
+        source: 'uploaded',
+      });
+      selectClip(clip.id);
       setOpenPianoRoll(track.id, clip.id);
       return;
     }
 
-    // For stems/sample/audio tracks, double-click on empty space opens the Add Layer panel
+    // For stems/sample/audio tracks, double-click on empty space creates a new empty clip
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
     const clickTime = laneX / pixelsPerSecond;
     if (hitsClip(clickTime)) return;
-    useUIStore.getState().setAddLayerOpen(true);
-  }, [isSequencer, isPianoRoll, pixelsPerSecond, project.bpm, project.totalDuration, project.timeSignature, hitsClip, track.id, setOpenSequencerTrackId, ensureMidiClip, setOpenPianoRoll]);
+    const startTime = Math.max(0, snapToGrid(clickTime, project.bpm, 1, project.tempoMap));
+    const clip = addClip(track.id, {
+      startTime,
+      duration: defaultClipDuration,
+      prompt: 'Audio Clip',
+      globalCaption: '',
+      lyrics: '',
+      source: 'uploaded',
+    });
+    selectClip(clip.id);
+  }, [isDrumMachine, isSequencer, isPianoRoll, pixelsPerSecond, project.bpm, project.tempoMap, hitsClip, track.id, addClip, defaultClipDuration, setOpenDrumMachineTrackId, setOpenSequencerTrackId, selectClip, setOpenPianoRoll]);
 
   const clearSel = useCallback(() => {
     setAddLayerTarget(null);
@@ -211,7 +227,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     const rect = e.currentTarget.getBoundingClientRect();
     const laneX = e.clientX - rect.left;
     const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1));
+    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
 
     // Handle preset loop drop
     const loopId = e.dataTransfer.getData('application/x-loop-id');
@@ -314,7 +330,16 @@ export function TrackLane({ track }: TrackLaneProps) {
             <div
               className="absolute inset-0 flex items-center justify-center cursor-pointer"
               onClick={() => {
-                const clip = ensureMidiClip(track.id, 0, Math.max(4, getBarDurationSec(project.bpm, project.timeSignature)));
+                const clip = addClip(track.id, {
+                  startTime: 0,
+                  duration: defaultClipDuration,
+                  prompt: 'MIDI Clip',
+                  globalCaption: '',
+                  lyrics: '',
+                  midiData: { notes: [], grid: '1/16' },
+                  source: 'uploaded',
+                });
+                selectClip(clip.id);
                 setOpenPianoRoll(track.id, clip.id);
               }}
             >
@@ -333,7 +358,16 @@ export function TrackLane({ track }: TrackLaneProps) {
             onAddLayer={() => setAddLayerTarget({ startTime: ctxMenu.startTime, duration: ctxMenu.duration })}
             onOpenSequencer={isSequencer ? () => setOpenSequencerTrackId(track.id) : undefined}
             onOpenPianoRoll={isPianoRoll ? () => {
-              const clip = ensureMidiClip(track.id, ctxMenu.startTime, ctxMenu.duration);
+              const clip = addClip(track.id, {
+                startTime: ctxMenu.startTime,
+                duration: defaultClipDuration,
+                prompt: 'MIDI Clip',
+                globalCaption: '',
+                lyrics: '',
+                midiData: { notes: [], grid: '1/16' },
+                source: 'uploaded',
+              });
+              selectClip(clip.id);
               setOpenPianoRoll(track.id, clip.id);
             } : undefined}
             onCreateQuickSampler={() => openQuickSamplerFilePicker()}

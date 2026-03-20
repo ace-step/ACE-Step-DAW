@@ -1,3 +1,5 @@
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
+
 interface ClipContextMenuProps {
   x: number;
   y: number;
@@ -61,109 +63,54 @@ export function ClipContextMenu({
   hasWarpMarkers,
   canConsolidate,
 }: ClipContextMenuProps) {
-  const clampedX = Math.min(x, window.innerWidth - 210);
-  const clampedY = Math.min(y, window.innerHeight - 300);
-
   return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
-      <div
-        className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[190px] backdrop-blur-sm"
-        style={{ left: clampedX, top: clampedY }}
-      >
-        <button onClick={onEdit} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-          Edit Clip
-        </button>
-        {isMidiClip ? (
-          <>
-            <button onClick={onOpenMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-200 hover:bg-daw-accent hover:text-white transition-colors">
-              Open Piano Roll
-            </button>
-            <button
-              onClick={onExportMidi}
-              aria-label="Export MIDI Clip"
-              className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-200 hover:bg-daw-accent hover:text-white transition-colors"
-            >
-              Export MIDI Clip…
-            </button>
-          </>
-        ) : isReady ? (
-          <button onClick={onRegenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
-            Regenerate
-          </button>
-        ) : (
-          <button onClick={onGenerate} disabled={!hasPrompt} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed">
-            Generate
-          </button>
-        )}
+    <ContextMenuWrapper x={x} y={y} onClose={onClose} minWidth={190}>
+      <ContextMenuItem label="Edit Clip" onClick={onEdit} />
+      {isMidiClip ? (
+        <>
+          <ContextMenuItem label="Open Piano Roll" onClick={onOpenMidi} color="#ddd6fe" />
+          <ContextMenuItem label="Export MIDI Clip..." onClick={onExportMidi} color="#a5f3fc" />
+        </>
+      ) : isReady ? (
+        <ContextMenuItem label="Regenerate" onClick={onRegenerate} disabled={!hasPrompt} />
+      ) : (
+        <ContextMenuItem label="Generate" onClick={onGenerate} disabled={!hasPrompt} />
+      )}
 
-        {!isMidiClip && isReady && (
-          <>
-            <button onClick={onCreateCover} className="w-full text-left px-3 py-1.5 text-[11px] text-amber-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Create Cover…
-            </button>
-            <button onClick={onRepaint} className="w-full text-left px-3 py-1.5 text-[11px] text-rose-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Repaint Selection…
-            </button>
-            {hasAudio && (
-              <button onClick={onSeparateStems} className="w-full text-left px-3 py-1.5 text-[11px] text-sky-300 hover:bg-daw-accent hover:text-white transition-colors">
-                Separate Stems…
-              </button>
-            )}
-            {isVocalTrack && (
-              <button onClick={onVocal2BGM} className="w-full text-left px-3 py-1.5 text-[11px] text-emerald-300 hover:bg-daw-accent hover:text-white transition-colors">
-                Generate Accompaniment…
-              </button>
-            )}
-            <button onClick={onAnalyze} className="w-full text-left px-3 py-1.5 text-[11px] text-cyan-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Analyze Audio…
-            </button>
-          </>
-        )}
+      {!isMidiClip && isReady && (
+        <>
+          <ContextMenuItem label="Create Cover..." onClick={onCreateCover} color="#fcd34d" />
+          <ContextMenuItem label="Repaint Selection..." onClick={onRepaint} color="#fda4af" />
+          {hasAudio && (
+            <ContextMenuItem label="Separate Stems..." onClick={onSeparateStems} color="#7dd3fc" />
+          )}
+          {isVocalTrack && (
+            <ContextMenuItem label="Generate Accompaniment..." onClick={onVocal2BGM} color="#6ee7b7" />
+          )}
+          <ContextMenuItem label="Analyze Audio..." onClick={onAnalyze} color="#67e8f9" />
+        </>
+      )}
 
-        {!isMidiClip && hasAudio && (
-          <>
-            <button onClick={onConvertToMidi} className="w-full text-left px-3 py-1.5 text-[11px] text-violet-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Convert to MIDI…
-            </button>
-            <button onClick={onCreateQuickSampler} className="w-full text-left px-3 py-1.5 text-[11px] text-orange-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Create Quick Sampler
-            </button>
-            <button onClick={onQuantizeAudio} className="w-full text-left px-3 py-1.5 text-[11px] text-teal-300 hover:bg-daw-accent hover:text-white transition-colors">
-              Quantize Audio
-            </button>
-            {hasWarpMarkers && (
-              <button onClick={onClearAudioQuantize} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-400 hover:bg-daw-accent hover:text-white transition-colors">
-                Clear Audio Quantize
-              </button>
-            )}
-          </>
-        )}
+      {!isMidiClip && hasAudio && (
+        <>
+          <ContextMenuItem label="Convert to MIDI..." onClick={onConvertToMidi} color="#c4b5fd" />
+          <ContextMenuItem label="Create Quick Sampler" onClick={onCreateQuickSampler} color="#fdba74" />
+          <ContextMenuItem label="Quantize Audio" onClick={onQuantizeAudio} color="#5eead4" />
+          {hasWarpMarkers && (
+            <ContextMenuItem label="Clear Audio Quantize" onClick={onClearAudioQuantize} color="#a1a1aa" />
+          )}
+        </>
+      )}
 
-        <div className="my-1 border-t border-[#555]" />
-        <button onClick={onSplitAtPlayhead} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-          Split at Playhead <span className="float-right text-zinc-400 text-[10px]">S</span>
-        </button>
-        <button onClick={onDuplicate} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-          Duplicate
-        </button>
-        <button
-          onClick={onConsolidate}
-          disabled={!canConsolidate}
-          className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
-        >
-          Consolidate
-        </button>
-        {!isMidiClip && (
-          <button onClick={onAddLayer} className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors">
-            Add Layer here…
-          </button>
-        )}
-        <div className="my-1 border-t border-[#555]" />
-        <button onClick={onDelete} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-600 hover:text-white transition-colors">
-          Delete
-        </button>
-      </div>
-    </>
+      <ContextMenuSeparator />
+      <ContextMenuItem label="Split at Playhead" onClick={onSplitAtPlayhead} shortcut="S" />
+      <ContextMenuItem label="Duplicate" onClick={onDuplicate} />
+      <ContextMenuItem label="Consolidate" onClick={onConsolidate} disabled={!canConsolidate} />
+      {!isMidiClip && (
+        <ContextMenuItem label="Add Layer here..." onClick={onAddLayer} />
+      )}
+      <ContextMenuSeparator />
+      <ContextMenuItem label="Delete" onClick={onDelete} danger />
+    </ContextMenuWrapper>
   );
 }

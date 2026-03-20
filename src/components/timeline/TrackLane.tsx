@@ -8,6 +8,7 @@ import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import {
@@ -35,51 +36,19 @@ interface LaneContextMenuProps {
 }
 
 function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onOpenPianoRoll, onCreateQuickSampler, onClose }: LaneContextMenuProps) {
-  const clampedX = Math.min(x, window.innerWidth - 180);
-  const clampedY = Math.min(y, window.innerHeight - 80);
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40"
-        onClick={onClose}
-        onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-      />
-      <div
-        className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[160px]"
-        style={{ left: clampedX, top: clampedY }}
-      >
-        {onOpenSequencer && (
-          <button
-            onClick={() => { onClose(); onOpenSequencer(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-emerald-300 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Open Sequencer Editor...
-          </button>
-        )}
-        {onOpenPianoRoll && (
-          <button
-            onClick={() => { onClose(); onOpenPianoRoll(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-violet-300 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Open Piano Roll...
-          </button>
-        )}
-        {onCreateQuickSampler && (
-          <button
-            onClick={() => { onClose(); onCreateQuickSampler(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-amber-300 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Create Quick Sampler...
-          </button>
-        )}
-        <button
-          onClick={() => { onClose(); onAddLayer(); }}
-          className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-        >
-          Add Layer...
-        </button>
-      </div>
-    </>
+    <ContextMenuWrapper x={x} y={y} onClose={onClose}>
+      {onOpenSequencer && (
+        <ContextMenuItem label="Open Sequencer Editor..." onClick={() => { onClose(); onOpenSequencer(); }} color="#6ee7b7" />
+      )}
+      {onOpenPianoRoll && (
+        <ContextMenuItem label="Open Piano Roll..." onClick={() => { onClose(); onOpenPianoRoll(); }} color="#c4b5fd" />
+      )}
+      {onCreateQuickSampler && (
+        <ContextMenuItem label="Create Quick Sampler..." onClick={() => { onClose(); onCreateQuickSampler(); }} color="#fcd34d" />
+      )}
+      <ContextMenuItem label="Add Layer..." onClick={() => { onClose(); onAddLayer(); }} />
+    </ContextMenuWrapper>
   );
 }
 

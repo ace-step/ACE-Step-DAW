@@ -3,6 +3,7 @@ import { synthEngine } from '../../engine/SynthEngine';
 import { samplerEngine } from '../../engine/SamplerEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
@@ -1329,33 +1330,18 @@ export function PianoRollCanvas({
         onMouseLeave={handleCanvasMouseLeave}
       />
       {contextMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setContextMenu(null)}
-            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+        <ContextMenuWrapper x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem
+            label="Quantize"
+            onClick={handleContextMenuQuickQuantize}
+            shortcut="Q"
           />
-          <div
-            className="fixed z-50 bg-[#1a1a2e] border border-[#333] rounded shadow-xl py-1 min-w-[160px]"
-            style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 180),
-              top: Math.min(contextMenu.y, window.innerHeight - 120),
-            }}
-          >
-            <button
-              className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-violet-600/30 hover:text-white transition-colors"
-              onClick={handleContextMenuQuickQuantize}
-            >
-              Quantize (Q)
-            </button>
-            <button
-              className="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-violet-600/30 hover:text-white transition-colors"
-              onClick={handleContextMenuQuantize}
-            >
-              Quantize with options... ({navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q)
-            </button>
-          </div>
-        </>
+          <ContextMenuItem
+            label="Quantize with options..."
+            onClick={handleContextMenuQuantize}
+            shortcut={`${navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q`}
+          />
+        </ContextMenuWrapper>
       )}
     </div>
   );

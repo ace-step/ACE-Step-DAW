@@ -52,7 +52,10 @@ describe('ClipContextMenu split option', () => {
 
   it('shows S shortcut hint', () => {
     renderMenu();
-    const btn = screen.getByText(/Split at Playhead/);
-    expect(btn.querySelector('span')?.textContent).toBe('S');
+    const label = screen.getByText(/Split at Playhead/);
+    // The shortcut is rendered as a sibling span inside the button
+    const button = label.closest('button')!;
+    const shortcutSpan = button.querySelectorAll('span')[1];
+    expect(shortcutSpan?.textContent).toBe('S');
   });
 });

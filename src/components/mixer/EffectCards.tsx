@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Knob } from '../ui/Knob';
 import { PrecisionInput, clampValue, roundToStep } from '../ui/PrecisionInput';
+import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -185,46 +186,25 @@ function AutomationControlShell({
         {children}
       </div>
       {menu && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
+        <ContextMenuWrapper x={menu.x} y={menu.y} onClose={() => setMenu(null)} minWidth={170}>
+          <ContextMenuItem
+            label="Show Automation Lane"
+            onClick={() => {
+              ensureAutomationLane(trackId, parameter, normalizedValue);
               setMenu(null);
             }}
           />
-          <div
-            className="fixed z-50 min-w-[170px] rounded-md border border-white/10 bg-[#16162b] p-1 shadow-xl"
-            style={{
-              left: Math.min(menu.x, window.innerWidth - 190),
-              top: Math.min(menu.y, window.innerHeight - (hasLane ? 88 : 54)),
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            <button
-              className="w-full rounded px-2 py-1 text-left text-[11px] text-white/75 hover:bg-white/8"
+          {hasLane && (
+            <ContextMenuItem
+              label="Hide Automation Lane"
               onClick={() => {
-                ensureAutomationLane(trackId, parameter, normalizedValue);
+                clearAutomationLane(trackId, parameter);
                 setMenu(null);
               }}
-            >
-              Show Automation Lane
-            </button>
-            {hasLane && (
-              <button
-                className="w-full rounded px-2 py-1 text-left text-[11px] text-white/55 hover:bg-white/8"
-                onClick={() => {
-                  clearAutomationLane(trackId, parameter);
-                  setMenu(null);
-                }}
-              >
-                Hide Automation Lane
-              </button>
-            )}
-          </div>
-        </>
+              color="#a1a1aa"
+            />
+          )}
+        </ContextMenuWrapper>
       )}
     </>
   );

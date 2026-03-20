@@ -13,6 +13,7 @@ import {
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
 import { getButtonClasses } from '../ui/Button';
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -663,180 +664,112 @@ export function TrackHeader({
 
     {/* Context menu */}
     {ctxMenu && (
-      <>
-        <div className="fixed inset-0 z-40" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+      <ContextMenuWrapper x={ctxMenu.x} y={ctxMenu.y} onClose={() => setCtxMenu(null)}>
+        <ContextMenuItem
+          label="Open Piano Roll..."
+          onClick={() => {
+            setCtxMenu(null);
+            if (track.trackType === 'pianoRoll') {
+              const clip = track.clips.find((candidate) => candidate.midiData);
+              setOpenPianoRoll(track.id, clip?.id ?? null);
+            }
+          }}
+          disabled={track.trackType !== 'pianoRoll'}
+        />
+        <ContextMenuItem label="Open Effect Chain..." onClick={() => { setCtxMenu(null); setOpenEffectChainTrackId(track.id); }} />
+        <ContextMenuItem label="Rename Track" onClick={() => { setCtxMenu(null); startEditing(); }} />
+        <ContextMenuItem label="Track Settings..." onClick={() => { setCtxMenu(null); setEditModalOpen(true); }} />
+        <ContextMenuItem label="Save as Track Preset..." onClick={() => { setCtxMenu(null); handleSavePreset(); }} />
+        {/* Track Height submenu */}
         <div
-          className="fixed z-50 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[160px]"
-          style={{ left: Math.min(ctxMenu.x, window.innerWidth - 180), top: Math.min(ctxMenu.y, window.innerHeight - 100) }}
+          className="relative"
+          onMouseEnter={() => setHeightSubmenu(true)}
+          onMouseLeave={() => setHeightSubmenu(false)}
         >
-          <button
-            onClick={() => {
-              setCtxMenu(null);
-              if (track.trackType === 'pianoRoll') {
-                const clip = track.clips.find((candidate) => candidate.midiData);
-                setOpenPianoRoll(track.id, clip?.id ?? null);
-              }
-            }}
-            disabled={track.trackType !== 'pianoRoll'}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors disabled:text-zinc-600 disabled:hover:bg-transparent disabled:hover:text-zinc-600"
-          >
-            Open Piano Roll...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); setOpenEffectChainTrackId(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Open Effect Chain...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); startEditing(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Rename Track
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); setEditModalOpen(true); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Track Settings...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); handleSavePreset(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Save as Track Preset...
-          </button>
-          {/* Track Height submenu */}
-          <div
-            className="relative"
-            onMouseEnter={() => setHeightSubmenu(true)}
-            onMouseLeave={() => setHeightSubmenu(false)}
-          >
-            <button
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors flex items-center justify-between"
-            >
-              Track Height
-              <span className="text-zinc-400 text-[9px] ml-2">&#8250;</span>
-            </button>
-            {heightSubmenu && (
-              <div className="absolute left-full top-0 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[130px] z-50">
+          <ContextMenuItem
+            label={<span className="flex items-center justify-between w-full">Track Height<span style={{ fontSize: 9, color: '#666', marginLeft: 8 }}>&#8250;</span></span>}
+            onClick={() => {/* submenu trigger */}}
+          />
+          {heightSubmenu && (
+            <div className="absolute left-full top-0">
+              <ContextMenuSubmenu>
                 {(['small', 'medium', 'large', 'auto'] as const).map((preset) => (
-                  <button
+                  <ContextMenuItem
                     key={preset}
+                    label={<span className="capitalize">{preset}</span>}
                     onClick={() => { setCtxMenu(null); setHeightSubmenu(false); setTrackHeightPreset(track.id, preset); }}
-                    className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors capitalize"
-                  >
-                    {preset}
-                  </button>
+                  />
                 ))}
-                <div className="my-1 border-t border-[#555]" />
+                <ContextMenuSeparator />
                 {(['small', 'medium', 'large', 'auto'] as const).map((preset) => (
-                  <button
+                  <ContextMenuItem
                     key={`all-${preset}`}
+                    label={<span className="capitalize">All Tracks {preset}</span>}
                     onClick={() => { setCtxMenu(null); setHeightSubmenu(false); setAllTracksHeightPreset(preset); }}
-                    className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-400 hover:bg-daw-accent hover:text-white transition-colors capitalize"
-                  >
-                    All Tracks {preset}
-                  </button>
+                    color="#a1a1aa"
+                  />
                 ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Bounce in Place...
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Duplicate Track
-          </button>
-          {/* Move to Group submenu — only for non-group tracks */}
-          {!track.isGroup && (() => {
-            const groups = project?.tracks.filter((t) => t.isGroup) ?? [];
-            return groups.length > 0 ? (
-              <div
-                className="relative"
-                onMouseEnter={() => setGroupSubmenu(true)}
-                onMouseLeave={() => setGroupSubmenu(false)}
-              >
-                <button
-                  className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors flex items-center justify-between"
-                >
-                  Move to Group
-                  <span className="text-zinc-400 text-[9px] ml-2">&#8250;</span>
-                </button>
-                {groupSubmenu && (
-                  <div className="absolute left-full top-0 bg-[#383838] border border-[#555] rounded-lg shadow-2xl py-1 min-w-[130px] z-50">
+              </ContextMenuSubmenu>
+            </div>
+          )}
+        </div>
+        <ContextMenuItem label="Bounce in Place..." onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }} />
+        <ContextMenuItem label="Duplicate Track" onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }} />
+        {/* Move to Group submenu — only for non-group tracks */}
+        {!track.isGroup && (() => {
+          const groups = project?.tracks.filter((t) => t.isGroup) ?? [];
+          return groups.length > 0 ? (
+            <div
+              className="relative"
+              onMouseEnter={() => setGroupSubmenu(true)}
+              onMouseLeave={() => setGroupSubmenu(false)}
+            >
+              <ContextMenuItem
+                label={<span className="flex items-center justify-between w-full">Move to Group<span style={{ fontSize: 9, color: '#666', marginLeft: 8 }}>&#8250;</span></span>}
+                onClick={() => {/* submenu trigger */}}
+              />
+              {groupSubmenu && (
+                <div className="absolute left-full top-0">
+                  <ContextMenuSubmenu>
                     {groups.map((g) => (
-                      <button
+                      <ContextMenuItem
                         key={g.id}
+                        label={g.displayName}
                         onClick={() => { setCtxMenu(null); setGroupSubmenu(false); moveTrackToGroup(track.id, g.id); }}
-                        className={`w-full text-left px-3 py-1.5 text-[11px] transition-colors ${
-                          track.parentTrackId === g.id
-                            ? 'text-daw-accent font-medium'
-                            : 'text-zinc-200 hover:bg-daw-accent hover:text-white'
-                        }`}
-                      >
-                        {g.displayName}
-                      </button>
+                        color={track.parentTrackId === g.id ? '#4a90d9' : undefined}
+                      />
                     ))}
                     {track.parentTrackId && (
                       <>
-                        <div className="my-1 border-t border-[#555]" />
-                        <button
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          label="Remove from Group"
                           onClick={() => { setCtxMenu(null); setGroupSubmenu(false); moveTrackToGroup(track.id, null); }}
-                          className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-400 hover:bg-daw-accent hover:text-white transition-colors"
-                        >
-                          Remove from Group
-                        </button>
+                          color="#a1a1aa"
+                        />
                       </>
                     )}
-                  </div>
-                )}
-              </div>
-            ) : null;
-          })()}
-          <div className="my-1 border-t border-[#555]" />
-          <button
-            onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Bounce in Place...
-          </button>
-          {track.clips.some((c) => c.midiData?.notes.length) && (
-            <button
-              onClick={() => { setCtxMenu(null); exportTrackMidi(track.id); }}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-            >
-              Export MIDI
-            </button>
-          )}
-          <div className="my-1 border-t border-[#555]" />
-          <button
-            onClick={() => { setCtxMenu(null); void handleFreeze(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            {track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
-          </button>
-          <button
-            onClick={() => { setCtxMenu(null); void handleFlatten(); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-200 hover:bg-daw-accent hover:text-white transition-colors"
-          >
-            Flatten Track
-          </button>
-          <div className="my-1 border-t border-[#555]" />
-          <button
-            onClick={() => { setCtxMenu(null); track.isGroup ? removeGroupTrack(track.id) : removeTrack(track.id); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-600 hover:text-white transition-colors"
-          >
-            {track.isGroup ? 'Delete Group (keeps children)' : 'Delete Track'}
-          </button>
-        </div>
-      </>
+                  </ContextMenuSubmenu>
+                </div>
+              )}
+            </div>
+          ) : null;
+        })()}
+        <ContextMenuSeparator />
+        <ContextMenuItem label="Bounce in Place..." onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }} />
+        {track.clips.some((c) => c.midiData?.notes.length) && (
+          <ContextMenuItem label="Export MIDI" onClick={() => { setCtxMenu(null); exportTrackMidi(track.id); }} />
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem label={track.frozen ? 'Unfreeze Track' : 'Freeze Track'} onClick={() => { setCtxMenu(null); void handleFreeze(); }} />
+        <ContextMenuItem label="Flatten Track" onClick={() => { setCtxMenu(null); void handleFlatten(); }} />
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          label={track.isGroup ? 'Delete Group (keeps children)' : 'Delete Track'}
+          onClick={() => { setCtxMenu(null); track.isGroup ? removeGroupTrack(track.id) : removeTrack(track.id); }}
+          danger
+        />
+      </ContextMenuWrapper>
     )}
 
     {editModalOpen && (

@@ -6,6 +6,7 @@ import { useTransportStore } from '../../store/transportStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { getSample, cacheUserSample } from '../../services/sampleManager';
 import { DEFAULT_DRUM_KIT } from '../../constants/tracks';
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
 
 const FL = {
   bg: '#2a2a2a',
@@ -428,41 +429,22 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
 
       {/* Row context menu */}
       {rowCtxMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setRowCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setRowCtxMenu(null); }} />
-          <div
-            className="fixed z-50 py-1"
-            style={{
-              left: Math.min(rowCtxMenu.x, window.innerWidth - 160),
-              top: Math.min(rowCtxMenu.y, window.innerHeight - 100),
-              background: FL.bg,
-              border: `1px solid ${FL.borderLight}`,
-              borderRadius: 4,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-              minWidth: 140,
-            }}
-          >
-            <button
-              onClick={() => { clearRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: FL.text }}
-            >
-              Clear Steps
-            </button>
-            <button
-              onClick={() => { previewSample(pattern.rows.find(r => r.id === rowCtxMenu.rowId)?.sampleKey ?? '', 0.8); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: FL.text }}
-            >
-              Preview Sound
-            </button>
-            <div style={{ margin: '2px 8px', height: 1, background: FL.border }} />
-            <button
-              onClick={() => { removeRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); if (selectedRow === rowCtxMenu.rowId) setSelectedRow(null); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 12px', fontSize: 11, border: 'none', cursor: 'pointer', background: 'transparent', color: '#e74c3c' }}
-            >
-              Delete Row
-            </button>
-          </div>
-        </>
+        <ContextMenuWrapper x={rowCtxMenu.x} y={rowCtxMenu.y} onClose={() => setRowCtxMenu(null)} minWidth={140}>
+          <ContextMenuItem
+            label="Clear Steps"
+            onClick={() => { clearRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); }}
+          />
+          <ContextMenuItem
+            label="Preview Sound"
+            onClick={() => { previewSample(pattern.rows.find(r => r.id === rowCtxMenu.rowId)?.sampleKey ?? '', 0.8); }}
+          />
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            label="Delete Row"
+            danger
+            onClick={() => { removeRow(track.id, rowCtxMenu.rowId); setRowCtxMenu(null); if (selectedRow === rowCtxMenu.rowId) setSelectedRow(null); }}
+          />
+        </ContextMenuWrapper>
       )}
     </div>
   );

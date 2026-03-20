@@ -14,6 +14,7 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
+import { TimelineEmptyState } from './TimelineEmptyState';
 import { toastInfo } from '../../hooks/useToast';
 import { getTimelineFitViewport } from '../../utils/timelineZoom';
 
@@ -568,11 +569,7 @@ export function Timeline() {
               <TrackLane key={track.id} track={track} />
             ))}
 
-            {sortedTracks.length === 0 && (
-              <div className="flex items-center justify-center h-32 text-zinc-600 text-xs">
-                Add a track to begin
-              </div>
-            )}
+            <TimelineEmptyState />
 
             {/* Inline AI suggestion badges */}
             {suggestionFrequency !== 'off' && inlineSuggestions.map((s) => (

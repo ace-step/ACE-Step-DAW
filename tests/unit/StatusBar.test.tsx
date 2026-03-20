@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { StatusBar } from '../../src/components/layout/StatusBar';
+import { StatusBar, _resetLastKnownConnection } from '../../src/components/layout/StatusBar';
 import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
 
@@ -16,6 +16,7 @@ describe('StatusBar', () => {
     vi.clearAllMocks();
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
     useProjectStore.setState(useProjectStore.getInitialState(), true);
+    _resetLastKnownConnection();
   });
 
   it('delays the first health probe until the polling window', async () => {
@@ -23,7 +24,8 @@ describe('StatusBar', () => {
 
     render(<StatusBar />);
 
-    expect(screen.getByText('Offline')).toBeInTheDocument();
+    // After the fix, there should be no "Offline" text — only a dot with title
+    expect(screen.queryByText('Offline')).not.toBeInTheDocument();
     expect(healthCheckMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -35,5 +37,146 @@ describe('StatusBar', () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(healthCheckMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe('height', () => {
+    it('uses h-6 (24px) instead of h-5 (20px)', () => {
+      healthCheckMock.mockResolvedValue(false);
+      const { container } = render(<StatusBar />);
+      const bar = container.firstElementChild as HTMLElement;
+      expect(bar.className).toContain('h-6');
+      expect(bar.className).not.toContain('h-5');
+    });
+  });
+
+  describe('connection status', () => {
+    it('does not render "Connected" or "Offline" text', () => {
+      healthCheckMock.mockResolvedValue(false);
+      render(<StatusBar />);
+      expect(screen.queryByText('Connected')).not.toBeInTheDocument();
+      expect(screen.queryByText('Offline')).not.toBeInTheDocument();
+    });
+
+    it('renders a dot with title="Backend offline" when disconnected', () => {
+      healthCheckMock.mockResolvedValue(false);
+      render(<StatusBar />);
+      const dotContainer = screen.getByTitle('Backend offline');
+      expect(dotContainer).toBeInTheDocument();
+    });
+
+    it('renders a dot with title="Backend connected" when connected', async () => {
+      healthCheckMock.mockResolvedValue(true);
+      render(<StatusBar />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      const dotContainer = screen.getByTitle('Backend connected');
+      expect(dotContainer).toBeInTheDocument();
+    });
+  });
+
+  describe('spacing', () => {
+    it('uses gap-3 instead of gap-4', () => {
+      healthCheckMock.mockResolvedValue(false);
+      const { container } = render(<StatusBar />);
+      const bar = container.firstElementChild as HTMLElement;
+      expect(bar.className).toContain('gap-3');
+      expect(bar.className).not.toContain('gap-4');
+    });
+  });
+
+  describe('branding', () => {
+    it('does not render "ACE Studio" text link', () => {
+      healthCheckMock.mockResolvedValue(false);
+      render(<StatusBar />);
+      expect(screen.queryByText('ACE Studio')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('job info', () => {
+    it('does not render the duplicate primaryJob span', () => {
+      healthCheckMock.mockResolvedValue(false);
+      useGenerationStore.setState({
+        jobs: [
+          {
+            id: 'job-1',
+            clipId: 'clip-1',
+            trackName: 'My Track',
+            status: 'generating',
+            progress: 'generating',
+            stage: 'Rendering',
+            progressPercent: 42,
+            lastUpdatedAt: Date.now(),
+          },
+        ],
+      });
+
+      render(<StatusBar />);
+
+      // The old duplicate span showed "My Track: Rendering 42%"
+      // It should not exist anymore
+      const duplicateSpans = screen.queryAllByText(/My Track: Rendering 42%/);
+      expect(duplicateSpans).toHaveLength(0);
+    });
+
+    it('renders combined job info with track name, stage, percent, and job count', () => {
+      healthCheckMock.mockResolvedValue(false);
+      useGenerationStore.setState({
+        jobs: [
+          {
+            id: 'job-1',
+            clipId: 'clip-1',
+            trackName: 'My Track',
+            status: 'generating',
+            progress: 'generating',
+            stage: 'Rendering',
+            progressPercent: 42,
+            lastUpdatedAt: Date.now(),
+          },
+        ],
+      });
+
+      render(<StatusBar />);
+
+      // Should show the new combined format
+      expect(screen.getByText(/Generating:.*My Track/)).toBeInTheDocument();
+      expect(screen.getByText(/Rendering/)).toBeInTheDocument();
+      expect(screen.getByText(/42%/)).toBeInTheDocument();
+      expect(screen.getByText(/1 job/)).toBeInTheDocument();
+    });
+
+    it('renders plural "jobs" when multiple active', () => {
+      healthCheckMock.mockResolvedValue(false);
+      useGenerationStore.setState({
+        jobs: [
+          {
+            id: 'job-1',
+            clipId: 'clip-1',
+            trackName: 'Track A',
+            status: 'generating',
+            progress: 'generating',
+            stage: 'Rendering',
+            progressPercent: 50,
+            lastUpdatedAt: Date.now(),
+          },
+          {
+            id: 'job-2',
+            clipId: 'clip-2',
+            trackName: 'Track B',
+            status: 'queued',
+            progress: 'queued',
+            stage: null,
+            progressPercent: 0,
+            lastUpdatedAt: Date.now() + 1,
+          },
+        ],
+      });
+
+      render(<StatusBar />);
+
+      expect(screen.getByText(/2 jobs/)).toBeInTheDocument();
+    });
   });
 });

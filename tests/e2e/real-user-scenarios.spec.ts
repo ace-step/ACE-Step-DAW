@@ -13,6 +13,12 @@ import {
   focusApplicationShell,
   loadFreshApp,
 } from '../support/e2eStartup';
+import {
+  getProjectBpm,
+  getProjectName,
+  getTrackCount,
+  type E2EBrowserWindow,
+} from '../support/browserStores';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,13 +59,6 @@ async function addSequencerTrack(page: Page) {
   await page.waitForTimeout(300);
 }
 
-/** Read the current track count from the store (read-only helper). */
-async function getTrackCount(page: Page): Promise<number> {
-  return page.evaluate(
-    () => (window as any).__store.getState().project?.tracks?.length ?? 0,
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -85,18 +84,14 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     test('1b. Filling name + clicking Create produces a project', async ({ page }) => {
       await createProjectViaDialog(page, 'My First Song');
 
-      const projectName = await page.evaluate(
-        () => (window as any).__store.getState().project?.name,
-      );
+      const projectName = await getProjectName(page);
       expect(projectName).toBe('My First Song');
     });
 
     test('1c. Custom BPM is respected', async ({ page }) => {
       await createProjectViaDialog(page, 'BPM Test', 160);
 
-      const bpm = await page.evaluate(
-        () => (window as any).__store.getState().project?.bpm,
-      );
+      const bpm = await getProjectBpm(page);
       expect(bpm).toBe(160);
     });
 
@@ -106,7 +101,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(300);
 
       const project = await page.evaluate(
-        () => (window as any).__store.getState().project,
+        () => (window as E2EBrowserWindow).__store.getState().project,
       );
       expect(project).toBeNull();
     });
@@ -139,7 +134,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       expect(await getTrackCount(page)).toBe(1);
 
       const trackType = await page.evaluate(
-        () => (window as any).__store.getState().project?.tracks[0]?.trackType,
+        () => (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.trackType,
       );
       expect(trackType).toBe('pianoRoll');
     });
@@ -149,7 +144,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       expect(await getTrackCount(page)).toBe(1);
 
       const trackType = await page.evaluate(
-        () => (window as any).__store.getState().project?.tracks[0]?.trackType,
+        () => (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.trackType,
       );
       expect(trackType).toBe('sequencer');
     });
@@ -213,7 +208,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
         .catch(() => false);
       // Verify piano roll opened via UI store
       const openPianoRoll = await page.evaluate(
-        () => (window as any).__uiStore?.getState().openPianoRollTrackId,
+        () => (window as E2EBrowserWindow).__uiStore?.getState().openPianoRollTrackId,
       );
       expect(openPianoRoll).toBeTruthy();
     });
@@ -235,7 +230,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
         await page.waitForTimeout(300);
 
         const openPianoRoll = await page.evaluate(
-          () => (window as any).__uiStore?.getState().openPianoRollTrackId,
+          () => (window as E2EBrowserWindow).__uiStore?.getState().openPianoRollTrackId,
         );
         expect(openPianoRoll).toBeFalsy();
       }
@@ -251,7 +246,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.evaluate(() => {
         const active = document.activeElement as HTMLElement | null;
         active?.blur?.();
-        (window as any).__uiStore?.getState().setKeyboardContext('timeline');
+        (window as E2EBrowserWindow).__uiStore?.getState().setKeyboardContext('timeline');
       });
       await page.mouse.click(16, 16);
       await focusApplicationShell(page);
@@ -265,7 +260,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(300);
 
       const isPlaying = await page.evaluate(
-        () => (window as any).__transportStore?.getState().isPlaying,
+        () => (window as E2EBrowserWindow).__transportStore?.getState().isPlaying,
       );
       // Space should have toggled playback on
       expect(isPlaying).toBe(true);
@@ -274,21 +269,21 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(200);
 
       const isPaused = await page.evaluate(
-        () => (window as any).__transportStore?.getState().isPlaying,
+        () => (window as E2EBrowserWindow).__transportStore?.getState().isPlaying,
       );
       expect(isPaused).toBe(false);
     });
 
     test('4b. X toggles the mixer panel', async ({ page }) => {
       const before = await page.evaluate(
-        () => (window as any).__uiStore?.getState().showMixer,
+        () => (window as E2EBrowserWindow).__uiStore?.getState().showMixer,
       );
 
       await page.keyboard.press('x');
       await page.waitForTimeout(300);
 
       const after = await page.evaluate(
-        () => (window as any).__uiStore?.getState().showMixer,
+        () => (window as E2EBrowserWindow).__uiStore?.getState().showMixer,
       );
       expect(after).toBe(!before);
     });
@@ -310,14 +305,14 @@ test.describe('Real User Scenarios (Issue #110)', () => {
 
     test('4d. L toggles loop', async ({ page }) => {
       const before = await page.evaluate(
-        () => (window as any).__transportStore?.getState().loopEnabled,
+        () => (window as E2EBrowserWindow).__transportStore?.getState().loopEnabled,
       );
 
       await page.keyboard.press('l');
       await page.waitForTimeout(200);
 
       const after = await page.evaluate(
-        () => (window as any).__transportStore?.getState().loopEnabled,
+        () => (window as E2EBrowserWindow).__transportStore?.getState().loopEnabled,
       );
       expect(after).toBe(!before);
     });
@@ -355,7 +350,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
 
     test('4h. N remains registered as the snap shortcut', async ({ page }) => {
       const combo = await page.evaluate(
-        () => (window as any).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
+        () => (window as E2EBrowserWindow).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
       );
       expect(combo).toEqual({ code: 'KeyN' });
     });
@@ -380,7 +375,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(200);
 
       const muted = await page.evaluate(
-        () => (window as any).__store.getState().project?.tracks[0]?.muted,
+        () => (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.muted,
       );
       expect(muted).toBe(true);
     });
@@ -393,7 +388,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(150);
 
       const muted = await page.evaluate(
-        () => (window as any).__store.getState().project?.tracks[0]?.muted,
+        () => (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.muted,
       );
       expect(muted).toBe(false);
     });
@@ -406,7 +401,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(200);
 
       const result = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return {
           track0Soloed: tracks[0]?.soloed,
           track1Soloed: tracks[1]?.soloed,
@@ -426,7 +421,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       await page.waitForTimeout(150);
 
       const result = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return {
           track0Soloed: tracks[0]?.soloed,
           track0Muted: tracks[0]?.muted,
@@ -448,7 +443,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       // The second track header should have reduced opacity (implied mute)
       // We verify via store that the UI would dim it
       const anySoloed = await page.evaluate(
-        () => (window as any).__store.getState().project?.tracks.some((t: any) => t.soloed),
+        () => (window as E2EBrowserWindow).__store.getState().project?.tracks.some((t: any) => t.soloed),
       );
       expect(anySoloed).toBe(true);
     });
@@ -497,7 +492,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     test('6d. Export button enabled when piano roll has notes', async ({ page }) => {
       // Add piano roll track and notes via store (setup only — the export dialog itself is the UI under test)
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
         store.getState().addMidiNote(clip.id, {
@@ -547,7 +542,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     // Step 1 — Create project
     await createProjectViaDialog(page, 'Full Journey Song');
     const projectName = await page.evaluate(
-      () => (window as any).__store.getState().project?.name,
+      () => (window as E2EBrowserWindow).__store.getState().project?.name,
     );
     expect(projectName).toBe('Full Journey Song');
 
@@ -563,7 +558,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     await page.keyboard.press('x');
     await page.waitForTimeout(300);
     const mixerVisible = await page.evaluate(
-      () => (window as any).__uiStore?.getState().showMixer,
+      () => (window as E2EBrowserWindow).__uiStore?.getState().showMixer,
     );
     // Mixer was toggled (we don't know initial state, just confirm no crash)
     expect(typeof mixerVisible).toBe('boolean');
@@ -578,7 +573,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     await page.locator('button[title="Mute (M)"]').first().click();
     await page.waitForTimeout(200);
     const drumsMuted = await page.evaluate(
-      () => (window as any).__store.getState().project?.tracks[0]?.muted,
+      () => (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.muted,
     );
     expect(drumsMuted).toBe(true);
 
@@ -586,7 +581,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     await page.locator('button[title="Solo (S)"]').nth(1).click();
     await page.waitForTimeout(200);
     const bassSoloed = await page.evaluate(
-      () => (window as any).__store.getState().project?.tracks[1]?.soloed,
+      () => (window as E2EBrowserWindow).__store.getState().project?.tracks[1]?.soloed,
     );
     expect(bassSoloed).toBe(true);
 
@@ -594,7 +589,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     await page.keyboard.press('Meta+z');
     await page.waitForTimeout(200);
     const bassSoloedAfterUndo = await page.evaluate(
-      () => (window as any).__store.getState().project?.tracks[1]?.soloed,
+      () => (window as E2EBrowserWindow).__store.getState().project?.tracks[1]?.soloed,
     );
     expect(bassSoloedAfterUndo).toBe(false);
 

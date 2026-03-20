@@ -14,6 +14,12 @@ import {
   focusApplicationShell,
   loadFreshApp,
 } from '../support/e2eStartup';
+import {
+  getProjectBpm,
+  getProjectName,
+  getTrackCount,
+  type E2EBrowserWindow,
+} from '../support/browserStores';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,9 +55,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01b-project-created.png'), fullPage: true });
 
       // Verify project exists
-      const projectName = await page.evaluate(() =>
-        (window as any).__store.getState().project?.name
-      );
+      const projectName = await getProjectName(page);
       expect(projectName).toBeTruthy();
 
     });
@@ -61,12 +65,8 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01c-custom-project.png'), fullPage: true });
 
-      const result = await page.evaluate(() => {
-        const p = (window as any).__store.getState().project;
-        return { name: p?.name, bpm: p?.bpm };
-      });
-      expect(result.name).toBe('Custom BPM Project');
-      expect(result.bpm).toBe(140);
+      expect(await getProjectName(page)).toBe('Custom BPM Project');
+      expect(await getProjectBpm(page)).toBe(140);
     });
 
     test('1d. Cancel button closes dialog without creating project', async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       }
 
       const project = await page.evaluate(() =>
-        (window as any).__store.getState().project
+        (window as E2EBrowserWindow).__store.getState().project
       );
       // After cancel, project should still be null
       expect(project).toBeNull();
@@ -94,7 +94,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       }
 
       const project = await page.evaluate(() =>
-        (window as any).__store.getState().project
+        (window as E2EBrowserWindow).__store.getState().project
       );
       expect(project).toBeNull();
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01e-close-button.png'), fullPage: true });
@@ -132,20 +132,20 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02a-drums-added.png'), fullPage: true });
 
       const trackCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(trackCount).toBeGreaterThanOrEqual(1);
     });
 
     test('2b. Add bass track via store', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('bass');
+        (window as E2EBrowserWindow).__store.getState().addTrack('bass');
       });
       await page.waitForTimeout(300);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02b-bass-added.png'), fullPage: true });
 
       const result = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return tracks.map((t: any) => ({ name: t.trackName, type: t.trackType }));
       });
       expect(result).toContainEqual({ name: 'bass', type: 'stems' });
@@ -153,13 +153,13 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('2c. Add keyboard track (piano roll type)', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('keyboard', 'pianoRoll');
+        (window as E2EBrowserWindow).__store.getState().addTrack('keyboard', 'pianoRoll');
       });
       await page.waitForTimeout(300);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02c-keyboard-added.png'), fullPage: true });
 
       const result = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return tracks.map((t: any) => ({ name: t.trackName, type: t.trackType }));
       });
       expect(result).toContainEqual({ name: 'keyboard', type: 'pianoRoll' });
@@ -167,13 +167,13 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('2d. Add sequencer track (percussion)', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('percussion', 'sequencer');
+        (window as E2EBrowserWindow).__store.getState().addTrack('percussion', 'sequencer');
       });
       await page.waitForTimeout(300);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02d-sequencer-added.png'), fullPage: true });
 
       const result = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return tracks.map((t: any) => ({ name: t.trackName, type: t.trackType }));
       });
       expect(result).toContainEqual({ name: 'percussion', type: 'sequencer' });
@@ -181,7 +181,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('2e. Add all track types together', async ({ page }) => {
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         store.getState().addTrack('drums');
         store.getState().addTrack('bass');
         store.getState().addTrack('keyboard', 'pianoRoll');
@@ -193,7 +193,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02e-all-tracks.png'), fullPage: true });
 
       const trackCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(trackCount).toBe(6);
     });
@@ -245,7 +245,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
     test('3a. Can open piano roll for keyboard track', async ({ page }) => {
       // Add keyboard track with piano roll
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         store.getState().ensureMidiClip(track.id);
       });
@@ -253,13 +253,13 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
       // Open piano roll via store
       const trackId = await page.evaluate(() => {
-        const tracks = (window as any).__store.getState().project?.tracks ?? [];
+        const tracks = (window as E2EBrowserWindow).__store.getState().project?.tracks ?? [];
         return tracks.find((t: any) => t.trackType === 'pianoRoll')?.id;
       });
 
       if (trackId) {
         await page.evaluate((id: string) => {
-          const uiStore = (window as any).__uiStore;
+          const uiStore = (window as E2EBrowserWindow).__uiStore;
           if (uiStore) {
             uiStore.getState().setOpenPianoRoll(id, null);
           }
@@ -272,7 +272,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('3b. Can add MIDI notes via store and verify they persist', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
 
@@ -302,7 +302,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('3c. Can remove MIDI notes', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
 
@@ -327,7 +327,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('3d. Quantize MIDI notes works correctly', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
 
@@ -352,7 +352,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       page.on('pageerror', (err) => errors.push(err.message));
 
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
 
@@ -369,7 +369,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
       await page.waitForTimeout(500);
       const noteCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks[0]?.clips[0]?.midiData?.notes?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.clips[0]?.midiData?.notes?.length ?? 0
       );
       expect(noteCount).toBe(100);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03e-100-notes.png'), fullPage: true });
@@ -390,7 +390,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.evaluate(() => {
         const active = document.activeElement as HTMLElement | null;
         active?.blur?.();
-        const uiStore = (window as any).__uiStore?.getState();
+        const uiStore = (window as E2EBrowserWindow).__uiStore?.getState();
         uiStore?.setKeyboardContext('timeline');
         uiStore?.setHistoryFocusScope('arrangement');
       });
@@ -402,7 +402,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4a. Space toggles play/pause', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
+        (window as E2EBrowserWindow).__store.getState().addTrack('drums');
       });
 
       await page.keyboard.press('Space');
@@ -411,7 +411,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
       // Check transport state
       const isPlaying = await page.evaluate(() => {
-        const ts = (window as any).__transportStore;
+        const ts = (window as E2EBrowserWindow).__transportStore;
         if (ts) return ts.getState().isPlaying;
         return null;
       });
@@ -424,7 +424,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4b. X toggles mixer panel', async ({ page }) => {
       const before = await page.evaluate(() => {
-        const ui = (window as any).__uiStore;
+        const ui = (window as E2EBrowserWindow).__uiStore;
         if (ui) return ui.getState().showMixer;
         return null;
       });
@@ -434,7 +434,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04b-mixer-toggle.png'), fullPage: true });
 
       const after = await page.evaluate(() => {
-        const ui = (window as any).__uiStore;
+        const ui = (window as E2EBrowserWindow).__uiStore;
         if (ui) return ui.getState().showMixer;
         return null;
       });
@@ -469,7 +469,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04f-loop-toggle.png'), fullPage: true });
 
       const loopEnabled = await page.evaluate(() => {
-        const ts = (window as any).__transportStore;
+        const ts = (window as E2EBrowserWindow).__transportStore;
         if (ts) return ts.getState().loopEnabled;
         return null;
       });
@@ -484,7 +484,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4h. N remains registered as the snap shortcut', async ({ page }) => {
       const combo = await page.evaluate(() =>
-        (window as any).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
+        (window as E2EBrowserWindow).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
       );
 
       expect(combo).toEqual({ code: 'KeyN' });
@@ -493,14 +493,14 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4i. Arrangement zoom commands emit the expected zoom requests', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().createProject({ name: 'QA Keyboard Shortcut Project' });
+        (window as E2EBrowserWindow).__store.getState().createProject({ name: 'QA Keyboard Shortcut Project' });
       });
       await page.mouse.click(16, 16);
       await page.waitForTimeout(250);
 
       const clipIds = await page.evaluate(() => {
-        const store = (window as any).__store;
-        const ui = (window as any).__uiStore.getState();
+        const store = (window as E2EBrowserWindow).__store;
+        const ui = (window as E2EBrowserWindow).__uiStore.getState();
         const track = store.getState().addTrack('drums');
         const intro = store.getState().addClip(track.id, {
           startTime: 8,
@@ -534,35 +534,35 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.evaluate(() => {
         const active = document.activeElement as HTMLElement | null;
         active?.blur?.();
-        const uiStore = (window as any).__uiStore?.getState();
+        const uiStore = (window as E2EBrowserWindow).__uiStore?.getState();
         uiStore?.setKeyboardContext('timeline');
         uiStore?.setHistoryFocusScope('arrangement');
-        (window as any).__uiStore?.setState({ timelineZoomRequest: null });
+        (window as E2EBrowserWindow).__uiStore?.setState({ timelineZoomRequest: null });
       });
       await page.evaluate(() =>
-        (window as any).__keyboardCommands.execute('view.zoomToSelection'),
+        (window as E2EBrowserWindow).__keyboardCommands.execute('view.zoomToSelection'),
       );
 
       await page.waitForFunction(() => {
-        const request = (window as any).__uiStore.getState().timelineZoomRequest;
+        const request = (window as E2EBrowserWindow).__uiStore.getState().timelineZoomRequest;
         return request?.mode === 'selection';
       });
 
       const selectionRequest = await page.evaluate(() =>
-        (window as any).__uiStore.getState().timelineZoomRequest,
+        (window as E2EBrowserWindow).__uiStore.getState().timelineZoomRequest,
       );
       expect(selectionRequest).toEqual({ id: 1, mode: 'selection' });
 
       await page.evaluate(() =>
-        (window as any).__keyboardCommands.execute('view.zoomToFit'),
+        (window as E2EBrowserWindow).__keyboardCommands.execute('view.zoomToFit'),
       );
       await page.waitForFunction(() => {
-        const request = (window as any).__uiStore.getState().timelineZoomRequest;
+        const request = (window as E2EBrowserWindow).__uiStore.getState().timelineZoomRequest;
         return request?.mode === 'project' && request.id === 2;
       });
 
       const { projectRequest } = await page.evaluate(() => ({
-        projectRequest: (window as any).__uiStore.getState().timelineZoomRequest,
+        projectRequest: (window as E2EBrowserWindow).__uiStore.getState().timelineZoomRequest,
       }));
       expect(projectRequest).toEqual({ id: 2, mode: 'project' });
 
@@ -574,11 +574,11 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4j. Cmd+Z undoes last action', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
+        (window as E2EBrowserWindow).__store.getState().addTrack('drums');
       });
 
       let trackCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(trackCount).toBe(1);
 
@@ -586,7 +586,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.waitForTimeout(300);
 
       trackCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(trackCount).toBe(0);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04j-undo.png'), fullPage: true });
@@ -594,7 +594,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('4k. Cmd+Shift+Z redoes', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
+        (window as E2EBrowserWindow).__store.getState().addTrack('drums');
       });
 
       await page.keyboard.press('Meta+z');
@@ -604,7 +604,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.waitForTimeout(200);
 
       const trackCount = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(trackCount).toBe(1);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04k-redo.png'), fullPage: true });
@@ -638,8 +638,8 @@ test.describe('QA Test Suite: Full Workflow', () => {
       page.on('pageerror', (err) => errors.push(err.message));
 
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
-        (window as any).__store.getState().addTrack('bass');
+        (window as E2EBrowserWindow).__store.getState().addTrack('drums');
+        (window as E2EBrowserWindow).__store.getState().addTrack('bass');
       });
 
       // Spam shortcuts rapidly
@@ -653,7 +653,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04n-rapid-shortcuts.png'), fullPage: true });
 
       // App should still be alive
-      const storeAlive = await page.evaluate(() => typeof (window as any).__store !== 'undefined');
+      const storeAlive = await page.evaluate(() => typeof (window as E2EBrowserWindow).__store !== 'undefined');
       expect(storeAlive).toBe(true);
 
       if (errors.length > 0) {
@@ -669,7 +669,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
     test.beforeEach(async ({ page }) => {
       await createProjectViaUI(page);
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         store.getState().addTrack('drums');
         store.getState().addTrack('bass');
         store.getState().addTrack('keyboard', 'pianoRoll');
@@ -679,7 +679,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('5a. Can mute a track via store', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const trackId = store.getState().project?.tracks[0]?.id;
         store.getState().updateTrack(trackId, { muted: true });
         return store.getState().project?.tracks[0]?.muted;
@@ -690,7 +690,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('5b. Can solo a track via store', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const trackId = store.getState().project?.tracks[0]?.id;
         store.getState().updateTrack(trackId, { soloed: true });
         return {
@@ -716,7 +716,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
         await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05c-ui-mute.png'), fullPage: true });
 
         const muted = await page.evaluate(() =>
-          (window as any).__store.getState().project?.tracks[0]?.muted
+          (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.muted
         );
         expect(muted).toBe(true);
       } else {
@@ -734,7 +734,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
         await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05d-ui-solo.png'), fullPage: true });
 
         const soloed = await page.evaluate(() =>
-          (window as any).__store.getState().project?.tracks[0]?.soloed
+          (window as E2EBrowserWindow).__store.getState().project?.tracks[0]?.soloed
         );
         expect(soloed).toBe(true);
       } else {
@@ -744,7 +744,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('5e. Mute and solo interact correctly', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const tracks = store.getState().project?.tracks;
         if (!tracks || tracks.length < 3) return null;
 
@@ -769,7 +769,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('5f. Toggle mute off after muting', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const trackId = store.getState().project?.tracks[0]?.id;
 
         // Mute
@@ -808,7 +808,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
     test('6b. Export dialog shows correct clip count', async ({ page }) => {
       // Add some tracks with content
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
         store.getState().addMidiNote(clip.id, { pitch: 60, startBeat: 0, durationBeats: 4, velocity: 100 });
@@ -831,7 +831,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
 
     test('6d. Export button enabled with piano roll notes', async ({ page }) => {
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('keyboard', 'pianoRoll');
         const clip = store.getState().ensureMidiClip(track.id);
         store.getState().addMidiNote(clip.id, { pitch: 60, startBeat: 0, durationBeats: 4, velocity: 100 });
@@ -884,7 +884,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '07a-no-project.png'), fullPage: true });
 
       // App should not crash
-      const alive = await page.evaluate(() => typeof (window as any).__store !== 'undefined');
+      const alive = await page.evaluate(() => typeof (window as E2EBrowserWindow).__store !== 'undefined');
       expect(alive).toBe(true);
     });
 
@@ -895,7 +895,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       page.on('pageerror', (err) => errors.push(err.message));
 
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const ids: string[] = [];
 
         // Add 10 tracks rapidly
@@ -929,7 +929,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await createProjectViaUI(page);
 
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         // Do a series of operations
         store.getState().addTrack('drums');
         store.getState().addTrack('bass');
@@ -943,7 +943,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       }
 
       const afterUndo = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(afterUndo).toBe(0);
 
@@ -954,7 +954,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       }
 
       const afterRedo = await page.evaluate(() =>
-        (window as any).__store.getState().project?.tracks?.length ?? 0
+        (window as E2EBrowserWindow).__store.getState().project?.tracks?.length ?? 0
       );
       expect(afterRedo).toBe(3);
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '07c-undo-redo.png'), fullPage: true });
@@ -964,7 +964,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await createProjectViaUI(page);
 
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('percussion', 'sequencer');
 
         // Check sequencer pattern exists
@@ -986,7 +986,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await createProjectViaUI(page);
 
       const result = await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         const track = store.getState().addTrack('drums');
         const id = track.id;
 
@@ -1020,7 +1020,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await createProjectViaUI(page);
 
       await page.evaluate(() => {
-        const store = (window as any).__store;
+        const store = (window as E2EBrowserWindow).__store;
         store.getState().addTrack('drums');
         store.getState().addTrack('bass');
         store.getState().addTrack('keyboard', 'pianoRoll');
@@ -1062,7 +1062,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '07g-double-create.png'), fullPage: true });
 
       const projectName = await page.evaluate(() =>
-        (window as any).__store.getState().project?.name
+        (window as E2EBrowserWindow).__store.getState().project?.name
       );
       expect(projectName).toBeTruthy();
     });

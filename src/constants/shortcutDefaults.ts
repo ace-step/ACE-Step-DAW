@@ -50,6 +50,8 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.generation',     category: 'panels',    label: 'Toggle AI Generation Panel',  defaultCombo: { code: 'KeyG' }, contexts: ['global'] },
   { id: 'panels.aiAssistant',    category: 'panels',    label: 'Toggle AI Assistant',         defaultCombo: { code: 'Slash', mod: true }, contexts: ['global'] },
 
+  { id: 'view.autoScroll',        category: 'view',      label: 'Toggle Auto-Scroll',          defaultCombo: { code: 'KeyF', shift: true }, contexts: ['global'] },
+
   { id: 'project.new',           category: 'project',   label: 'New Project',                 defaultCombo: { code: 'KeyN', mod: true }, contexts: ['global'] },
   { id: 'project.open',          category: 'project',   label: 'Open Project List',           defaultCombo: { code: 'KeyO', mod: true }, contexts: ['global'] },
   { id: 'project.bounceInPlace', category: 'project',   label: 'Bounce Selected/Focused Track', defaultCombo: { code: 'KeyB', mod: true }, contexts: ['global'] },

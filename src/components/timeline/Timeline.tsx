@@ -69,6 +69,7 @@ export function Timeline() {
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const seek = useTransportStore((s) => s.seek);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const setTimelineFocused = useUIStore((s) => s.setTimelineFocused);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
@@ -82,8 +83,12 @@ export function Timeline() {
   const keyboardContext = useUIStore((s) => s.keyboardContext);
   const timelineZoomRequest = useUIStore((s) => s.timelineZoomRequest);
   const setScrollX = useUIStore((s) => s.setScrollX);
+  const autoScrollEnabled = useUIStore((s) => s.autoScrollEnabled);
+  const userScrolledDuringPlayback = useUIStore((s) => s.userScrolledDuringPlayback);
+  const setUserScrolledDuringPlayback = useUIStore((s) => s.setUserScrolledDuringPlayback);
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
+  const programmaticScrollRef = useRef(false);
 
   const deselectAllTracks = useUIStore((s) => s.deselectAllTracks);
   const setRegionRegenerateTarget = useUIStore((s) => s.setRegionRegenerateTarget);
@@ -228,6 +233,70 @@ export function Timeline() {
       toastInfo('Nothing is selected, so the timeline zoomed to the full project.');
     }
   }, [project, selectWindow, selectedClipIds, setPixelsPerSecond, setScrollX, timelineZoomRequest]);
+
+  // Reset userScrolledDuringPlayback when playback starts or stops
+  const prevIsPlayingRef = useRef(false);
+  useEffect(() => {
+    if (isPlaying && !prevIsPlayingRef.current) {
+      setUserScrolledDuringPlayback(false);
+    }
+    prevIsPlayingRef.current = isPlaying;
+  }, [isPlaying, setUserScrolledDuringPlayback]);
+
+  // Detect manual scroll during playback to temporarily disable auto-scroll
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleManualScroll = () => {
+      const transport = useTransportStore.getState();
+      const ui = useUIStore.getState();
+      if (transport.isPlaying && ui.autoScrollEnabled && !ui.userScrolledDuringPlayback) {
+        if (!programmaticScrollRef.current) {
+          setUserScrolledDuringPlayback(true);
+        }
+      }
+    };
+
+    container.addEventListener('scroll', handleManualScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleManualScroll);
+  }, [setUserScrolledDuringPlayback]);
+
+  // Auto-scroll to follow playhead during playback
+  useEffect(() => {
+    if (!isPlaying || !autoScrollEnabled || userScrolledDuringPlayback) return;
+
+    const container = scrollRef.current;
+    if (!container) return;
+
+    let rafId: number;
+    const tick = () => {
+      const currentTime = useTransportStore.getState().currentTime;
+      const pps = useUIStore.getState().pixelsPerSecond;
+      const playheadX = currentTime * pps;
+      const viewportWidth = container.clientWidth;
+      const scrollLeft = container.scrollLeft;
+
+      const leftMargin = viewportWidth * 0.2;
+      const rightMargin = viewportWidth * 0.8;
+      const playheadViewX = playheadX - scrollLeft;
+
+      if (playheadViewX > rightMargin || playheadViewX < leftMargin) {
+        const targetScroll = Math.max(0, playheadX - viewportWidth * 0.4);
+        programmaticScrollRef.current = true;
+        container.scrollTo({ left: targetScroll, behavior: 'smooth' });
+        requestAnimationFrame(() => {
+          programmaticScrollRef.current = false;
+        });
+        setScrollX(targetScroll);
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, autoScrollEnabled, userScrolledDuringPlayback, setScrollX]);
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {

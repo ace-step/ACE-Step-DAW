@@ -164,3 +164,30 @@ When using Claude Code on this project, install these skills for better UX outpu
 - Never push directly to main — always use PR workflow
 - Never merge a PR before CI passes — check CI status first, fix if red
 - If CI fails: understand root cause → add fix commit → wait for green → then merge
+
+## gstack
+
+Use the `/browse` skill from gstack for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.
+
+Available skills:
+- `/office-hours` — Office hours
+- `/plan-ceo-review` — Plan CEO review
+- `/plan-eng-review` — Plan engineering review
+- `/plan-design-review` — Plan design review
+- `/design-consultation` — Design consultation
+- `/review` — Code review
+- `/ship` — Ship changes
+- `/browse` — Web browsing (use this instead of Chrome MCP tools)
+- `/qa` — QA testing
+- `/qa-only` — QA only
+- `/design-review` — Design review
+- `/setup-browser-cookies` — Setup browser cookies
+- `/retro` — Retrospective
+- `/investigate` — Investigate issues
+- `/document-release` — Document a release
+- `/codex` — Codex mode
+- `/careful` — Careful mode
+- `/freeze` — Freeze changes
+- `/guard` — Guard mode
+- `/unfreeze` — Unfreeze changes
+- `/gstack-upgrade` — Upgrade gstack

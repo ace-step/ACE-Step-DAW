@@ -115,7 +115,11 @@ async function withGenerationToast(label: string, action: () => Promise<boolean>
   if (succeeded) {
     toastSuccess(`${label} completed`);
   } else {
-    toastError(`${label} failed`);
+    const failedJobs = useGenerationStore.getState().jobs.filter((j) => j.status === 'error');
+    const detail = failedJobs.length > 0
+      ? failedJobs.map((j) => `${j.trackName}: ${j.actionableMessage ?? j.error ?? 'unknown error'}`).join('; ')
+      : undefined;
+    toastError(detail ? `${label} failed — ${detail}` : `${label} failed`);
   }
 }
 
@@ -521,6 +525,7 @@ async function generateClipInternal(
 
     const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
     const taskId = releaseResp.task_id;
+    useGenerationStore.getState().updateJob(jobId, { taskId });
     updateVariationProgress({
       taskId,
       status: 'generating',

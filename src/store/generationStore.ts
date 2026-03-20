@@ -25,6 +25,7 @@ export interface GenerationJob {
   lastUpdatedAt?: number;
   actionableMessage?: string;
   error?: string;
+  taskId?: string;
 }
 
 export interface GenerationJobProgressInput {

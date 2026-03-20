@@ -93,10 +93,12 @@ export function GridOverlay() {
         .map((line, i) => (
         <div
           key={i}
-          className="absolute top-0 bottom-0 w-px"
+          className="absolute top-0 bottom-0"
           style={{
             left: line.x,
-            backgroundColor: colors[line.strength as 'bar' | 'beat'],
+            width: line.strength === 'bar' ? 1 : 0,
+            backgroundColor: line.strength === 'bar' ? colors.bar : undefined,
+            borderLeft: line.strength === 'beat' ? `1px dashed ${colors.beat}` : undefined,
           }}
         />
       ))}

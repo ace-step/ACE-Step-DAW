@@ -201,15 +201,15 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
 
   return (
     <div
-      className="absolute bottom-0 z-30 pointer-events-none"
-      style={{ left: x, transform: 'translateX(-6px)' }}
+      className="absolute top-0 z-30 pointer-events-none"
+      style={{ left: x, transform: 'translateX(-5px)' }}
     >
-      {/* Upright triangle (△) pointing up, positioned at bottom of ruler */}
+      {/* Inverted triangle (▽) pointing down */}
       <div
-        className="w-0 h-0 border-l-[7px] border-r-[7px] border-b-[8px] border-l-transparent border-r-transparent"
+        className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent"
         style={{
-          borderBottomColor: blinking ? undefined : 'var(--color-daw-playhead)',
-          animation: blinking ? 'playhead-blink-triangle-up 1.2s ease-in-out infinite' : 'none',
+          borderTopColor: blinking ? undefined : '#000000',
+          animation: blinking ? 'playhead-blink-triangle 1.2s ease-in-out infinite' : 'none',
           filter: 'drop-shadow(0 0 0.5px white)',
         }}
       />

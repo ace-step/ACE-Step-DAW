@@ -111,17 +111,18 @@ describe('GenerationSidePanel', () => {
     fireEvent.click(screen.getByTestId('generation-generate-btn'));
 
     await waitFor(() => {
-      expect(generateFromGenerationPanel).toHaveBeenCalledWith({
-        prompt: 'cinematic strings with pulsing bass',
-        trackId: useProjectStore.getState().project?.tracks[0].id,
-        styleTags: ['Ambient'],
-        bpm: 110,
-        keyScale: 'G minor',
-        lengthSeconds: 64,
-        temperature: 0.55,
-        variationCount: 3,
-        lyrics: undefined,
-      });
+      expect(generateVariationSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'cinematic strings with pulsing bass',
+          trackId: useProjectStore.getState().project?.tracks[0].id,
+          styleTags: ['Ambient'],
+          bpm: 110,
+          keyScale: 'G minor',
+          duration: 64,
+          temperature: 0.55,
+          variationCount: 3,
+        }),
+      );
     });
 
     const session = useGenerationStore.getState().variationSession;
@@ -135,9 +136,9 @@ describe('GenerationSidePanel', () => {
       prompt: 'cinematic strings with pulsing bass',
       styleTags: ['Ambient'],
       variationCount: 3,
-      bpm: 132,
-      keyScale: 'D minor',
-      duration: 30,
+      bpm: 110,
+      keyScale: 'G minor',
+      duration: 64,
       globalCaption: '',
     });
     expect(screen.getByTestId('variation-cards')).toBeInTheDocument();

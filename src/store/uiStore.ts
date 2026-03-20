@@ -150,6 +150,12 @@ export interface UIState {
   // Add Layer Panel (floating, no backdrop)
   addLayerOpen: boolean;
 
+  // Model Library
+  showModelLibrary: boolean;
+
+  // Auto-scroll
+  autoScroll: boolean;
+
   // Generation Side Panel
   showGenerationPanel: boolean;
 
@@ -280,6 +286,12 @@ export interface UIState {
 
   // Add Layer Panel
   setAddLayerOpen: (v: boolean) => void;
+
+  // Model Library
+  toggleModelLibrary: () => void;
+
+  // Auto-scroll
+  toggleAutoScroll: () => void;
 
   // Generation Side Panel
   toggleGenerationPanel: () => void;
@@ -445,6 +457,9 @@ export const useUIStore = create<UIState>()(
   generatePatternClipId: null,
 
   addLayerOpen: false,
+
+  showModelLibrary: false,
+  autoScroll: true,
 
   showGenerationPanel: false,
 
@@ -706,6 +721,9 @@ export const useUIStore = create<UIState>()(
   openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),
 
   setAddLayerOpen: (v) => set({ addLayerOpen: v }),
+
+  toggleModelLibrary: () => set((s) => ({ showModelLibrary: !s.showModelLibrary })),
+  toggleAutoScroll: () => set((s) => ({ autoScroll: !s.autoScroll })),
 
   toggleGenerationPanel: () => set((s) => ({ showGenerationPanel: !s.showGenerationPanel })),
   setShowGenerationPanel: (v) => set({ showGenerationPanel: v }),

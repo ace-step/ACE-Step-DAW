@@ -103,6 +103,11 @@ select:focus-visible,
   50%, 80% { border-top-color: var(--color-daw-playhead); }
   100% { border-top-color: #000000; }
 }
+@keyframes playhead-blink-triangle-up {
+  0%, 30% { border-bottom-color: var(--color-daw-playhead); }
+  50%, 80% { border-bottom-color: #ffffff; }
+  100% { border-bottom-color: var(--color-daw-playhead); }
+}
 
 /* Micro-animations for DAW interactions */
 @keyframes fadeIn {

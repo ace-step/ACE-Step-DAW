@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, memo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
@@ -184,6 +184,35 @@ export function TimeRuler() {
           )}
         </div>
       ))}
+
+      {/* Playhead triangle indicator in ruler */}
+      <PlayheadRulerIndicator pixelsPerSecond={pixelsPerSecond} />
     </div>
   );
 }
+
+/** Playhead position indicator rendered inside the ruler bar */
+const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerSecond }: { pixelsPerSecond: number }) {
+  const currentTime = useTransportStore((s) => s.currentTime);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
+  const timelineFocused = useUIStore((s) => s.timelineFocused);
+  const x = currentTime * pixelsPerSecond;
+  const blinking = !isPlaying && timelineFocused;
+
+  return (
+    <div
+      className="absolute bottom-0 z-30 pointer-events-none"
+      style={{ left: x, transform: 'translateX(-6px)' }}
+    >
+      {/* Upright triangle (△) pointing up, positioned at bottom of ruler */}
+      <div
+        className="w-0 h-0 border-l-[7px] border-r-[7px] border-b-[8px] border-l-transparent border-r-transparent"
+        style={{
+          borderBottomColor: blinking ? undefined : 'var(--color-daw-playhead)',
+          animation: blinking ? 'playhead-blink-triangle-up 1.2s ease-in-out infinite' : 'none',
+          filter: 'drop-shadow(0 0 0.5px white)',
+        }}
+      />
+    </div>
+  );
+});

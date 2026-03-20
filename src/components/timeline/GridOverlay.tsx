@@ -87,7 +87,7 @@ export function GridOverlay() {
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none" style={{ width: totalWidth }}>
+    <div className="absolute inset-0 pointer-events-none" style={{ width: totalWidth, minHeight: '100vh' }}>
       {lines
         .filter((line) => line.strength !== 'sub')
         .map((line, i) => (

@@ -16,9 +16,6 @@ describe('Playhead blink animation', () => {
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
     expect(line.style.animation).toContain('playhead-blink-line');
-    // Triangle should also blink
-    const triangle = line.firstElementChild as HTMLElement;
-    expect(triangle.style.animation).toContain('playhead-blink-triangle');
   });
 
   it('does not blink when transport is playing', () => {
@@ -37,15 +34,13 @@ describe('Playhead blink animation', () => {
     expect(line.style.animation).toBe('none');
   });
 
-  it('shows white line with black triangle when not blinking', () => {
+  it('shows white line when not blinking', () => {
     useTransportStore.setState({ isPlaying: false });
     useUIStore.setState({ timelineFocused: false });
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
     // JSDOM normalizes hex to rgb
     expect(line.style.backgroundColor).toBe('rgb(255, 255, 255)');
-    const triangle = line.firstElementChild as HTMLElement;
-    expect(triangle.style.borderTopColor).toBe('rgb(0, 0, 0)');
   });
 
   it('positions playhead at currentTime * pixelsPerSecond', () => {
@@ -54,12 +49,5 @@ describe('Playhead blink animation', () => {
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
     expect(line.style.left).toBe('300px');
-  });
-
-  it('triangle has white stroke (drop-shadow filter)', () => {
-    const { container } = render(<Playhead />);
-    const line = container.firstElementChild as HTMLElement;
-    const triangle = line.firstElementChild as HTMLElement;
-    expect(triangle.style.filter).toContain('drop-shadow');
   });
 });

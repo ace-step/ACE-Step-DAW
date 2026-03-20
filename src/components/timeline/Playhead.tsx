@@ -13,21 +13,13 @@ export function Playhead() {
 
   return (
     <div
-      className="absolute top-0 bottom-0 w-px z-20 pointer-events-none"
+      className="absolute top-0 w-px z-20 pointer-events-none"
       style={{
         left: x,
+        minHeight: '100vh',
         backgroundColor: blinking ? undefined : '#ffffff',
         animation: blinking ? 'playhead-blink-line 1.2s ease-in-out infinite' : 'none',
       }}
-    >
-      <div
-        className="absolute -top-0 -left-[6px] w-0 h-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent"
-        style={{
-          borderTopColor: blinking ? undefined : '#000000',
-          animation: blinking ? 'playhead-blink-triangle 1.2s ease-in-out infinite' : 'none',
-          filter: 'drop-shadow(0 0 0.5px white)',
-        }}
-      />
-    </div>
+    />
   );
 }

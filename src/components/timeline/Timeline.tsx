@@ -440,22 +440,16 @@ export function Timeline() {
             </div>
           </div>
         )}
-        <div
-          aria-label="Timeline navigation status"
-          role="status"
-          aria-live="polite"
-          className="absolute right-3 top-3 z-30 w-fit rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
-        >
-          Scope: <span className="text-white">Timeline</span> · Focus: <span className="text-white">{focusedTrackLabel}</span> · Clip: <span className="text-white">{selectedClipLabel}</span>
-        </div>
         <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
           <TimeRuler />
           <ArrangementMarkers />
           {showTempoLane && <TempoLane />}
 
+          {/* Grid and playhead span full height (tracks + empty space below) */}
+          <GridOverlay />
+          <Playhead />
+
           <div ref={trackAreaRef} className="relative">
-            <GridOverlay />
-            <Playhead />
 
             {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
             {ctxLeft !== null && ctxWidth !== null && ctxVRange && (

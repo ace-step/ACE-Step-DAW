@@ -34,6 +34,7 @@ import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
 import { EffectChain } from '../mixer/EffectChain';
 import { SessionView } from '../session/SessionView';
+import { ModelLibraryPanel } from '../models/ModelLibraryPanel';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { FirstRunOnboarding } from '../onboarding/FirstRunOnboarding';
@@ -176,6 +177,7 @@ export function AppShell() {
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
+      {project && <ModelLibraryPanel />}
       {project && <AddLayerPanel />}
       <StatusBar />
       <ToastContainer />

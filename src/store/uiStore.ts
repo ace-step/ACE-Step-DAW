@@ -154,6 +154,9 @@ export interface UIState {
   // Add Layer Panel (floating, no backdrop)
   addLayerOpen: boolean;
 
+  // Model Library Panel
+  showModelLibrary: boolean;
+
   // Generation Side Panel
   showGenerationPanel: boolean;
 
@@ -289,6 +292,10 @@ export interface UIState {
 
   // Add Layer Panel
   setAddLayerOpen: (v: boolean) => void;
+
+  // Model Library Panel
+  toggleModelLibrary: () => void;
+  setShowModelLibrary: (v: boolean) => void;
 
   // Generation Side Panel
   toggleGenerationPanel: () => void;
@@ -457,6 +464,8 @@ export const useUIStore = create<UIState>()(
   generatePatternClipId: null,
 
   addLayerOpen: false,
+
+  showModelLibrary: false,
 
   showGenerationPanel: false,
 
@@ -723,6 +732,9 @@ export const useUIStore = create<UIState>()(
 
   setAddLayerOpen: (v) => set({ addLayerOpen: v }),
 
+  toggleModelLibrary: () => set((s) => ({ showModelLibrary: !s.showModelLibrary })),
+  setShowModelLibrary: (v) => set({ showModelLibrary: v }),
+
   toggleGenerationPanel: () => set((s) => ({ showGenerationPanel: !s.showGenerationPanel })),
   setShowGenerationPanel: (v) => set({ showGenerationPanel: v }),
 
@@ -888,6 +900,8 @@ export const useUIStore = create<UIState>()(
         showSpectrumAnalyzer: state.showSpectrumAnalyzer,
         // Loop Browser preference
         loopBrowserCategory: state.loopBrowserCategory,
+        // Model Library panel
+        showModelLibrary: state.showModelLibrary,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
         // AI Assistant

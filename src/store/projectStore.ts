@@ -500,6 +500,8 @@ export interface ProjectState {
   updateClip: (clipId: string, updates: Partial<Clip>) => void;
   updateClipColor: (clipId: string, color: string | undefined) => void;
   updateClipColors: (clipIds: string[], color: string | undefined) => void;
+  /** Toggle muted state on one or more clips. If any are active, mute all; if all muted, unmute all. */
+  toggleClipMuted: (clipIds: string[]) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -2706,6 +2708,41 @@ export const useProjectStore = create<ProjectState>()(
             }
           : clip
       )),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  toggleClipMuted: (clipIds) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || clipIds.length === 0) return;
+
+    const clipIdSet = new Set(clipIds);
+    // Collect targeted clips to decide toggle direction
+    const targetClips = state.project.tracks
+      .flatMap((t) => t.clips)
+      .filter((c) => clipIdSet.has(c.id));
+    if (targetClips.length === 0) return;
+
+    // If any clip is active (not muted), mute all. If all muted, unmute all.
+    const anyActive = targetClips.some((c) => !c.muted);
+    const newMuted = anyActive;
+
+    _pushHistory(state.project, { label: newMuted ? 'Mute clips' : 'Unmute clips', scope: 'arrangement' });
+
+    const newTracks = state.project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) =>
+        clipIdSet.has(clip.id) ? { ...clip, muted: newMuted } : clip,
+      ),
     }));
 
     set({

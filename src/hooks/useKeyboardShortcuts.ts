@@ -305,6 +305,14 @@ export function useKeyboardShortcuts() {
       if (shouldDeferToPianoRollTools(event)) return;
       if (shouldDeferToDrumMachine(event)) return;
 
+      if (matches('clips.toggleMute')) {
+        event.preventDefault();
+        if (ui.selectedClipIds.size > 0) {
+          project.toggleClipMuted([...ui.selectedClipIds]);
+        }
+        return;
+      }
+
       if (matches('view.toggleSessionView')) {
         event.preventDefault();
         ui.toggleMainView();

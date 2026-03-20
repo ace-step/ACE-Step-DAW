@@ -208,11 +208,11 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   return (
     <div
       className="absolute bottom-0 z-30 pointer-events-none"
-      style={{ left: x, transform: 'translate(-5px, 3px)' }}
+      style={{ left: x, transform: 'translate(-7px, -5px)' }}
     >
-      {/* Inverted triangle (▽) pointing down, sitting on the ruler bottom border */}
+      {/* Inverted triangle (▽) — mostly inside ruler, only the tiny tip pokes below */}
       <div
-        className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent"
+        className="w-0 h-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent"
         style={{
           borderTopColor: blinking ? undefined : '#000000',
           animation: blinking ? 'playhead-blink-triangle 1.2s ease-in-out infinite' : 'none',

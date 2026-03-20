@@ -39,6 +39,13 @@ describe('Generation Variation Session', () => {
         keyScale: 'C major',
         duration: 30,
         guidanceScale: 7.0,
+        comparisonMode: 'cross-model',
+        modelOverrides: [
+          { modelName: 'ace-step-v1', inferenceSteps: 12, guidanceScale: 0.45 },
+          { modelName: 'ace-step-v2', inferenceSteps: 16, guidanceScale: 0.55 },
+          { modelName: 'ace-step-v3', inferenceSteps: 20, guidanceScale: 0.65 },
+          { modelName: 'ace-step-v4', inferenceSteps: 24, guidanceScale: 0.75 },
+        ],
       });
 
       const session = useGenerationStore.getState().variationSession!;
@@ -47,6 +54,9 @@ describe('Generation Variation Session', () => {
         expect(v.status).toBe('pending');
         expect(v.clipId).toBeNull();
         expect(v.progress).toBe('');
+        expect(v.modelName).toBe(`ace-step-v${i + 1}`);
+        expect(v.inferenceSteps).toBe(12 + (i * 4));
+        expect(v.guidanceScale).toBeCloseTo(0.45 + (i * 0.1), 5);
       });
     });
 
@@ -87,6 +97,43 @@ describe('Generation Variation Session', () => {
       const history = useGenerationStore.getState().promptHistory;
       expect(history).toHaveLength(1);
       expect(history[0].prompt).toBe('upbeat pop');
+    });
+
+    it('normalizes comparison mode and model overrides when submitting generation requests', () => {
+      const store = useGenerationStore.getState();
+      store.hydrateGenerationForm({
+        prompt: 'cross-model test',
+        selectedTrackId: 'track-1',
+        variationCount: 3,
+        bpm: 126,
+        keyScale: 'F minor',
+        lengthSeconds: 24,
+        temperature: 0.5,
+        comparisonMode: 'cross-model',
+        modelOverrides: [
+          { modelName: 'ace-step-v1', inferenceSteps: 18, guidanceScale: 0.35 },
+          { modelName: 'ace-step-v2', inferenceSteps: 22, guidanceScale: 0.45 },
+          { modelName: 'ace-step-v3', inferenceSteps: 26, guidanceScale: 0.55 },
+          { modelName: '', inferenceSteps: 30, guidanceScale: 0.65 },
+        ],
+      });
+
+      const params = store.submitGenerationRequest();
+
+      expect(params).toMatchObject({
+        comparisonMode: 'cross-model',
+        modelOverrides: [
+          { modelName: 'ace-step-v1', inferenceSteps: 18, guidanceScale: 0.35 },
+          { modelName: 'ace-step-v2', inferenceSteps: 22, guidanceScale: 0.45 },
+          { modelName: 'ace-step-v3', inferenceSteps: 26, guidanceScale: 0.55 },
+        ],
+      });
+      expect(params?.modelOverrides).toHaveLength(3);
+      expect(useGenerationStore.getState().variationSession?.variations.map((variation) => variation.modelName)).toEqual([
+        'ace-step-v1',
+        'ace-step-v2',
+        'ace-step-v3',
+      ]);
     });
   });
 

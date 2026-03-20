@@ -6,6 +6,7 @@ import {
   streamGenerationVariations,
   type VariationGenerationDependencies,
 } from '../../src/services/generationPipeline';
+import * as aceStepApi from '../../src/services/aceStepApi';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -132,6 +133,79 @@ describe('generateVariationSession', () => {
     ]);
     expect(useGenerationStore.getState().variationSession?.status).toBe('done');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+
+  it('switches backend models sequentially for cross-model comparison sessions', async () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    const params: VariationSessionParams = {
+      prompt: 'cross-model warehouse groove',
+      trackId,
+      variationCount: 3,
+      bpm: 124,
+      keyScale: 'A minor',
+      duration: 12,
+      guidanceScale: 0.7,
+      temperature: 0.7,
+      comparisonMode: 'cross-model',
+      modelOverrides: [
+        { modelName: 'ace-step-v1', inferenceSteps: 12, guidanceScale: 0.35 },
+        { modelName: 'ace-step-v2', inferenceSteps: 16, guidanceScale: 0.45 },
+        { modelName: 'ace-step-v3', inferenceSteps: 20, guidanceScale: 0.55 },
+      ],
+    };
+
+    useGenerationStore.getState().startVariationSession(params);
+    const initModelSpy = vi.spyOn(aceStepApi, 'initModel').mockResolvedValue({ message: 'ok' });
+    const generateClip = vi.fn(async (_clipId, _previousCumulativeBlob, options) => {
+      const index = options?.variationIndex ?? -1;
+      useGenerationStore.getState().updateVariation(index, {
+        status: 'done',
+        progress: 'Ready',
+        resultAudioPath: `/audio/${index}.wav`,
+      });
+      return { cumulativeBlob: null, succeeded: true };
+    });
+
+    await generateVariationSession(params, { generateClip });
+
+    expect(initModelSpy.mock.calls.map(([request]) => request)).toEqual([
+      { model: 'ace-step-v1' },
+      { model: 'ace-step-v2' },
+      { model: 'ace-step-v3' },
+    ]);
+    expect(generateClip).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      null,
+      expect.objectContaining({
+        variationIndex: 0,
+        modelNameOverride: 'ace-step-v1',
+        inferenceStepsOverride: 12,
+        guidanceScaleOverride: 0.35,
+      }),
+    );
+    expect(generateClip).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      null,
+      expect.objectContaining({
+        variationIndex: 1,
+        modelNameOverride: 'ace-step-v2',
+        inferenceStepsOverride: 16,
+        guidanceScaleOverride: 0.45,
+      }),
+    );
+    expect(generateClip).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      null,
+      expect.objectContaining({
+        variationIndex: 2,
+        modelNameOverride: 'ace-step-v3',
+        inferenceStepsOverride: 20,
+        guidanceScaleOverride: 0.55,
+      }),
+    );
   });
 });
 

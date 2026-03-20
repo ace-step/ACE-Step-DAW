@@ -6,6 +6,7 @@ import { useUIStore } from '../../src/store/uiStore';
 import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
 import { generateVariationSession } from '../../src/services/generationPipeline';
+import * as aceStepApi from '../../src/services/aceStepApi';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -14,6 +15,24 @@ vi.mock('../../src/services/projectStorage', () => ({
 vi.mock('../../src/services/generationPipeline', () => ({
   generateVariationSession: vi.fn(() => Promise.resolve(true)),
 }));
+
+vi.mock('../../src/services/aceStepApi', async () => {
+  const actual = await vi.importActual<typeof import('../../src/services/aceStepApi')>('../../src/services/aceStepApi');
+  return {
+    ...actual,
+    listModels: vi.fn(() => Promise.resolve({
+      models: [
+        { name: 'ace-step-v1', is_default: true, is_loaded: true },
+        { name: 'ace-step-v2', is_default: false, is_loaded: false },
+        { name: 'ace-step-v3', is_default: false, is_loaded: false },
+      ],
+      default_model: 'ace-step-v1',
+      lm_models: [],
+      loaded_lm_model: null,
+      llm_initialized: false,
+    })),
+  };
+});
 
 describe('GenerationSidePanel', () => {
   beforeEach(() => {
@@ -147,6 +166,58 @@ describe('GenerationSidePanel', () => {
       prompt: 'cinematic strings with pulsing bass',
       variationCount: 3,
     }));
+  });
+
+  it('supports compare-model mode with per-variation overrides and model badges', async () => {
+    render(<GenerationSidePanel />);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation prompt' }), {
+      target: { value: 'compare model groove' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation variation count' }), {
+      target: { value: '3' },
+    });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Compare models across variations' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(aceStepApi.listModels)).toHaveBeenCalled();
+    });
+
+    fireEvent.change(screen.getByTestId('variation-model-select-0'), {
+      target: { value: 'ace-step-v1' },
+    });
+    fireEvent.change(screen.getByTestId('variation-model-select-1'), {
+      target: { value: 'ace-step-v2' },
+    });
+    fireEvent.change(screen.getByTestId('variation-model-select-2'), {
+      target: { value: 'ace-step-v3' },
+    });
+    fireEvent.change(screen.getByTestId('variation-inference-steps-0'), {
+      target: { value: '12' },
+    });
+    fireEvent.change(screen.getByTestId('variation-guidance-scale-0'), {
+      target: { value: '0.35' },
+    });
+
+    fireEvent.click(screen.getByTestId('generation-generate-btn'));
+
+    await waitFor(() => {
+      expect(generateVariationSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comparisonMode: 'cross-model',
+          modelOverrides: [
+            { modelName: 'ace-step-v1', inferenceSteps: 12, guidanceScale: 0.35 },
+            { modelName: 'ace-step-v2', inferenceSteps: 50, guidanceScale: 1 },
+            { modelName: 'ace-step-v3', inferenceSteps: 50, guidanceScale: 1 },
+          ],
+        }),
+      );
+    });
+
+    useGenerationStore.getState().updateVariation(0, { status: 'done', modelName: 'ace-step-v1' });
+
+    expect(screen.getByTestId('variation-card-0')).toHaveTextContent('ace-step-v1');
   });
 
   it('surfaces variation errors as actionable feedback', () => {

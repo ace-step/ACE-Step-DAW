@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
+import {
+  DEFAULT_BPM,
+  DEFAULT_DURATION,
+  DEFAULT_GENERATION,
+  DEFAULT_KEY_SCALE,
+  MAX_BPM,
+  MAX_DURATION,
+  MIN_BPM,
+  MIN_DURATION,
+} from '../constants/defaults';
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
 import {
@@ -161,6 +170,14 @@ export interface PromptHistoryEntry {
 
 export type VariationStatus = 'pending' | 'generating' | 'processing' | 'done' | 'error' | 'cancelled';
 
+export type ComparisonMode = 'same-model' | 'cross-model';
+
+export interface VariationModelOverride {
+  modelName: string;
+  inferenceSteps: number;
+  guidanceScale: number;
+}
+
 export interface Variation {
   index: number;
   status: VariationStatus;
@@ -179,6 +196,9 @@ export interface Variation {
   progressPercent?: number;
   /** Estimated seconds remaining */
   etaSeconds?: number;
+  modelName?: string;
+  inferenceSteps?: number;
+  guidanceScale?: number;
 }
 
 export interface VariationSessionParams {
@@ -194,6 +214,8 @@ export interface VariationSessionParams {
   lyrics?: string;
   globalCaption?: string;
   presetId?: string;
+  comparisonMode?: ComparisonMode;
+  modelOverrides?: VariationModelOverride[];
 }
 
 export interface VariationSession {
@@ -237,6 +259,8 @@ export interface GenerationFormState {
   lyrics: string;
   presetId: string | null;
   requestError: string | null;
+  comparisonMode: ComparisonMode;
+  modelOverrides: VariationModelOverride[];
 }
 
 export interface GenerationValidationInput {
@@ -246,6 +270,8 @@ export interface GenerationValidationInput {
   lengthSeconds: number;
   temperature: number;
   variationCount: number;
+  comparisonMode?: ComparisonMode;
+  modelOverrides?: VariationModelOverride[];
 }
 
 function clampBpm(value: number) {
@@ -264,6 +290,11 @@ function clampVariationCount(value: number) {
   return Math.max(1, Math.min(4, Math.round(value)));
 }
 
+function clampInferenceSteps(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_GENERATION.inferenceSteps;
+  return Math.max(1, Math.round(value));
+}
+
 function sanitizeStyleTag(tag: string) {
   return tag.trim().replace(/\s+/g, ' ');
 }
@@ -280,14 +311,73 @@ function normalizeStyleTags(tags: string[]) {
   return unique;
 }
 
+function createDefaultModelOverride(
+  index: number,
+  count: number,
+  fallbackModelName: string,
+  fallbackInferenceSteps: number,
+  fallbackGuidanceScale: number,
+): VariationModelOverride {
+  return {
+    modelName: count <= 1 || index === 0 ? fallbackModelName : '',
+    inferenceSteps: clampInferenceSteps(fallbackInferenceSteps),
+    guidanceScale: clampTemperature(fallbackGuidanceScale),
+  };
+}
+
+function normalizeModelOverrides(
+  overrides: VariationModelOverride[] | undefined,
+  count: number,
+  fallbackModelName: string,
+  fallbackInferenceSteps: number,
+  fallbackGuidanceScale: number,
+  comparisonMode: ComparisonMode,
+): VariationModelOverride[] {
+  const normalizedCount = clampVariationCount(count);
+  const normalized = Array.from({ length: normalizedCount }, (_, index) => {
+    const override = overrides?.[index];
+    const fallback = createDefaultModelOverride(
+      index,
+      normalizedCount,
+      fallbackModelName,
+      fallbackInferenceSteps,
+      fallbackGuidanceScale,
+    );
+
+    return {
+      modelName: override?.modelName?.trim() ?? fallback.modelName,
+      inferenceSteps: clampInferenceSteps(override?.inferenceSteps ?? fallback.inferenceSteps),
+      guidanceScale: clampTemperature(override?.guidanceScale ?? fallback.guidanceScale),
+    };
+  });
+
+  if (comparisonMode === 'cross-model') return normalized;
+
+  return normalized.map((override) => ({
+    ...override,
+    modelName: override.modelName || fallbackModelName,
+  }));
+}
+
 function normalizeVariationSessionParams(
   params: VariationSessionParams,
   fallbackPresetId: string | null = null,
 ): VariationSessionParams {
+  const projectDefaults = useProjectStore.getState().project?.generationDefaults ?? DEFAULT_GENERATION;
+  const normalizedCount = clampVariationCount(params.variationCount);
+  const comparisonMode = params.comparisonMode ?? 'same-model';
+  const normalizedOverrides = normalizeModelOverrides(
+    params.modelOverrides,
+    normalizedCount,
+    projectDefaults.model,
+    projectDefaults.inferenceSteps,
+    params.temperature ?? params.guidanceScale,
+    comparisonMode,
+  );
   return {
     ...params,
     prompt: params.prompt.trim(),
-    variationCount: clampVariationCount(params.variationCount),
+    variationCount: normalizedCount,
     bpm: clampBpm(params.bpm),
     duration: clampLengthSeconds(params.duration),
     guidanceScale: clampTemperature(params.guidanceScale),
@@ -296,6 +386,10 @@ function normalizeVariationSessionParams(
     lyrics: params.lyrics?.trim() || undefined,
     globalCaption: params.globalCaption?.trim() || undefined,
     presetId: params.presetId ?? fallbackPresetId ?? undefined,
+    comparisonMode,
+    modelOverrides: comparisonMode === 'cross-model'
+      ? normalizedOverrides.filter((override) => override.modelName)
+      : normalizedOverrides,
   };
 }
 
@@ -312,6 +406,15 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     lyrics: '',
     presetId: null,
     requestError: null,
+    comparisonMode: 'same-model',
+    modelOverrides: normalizeModelOverrides(
+      [],
+      2,
+      DEFAULT_GENERATION.model,
+      DEFAULT_GENERATION.inferenceSteps,
+      DEFAULT_GENERATION.guidanceScale,
+      'same-model',
+    ),
   };
 }
 
@@ -333,6 +436,19 @@ export function getGenerationValidationError(input: GenerationValidationInput): 
   }
   if (!Number.isFinite(input.variationCount) || input.variationCount < 1 || input.variationCount > 4) {
     return 'Choose between 1 and 4 variations.';
+  }
+  if (input.comparisonMode === 'cross-model') {
+    const overrides = (input.modelOverrides ?? []).slice(0, input.variationCount);
+    if (overrides.length < input.variationCount) {
+      return 'Choose a model for each variation slot before comparing models.';
+    }
+    if (overrides.some((override) => !override.modelName.trim())) {
+      return 'Choose a model for each variation slot before comparing models.';
+    }
+    const uniqueCount = new Set(overrides.map((override) => override.modelName.trim().toLowerCase())).size;
+    if (uniqueCount !== overrides.length) {
+      return 'Choose different models for each comparison slot.';
+    }
   }
   return null;
 }
@@ -362,6 +478,8 @@ export interface GenerationState {
   setGenerationLengthSeconds: (lengthSeconds: number) => void;
   setGenerationTemperature: (temperature: number) => void;
   setGenerationVariationCount: (variationCount: number) => void;
+  setGenerationComparisonMode: (comparisonMode: ComparisonMode) => void;
+  setGenerationModelOverride: (index: number, override: Partial<VariationModelOverride>) => void;
   setGenerationTargetTrack: (trackId: string) => void;
   setGenerationLyrics: (lyrics: string) => void;
   setGenerationRequestError: (message: string | null) => void;
@@ -466,15 +584,31 @@ export const useGenerationStore = create<GenerationState>()(
       clearPromptHistory: () => set({ promptHistory: [] }),
 
       hydrateGenerationForm: (updates) => set((s) => ({
-        generationForm: {
+        generationForm: (() => {
+          const projectDefaults = useProjectStore.getState().project?.generationDefaults ?? DEFAULT_GENERATION;
+          const comparisonMode = updates.comparisonMode ?? s.generationForm.comparisonMode;
+          const variationCount = updates.variationCount !== undefined
+            ? clampVariationCount(updates.variationCount)
+            : s.generationForm.variationCount;
+          return {
           ...s.generationForm,
           ...updates,
           styleTags: updates.styleTags ? normalizeStyleTags(updates.styleTags) : s.generationForm.styleTags,
           bpm: updates.bpm !== undefined ? clampBpm(updates.bpm) : s.generationForm.bpm,
           lengthSeconds: updates.lengthSeconds !== undefined ? clampLengthSeconds(updates.lengthSeconds) : s.generationForm.lengthSeconds,
           temperature: updates.temperature !== undefined ? clampTemperature(updates.temperature) : s.generationForm.temperature,
-          variationCount: updates.variationCount !== undefined ? clampVariationCount(updates.variationCount) : s.generationForm.variationCount,
-        },
+          variationCount,
+          comparisonMode,
+          modelOverrides: normalizeModelOverrides(
+            updates.modelOverrides ?? s.generationForm.modelOverrides,
+            variationCount,
+            projectDefaults.model,
+            projectDefaults.inferenceSteps,
+            updates.temperature ?? s.generationForm.temperature,
+            comparisonMode,
+          ),
+          };
+        })(),
       })),
 
       resetGenerationForm: () => set({ generationForm: createDefaultGenerationFormState() }),
@@ -535,20 +669,94 @@ export const useGenerationStore = create<GenerationState>()(
       })),
 
       setGenerationTemperature: (temperature) => set((s) => ({
-        generationForm: {
+        generationForm: (() => {
+          const nextTemperature = clampTemperature(temperature);
+          return {
           ...s.generationForm,
-          temperature: clampTemperature(temperature),
+          temperature: nextTemperature,
           requestError: null,
-        },
+          modelOverrides: normalizeModelOverrides(
+            s.generationForm.modelOverrides,
+            s.generationForm.variationCount,
+            useProjectStore.getState().project?.generationDefaults.model ?? DEFAULT_GENERATION.model,
+            useProjectStore.getState().project?.generationDefaults.inferenceSteps ?? DEFAULT_GENERATION.inferenceSteps,
+            nextTemperature,
+            s.generationForm.comparisonMode,
+          ),
+          };
+        })(),
       })),
 
       setGenerationVariationCount: (variationCount) => set((s) => ({
-        generationForm: {
+        generationForm: (() => {
+          const nextVariationCount = clampVariationCount(variationCount);
+          const projectDefaults = useProjectStore.getState().project?.generationDefaults ?? DEFAULT_GENERATION;
+          return {
           ...s.generationForm,
-          variationCount: clampVariationCount(variationCount),
+          variationCount: nextVariationCount,
           requestError: null,
-        },
+          modelOverrides: normalizeModelOverrides(
+            s.generationForm.modelOverrides,
+            nextVariationCount,
+            projectDefaults.model,
+            projectDefaults.inferenceSteps,
+            s.generationForm.temperature,
+            s.generationForm.comparisonMode,
+          ),
+          };
+        })(),
       })),
+
+      setGenerationComparisonMode: (comparisonMode) => set((s) => ({
+        generationForm: (() => {
+          const projectDefaults = useProjectStore.getState().project?.generationDefaults ?? DEFAULT_GENERATION;
+          return {
+            ...s.generationForm,
+            comparisonMode,
+            requestError: null,
+            modelOverrides: normalizeModelOverrides(
+              s.generationForm.modelOverrides,
+              s.generationForm.variationCount,
+              projectDefaults.model,
+              projectDefaults.inferenceSteps,
+              s.generationForm.temperature,
+              comparisonMode,
+            ),
+          };
+        })(),
+      })),
+
+      setGenerationModelOverride: (index, override) => set((s) => {
+        if (index < 0 || index >= s.generationForm.variationCount) return s;
+        const projectDefaults = useProjectStore.getState().project?.generationDefaults ?? DEFAULT_GENERATION;
+        const modelOverrides = normalizeModelOverrides(
+          s.generationForm.modelOverrides,
+          s.generationForm.variationCount,
+          projectDefaults.model,
+          projectDefaults.inferenceSteps,
+          s.generationForm.temperature,
+          s.generationForm.comparisonMode,
+        ).map((entry, entryIndex) => (
+          entryIndex === index
+            ? {
+                modelName: override.modelName?.trim() ?? entry.modelName,
+                inferenceSteps: override.inferenceSteps !== undefined
+                  ? clampInferenceSteps(override.inferenceSteps)
+                  : entry.inferenceSteps,
+                guidanceScale: override.guidanceScale !== undefined
+                  ? clampTemperature(override.guidanceScale)
+                  : entry.guidanceScale,
+              }
+            : entry
+        ));
+        return {
+          generationForm: {
+            ...s.generationForm,
+            requestError: null,
+            modelOverrides,
+          },
+        };
+      }),
 
       setGenerationTargetTrack: (trackId) => set((s) => ({
         generationForm: {
@@ -608,6 +816,8 @@ export const useGenerationStore = create<GenerationState>()(
           lengthSeconds: generationForm.lengthSeconds,
           temperature: generationForm.temperature,
           variationCount: generationForm.variationCount,
+          comparisonMode: generationForm.comparisonMode,
+          modelOverrides: generationForm.modelOverrides,
         });
       },
 
@@ -637,6 +847,8 @@ export const useGenerationStore = create<GenerationState>()(
           lyrics: generationForm.lyrics.trim() || undefined,
           globalCaption: context?.globalCaption?.trim() || undefined,
           presetId: generationForm.presetId ?? undefined,
+          comparisonMode: generationForm.comparisonMode,
+          modelOverrides: generationForm.modelOverrides,
         }, generationForm.presetId);
 
         set({
@@ -668,6 +880,9 @@ export const useGenerationStore = create<GenerationState>()(
           status: 'pending' as const,
           clipId: null,
           progress: '',
+          modelName: normalizedParams.modelOverrides?.[i]?.modelName || undefined,
+          inferenceSteps: normalizedParams.modelOverrides?.[i]?.inferenceSteps,
+          guidanceScale: normalizedParams.modelOverrides?.[i]?.guidanceScale,
         }));
 
         // Add to prompt history
@@ -700,6 +915,8 @@ export const useGenerationStore = create<GenerationState>()(
             lyrics: normalizedParams.lyrics ?? '',
             presetId: normalizedParams.presetId ?? get().generationForm.presetId,
             requestError: null,
+            comparisonMode: normalizedParams.comparisonMode ?? 'same-model',
+            modelOverrides: normalizedParams.modelOverrides ?? [],
           },
         });
       },

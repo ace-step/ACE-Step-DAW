@@ -12,8 +12,10 @@ import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/de
 import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generationPresets';
 import type { PresetCategory } from '../../constants/generationPresets';
 import { generateVariationSession } from '../../services/generationPipeline';
+import { listModels } from '../../services/aceStepApi';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { computeEta, formatEtaDisplay } from '../../utils/generationProgress';
+import type { ModelEntry } from '../../types/api';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -52,6 +54,8 @@ export function GenerationSidePanel() {
   const setGenerationLengthSeconds = useGenerationStore((s) => s.setGenerationLengthSeconds);
   const setGenerationTemperature = useGenerationStore((s) => s.setGenerationTemperature);
   const setGenerationVariationCount = useGenerationStore((s) => s.setGenerationVariationCount);
+  const setGenerationComparisonMode = useGenerationStore((s) => s.setGenerationComparisonMode);
+  const setGenerationModelOverride = useGenerationStore((s) => s.setGenerationModelOverride);
   const setGenerationTargetTrack = useGenerationStore((s) => s.setGenerationTargetTrack);
   const setGenerationLyrics = useGenerationStore((s) => s.setGenerationLyrics);
   const applyGenerationPreset = useGenerationStore((s) => s.applyGenerationPreset);
@@ -66,6 +70,7 @@ export function GenerationSidePanel() {
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
+  const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
@@ -75,6 +80,7 @@ export function GenerationSidePanel() {
   const projectBpm = project?.bpm;
   const projectKeyScale = project?.keyScale;
   const projectGuidanceScale = project?.generationDefaults.guidanceScale;
+  const projectModel = project?.generationDefaults.model ?? '';
 
   useEffect(() => {
     const selectedTrackStillExists = stemsTracks.some((track) => track.id === generationForm.selectedTrackId);
@@ -86,6 +92,25 @@ export function GenerationSidePanel() {
   useEffect(() => {
     if (generationForm.lyrics.trim()) setShowLyrics(true);
   }, [generationForm.lyrics]);
+
+  useEffect(() => {
+    if (generationForm.comparisonMode !== 'cross-model') return;
+
+    let cancelled = false;
+    void listModels()
+      .then((response) => {
+        if (cancelled) return;
+        setAvailableModels(response.models ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAvailableModels(projectModel ? [{ name: projectModel, is_default: true, is_loaded: true }] : []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [generationForm.comparisonMode, projectModel]);
 
   useEffect(() => {
     setStyleTagsInput(generationForm.styleTags.join(', '));
@@ -127,7 +152,18 @@ export function GenerationSidePanel() {
     lengthSeconds: generationForm.lengthSeconds,
     temperature: generationForm.temperature,
     variationCount: generationForm.variationCount,
+    comparisonMode: generationForm.comparisonMode,
+    modelOverrides: generationForm.modelOverrides,
   }), [generationForm]);
+
+  const visibleModelOverrides = useMemo(
+    () => generationForm.modelOverrides.slice(0, generationForm.variationCount),
+    [generationForm.modelOverrides, generationForm.variationCount],
+  );
+  const selectableModels = useMemo(() => {
+    if (availableModels.length > 0) return availableModels;
+    return projectModel ? [{ name: projectModel, is_default: true, is_loaded: true }] : [];
+  }, [availableModels, projectModel]);
 
   const variationError = useMemo(
     () => variationSession?.variations.find((variation) => variation.error)?.error ?? null,
@@ -425,6 +461,76 @@ export function GenerationSidePanel() {
         </section>
 
         <section className="space-y-2">
+          <label className="flex items-center justify-between rounded border border-[#333] bg-[#252525] px-2 py-2 text-sm text-zinc-200">
+            <span className="text-[11px] font-medium uppercase text-zinc-400">Compare Models</span>
+            <input
+              type="checkbox"
+              checked={generationForm.comparisonMode === 'cross-model'}
+              onChange={(event) => setGenerationComparisonMode(event.target.checked ? 'cross-model' : 'same-model')}
+              disabled={isSessionActive}
+              aria-label="Compare models across variations"
+            />
+          </label>
+
+          {generationForm.comparisonMode === 'cross-model' && (
+            <div className="space-y-2 rounded border border-[#333] bg-[#252525] p-2" data-testid="compare-models-controls">
+              <div className="text-[10px] text-zinc-500">
+                Assign one model to each variation slot. Inference steps and guidance can diverge per slot.
+              </div>
+              {visibleModelOverrides.map((override, index) => (
+                <div key={index} className="grid grid-cols-3 gap-2 rounded border border-[#333] bg-[#202020] p-2">
+                  <label className="space-y-1">
+                    <span className="block text-[10px] uppercase text-zinc-500">Variation {index + 1} Model</span>
+                    <select
+                      value={override.modelName}
+                      onChange={(event) => setGenerationModelOverride(index, { modelName: event.target.value })}
+                      className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+                      disabled={isSessionActive}
+                      data-testid={`variation-model-select-${index}`}
+                    >
+                      <option value="">Choose model</option>
+                      {selectableModels.map((model) => (
+                        <option key={model.name} value={model.name}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="block text-[10px] uppercase text-zinc-500">Steps</span>
+                    <input
+                      type="number"
+                      value={override.inferenceSteps}
+                      min={1}
+                      onChange={(event) => setGenerationModelOverride(index, { inferenceSteps: Number(event.target.value) })}
+                      className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+                      disabled={isSessionActive}
+                      data-testid={`variation-inference-steps-${index}`}
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="block text-[10px] uppercase text-zinc-500">Guidance</span>
+                    <input
+                      type="number"
+                      value={override.guidanceScale}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      onChange={(event) => setGenerationModelOverride(index, { guidanceScale: Number(event.target.value) })}
+                      className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+                      disabled={isSessionActive}
+                      data-testid={`variation-guidance-scale-${index}`}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-temperature-slider">
               Temperature
@@ -586,6 +692,11 @@ export function GenerationSidePanel() {
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${VARIATION_STATUS_COLORS[variation.status]}`}>
                         {VARIATION_STATUS_LABELS[variation.status]}
                       </span>
+                      {variation.modelName && (
+                        <span className="rounded border border-cyan-500/30 bg-cyan-900/20 px-1.5 py-0.5 text-[10px] text-cyan-200">
+                          {variation.modelName}
+                        </span>
+                      )}
                       {variation.status === 'generating' && (
                         <div className="h-2.5 w-2.5 rounded-full border border-indigo-400 border-t-transparent animate-spin" />
                       )}

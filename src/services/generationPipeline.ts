@@ -10,6 +10,7 @@ import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
+import { initModel } from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
@@ -71,6 +72,10 @@ export interface ClipInternalOptions {
   repaintRange?: { start: number; end: number };
   /** Manual override for the backend guidance scale. */
   guidanceScaleOverride?: number;
+  /** Manual override for backend inference steps. */
+  inferenceStepsOverride?: number;
+  /** Manual override for backend model selection. */
+  modelNameOverride?: string;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
 }
@@ -94,6 +99,19 @@ type VariationProgressUpdate = {
 export interface VariationGenerationResult {
   succeeded: boolean;
   errorMessage?: string;
+}
+
+function getVariationOverride(
+  params: VariationSessionParams,
+  index: number,
+) {
+  const projectDefaults = useProjectStore.getState().project?.generationDefaults;
+  const override = params.modelOverrides?.[index];
+  return {
+    modelName: override?.modelName?.trim() || projectDefaults?.model || '',
+    inferenceSteps: override?.inferenceSteps ?? projectDefaults?.inferenceSteps,
+    guidanceScale: override?.guidanceScale ?? params.temperature ?? params.guidanceScale,
+  };
 }
 
 export interface GenerationPanelRequest {
@@ -256,6 +274,7 @@ export async function generateVariationSession(
 
   try {
     const clipIds = Array.from({ length: params.variationCount }, (_, index) => {
+      const variationOverride = getVariationOverride(params, index);
       const clip = store.addClip(params.trackId, {
         startTime: baseStartTime + (index * (params.duration + spacingSeconds)),
         duration: params.duration,
@@ -268,22 +287,51 @@ export async function generateVariationSession(
       useGenerationStore.getState().updateVariation(index, {
         clipId: clip.id,
         progress: 'Queued',
+        modelName: variationOverride.modelName || undefined,
+        inferenceSteps: variationOverride.inferenceSteps,
+        guidanceScale: variationOverride.guidanceScale,
       });
 
       return clip.id;
     });
 
-    const results = await Promise.allSettled(
-      clipIds.map((clipId, index) =>
-        generateClip(clipId, null, {
-          forceSilence: true,
-          localDescription: params.prompt,
-          globalCaptionOverride: params.globalCaption,
-          lyricsOverride: params.lyrics,
-          variationIndex: index,
-        }),
-      ),
-    );
+    let lastInitializedModel = '';
+    const runVariation = async (clipId: string, index: number) => {
+      const variationOverride = getVariationOverride(params, index);
+      if (
+        params.comparisonMode === 'cross-model'
+        && variationOverride.modelName
+        && variationOverride.modelName !== lastInitializedModel
+      ) {
+        await initModel({ model: variationOverride.modelName });
+        lastInitializedModel = variationOverride.modelName;
+      }
+
+      return generateClip(clipId, null, {
+        forceSilence: true,
+        localDescription: params.prompt,
+        globalCaptionOverride: params.globalCaption,
+        lyricsOverride: params.lyrics,
+        variationIndex: index,
+        modelNameOverride: variationOverride.modelName || undefined,
+        inferenceStepsOverride: variationOverride.inferenceSteps,
+        guidanceScaleOverride: variationOverride.guidanceScale,
+      });
+    };
+
+    let results: PromiseSettledResult<GenerationOutcome>[] = [];
+    if (params.comparisonMode === 'cross-model') {
+      for (const [index, clipId] of clipIds.entries()) {
+        try {
+          const value = await runVariation(clipId, index);
+          results.push({ status: 'fulfilled', value });
+        } catch (error) {
+          results.push({ status: 'rejected', reason: error });
+        }
+      }
+    } else {
+      results = await Promise.allSettled(clipIds.map((clipId, index) => runVariation(clipId, index)));
+    }
 
     const firstCompletedVariation = useGenerationStore.getState().variationSession?.variations.find(
       (variation) => variation.status === 'done' && variation.clipId,
@@ -479,13 +527,13 @@ async function generateClipInternal(
       bpm: resolvedBpm,
       key_scale: resolvedKey,
       time_signature: resolvedTimeSig,
-      inference_steps: project.generationDefaults.inferenceSteps,
+      inference_steps: options.inferenceStepsOverride ?? project.generationDefaults.inferenceSteps,
       guidance_scale: options.guidanceScaleOverride ?? project.generationDefaults.guidanceScale,
       shift: project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
       thinking: project.generationDefaults.thinking,
-      model: project.generationDefaults.model,
+      model: options.modelNameOverride ?? project.generationDefaults.model,
     } as LegoTaskParams;
 
     // Shared seed: override backend randomness so all batch tracks are correlated

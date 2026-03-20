@@ -5,8 +5,8 @@
 import { useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { TIMELINE_MINIMAP_HEIGHT } from './timelineLayout';
 
-const MINIMAP_HEIGHT = 28;
 const TRACK_ROW_HEIGHT = 4;
 const TRACK_GAP = 1;
 
@@ -42,7 +42,7 @@ export function Minimap() {
     <div
       ref={containerRef}
       className="relative bg-[#1a1a1a] border-b border-[#333] cursor-pointer select-none"
-      style={{ height: MINIMAP_HEIGHT }}
+      style={{ height: TIMELINE_MINIMAP_HEIGHT }}
       onClick={handleClick}
       title="Click to navigate"
       data-testid="timeline-minimap"

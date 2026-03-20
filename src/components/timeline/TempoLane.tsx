@@ -4,8 +4,8 @@ import { useUIStore } from '../../store/uiStore';
 import { MIN_BPM, MAX_BPM } from '../../constants/defaults';
 import { beatToTime } from '../../utils/tempoMap';
 import type { TempoEvent } from '../../types/project';
+import { TEMPO_LANE_HEIGHT } from './timelineLayout';
 
-const LANE_HEIGHT = 60;
 const POINT_RADIUS = 5;
 const COLOR = '#f59e0b'; // amber for tempo
 
@@ -57,14 +57,14 @@ export function TempoLane() {
   const bpmToY = useCallback(
     (v: number) => {
       const ratio = (v - MIN_BPM) / (MAX_BPM - MIN_BPM);
-      return LANE_HEIGHT - ratio * LANE_HEIGHT;
+      return TEMPO_LANE_HEIGHT - ratio * TEMPO_LANE_HEIGHT;
     },
     [],
   );
 
   const yToBpm = useCallback(
     (y: number) => {
-      const ratio = Math.max(0, Math.min(1, (LANE_HEIGHT - y) / LANE_HEIGHT));
+      const ratio = Math.max(0, Math.min(1, (TEMPO_LANE_HEIGHT - y) / TEMPO_LANE_HEIGHT));
       return Math.round(MIN_BPM + ratio * (MAX_BPM - MIN_BPM));
     },
     [],
@@ -108,12 +108,12 @@ export function TempoLane() {
 
   const fillD = useMemo(() => {
     if (renderPoints.length === 0) return '';
-    let d = `M ${renderPoints[0].x} ${LANE_HEIGHT}`;
+    let d = `M ${renderPoints[0].x} ${TEMPO_LANE_HEIGHT}`;
     d += ` L ${renderPoints[0].x} ${renderPoints[0].y}`;
     for (let i = 1; i < renderPoints.length; i++) {
       d += ` L ${renderPoints[i].x} ${renderPoints[i].y}`;
     }
-    d += ` L ${renderPoints[renderPoints.length - 1].x} ${LANE_HEIGHT} Z`;
+    d += ` L ${renderPoints[renderPoints.length - 1].x} ${TEMPO_LANE_HEIGHT} Z`;
     return d;
   }, [renderPoints]);
 
@@ -180,7 +180,7 @@ export function TempoLane() {
   return (
     <div
       className="relative border-b border-white/10"
-      style={{ height: LANE_HEIGHT, background: 'rgba(245, 158, 11, 0.03)' }}
+      style={{ height: TEMPO_LANE_HEIGHT, background: 'rgba(245, 158, 11, 0.03)' }}
       data-tempo-lane
     >
       <div className="absolute left-1 top-0.5 text-[9px] font-mono select-none pointer-events-none z-10 text-amber-400/60">
@@ -197,7 +197,7 @@ export function TempoLane() {
       <svg
         ref={svgRef}
         width={width}
-        height={LANE_HEIGHT}
+        height={TEMPO_LANE_HEIGHT}
         className="absolute left-0 top-0"
         onDoubleClick={handleDoubleClick}
         style={{ cursor: 'crosshair' }}
@@ -224,8 +224,8 @@ export function TempoLane() {
 
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute w-full" style={{ top: 0, height: 1, background: 'rgba(245,158,11,0.08)' }} />
-        <div className="absolute w-full" style={{ top: LANE_HEIGHT / 2, height: 1, background: 'rgba(245,158,11,0.05)' }} />
-        <div className="absolute w-full" style={{ top: LANE_HEIGHT - 1, height: 1, background: 'rgba(245,158,11,0.08)' }} />
+        <div className="absolute w-full" style={{ top: TEMPO_LANE_HEIGHT / 2, height: 1, background: 'rgba(245,158,11,0.05)' }} />
+        <div className="absolute w-full" style={{ top: TEMPO_LANE_HEIGHT - 1, height: 1, background: 'rgba(245,158,11,0.08)' }} />
       </div>
     </div>
   );

@@ -4,6 +4,11 @@ import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
 import { AddTrackButton } from './AddTrackButton';
 import { TrackHeightPresetSelector } from './TrackHeightPresetSelector';
+import {
+  ARRANGEMENT_MARKERS_HEIGHT,
+  TEMPO_LANE_HEIGHT,
+  TIMELINE_RULER_HEIGHT,
+} from '../timeline/timelineLayout';
 
 export function TrackList() {
   const project = useProjectStore((s) => s.project);
@@ -11,6 +16,7 @@ export function TrackList() {
   const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
+  const showTempoLane = useUIStore((s) => s.showTempoLane);
 
   const draggedIdRef = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -70,6 +76,7 @@ export function TrackList() {
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const visibleTracks = useMemo(() => getVisibleTracks(), [getVisibleTracks, project]);
+  const showsArrangementMarkers = (project.markers?.length ?? 0) > 0;
 
   return (
     <div
@@ -82,10 +89,29 @@ export function TrackList() {
       }}
     >
       {/* Header spacer aligned with TimeRuler */}
-      <div className="h-6 border-b border-[#3a3a3a] shrink-0 bg-[#333] flex items-center px-2 justify-between">
+      <div
+        className="shrink-0 border-b border-[#3a3a3a] bg-[#333] flex items-center px-2 justify-between"
+        style={{ height: TIMELINE_RULER_HEIGHT }}
+      >
         <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Tracks</span>
         <TrackHeightPresetSelector />
       </div>
+
+      {showsArrangementMarkers && (
+        <div
+          className="shrink-0 border-b border-[#333] bg-[#242424]"
+          style={{ height: ARRANGEMENT_MARKERS_HEIGHT }}
+          data-testid="tracklist-marker-spacer"
+        />
+      )}
+
+      {showTempoLane && (
+        <div
+          className="shrink-0 border-b border-white/10 bg-[rgba(245,158,11,0.03)]"
+          style={{ height: TEMPO_LANE_HEIGHT }}
+          data-testid="tracklist-tempo-spacer"
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {visibleTracks.map((track) => (

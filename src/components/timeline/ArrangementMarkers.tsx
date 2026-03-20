@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { computeSections } from '../../utils/arrangementSections';
+import { ARRANGEMENT_MARKERS_HEIGHT } from './timelineLayout';
 
 /** Preset colors for common arrangement sections. */
 const SECTION_COLORS: Record<string, string> = {
@@ -21,8 +22,6 @@ function getSectionColor(name: string, fallback: string): string {
   const key = name.toLowerCase().trim();
   return SECTION_COLORS[key] ?? fallback;
 }
-
-const MARKER_HEIGHT = 20;
 
 export function ArrangementMarkers() {
   const project = useProjectStore((s) => s.project);
@@ -93,7 +92,7 @@ export function ArrangementMarkers() {
   return (
     <div
       className="relative select-none"
-      style={{ width: totalWidth, height: MARKER_HEIGHT }}
+      style={{ width: totalWidth, height: ARRANGEMENT_MARKERS_HEIGHT }}
       onDoubleClick={handleDoubleClick}
       data-testid="arrangement-markers"
     >

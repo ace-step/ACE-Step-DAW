@@ -441,7 +441,7 @@ export function Timeline() {
           aria-label="Timeline navigation status"
           role="status"
           aria-live="polite"
-          className="sticky right-3 top-3 z-30 ml-auto mr-3 mt-3 w-fit rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
+          className="absolute right-3 top-3 z-30 w-fit rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
         >
           Scope: <span className="text-white">Timeline</span> · Focus: <span className="text-white">{focusedTrackLabel}</span> · Clip: <span className="text-white">{selectedClipLabel}</span>
         </div>

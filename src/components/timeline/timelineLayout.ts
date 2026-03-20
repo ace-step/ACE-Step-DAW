@@ -1,0 +1,4 @@
+export const TIMELINE_MINIMAP_HEIGHT = 28;
+export const TIMELINE_RULER_HEIGHT = 24;
+export const ARRANGEMENT_MARKERS_HEIGHT = 20;
+export const TEMPO_LANE_HEIGHT = 60;

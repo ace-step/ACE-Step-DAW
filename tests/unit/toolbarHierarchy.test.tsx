@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Toolbar } from '../../src/components/layout/Toolbar';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { useTransportStore } from '../../src/store/transportStore';
-
-const healthCheckMock = vi.fn();
-const listModelsMock = vi.fn();
+import { useModelStore } from '../../src/store/modelStore';
 
 // Mock all external dependencies
 vi.mock('../../src/store/collaborationStore', () => ({
@@ -44,8 +42,10 @@ vi.mock('../../src/services/projectStorage', () => ({
 }));
 
 vi.mock('../../src/services/aceStepApi', () => ({
-  healthCheck: () => healthCheckMock(),
-  listModels: () => listModelsMock(),
+  healthCheck: vi.fn().mockResolvedValue(false),
+  listModels: vi.fn().mockResolvedValue({ models: [], default_model: null, lm_models: [], loaded_lm_model: null, llm_initialized: false }),
+  initModel: vi.fn().mockResolvedValue({}),
+  getStats: vi.fn().mockResolvedValue({}),
 }));
 
 describe('Toolbar visual hierarchy and grouping (#544)', () => {
@@ -55,15 +55,17 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     useTransportStore.setState(useTransportStore.getInitialState(), true);
-    useProjectStore.getState().createProject({ name: 'Toolbar Test' });
-    healthCheckMock.mockResolvedValue(false);
-    listModelsMock.mockResolvedValue({
-      models: [],
-      default_model: null,
-      lm_models: [],
-      loaded_lm_model: null,
-      llm_initialized: false,
+    useModelStore.setState({
+      availableModels: [],
+      availableLmModels: [],
+      activeModelId: null,
+      activeLmModelId: null,
+      modelLoadingState: 'idle',
+      connected: false,
+      lastRefreshedAt: 0,
+      stats: null,
     });
+    useProjectStore.getState().createProject({ name: 'Toolbar Test' });
   });
 
   it('renders a transport pill container with distinct background', () => {
@@ -140,7 +142,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByTitle('Zoom In')).toBeInTheDocument();
   });
 
-  it('shows the loaded model badge and opens the library panel when clicked', async () => {
+  it('shows the loaded model badge and opens the library panel when clicked', () => {
     useProjectStore.setState((state) => ({
       project: state.project
         ? {
@@ -152,20 +154,18 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
         }
         : state.project,
     }));
-    healthCheckMock.mockResolvedValue(true);
-    listModelsMock.mockResolvedValue({
-      models: [
-        { name: 'ace-step-large', is_default: true, is_loaded: true },
+    useModelStore.setState({
+      connected: true,
+      activeModelId: 'ace-step-large',
+      modelLoadingState: 'idle',
+      availableModels: [
+        { name: 'ace-step-large', is_default: true, is_loaded: true } as any,
       ],
-      default_model: 'ace-step-large',
-      lm_models: [],
-      loaded_lm_model: null,
-      llm_initialized: false,
     });
 
     render(<Toolbar />);
 
-    const badge = await screen.findByRole('button', { name: /model status: ace-step-large/i });
+    const badge = screen.getByRole('button', { name: /model status: ace-step-large/i });
     expect(badge).toHaveTextContent('ace-step-large');
     expect(badge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-emerald-500');
 
@@ -173,24 +173,24 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(useUIStore.getState().showLibrary).toBe(true);
   });
 
-  it('shows loading and empty badge states as the model status changes', async () => {
-    healthCheckMock.mockResolvedValue(true);
-    listModelsMock.mockResolvedValue({
-      models: [
-        { name: 'switching-model', is_default: true, is_loaded: false },
+  it('shows loading and empty badge states as the model status changes', () => {
+    // Start with no model selected, connected but nothing loaded
+    useModelStore.setState({
+      connected: true,
+      activeModelId: null,
+      modelLoadingState: 'idle',
+      availableModels: [
+        { name: 'switching-model', is_default: true, is_loaded: false } as any,
       ],
-      default_model: 'switching-model',
-      lm_models: [],
-      loaded_lm_model: null,
-      llm_initialized: false,
     });
 
     const { rerender } = render(<Toolbar />);
 
-    const emptyBadge = await screen.findByRole('button', { name: /model status: no model/i });
+    const emptyBadge = screen.getByRole('button', { name: /model status: no model/i });
     expect(emptyBadge).toHaveTextContent('No model');
     expect(emptyBadge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-zinc-500');
 
+    // Now set a model name and put the store in loading state
     useProjectStore.setState((state) => ({
       project: state.project
         ? {
@@ -202,12 +202,11 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
         }
         : state.project,
     }));
+    useModelStore.setState({ modelLoadingState: 'loading' });
     rerender(<Toolbar />);
 
-    await waitFor(() => {
-      const loadingBadge = screen.getByRole('button', { name: /model status: switching-model/i });
-      expect(loadingBadge).toHaveTextContent('switching-model');
-      expect(loadingBadge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-amber-400');
-    });
+    const loadingBadge = screen.getByRole('button', { name: /model status: switching-model/i });
+    expect(loadingBadge).toHaveTextContent('switching-model');
+    expect(loadingBadge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-amber-400');
   });
 });

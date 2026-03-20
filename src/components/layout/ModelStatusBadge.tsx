@@ -1,64 +1,34 @@
-import { useEffect, useState } from 'react';
-import { healthCheck, listModels } from '../../services/aceStepApi';
-
-const MODEL_STATUS_POLL_INTERVAL_MS = 10_000;
+import { useModelStore } from '../../store/modelStore';
 
 type ToolbarModelBadgeStatus = 'loaded' | 'loading' | 'none';
 
-function resolveModelBadgeStatus(selectedModel: string, connected: boolean, loadedModelNames: Set<string>): ToolbarModelBadgeStatus {
-  if (!selectedModel) return 'none';
-  return connected && loadedModelNames.has(selectedModel) ? 'loaded' : 'loading';
+function resolveModelBadgeStatus(
+  modelName: string,
+  connected: boolean,
+  activeModelId: string | null,
+  modelLoadingState: 'idle' | 'loading' | 'error',
+  availableModels: Array<{ name: string; is_loaded: boolean }>,
+): ToolbarModelBadgeStatus {
+  if (modelLoadingState === 'loading') return 'loading';
+  if (!modelName || !connected) return 'none';
+  const isLoaded = availableModels.some((m) => m.name === modelName && m.is_loaded);
+  if (isLoaded && activeModelId === modelName) return 'loaded';
+  return 'none';
 }
 
 export function ModelStatusBadge({ modelName, onClick }: { modelName: string; onClick: () => void }) {
-  const [connected, setConnected] = useState(false);
-  const [loadedModelNames, setLoadedModelNames] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    let active = true;
-    let interval: number | null = null;
-
-    const refreshStatus = async () => {
-      const ok = await healthCheck();
-      if (!active) return;
-      setConnected(ok);
-
-      if (!ok) {
-        setLoadedModelNames(new Set());
-        return;
-      }
-
-      try {
-        const resp = await listModels();
-        if (!active) return;
-        const loaded = new Set((resp.models ?? []).filter((model) => model.is_loaded).map((model) => model.name));
-        setLoadedModelNames(loaded);
-      } catch {
-        if (!active) return;
-        setLoadedModelNames(new Set());
-      }
-    };
-
-    void refreshStatus();
-    interval = window.setInterval(() => {
-      void refreshStatus();
-    }, MODEL_STATUS_POLL_INTERVAL_MS);
-
-    return () => {
-      active = false;
-      if (interval !== null) {
-        window.clearInterval(interval);
-      }
-    };
-  }, [modelName]);
+  const connected = useModelStore((s) => s.connected);
+  const activeModelId = useModelStore((s) => s.activeModelId);
+  const modelLoadingState = useModelStore((s) => s.modelLoadingState);
+  const availableModels = useModelStore((s) => s.availableModels);
 
   const displayName = modelName || 'No model';
-  const status = resolveModelBadgeStatus(modelName, connected, loadedModelNames);
+  const status = resolveModelBadgeStatus(modelName, connected, activeModelId, modelLoadingState, availableModels);
   const dotClassName =
     status === 'loaded'
       ? 'bg-emerald-500'
       : status === 'loading'
-        ? 'bg-amber-400'
+        ? 'bg-amber-400 animate-pulse'
         : 'bg-zinc-500';
   const statusLabel =
     status === 'loaded'

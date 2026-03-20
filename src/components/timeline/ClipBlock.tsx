@@ -536,6 +536,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       <div
         ref={clipBlockRef}
         className={`absolute top-1 bottom-1 rounded-md select-none overflow-hidden
+          transition-[filter,box-shadow] duration-100
+          hover:brightness-110 hover:ring-1 hover:ring-white/10
+          active:brightness-95
           ${clip.muted ? 'opacity-30 pointer-events-none' : (statusStyles[clip.generationStatus] ?? '')}
           ${isSelected ? 'ring-2 ring-offset-1 ring-offset-transparent' : ''}
           ${dragGhost && dragGhost.targetTrackId && !dragGhost.isShiftCopy ? 'opacity-0' : ''}
@@ -557,8 +560,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         onMouseMove={handleMouseMoveLocal}
         onContextMenu={handleContextMenu}
       >
-        <div className="absolute top-0 bottom-0 left-0 w-[10px] cursor-col-resize z-10" />
-        <div className="absolute top-0 bottom-0 right-0 w-[10px] cursor-col-resize z-10" />
+        <div className="absolute top-0 bottom-0 left-0 w-[10px] cursor-col-resize z-10 group/resize-left" data-testid="resize-handle-left">
+          <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-white/0 group-hover/resize-left:bg-white/20 transition-colors duration-100" data-testid="resize-indicator-left" />
+        </div>
+        <div className="absolute top-0 bottom-0 right-0 w-[10px] cursor-col-resize z-10 group/resize-right" data-testid="resize-handle-right">
+          <div className="absolute top-0 bottom-0 right-0 w-[2px] bg-white/0 group-hover/resize-right:bg-white/20 transition-colors duration-100" data-testid="resize-indicator-right" />
+        </div>
 
         <ClipWaveform
           peaks={peaks}

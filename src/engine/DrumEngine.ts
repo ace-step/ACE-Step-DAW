@@ -35,10 +35,10 @@ export const DRUM_PAD_NAMES = [
 ];
 
 export const BEAT_PAD_KEYS: string[] = [
-  '1', '2', '3', '4',
-  'q', 'w', 'e', 'r',
-  'a', 's', 'd', 'f',
   'z', 'x', 'c', 'v',
+  'a', 's', 'd', 'f',
+  'q', 'w', 'e', 'r',
+  '1', '2', '3', '4',
 ];
 
 // ─── Synthesized Drum Sound Generators ──────────────────────────────────────

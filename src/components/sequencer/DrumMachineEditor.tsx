@@ -299,7 +299,7 @@ export function DrumMachineEditor() {
           <div className="mt-auto text-[8px] text-white/20 leading-relaxed">
             Velocity: click higher on pad for louder hits.
             <br />
-            Keys: 1-4, Q-R, A-F, Z-V
+            Keys: Z-V, A-F, Q-R, 1-4
           </div>
         </div>
       </div>

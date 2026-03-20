@@ -540,8 +540,14 @@ export function useTransport() {
     synthEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
-    useTransportStore.getState().stop();
+    useTransportStore.getState().stop(time);
   }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
+
+  const continuePlayback = useCallback(async () => {
+    const resumeFrom = useTransportStore.getState().lastStopPosition;
+    useTransportStore.getState().continuePlayback();
+    await play(resumeFrom);
+  }, [play]);
 
   const seek = useCallback((time: number) => {
     const engine = getAudioEngine();
@@ -705,6 +711,7 @@ export function useTransport() {
     isPlaying,
     currentTime,
     play,
+    continuePlayback,
     pause,
     stop,
     seek,

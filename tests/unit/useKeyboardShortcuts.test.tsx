@@ -7,6 +7,7 @@ import { useTransportStore } from '../../src/store/transportStore';
 
 const transportSpies = {
   play: vi.fn(),
+  continuePlayback: vi.fn(),
   pause: vi.fn(),
   stop: vi.fn(),
   seek: vi.fn(),
@@ -263,5 +264,23 @@ describe('useKeyboardShortcuts', () => {
 
     contentEditable.remove();
     input.remove();
+  });
+
+  it('continues playback from the last stop position on Shift+Space', () => {
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', shiftKey: true }));
+
+    expect(transportSpies.continuePlayback).toHaveBeenCalledTimes(1);
+    expect(transportSpies.play).not.toHaveBeenCalled();
+    expect(transportSpies.pause).not.toHaveBeenCalled();
+  });
+
+  it('keeps Space mapped to the existing play/pause behavior', () => {
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+
+    expect(transportSpies.play).toHaveBeenCalledTimes(1);
   });
 });

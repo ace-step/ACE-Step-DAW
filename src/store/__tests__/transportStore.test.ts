@@ -10,6 +10,7 @@ describe('transportStore', () => {
       countInActive: false,
       countInBeat: 0,
       currentTime: 0,
+      lastStopPosition: 0,
       loopEnabled: false,
       loopStart: 0,
       loopEnd: 0,
@@ -53,6 +54,19 @@ describe('transportStore', () => {
       const state = useTransportStore.getState();
       expect(state.isPlaying).toBe(false);
       expect(state.currentTime).toBe(0);
+      expect(state.lastStopPosition).toBe(10);
+    });
+
+    it('continuePlayback resumes from the last stop position', () => {
+      useTransportStore.getState().seek(6);
+      useTransportStore.getState().stop();
+
+      useTransportStore.getState().seek(2);
+      useTransportStore.getState().continuePlayback();
+
+      const state = useTransportStore.getState();
+      expect(state.isPlaying).toBe(true);
+      expect(state.currentTime).toBe(6);
     });
   });
 

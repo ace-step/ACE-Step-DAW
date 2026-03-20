@@ -100,7 +100,7 @@ export function shouldDeferToDrumMachine(event: KeyboardEvent): boolean {
 }
 
 export function useKeyboardShortcuts() {
-  const { play, pause, stop, seek } = useTransport();
+  const { play, continuePlayback, pause, stop, seek } = useTransport();
   const { toggleRecord, toggleArmTrack } = useRecording();
 
   useEffect(() => {
@@ -311,6 +311,12 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      if (event.code === 'Space' && event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        void continuePlayback();
+        return;
+      }
+
       if (matches('transport.playPause')) {
         event.preventDefault();
         void executeCoreKeyboardAction('transport.playPause', { play, pause, toggleRecord, toggleArmTrack });
@@ -492,5 +498,5 @@ export function useKeyboardShortcuts() {
       unregisterRuntime();
       window.removeEventListener('keydown', handler);
     };
-  }, [pause, play, seek, stop, toggleArmTrack, toggleRecord]);
+  }, [continuePlayback, pause, play, seek, stop, toggleArmTrack, toggleRecord]);
 }

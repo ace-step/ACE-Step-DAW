@@ -26,9 +26,11 @@ export function AIAssistantPanel() {
   const streaming = useUIStore((state) => state.aiAssistantStreaming);
   const suggestions = useUIStore((state) => state.aiAssistantSuggestions);
   const error = useUIStore((state) => state.aiAssistantError);
+  const draft = useUIStore((state) => state.aiAssistantDraft);
   const clearMessages = useUIStore((state) => state.clearAIChatMessages);
   const refreshSuggestions = useUIStore((state) => state.refreshAIAssistantSuggestions);
   const setShow = useUIStore((state) => state.setShowAIAssistant);
+  const setDraft = useUIStore((state) => state.setAIAssistantDraft);
   const askAIAssistant = useUIStore((state) => state.askAIAssistant);
 
   const [input, setInput] = useState('');
@@ -42,15 +44,17 @@ export function AIAssistantPanel() {
   useEffect(() => {
     if (!show) return;
     refreshSuggestions();
+    if (draft) setInput(draft);
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [refreshSuggestions, show]);
+  }, [draft, refreshSuggestions, show]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || streaming) return;
     setInput('');
+    setDraft('');
     await askAIAssistant(trimmed);
-  }, [askAIAssistant, input, streaming]);
+  }, [askAIAssistant, input, setDraft, streaming]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {

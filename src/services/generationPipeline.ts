@@ -536,7 +536,7 @@ async function generateClipInternal(
       if (!entry) continue;
 
       const { stage, progressPercent } = extractProgressMetadata(entry);
-      const etaSeconds = computeEta(jobStartedAt, progressPercent) ?? undefined;
+      const etaSeconds = computeEta(jobStartedAt, progressPercent ?? undefined) ?? undefined;
 
       {
         const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);

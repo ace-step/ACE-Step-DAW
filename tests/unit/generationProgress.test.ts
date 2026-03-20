@@ -24,12 +24,11 @@ describe('generation progress tracking', () => {
 
   describe('GenerationJob progress fields', () => {
     it('stores stage and progressPercent on a job', () => {
-      const job = makeJob({ id: 'j1' });
+      const job = makeJob({ id: 'j1', startedAt: 1000 });
       useGenerationStore.getState().addJob(job);
       useGenerationStore.getState().updateJob('j1', {
         stage: 'DIT inference',
         progressPercent: 45,
-        startedAt: 1000,
       });
 
       const updated = useGenerationStore.getState().jobs[0];
@@ -38,14 +37,23 @@ describe('generation progress tracking', () => {
       expect(updated.startedAt).toBe(1000);
     });
 
-    it('stores etaSeconds on a job', () => {
-      const job = makeJob({ id: 'j1' });
+    it('stores etaSeconds on a job via deriveGenerationJobProgress', () => {
+      // etaSeconds is derived by deriveGenerationJobProgress during updateJob,
+      // so we set up conditions that produce a computable ETA:
+      // startedAt far enough in the past + enough progress + 'generating' status.
+      const startedAt = Date.now() - 30_000; // 30 seconds ago
+      const job = makeJob({ id: 'j1', startedAt });
       useGenerationStore.getState().addJob(job);
       useGenerationStore.getState().updateJob('j1', {
-        etaSeconds: 30,
+        status: 'generating',
+        progress: 'Generating...',
+        progressPercent: 50,
       });
 
-      expect(useGenerationStore.getState().jobs[0].etaSeconds).toBe(30);
+      const updated = useGenerationStore.getState().jobs[0];
+      // With 30s elapsed and 50% progress, ETA should be ~30s
+      expect(updated.etaSeconds).toBeGreaterThanOrEqual(25);
+      expect(updated.etaSeconds).toBeLessThanOrEqual(35);
     });
 
     it('does not allow progress to jump backward', () => {

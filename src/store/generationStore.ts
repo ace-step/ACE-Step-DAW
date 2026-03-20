@@ -413,8 +413,8 @@ export const useGenerationStore = create<GenerationState>()(
             // Prevent progress from jumping backward
             const safeUpdates = { ...updates };
             if (
-              safeUpdates.progressPercent !== undefined &&
-              j.progressPercent !== undefined &&
+              safeUpdates.progressPercent != null &&
+              j.progressPercent != null &&
               safeUpdates.progressPercent < j.progressPercent
             ) {
               safeUpdates.progressPercent = j.progressPercent;

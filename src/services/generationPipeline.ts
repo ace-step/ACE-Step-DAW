@@ -71,6 +71,16 @@ export interface ClipInternalOptions {
   repaintRange?: { start: number; end: number };
   /** Manual override for the backend guidance scale. */
   guidanceScaleOverride?: number;
+  /** Manual override for inference steps. */
+  inferenceStepsOverride?: number;
+  /** Manual override for shift parameter. */
+  shiftOverride?: number;
+  /** Manual override for thinking mode. */
+  thinkingOverride?: boolean;
+  /** Manual override for seed value. */
+  seedOverride?: number;
+  /** Whether to use a random seed (overrides seedOverride). */
+  useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
 }
@@ -281,6 +291,12 @@ export async function generateVariationSession(
           globalCaptionOverride: params.globalCaption,
           lyricsOverride: params.lyrics,
           variationIndex: index,
+          guidanceScaleOverride: params.guidanceScale,
+          inferenceStepsOverride: params.inferenceSteps,
+          shiftOverride: params.shift,
+          thinkingOverride: params.thinking,
+          seedOverride: params.seed ? Number(params.seed) : undefined,
+          useRandomSeedOverride: params.useRandomSeed,
         }),
       ),
     );
@@ -479,14 +495,22 @@ async function generateClipInternal(
       bpm: resolvedBpm,
       key_scale: resolvedKey,
       time_signature: resolvedTimeSig,
-      inference_steps: project.generationDefaults.inferenceSteps,
+      inference_steps: options.inferenceStepsOverride ?? project.generationDefaults.inferenceSteps,
       guidance_scale: options.guidanceScaleOverride ?? project.generationDefaults.guidanceScale,
-      shift: project.generationDefaults.shift,
+      shift: options.shiftOverride ?? project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
-      thinking: project.generationDefaults.thinking,
+      thinking: options.thinkingOverride ?? project.generationDefaults.thinking,
       model: project.generationDefaults.model,
     } as LegoTaskParams;
+
+    // Per-generation seed override from advanced params
+    if (options.useRandomSeedOverride === false && options.seedOverride !== undefined) {
+      params.seed = options.seedOverride;
+      params.use_random_seed = false;
+    } else if (options.useRandomSeedOverride === true) {
+      params.use_random_seed = true;
+    }
 
     // Shared seed: override backend randomness so all batch tracks are correlated
     if (options.sharedSeed !== undefined) {

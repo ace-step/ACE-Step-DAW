@@ -113,6 +113,10 @@ export interface UIState {
   // Playhead focus — true when timeline area is focused (after click-to-seek)
   timelineFocused: boolean;
 
+  // Auto-scroll — follow playhead during playback
+  autoScrollEnabled: boolean;
+  userScrolledDuringPlayback: boolean;
+
   // Loop Browser
   loopBrowserOpen: boolean;
   loopBrowserCategory: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth';
@@ -150,11 +154,8 @@ export interface UIState {
   // Add Layer Panel (floating, no backdrop)
   addLayerOpen: boolean;
 
-  // Model Library
+  // Model Library Panel
   showModelLibrary: boolean;
-
-  // Auto-scroll
-  autoScroll: boolean;
 
   // Generation Side Panel
   showGenerationPanel: boolean;
@@ -251,6 +252,11 @@ export interface UIState {
   // Playhead focus
   setTimelineFocused: (focused: boolean) => void;
 
+  // Auto-scroll
+  setAutoScrollEnabled: (enabled: boolean) => void;
+  setUserScrolledDuringPlayback: (scrolled: boolean) => void;
+  toggleAutoScroll: () => void;
+
   // Loop Browser
   toggleLoopBrowser: () => void;
   setLoopBrowserCategory: (v: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth') => void;
@@ -287,11 +293,9 @@ export interface UIState {
   // Add Layer Panel
   setAddLayerOpen: (v: boolean) => void;
 
-  // Model Library
+  // Model Library Panel
   toggleModelLibrary: () => void;
-
-  // Auto-scroll
-  toggleAutoScroll: () => void;
+  setShowModelLibrary: (v: boolean) => void;
 
   // Generation Side Panel
   toggleGenerationPanel: () => void;
@@ -431,6 +435,9 @@ export const useUIStore = create<UIState>()(
   showTempoLane: false,
   timelineFocused: false,
 
+  autoScrollEnabled: true,
+  userScrolledDuringPlayback: false,
+
   loopBrowserOpen: false,
   loopBrowserCategory: 'All',
   loopBrowserSearch: '',
@@ -459,7 +466,6 @@ export const useUIStore = create<UIState>()(
   addLayerOpen: false,
 
   showModelLibrary: false,
-  autoScroll: true,
 
   showGenerationPanel: false,
 
@@ -694,6 +700,10 @@ export const useUIStore = create<UIState>()(
   toggleTempoLane: () => set((s) => ({ showTempoLane: !s.showTempoLane })),
   setTimelineFocused: (focused) => set({ timelineFocused: focused }),
 
+  setAutoScrollEnabled: (enabled) => set({ autoScrollEnabled: enabled }),
+  setUserScrolledDuringPlayback: (scrolled) => set({ userScrolledDuringPlayback: scrolled }),
+  toggleAutoScroll: () => set((s) => ({ autoScrollEnabled: !s.autoScrollEnabled })),
+
   toggleLoopBrowser: () => set((s) => ({ loopBrowserOpen: !s.loopBrowserOpen })),
   setLoopBrowserCategory: (v) => set({ loopBrowserCategory: v }),
   setLoopBrowserSearch: (v) => set({ loopBrowserSearch: v }),
@@ -723,7 +733,7 @@ export const useUIStore = create<UIState>()(
   setAddLayerOpen: (v) => set({ addLayerOpen: v }),
 
   toggleModelLibrary: () => set((s) => ({ showModelLibrary: !s.showModelLibrary })),
-  toggleAutoScroll: () => set((s) => ({ autoScroll: !s.autoScroll })),
+  setShowModelLibrary: (v) => set({ showModelLibrary: v }),
 
   toggleGenerationPanel: () => set((s) => ({ showGenerationPanel: !s.showGenerationPanel })),
   setShowGenerationPanel: (v) => set({ showGenerationPanel: v }),
@@ -890,6 +900,8 @@ export const useUIStore = create<UIState>()(
         showSpectrumAnalyzer: state.showSpectrumAnalyzer,
         // Loop Browser preference
         loopBrowserCategory: state.loopBrowserCategory,
+        // Model Library panel
+        showModelLibrary: state.showModelLibrary,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
         // AI Assistant

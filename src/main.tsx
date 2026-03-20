@@ -10,6 +10,7 @@ import { useCollaborationStore } from './store/collaborationStore';
 import { useShortcutsStore } from './store/shortcutsStore';
 import { useGenerationStore } from './store/generationStore';
 import { useSessionStore } from './store/sessionStore';
+import { useModelStore } from './store/modelStore';
 import { projectActionApi } from './services/actionApi';
 import { getDAWApi } from './api/dawApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
@@ -99,6 +100,7 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__collaborationStore = useCollaborationStore;
 (window as unknown as Record<string, unknown>).__generationStore = useGenerationStore;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
+(window as unknown as Record<string, unknown>).__modelStore = useModelStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
 (window as unknown as Record<string, unknown>).__coreDawShortcuts = {

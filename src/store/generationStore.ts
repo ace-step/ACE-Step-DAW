@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
+import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, DEFAULT_GENERATION, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
 import {
@@ -194,6 +194,11 @@ export interface VariationSessionParams {
   lyrics?: string;
   globalCaption?: string;
   presetId?: string;
+  inferenceSteps?: number;
+  shift?: number;
+  thinking?: boolean;
+  seed?: string;
+  useRandomSeed?: boolean;
 }
 
 export interface VariationSession {
@@ -237,6 +242,12 @@ export interface GenerationFormState {
   lyrics: string;
   presetId: string | null;
   requestError: string | null;
+  inferenceSteps: number;
+  guidanceScale: number;
+  shift: number;
+  thinking: boolean;
+  seed: string;
+  useRandomSeed: boolean;
 }
 
 export interface GenerationValidationInput {
@@ -262,6 +273,18 @@ function clampTemperature(value: number) {
 
 function clampVariationCount(value: number) {
   return Math.max(1, Math.min(4, Math.round(value)));
+}
+
+function clampInferenceSteps(value: number) {
+  return Math.max(1, Math.min(200, Math.round(value)));
+}
+
+function clampGuidanceScale(value: number) {
+  return Math.max(0, Math.min(20, Number(value.toFixed(1))));
+}
+
+function clampShift(value: number) {
+  return Math.max(0, Math.min(10, Number(value.toFixed(1))));
 }
 
 function sanitizeStyleTag(tag: string) {
@@ -290,12 +313,17 @@ function normalizeVariationSessionParams(
     variationCount: clampVariationCount(params.variationCount),
     bpm: clampBpm(params.bpm),
     duration: clampLengthSeconds(params.duration),
-    guidanceScale: clampTemperature(params.guidanceScale),
+    guidanceScale: params.guidanceScale != null ? clampGuidanceScale(params.guidanceScale) : clampTemperature(params.temperature ?? 0.7),
     temperature: clampTemperature(params.temperature ?? params.guidanceScale),
     styleTags: normalizeStyleTags(params.styleTags ?? []),
     lyrics: params.lyrics?.trim() || undefined,
     globalCaption: params.globalCaption?.trim() || undefined,
     presetId: params.presetId ?? fallbackPresetId ?? undefined,
+    inferenceSteps: params.inferenceSteps != null ? clampInferenceSteps(params.inferenceSteps) : undefined,
+    shift: params.shift != null ? clampShift(params.shift) : undefined,
+    thinking: params.thinking,
+    seed: params.seed,
+    useRandomSeed: params.useRandomSeed,
   };
 }
 
@@ -312,6 +340,12 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     lyrics: '',
     presetId: null,
     requestError: null,
+    inferenceSteps: DEFAULT_GENERATION.inferenceSteps,
+    guidanceScale: DEFAULT_GENERATION.guidanceScale,
+    shift: DEFAULT_GENERATION.shift,
+    thinking: DEFAULT_GENERATION.thinking,
+    seed: '',
+    useRandomSeed: true,
   };
 }
 
@@ -364,6 +398,12 @@ export interface GenerationState {
   setGenerationVariationCount: (variationCount: number) => void;
   setGenerationTargetTrack: (trackId: string) => void;
   setGenerationLyrics: (lyrics: string) => void;
+  setGenerationInferenceSteps: (steps: number) => void;
+  setGenerationGuidanceScale: (scale: number) => void;
+  setGenerationShift: (shift: number) => void;
+  setGenerationThinking: (thinking: boolean) => void;
+  setGenerationSeed: (seed: string) => void;
+  setGenerationUseRandomSeed: (useRandom: boolean) => void;
   setGenerationRequestError: (message: string | null) => void;
   applyGenerationPreset: (preset: GenerationPreset) => void;
   getPromptAutocompleteSuggestions: (prompt?: string, caretIndex?: number, limit?: number) => PromptAutocompleteSuggestion[];
@@ -559,11 +599,31 @@ export const useGenerationStore = create<GenerationState>()(
       })),
 
       setGenerationLyrics: (lyrics) => set((s) => ({
-        generationForm: {
-          ...s.generationForm,
-          lyrics,
-          requestError: null,
-        },
+        generationForm: { ...s.generationForm, lyrics, requestError: null },
+      })),
+
+      setGenerationInferenceSteps: (steps) => set((s) => ({
+        generationForm: { ...s.generationForm, inferenceSteps: clampInferenceSteps(steps), requestError: null },
+      })),
+
+      setGenerationGuidanceScale: (scale) => set((s) => ({
+        generationForm: { ...s.generationForm, guidanceScale: clampGuidanceScale(scale), requestError: null },
+      })),
+
+      setGenerationShift: (shift) => set((s) => ({
+        generationForm: { ...s.generationForm, shift: clampShift(shift), requestError: null },
+      })),
+
+      setGenerationThinking: (thinking) => set((s) => ({
+        generationForm: { ...s.generationForm, thinking, requestError: null },
+      })),
+
+      setGenerationSeed: (seed) => set((s) => ({
+        generationForm: { ...s.generationForm, seed, requestError: null },
+      })),
+
+      setGenerationUseRandomSeed: (useRandom) => set((s) => ({
+        generationForm: { ...s.generationForm, useRandomSeed: useRandom, requestError: null },
       })),
 
       setGenerationRequestError: (message) => set((s) => ({
@@ -631,12 +691,17 @@ export const useGenerationStore = create<GenerationState>()(
           bpm: generationForm.bpm,
           keyScale: generationForm.keyScale,
           duration: generationForm.lengthSeconds,
-          guidanceScale: generationForm.temperature,
+          guidanceScale: generationForm.guidanceScale,
           temperature: generationForm.temperature,
           styleTags: generationForm.styleTags,
           lyrics: generationForm.lyrics.trim() || undefined,
           globalCaption: context?.globalCaption?.trim() || undefined,
           presetId: generationForm.presetId ?? undefined,
+          inferenceSteps: generationForm.inferenceSteps,
+          shift: generationForm.shift,
+          thinking: generationForm.thinking,
+          seed: generationForm.useRandomSeed ? undefined : generationForm.seed || undefined,
+          useRandomSeed: generationForm.useRandomSeed,
         }, generationForm.presetId);
 
         set({

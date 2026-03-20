@@ -50,7 +50,7 @@ export function InstrumentPicker() {
     close();
   };
 
-  const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'pianoRoll'];
+  const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'drumMachine', 'pianoRoll'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
@@ -218,6 +218,29 @@ export function InstrumentPicker() {
               <div>
                 <div className="text-sm font-medium">Step Sequencer</div>
                 <div className="text-[11px] text-zinc-400">16-step pattern with Kick, Snare, Hi-Hat and more — fully customizable</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {step === 'instrument' && selectedType === 'drumMachine' && (
+          <div className="p-5 flex flex-col gap-3">
+            <div className="text-center mb-2">
+              <span className="text-3xl">🥁</span>
+              <p className="text-xs text-zinc-400 mt-2">Creates an MPC-style drum machine track with 16 pads for triggering samples. Fully customizable kit and pattern.</p>
+            </div>
+            <button
+              onClick={() => {
+                addTrack('percussion', 'drumMachine');
+                close();
+              }}
+              className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-[#484848] transition-colors text-left"
+              style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.drumMachine.color}` }}
+            >
+              <span className="text-xl">🥁</span>
+              <div>
+                <div className="text-sm font-medium">Drum Machine</div>
+                <div className="text-[11px] text-zinc-400">16-pad sample trigger with velocity-sensitive pads and pattern sequencing</div>
               </div>
             </button>
           </div>

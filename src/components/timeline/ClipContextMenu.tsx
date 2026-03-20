@@ -1,4 +1,6 @@
-import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
+import { useState } from 'react';
+import { TRACK_COLOR_PALETTE } from '../../constants/colorPalette';
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
 
 interface ClipContextMenuProps {
   x: number;
@@ -22,6 +24,8 @@ interface ClipContextMenuProps {
   onQuantizeAudio: () => void;
   onClearAudioQuantize: () => void;
   onSplitAtPlayhead: () => void;
+  onAssignColor: (color: string) => void;
+  onResetColor: () => void;
   onClose: () => void;
   hasPrompt: boolean;
   isReady: boolean;
@@ -30,6 +34,7 @@ interface ClipContextMenuProps {
   hasAudio: boolean;
   hasWarpMarkers: boolean;
   canConsolidate: boolean;
+  hasCustomColor: boolean;
 }
 
 export function ClipContextMenu({
@@ -54,6 +59,8 @@ export function ClipContextMenu({
   onQuantizeAudio,
   onClearAudioQuantize,
   onSplitAtPlayhead,
+  onAssignColor,
+  onResetColor,
   onClose,
   hasPrompt,
   isReady,
@@ -62,7 +69,10 @@ export function ClipContextMenu({
   hasAudio,
   hasWarpMarkers,
   canConsolidate,
+  hasCustomColor,
 }: ClipContextMenuProps) {
+  const [showColorMenu, setShowColorMenu] = useState(false);
+
   return (
     <ContextMenuWrapper x={x} y={y} onClose={onClose} minWidth={190}>
       <ContextMenuItem label="Edit Clip" onClick={onEdit} />
@@ -105,6 +115,35 @@ export function ClipContextMenu({
       <ContextMenuSeparator />
       <ContextMenuItem label="Split at Playhead" onClick={onSplitAtPlayhead} shortcut="S" />
       <ContextMenuItem label="Duplicate" onClick={onDuplicate} />
+      <div className="relative">
+        <ContextMenuItem
+          label="Assign Color"
+          shortcut={showColorMenu ? '◀' : '▶'}
+          onClick={() => setShowColorMenu((open) => !open)}
+        />
+        {showColorMenu && (
+          <div className="absolute top-0 left-full ml-1">
+            <ContextMenuSubmenu>
+              {TRACK_COLOR_PALETTE.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Assign clip color ${color}`}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-zinc-200 transition-colors hover:bg-[rgba(74,144,217,0.25)]"
+                  onClick={() => onAssignColor(color)}
+                >
+                  <span
+                    className="h-3 w-3 rounded-full border border-white/20"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span>{color.toUpperCase()}</span>
+                </button>
+              ))}
+            </ContextMenuSubmenu>
+          </div>
+        )}
+      </div>
+      <ContextMenuItem label="Reset to Track Color" onClick={onResetColor} disabled={!hasCustomColor} />
       <ContextMenuItem label="Consolidate" onClick={onConsolidate} disabled={!canConsolidate} />
       {!isMidiClip && (
         <ContextMenuItem label="Add Layer here..." onClick={onAddLayer} />

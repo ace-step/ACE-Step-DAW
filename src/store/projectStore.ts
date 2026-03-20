@@ -498,6 +498,8 @@ export interface ProjectState {
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
   ensureMidiClip: (trackId: string, startTime?: number, duration?: number) => Clip;
   updateClip: (clipId: string, updates: Partial<Clip>) => void;
+  updateClipColor: (clipId: string, color: string | undefined) => void;
+  updateClipColors: (clipIds: string[], color: string | undefined) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -2599,6 +2601,7 @@ export const useProjectStore = create<ProjectState>()(
     const clip: Clip = {
       id: uuidv4(),
       trackId,
+      color: clipData.color,
       startTime: clipData.startTime,
       duration: clipData.duration,
       prompt: clipData.prompt,
@@ -2671,6 +2674,40 @@ export const useProjectStore = create<ProjectState>()(
         c.id === clipId ? { ...c, ...updates } : c,
       ),
     }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  updateClipColor: (clipId, color) => {
+    get().updateClipColors([clipId], color);
+  },
+
+  updateClipColors: (clipIds, color) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || clipIds.length === 0) return;
+
+    const clipIdSet = new Set(clipIds);
+    _pushHistory(state.project, { label: color ? 'Assign clip color' : 'Reset clip color', scope: 'arrangement' });
+
+    const newTracks = state.project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => (
+        clipIdSet.has(clip.id)
+          ? {
+              ...clip,
+              ...(color ? { color } : { color: undefined }),
+            }
+          : clip
+      )),
+    }));
+
     set({
       project: {
         ...state.project,

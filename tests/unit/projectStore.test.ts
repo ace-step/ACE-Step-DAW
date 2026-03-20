@@ -180,6 +180,23 @@ describe('projectStore', () => {
         waveformPeaks: null,
       });
     });
+
+    it('updates and clears a clip color override', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const clip = useProjectStore.getState().addClip(track.id, {
+        startTime: 4,
+        duration: 8,
+        prompt: 'steady kick groove',
+        lyrics: '',
+        source: 'generated',
+      });
+
+      useProjectStore.getState().updateClipColor(clip.id, '#22c55e');
+      expect(useProjectStore.getState().project?.tracks[0].clips[0].color).toBe('#22c55e');
+
+      useProjectStore.getState().updateClipColor(clip.id, undefined);
+      expect(useProjectStore.getState().project?.tracks[0].clips[0].color).toBeUndefined();
+    });
   });
 
   describe('automation lane operations', () => {

@@ -78,6 +78,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
+  const updateClipColors = useProjectStore((s) => s.updateClipColors);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
   const project = useProjectStore((s) => s.project);
   const { generateClip } = useGeneration();
@@ -115,6 +116,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
+  const clipColor = clip.color ?? track.color;
 
   const dragRef = useRef(false);
 
@@ -523,6 +525,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const canConsolidate = selectedActionClips.length === selectedActionClipIds.length
     && selectedActionClips.every((candidate) => candidate.trackId === track.id)
     && new Set(selectedActionClips.map((candidate) => Boolean(candidate.midiData))).size <= 1;
+  const hasCustomColor = selectedActionClips.some((candidate) => Boolean(candidate.color));
 
   const handleConsolidate = async () => {
     const consolidatedClip = await consolidateClips(track.id, selectedActionClipIds);
@@ -547,8 +550,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         style={{
           left,
           width: Math.max(width, 4),
-          background: `linear-gradient(180deg, ${hexToRgba(track.color, 0.45)} 0%, ${hexToRgba(track.color, 0.28)} 100%)`,
-          borderLeft: `3px solid ${track.color}`,
+          background: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.45)} 0%, ${hexToRgba(clipColor, 0.28)} 100%)`,
+          borderLeft: `3px solid ${clipColor}`,
           boxShadow: isSelected ? '0 0 10px rgba(0, 122, 255, 0.45), inset 0 0 0 1px rgba(0, 122, 255, 0.3)' : 'none',
           ...(isSelected ? { '--tw-ring-color': 'rgba(0, 122, 255, 0.85)' } as React.CSSProperties : {}),
         }}
@@ -574,7 +577,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           audioOffset={audioOffset}
           clipDuration={clip.duration}
           width={width}
-          color={track.color}
+          color={clipColor}
         />
 
         {!isMidiClip && hasAudioBody && (
@@ -648,7 +651,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             clipDuration={clip.duration}
             width={width}
             gainEnvelope={clip.gainEnvelope}
-            color={track.color}
+            color={clipColor}
           />
         )}
 
@@ -667,7 +670,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             width={width}
             duration={clip.duration}
             bpm={project?.bpm ?? 120}
-            color={track.color}
+            color={clipColor}
           />
         )}
 
@@ -747,6 +750,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             }
           }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
+          onAssignColor={(color) => {
+            closeCtxMenu();
+            updateClipColors(selectedActionClipIds, color);
+          }}
+          onResetColor={() => {
+            closeCtxMenu();
+            updateClipColors(selectedActionClipIds, undefined);
+          }}
           onConsolidate={() => { void handleConsolidate(); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
           onAddLayer={() => { closeCtxMenu(); useUIStore.getState().setAddLayerOpen(true); }}
@@ -804,6 +815,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           hasAudio={!!(clip.isolatedAudioKey || clip.cumulativeMixKey)}
           hasWarpMarkers={!!(clip.warpMarkers && clip.warpMarkers.length > 0)}
           canConsolidate={canConsolidate}
+          hasCustomColor={hasCustomColor}
         />
       )}
 
@@ -840,9 +852,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 top: dragGhost.sourceLaneRect.top + 4,
                 width,
                 height: dragGhost.sourceLaneRect.height - 8,
-                border: `1.5px dashed ${hexToRgba(track.color, 0.4)}`,
+                border: `1.5px dashed ${hexToRgba(clipColor, 0.4)}`,
                 borderRadius: 2,
-                backgroundColor: hexToRgba(track.color, dragGhost.isShiftCopy ? 0.15 : 0.04),
+                backgroundColor: hexToRgba(clipColor, dragGhost.isShiftCopy ? 0.15 : 0.04),
               }}
             />
           )}
@@ -857,9 +869,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               height: dragGhost.targetLaneRect
                 ? dragGhost.targetLaneRect.height - 8
                 : dragGhost.height,
-              backgroundColor: hexToRgba(track.color, 0.45),
-              borderLeft: `2px solid ${track.color}`,
-              boxShadow: `0 4px 20px ${hexToRgba(track.color, 0.3)}, 0 0 0 1px ${hexToRgba(track.color, 0.5)}`,
+              backgroundColor: hexToRgba(clipColor, 0.45),
+              borderLeft: `2px solid ${clipColor}`,
+              boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${hexToRgba(clipColor, 0.5)}`,
               transition: 'top 80ms ease-out',
             }}
           >
@@ -869,7 +881,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               audioOffset={audioOffset}
               clipDuration={clip.duration}
               width={width}
-              color={track.color}
+              color={clipColor}
               opacityClassName="opacity-50"
             />
             <div className="absolute top-0 left-1.5 right-1.5 text-[10px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm">
@@ -891,9 +903,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 top: dragGhost.targetLaneRect.top,
                 width: '100vw',
                 height: dragGhost.targetLaneRect.height,
-                backgroundColor: hexToRgba(track.color, 0.06),
-                borderTop: `1px solid ${hexToRgba(track.color, 0.35)}`,
-                borderBottom: `1px solid ${hexToRgba(track.color, 0.35)}`,
+                backgroundColor: hexToRgba(clipColor, 0.06),
+                borderTop: `1px solid ${hexToRgba(clipColor, 0.35)}`,
+                borderBottom: `1px solid ${hexToRgba(clipColor, 0.35)}`,
                 transition: 'top 80ms ease-out',
               }}
             />

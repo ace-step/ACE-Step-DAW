@@ -314,6 +314,7 @@ export interface GainEnvelopePoint {
 export interface Clip {
   id: string;
   trackId: string;
+  color?: string;
   startTime: number;
   duration: number;
   prompt: string;

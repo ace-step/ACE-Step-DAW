@@ -132,4 +132,26 @@ describe('ClipBlock hover and active feedback', () => {
     expect(clipEl.className).toMatch(/hover:/);
     expect(clipEl.className).toMatch(/active:/);
   });
+
+  it('uses clip color override instead of track color when present', () => {
+    const clip = makeClip({ color: '#22c55e' });
+    const track = makeTrack({ color: '#4488ff' });
+
+    render(<ClipBlock clip={clip} track={track} />);
+
+    const clipEl = screen.getByTestId(`clip-${clip.id}`);
+    expect(clipEl.style.borderLeft).toContain('rgb(34, 197, 94)');
+    expect(clipEl.style.background).toContain('34, 197, 94');
+  });
+
+  it('falls back to the track color when no clip color override is set', () => {
+    const clip = makeClip();
+    const track = makeTrack({ color: '#4488ff' });
+
+    render(<ClipBlock clip={clip} track={track} />);
+
+    const clipEl = screen.getByTestId(`clip-${clip.id}`);
+    expect(clipEl.style.borderLeft).toContain('rgb(68, 136, 255)');
+    expect(clipEl.style.background).toContain('68, 136, 255');
+  });
 });

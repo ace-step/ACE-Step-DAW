@@ -16,13 +16,13 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 
   { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },
   { id: 'clips.duplicate',       category: 'clips',     label: 'Duplicate Clip',              defaultCombo: { code: 'KeyD', mod: true }, contexts: ['timeline'] },
-  { id: 'clips.split',           category: 'clips',     label: 'Split Clip at Playhead',      defaultCombo: { code: 'KeyE', mod: true }, contexts: ['timeline'] },
+  { id: 'clips.split',           category: 'clips',     label: 'Split Clip at Playhead',      defaultCombo: { code: 'KeyS' }, contexts: ['timeline'] },
   { id: 'clips.selectAll',       category: 'clips',     label: 'Select All Clips',            defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },
   { id: 'clips.edit',            category: 'clips',     label: 'Edit Selected Clip',          defaultCombo: { code: 'KeyE' }, contexts: ['timeline'] },
   { id: 'clips.generate',        category: 'clips',     label: 'Generate Selected Clip',      defaultCombo: { code: 'Enter', mod: true }, contexts: ['timeline'] },
 
   { id: 'tracks.mute',           category: 'tracks',    label: 'Toggle Focused Track Mute',   defaultCombo: { code: 'KeyM' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
-  { id: 'tracks.solo',           category: 'tracks',    label: 'Toggle Focused Track Solo',   defaultCombo: { code: 'KeyS' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
+  { id: 'tracks.solo',           category: 'tracks',    label: 'Toggle Focused Track Solo',   defaultCombo: { code: 'KeyS', shift: true }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.createGroup',    category: 'tracks',    label: 'Create Group Track',          defaultCombo: { code: 'KeyG', mod: true, shift: true }, contexts: ['timeline', 'mixer'] },
   { id: 'tracks.toggleCollapse', category: 'tracks',    label: 'Toggle Group Collapse',       defaultCombo: { code: 'KeyG', shift: true }, contexts: ['timeline'] },
   { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },

@@ -21,7 +21,7 @@ interface ClipBlockProps {
   track: Track;
 }
 
-const EDGE_HANDLE_PX = 6;
+const EDGE_HANDLE_PX = 10;
 const FADE_HANDLE_HIT_TARGET_PX = 14;
 const MIN_CLIP_DURATION = 0.5;
 
@@ -557,8 +557,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         onMouseMove={handleMouseMoveLocal}
         onContextMenu={handleContextMenu}
       >
-        <div className="absolute top-0 bottom-0 left-0 w-[6px] cursor-col-resize z-10" />
-        <div className="absolute top-0 bottom-0 right-0 w-[6px] cursor-col-resize z-10" />
+        <div className="absolute top-0 bottom-0 left-0 w-[10px] cursor-col-resize z-10" />
+        <div className="absolute top-0 bottom-0 right-0 w-[10px] cursor-col-resize z-10" />
 
         <ClipWaveform
           peaks={peaks}
@@ -574,20 +574,22 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             {fadeInWidth > 0 && (
               <div
                 className="absolute inset-y-0 left-0 pointer-events-none"
+                data-testid="fade-in-overlay"
                 style={{
                   width: fadeInWidth,
-                  background: 'linear-gradient(90deg, rgba(10, 12, 18, 0.72) 0%, rgba(10, 12, 18, 0.18) 100%)',
-                  clipPath: 'polygon(0 100%, 0 0, 100% 100%)',
+                  background: 'linear-gradient(90deg, rgba(10, 12, 18, 0.35) 0%, rgba(10, 12, 18, 0.05) 100%)',
+                  clipPath: 'polygon(0 0, 100% 0, 0 100%)',
                 }}
               />
             )}
             {fadeOutWidth > 0 && (
               <div
                 className="absolute inset-y-0 right-0 pointer-events-none"
+                data-testid="fade-out-overlay"
                 style={{
                   width: fadeOutWidth,
-                  background: 'linear-gradient(270deg, rgba(10, 12, 18, 0.72) 0%, rgba(10, 12, 18, 0.18) 100%)',
-                  clipPath: 'polygon(0 100%, 100% 0, 100% 100%)',
+                  background: 'linear-gradient(270deg, rgba(10, 12, 18, 0.35) 0%, rgba(10, 12, 18, 0.05) 100%)',
+                  clipPath: 'polygon(0 0, 100% 0, 100% 100%)',
                 }}
               />
             )}

@@ -225,6 +225,19 @@ describe('useKeyboardShortcuts', () => {
     });
   });
 
+  it('toggles snap in timeline context with KeyN', () => {
+    useUIStore.getState().setKeyboardContext('timeline');
+    render(<Harness />);
+
+    expect(useUIStore.getState().snapEnabled).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN' }));
+    expect(useUIStore.getState().snapEnabled).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN' }));
+    expect(useUIStore.getState().snapEnabled).toBe(true);
+  });
+
   it('suppresses single-key shortcuts while typing in editable fields', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);

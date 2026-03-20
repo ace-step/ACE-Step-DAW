@@ -20,6 +20,23 @@ export type AceStepTaskParams =
 import { downsampleWavBlob } from '../utils/audioDownsample';
 
 const BACKEND_URL_KEY = 'ace-step-daw-backend-url';
+const HEALTH_CHECK_MIN_RETRY_DELAY_MS = 30_000;
+const HEALTH_CHECK_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
+
+let healthCheckRetryDelayMs = 0;
+let healthCheckBlockedUntil = 0;
+
+function resetHealthCheckBackoff() {
+  healthCheckRetryDelayMs = 0;
+  healthCheckBlockedUntil = 0;
+}
+
+function scheduleNextHealthCheckRetry(now: number) {
+  healthCheckRetryDelayMs = healthCheckRetryDelayMs > 0
+    ? Math.min(healthCheckRetryDelayMs * 2, HEALTH_CHECK_MAX_RETRY_DELAY_MS)
+    : HEALTH_CHECK_MIN_RETRY_DELAY_MS;
+  healthCheckBlockedUntil = now + healthCheckRetryDelayMs;
+}
 
 /**
  * Resolve the API base URL.
@@ -44,13 +61,26 @@ export function setBackendUrl(url: string): void {
   } else {
     localStorage.removeItem(BACKEND_URL_KEY);
   }
+  resetHealthCheckBackoff();
 }
 
 export async function healthCheck(): Promise<boolean> {
+  const now = Date.now();
+  if (healthCheckBlockedUntil > now) {
+    return false;
+  }
+
   try {
     const res = await fetch(`${getApiBase()}/health`);
-    return res.ok;
+    if (res.ok) {
+      resetHealthCheckBackoff();
+      return true;
+    }
+
+    scheduleNextHealthCheckRetry(now);
+    return false;
   } catch {
+    scheduleNextHealthCheckRetry(now);
     return false;
   }
 }

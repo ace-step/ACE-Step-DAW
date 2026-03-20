@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
+import { downloadBlob } from '../../services/browserDownload';
 import { exportMix, type ExportClip } from '../../engine/exportMix';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../../engine/offlineRender';
 import { createSamplerConfig } from '../../engine/SamplerEngine';
@@ -150,12 +151,7 @@ export function ExportDialog() {
       const blob = await exportMix(clips, project.totalDuration, optionsWithMeta);
       setProgress(90);
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project.name}${fileExtension(exportOptions.format)}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${project.name}${fileExtension(exportOptions.format)}`);
       setProgress(100);
       toastSuccess(`${exportOptions.format.toUpperCase()} exported successfully`);
       setShow(false);

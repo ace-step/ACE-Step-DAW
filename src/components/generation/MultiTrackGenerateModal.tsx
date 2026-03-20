@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { generateFromMultiTrack } from '../../services/generationPipeline';
-import { extractContextAudio } from '../../services/contextAudioExtractor';
+import type { ContextWindow } from '../../services/contextAudioExtractor';
+import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 
 const VOCAL_TRACKS = new Set(['vocals', 'backing_vocals']);
 
 interface Props {
   selectWindow: { startTime: number; endTime: number; trackIds?: string[] };
-  contextWindow: { startTime: number; endTime: number; trackIds?: string[] } | null;
+  contextWindow: (ContextWindow & { trackIds?: string[] }) | null;
   onClose: () => void;
 }
 
@@ -117,7 +118,7 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
     if (!contextWindow) return;
     setPreviewState('loading');
     try {
-      const blob = await extractContextAudio(contextWindow);
+      const blob = await extractContextAudioLazy(contextWindow);
       if (!blob || blob.size <= 44) {
         setPreviewState('idle');
         return;

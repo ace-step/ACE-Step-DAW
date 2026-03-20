@@ -3,8 +3,12 @@ import { healthCheck } from '../../services/aceStepApi';
 import { useGenerationStore } from '../../store/generationStore';
 import { useProjectStore } from '../../store/projectStore';
 
+const HEALTH_POLL_INTERVAL_MS = 10_000;
+
+let lastKnownBackendConnection = false;
+
 export function StatusBar() {
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(lastKnownBackendConnection);
   const jobs = useGenerationStore((s) => s.jobs);
   const activeJobs = [...jobs]
     .filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing')
@@ -14,13 +18,25 @@ export function StatusBar() {
 
   useEffect(() => {
     let active = true;
+    let interval: number | null = null;
     const check = async () => {
       const ok = await healthCheck();
+      lastKnownBackendConnection = ok;
       if (active) setConnected(ok);
     };
-    check();
-    const interval = setInterval(check, 10000);
-    return () => { active = false; clearInterval(interval); };
+
+    const timeout = window.setTimeout(() => {
+      void check();
+      interval = window.setInterval(check, HEALTH_POLL_INTERVAL_MS);
+    }, HEALTH_POLL_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      if (interval !== null) {
+        window.clearInterval(interval);
+      }
+    };
   }, []);
 
   return (

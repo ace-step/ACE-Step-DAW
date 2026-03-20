@@ -1,5 +1,6 @@
 import { get, set, del, keys } from 'idb-keyval';
 import type { Project, ProjectTemplate } from '../types/project';
+import { downloadBlob } from './browserDownload';
 import { buildClipLayout, type ClipLayoutItem } from '../utils/clipLayout';
 
 const PROJECT_PREFIX = 'project:';
@@ -187,12 +188,7 @@ export async function exportProjectArchive(project: Project): Promise<void> {
 
   // Download
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${project.name.replace(/[^a-zA-Z0-9\-_ ]/g, '')}.acedaw`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `${project.name.replace(/[^a-zA-Z0-9\-_ ]/g, '')}.acedaw`);
 }
 
 export async function importProjectArchive(): Promise<Project | null> {

@@ -1,4 +1,5 @@
 import type { Project } from '../types/project';
+import { downloadBlob } from './browserDownload';
 
 // ── Share bundle format ──
 // A lightweight JSON bundle for sharing projects without audio blobs.
@@ -146,12 +147,7 @@ export function parseShareParams(search: string): {
 export function downloadShareBundle(project: Project, sharedBy?: string): void {
   const json = exportShareBundle(project, sharedBy);
   const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${project.name.replace(/[^a-zA-Z0-9\-_ ]/g, '')}-share.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `${project.name.replace(/[^a-zA-Z0-9\-_ ]/g, '')}-share.json`);
 }
 
 /**

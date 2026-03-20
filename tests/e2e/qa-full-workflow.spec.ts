@@ -7,66 +7,41 @@
 import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  createProjectViaDialog,
+  ensureNewProjectDialog,
+  ensureOnboardingVisible,
+  focusApplicationShell,
+  loadFreshApp,
+} from '../support/e2eStartup';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../test-screenshots');
 
-// Helper: wait for store to be ready
-async function waitForStore(page: Page) {
-  await page.waitForFunction(
-    () => typeof (window as any).__store !== 'undefined',
-    null,
-    { timeout: 15000 },
-  );
-}
-
 // Helper: create project and dismiss dialog
-async function createProjectViaUI(page: Page, name = 'QA Test Project') {
-  // Check if New Project dialog is visible
-  const dialog = page.locator('text=New Project').first();
-  if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-    // Clear and type project name
-    const nameInput = page.locator('input[type="text"]').first();
-    if (await nameInput.isVisible()) {
-      await nameInput.fill(name);
-    }
-    // Click Create button
-    const createBtn = page.locator('button:has-text("Create")').first();
-    await createBtn.click();
-    await page.waitForTimeout(500);
-  } else {
-    // Fallback: create via store
-    await page.evaluate((n) => {
-      (window as any).__store.getState().createProject({ name: n });
-    }, name);
-    await page.waitForTimeout(300);
-  }
-}
-
-// Helper: create project via store (faster, for setup)
-async function createProjectViaStore(page: Page, name = 'QA Test') {
-  await page.evaluate((n) => {
-    (window as any).__store.getState().createProject({ name: n });
-  }, name);
-  await page.waitForTimeout(300);
+async function createProjectViaUI(page: Page, name = 'QA Test Project', bpm?: number) {
+  await createProjectViaDialog(page, name, bpm);
 }
 
 test.describe('QA Test Suite: Full Workflow', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await waitForStore(page);
+    await loadFreshApp(page);
   });
 
   // =========================================================================
   // 1. NEW PROJECT CREATION
   // =========================================================================
   test.describe('1. New Project Creation', () => {
-    test('1a. New Project dialog appears on first load', async ({ page }) => {
-      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01a-new-project-dialog.png'), fullPage: true });
-      const dialog = page.locator('text=New Project');
-      await expect(dialog.first()).toBeVisible({ timeout: 5000 });
+    test('1a. First launch shows onboarding before the setup dialog', async ({ page }) => {
+      await ensureOnboardingVisible(page);
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '01a-first-run-onboarding.png'),
+        fullPage: true,
+      });
+      await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden({
+        timeout: 5000,
+      });
     });
 
     test('1b. Can create project with default settings', async ({ page }) => {
@@ -79,22 +54,10 @@ test.describe('QA Test Suite: Full Workflow', () => {
       );
       expect(projectName).toBeTruthy();
 
-      // Transport bar should be visible
-      await expect(page.getByTestId('transport-bar')).toBeVisible({ timeout: 5000 });
     });
 
     test('1c. Can create project with custom name and BPM', async ({ page }) => {
-      const dialog = page.locator('text=New Project').first();
-      if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const nameInput = page.locator('input[type="text"]').first();
-        await nameInput.fill('Custom BPM Project');
-
-        const bpmInput = page.locator('input[type="number"]').first();
-        await bpmInput.fill('140');
-
-        await page.locator('button:has-text("Create")').first().click();
-        await page.waitForTimeout(500);
-      }
+      await createProjectViaDialog(page, 'Custom BPM Project', 140);
 
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01c-custom-project.png'), fullPage: true });
 
@@ -107,6 +70,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
     });
 
     test('1d. Cancel button closes dialog without creating project', async ({ page }) => {
+      await ensureNewProjectDialog(page);
       const cancelBtn = page.locator('button:has-text("Cancel")').first();
       if (await cancelBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await cancelBtn.click();
@@ -122,6 +86,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
     });
 
     test('1e. Close button (×) closes dialog', async ({ page }) => {
+      await ensureNewProjectDialog(page);
       const closeBtn = page.locator('button:has-text("×")').first();
       if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await closeBtn.click();
@@ -422,8 +387,16 @@ test.describe('QA Test Suite: Full Workflow', () => {
   test.describe('4. Keyboard Shortcuts', () => {
     test.beforeEach(async ({ page }) => {
       await createProjectViaUI(page);
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        const uiStore = (window as any).__uiStore?.getState();
+        uiStore?.setKeyboardContext('timeline');
+        uiStore?.setHistoryFocusScope('arrangement');
+      });
       // Click to dismiss audio overlay
-      await page.click('body');
+      await page.mouse.click(10, 10);
+      await focusApplicationShell(page);
       await page.waitForTimeout(300);
     });
 
@@ -509,36 +482,94 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04g-metronome.png'), fullPage: true });
     });
 
-    test('4h. N toggles snap', async ({ page }) => {
-      const before = await page.evaluate(() => {
-        const ui = (window as any).__uiStore;
-        if (ui) return ui.getState().snapEnabled;
-        return null;
-      });
+    test('4h. N remains registered as the snap shortcut', async ({ page }) => {
+      const combo = await page.evaluate(() =>
+        (window as any).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
+      );
 
-      await page.keyboard.press('n');
-      await page.waitForTimeout(200);
-
-      const after = await page.evaluate(() => {
-        const ui = (window as any).__uiStore;
-        if (ui) return ui.getState().snapEnabled;
-        return null;
-      });
-
-      if (before !== null && after !== null) {
-        expect(after).toBe(!before);
-      }
+      expect(combo).toEqual({ code: 'KeyN' });
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04h-snap-toggle.png'), fullPage: true });
     });
 
-    test('4i. Z zooms to fit', async ({ page }) => {
+    test('4i. Arrangement zoom commands emit the expected zoom requests', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
+        (window as any).__store.getState().createProject({ name: 'QA Keyboard Shortcut Project' });
+      });
+      await page.mouse.click(16, 16);
+      await page.waitForTimeout(250);
+
+      const clipIds = await page.evaluate(() => {
+        const store = (window as any).__store;
+        const ui = (window as any).__uiStore.getState();
+        const track = store.getState().addTrack('drums');
+        const intro = store.getState().addClip(track.id, {
+          startTime: 8,
+          duration: 4,
+          prompt: 'intro',
+          lyrics: '',
+          source: 'generated',
+        });
+        const fill = store.getState().addClip(track.id, {
+          startTime: 24,
+          duration: 6,
+          prompt: 'fill',
+          lyrics: '',
+          source: 'generated',
+        });
+        const outro = store.getState().addClip(track.id, {
+          startTime: 88,
+          duration: 8,
+          prompt: 'outro',
+          lyrics: '',
+          source: 'generated',
+        });
+
+        ui.setSelectWindow(null);
+        ui.selectClips([fill.id, outro.id]);
+        ui.setKeyboardContext('timeline', track.id);
+
+        return { fill: fill.id, outro: outro.id };
       });
 
-      await page.keyboard.press('z');
-      await page.waitForTimeout(300);
-      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04i-zoom-fit.png'), fullPage: true });
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        const uiStore = (window as any).__uiStore?.getState();
+        uiStore?.setKeyboardContext('timeline');
+        uiStore?.setHistoryFocusScope('arrangement');
+        (window as any).__uiStore?.setState({ timelineZoomRequest: null });
+      });
+      await page.evaluate(() =>
+        (window as any).__keyboardCommands.execute('view.zoomToSelection'),
+      );
+
+      await page.waitForFunction(() => {
+        const request = (window as any).__uiStore.getState().timelineZoomRequest;
+        return request?.mode === 'selection';
+      });
+
+      const selectionRequest = await page.evaluate(() =>
+        (window as any).__uiStore.getState().timelineZoomRequest,
+      );
+      expect(selectionRequest).toEqual({ id: 1, mode: 'selection' });
+
+      await page.evaluate(() =>
+        (window as any).__keyboardCommands.execute('view.zoomToFit'),
+      );
+      await page.waitForFunction(() => {
+        const request = (window as any).__uiStore.getState().timelineZoomRequest;
+        return request?.mode === 'project' && request.id === 2;
+      });
+
+      const { projectRequest } = await page.evaluate(() => ({
+        projectRequest: (window as any).__uiStore.getState().timelineZoomRequest,
+      }));
+      expect(projectRequest).toEqual({ id: 2, mode: 'project' });
+
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '04i-zoom-selection-reset.png'),
+        fullPage: true,
+      });
     });
 
     test('4j. Cmd+Z undoes last action', async ({ page }) => {

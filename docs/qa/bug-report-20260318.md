@@ -51,7 +51,7 @@
 | 4f. L (loop mode) | ✅ Pass | |
 | 4g. K (metronome) | ✅ Pass | |
 | 4h. N (snap toggle) | ✅ Pass | Snap state correctly toggles |
-| 4i. Z (zoom to fit) | ✅ Pass | |
+| 4i. Z (zoom to selection) | ✅ Pass | |
 | 4j. Cmd+Z (undo) | ✅ Pass | Track removed by undo |
 | 4k. Cmd+Shift+Z (redo) | ✅ Pass | Track restored by redo |
 | 4l. Escape (close modal) | ✅ Pass | |

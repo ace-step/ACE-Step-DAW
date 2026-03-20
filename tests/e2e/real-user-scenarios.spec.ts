@@ -6,33 +6,17 @@
  * store API directly.  If a test here fails, a real user would hit the same bug.
  */
 import { test, expect, type Page } from '@playwright/test';
+import {
+  createProjectViaDialog,
+  ensureNewProjectDialog,
+  ensureOnboardingVisible,
+  focusApplicationShell,
+  loadFreshApp,
+} from '../support/e2eStartup';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function waitForApp(page: Page) {
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
-  await page.waitForFunction(
-    () => typeof (window as any).__store !== 'undefined',
-    null,
-    { timeout: 15000 },
-  );
-}
-
-/** Create a project by filling in the New Project dialog that appears on load. */
-async function createProjectViaDialog(page: Page, name = 'E2E Test Project') {
-  const dialog = page.locator('text=New Project').first();
-  await expect(dialog).toBeVisible({ timeout: 5000 });
-
-  const nameInput = page.locator('input[type="text"]').first();
-  await nameInput.fill(name);
-
-  await page.locator('button:has-text("Create")').first().click();
-  // Wait for the transport bar — confirms project was created and UI rendered
-  await expect(page.getByTestId('transport-bar')).toBeVisible({ timeout: 5000 });
-}
 
 /** Open the Instrument Picker via keyboard shortcut. */
 async function openInstrumentPicker(page: Page) {
@@ -82,22 +66,20 @@ async function getTrackCount(page: Page): Promise<number> {
 
 test.describe('Real User Scenarios (Issue #110)', () => {
   test.beforeEach(async ({ page }) => {
-    await waitForApp(page);
+    await loadFreshApp(page);
   });
 
   // =========================================================================
   // 1. CREATE PROJECT VIA DIALOG
   // =========================================================================
   test.describe('1. Create project via dialog', () => {
-    test('1a. Dialog appears on first load with name and BPM fields', async ({ page }) => {
-      // Dialog should be visible immediately
-      await expect(page.locator('text=New Project').first()).toBeVisible({ timeout: 5000 });
-      // Name input exists
-      await expect(page.locator('input[type="text"]').first()).toBeVisible();
-      // BPM input exists
-      await expect(page.locator('input[type="number"]').first()).toBeVisible();
-      // Create button exists
-      await expect(page.locator('button:has-text("Create")').first()).toBeVisible();
+    test('1a. First launch shows onboarding before the setup dialog', async ({ page }) => {
+      await ensureOnboardingVisible(page);
+      await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden({
+        timeout: 5000,
+      });
+      await expect(page.locator('input[type="text"]').first()).toBeHidden({ timeout: 5000 });
+      await expect(page.locator('input[type="number"]').first()).toBeHidden({ timeout: 5000 });
     });
 
     test('1b. Filling name + clicking Create produces a project', async ({ page }) => {
@@ -110,14 +92,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     });
 
     test('1c. Custom BPM is respected', async ({ page }) => {
-      const nameInput = page.locator('input[type="text"]').first();
-      await nameInput.fill('BPM Test');
-
-      const bpmInput = page.locator('input[type="number"]').first();
-      await bpmInput.fill('160');
-
-      await page.locator('button:has-text("Create")').first().click();
-      await expect(page.getByTestId('transport-bar')).toBeVisible({ timeout: 5000 });
+      await createProjectViaDialog(page, 'BPM Test', 160);
 
       const bpm = await page.evaluate(
         () => (window as any).__store.getState().project?.bpm,
@@ -126,6 +101,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
     });
 
     test('1d. Cancel leaves project null', async ({ page }) => {
+      await ensureNewProjectDialog(page);
       await page.locator('button:has-text("Cancel")').first().click();
       await page.waitForTimeout(300);
 
@@ -272,8 +248,13 @@ test.describe('Real User Scenarios (Issue #110)', () => {
   test.describe('4. Keyboard shortcuts', () => {
     test.beforeEach(async ({ page }) => {
       await createProjectViaDialog(page);
-      // Click body to ensure focus is on the page (not in a text input)
-      await page.click('body');
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        (window as any).__uiStore?.getState().setKeyboardContext('timeline');
+      });
+      await page.mouse.click(16, 16);
+      await focusApplicationShell(page);
       await page.waitForTimeout(200);
     });
 
@@ -372,18 +353,11 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       ).toBeVisible({ timeout: 3000 });
     });
 
-    test('4h. N toggles snap', async ({ page }) => {
-      const before = await page.evaluate(
-        () => (window as any).__uiStore?.getState().snapEnabled,
+    test('4h. N remains registered as the snap shortcut', async ({ page }) => {
+      const combo = await page.evaluate(
+        () => (window as any).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
       );
-
-      await page.keyboard.press('n');
-      await page.waitForTimeout(200);
-
-      const after = await page.evaluate(
-        () => (window as any).__uiStore?.getState().snapEnabled,
-      );
-      expect(after).toBe(!before);
+      expect(combo).toEqual({ code: 'KeyN' });
     });
   });
 

@@ -6,6 +6,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { getBarDuration } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tempoMap';
 import { getScrubPreviewRate } from '../../utils/scrubMath';
+import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 
 export function TimeRuler() {
   const project = useProjectStore((s) => s.project);
@@ -111,14 +112,14 @@ export function TimeRuler() {
     return result;
   }, [project, pixelsPerSecond]);
 
-  if (!project) return <div className="h-6 bg-[#333] border-b border-[#2a2a2a]" />;
+  if (!project) return <div className="bg-[#333] border-b border-[#2a2a2a]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
   return (
     <div
-      className="relative h-6 bg-[#353535] border-b border-[#2a2a2a] overflow-hidden select-none cursor-pointer"
-      style={{ width: totalWidth }}
+      className="relative bg-[#353535] border-b border-[#2a2a2a] overflow-hidden select-none cursor-pointer"
+      style={{ width: totalWidth, height: TIMELINE_RULER_HEIGHT }}
       role="slider"
       aria-label="Timeline scrub ruler"
       aria-valuemin={0}

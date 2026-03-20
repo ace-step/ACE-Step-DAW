@@ -10,14 +10,12 @@ import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { RegionRegenerateModal } from '../generation/RegionRegenerateModal';
 import { RegionContextMenu } from './RegionContextMenu';
 import { InlineSuggestionBadge } from './InlineSuggestionBadge';
-import { SelectionActionBar } from './SelectionActionBar';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
 import { toastInfo } from '../../hooks/useToast';
 import { getTimelineFitViewport } from '../../utils/timelineZoom';
-import { openPostProduction } from '../../services/postProductionOrchestrator';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -85,10 +83,6 @@ export function Timeline() {
   const deselectAllTracks = useUIStore((s) => s.deselectAllTracks);
   const setRegionRegenerateTarget = useUIStore((s) => s.setRegionRegenerateTarget);
   const regionRegenerateTarget = useUIStore((s) => s.regionRegenerateTarget);
-  const setCoverModal = useUIStore((s) => s.setCoverModal);
-  const setRepaintModal = useUIStore((s) => s.setRepaintModal);
-  const setShowAIAssistant = useUIStore((s) => s.setShowAIAssistant);
-  const setAIAssistantDraft = useUIStore((s) => s.setAIAssistantDraft);
   const inlineSuggestions = useUIStore((s) => s.inlineSuggestions);
   const suggestionFrequency = useUIStore((s) => s.suggestionFrequency);
 
@@ -189,15 +183,6 @@ export function Timeline() {
     if (!project || !keyboardContext.trackId) return 'Project';
     return project.tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'Project';
   }, [keyboardContext.trackId, project]);
-  const primarySelectedClip = useMemo(() => {
-    if (!project || selectedClipIds.size !== 1) return null;
-    const clipId = Array.from(selectedClipIds)[0];
-    for (const track of project.tracks) {
-      const clip = track.clips.find((item) => item.id === clipId);
-      if (clip) return { clip, track };
-    }
-    return null;
-  }, [project, selectedClipIds]);
 
   useEffect(() => {
     if (!project || !timelineZoomRequest || !scrollRef.current) return;
@@ -427,111 +412,6 @@ export function Timeline() {
         return { top: vr.top - taTop, height: vr.height };
       })()
     : null;
-  const selectionActionAnchor = selectWindow
-    ? {
-        left: Math.max(8, selLeft ?? 0),
-        top: Math.max(6, (selVRange?.top ?? 40) - 34),
-      }
-    : primarySelectedClip
-      ? {
-          left: Math.max(8, primarySelectedClip.clip.startTime * pixelsPerSecond),
-          top: 8,
-        }
-      : null;
-  const selectionActions = (() => {
-    if (!project) return [];
-    if (primarySelectedClip && !primarySelectedClip.clip.midiData) {
-      const clip = primarySelectedClip.clip;
-      const hasAudio = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey);
-      const range = selectWindow
-        ? {
-            start: Math.max(selectWindow.startTime, clip.startTime),
-            end: Math.min(selectWindow.endTime, clip.startTime + clip.duration),
-          }
-        : { start: clip.startTime, end: clip.startTime + clip.duration };
-      const actions = [
-        {
-          id: 'repaint',
-          label: 'Repaint',
-          onClick: () => setRepaintModal(clip.id, range.end > range.start ? range : null),
-          tone: 'danger' as const,
-        },
-        {
-          id: 'cover',
-          label: 'Cover',
-          onClick: () => setCoverModal(clip.id),
-          tone: 'default' as const,
-        },
-        {
-          id: 'extend',
-          label: 'Add Layer',
-          onClick: () => openPostProduction('extend', {
-            targetTrackIds: [primarySelectedClip.track.id],
-            targetClipIds: [clip.id],
-            timeRange: {
-              startTime: selectWindow?.startTime ?? clip.startTime,
-              endTime: selectWindow?.endTime ?? (clip.startTime + clip.duration),
-            },
-            prompt: clip.prompt ?? primarySelectedClip.track.localCaption ?? primarySelectedClip.track.displayName,
-            globalCaption: clip.globalCaption ?? project.globalCaption ?? '',
-            lyricsOverride: clip.lyrics ?? '',
-            contextMode: contextWindow ? 'context' : 'none',
-          }),
-          tone: 'accent' as const,
-        },
-        {
-          id: 'polish',
-          label: 'Polish',
-          onClick: () => openPostProduction('polish'),
-          tone: 'default' as const,
-        },
-        {
-          id: 'agent',
-          label: 'Ask Agent',
-          onClick: () => {
-            setAIAssistantDraft('Repair the selected section without changing the surrounding vibe.');
-            setShowAIAssistant(true);
-          },
-          tone: 'default' as const,
-        },
-      ];
-      return hasAudio ? actions : actions.filter((item) => item.id !== 'repaint' && item.id !== 'cover');
-    }
-
-    if (selectWindow) {
-      return [
-        {
-          id: 'extend',
-          label: 'Add Layer',
-          onClick: () => openPostProduction('extend', {
-            targetTrackIds: selectWindow.trackIds,
-            timeRange: {
-              startTime: selectWindow.startTime,
-              endTime: selectWindow.endTime,
-            },
-            contextMode: contextWindow ? 'context' : 'none',
-          }),
-          tone: 'accent' as const,
-        },
-        {
-          id: 'polish',
-          label: 'Polish',
-          onClick: () => openPostProduction('polish'),
-          tone: 'default' as const,
-        },
-        {
-          id: 'agent',
-          label: 'Ask Agent',
-          onClick: () => {
-            setAIAssistantDraft('Continue this selected section and add one complementary layer.');
-            setShowAIAssistant(true);
-          },
-          tone: 'default' as const,
-        },
-      ];
-    }
-    return [];
-  })();
 
   return (
     <>
@@ -631,14 +511,6 @@ export function Timeline() {
                   select window
                 </span>
               </div>
-            )}
-
-            {selectionActionAnchor && selectionActions.length > 0 && (
-              <SelectionActionBar
-                left={selectionActionAnchor.left}
-                top={selectionActionAnchor.top}
-                actions={selectionActions}
-              />
             )}
 
             {/* Live context drag overlay — Apple Teal (#5AC8FA) */}

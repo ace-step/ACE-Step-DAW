@@ -12,7 +12,6 @@
     "test:e2e": "npx playwright test",
     "test:all": "vitest run && npx playwright test",
     "test:coverage": "vitest run --coverage",
-    "daw:cli": "node scripts/cli/daw-cli.mjs",
     "qa:runlist": "node scripts/qa/generate-runlist.mjs",
     "qa:validate": "node scripts/qa/validate-story-assets.mjs",
     "docs:dev": "vitepress dev website",

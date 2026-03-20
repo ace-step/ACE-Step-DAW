@@ -15,8 +15,6 @@ import { getDAWApi } from './api/dawApi';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
-import { getAgentCliRuntime } from './services/agentCli';
-import { usePostProductionStore } from './store/postProductionStore';
 
 const agentProjectStore = {
   getState: () => ({
@@ -100,7 +98,6 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__transportStore = useTransportStore;
 (window as unknown as Record<string, unknown>).__collaborationStore = useCollaborationStore;
 (window as unknown as Record<string, unknown>).__generationStore = useGenerationStore;
-(window as unknown as Record<string, unknown>).__postProductionStore = usePostProductionStore;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
@@ -118,7 +115,6 @@ const agentProjectStore = {
   execute: (actionId: Parameters<ReturnType<typeof getDAWApi>['commands']['executeCoreShortcut']>[0]) =>
     getDAWApi().commands.executeCoreShortcut(actionId),
 };
-(window as unknown as Record<string, unknown>).__agentCli = getAgentCliRuntime();
 
 // Expose DAW state summary for LLM agents
 // Agents can call: window.__dawSummary() for natural language, window.__dawStructure() for JSON

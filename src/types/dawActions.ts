@@ -19,10 +19,8 @@ import type { GenerationState } from '../store/generationStore';
 import type { CollaborationState } from '../store/collaborationStore';
 import type { SessionState } from '../store/sessionStore';
 import type { ShortcutsState } from '../store/shortcutsStore';
-import type { PostProductionStoreState } from '../store/postProductionStore';
 import type { CoreDawShortcutActionId } from '../services/coreDawShortcuts';
 import type { CoreKeyboardActionId } from '../services/coreKeyboardActions';
-import type { AgentCliGlobal } from './agentCli';
 
 // ---------------------------------------------------------------------------
 // Helper: extract only function-typed keys from a state interface
@@ -129,14 +127,12 @@ export interface DAWGlobals {
   __transportStore: DAWStore<TransportState>;
   __collaborationStore: DAWStore<CollaborationState>;
   __generationStore: DAWStore<GenerationState>;
-  __postProductionStore: DAWStore<PostProductionStoreState>;
   __sessionStore: DAWStore<SessionState>;
   __shortcutsStore: DAWStore<ShortcutsState>;
   __coreDawShortcuts: CoreDawShortcutsGlobal;
   __getAudioEngine: () => unknown;
   __commandPalette: CommandPaletteGlobal;
   __keyboardCommands: KeyboardCommandsGlobal;
-  __agentCli: AgentCliGlobal;
   __dawSummary: () => string;
   __dawStructure: () => unknown;
   __midiCaptureService: unknown;

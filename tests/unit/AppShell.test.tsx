@@ -16,7 +16,6 @@ vi.mock('../../src/components/generation/Vocal2BGMModal', () => ({ Vocal2BGMModa
 vi.mock('../../src/components/generation/AudioAnalysisPanel', () => ({ AudioAnalysisPanel: () => <div>AudioAnalysisPanel</div> }));
 vi.mock('../../src/components/generation/StemSeparationModal', () => ({ StemSeparationModal: () => <div>StemSeparationModal</div> }));
 vi.mock('../../src/components/generation/AudioToMidiModal', () => ({ AudioToMidiModal: () => <div>AudioToMidiModal</div> }));
-vi.mock('../../src/components/generation/PostProductionCopilotPanel', () => ({ PostProductionCopilotPanel: () => <div>PostProductionCopilotPanel</div> }));
 vi.mock('../../src/components/dialogs/NewProjectDialog', () => ({ NewProjectDialog: () => <div>NewProjectDialog</div> }));
 vi.mock('../../src/components/dialogs/InstrumentPicker', () => ({ InstrumentPicker: () => <div>InstrumentPicker</div> }));
 vi.mock('../../src/components/dialogs/ExportDialog', () => ({ ExportDialog: () => <div>ExportDialog</div> }));

@@ -204,11 +204,10 @@ export function Toolbar() {
         </button>
       </div>
 
-      {/* Left-center: Project actions */}
+      <div className="w-px h-6 bg-[#555]" />
+
+      {/* Generation actions */}
       <div className="flex items-center gap-0.5">
-        <button onClick={toggleArrangementView} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Toggle Arrangement / Session (Tab)">
-          {arrangementView === 'arrangement' ? 'Session' : 'Arrange'}
-        </button>
         <button
           onClick={() => setBatchGenerateMode('silence')}
           disabled={!project}
@@ -232,6 +231,12 @@ export function Toolbar() {
         >
           AI
         </button>
+      </div>
+
+      <div className="w-px h-6 bg-[#555]" />
+
+      {/* Project actions */}
+      <div className="flex items-center gap-0.5">
         <button onClick={() => setShowProjectListDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -241,19 +246,25 @@ export function Toolbar() {
         <button onClick={() => setShowNewProjectDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="New Project">
           New
         </button>
-        <button onClick={() => setShowExportDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export Audio">
+      </div>
+
+      <div className="w-px h-6 bg-[#555]" />
+
+      {/* File actions */}
+      <div className="flex items-center gap-0.5">
+        <button onClick={() => setShowExportDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export Audio">
           Export
         </button>
-        <button onClick={() => useProjectStore.getState().exportProjectMidi()} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export all MIDI tracks as .mid file">
-          Export MIDI
+        <button onClick={() => useProjectStore.getState().exportProjectMidi()} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export all MIDI tracks as .mid file">
+          MIDI
         </button>
-        <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
+        <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
           Import
         </button>
-        <button onClick={() => setShowUndoHistoryPanel(!showUndoHistoryPanel)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Undo History (Cmd/Ctrl+Alt+Z)">
+        <button onClick={() => setShowUndoHistoryPanel(!showUndoHistoryPanel)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Undo History (Cmd/Ctrl+Alt+Z)">
           History
         </button>
-        <button onClick={() => setShowShareDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Share Project">
+        <button onClick={() => setShowShareDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Share Project">
           Share
         </button>
       </div>

@@ -241,7 +241,7 @@ export function SettingsDialog() {
           </button>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
           <h3 className="text-xs font-medium text-zinc-300">Backend Connection</h3>
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Backend URL</label>

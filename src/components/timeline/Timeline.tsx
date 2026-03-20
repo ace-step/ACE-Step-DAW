@@ -418,7 +418,7 @@ export function Timeline() {
         role="grid"
         tabIndex={0}
         data-onboarding-target="timeline"
-        className="flex-1 overflow-auto bg-[#242424] relative"
+        className="flex-1 overflow-auto bg-[#242424] relative group"
         onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}
         onFocus={() => setKeyboardContext('timeline')}
@@ -441,7 +441,7 @@ export function Timeline() {
           aria-label="Timeline navigation status"
           role="status"
           aria-live="polite"
-          className="absolute right-3 top-3 z-30 rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-200"
+          className="sticky right-3 top-3 z-30 ml-auto mr-3 mt-3 w-fit rounded border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-200 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
         >
           Scope: <span className="text-white">Timeline</span> · Focus: <span className="text-white">{focusedTrackLabel}</span> · Clip: <span className="text-white">{selectedClipLabel}</span>
         </div>

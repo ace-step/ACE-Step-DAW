@@ -66,7 +66,10 @@ export function GenerationSidePanel() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
 
-  const stemsTracks = project?.tracks.filter((track) => track.trackType === 'stems') ?? [];
+  const stemsTracks = useMemo(
+    () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
+    [project?.tracks],
+  );
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing');
   const projectBpm = project?.bpm;
   const projectKeyScale = project?.keyScale;

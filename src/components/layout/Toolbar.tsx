@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
@@ -90,16 +90,93 @@ function ControlBarButton({
   );
 }
 
+function ToolbarSeparator() {
+  return <div className="w-px h-5 bg-[#444]/50" data-testid="toolbar-separator" />;
+}
+
+function FileMenu({ disabled }: { disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const setShowExportDialog = useUIStore((s) => s.setShowExportDialog);
+  const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
+  const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
+  const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
+  const { openFilePicker } = useAudioImport();
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        data-testid="file-menu-trigger"
+        className="flex items-center gap-1 px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30"
+        title="File actions"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
+          <path d="M2 3h8M2 6h8M2 9h8" strokeLinecap="round" />
+        </svg>
+        File
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className="opacity-50">
+          <path d="M1 2.5L4 5.5L7 2.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-48 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 py-1" data-testid="file-menu-dropdown">
+          <button
+            onClick={() => { setShowExportDialog(true); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+          >
+            Export Audio
+          </button>
+          <button
+            onClick={() => { useProjectStore.getState().exportProjectMidi(); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+          >
+            Export MIDI
+          </button>
+          <button
+            onClick={() => { openFilePicker(); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+          >
+            Import Audio/MIDI
+          </button>
+          <div className="w-full h-px bg-[#444]/50 my-1" />
+          <button
+            onClick={() => { setShowUndoHistoryPanel(!showUndoHistoryPanel); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+          >
+            Undo History
+          </button>
+          <button
+            onClick={() => { setShowShareDialog(true); setOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+          >
+            Share Project
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Toolbar() {
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setShowSettingsDialog = useUIStore((s) => s.setShowSettingsDialog);
-  const setShowExportDialog = useUIStore((s) => s.setShowExportDialog);
   const setShowProjectListDialog = useUIStore((s) => s.setShowProjectListDialog);
   const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
-  const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
-  const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
   const mainView = useUIStore((s) => s.mainView);
   const setMainView = useUIStore((s) => s.setMainView);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
@@ -115,11 +192,7 @@ export function Toolbar() {
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
   const showGenerationPanel = useUIStore((s) => s.showGenerationPanel);
   const toggleGenerationPanel = useUIStore((s) => s.toggleGenerationPanel);
-  const arrangementView = useUIStore((s) => s.arrangementView);
-  const toggleArrangementView = useUIStore((s) => s.toggleArrangementView);
-  const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
-  const { openFilePicker } = useAudioImport();
   const { toggleRecord } = useRecording();
 
   const { isPlaying, play, pause, stop } = useTransport();
@@ -148,7 +221,7 @@ export function Toolbar() {
   return (
     <div className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none">
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
         <ControlBarButton
           active={showLibrary}
           onClick={() => setShowLibrary(!showLibrary)}
@@ -175,7 +248,7 @@ export function Toolbar() {
         </ControlBarButton>
       </div>
 
-      <div className="w-px h-6 bg-[#555]" />
+      <ToolbarSeparator />
 
       <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5">
         <button
@@ -204,10 +277,10 @@ export function Toolbar() {
         </button>
       </div>
 
-      <div className="w-px h-6 bg-[#555]" />
+      <ToolbarSeparator />
 
       {/* Generation actions */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
         <button
           onClick={() => setBatchGenerateMode('silence')}
           disabled={!project}
@@ -233,10 +306,10 @@ export function Toolbar() {
         </button>
       </div>
 
-      <div className="w-px h-6 bg-[#555]" />
+      <ToolbarSeparator />
 
-      {/* Project actions */}
-      <div className="flex items-center gap-0.5">
+      {/* Project actions + File menu */}
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
         <button onClick={() => setShowProjectListDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -246,33 +319,17 @@ export function Toolbar() {
         <button onClick={() => setShowNewProjectDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="New Project">
           New
         </button>
-      </div>
-
-      <div className="w-px h-6 bg-[#555]" />
-
-      {/* File actions */}
-      <div className="flex items-center gap-0.5">
-        <button onClick={() => setShowExportDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export Audio">
-          Export
-        </button>
-        <button onClick={() => useProjectStore.getState().exportProjectMidi()} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Export all MIDI tracks as .mid file">
-          MIDI
-        </button>
-        <button onClick={openFilePicker} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Import Audio or MIDI">
-          Import
-        </button>
-        <button onClick={() => setShowUndoHistoryPanel(!showUndoHistoryPanel)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Undo History (Cmd/Ctrl+Alt+Z)">
-          History
-        </button>
-        <button onClick={() => setShowShareDialog(true)} disabled={!project} className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30" title="Share Project">
-          Share
-        </button>
+        <FileMenu disabled={!project} />
       </div>
 
       <div className="flex-1" />
 
-      {/* Center: Transport controls */}
-      <div className="flex items-center gap-0.5" data-testid="transport-bar" data-onboarding-target="transport">
+      {/* Center: Transport controls — prominent pill container */}
+      <div
+        className="flex items-center gap-0.5 bg-[#353535] rounded-full px-2 py-0.5"
+        data-testid="transport-bar"
+        data-onboarding-target="transport"
+      >
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
           <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
@@ -280,23 +337,23 @@ export function Toolbar() {
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
         </ControlBarButton>
-        {/* Play/Pause */}
+        {/* Play/Pause — larger for prominence */}
         <button
           onClick={() => void (isPlaying ? pause() : play())}
-          className={`w-9 h-8 flex items-center justify-center rounded transition-colors ${
+          className={`w-10 h-9 flex items-center justify-center rounded-lg transition-colors ${
             isPlaying
-              ? 'bg-daw-accent text-white'
+              ? 'bg-daw-accent text-white shadow-md'
               : 'text-zinc-300 hover:text-white hover:bg-daw-surface-2'
           }`}
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
-            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="14" height="16" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="14" height="16" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
@@ -324,15 +381,15 @@ export function Toolbar() {
         </ControlBarButton>
       </div>
 
-      <div className="w-px h-6 bg-[#555] mx-1" />
+      <ToolbarSeparator />
 
       {/* LCD Display */}
       <LCDDisplay />
 
-      <div className="w-px h-6 bg-[#555] mx-1" />
+      <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -362,7 +419,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}
@@ -405,7 +462,7 @@ export function Toolbar() {
         </ControlBarButton>
       </div>
 
-      <div className="w-px h-6 bg-[#555]" />
+      <ToolbarSeparator />
 
       {/* Settings + Shortcuts */}
       <div className="flex items-center gap-0.5">
@@ -427,8 +484,9 @@ export function Toolbar() {
         </button>
         <button
           onClick={() => setShowSettingsDialog(true)}
-          className="px-2 py-1 text-[11px] text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors"
+          className="w-8 h-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors"
           title="Settings"
+          aria-label="Settings"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
             <circle cx="7" cy="7" r="2" />
@@ -452,7 +510,7 @@ export function Toolbar() {
       )}
 
       {/* Zoom controls */}
-      <div className="w-px h-6 bg-[#555] ml-1" />
+      <ToolbarSeparator />
       <div className="flex items-center gap-0.5">
         <button onClick={zoomOut} className="w-6 h-6 text-zinc-400 hover:text-white flex items-center justify-center rounded hover:bg-daw-surface-2 transition-colors text-sm" title="Zoom Out">
           −

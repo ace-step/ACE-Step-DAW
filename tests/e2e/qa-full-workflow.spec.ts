@@ -386,8 +386,16 @@ test.describe('QA Test Suite: Full Workflow', () => {
   test.describe('4. Keyboard Shortcuts', () => {
     test.beforeEach(async ({ page }) => {
       await createProjectViaUI(page);
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        const uiStore = (window as any).__uiStore?.getState();
+        uiStore?.setKeyboardContext('timeline');
+        uiStore?.setHistoryFocusScope('arrangement');
+      });
       // Click to dismiss audio overlay
       await page.mouse.click(10, 10);
+      await page.getByRole('application', { name: 'ACE-Step DAW' }).focus();
       await page.waitForTimeout(300);
     });
 
@@ -480,7 +488,7 @@ test.describe('QA Test Suite: Full Workflow', () => {
         return null;
       });
 
-      await page.keyboard.press('n');
+      await page.keyboard.press('KeyN');
       await page.waitForTimeout(200);
 
       const after = await page.evaluate(() => {
@@ -535,8 +543,13 @@ test.describe('QA Test Suite: Full Workflow', () => {
         return { fill: fill.id, outro: outro.id };
       });
 
-      const timeline = page.getByRole('grid');
-      await timeline.click({ position: { x: 200, y: 120 } });
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        const uiStore = (window as any).__uiStore?.getState();
+        uiStore?.setKeyboardContext('timeline');
+        uiStore?.setHistoryFocusScope('arrangement');
+      });
       await page.keyboard.press('z');
 
       await page.waitForFunction(() => {

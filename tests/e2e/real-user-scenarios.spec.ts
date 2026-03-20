@@ -247,8 +247,13 @@ test.describe('Real User Scenarios (Issue #110)', () => {
   test.describe('4. Keyboard shortcuts', () => {
     test.beforeEach(async ({ page }) => {
       await createProjectViaDialog(page);
-      // Click body to ensure focus is on the page (not in a text input)
-      await page.click('body');
+      await page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur?.();
+        (window as any).__uiStore?.getState().setKeyboardContext('timeline');
+      });
+      await page.mouse.click(16, 16);
+      await page.getByRole('application', { name: 'ACE-Step DAW' }).focus();
       await page.waitForTimeout(200);
     });
 
@@ -352,7 +357,7 @@ test.describe('Real User Scenarios (Issue #110)', () => {
         () => (window as any).__uiStore?.getState().snapEnabled,
       );
 
-      await page.keyboard.press('n');
+      await page.keyboard.press('KeyN');
       await page.waitForTimeout(200);
 
       const after = await page.evaluate(

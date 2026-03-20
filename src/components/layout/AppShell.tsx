@@ -49,16 +49,45 @@ export function AppShell() {
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const showOnboarding = useUIStore((s) => s.showOnboarding);
+  const activeTutorialStep = useUIStore((s) => s.activeTutorialStep);
   const onboardingCompleted = useUIStore((s) => s.onboardingCompleted);
   const onboardingSkipped = useUIStore((s) => s.onboardingSkipped);
   const setShowOnboarding = useUIStore((s) => s.setShowOnboarding);
   const mainView = useUIStore((s) => s.mainView);
+  const showCommandPalette = useUIStore((s) => s.showCommandPalette);
+  const showAIAssistant = useUIStore((s) => s.showAIAssistant);
+  const showNewProjectDialog = useUIStore((s) => s.showNewProjectDialog);
+  const showInstrumentPicker = useUIStore((s) => s.showInstrumentPicker);
+  const showExportDialog = useUIStore((s) => s.showExportDialog);
+  const showSettingsDialog = useUIStore((s) => s.showSettingsDialog);
+  const showProjectListDialog = useUIStore((s) => s.showProjectListDialog);
+  const bounceInPlaceTrackId = useUIStore((s) => s.bounceInPlaceTrackId);
+  const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
+  const showShortcutEditorDialog = useUIStore((s) => s.showShortcutEditorDialog);
   const [audioResumed, setAudioResumed] = useState(false);
 
   const handleClick = useCallback(async () => {
     await resumeOnGesture();
     setAudioResumed(true);
   }, [resumeOnGesture]);
+
+  const hasPriorityBlocker = showOnboarding || activeTutorialStep !== null;
+  const hasForegroundInteractiveSurface = showCommandPalette || showAIAssistant;
+  const hasBlockingDialog =
+    showNewProjectDialog ||
+    showInstrumentPicker ||
+    showExportDialog ||
+    showSettingsDialog ||
+    showProjectListDialog ||
+    bounceInPlaceTrackId !== null ||
+    showKeyboardShortcutsDialog ||
+    showShortcutEditorDialog;
+  const showAudioResumeOverlay =
+    !audioResumed &&
+    !!project &&
+    !hasPriorityBlocker &&
+    !hasForegroundInteractiveSurface &&
+    !hasBlockingDialog;
 
   useEffect(() => {
     if (!project) {
@@ -94,10 +123,25 @@ export function AppShell() {
       onClick={handleClick}
       role="application"
       aria-label="ACE-Step DAW"
+      tabIndex={-1}
     >
       {/* Audio context overlay — shown until user's first click resumes audio */}
-      {!audioResumed && project && (
-        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center backdrop-blur-sm cursor-pointer">
+      {showAudioResumeOverlay && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+          role="button"
+          tabIndex={0}
+          aria-label="Enable audio playback"
+          onClick={() => {
+            void handleClick();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              void handleClick();
+            }
+          }}
+        >
           <div className="text-center">
             <div className="text-4xl mb-3">🎵</div>
             <div className="text-lg font-medium text-white mb-1">Click anywhere to enable audio</div>
@@ -143,7 +187,7 @@ export function AppShell() {
       <ProjectListDialog />
       <BounceInPlaceDialog />
       <KeyboardShortcutsDialog />
-      <CommandPalette />
+      {!hasPriorityBlocker && <CommandPalette />}
       <ShortcutEditorDialog />
       <CoverModal />
       <RepaintModal />
@@ -152,7 +196,7 @@ export function AppShell() {
       <StemSeparationModal />
       <AudioToMidiModal />
       <ShareDialog />
-      <AIAssistantPanel />
+      {!hasPriorityBlocker && <AIAssistantPanel />}
     </div>
   );
 }

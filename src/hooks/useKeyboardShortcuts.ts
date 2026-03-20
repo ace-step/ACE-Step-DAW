@@ -305,6 +305,14 @@ export function useKeyboardShortcuts() {
       if (shouldDeferToPianoRollTools(event)) return;
       if (shouldDeferToDrumMachine(event)) return;
 
+      if (matches('clips.toggleMute')) {
+        event.preventDefault();
+        if (ui.selectedClipIds.size > 0) {
+          project.toggleClipMuted([...ui.selectedClipIds]);
+        }
+        return;
+      }
+
       if (matches('view.toggleSessionView')) {
         event.preventDefault();
         ui.toggleMainView();
@@ -365,6 +373,8 @@ export function useKeyboardShortcuts() {
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }
       if (matches('panels.generation')) { event.preventDefault(); ui.toggleGenerationPanel(); return; }
+      if (matches('panels.modelLibrary')) { event.preventDefault(); ui.toggleModelLibrary(); return; }
+      if (matches('view.autoScroll')) { event.preventDefault(); ui.toggleAutoScroll(); return; }
 
       if (matches('tracks.mute')) {
         event.preventDefault();

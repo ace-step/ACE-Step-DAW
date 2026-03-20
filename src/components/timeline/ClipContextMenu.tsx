@@ -26,7 +26,9 @@ interface ClipContextMenuProps {
   onSplitAtPlayhead: () => void;
   onAssignColor: (color: string) => void;
   onResetColor: () => void;
+  onToggleMute: () => void;
   onClose: () => void;
+  isMuted: boolean;
   hasPrompt: boolean;
   isReady: boolean;
   isMidiClip: boolean;
@@ -61,7 +63,9 @@ export function ClipContextMenu({
   onSplitAtPlayhead,
   onAssignColor,
   onResetColor,
+  onToggleMute,
   onClose,
+  isMuted,
   hasPrompt,
   isReady,
   isMidiClip,
@@ -148,6 +152,7 @@ export function ClipContextMenu({
       {!isMidiClip && (
         <ContextMenuItem label="Add Layer here..." onClick={onAddLayer} />
       )}
+      <ContextMenuItem label={isMuted ? 'Activate Clip' : 'Deactivate Clip'} onClick={onToggleMute} shortcut="0" />
       <ContextMenuSeparator />
       <ContextMenuItem label="Delete" onClick={onDelete} danger />
     </ContextMenuWrapper>

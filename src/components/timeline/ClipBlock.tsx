@@ -543,7 +543,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           transition-[filter,box-shadow] duration-100
           hover:brightness-110 hover:ring-1 hover:ring-white/10
           active:brightness-95
-          ${clip.muted ? 'opacity-30 pointer-events-none' : (statusStyles[clip.generationStatus] ?? '')}
+          ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
           ${isSelected ? 'ring-2 ring-offset-1 ring-offset-transparent' : ''}
           ${dragGhost && dragGhost.targetTrackId && !dragGhost.isShiftCopy ? 'opacity-0' : ''}
         `}
@@ -719,6 +719,16 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} isMidiClip={isMidiClip} />
 
+        {clip.muted && (
+          <div
+            className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center"
+            data-testid="clip-muted-overlay"
+            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
+          >
+            <span className="text-[9px] font-bold tracking-wider text-zinc-400 uppercase opacity-80">Muted</span>
+          </div>
+        )}
+
         {scissorLine !== null && (
           <div
             className="absolute top-0 bottom-0 w-px pointer-events-none z-30"
@@ -807,7 +817,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             closeCtxMenu();
             clearAudioQuantize(clip.id);
           }}
+          onToggleMute={() => {
+            closeCtxMenu();
+            useProjectStore.getState().toggleClipMuted(selectedActionClipIds);
+          }}
           onClose={closeCtxMenu}
+          isMuted={selectedActionClipIds.length > 1
+            ? selectedActionClipIds.every((id) => {
+                const c = project?.tracks.flatMap((t) => t.clips).find((cl) => cl.id === id);
+                return c?.muted;
+              })
+            : !!clip.muted
+          }
           hasPrompt={!!clip.prompt}
           isReady={clip.generationStatus === 'ready'}
           isMidiClip={isMidiClip}

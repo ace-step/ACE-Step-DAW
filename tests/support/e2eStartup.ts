@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { getProjectName, waitForBrowserStores, type E2EBrowserWindow } from './browserStores';
 
 export async function loadFreshApp(page: Page) {
   await page.addInitScript(() => {
@@ -7,11 +8,7 @@ export async function loadFreshApp(page: Page) {
   });
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForFunction(
-    () => typeof (window as any).__store !== 'undefined',
-    null,
-    { timeout: 15000 },
-  );
+  await waitForBrowserStores(page);
 }
 
 export async function loadReturningUserApp(page: Page) {
@@ -29,11 +26,7 @@ export async function loadReturningUserApp(page: Page) {
   });
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForFunction(
-    () => typeof (window as any).__store !== 'undefined',
-    null,
-    { timeout: 15000 },
-  );
+  await waitForBrowserStores(page);
 }
 
 export async function ensureOnboardingVisible(page: Page) {
@@ -71,13 +64,18 @@ export async function createProjectViaDialog(
 
   await page.locator('button:has-text("Create")').first().click();
   await page.waitForFunction(
-    (expectedName) => (window as any).__store.getState().project?.name === expectedName,
+    (expectedName) => {
+      const dawWindow = window as E2EBrowserWindow;
+      return dawWindow.__store.getState().project?.name === expectedName;
+    },
     name,
     { timeout: 5000 },
   );
   await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden({
     timeout: 5000,
   });
+
+  await expect.poll(async () => getProjectName(page)).toBe(name);
 }
 
 export async function focusApplicationShell(page: Page) {

@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { SequencerPattern } from '../../types/project';
 import { FL } from './SequencerConstants';
 import { SequencerStepGridRow } from './SequencerStepGridRow';
+import { Z } from '../../utils/zIndex';
 
 interface StepSelection {
   rowStart: number;
@@ -286,7 +287,7 @@ export function SequencerStepGrid({
             height: pattern.rows.length * stepH,
             background: 'rgba(255,255,255,0.5)',
             pointerEvents: 'none',
-            zIndex: 20,
+            zIndex: Z.clipContent,
             transition: 'left 60ms linear',
             borderRadius: 1,
           }}

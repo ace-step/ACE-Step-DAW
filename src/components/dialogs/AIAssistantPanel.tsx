@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 import type { AIChatMessage } from '../../types/aiAssistant';
 
 function MessageBubble({ message }: { message: AIChatMessage }) {
@@ -63,7 +64,8 @@ export function AIAssistantPanel() {
 
   return (
     <div
-      className="fixed top-11 right-0 bottom-6 z-50 flex w-[340px] flex-col border-l border-[#333] bg-[#1e1e1e] shadow-xl"
+      className="fixed top-11 right-0 bottom-6 flex w-[340px] flex-col border-l border-[#333] bg-[#1e1e1e] shadow-xl"
+      style={{ zIndex: Z.panel }}
       data-testid="ai-assistant-panel"
       role="complementary"
       aria-label="AI Assistant"

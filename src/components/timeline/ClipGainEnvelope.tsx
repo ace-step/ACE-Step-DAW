@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type { GainEnvelopePoint } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
+import { Z } from '../../utils/zIndex';
 
 interface ClipGainEnvelopeProps {
   clipId: string;
@@ -111,7 +112,8 @@ export function ClipGainEnvelope({
   return (
     <svg
       ref={svgRef}
-      className="absolute inset-0 z-[5] pointer-events-auto"
+      className="absolute inset-0 pointer-events-auto"
+      style={{ zIndex: Z.base + 5 }}
       viewBox={viewBox}
       preserveAspectRatio="none"
       onDoubleClick={handleSvgDoubleClick}

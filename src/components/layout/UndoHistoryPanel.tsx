@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useProjectStore, type HistoryScope } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 
 const HISTORY_SCOPE_LABELS: Record<HistoryScope, string> = {
   arrangement: 'Arrangement',
@@ -41,7 +42,7 @@ export function UndoHistoryPanel() {
   if (!showUndoHistoryPanel) return null;
 
   return (
-    <div className="fixed right-4 top-14 z-[160] w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/10 bg-[#141426]/95 shadow-2xl backdrop-blur">
+    <div className="fixed right-4 top-14 w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/10 bg-[#141426]/95 shadow-2xl backdrop-blur" style={{ zIndex: Z.commandPalette }}>
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-200">History</div>

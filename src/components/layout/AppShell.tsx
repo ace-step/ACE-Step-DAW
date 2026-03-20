@@ -3,6 +3,7 @@ import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
+import { Z } from '../../utils/zIndex';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
 import { CoverModal } from '../generation/CoverModal';
@@ -128,7 +129,8 @@ export function AppShell() {
       {/* Audio context overlay — shown until user's first click resumes audio */}
       {showAudioResumeOverlay && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+          className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+          style={{ zIndex: Z.appOverlay }}
           role="button"
           tabIndex={0}
           aria-label="Enable audio playback"

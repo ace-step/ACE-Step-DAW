@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../data/onboardingCatalog';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 
 const COMPLEXITY_TIERS = [
   {
@@ -64,7 +65,7 @@ export function FirstRunOnboarding() {
   };
 
   return (
-    <div className="fixed inset-0 z-[240] bg-[#090b10]/92 backdrop-blur-sm text-zinc-100" aria-label="First-run onboarding">
+    <div className="fixed inset-0 bg-[#090b10]/92 backdrop-blur-sm text-zinc-100" style={{ zIndex: Z.onboarding }} aria-label="First-run onboarding">
       <div className="h-full overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-5 py-8">
           <div className="mb-8 flex items-start justify-between gap-4">

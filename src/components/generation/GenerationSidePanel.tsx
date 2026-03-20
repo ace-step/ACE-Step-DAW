@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 import {
   getGenerationValidationError,
   useGenerationStore,
@@ -162,7 +163,8 @@ export function GenerationSidePanel() {
 
   return (
     <aside
-      className="fixed right-0 top-10 bottom-6 z-40 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl"
+      className="fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl"
+      style={{ zIndex: Z.panel }}
       data-testid="generation-side-panel"
       aria-label="AI generation panel"
     >

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useToast } from '../../hooks/useToast';
+import { Z } from '../../utils/zIndex';
 
 const TOAST_STYLES = {
   success: {
@@ -69,7 +70,8 @@ export function ToastContainer() {
 
   return (
     <div
-      className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2"
+      className="pointer-events-none fixed right-4 top-4 flex w-[320px] max-w-[calc(100vw-2rem)] flex-col gap-2"
+      style={{ zIndex: Z.toast }}
       aria-live="polite"
       aria-atomic="true"
     >

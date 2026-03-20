@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ONBOARDING_TIPS } from '../../data/onboardingCatalog';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 
 type Rect = { top: number; left: number; width: number; height: number };
 
@@ -58,8 +59,8 @@ export function ContextualTips() {
 
   return (
     <div
-      className="fixed z-[210] rounded-2xl border border-cyan-400/30 bg-[#111723]/95 p-4 text-zinc-100 shadow-xl shadow-black/50"
-      style={{ top, left, width }}
+      className="fixed rounded-2xl border border-cyan-400/30 bg-[#111723]/95 p-4 text-zinc-100 shadow-xl shadow-black/50"
+      style={{ zIndex: Z.contextualTip, top, left, width }}
       aria-label={`Tip: ${tip.title}`}
     >
       <div className="flex items-start justify-between gap-3">

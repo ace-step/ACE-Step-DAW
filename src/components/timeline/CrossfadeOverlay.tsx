@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { computeCrossfadeRegions } from '../../utils/crossfade';
+import { Z } from '../../utils/zIndex';
 
 interface CrossfadeOverlayProps {
   track: Track;
@@ -30,8 +31,8 @@ export function CrossfadeOverlay({ track }: CrossfadeOverlayProps) {
         return (
           <div
             key={`xfade-${region.clipAId}-${region.clipBId}`}
-            className="absolute top-0 bottom-0 pointer-events-none z-12"
-            style={{ left, width }}
+            className="absolute top-0 bottom-0 pointer-events-none"
+            style={{ left, width, zIndex: Z.trackContent + 2 }}
             data-testid={`crossfade-${region.clipAId}-${region.clipBId}`}
             aria-label={`Crossfade between clips: ${region.duration.toFixed(2)}s`}
           >

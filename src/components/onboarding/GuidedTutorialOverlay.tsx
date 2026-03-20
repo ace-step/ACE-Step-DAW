@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ONBOARDING_TUTORIAL_STEPS } from '../../data/onboardingCatalog';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 
 type Rect = { top: number; left: number; width: number; height: number };
 
@@ -61,7 +62,7 @@ export function GuidedTutorialOverlay() {
   const isLastStep = activeTutorialStep === ONBOARDING_TUTORIAL_STEPS.length - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[250]">
+    <div className="pointer-events-none fixed inset-0" style={{ zIndex: Z.tutorial }}>
       <div className="absolute inset-0 bg-black/45" />
       {targetRect && (
         <div

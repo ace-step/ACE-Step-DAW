@@ -7,6 +7,7 @@ import { useTransportStore } from '../../store/transportStore';
 import { useGeneration } from '../../hooks/useGeneration';
 import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
+import { Z } from '../../utils/zIndex';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
@@ -831,8 +832,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <>
           {dragGhost.sourceLaneRect && (
             <div
-              className="fixed pointer-events-none z-[98]"
+              className="fixed pointer-events-none"
+              data-layer="drag-ghost-source"
               style={{
+                zIndex: Z.dragGhost,
                 left: left,
                 top: dragGhost.sourceLaneRect.top + 4,
                 width,
@@ -845,8 +848,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           )}
 
           <div
-            className="fixed pointer-events-none z-[100] rounded-sm overflow-hidden"
+            className="fixed pointer-events-none rounded-sm overflow-hidden"
             style={{
+              zIndex: Z.tooltip,
               left: dragGhost.x,
               top: dragGhost.y,
               width: dragGhost.width,
@@ -880,8 +884,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
           {dragGhost.targetLaneRect && (
             <div
-              className="fixed pointer-events-none z-[99]"
+              className="fixed pointer-events-none"
               style={{
+                zIndex: Z.dragGhost + 1,
                 left: 0,
                 top: dragGhost.targetLaneRect.top,
                 width: '100vw',

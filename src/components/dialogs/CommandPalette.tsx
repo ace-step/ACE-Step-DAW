@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
+import { Z } from '../../utils/zIndex';
 
 function ShortcutHint({ keys }: { keys?: string[] }) {
   if (!keys || keys.length === 0) return null;
@@ -58,7 +59,8 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[160] flex items-start justify-center bg-black/55 px-4 pt-[10vh] backdrop-blur-sm"
+      className="fixed inset-0 flex items-start justify-center bg-black/55 px-4 pt-[10vh] backdrop-blur-sm"
+      style={{ zIndex: Z.commandPalette }}
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
       <div

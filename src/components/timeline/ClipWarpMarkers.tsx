@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { AudioWarpMarker } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
+import { Z } from '../../utils/zIndex';
 
 interface ClipWarpMarkersProps {
   clipId: string;
@@ -28,7 +29,7 @@ export function ClipWarpMarkers({ clipId, clipDuration, width, markers }: ClipWa
   const pixelsPerSecond = width / clipDuration;
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-15" aria-label="Warp markers">
+    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: Z.trackContent + 5 }} aria-label="Warp markers">
       {markers.map((marker, index) => {
         const x = marker.quantizedTime * pixelsPerSecond;
         if (x < 0 || x > width) return null;

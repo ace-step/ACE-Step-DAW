@@ -16,6 +16,8 @@ interface SelectionFloatingToolbarProps {
  */
 export function SelectionFloatingToolbar({ selLeft, selWidth, selBottom }: SelectionFloatingToolbarProps) {
   const selectWindow = useUIStore((s) => s.selectWindow);
+  const setMusicEnhancerOpen = useUIStore((s) => s.setMusicEnhancerOpen);
+  const setAddLayerOpen = useUIStore((s) => s.setAddLayerOpen);
   const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
 
   if (!selectWindow || selLeft === null || selWidth === null || selBottom === null) {
@@ -26,13 +28,11 @@ export function SelectionFloatingToolbar({ selLeft, selWidth, selBottom }: Selec
   const topY = selBottom + 8;
 
   const handleMusicEnhancer = () => {
-    // Future: open music enhancer modal
-    // For now, placeholder — will be wired when musicEnhancerOpen state is added
+    setMusicEnhancerOpen(true);
   };
 
   const handleAddLayer = () => {
-    // Future: open add layer modal
-    // For now, placeholder — will be wired when addLayerOpen state is added
+    setAddLayerOpen(true);
   };
 
   const handleAddMidi = () => {

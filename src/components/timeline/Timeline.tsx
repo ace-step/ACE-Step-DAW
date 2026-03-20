@@ -566,15 +566,8 @@ export function Timeline() {
         </div>
       </div>
 
-      {selectWindow && (
-        <MultiTrackGenerateModal
-          selectWindow={selectWindow}
-          contextWindow={contextWindow}
-          onClose={() => {
-            setSelectWindow(null);
-          }}
-        />
-      )}
+      {/* MultiTrackGenerateModal is now accessed via GENR button or toolbar —
+           no longer auto-opens on selectWindow creation (#577) */}
 
       {/* Region context menu — right-click on select window */}
       {regionCtxMenu && selectWindow && (

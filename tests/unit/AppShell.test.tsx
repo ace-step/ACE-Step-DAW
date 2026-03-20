@@ -10,6 +10,7 @@ vi.mock('../../src/components/tracks/TrackList', () => ({ TrackList: () => <div>
 vi.mock('../../src/components/timeline/Timeline', () => ({ Timeline: () => <div>Timeline</div> }));
 vi.mock('../../src/components/generation/GenerationPanel', () => ({ GenerationPanel: () => <div>GenerationPanel</div> }));
 vi.mock('../../src/components/generation/GenerationSidePanel', () => ({ GenerationSidePanel: () => <div>GenerationSidePanel</div> }));
+vi.mock('../../src/components/generation/GenerationHistoryPanel', () => ({ GenerationHistoryPanel: () => <div>GenerationHistoryPanel</div> }));
 vi.mock('../../src/components/generation/CoverModal', () => ({ CoverModal: () => <div>CoverModal</div> }));
 vi.mock('../../src/components/generation/RepaintModal', () => ({ RepaintModal: () => <div>RepaintModal</div> }));
 vi.mock('../../src/components/generation/Vocal2BGMModal', () => ({ Vocal2BGMModal: () => <div>Vocal2BGMModal</div> }));

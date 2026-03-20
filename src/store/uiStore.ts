@@ -159,6 +159,7 @@ export interface UIState {
 
   // Generation Side Panel
   showGenerationPanel: boolean;
+  showGenerationHistoryPanel: boolean;
 
   // AI Assistant
   showAIAssistant: boolean;
@@ -300,6 +301,8 @@ export interface UIState {
   // Generation Side Panel
   toggleGenerationPanel: () => void;
   setShowGenerationPanel: (v: boolean) => void;
+  toggleGenerationHistoryPanel: () => void;
+  setShowGenerationHistoryPanel: (v: boolean) => void;
 
   // Command Palette
   setShowCommandPalette: (v: boolean) => void;
@@ -468,6 +471,7 @@ export const useUIStore = create<UIState>()(
   showModelLibrary: false,
 
   showGenerationPanel: false,
+  showGenerationHistoryPanel: false,
 
   showAIAssistant: false,
   aiChatMessages: [],
@@ -737,6 +741,8 @@ export const useUIStore = create<UIState>()(
 
   toggleGenerationPanel: () => set((s) => ({ showGenerationPanel: !s.showGenerationPanel })),
   setShowGenerationPanel: (v) => set({ showGenerationPanel: v }),
+  toggleGenerationHistoryPanel: () => set((s) => ({ showGenerationHistoryPanel: !s.showGenerationHistoryPanel })),
+  setShowGenerationHistoryPanel: (v) => set({ showGenerationHistoryPanel: v }),
 
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
   toggleCommandPalette: () => set((s) => ({ showCommandPalette: !s.showCommandPalette })),
@@ -904,6 +910,7 @@ export const useUIStore = create<UIState>()(
         showModelLibrary: state.showModelLibrary,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
+        showGenerationHistoryPanel: state.showGenerationHistoryPanel,
         // AI Assistant
         showAIAssistant: state.showAIAssistant,
         // Onboarding

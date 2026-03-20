@@ -5,6 +5,7 @@ import {
   getGenerationValidationError,
   deriveGenerationJobProgress,
 } from '../../src/store/generationStore';
+import { useProjectStore } from '../../src/store/projectStore';
 
 function makeJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
   return {
@@ -25,6 +26,7 @@ describe('generationStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
   });
 
   describe('job management', () => {
@@ -210,6 +212,100 @@ describe('generationStore', () => {
         caretIndex: 11,
       });
       expect(useGenerationStore.getState().generationForm.prompt).toBe('warm analog pad');
+    });
+  });
+
+  describe('generation history', () => {
+    it('upserts reusable generation records and filters them by model, time range, and search query', () => {
+      const now = Date.now();
+      useGenerationStore.getState().upsertGenerationHistoryRecord({
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        trackName: 'Drums',
+        prompt: 'tight breakbeat with dusty hats',
+        model: 'ace-v1',
+        duration: 16,
+        status: 'done',
+        createdAt: now,
+        updatedAt: now,
+        completedAt: now,
+        audioKey: 'audio-1',
+      });
+      useGenerationStore.getState().upsertGenerationHistoryRecord({
+        clipId: 'clip-2',
+        trackId: 'track-2',
+        trackName: 'Bass',
+        prompt: 'sub bass with glide',
+        model: 'ace-v2',
+        duration: 8,
+        status: 'error',
+        createdAt: now - (9 * 24 * 60 * 60 * 1000),
+        updatedAt: now - (9 * 24 * 60 * 60 * 1000),
+        error: 'Backend timeout',
+      });
+      useGenerationStore.getState().upsertGenerationHistoryRecord({
+        clipId: 'clip-1',
+        trackId: 'track-1',
+        trackName: 'Drums',
+        prompt: 'tight breakbeat with dusty hats',
+        model: 'ace-v1.1',
+        duration: 20,
+        status: 'done',
+        createdAt: now,
+        updatedAt: now + 1_000,
+        completedAt: now + 1_000,
+        audioKey: 'audio-1b',
+      });
+
+      const history = useGenerationStore.getState().generationHistory;
+      expect(history).toHaveLength(2);
+      expect(history[0]).toMatchObject({
+        clipId: 'clip-1',
+        model: 'ace-v1.1',
+        duration: 20,
+        audioKey: 'audio-1b',
+      });
+
+      expect(useGenerationStore.getState().getGenerationHistoryRecords({
+        model: 'ace-v1.1',
+      })).toHaveLength(1);
+      expect(useGenerationStore.getState().getGenerationHistoryRecords({
+        search: 'breakbeat dusty',
+      })[0]?.clipId).toBe('clip-1');
+      expect(useGenerationStore.getState().getGenerationHistoryRecords({
+        timeRange: '7d',
+      })).toHaveLength(1);
+    });
+
+    it('places a completed history record back onto the timeline as a ready audio clip', () => {
+      useProjectStore.getState().createProject({ name: 'History Reuse' });
+      const track = useProjectStore.getState().addTrack('custom', 'stems');
+      useGenerationStore.getState().upsertGenerationHistoryRecord({
+        clipId: 'source-clip',
+        trackId: track.id,
+        trackName: 'Lead',
+        prompt: 'wide cinematic lead',
+        model: 'ace-v1',
+        duration: 12,
+        status: 'done',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        completedAt: Date.now(),
+        audioKey: 'audio-ready',
+      });
+
+      const historyId = useGenerationStore.getState().generationHistory[0].id;
+      const newClipId = useGenerationStore.getState().placeGenerationHistoryOnTrack(historyId, track.id, 24);
+      const clip = newClipId ? useProjectStore.getState().getClipById(newClipId) : null;
+
+      expect(clip).toMatchObject({
+        startTime: 24,
+        duration: 12,
+        prompt: 'wide cinematic lead',
+        generationStatus: 'ready',
+        isolatedAudioKey: 'audio-ready',
+        audioDuration: 12,
+      });
     });
   });
 });

@@ -38,6 +38,7 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
 export function GenerationSidePanel() {
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
+  const toggleGenerationHistoryPanel = useUIStore((s) => s.toggleGenerationHistoryPanel);
   const selectClip = useUIStore((s) => s.selectClip);
   const project = useProjectStore((s) => s.project);
 
@@ -187,13 +188,22 @@ export function GenerationSidePanel() {
           <h2 className="text-sm font-semibold text-zinc-100">AI Generation</h2>
           <p className="text-[11px] text-zinc-400">Prompt a new idea without leaving the arrangement.</p>
         </div>
-        <button
-          onClick={() => setShow(false)}
-          className="text-lg leading-none text-zinc-400 transition-colors hover:text-zinc-300"
-          aria-label="Close generation panel"
-        >
-          &times;
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleGenerationHistoryPanel}
+            className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200 transition-colors hover:bg-emerald-500/20"
+          >
+            History
+          </button>
+          <button
+            onClick={() => setShow(false)}
+            className="text-lg leading-none text-zinc-400 transition-colors hover:text-zinc-300"
+            aria-label="Close generation panel"
+          >
+            &times;
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">

@@ -575,6 +575,25 @@ async function generateClipInternal(
       params.use_random_seed = true;
     }
 
+    const historyUpdatedAt = Date.now();
+    genStore.upsertGenerationHistoryRecord({
+      clipId,
+      trackId: track.id,
+      trackName: track.trackName,
+      prompt: effectivePrompt,
+      model: params.model ?? '',
+      duration: clip.duration,
+      status: 'queued',
+      createdAt: historyUpdatedAt,
+      updatedAt: historyUpdatedAt,
+      startedAt: null,
+      completedAt: null,
+      taskId: undefined,
+      audioKey: null,
+      audioDuration: clip.duration,
+      error: undefined,
+    });
+
     // Shared seed: override backend randomness so all batch tracks are correlated
     if (options.sharedSeed !== undefined) {
       params.seed = options.sharedSeed;
@@ -622,6 +641,21 @@ async function generateClipInternal(
     const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
     const taskId = releaseResp.task_id;
     useGenerationStore.getState().updateJob(jobId, { taskId });
+    genStore.upsertGenerationHistoryRecord({
+      clipId,
+      trackId: track.id,
+      trackName: track.trackName,
+      prompt: effectivePrompt,
+      model: params.model ?? '',
+      duration: clip.duration,
+      status: 'generating',
+      createdAt: historyUpdatedAt,
+      updatedAt: Date.now(),
+      startedAt: jobStartedAt,
+      taskId,
+      audioKey: null,
+      audioDuration: clip.duration,
+    });
     updateVariationProgress({
       taskId,
       status: 'generating',
@@ -789,11 +823,43 @@ async function generateClipInternal(
       seed: firstResult?.seed_value,
       completedAt: Date.now(),
     });
+    genStore.upsertGenerationHistoryRecord({
+      clipId,
+      trackId: track.id,
+      trackName: track.trackName,
+      prompt: effectivePrompt,
+      model: params.model ?? '',
+      duration: clip.duration,
+      status: 'done',
+      createdAt: historyUpdatedAt,
+      updatedAt: Date.now(),
+      startedAt: jobStartedAt,
+      completedAt: Date.now(),
+      taskId,
+      audioKey: isolatedKey,
+      audioDuration: clipDuration,
+      error: undefined,
+    });
 
     return { cumulativeBlob, succeeded: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
+    genStore.upsertGenerationHistoryRecord({
+      clipId,
+      trackId: track.id,
+      trackName: track.trackName,
+      prompt: clip.prompt ?? '',
+      model: project.generationDefaults.model ?? '',
+      duration: clip.duration,
+      status: 'error',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      completedAt: Date.now(),
+      audioKey: null,
+      audioDuration: clip.duration,
+      error: message,
+    });
     {
       const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
       useGenerationStore.getState().updateJob(jobId, {

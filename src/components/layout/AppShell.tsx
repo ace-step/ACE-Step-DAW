@@ -7,6 +7,7 @@ import { Z } from '../../utils/zIndex';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
+import { GenerationHistoryPanel } from '../generation/GenerationHistoryPanel';
 import { CoverModal } from '../generation/CoverModal';
 import { MusicEnhancerPanel } from '../generation/MusicEnhancerPanel';
 import { RepaintModal } from '../generation/RepaintModal';
@@ -177,6 +178,7 @@ export function AppShell() {
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
+      {project && <GenerationHistoryPanel />}
       {project && <ModelLibraryPanel />}
       {project && <AddLayerPanel />}
       <StatusBar />

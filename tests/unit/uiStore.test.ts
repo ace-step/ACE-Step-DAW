@@ -89,6 +89,16 @@ describe('uiStore', () => {
       useUIStore.getState().setMainView('arrangement');
       expect(useUIStore.getState().mainView).toBe('arrangement');
     });
+
+    it('toggles the generation history panel', () => {
+      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+
+      useUIStore.getState().toggleGenerationHistoryPanel();
+      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(true);
+
+      useUIStore.getState().setShowGenerationHistoryPanel(false);
+      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+    });
   });
 
   describe('selectedClipIds', () => {

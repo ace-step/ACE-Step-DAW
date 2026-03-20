@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, DEFAULT_GENERATION, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
+import { loadAudioBlobByKey } from '../services/audioFileManager';
 import {
   applyPromptAutocompleteSuggestion as applyPromptAutocompleteSuggestionToPrompt,
   getPromptAutocompleteSuggestions as getPromptAutocompleteSuggestionsForPrompt,
@@ -157,6 +158,33 @@ export interface PromptHistoryEntry {
   trackName?: string;
   bpm?: number;
   keyScale?: string;
+}
+
+export type GenerationHistoryStatus = GenerationJob['status'] | VariationStatus;
+
+export interface GenerationHistoryRecord {
+  id: string;
+  clipId: string | null;
+  trackId: string | null;
+  trackName: string;
+  prompt: string;
+  model: string;
+  duration: number;
+  status: GenerationHistoryStatus;
+  createdAt: number;
+  updatedAt: number;
+  startedAt?: number | null;
+  completedAt?: number | null;
+  taskId?: string;
+  audioKey?: string | null;
+  audioDuration?: number | null;
+  error?: string;
+}
+
+export interface GenerationHistoryFilter {
+  model?: string;
+  search?: string;
+  timeRange?: 'all' | '24h' | '7d' | '30d';
 }
 
 export type VariationStatus = 'pending' | 'generating' | 'processing' | 'done' | 'error' | 'cancelled';
@@ -399,6 +427,8 @@ export interface GenerationState {
   jobs: GenerationJob[];
   isGenerating: boolean;
   promptHistory: PromptHistoryEntry[];
+  generationHistory: GenerationHistoryRecord[];
+  previewingHistoryId: string | null;
   variationSession: VariationSession | null;
   generationForm: GenerationFormState;
   lastSubmittedRequest: SubmittedGenerationRequest | null;
@@ -410,6 +440,11 @@ export interface GenerationState {
   setIsGenerating: (v: boolean) => void;
   addPromptToHistory: (prompt: string, meta?: Partial<Omit<PromptHistoryEntry, 'id' | 'prompt' | 'timestamp'>>) => void;
   clearPromptHistory: () => void;
+  upsertGenerationHistoryRecord: (record: Omit<GenerationHistoryRecord, 'id'> & { id?: string }) => string;
+  getGenerationHistoryRecords: (filters?: GenerationHistoryFilter) => GenerationHistoryRecord[];
+  previewGenerationHistory: (recordId: string) => Promise<boolean>;
+  stopGenerationHistoryPreview: () => void;
+  placeGenerationHistoryOnTrack: (recordId: string, trackId: string, startTime: number) => string | null;
   hydrateGenerationForm: (updates: Partial<GenerationFormState>) => void;
   resetGenerationForm: () => void;
   setGenerationPrompt: (prompt: string) => void;
@@ -446,12 +481,48 @@ export interface GenerationState {
   cancelVariationSession: () => void;
 }
 
+let activeHistoryPreviewAudio: HTMLAudioElement | null = null;
+let activeHistoryPreviewUrl: string | null = null;
+
+function stopActiveHistoryPreview() {
+  activeHistoryPreviewAudio?.pause();
+  activeHistoryPreviewAudio = null;
+  if (activeHistoryPreviewUrl) {
+    URL.revokeObjectURL(activeHistoryPreviewUrl);
+    activeHistoryPreviewUrl = null;
+  }
+}
+
+function matchesGenerationHistoryTimeRange(
+  updatedAt: number,
+  timeRange: GenerationHistoryFilter['timeRange'],
+): boolean {
+  if (!timeRange || timeRange === 'all') return true;
+  const maxAgeMs = timeRange === '24h'
+    ? 24 * 60 * 60 * 1000
+    : timeRange === '7d'
+      ? 7 * 24 * 60 * 60 * 1000
+      : 30 * 24 * 60 * 60 * 1000;
+  return (Date.now() - updatedAt) <= maxAgeMs;
+}
+
+function normalizeGenerationHistorySearch(search?: string): string[] {
+  return search
+    ?.toLowerCase()
+    .split(/\s+/u)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    ?? [];
+}
+
 export const useGenerationStore = create<GenerationState>()(
   persist(
     (set, get) => ({
       jobs: [],
       isGenerating: false,
       promptHistory: [],
+      generationHistory: [],
+      previewingHistoryId: null,
       variationSession: null,
       generationForm: createDefaultGenerationFormState(),
       lastSubmittedRequest: null,
@@ -531,6 +602,112 @@ export const useGenerationStore = create<GenerationState>()(
       }),
 
       clearPromptHistory: () => set({ promptHistory: [] }),
+
+      upsertGenerationHistoryRecord: (record) => {
+        const recordId = record.id ?? crypto.randomUUID();
+        set((state) => {
+          const existing = state.generationHistory.find((entry) => (
+            (record.clipId && entry.clipId === record.clipId)
+            || entry.id === recordId
+          ));
+          const nextRecord: GenerationHistoryRecord = existing
+            ? {
+                ...existing,
+                ...record,
+                id: existing.id,
+                createdAt: existing.createdAt,
+                updatedAt: record.updatedAt ?? Date.now(),
+              }
+            : {
+                ...record,
+                id: recordId,
+                clipId: record.clipId ?? null,
+                trackId: record.trackId ?? null,
+                trackName: record.trackName,
+                prompt: record.prompt,
+                model: record.model,
+                duration: record.duration,
+                status: record.status,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt ?? record.createdAt,
+                startedAt: record.startedAt ?? null,
+                completedAt: record.completedAt ?? null,
+                taskId: record.taskId,
+                audioKey: record.audioKey ?? null,
+                audioDuration: record.audioDuration ?? null,
+                error: record.error,
+              };
+          const nextHistory = existing
+            ? state.generationHistory.map((entry) => (entry.id === existing.id ? nextRecord : entry))
+            : [nextRecord, ...state.generationHistory];
+
+          nextHistory.sort((a, b) => b.updatedAt - a.updatedAt);
+          return { generationHistory: nextHistory };
+        });
+        return get().generationHistory.find((entry) => entry.clipId === record.clipId || entry.id === recordId)?.id ?? recordId;
+      },
+
+      getGenerationHistoryRecords: (filters = {}) => {
+        const searchTokens = normalizeGenerationHistorySearch(filters.search);
+        return get().generationHistory.filter((entry) => {
+          if (filters.model && filters.model !== 'all' && entry.model !== filters.model) return false;
+          if (!matchesGenerationHistoryTimeRange(entry.updatedAt, filters.timeRange ?? 'all')) return false;
+          if (searchTokens.length === 0) return true;
+          const haystack = `${entry.prompt} ${entry.model} ${entry.trackName} ${entry.status}`.toLowerCase();
+          return searchTokens.every((token) => haystack.includes(token));
+        });
+      },
+
+      previewGenerationHistory: async (recordId) => {
+        const record = get().generationHistory.find((entry) => entry.id === recordId);
+        if (!record?.audioKey) return false;
+
+        stopActiveHistoryPreview();
+        const blob = await loadAudioBlobByKey(record.audioKey);
+        if (!blob) return false;
+
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        activeHistoryPreviewUrl = url;
+        activeHistoryPreviewAudio = audio;
+        audio.addEventListener('ended', () => {
+          stopActiveHistoryPreview();
+          set({ previewingHistoryId: null });
+        }, { once: true });
+        await audio.play();
+        set({ previewingHistoryId: recordId });
+        return true;
+      },
+
+      stopGenerationHistoryPreview: () => {
+        stopActiveHistoryPreview();
+        set({ previewingHistoryId: null });
+      },
+
+      placeGenerationHistoryOnTrack: (recordId, trackId, startTime) => {
+        const state = get();
+        const record = state.generationHistory.find((entry) => entry.id === recordId);
+        const projectStore = useProjectStore.getState();
+        const track = projectStore.project?.tracks.find((candidate) => candidate.id === trackId);
+        if (!record?.audioKey || !track) return null;
+        if (track.trackType === 'pianoRoll' || track.trackType === 'sequencer' || track.trackType === 'drumMachine') {
+          return null;
+        }
+
+        const clip = projectStore.addClip(trackId, {
+          startTime,
+          duration: record.duration,
+          prompt: record.prompt,
+          globalCaption: '',
+          lyrics: '',
+          source: 'generated',
+        });
+        projectStore.updateClipStatus(clip.id, 'ready', {
+          isolatedAudioKey: record.audioKey,
+          audioDuration: record.audioDuration ?? record.duration,
+        });
+        return clip.id;
+      },
 
       hydrateGenerationForm: (updates) => set((s) => ({
         generationForm: {
@@ -896,6 +1073,7 @@ export const useGenerationStore = create<GenerationState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         promptHistory: state.promptHistory,
+        generationHistory: state.generationHistory,
         generationForm: state.generationForm,
       }),
     },

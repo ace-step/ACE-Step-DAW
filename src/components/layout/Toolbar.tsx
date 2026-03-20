@@ -194,6 +194,8 @@ export function Toolbar() {
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
   const showGenerationPanel = useUIStore((s) => s.showGenerationPanel);
   const toggleGenerationPanel = useUIStore((s) => s.toggleGenerationPanel);
+  const showGenerationHistoryPanel = useUIStore((s) => s.showGenerationHistoryPanel);
+  const toggleGenerationHistoryPanel = useUIStore((s) => s.toggleGenerationHistoryPanel);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { toggleRecord } = useRecording();
 
@@ -303,6 +305,19 @@ export function Toolbar() {
           title="AI Generation Panel (G)"
         >
           AI
+        </button>
+        <button
+          onClick={toggleGenerationHistoryPanel}
+          disabled={!project}
+          aria-pressed={showGenerationHistoryPanel}
+          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+            showGenerationHistoryPanel
+              ? 'border border-emerald-400/50 bg-emerald-500/20 text-emerald-100'
+              : 'border border-[#4b4b4b] bg-[#242424] text-zinc-300 hover:bg-daw-surface-2'
+          } disabled:opacity-30`}
+          title="Generation History Panel (H)"
+        >
+          Hist
         </button>
       </div>
 

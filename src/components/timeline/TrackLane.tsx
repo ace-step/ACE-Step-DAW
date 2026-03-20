@@ -2,6 +2,7 @@ import { useCallback, useState, useRef } from 'react';
 import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useGenerationStore } from '../../store/generationStore';
 import { ClipBlock } from './ClipBlock';
 import { TakeLaneStrip } from './TakeLaneStrip';
 import { AutomationLaneView } from './AutomationLaneView';
@@ -62,6 +63,8 @@ export function TrackLane({ track }: TrackLaneProps) {
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const addClip = useProjectStore((s) => s.addClip);
+  const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
+  const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; startTime: number; duration: number;
@@ -206,7 +209,12 @@ export function TrackLane({ track }: TrackLaneProps) {
 
   const handleFileDragOver = useCallback((e: React.DragEvent) => {
     const types = e.dataTransfer.types;
-    if (types.includes('Files') || types.includes('application/x-loop-id') || types.includes('application/x-asset-id')) {
+    if (
+      types.includes('Files')
+      || types.includes('application/x-loop-id')
+      || types.includes('application/x-asset-id')
+      || types.includes('application/x-generation-history-id')
+    ) {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
@@ -228,6 +236,12 @@ export function TrackLane({ track }: TrackLaneProps) {
     const laneX = e.clientX - rect.left;
     const rawTime = laneX / pixelsPerSecond;
     const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+
+    const historyId = e.dataTransfer.getData('application/x-generation-history-id');
+    if (historyId) {
+      placeGenerationHistoryOnTrack(historyId, track.id, startTime);
+      return;
+    }
 
     // Handle preset loop drop
     const loopId = e.dataTransfer.getData('application/x-loop-id');
@@ -265,7 +279,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         await importMidiFile(file, startTime);
       }
     }
-  }, [project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
+  }, [placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
 
   const hasClips = track.clips.length > 0;
   const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll;

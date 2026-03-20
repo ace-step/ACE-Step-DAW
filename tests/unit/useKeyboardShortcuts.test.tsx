@@ -239,6 +239,18 @@ describe('useKeyboardShortcuts', () => {
     expect(useUIStore.getState().snapEnabled).toBe(true);
   });
 
+  it('toggles generation history panel with KeyH', () => {
+    render(<Harness />);
+
+    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
+    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
+    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+  });
+
   it('suppresses single-key shortcuts while typing in editable fields', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);

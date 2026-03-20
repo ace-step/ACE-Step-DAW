@@ -469,6 +469,7 @@ export interface ProjectState {
 
   addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
   removeTrack: (trackId: string) => void;
+  removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
@@ -2299,6 +2300,28 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'arrangement', label: 'Remove track', trackId });
     const newTracks = state.project.tracks.filter((t) => t.id !== trackId);
+    set({
+      project: ensureProjectSession({
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      }),
+    });
+  },
+
+  removeTracks: (trackIds) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    if (trackIds.length === 0) return;
+    _pushHistory(state.project, { scope: 'arrangement', label: `Remove ${trackIds.length} track${trackIds.length > 1 ? 's' : ''}` });
+    const idSet = new Set(trackIds);
+    // For group tracks, unparent children instead of deleting them
+    const groupIds = new Set(state.project.tracks.filter((t) => idSet.has(t.id) && t.isGroup).map((t) => t.id));
+    const newTracks = state.project.tracks
+      .filter((t) => !idSet.has(t.id))
+      .map((t) => (t.parentTrackId && groupIds.has(t.parentTrackId)) ? { ...t, parentTrackId: undefined } : t);
     set({
       project: ensureProjectSession({
         ...state.project,

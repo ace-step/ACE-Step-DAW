@@ -25,6 +25,8 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'tracks.solo',           category: 'tracks',    label: 'Toggle Focused Track Solo',   defaultCombo: { code: 'KeyS' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.createGroup',    category: 'tracks',    label: 'Create Group Track',          defaultCombo: { code: 'KeyG', mod: true, shift: true }, contexts: ['timeline', 'mixer'] },
   { id: 'tracks.toggleCollapse', category: 'tracks',    label: 'Toggle Group Collapse',       defaultCombo: { code: 'KeyG', shift: true }, contexts: ['timeline'] },
+  { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },
+  { id: 'tracks.selectAll',      category: 'tracks',    label: 'Select All Tracks',           defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },
 
   { id: 'navigation.previousTrack', category: 'navigation', label: 'Focus Previous Track',   defaultCombo: { code: 'ArrowUp' }, contexts: ['timeline', 'mixer'] },
   { id: 'navigation.nextTrack',     category: 'navigation', label: 'Focus Next Track',       defaultCombo: { code: 'ArrowDown' }, contexts: ['timeline', 'mixer'] },

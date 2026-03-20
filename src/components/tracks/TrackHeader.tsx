@@ -60,6 +60,9 @@ export function TrackHeader({
   const openBounceInPlaceDialog = useUIStore((s) => s.openBounceInPlaceDialog);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
+  const selectTrack = useUIStore((s) => s.selectTrack);
+  const selectTracks = useUIStore((s) => s.selectTracks);
+  const isTrackSelected = useUIStore((s) => s.selectedTrackIds.has(track.id));
   const { armedTrackIds, toggleArmTrack } = useRecording();
   const info = TRACK_CATALOG[track.trackName];
 
@@ -179,10 +182,10 @@ export function TrackHeader({
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
       className={`relative flex items-center gap-2 border-b group select-none ${
-        isDragOver ? 'bg-[#383838]' : ''
+        isDragOver ? 'bg-[#383838]' : isTrackSelected ? 'ring-1 ring-inset ring-blue-500/50' : ''
       }`}
       style={{
-        backgroundColor: isDragOver ? undefined : headerBackgroundColor,
+        backgroundColor: isDragOver ? undefined : isTrackSelected ? 'rgba(59, 130, 246, 0.1)' : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
         height: track.isGroup ? Math.max(40, laneHeight * 0.7) : laneHeight,
         paddingLeft: isChild ? 24 : 8,
@@ -203,9 +206,26 @@ export function TrackHeader({
         setExpandedTrackId(track.id);
         setKeyboardContext('timeline', track.id);
       }}
-      onMouseDown={() => {
+      onMouseDown={(e) => {
         setExpandedTrackId(track.id);
         setKeyboardContext('timeline', track.id);
+        if (e.shiftKey && project) {
+          // Shift+click: range select
+          const selectedIds = useUIStore.getState().selectedTrackIds;
+          const tracks = project.tracks;
+          const clickedIdx = tracks.findIndex((t) => t.id === track.id);
+          // Find anchor: first selected track or expanded track
+          let anchorIdx = clickedIdx;
+          for (const id of selectedIds) {
+            const idx = tracks.findIndex((t) => t.id === id);
+            if (idx !== -1) { anchorIdx = idx; break; }
+          }
+          const start = Math.min(anchorIdx, clickedIdx);
+          const end = Math.max(anchorIdx, clickedIdx);
+          selectTracks(tracks.slice(start, end + 1).map((t) => t.id));
+        } else {
+          selectTrack(track.id, e.metaKey || e.ctrlKey);
+        }
       }}
     >
       {/* Color strip (left edge) — click to change track color */}

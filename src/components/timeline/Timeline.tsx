@@ -80,6 +80,7 @@ export function Timeline() {
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
   const selectClips = useUIStore((s) => s.selectClips);
+  const deselectAllTracks = useUIStore((s) => s.deselectAllTracks);
   const setRegionRegenerateTarget = useUIStore((s) => s.setRegionRegenerateTarget);
   const regionRegenerateTarget = useUIStore((s) => s.regionRegenerateTarget);
   const inlineSuggestions = useUIStore((s) => s.inlineSuggestions);
@@ -272,6 +273,9 @@ export function Timeline() {
       e.preventDefault();
       e.stopPropagation();
 
+      // Clear track selection when interacting with timeline
+      deselectAllTracks();
+
       const container = scrollRef.current;
       const trackArea = trackAreaRef.current;
       if (!container || !trackArea) return;
@@ -369,7 +373,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, selectClips],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, selectClips, deselectAllTracks],
   );
 
 

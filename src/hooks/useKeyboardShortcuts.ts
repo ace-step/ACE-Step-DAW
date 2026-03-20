@@ -238,8 +238,15 @@ export function useKeyboardShortcuts() {
       if (matches('clips.selectAll')) {
         event.preventDefault();
         if (!anyModalOpen && project.project) {
-          const allClips = project.project.tracks.flatMap((track) => track.clips);
-          if (allClips.length > 0) ui.selectClips(allClips.map((clip) => clip.id));
+          if (ui.lastSelectionContext === 'tracks') {
+            // Context is tracks — select all tracks
+            const allTrackIds = project.project.tracks.map((t) => t.id);
+            if (allTrackIds.length > 0) ui.selectTracks(allTrackIds);
+          } else {
+            // Default: select all clips
+            const allClips = project.project.tracks.flatMap((track) => track.clips);
+            if (allClips.length > 0) ui.selectClips(allClips.map((clip) => clip.id));
+          }
         }
         return;
       }
@@ -374,9 +381,15 @@ export function useKeyboardShortcuts() {
       if (matches('navigation.previousTrack')) { event.preventDefault(); focusTrack(-1); return; }
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
 
-      if (matches('clips.delete')) {
+      // Context-aware Delete / Backspace: tracks take priority over clips
+      const isDeleteKey = matches('clips.delete') || (event.code === 'Backspace' && !mod && !event.shiftKey && !event.altKey);
+      if (isDeleteKey) {
         event.preventDefault();
-        if (ui.selectedClipIds.size > 0) {
+        if (ui.selectedTrackIds.size > 0) {
+          const trackIds = [...ui.selectedTrackIds];
+          ui.deselectAllTracks();
+          project.removeTracks(trackIds);
+        } else if (ui.selectedClipIds.size > 0) {
           const ids = [...ui.selectedClipIds];
           ui.deselectAll();
           ids.forEach((id) => project.removeClip(id));

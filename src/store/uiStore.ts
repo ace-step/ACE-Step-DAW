@@ -49,6 +49,9 @@ export interface UIState {
   scrollX: number;
   scrollY: number;
   selectedClipIds: Set<string>;
+  selectedTrackIds: Set<string>;
+  /** Tracks whether the user's last selection was on clips or tracks, for context-aware Cmd+A and Delete. */
+  lastSelectionContext: 'tracks' | 'clips' | null;
   editingClipId: string | null;
   showNewProjectDialog: boolean;
   showInstrumentPicker: boolean;
@@ -174,6 +177,9 @@ export interface UIState {
   setScrollY: (y: number) => void;
   selectClip: (clipId: string, multi?: boolean) => void;
   selectClips: (clipIds: string[]) => void;
+  selectTrack: (trackId: string, multi?: boolean) => void;
+  selectTracks: (trackIds: string[]) => void;
+  deselectAllTracks: () => void;
   deselectAll: () => void;
   setEditingClip: (clipId: string | null) => void;
   setShowNewProjectDialog: (v: boolean) => void;
@@ -345,6 +351,8 @@ export const useUIStore = create<UIState>()(
   scrollX: 0,
   scrollY: 0,
   selectedClipIds: new Set(),
+  selectedTrackIds: new Set(),
+  lastSelectionContext: null,
   editingClipId: null,
   showNewProjectDialog: false,
   showInstrumentPicker: false,
@@ -477,14 +485,29 @@ export const useUIStore = create<UIState>()(
         const next = new Set(s.selectedClipIds);
         if (next.has(clipId)) next.delete(clipId);
         else next.add(clipId);
-        return { selectedClipIds: next };
+        return { selectedClipIds: next, lastSelectionContext: 'clips' as const };
       }
-      return { selectedClipIds: new Set([clipId]) };
+      return { selectedClipIds: new Set([clipId]), lastSelectionContext: 'clips' as const };
     }),
 
-  selectClips: (clipIds) => set({ selectedClipIds: new Set(clipIds) }),
+  selectClips: (clipIds) => set({ selectedClipIds: new Set(clipIds), lastSelectionContext: 'clips' as const }),
 
-  deselectAll: () => set({ selectedClipIds: new Set() }),
+  selectTrack: (trackId, multi) =>
+    set((s) => {
+      if (multi) {
+        const next = new Set(s.selectedTrackIds);
+        if (next.has(trackId)) next.delete(trackId);
+        else next.add(trackId);
+        return { selectedTrackIds: next, lastSelectionContext: 'tracks' as const };
+      }
+      return { selectedTrackIds: new Set([trackId]), lastSelectionContext: 'tracks' as const };
+    }),
+
+  selectTracks: (trackIds) => set({ selectedTrackIds: new Set(trackIds), lastSelectionContext: 'tracks' as const }),
+
+  deselectAllTracks: () => set({ selectedTrackIds: new Set() }),
+
+  deselectAll: () => set({ selectedClipIds: new Set(), selectedTrackIds: new Set(), lastSelectionContext: null }),
 
   setEditingClip: (clipId) => set({ editingClipId: clipId }),
   setShowNewProjectDialog: (v) => set({ showNewProjectDialog: v }),
@@ -852,6 +875,7 @@ function buildCommandPaletteContext(state: UIState) {
   return {
     project: projectStore.project,
     selectedClipIds: [...state.selectedClipIds],
+    selectedTrackIds: [...state.selectedTrackIds],
     currentTime: transportStore.currentTime,
     isPlaying: transportStore.isPlaying,
     showMixer: state.showMixer,

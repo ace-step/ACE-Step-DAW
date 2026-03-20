@@ -9,6 +9,7 @@ import { snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { RegionRegenerateModal } from '../generation/RegionRegenerateModal';
 import { RegionContextMenu } from './RegionContextMenu';
+import { CanvasContextMenu } from './CanvasContextMenu';
 import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
@@ -88,6 +89,7 @@ export function Timeline() {
   const suggestionFrequency = useUIStore((s) => s.suggestionFrequency);
 
   const [regionCtxMenu, setRegionCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [canvasCtxMenu, setCanvasCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
   const [normalDrag, setNormalDrag] = useState<DragRect | null>(null);
@@ -432,6 +434,19 @@ export function Timeline() {
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onContextMenu={(e) => {
+          // Only show canvas context menu on empty area
+          const target = e.target as HTMLElement;
+          if (target.closest?.('[data-clip-block]')) return;
+          if (target.closest?.('[data-sequencer-grid]')) return;
+          // Don't interfere with select window region context menu
+          if (selectWindow) {
+            const selEl = target.closest?.('[style]');
+            if (selEl && (selEl as HTMLElement).style.borderLeft?.includes('175, 82, 222')) return;
+          }
+          e.preventDefault();
+          setCanvasCtxMenu({ x: e.clientX, y: e.clientY });
+        }}
         style={{ cursor: 'default' }}
       >
         {fileDragOver && (
@@ -622,6 +637,15 @@ export function Timeline() {
 
       {/* Region regeneration modal */}
       {regionRegenerateTarget && <RegionRegenerateModal />}
+
+      {/* Canvas context menu — right-click on empty timeline area */}
+      {canvasCtxMenu && (
+        <CanvasContextMenu
+          x={canvasCtxMenu.x}
+          y={canvasCtxMenu.y}
+          onClose={() => setCanvasCtxMenu(null)}
+        />
+      )}
     </>
   );
 }

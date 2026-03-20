@@ -495,14 +495,78 @@ test.describe('QA Test Suite: Full Workflow', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04h-snap-toggle.png'), fullPage: true });
     });
 
-    test('4i. Z zooms to fit', async ({ page }) => {
+    test('4i. Z zooms to the selected arrangement clips and Shift+Z resets', async ({ page }) => {
       await page.evaluate(() => {
-        (window as any).__store.getState().addTrack('drums');
+        (window as any).__store.getState().createProject({ name: 'QA Keyboard Shortcut Project' });
+      });
+      await page.mouse.click(16, 16);
+      await page.waitForTimeout(250);
+
+      const clipIds = await page.evaluate(() => {
+        const store = (window as any).__store;
+        const ui = (window as any).__uiStore.getState();
+        const track = store.getState().addTrack('drums');
+        const intro = store.getState().addClip(track.id, {
+          startTime: 8,
+          duration: 4,
+          prompt: 'intro',
+          lyrics: '',
+          source: 'generated',
+        });
+        const fill = store.getState().addClip(track.id, {
+          startTime: 24,
+          duration: 6,
+          prompt: 'fill',
+          lyrics: '',
+          source: 'generated',
+        });
+        const outro = store.getState().addClip(track.id, {
+          startTime: 88,
+          duration: 8,
+          prompt: 'outro',
+          lyrics: '',
+          source: 'generated',
+        });
+
+        ui.setSelectWindow(null);
+        ui.selectClips([fill.id, outro.id]);
+        ui.setKeyboardContext('timeline', track.id);
+
+        return { fill: fill.id, outro: outro.id };
       });
 
+      const timeline = page.getByRole('grid');
+      await timeline.click({ position: { x: 200, y: 120 } });
       await page.keyboard.press('z');
-      await page.waitForTimeout(300);
-      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04i-zoom-fit.png'), fullPage: true });
+
+      await page.waitForFunction(() => {
+        const ui = (window as any).__uiStore.getState();
+        return ui.pixelsPerSecond < 20;
+      });
+
+      await expect(page.getByTestId(`clip-${clipIds.fill}`)).toBeVisible();
+      await expect(page.getByTestId(`clip-${clipIds.outro}`)).toBeVisible();
+
+      const zoomedSelectionPps = await page.evaluate(() =>
+        (window as any).__uiStore.getState().pixelsPerSecond,
+      );
+      expect(zoomedSelectionPps).toBeLessThan(20);
+
+      await page.keyboard.press('Shift+z');
+      await page.waitForFunction(() => {
+        const ui = (window as any).__uiStore.getState();
+        return ui.pixelsPerSecond === 10;
+      });
+
+      const fullProjectPps = await page.evaluate(() =>
+        (window as any).__uiStore.getState().pixelsPerSecond,
+      );
+      expect(fullProjectPps).toBe(10);
+
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '04i-zoom-selection-reset.png'),
+        fullPage: true,
+      });
     });
 
     test('4j. Cmd+Z undoes last action', async ({ page }) => {

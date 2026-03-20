@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
+import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { TimeRuler } from './TimeRuler';
 import { TrackLane } from './TrackLane';
@@ -67,6 +68,7 @@ export function Timeline() {
   const project = useProjectStore((s) => s.project);
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
+  const seek = useTransportStore((s) => s.seek);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -321,6 +323,9 @@ export function Timeline() {
 
         if (!hasDragged) {
           setDrag(null);
+          // Click without drag → seek playhead to click position
+          const time = (startViewX + scrollLeft) / pixelsPerSecond;
+          seek(Math.max(0, time));
           return;
         }
 
@@ -351,7 +356,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, seek],
   );
 
 

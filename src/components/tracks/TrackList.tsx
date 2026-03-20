@@ -1,8 +1,7 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
-import { AddTrackButton } from './AddTrackButton';
 import { TrackHeightPresetSelector } from './TrackHeightPresetSelector';
 import {
   ARRANGEMENT_MARKERS_HEIGHT,
@@ -17,6 +16,15 @@ export function TrackList() {
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
+  const scrollY = useUIStore((s) => s.scrollY);
+  const trackListScrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync vertical scroll with timeline
+  useEffect(() => {
+    if (trackListScrollRef.current) {
+      trackListScrollRef.current.scrollTop = scrollY;
+    }
+  }, [scrollY]);
 
   const draggedIdRef = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -113,7 +121,7 @@ export function TrackList() {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={trackListScrollRef} className="flex-1 overflow-y-hidden overflow-x-hidden">
         {visibleTracks.map((track) => (
           <TrackHeader
             key={track.id}
@@ -126,9 +134,10 @@ export function TrackList() {
             dragOverPosition={dragOverId === track.id ? dragOverPosition : null}
           />
         ))}
-      </div>
 
-      <AddTrackButton />
+        {/* Empty placeholder rows matching timeline — click to add track */}
+        <EmptyTrackHeaderRows />
+      </div>
 
       {/* Right-edge resize handle */}
       <div
@@ -136,5 +145,38 @@ export function TrackList() {
         onMouseDown={onResizeMouseDown}
       />
     </div>
+  );
+}
+
+const PLACEHOLDER_ROW_HEIGHT = 64;
+const PLACEHOLDER_ROW_COUNT = 20;
+
+function EmptyTrackHeaderRows() {
+  const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  return (
+    <>
+      {Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, i) => {
+        const virtualId = `__empty-${i}`;
+        const isSelected = selectedTrackIds.has(virtualId);
+        return (
+          <div
+            key={`empty-header-${i}`}
+            className="relative flex items-center justify-center border-b cursor-pointer group"
+            style={{
+              height: PLACEHOLDER_ROW_HEIGHT,
+              borderColor: 'var(--color-daw-arrangement-separator)',
+            }}
+            onClick={() => setShowInstrumentPicker(true)}
+            data-testid={`empty-header-row-${i}`}
+          >
+            {isSelected && (
+              <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+            )}
+            <span className="text-zinc-600 text-lg opacity-0 group-hover:opacity-100 transition-opacity">+</span>
+          </div>
+        );
+      })}
+    </>
   );
 }

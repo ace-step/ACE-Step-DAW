@@ -82,10 +82,12 @@ export function Timeline() {
   const keyboardContext = useUIStore((s) => s.keyboardContext);
   const timelineZoomRequest = useUIStore((s) => s.timelineZoomRequest);
   const setScrollX = useUIStore((s) => s.setScrollX);
+  const setScrollY = useUIStore((s) => s.setScrollY);
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
   const deselectAllTracks = useUIStore((s) => s.deselectAllTracks);
+  const selectTrack = useUIStore((s) => s.selectTrack);
   const setRegionRegenerateTarget = useUIStore((s) => s.setRegionRegenerateTarget);
   const regionRegenerateTarget = useUIStore((s) => s.regionRegenerateTarget);
   const inlineSuggestions = useUIStore((s) => s.inlineSuggestions);
@@ -277,9 +279,6 @@ export function Timeline() {
       e.preventDefault();
       e.stopPropagation();
 
-      // Clear track selection when interacting with timeline
-      deselectAllTracks();
-
       const container = scrollRef.current;
       const trackArea = trackAreaRef.current;
       if (!container || !trackArea) return;
@@ -324,10 +323,17 @@ export function Timeline() {
 
         if (!hasDragged) {
           setDrag(null);
-          // Click without drag → seek playhead to click position
+          // Click without drag → seek playhead + select the clicked track row
           const time = (startViewX + scrollLeft) / pixelsPerSecond;
           seek(time);
           setTimelineFocused(true);
+          // Find and select the track row at the click Y position
+          const clickedIds = getIntersectedTrackIds(container, startViewY, startViewY + 1);
+          if (clickedIds.length > 0) {
+            selectTrack(clickedIds[0], ev.metaKey || ev.ctrlKey);
+          } else {
+            deselectAllTracks();
+          }
           return;
         }
 
@@ -358,7 +364,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, seek, setTimelineFocused],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, seek, setTimelineFocused],
   );
 
 
@@ -407,7 +413,11 @@ export function Timeline() {
         role="grid"
         tabIndex={0}
         data-onboarding-target="timeline"
-        className="flex-1 overflow-auto bg-[#1a1a2a] relative group"
+        className="flex-1 overflow-auto bg-[#1c1d22] relative group"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setScrollY(el.scrollTop);
+        }}
         onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}
         onFocus={() => { setKeyboardContext('timeline'); setTimelineFocused(true); }}
@@ -598,22 +608,35 @@ export function Timeline() {
   );
 }
 
-/** Empty placeholder rows below tracks — creates infinite grid like ACE Studio */
+/** Empty placeholder rows below tracks — infinite grid like ACE Studio */
 const PLACEHOLDER_ROW_HEIGHT = 64; // matches default track height
 const PLACEHOLDER_ROW_COUNT = 20;  // enough to fill any viewport
 
 function EmptyTrackRows() {
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   return (
     <>
-      {Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, i) => (
-        <div
-          key={`empty-row-${i}`}
-          style={{
-            height: PLACEHOLDER_ROW_HEIGHT,
-            borderBottom: '1px solid var(--color-daw-arrangement-separator)',
-          }}
-        />
-      ))}
+      {Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, i) => {
+        const virtualId = `__empty-${i}`;
+        const isSelected = selectedTrackIds.has(virtualId);
+        return (
+          <div
+            key={virtualId}
+            data-track-id={virtualId}
+            data-timeline-lane
+            className="relative"
+            style={{
+              height: PLACEHOLDER_ROW_HEIGHT,
+              borderBottom: '1px solid var(--color-daw-arrangement-separator)',
+            }}
+            data-testid={`empty-row-${i}`}
+          >
+            {isSelected && (
+              <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+            )}
+          </div>
+        );
+      })}
     </>
   );
 }

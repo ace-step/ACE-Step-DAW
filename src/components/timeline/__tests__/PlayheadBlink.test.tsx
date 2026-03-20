@@ -6,48 +6,42 @@ import { useUIStore } from '../../../store/uiStore';
 
 describe('Playhead blink animation', () => {
   beforeEach(() => {
-    useTransportStore.setState({ currentTime: 5, isPlaying: false });
-    useUIStore.setState({ pixelsPerSecond: 50, timelineFocused: false });
+    useTransportStore.setState({ currentTime: 0, playStartTime: 0, isPlaying: false });
+    useUIStore.setState({ pixelsPerSecond: 50, timelineFocused: false, selectedTrackIds: new Set() });
   });
 
-  it('applies blink animation when stopped and timeline is focused', () => {
-    useTransportStore.setState({ isPlaying: false });
-    useUIStore.setState({ timelineFocused: true });
+  it('renders transport line when currentTime differs from playStartTime', () => {
+    useTransportStore.setState({ isPlaying: true, currentTime: 3, playStartTime: 1 });
+    useUIStore.setState({ pixelsPerSecond: 100, timelineFocused: true });
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
-    expect(line.style.animation).toContain('playhead-blink-line');
-  });
-
-  it('does not blink when transport is playing', () => {
-    useTransportStore.setState({ isPlaying: true });
-    useUIStore.setState({ timelineFocused: true });
-    const { container } = render(<Playhead />);
-    const line = container.firstElementChild as HTMLElement;
-    expect(line.style.animation).toBe('none');
-  });
-
-  it('does not blink when timeline is not focused', () => {
-    useTransportStore.setState({ isPlaying: false });
-    useUIStore.setState({ timelineFocused: false });
-    const { container } = render(<Playhead />);
-    const line = container.firstElementChild as HTMLElement;
-    expect(line.style.animation).toBe('none');
-  });
-
-  it('shows white line when not blinking', () => {
-    useTransportStore.setState({ isPlaying: false });
-    useUIStore.setState({ timelineFocused: false });
-    const { container } = render(<Playhead />);
-    const line = container.firstElementChild as HTMLElement;
-    // JSDOM normalizes hex to rgb
+    expect(line).not.toBeNull();
     expect(line.style.backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(line.style.left).toBe('300px');
+    expect(line.style.minHeight).toBe('100vh');
   });
 
-  it('positions playhead at currentTime * pixelsPerSecond', () => {
-    useTransportStore.setState({ currentTime: 3 });
-    useUIStore.setState({ pixelsPerSecond: 100 });
+  it('renders nothing when stopped, unfocused, and currentTime equals playStartTime', () => {
+    useTransportStore.setState({ isPlaying: false, currentTime: 0, playStartTime: 0 });
+    useUIStore.setState({ timelineFocused: false });
+    const { container } = render(<Playhead />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it('transport line stays visible after pause when currentTime differs from anchor', () => {
+    // Simulate: played from t=1, paused at t=5
+    useTransportStore.setState({ isPlaying: false, currentTime: 5, playStartTime: 1 });
+    useUIStore.setState({ pixelsPerSecond: 100, timelineFocused: true });
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
-    expect(line.style.left).toBe('300px');
+    expect(line).not.toBeNull();
+    expect(line.style.left).toBe('500px');
+  });
+
+  it('hides transport line when currentTime equals playStartTime', () => {
+    useTransportStore.setState({ isPlaying: false, currentTime: 2, playStartTime: 2 });
+    useUIStore.setState({ pixelsPerSecond: 100, timelineFocused: false, selectedTrackIds: new Set() });
+    const { container } = render(<Playhead />);
+    expect(container.firstElementChild).toBeNull();
   });
 });

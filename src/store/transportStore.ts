@@ -22,6 +22,8 @@ export interface TransportState {
   countInActive: boolean;
   countInBeat: number; // 0 = not counting in, negative = beats remaining
   currentTime: number;
+  /** The time position where playback started — triangle anchor */
+  playStartTime: number;
   scrubAnchorTime: number | null;
   scrubResumeOnRelease: boolean;
   scrubPreviewRate: number;
@@ -83,6 +85,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   countInActive: false,
   countInBeat: 0,
   currentTime: 0,
+  playStartTime: 0,
   scrubAnchorTime: null,
   scrubResumeOnRelease: false,
   scrubPreviewRate: 0,
@@ -108,6 +111,7 @@ export const useTransportStore = create<TransportState>((set) => ({
     isPlaying: false,
     isScrubbing: false,
     currentTime: 0,
+    playStartTime: 0,
     scrubAnchorTime: null,
     scrubResumeOnRelease: false,
     scrubPreviewRate: 0,
@@ -129,12 +133,13 @@ export const useTransportStore = create<TransportState>((set) => ({
     }
     return { armedTrackIds: exclusive ? [id] : [...s.armedTrackIds, id] };
   }),
-  seek: (time) => set({ currentTime: Math.max(0, time) }),
+  seek: (time) => set({ currentTime: Math.max(0, time), playStartTime: Math.max(0, time) }),
   setCurrentTime: (time) => set({ currentTime: time }),
   startScrub: (time, resumeOnRelease = false) => set({
     isPlaying: false,
     isScrubbing: true,
     currentTime: Math.max(0, time),
+    playStartTime: Math.max(0, time),
     scrubAnchorTime: Math.max(0, time),
     scrubResumeOnRelease: resumeOnRelease,
     scrubPreviewRate: 0,
@@ -142,6 +147,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   updateScrub: (time, previewRate) => set((s) => ({
     isScrubbing: s.isScrubbing,
     currentTime: Math.max(0, time),
+    playStartTime: Math.max(0, time),
     scrubPreviewRate: Math.max(-4, Math.min(4, previewRate)),
   })),
   endScrub: () => set({

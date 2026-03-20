@@ -34,7 +34,7 @@ describe('TrackList alignment spacers', () => {
 
     render(<TrackList />);
 
-    expect(screen.getByText('Tracks').parentElement).toHaveStyle({ height: '24px' });
+    expect(screen.getByText('Tracks').parentElement).toHaveStyle({ height: '34px' });
   });
 
   it('adds marker and tempo spacers when those top-stack lanes are visible', () => {

@@ -15,6 +15,7 @@ import {
   ARRANGEMENT_EMPTY_LANE_BG,
   ARRANGEMENT_ROW_BORDER_CLASS,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
+  ARRANGEMENT_SELECTED_LANE_BG,
 } from '../arrangement/rowSurface';
 
 function getBarDurationSec(bpm: number, timeSignature: number): number {
@@ -59,6 +60,8 @@ const EMPTY_LANE_SURFACE_OVERLAY_OPACITY = 0.55;
 export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const contextWindow = useUIStore((s) => s.contextWindow);
+  const isSelected = useUIStore((s) => s.selectedTrackIds.has(track.id));
+  const selectTrack = useUIStore((s) => s.selectTrack);
   const setOpenSequencerTrackId = useUIStore((s) => s.setOpenSequencerTrackId);
   const setOpenDrumMachineTrackId = useUIStore((s) => s.setOpenDrumMachineTrackId);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -259,6 +262,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     <>
       <div
         data-track-id={track.id}
+        data-timeline-lane
         data-testid={`track-lane-${track.id}`}
         data-lane-surface={shouldHighlightEmptyLane ? 'empty' : 'default'}
         className={`relative border-b ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
@@ -274,7 +278,16 @@ export function TrackLane({ track }: TrackLaneProps) {
         onDragLeave={handleFileDragLeave}
         onDrop={handleFileDrop}
       >
-        {shouldHighlightEmptyLane && !fileDragOver && (
+        {/* Selected track overlay — semi-transparent so grid lines show through */}
+        {isSelected && !fileDragOver && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }}
+          />
+        )}
+
+        {shouldHighlightEmptyLane && !fileDragOver && !isSelected && (
           <div
             aria-hidden="true"
             data-testid={`track-lane-surface-overlay-${track.id}`}

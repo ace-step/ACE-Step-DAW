@@ -82,8 +82,8 @@ export function GridOverlay() {
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
   const colors = {
-    bar: '#3a3a55',
-    beat: '#2e2e45',
+    bar: 'var(--color-daw-grid-bar)',
+    beat: 'var(--color-daw-grid-beat)',
   };
 
   return (

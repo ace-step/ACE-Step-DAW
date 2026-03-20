@@ -134,13 +134,13 @@ export function TimeRuler() {
     return result;
   }, [project, pixelsPerSecond]);
 
-  if (!project) return <div className="bg-[#1a1a28] border-b border-[#3a3a55]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
+  if (!project) return <div className="bg-[#1a1a28] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 
   const totalWidth = project.totalDuration * pixelsPerSecond;
 
   return (
     <div
-      className="relative bg-[#1a1a28] border-b border-[#3a3a55] select-none cursor-pointer z-30"
+      className="relative bg-[#1a1a28] border-b border-[color:var(--color-daw-grid-bar)] select-none cursor-pointer z-30"
       style={{ width: totalWidth, height: TIMELINE_RULER_HEIGHT }}
       role="slider"
       aria-label="Timeline scrub ruler"
@@ -178,10 +178,10 @@ export function TimeRuler() {
           style={{ left: x }}
         >
           {/* Vertical tick line from top */}
-          <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5a75]' : 'h-2/3 bg-[#3a3a55]'}`} />
+          <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5a75]' : 'h-2/3 bg-[color:var(--color-daw-grid-bar)]'}`} />
           {/* Label beside tick */}
           <span
-            className={`absolute top-[2px] left-[4px] font-medium whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
+            className={`absolute bottom-[4px] left-[4px] font-medium whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
           >
             {label}
             {tsLabel && (
@@ -197,28 +197,42 @@ export function TimeRuler() {
   );
 }
 
-/** Playhead position indicator rendered inside the ruler bar */
+/** Playhead position indicator rendered inside the ruler bar.
+ *  Always positioned at playStartTime (the user's click anchor).
+ *  Blinks when stopped and timeline is focused. */
 const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerSecond }: { pixelsPerSecond: number }) {
-  const currentTime = useTransportStore((s) => s.currentTime);
+  const playStartTime = useTransportStore((s) => s.playStartTime);
   const isPlaying = useTransportStore((s) => s.isPlaying);
   const timelineFocused = useUIStore((s) => s.timelineFocused);
-  const x = currentTime * pixelsPerSecond;
+  // Triangle always stays at the anchor position (playStartTime)
+  const x = playStartTime * pixelsPerSecond;
   const blinking = !isPlaying && timelineFocused;
 
+  // SVG inverted equilateral triangle with crisp 1px white stroke.
+  // Odd width (13px) so center pixel aligns with the 1px playhead line.
+  // Inset polygon by 0.5px to keep stroke within SVG bounds.
+  const svgW = 13;
+  const svgH = 12;
   return (
     <div
-      className="absolute bottom-0 z-30 pointer-events-none"
-      style={{ left: x, transform: 'translate(-7px, -5px)' }}
+      className="absolute bottom-[4px] z-30 pointer-events-none"
+      style={{ left: x, transform: `translate(-${Math.floor(svgW / 2)}px, 0px)` }}
     >
-      {/* Inverted triangle (▽) — mostly inside ruler, only the tiny tip pokes below */}
-      <div
-        className="w-0 h-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent"
-        style={{
-          borderTopColor: blinking ? undefined : '#000000',
-          animation: blinking ? 'playhead-blink-triangle 1.2s ease-in-out infinite' : 'none',
-          filter: 'drop-shadow(0 0 0.5px white)',
-        }}
-      />
+      <svg
+        width={svgW}
+        height={svgH}
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        className={blinking ? 'playhead-triangle-blink' : undefined}
+        style={{ display: 'block' }}
+      >
+        <polygon
+          points={`0.5,0.5 ${svgW - 0.5},0.5 ${svgW / 2},${svgH - 0.5}`}
+          fill={blinking ? undefined : '#000000'}
+          stroke="white"
+          strokeWidth="1"
+          strokeLinejoin="miter"
+        />
+      </svg>
     </div>
   );
 });

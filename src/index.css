@@ -3,20 +3,21 @@
 @theme {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
-  --color-daw-bg: #151520;
+  --color-daw-bg: #191b1f;
   --color-daw-surface: #1e1e2e;
   --color-daw-surface-2: #2a2a3d;
   --color-daw-surface-3: #353548;
   --color-daw-border: #3a3a50;
   --color-daw-accent: #4a90d9;
   --color-daw-accent-hover: #5ba3ec;
-  --color-daw-playhead: #7c5bf5;
+  --color-daw-playhead: #5e59ff;
   --color-daw-arrangement-header-bg: #1e1e2e;
   --color-daw-arrangement-group-bg: #252538;
   --color-daw-arrangement-empty-lane-bg: #1a1a2a;
-  --color-daw-arrangement-separator: #2e2e45;
-  --color-daw-grid-bar: #3a3a55;
-  --color-daw-grid-beat: #2a2a40;
+  --color-daw-arrangement-separator: #3e424c;
+  --color-daw-grid-bar: #343557;
+  --color-daw-grid-beat: #343557;
+  --color-daw-track-selected: #2e2c58;
   --color-daw-region-audio: #4a8cc7;
   --color-daw-region-midi: #5cb85c;
   --color-daw-region-drummer: #d4a843;
@@ -102,6 +103,14 @@ select:focus-visible,
   0%, 30% { border-top-color: #000000; }
   50%, 80% { border-top-color: var(--color-daw-playhead); }
   100% { border-top-color: #000000; }
+}
+@keyframes playhead-blink-fill {
+  0%, 30% { fill: #000000; }
+  50%, 80% { fill: var(--color-daw-playhead); }
+  100% { fill: #000000; }
+}
+.playhead-triangle-blink polygon {
+  animation: playhead-blink-fill 1.2s ease-in-out infinite;
 }
 /* Micro-animations for DAW interactions */
 @keyframes fadeIn {

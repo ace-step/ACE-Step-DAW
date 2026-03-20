@@ -185,10 +185,10 @@ export function TrackHeader({
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
       className={`relative flex items-center gap-2 border-b group select-none animate-[fadeIn_150ms_ease-out] ${
-        isDragOver ? 'bg-[#383838]' : isTrackSelected ? 'ring-1 ring-inset ring-blue-500/50' : ''
+        isDragOver ? 'bg-[#383838]' : ''
       }`}
       style={{
-        backgroundColor: isDragOver ? undefined : isTrackSelected ? 'rgba(59, 130, 246, 0.1)' : headerBackgroundColor,
+        backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
         height: track.isGroup ? Math.max(40, laneHeight * 0.7) : laneHeight,
         paddingLeft: isChild ? 24 : 8,
@@ -231,6 +231,11 @@ export function TrackHeader({
         }
       }}
     >
+      {/* Selected track overlay */}
+      {isTrackSelected && !isDragOver && (
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none rounded-inherit" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+      )}
+
       {/* Color strip (left edge) — click to change track color */}
       <div
         className="absolute left-0 top-0 bottom-0 w-[6px] rounded-r-sm cursor-pointer hover:w-2 hover:shadow-[0_0_6px_var(--track-color)] transition-all duration-100"

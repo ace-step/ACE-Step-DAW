@@ -73,7 +73,7 @@ export function TrackHeaderMeter({ trackId }: TrackHeaderMeterProps) {
     <div className="flex items-center gap-1 w-full">
       <div
         aria-label={`Track header level meter for ${trackId}`}
-        className="relative flex-1 h-[4px] rounded-full bg-[#111] overflow-hidden border border-white/5"
+        className="relative flex-1 min-w-[6px] h-[4px] rounded-full bg-[#111] overflow-hidden border border-white/5"
       >
         {/* Level bar */}
         <div

@@ -124,7 +124,8 @@ export function TrackHeader({
   const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
   const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
-  const primaryButtonClass = 'w-6 h-6 flex items-center justify-center rounded-md transition-colors';
+  const isTwoRow = laneHeight >= 60;
+  const primaryButtonClass = 'w-6 h-6 min-w-[20px] min-h-[20px] flex items-center justify-center rounded-md transition-colors';
   const secondaryButtonClass = 'w-5 h-5 flex items-center justify-center rounded-md transition-colors';
 
   const cycleMonitor = useCallback(() => {
@@ -230,8 +231,8 @@ export function TrackHeader({
     >
       {/* Color strip (left edge) — click to change track color */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[4px] rounded-r-sm cursor-pointer hover:w-[7px] transition-all duration-100"
-        style={{ backgroundColor: track.color }}
+        className="absolute left-0 top-0 bottom-0 w-[6px] rounded-r-sm cursor-pointer hover:w-2 hover:shadow-[0_0_6px_var(--track-color)] transition-all duration-100"
+        style={{ backgroundColor: track.color, '--track-color': track.color } as React.CSSProperties}
         title="Click to change track color"
         onClick={(e) => {
           e.stopPropagation();
@@ -287,36 +288,180 @@ export function TrackHeader({
         ) : info.emoji}
       </div>
 
-      {/* Name + controls column */}
-      <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
-        {/* Name */}
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitRename();
-              if (e.key === 'Escape') cancelEditing();
-            }}
-            className="text-[11px] font-medium text-zinc-100 bg-[#1a1a1a] rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
-            autoFocus
-          />
-        ) : (
-          <span
-            className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
-            title={track.displayName}
-            onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
-          >
-            {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
-            {track.displayName}
-          </span>
-        )}
+      {/* Track name element (shared between layouts) */}
+      {isTwoRow ? (
+        /* Two-row layout for non-compact tracks (laneHeight >= 60) */
+        <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+          {/* Row 1: drag handle + instrument icon + name + M/S/Arm */}
+          <div data-testid="track-header-row1" className="flex items-center gap-1 w-full">
+            <div className="flex-1 min-w-[48px]">
+              {isEditing ? (
+                <input
+                  ref={inputRef}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename();
+                    if (e.key === 'Escape') cancelEditing();
+                  }}
+                  className="text-[11px] font-medium text-zinc-100 bg-[#1a1a1a] rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
+                  autoFocus
+                />
+              ) : (
+                <span
+                  className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
+                  title={track.displayName}
+                  onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
+                >
+                  {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+                  {track.displayName}
+                </span>
+              )}
+            </div>
+            <div
+              data-primary-actions
+              className="flex items-center gap-0.5 rounded-lg border border-[#494949] bg-[#242424]/95 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+            >
+              <button
+                onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
+                className={`${primaryButtonClass} ${
+                  track.muted
+                    ? 'bg-amber-600/90 text-white'
+                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+                }`}
+                title="Mute (M)"
+                aria-label={`Mute ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  {track.muted ? (
+                    <>
+                      <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                      <path d="M9 4l3 4M12 4L9 8" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                      <path d="M9 3.5c1 .8 1 4.2 0 5" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
+                className={`${primaryButtonClass} ${
+                  track.soloed
+                    ? 'bg-emerald-600/90 text-white'
+                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+                }`}
+                title="Solo (S)"
+                aria-label={`Solo ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 5.5a4 4 0 018 0" />
+                  <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
+                className={`${primaryButtonClass} ${
+                  isArmed
+                    ? 'bg-red-600/90 text-white'
+                    : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+                }`}
+                title="Record arm"
+                aria-label={`Record arm ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+                  <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
+                </svg>
+              </button>
+            </div>
+            <div
+              data-secondary-actions
+              className={`flex items-center gap-0.5 rounded-lg border border-[#404040] bg-[#1f1f1f]/90 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all ${
+                showSecondaryActions
+                  ? 'opacity-100 translate-x-0'
+                  : 'opacity-0 pointer-events-none translate-x-1 max-w-0 overflow-hidden group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:max-w-none group-hover:overflow-visible'
+              }`}
+            >
+              <button
+                onClick={cycleMonitor}
+                className={`${secondaryButtonClass} ${
+                  monitorMode === 'on'
+                    ? 'bg-cyan-600/90 text-white'
+                    : monitorMode === 'auto'
+                      ? 'bg-cyan-600/50 text-cyan-200'
+                      : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
+                }`}
+                title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
+                aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
+              >
+                <svg data-icon="microphone" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+                  <rect x="4" y="1" width="4" height="6" rx="2" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
+                  <path d="M3 7a3 3 0 006 0" />
+                  <path d="M6 10v1.5M4.5 11.5h3" />
+                </svg>
+              </button>
+              <button
+                onClick={handleFreeze}
+                disabled={isFreezing}
+                className={`${secondaryButtonClass} ${
+                  track.frozen
+                    ? 'bg-cyan-600/90 text-white'
+                    : isFreezing
+                      ? 'text-cyan-400 animate-pulse'
+                      : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
+                }`}
+                title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
+                aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 1.5v9" />
+                  <path d="M2.5 3.25l7 5.5" />
+                  <path d="M2.5 8.75l7-5.5" />
+                  <path d="M1.75 6h8.5" />
+                  <path d="M4.65 1.9L6 3.25l1.35-1.35" />
+                  <path d="M4.65 10.1L6 8.75l1.35 1.35" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  const currentProject = useProjectStore.getState().project;
+                  if (!currentProject) return;
+                  const laneExists = (currentProject.automationLanes ?? []).some((lane) => lane.trackId === track.id);
+                  if (!laneExists) {
+                    useProjectStore.getState().ensureAutomationLane(
+                      track.id,
+                      { type: 'mixer', param: 'volume' },
+                      track.volume,
+                    );
+                  } else {
+                    for (const lane of (currentProject.automationLanes ?? []).filter((candidate) => candidate.trackId === track.id)) {
+                      useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
+                    }
+                  }
+                }}
+                className={`${secondaryButtonClass} ${
+                  hasAutomationLane
+                    ? 'bg-amber-600/80 text-white'
+                    : 'text-zinc-500 hover:text-amber-300 hover:bg-[#444]'
+                }`}
+                title="Toggle automation lane (A)"
+                aria-label={`Toggle automation ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 8.5L4 6l2 2 4.5-4.5" />
+                  <circle cx="4" cy="6" r="0.8" fill="currentColor" stroke="none" />
+                  <circle cx="6" cy="8" r="0.8" fill="currentColor" stroke="none" />
+                  <circle cx="10.5" cy="3.5" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </div>
+          </div>
 
-        {/* Volume slider + M/S buttons (only in non-compact mode) */}
-        {!isCompact && (
-          <div className="flex items-center gap-1 w-full">
+          {/* Row 2: volume slider + level meter */}
+          <div data-testid="track-header-row2" className="flex items-center gap-1 w-full">
             <input
               type="range"
               min="0"
@@ -326,156 +471,187 @@ export function TrackHeader({
               className="flex-1 h-1 min-w-0"
               title={`Volume: ${Math.round(track.volume * 100)}%`}
             />
+            <TrackHeaderMeter trackId={track.id} />
           </div>
-        )}
-
-        {/* Level meter with peak hold + clip indicator */}
-        <TrackHeaderMeter trackId={track.id} />
-      </div>
-
-      {/* Primary and secondary track actions */}
-      <div className="flex items-center gap-1 flex-shrink-0 self-stretch py-1">
-        <div
-          data-primary-actions
-          className="flex items-center gap-0.5 rounded-lg border border-[#494949] bg-[#242424]/95 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-        >
-          <button
-            onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-            className={`${primaryButtonClass} ${
-              track.muted
-                ? 'bg-amber-600/90 text-white'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
-            }`}
-            title="Mute (M)"
-            aria-label={`Mute ${track.displayName}`}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              {track.muted ? (
-                <>
-                  <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
-                  <path d="M9 4l3 4M12 4L9 8" />
-                </>
-              ) : (
-                <>
-                  <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
-                  <path d="M9 3.5c1 .8 1 4.2 0 5" />
-                </>
-              )}
-            </svg>
-          </button>
-          <button
-            onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-            className={`${primaryButtonClass} ${
-              track.soloed
-                ? 'bg-emerald-600/90 text-white'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
-            }`}
-            title="Solo (S)"
-            aria-label={`Solo ${track.displayName}`}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 5.5a4 4 0 018 0" />
-              <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
-            className={`${primaryButtonClass} ${
-              isArmed
-                ? 'bg-red-600/90 text-white'
-                : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
-            }`}
-            title="Record arm"
-            aria-label={`Record arm ${track.displayName}`}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
-              <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
         </div>
+      ) : (
+        /* Single-row compact layout (laneHeight < 60) */
+        <>
+          <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+            {/* Name */}
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename();
+                  if (e.key === 'Escape') cancelEditing();
+                }}
+                className="text-[11px] font-medium text-zinc-100 bg-[#1a1a1a] rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
+                autoFocus
+              />
+            ) : (
+              <span
+                className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
+                title={track.displayName}
+                onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
+              >
+                {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+                {track.displayName}
+              </span>
+            )}
 
-        <div
-          data-secondary-actions
-          className={`flex items-center gap-0.5 rounded-lg border border-[#404040] bg-[#1f1f1f]/90 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all ${
-            showSecondaryActions
-              ? 'opacity-100 translate-x-0'
-              : 'opacity-0 pointer-events-none translate-x-1 max-w-0 overflow-hidden group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:max-w-none group-hover:overflow-visible'
-          }`}
-        >
-          <button
-            onClick={cycleMonitor}
-            className={`${secondaryButtonClass} ${
-              monitorMode === 'on'
-                ? 'bg-cyan-600/90 text-white'
-                : monitorMode === 'auto'
-                  ? 'bg-cyan-600/50 text-cyan-200'
-                  : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
-            }`}
-            title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
-            aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
-          >
-            <svg data-icon="microphone" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
-              <rect x="4" y="1" width="4" height="6" rx="2" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
-              <path d="M3 7a3 3 0 006 0" />
-              <path d="M6 10v1.5M4.5 11.5h3" />
-            </svg>
-          </button>
-          <button
-            onClick={handleFreeze}
-            disabled={isFreezing}
-            className={`${secondaryButtonClass} ${
-              track.frozen
-                ? 'bg-cyan-600/90 text-white'
-                : isFreezing
-                  ? 'text-cyan-400 animate-pulse'
-                  : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
-            }`}
-            title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
-            aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 1.5v9" />
-              <path d="M2.5 3.25l7 5.5" />
-              <path d="M2.5 8.75l7-5.5" />
-              <path d="M1.75 6h8.5" />
-              <path d="M4.65 1.9L6 3.25l1.35-1.35" />
-              <path d="M4.65 10.1L6 8.75l1.35 1.35" />
-            </svg>
-          </button>
-          <button
-            onClick={() => {
-              const currentProject = useProjectStore.getState().project;
-              if (!currentProject) return;
-              const laneExists = (currentProject.automationLanes ?? []).some((lane) => lane.trackId === track.id);
-              if (!laneExists) {
-                useProjectStore.getState().ensureAutomationLane(
-                  track.id,
-                  { type: 'mixer', param: 'volume' },
-                  track.volume,
-                );
-              } else {
-                for (const lane of (currentProject.automationLanes ?? []).filter((candidate) => candidate.trackId === track.id)) {
-                  useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
-                }
-              }
-            }}
-            className={`${secondaryButtonClass} ${
-              hasAutomationLane
-                ? 'bg-amber-600/80 text-white'
-                : 'text-zinc-500 hover:text-amber-300 hover:bg-[#444]'
-            }`}
-            title="Toggle automation lane (A)"
-            aria-label={`Toggle automation ${track.displayName}`}
-          >
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1.5 8.5L4 6l2 2 4.5-4.5" />
-              <circle cx="4" cy="6" r="0.8" fill="currentColor" stroke="none" />
-              <circle cx="6" cy="8" r="0.8" fill="currentColor" stroke="none" />
-              <circle cx="10.5" cy="3.5" r="0.8" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
-        </div>
-      </div>
+            {/* Level meter with peak hold + clip indicator */}
+            <TrackHeaderMeter trackId={track.id} />
+          </div>
+
+          {/* Primary and secondary track actions */}
+          <div className="flex items-center gap-1 flex-shrink-0 self-stretch py-1">
+            <div
+              data-primary-actions
+              className="flex items-center gap-0.5 rounded-lg border border-[#494949] bg-[#242424]/95 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+            >
+              <button
+                onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
+                className={`${primaryButtonClass} ${
+                  track.muted
+                    ? 'bg-amber-600/90 text-white'
+                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+                }`}
+                title="Mute (M)"
+                aria-label={`Mute ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  {track.muted ? (
+                    <>
+                      <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                      <path d="M9 4l3 4M12 4L9 8" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M1 4.5h2l3-3v9l-3-3H1z" fill="currentColor" stroke="none" />
+                      <path d="M9 3.5c1 .8 1 4.2 0 5" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
+                className={`${primaryButtonClass} ${
+                  track.soloed
+                    ? 'bg-emerald-600/90 text-white'
+                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-[#444]'
+                }`}
+                title="Solo (S)"
+                aria-label={`Solo ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 5.5a4 4 0 018 0" />
+                  <path d="M2 5.5v2a1 1 0 001 1h1v-3H2zM10 5.5v2a1 1 0 01-1 1H8v-3h2z" fill={track.soloed ? 'currentColor' : 'none'} />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
+                className={`${primaryButtonClass} ${
+                  isArmed
+                    ? 'bg-red-600/90 text-white'
+                    : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+                }`}
+                title="Record arm"
+                aria-label={`Record arm ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+                  <circle cx="6" cy="6" r="3.25" fill={isArmed ? 'currentColor' : 'none'} />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              data-secondary-actions
+              className={`flex items-center gap-0.5 rounded-lg border border-[#404040] bg-[#1f1f1f]/90 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all ${
+                showSecondaryActions
+                  ? 'opacity-100 translate-x-0'
+                  : 'opacity-0 pointer-events-none translate-x-1 max-w-0 overflow-hidden group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:max-w-none group-hover:overflow-visible'
+              }`}
+            >
+              <button
+                onClick={cycleMonitor}
+                className={`${secondaryButtonClass} ${
+                  monitorMode === 'on'
+                    ? 'bg-cyan-600/90 text-white'
+                    : monitorMode === 'auto'
+                      ? 'bg-cyan-600/50 text-cyan-200'
+                      : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
+                }`}
+                title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
+                aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
+              >
+                <svg data-icon="microphone" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+                  <rect x="4" y="1" width="4" height="6" rx="2" fill={monitorMode !== 'off' ? 'currentColor' : 'none'} />
+                  <path d="M3 7a3 3 0 006 0" />
+                  <path d="M6 10v1.5M4.5 11.5h3" />
+                </svg>
+              </button>
+              <button
+                onClick={handleFreeze}
+                disabled={isFreezing}
+                className={`${secondaryButtonClass} ${
+                  track.frozen
+                    ? 'bg-cyan-600/90 text-white'
+                    : isFreezing
+                      ? 'text-cyan-400 animate-pulse'
+                      : 'text-zinc-500 hover:text-cyan-300 hover:bg-[#444]'
+                }`}
+                title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
+                aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 1.5v9" />
+                  <path d="M2.5 3.25l7 5.5" />
+                  <path d="M2.5 8.75l7-5.5" />
+                  <path d="M1.75 6h8.5" />
+                  <path d="M4.65 1.9L6 3.25l1.35-1.35" />
+                  <path d="M4.65 10.1L6 8.75l1.35 1.35" />
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  const currentProject = useProjectStore.getState().project;
+                  if (!currentProject) return;
+                  const laneExists = (currentProject.automationLanes ?? []).some((lane) => lane.trackId === track.id);
+                  if (!laneExists) {
+                    useProjectStore.getState().ensureAutomationLane(
+                      track.id,
+                      { type: 'mixer', param: 'volume' },
+                      track.volume,
+                    );
+                  } else {
+                    for (const lane of (currentProject.automationLanes ?? []).filter((candidate) => candidate.trackId === track.id)) {
+                      useProjectStore.getState().clearAutomationLane(track.id, lane.parameter);
+                    }
+                  }
+                }}
+                className={`${secondaryButtonClass} ${
+                  hasAutomationLane
+                    ? 'bg-amber-600/80 text-white'
+                    : 'text-zinc-500 hover:text-amber-300 hover:bg-[#444]'
+                }`}
+                title="Toggle automation lane (A)"
+                aria-label={`Toggle automation ${track.displayName}`}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 8.5L4 6l2 2 4.5-4.5" />
+                  <circle cx="4" cy="6" r="0.8" fill="currentColor" stroke="none" />
+                  <circle cx="6" cy="8" r="0.8" fill="currentColor" stroke="none" />
+                  <circle cx="10.5" cy="3.5" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Bottom-edge height resize handle */}
       <div

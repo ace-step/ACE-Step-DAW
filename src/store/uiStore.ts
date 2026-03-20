@@ -110,6 +110,9 @@ export interface UIState {
   // Tempo lane
   showTempoLane: boolean;
 
+  // Playhead focus — true when timeline area is focused (after click-to-seek)
+  timelineFocused: boolean;
+
   // Loop Browser
   loopBrowserOpen: boolean;
   loopBrowserCategory: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth';
@@ -238,6 +241,9 @@ export interface UIState {
 
   // Tempo lane
   toggleTempoLane: () => void;
+
+  // Playhead focus
+  setTimelineFocused: (focused: boolean) => void;
 
   // Loop Browser
   toggleLoopBrowser: () => void;
@@ -411,6 +417,7 @@ export const useUIStore = create<UIState>()(
   activeBottomPanel: null,
 
   showTempoLane: false,
+  timelineFocused: false,
 
   loopBrowserOpen: false,
   loopBrowserCategory: 'All',
@@ -670,6 +677,7 @@ export const useUIStore = create<UIState>()(
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
 
   toggleTempoLane: () => set((s) => ({ showTempoLane: !s.showTempoLane })),
+  setTimelineFocused: (focused) => set({ timelineFocused: focused }),
 
   toggleLoopBrowser: () => set((s) => ({ loopBrowserOpen: !s.loopBrowserOpen })),
   setLoopBrowserCategory: (v) => set({ loopBrowserCategory: v }),

@@ -94,12 +94,12 @@ select:focus-visible,
 
 /* Playhead blink animation (ACE Studio style) */
 @keyframes playhead-blink-line {
-  0%, 49% { background-color: #1e1e2e; }
-  50%, 100% { background-color: #7c5bf5; }
+  0%, 49% { background-color: #ffffff; }
+  50%, 100% { background-color: var(--color-daw-playhead); }
 }
 @keyframes playhead-blink-triangle {
-  0%, 49% { border-top-color: #1e1e2e; }
-  50%, 100% { border-top-color: #7c5bf5; }
+  0%, 49% { border-top-color: #000000; }
+  50%, 100% { border-top-color: var(--color-daw-playhead); }
 }
 
 /* Micro-animations for DAW interactions */

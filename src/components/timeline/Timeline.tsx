@@ -69,6 +69,7 @@ export function Timeline() {
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const seek = useTransportStore((s) => s.seek);
+  const setTimelineFocused = useUIStore((s) => s.setTimelineFocused);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -325,7 +326,8 @@ export function Timeline() {
           setDrag(null);
           // Click without drag → seek playhead to click position
           const time = (startViewX + scrollLeft) / pixelsPerSecond;
-          seek(Math.max(0, time));
+          seek(time);
+          setTimelineFocused(true);
           return;
         }
 
@@ -356,7 +358,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, seek],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, seek, setTimelineFocused],
   );
 
 
@@ -408,7 +410,8 @@ export function Timeline() {
         className="flex-1 overflow-auto bg-[#242424] relative group"
         onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}
-        onFocus={() => setKeyboardContext('timeline')}
+        onFocus={() => { setKeyboardContext('timeline'); setTimelineFocused(true); }}
+        onBlur={() => setTimelineFocused(false)}
         onMouseDown={() => setKeyboardContext('timeline')}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}

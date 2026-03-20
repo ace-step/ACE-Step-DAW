@@ -70,39 +70,16 @@ export function GenerationSidePanel() {
 
   const stemsTracks = project?.tracks.filter((track) => track.trackType === 'stems') ?? [];
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing');
+  const projectBpm = project?.bpm;
+  const projectKeyScale = project?.keyScale;
+  const projectGuidanceScale = project?.generationDefaults.guidanceScale;
 
   useEffect(() => {
-    if (!project) return;
-
     const selectedTrackStillExists = stemsTracks.some((track) => track.id === generationForm.selectedTrackId);
     if (!selectedTrackStillExists) {
       setGenerationTargetTrack(stemsTracks[0]?.id ?? '');
     }
-  }, [generationForm.selectedTrackId, project, setGenerationTargetTrack, stemsTracks]);
-
-  useEffect(() => {
-    if (!project?.keyScale) return;
-
-    const isPristine =
-      generationForm.prompt.trim() === ''
-      && generationForm.styleTags.length === 0
-      && generationForm.bpm === 120
-      && generationForm.keyScale === 'C major';
-
-    if (isPristine) {
-      useGenerationStore.getState().hydrateGenerationForm({
-        bpm: project.bpm,
-        keyScale: project.keyScale,
-      });
-    }
-  }, [
-    generationForm.bpm,
-    generationForm.keyScale,
-    generationForm.prompt,
-    generationForm.styleTags.length,
-    project?.bpm,
-    project?.keyScale,
-  ]);
+  }, [generationForm.selectedTrackId, setGenerationTargetTrack, stemsTracks]);
 
   useEffect(() => {
     if (generationForm.lyrics.trim()) setShowLyrics(true);
@@ -112,6 +89,31 @@ export function GenerationSidePanel() {
     setStyleTagsInput(generationForm.styleTags.join(', '));
   }, [generationForm.styleTags]);
 
+  useEffect(() => {
+    if (projectBpm === undefined || !projectKeyScale || projectGuidanceScale === undefined) return;
+
+    const isPristine =
+      generationForm.prompt.trim() === ''
+      && generationForm.styleTags.length === 0
+      && generationForm.bpm === 120
+      && generationForm.keyScale === 'C major';
+
+    if (isPristine) {
+      useGenerationStore.getState().hydrateGenerationForm({
+        bpm: projectBpm,
+        keyScale: projectKeyScale,
+        temperature: projectGuidanceScale,
+      });
+    }
+  }, [
+    generationForm.bpm,
+    generationForm.keyScale,
+    generationForm.prompt,
+    generationForm.styleTags.length,
+    projectBpm,
+    projectGuidanceScale,
+    projectKeyScale,
+  ]);
   const filteredPresets = presetCategory === 'All'
     ? GENERATION_PRESETS
     : GENERATION_PRESETS.filter((preset) => preset.category === presetCategory);
@@ -148,7 +150,11 @@ export function GenerationSidePanel() {
   }, [setGenerationPrompt]);
 
   const commitStyleTagsInput = useCallback(() => {
-    setGenerationStyleTags(styleTagsInput.split(','));
+    const nextTags = styleTagsInput
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    setGenerationStyleTags(nextTags);
   }, [setGenerationStyleTags, styleTagsInput]);
 
   if (!show) return null;
@@ -301,6 +307,12 @@ export function GenerationSidePanel() {
             value={styleTagsInput}
             onChange={(event) => setStyleTagsInput(event.target.value)}
             onBlur={commitStyleTagsInput}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitStyleTagsInput();
+              }
+            }}
             placeholder="Add comma-separated style tags"
             className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
             disabled={isSessionActive}

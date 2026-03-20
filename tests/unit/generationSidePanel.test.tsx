@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { GenerationSidePanel } from '../../src/components/generation/GenerationSidePanel';
 import { useUIStore } from '../../src/store/uiStore';
@@ -19,6 +19,7 @@ describe('GenerationSidePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    vi.clearAllMocks();
     useUIStore.setState(useUIStore.getInitialState(), true);
     useGenerationStore.setState(useGenerationStore.getInitialState(), true);
     useProjectStore.setState(useProjectStore.getInitialState(), true);
@@ -85,18 +86,45 @@ describe('GenerationSidePanel', () => {
     );
   });
 
-  it('starts a variation session from the shared store form state', () => {
+  it('submits selected generation parameters through the generation pipeline', async () => {
     render(<GenerationSidePanel />);
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Generation prompt' }), {
       target: { value: 'cinematic strings with pulsing bass' },
     });
     fireEvent.click(within(screen.getByTestId('generation-style-tags')).getByRole('button', { name: 'Ambient' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Generation BPM' }), {
+      target: { value: '110' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation key' }), {
+      target: { value: 'G minor' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Generation length' }), {
+      target: { value: '64' },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Generation temperature' }), {
+      target: { value: '0.55' },
+    });
     fireEvent.change(screen.getByRole('combobox', { name: 'Generation variation count' }), {
       target: { value: '3' },
     });
 
     fireEvent.click(screen.getByTestId('generation-generate-btn'));
+
+    await waitFor(() => {
+      expect(generateVariationSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'cinematic strings with pulsing bass',
+          trackId: useProjectStore.getState().project?.tracks[0].id,
+          styleTags: ['Ambient'],
+          bpm: 110,
+          keyScale: 'G minor',
+          duration: 64,
+          temperature: 0.55,
+          variationCount: 3,
+        }),
+      );
+    });
 
     const session = useGenerationStore.getState().variationSession;
     const submittedRequest = useGenerationStore.getState().lastSubmittedRequest;
@@ -109,9 +137,9 @@ describe('GenerationSidePanel', () => {
       prompt: 'cinematic strings with pulsing bass',
       styleTags: ['Ambient'],
       variationCount: 3,
-      bpm: 132,
-      keyScale: 'D minor',
-      duration: 30,
+      bpm: 110,
+      keyScale: 'G minor',
+      duration: 64,
       globalCaption: '',
     });
     expect(screen.getByTestId('variation-cards')).toBeInTheDocument();

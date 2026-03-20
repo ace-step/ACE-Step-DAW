@@ -10,6 +10,11 @@ import { snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
+import {
+  ARRANGEMENT_EMPTY_LANE_BG,
+  ARRANGEMENT_ROW_BORDER_CLASS,
+  ARRANGEMENT_ROW_SEPARATOR_COLOR,
+} from '../arrangement/rowSurface';
 
 function getBarDurationSec(bpm: number, timeSignature: number): number {
   return (60 / bpm) * timeSignature;
@@ -281,6 +286,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   }, [project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
 
   const hasClips = track.clips.length > 0;
+  const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll;
   const automationLanes = (project?.automationLanes ?? []).filter((l) => l.trackId === track.id);
 
   return (
@@ -288,8 +294,15 @@ export function TrackLane({ track }: TrackLaneProps) {
       <div
         data-track-id={track.id}
         data-testid={`track-lane-${track.id}`}
-        className={`relative border-b border-[#333] ${fileDragOver ? 'bg-blue-900/20' : ''}`}
-        style={{ width: totalWidth, height: laneHeight, opacity: track.muted ? 0.4 : 1 }}
+        data-lane-surface={shouldHighlightEmptyLane ? 'empty' : 'default'}
+        className={`relative border-b ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
+        style={{
+          width: totalWidth,
+          height: laneHeight,
+          opacity: track.muted ? 0.4 : 1,
+          backgroundColor: fileDragOver ? undefined : shouldHighlightEmptyLane ? ARRANGEMENT_EMPTY_LANE_BG : undefined,
+          borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
+        }}
         onContextMenu={handleContextMenu}
         onDoubleClick={handleDoubleClick}
         onDragOver={handleFileDragOver}

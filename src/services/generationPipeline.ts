@@ -18,6 +18,7 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { extractContextAudioLazy } from './lazyContextAudioExtractor';
+import { computeEta } from '../utils/generationProgress';
 
 function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null; progressPercent: number | null } {
   let stage: string | null = null;
@@ -499,14 +500,17 @@ async function generateClipInternal(
     }
 
     // Submit task
+    const jobStartedAt = Date.now();
     {
       const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
       useGenerationStore.getState().updateJob(jobId, {
         status: 'generating',
+        startedAt: jobStartedAt,
         ...deriveGenerationJobProgress(currentJob, {
           status: 'generating',
-          progress: 'Submitting request...',
+          progress: 'Submitting...',
           stage: 'Submitting request',
+          now: jobStartedAt,
         }),
       });
     }
@@ -532,12 +536,14 @@ async function generateClipInternal(
       const entry = entries?.[0];
       if (!entry) continue;
 
+      const { stage, progressPercent } = extractProgressMetadata(entry);
+      const etaSeconds = computeEta(jobStartedAt, progressPercent ?? undefined) ?? undefined;
+
       {
         const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
-        const { stage, progressPercent } = extractProgressMetadata(entry);
         useGenerationStore.getState().updateJob(jobId, {
           ...deriveGenerationJobProgress(currentJob, {
-            status: currentJob?.status === 'processing' ? 'processing' : 'generating',
+            status: 'generating',
             progress: entry.progress_text || 'Generating...',
             stage,
             progressPercent,
@@ -545,8 +551,11 @@ async function generateClipInternal(
         });
       }
       updateVariationProgress({
-        status: entry.status === 0 ? 'generating' : 'processing',
+        status: 'generating',
         progress: entry.progress_text || 'Generating...',
+        ...(stage !== null && { stage }),
+        ...(progressPercent !== null && { progressPercent }),
+        ...(etaSeconds !== undefined && { etaSeconds }),
       });
 
       if (entry.status === 1) {
@@ -562,7 +571,7 @@ async function generateClipInternal(
     }
 
     if (!resultAudioPath) {
-      throw new Error('Generation timed out');
+      throw new Error('Generation timed out — the server did not return a result within the time limit. Try again or check server status.');
     }
 
     // If the project-level global caption was blank, seed it from this generation
@@ -1333,7 +1342,8 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
         model: project.generationDefaults.model,
       };
 
-      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
+      const coverStartedAt = Date.now();
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: coverStartedAt });
       store.updateClipStatus(targetClipId, 'generating');
 
       const releaseResp = await api.releaseLegoTask(sourceAudioBlob, coverParams);
@@ -1347,7 +1357,25 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
         const entries = await api.queryResult([taskId]);
         const entry = entries?.[0];
         if (!entry) continue;
-        genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating...' });
+
+        let progressPercent: number | undefined;
+        let stage: string | undefined;
+        if (entry.status === 0 && entry.result) {
+          try {
+            const partial: TaskResultItem[] = JSON.parse(entry.result);
+            const first = partial?.[0];
+            if (first?.progress !== undefined) progressPercent = first.progress;
+            if (first?.stage) stage = first.stage;
+          } catch { /* not yet valid JSON */ }
+        }
+        const etaSeconds = computeEta(coverStartedAt, progressPercent) ?? undefined;
+
+        genStore.updateJob(jobId, {
+          progress: entry.progress_text || 'Generating...',
+          ...(stage !== undefined && { stage }),
+          ...(progressPercent !== undefined && { progressPercent }),
+          ...(etaSeconds !== undefined && { etaSeconds }),
+        });
         if (entry.status === 1) {
           const items: TaskResultItem[] = JSON.parse(entry.result);
           resultAudioPath = items?.[0]?.file ?? null;
@@ -1357,7 +1385,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
         }
       }
 
-      if (!resultAudioPath) throw new Error('Cover generation timed out');
+      if (!resultAudioPath) throw new Error('Cover generation timed out — the server did not return a result within the time limit. Try again or check server status.');
 
       genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
       store.updateClipStatus(targetClipId, 'processing');
@@ -1614,7 +1642,8 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         model: project.generationDefaults.model,
       };
 
-      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...' });
+      const v2bStartedAt = Date.now();
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: v2bStartedAt });
       store.updateClipStatus(newClip.id, 'generating');
 
       const releaseResp = await api.releaseLegoTask(vocalBlob, coverParams);
@@ -1629,7 +1658,25 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         const entries = await api.queryResult([taskId]);
         const entry = entries?.[0];
         if (!entry) continue;
-        genStore.updateJob(jobId, { progress: entry.progress_text || 'Generating accompaniment...' });
+
+        let progressPercent: number | undefined;
+        let stage: string | undefined;
+        if (entry.status === 0 && entry.result) {
+          try {
+            const partial: TaskResultItem[] = JSON.parse(entry.result);
+            const first = partial?.[0];
+            if (first?.progress !== undefined) progressPercent = first.progress;
+            if (first?.stage) stage = first.stage;
+          } catch { /* not yet valid JSON */ }
+        }
+        const etaSeconds = computeEta(v2bStartedAt, progressPercent) ?? undefined;
+
+        genStore.updateJob(jobId, {
+          progress: entry.progress_text || 'Generating accompaniment...',
+          ...(stage !== undefined && { stage }),
+          ...(progressPercent !== undefined && { progressPercent }),
+          ...(etaSeconds !== undefined && { etaSeconds }),
+        });
         if (entry.status === 1) {
           const items: TaskResultItem[] = JSON.parse(entry.result);
           firstResult = items?.[0] ?? null;
@@ -1640,7 +1687,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         }
       }
 
-      if (!resultAudioPath) throw new Error('Vocal2BGM generation timed out');
+      if (!resultAudioPath) throw new Error('Vocal2BGM generation timed out — the server did not return a result within the time limit. Try again or check server status.');
 
       genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
       store.updateClipStatus(newClip.id, 'processing');

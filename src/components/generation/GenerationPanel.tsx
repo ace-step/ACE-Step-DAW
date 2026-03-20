@@ -1,6 +1,7 @@
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { BatchGenerateModal } from './BatchGenerateModal';
+import { formatEtaDisplay } from '../../utils/generationProgress';
 
 export function GenerationPanel() {
   const jobs = useGenerationStore((s) => s.jobs);
@@ -8,6 +9,10 @@ export function GenerationPanel() {
 
   const modalMode = useUIStore((s) => s.batchGenerateMode);
   const setModalMode = useUIStore((s) => s.setBatchGenerateMode);
+  const activeJobs = [...jobs]
+    .filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing')
+    .sort((a, b) => (b.lastUpdatedAt ?? 0) - (a.lastUpdatedAt ?? 0));
+  const hasCompletedJobs = jobs.some((j) => j.status === 'done' || j.status === 'error');
 
   return (
     <>
@@ -21,14 +26,13 @@ export function GenerationPanel() {
 
       <div className="border-t border-[#1a1a1a] bg-[#2a2a2a]">
         <div className="flex items-center h-9 px-3 gap-3">
-          {jobs.length > 0 && (
+          {(activeJobs.length > 0 || hasCompletedJobs) && (
             <>
               <div className="flex-1 flex items-center gap-2 overflow-x-auto text-xs">
-                {jobs.map((job) => {
-                  const eta = job.etaSeconds != null && (job.etaConfidence === 'medium' || job.etaConfidence === 'high')
-                    ? ` • ETA ${job.etaSeconds < 60 ? `${Math.round(job.etaSeconds)}s` : `${Math.ceil(job.etaSeconds / 60)}m`}`
-                    : '';
-                  const percent = job.progressPercent != null ? ` • ${Math.round(job.progressPercent)}%` : '';
+                {activeJobs.map((job) => {
+                  const eta = formatEtaDisplay(job.etaSeconds ?? null);
+                  const progressPercent = Math.round(job.progressPercent ?? 0);
+                  const isActive = job.status === 'queued' || job.status === 'generating' || job.status === 'processing';
                   return (
                     <div
                       key={job.id}
@@ -37,27 +41,48 @@ export function GenerationPanel() {
                           ? 'bg-emerald-900/50 text-emerald-300'
                           : job.status === 'error'
                             ? 'bg-red-900/50 text-red-300'
-                            : job.status === 'generating' || job.status === 'processing'
-                              ? 'bg-indigo-900/50 text-indigo-300'
-                              : 'bg-[#333] text-zinc-400'
+                            : job.status === 'processing'
+                              ? 'bg-amber-900/50 text-amber-300'
+                              : job.status === 'generating'
+                                ? 'bg-indigo-900/50 text-indigo-300'
+                                : 'bg-[#333] text-zinc-400'
                       }`}
                     >
                       {(job.status === 'generating' || job.status === 'processing') && (
                         <div className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
                       )}
                       <span className="uppercase">{job.trackName}</span>
-                      <span className="text-[9px] opacity-80">{job.stage ?? job.progress}{percent}{eta}</span>
+                      <span className="text-[9px] opacity-70">{job.stage ?? job.progress}</span>
+                      {isActive && (
+                        <div
+                          className="h-1.5 w-14 overflow-hidden rounded-full bg-black/30"
+                          role="progressbar"
+                          aria-label={`${job.trackName} generation progress`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={progressPercent}
+                          aria-valuetext={`${job.stage ?? job.status}: ${progressPercent}%`}
+                        >
+                          <div
+                            className="h-full rounded-full bg-current transition-all"
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                      )}
+                      {eta !== '' && <span className="text-[9px] opacity-60">ETA {eta}</span>}
                     </div>
                   );
                 })}
               </div>
 
-              <button
-                onClick={clearCompletedJobs}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                Clear
-              </button>
+              {hasCompletedJobs && (
+                <button
+                  onClick={clearCompletedJobs}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
             </>
           )}
         </div>

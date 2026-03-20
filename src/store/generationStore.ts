@@ -172,6 +172,12 @@ export interface Variation {
   seed?: string;
   startedAt?: number;
   completedAt?: number;
+  /** Current generation stage from the backend */
+  stage?: string;
+  /** Progress percentage (0–100) from the backend */
+  progressPercent?: number;
+  /** Estimated seconds remaining */
+  etaSeconds?: number;
 }
 
 export interface VariationSessionParams {
@@ -388,19 +394,44 @@ export const useGenerationStore = create<GenerationState>()(
           {
             ...job,
             stage: job.stage ?? inferStageLabel(job.status, job.progress),
-            progressPercent: job.progressPercent ?? normalizeProgressPercent(null, job.progress),
+            progressPercent: normalizeProgressPercent(job.progressPercent, job.progress),
             etaSeconds: job.etaSeconds ?? null,
             etaConfidence: job.etaConfidence ?? 'none',
             startedAt: job.startedAt ?? Date.now(),
             lastUpdatedAt: job.lastUpdatedAt ?? Date.now(),
             actionableMessage: job.actionableMessage,
+            error: job.error,
+            completedAt: job.completedAt,
           },
         ],
       })),
 
       updateJob: (jobId, updates) =>
         set((s) => ({
-          jobs: s.jobs.map((j) => (j.id === jobId ? { ...j, ...updates } : j)),
+          jobs: s.jobs.map((j) => {
+            if (j.id !== jobId) return j;
+            // Prevent progress from jumping backward
+            const safeUpdates = { ...updates };
+            if (
+              safeUpdates.progressPercent != null &&
+              j.progressPercent != null &&
+              safeUpdates.progressPercent < j.progressPercent
+            ) {
+              safeUpdates.progressPercent = j.progressPercent;
+            }
+            const merged = { ...j, ...safeUpdates };
+            return {
+              ...merged,
+              ...deriveGenerationJobProgress(j, {
+                status: merged.status,
+                progress: merged.progress,
+                stage: merged.stage,
+                progressPercent: merged.progressPercent,
+                error: merged.error,
+                now: merged.lastUpdatedAt,
+              }),
+            };
+          }),
         })),
 
       removeJob: (jobId) =>
@@ -676,7 +707,15 @@ export const useGenerationStore = create<GenerationState>()(
         if (!s.variationSession) return s;
         const currentVariation = s.variationSession.variations.find((variation) => variation.index === index);
         const variations = s.variationSession.variations.map((v) =>
-          v.index === index ? { ...v, ...updates } : v,
+          v.index === index
+            ? {
+                ...v,
+                ...updates,
+                progressPercent: updates.progressPercent !== undefined
+                  ? Math.max(v.progressPercent ?? 0, updates.progressPercent)
+                  : v.progressPercent,
+              }
+            : v,
         );
         // Check if all variations are terminal (done, error, or cancelled)
         const allTerminal = variations.every(

@@ -161,11 +161,18 @@ export function AddLayerPanel() {
   const handleGenerate = async () => {
     stopPreview();
 
-    // Find or create a track for this layer type
-    const targetTrackName = selectedLayerType.trackName;
-    let targetTrack = project.tracks.find((t) => t.trackName === targetTrackName);
+    // Prefer the track the user actually selected via selectWindow;
+    // fall back to finding/creating a track by layer type name (#590)
+    let targetTrack: typeof project.tracks[number] | undefined;
+    if (selectWindow && selectWindow.trackIds.length > 0) {
+      targetTrack = project.tracks.find((t) => selectWindow.trackIds.includes(t.id));
+    }
     if (!targetTrack) {
-      targetTrack = addTrack(targetTrackName, 'stems');
+      const targetTrackName = selectedLayerType.trackName;
+      targetTrack = project.tracks.find((t) => t.trackName === targetTrackName);
+      if (!targetTrack) {
+        targetTrack = addTrack(targetTrackName, 'stems');
+      }
     }
 
     if (style) {

@@ -12,6 +12,8 @@ import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/de
 import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generationPresets';
 import type { PresetCategory } from '../../constants/generationPresets';
 import { generateVariationSession } from '../../services/generationPipeline';
+import { listModels } from '../../services/aceStepApi';
+import type { ModelEntry } from '../../types/api';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { computeEta, formatEtaDisplay } from '../../utils/generationProgress';
 
@@ -33,6 +35,10 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
   cancelled: 'bg-zinc-800 text-zinc-400',
 };
 
+function modelSupportsThinking(modelName: string): boolean {
+  return modelName.includes('turbo') || modelName.includes('sft');
+}
+
 export function GenerationSidePanel() {
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
@@ -51,6 +57,13 @@ export function GenerationSidePanel() {
   const setGenerationKeyScale = useGenerationStore((s) => s.setGenerationKeyScale);
   const setGenerationLengthSeconds = useGenerationStore((s) => s.setGenerationLengthSeconds);
   const setGenerationTemperature = useGenerationStore((s) => s.setGenerationTemperature);
+  const setGenerationInferenceSteps = useGenerationStore((s) => s.setGenerationInferenceSteps);
+  const setGenerationGuidanceScale = useGenerationStore((s) => s.setGenerationGuidanceScale);
+  const setGenerationShift = useGenerationStore((s) => s.setGenerationShift);
+  const setGenerationThinking = useGenerationStore((s) => s.setGenerationThinking);
+  const setGenerationModel = useGenerationStore((s) => s.setGenerationModel);
+  const setGenerationSeed = useGenerationStore((s) => s.setGenerationSeed);
+  const setGenerationUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
   const setGenerationVariationCount = useGenerationStore((s) => s.setGenerationVariationCount);
   const setGenerationTargetTrack = useGenerationStore((s) => s.setGenerationTargetTrack);
   const setGenerationLyrics = useGenerationStore((s) => s.setGenerationLyrics);
@@ -65,7 +78,12 @@ export function GenerationSidePanel() {
   const [showHistory, setShowHistory] = useState(false);
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
+  const [showAdvancedParameters, setShowAdvancedParameters] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
+  const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
@@ -74,7 +92,8 @@ export function GenerationSidePanel() {
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing');
   const projectBpm = project?.bpm;
   const projectKeyScale = project?.keyScale;
-  const projectGuidanceScale = project?.generationDefaults.guidanceScale;
+  const projectGenerationDefaults = project?.generationDefaults;
+  const canUseThinking = modelSupportsThinking(generationForm.model);
 
   useEffect(() => {
     const selectedTrackStillExists = stemsTracks.some((track) => track.id === generationForm.selectedTrackId);
@@ -92,30 +111,53 @@ export function GenerationSidePanel() {
   }, [generationForm.styleTags]);
 
   useEffect(() => {
-    if (projectBpm === undefined || !projectKeyScale || projectGuidanceScale === undefined) return;
+    if (projectBpm === undefined || !projectKeyScale || !projectGenerationDefaults) return;
 
     const isPristine =
       generationForm.prompt.trim() === ''
       && generationForm.styleTags.length === 0
       && generationForm.bpm === 120
-      && generationForm.keyScale === 'C major';
+      && generationForm.keyScale === 'C major'
+      && generationForm.inferenceSteps === 50
+      && generationForm.guidanceScale === 7
+      && generationForm.shift === 3
+      && generationForm.thinking === false
+      && generationForm.model === ''
+      && generationForm.seed === ''
+      && generationForm.useRandomSeed === true;
 
     if (isPristine) {
       useGenerationStore.getState().hydrateGenerationForm({
         bpm: projectBpm,
         keyScale: projectKeyScale,
-        temperature: projectGuidanceScale,
+        inferenceSteps: projectGenerationDefaults.inferenceSteps,
+        guidanceScale: projectGenerationDefaults.guidanceScale,
+        shift: projectGenerationDefaults.shift,
+        thinking: projectGenerationDefaults.thinking,
+        model: projectGenerationDefaults.model,
       });
     }
   }, [
+    generationForm.guidanceScale,
     generationForm.bpm,
+    generationForm.inferenceSteps,
     generationForm.keyScale,
+    generationForm.model,
     generationForm.prompt,
+    generationForm.seed,
+    generationForm.shift,
     generationForm.styleTags.length,
-    projectBpm,
-    projectGuidanceScale,
+    generationForm.thinking,
+    generationForm.useRandomSeed,
+    projectGenerationDefaults,
     projectKeyScale,
+    projectBpm,
   ]);
+
+  useEffect(() => {
+    if (canUseThinking || !generationForm.thinking) return;
+    setGenerationThinking(false);
+  }, [canUseThinking, generationForm.thinking, setGenerationThinking]);
   const filteredPresets = presetCategory === 'All'
     ? GENERATION_PRESETS
     : GENERATION_PRESETS.filter((preset) => preset.category === presetCategory);
@@ -158,6 +200,22 @@ export function GenerationSidePanel() {
       .filter(Boolean);
     setGenerationStyleTags(nextTags);
   }, [setGenerationStyleTags, styleTagsInput]);
+
+  const handleToggleModelPicker = useCallback(async () => {
+    const nextShowPicker = !showModelPicker;
+    setShowModelPicker(nextShowPicker);
+    if (!nextShowPicker) return;
+    setModelsLoading(true);
+    setModelError(null);
+    try {
+      const response = await listModels();
+      setAvailableModels(response.models);
+    } catch (error) {
+      setModelError(error instanceof Error ? error.message : 'Failed to load models.');
+    } finally {
+      setModelsLoading(false);
+    }
+  }, [showModelPicker]);
 
   if (!show) return null;
 
@@ -304,6 +362,170 @@ export function GenerationSidePanel() {
               );
             })}
           </div>
+        </section>
+
+        <section className="space-y-2 rounded-md border border-[#333] bg-[#202020] px-3 py-2" data-testid="generation-advanced-section">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setShowAdvancedParameters((value) => !value)}
+              className="text-[11px] font-medium uppercase text-zinc-300 transition-colors hover:text-white"
+              type="button"
+              aria-expanded={showAdvancedParameters}
+              aria-controls="generation-advanced-parameters"
+              aria-label={showAdvancedParameters ? 'Hide advanced parameters' : 'Show advanced parameters'}
+            >
+              Advanced Parameters {showAdvancedParameters ? '[-]' : '[+]'}
+            </button>
+            <span className="text-[10px] text-zinc-500">Per-generation only</span>
+          </div>
+
+          {showAdvancedParameters && (
+            <div id="generation-advanced-parameters" className="space-y-3">
+              <div className="rounded border border-[#383838] bg-[#252525] px-2.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-medium uppercase text-zinc-400">Model</div>
+                    <div
+                      className="mt-0.5 text-sm text-zinc-200"
+                      data-testid="generation-model-summary"
+                    >
+                      {generationForm.model || 'Project default'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => void handleToggleModelPicker()}
+                    type="button"
+                    disabled={isSessionActive}
+                    className="rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:border-[#666] hover:text-white disabled:opacity-50"
+                  >
+                    {showModelPicker ? 'Hide models' : 'Switch model'}
+                  </button>
+                </div>
+
+                {showModelPicker && (
+                  <div className="mt-2 space-y-2">
+                    <select
+                      value={generationForm.model}
+                      onChange={(event) => setGenerationModel(event.target.value)}
+                      className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+                      disabled={modelsLoading || isSessionActive}
+                      aria-label="Generation model"
+                    >
+                      {availableModels.map((model) => (
+                        <option key={model.name} value={model.name}>
+                          {model.name}{model.is_default ? ' (default)' : ''}{model.is_loaded ? ' (loaded)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {modelsLoading && <p className="text-[10px] text-zinc-500">Loading model inventory...</p>}
+                    {modelError && <p className="text-[10px] text-red-300">{modelError}</p>}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-inference-steps-slider">
+                    Inference Steps
+                  </label>
+                  <span className="text-xs text-zinc-300">{generationForm.inferenceSteps}</span>
+                </div>
+                <input
+                  id="generation-inference-steps-slider"
+                  type="range"
+                  min={1}
+                  max={200}
+                  step={1}
+                  value={generationForm.inferenceSteps}
+                  onChange={(event) => setGenerationInferenceSteps(Number(event.target.value))}
+                  className="w-full accent-indigo-500"
+                  disabled={isSessionActive}
+                  aria-label="Inference steps"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-guidance-scale-slider">
+                    Guidance Scale
+                  </label>
+                  <span className="text-xs text-zinc-300">{generationForm.guidanceScale.toFixed(1)}</span>
+                </div>
+                <input
+                  id="generation-guidance-scale-slider"
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={generationForm.guidanceScale}
+                  onChange={(event) => setGenerationGuidanceScale(Number(event.target.value))}
+                  className="w-full accent-indigo-500"
+                  disabled={isSessionActive}
+                  aria-label="Guidance scale"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-shift-slider">
+                    Shift
+                  </label>
+                  <span className="text-xs text-zinc-300">{generationForm.shift.toFixed(1)}</span>
+                </div>
+                <input
+                  id="generation-shift-slider"
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={0.1}
+                  value={generationForm.shift}
+                  onChange={(event) => setGenerationShift(Number(event.target.value))}
+                  className="w-full accent-indigo-500"
+                  disabled={isSessionActive}
+                  aria-label="Shift"
+                />
+              </div>
+
+              <label className={`flex items-center gap-2 text-sm ${canUseThinking ? 'text-zinc-300' : 'cursor-not-allowed text-zinc-500'}`}>
+                <input
+                  type="checkbox"
+                  checked={generationForm.thinking}
+                  onChange={(event) => setGenerationThinking(event.target.checked)}
+                  disabled={isSessionActive || !canUseThinking}
+                  className="h-4 w-4 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+                  aria-label="Thinking mode"
+                />
+                Thinking mode
+              </label>
+
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <label className="space-y-1">
+                  <span className="block text-[11px] font-medium uppercase text-zinc-400">Seed</span>
+                  <input
+                    type="text"
+                    value={generationForm.seed}
+                    onChange={(event) => setGenerationSeed(event.target.value)}
+                    className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                    placeholder="Backend random"
+                    disabled={isSessionActive || generationForm.useRandomSeed}
+                    aria-label="Seed"
+                    inputMode="numeric"
+                  />
+                </label>
+                <label className="flex items-end gap-2 pb-1 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={generationForm.useRandomSeed}
+                    onChange={(event) => setGenerationUseRandomSeed(event.target.checked)}
+                    disabled={isSessionActive}
+                    className="h-4 w-4 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+                    aria-label="Random seed"
+                  />
+                  Random seed
+                </label>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2">

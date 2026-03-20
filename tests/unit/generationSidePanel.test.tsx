@@ -6,6 +6,7 @@ import { useUIStore } from '../../src/store/uiStore';
 import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
 import { generateVariationSession } from '../../src/services/generationPipeline';
+import { listModels } from '../../src/services/aceStepApi';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -13,6 +14,19 @@ vi.mock('../../src/services/projectStorage', () => ({
 
 vi.mock('../../src/services/generationPipeline', () => ({
   generateVariationSession: vi.fn(() => Promise.resolve(true)),
+}));
+
+vi.mock('../../src/services/aceStepApi', () => ({
+  listModels: vi.fn(() => Promise.resolve({
+    models: [
+      { name: 'ace-step-base', is_default: true, is_loaded: true },
+      { name: 'ace-step-turbo', is_default: false, is_loaded: false },
+    ],
+    default_model: 'ace-step-base',
+    lm_models: [],
+    loaded_lm_model: null,
+    llm_initialized: false,
+  })),
 }));
 
 describe('GenerationSidePanel', () => {
@@ -25,9 +39,25 @@ describe('GenerationSidePanel', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
 
     useProjectStore.getState().createProject({ name: 'AI Panel Test', bpm: 132, keyScale: 'D minor' });
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? {
+            ...state.project,
+            generationDefaults: {
+              ...state.project.generationDefaults,
+              inferenceSteps: 48,
+              guidanceScale: 8.5,
+              shift: 2.5,
+              thinking: true,
+              model: 'ace-step-turbo',
+            },
+          }
+        : state.project,
+    }));
     useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setShowGenerationPanel(true);
     vi.mocked(generateVariationSession).mockClear();
+    vi.mocked(listModels).mockClear();
   });
 
   it('hydrates core generation controls from store-backed project defaults', () => {
@@ -38,6 +68,53 @@ describe('GenerationSidePanel', () => {
     );
     expect(screen.getByRole('spinbutton', { name: 'Generation BPM' })).toHaveValue(132);
     expect(screen.getByRole('combobox', { name: 'Generation key' })).toHaveValue('D minor');
+  });
+
+  it('hydrates advanced generation overrides from project defaults without mutating the project defaults', async () => {
+    render(<GenerationSidePanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced parameters' }));
+
+    expect(screen.getByRole('slider', { name: 'Inference steps' })).toHaveValue('48');
+    expect(screen.getByRole('slider', { name: 'Guidance scale' })).toHaveValue('8.5');
+    expect(screen.getByRole('slider', { name: 'Shift' })).toHaveValue('2.5');
+    expect(screen.getByRole('checkbox', { name: 'Thinking mode' })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: 'Seed' })).toHaveValue('');
+    expect(screen.getByRole('checkbox', { name: 'Random seed' })).toBeChecked();
+    expect(screen.getByTestId('generation-model-summary')).toHaveTextContent('ace-step-turbo');
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Inference steps' }), { target: { value: '96' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Guidance scale' }), { target: { value: '12.5' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Shift' }), { target: { value: '4.5' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Thinking mode' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Random seed' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Seed' }), { target: { value: '4242' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Switch model' }));
+
+    await waitFor(() => {
+      expect(listModels).toHaveBeenCalled();
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Generation model' }), {
+      target: { value: 'ace-step-base' },
+    });
+
+    const form = useGenerationStore.getState().generationForm;
+    expect(form.inferenceSteps).toBe(96);
+    expect(form.guidanceScale).toBe(12.5);
+    expect(form.shift).toBe(4.5);
+    expect(form.thinking).toBe(false);
+    expect(form.seed).toBe('4242');
+    expect(form.useRandomSeed).toBe(false);
+    expect(form.model).toBe('ace-step-base');
+
+    expect(useProjectStore.getState().project?.generationDefaults).toMatchObject({
+      inferenceSteps: 48,
+      guidanceScale: 8.5,
+      shift: 2.5,
+      thinking: true,
+      model: 'ace-step-turbo',
+    });
   });
 
   it('persists prompt, style tags, key, bpm, length, temperature, and variation count through the store', () => {
@@ -108,6 +185,20 @@ describe('GenerationSidePanel', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Generation variation count' }), {
       target: { value: '3' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Show advanced parameters' }));
+    fireEvent.change(screen.getByRole('slider', { name: 'Inference steps' }), {
+      target: { value: '120' },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Guidance scale' }), {
+      target: { value: '14.5' },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Shift' }), {
+      target: { value: '6' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Random seed' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Seed' }), {
+      target: { value: '12345' },
+    });
 
     fireEvent.click(screen.getByTestId('generation-generate-btn'));
 
@@ -122,6 +213,13 @@ describe('GenerationSidePanel', () => {
           duration: 64,
           temperature: 0.55,
           variationCount: 3,
+          inferenceSteps: 120,
+          guidanceScale: 14.5,
+          shift: 6,
+          thinking: true,
+          model: 'ace-step-turbo',
+          seed: '12345',
+          useRandomSeed: false,
         }),
       );
     });
@@ -133,6 +231,12 @@ describe('GenerationSidePanel', () => {
     expect(session?.params.prompt).toBe('cinematic strings with pulsing bass');
     expect(session?.params.styleTags).toEqual(['Ambient']);
     expect(session?.params.variationCount).toBe(3);
+    expect(session?.params.inferenceSteps).toBe(120);
+    expect(session?.params.guidanceScale).toBe(14.5);
+    expect(session?.params.shift).toBe(6);
+    expect(session?.params.seed).toBe('12345');
+    expect(session?.params.useRandomSeed).toBe(false);
+    expect(session?.params.model).toBe('ace-step-turbo');
     expect(submittedRequest).toMatchObject({
       prompt: 'cinematic strings with pulsing bass',
       styleTags: ['Ambient'],
@@ -141,6 +245,13 @@ describe('GenerationSidePanel', () => {
       keyScale: 'G minor',
       duration: 64,
       globalCaption: '',
+      inferenceSteps: 120,
+      guidanceScale: 14.5,
+      shift: 6,
+      thinking: true,
+      model: 'ace-step-turbo',
+      seed: '12345',
+      useRandomSeed: false,
     });
     expect(screen.getByTestId('variation-cards')).toBeInTheDocument();
     expect(generateVariationSession).toHaveBeenCalledWith(expect.objectContaining({

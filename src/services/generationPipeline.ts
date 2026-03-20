@@ -71,6 +71,18 @@ export interface ClipInternalOptions {
   repaintRange?: { start: number; end: number };
   /** Manual override for the backend guidance scale. */
   guidanceScaleOverride?: number;
+  /** Manual override for inference steps. */
+  inferenceStepsOverride?: number;
+  /** Manual override for shift. */
+  shiftOverride?: number;
+  /** Manual override for thinking mode. */
+  thinkingOverride?: boolean;
+  /** Manual override for DiT model. */
+  modelOverride?: string;
+  /** Per-request explicit seed from the generation panel. */
+  seedOverride?: string;
+  /** Whether the backend should randomize the seed for this request. */
+  useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
 }
@@ -106,6 +118,13 @@ export interface GenerationPanelRequest {
   temperature: number;
   variationCount: number;
   lyrics?: string;
+  inferenceSteps?: number;
+  guidanceScale?: number;
+  shift?: number;
+  thinking?: boolean;
+  model?: string;
+  seed?: string;
+  useRandomSeed?: boolean;
 }
 
 async function withGenerationToast(label: string, action: () => Promise<boolean>): Promise<void> {
@@ -280,6 +299,13 @@ export async function generateVariationSession(
           localDescription: params.prompt,
           globalCaptionOverride: params.globalCaption,
           lyricsOverride: params.lyrics,
+          inferenceStepsOverride: params.inferenceSteps,
+          guidanceScaleOverride: params.guidanceScale,
+          shiftOverride: params.shift,
+          thinkingOverride: params.thinking,
+          modelOverride: params.model,
+          seedOverride: params.seed,
+          useRandomSeedOverride: params.useRandomSeed,
           variationIndex: index,
         }),
       ),
@@ -479,19 +505,27 @@ async function generateClipInternal(
       bpm: resolvedBpm,
       key_scale: resolvedKey,
       time_signature: resolvedTimeSig,
-      inference_steps: project.generationDefaults.inferenceSteps,
+      inference_steps: options.inferenceStepsOverride ?? project.generationDefaults.inferenceSteps,
       guidance_scale: options.guidanceScaleOverride ?? project.generationDefaults.guidanceScale,
-      shift: project.generationDefaults.shift,
+      shift: options.shiftOverride ?? project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
-      thinking: project.generationDefaults.thinking,
-      model: project.generationDefaults.model,
+      thinking: options.thinkingOverride ?? project.generationDefaults.thinking,
+      model: options.modelOverride ?? project.generationDefaults.model,
     } as LegoTaskParams;
 
     // Shared seed: override backend randomness so all batch tracks are correlated
     if (options.sharedSeed !== undefined) {
       params.seed = options.sharedSeed;
       params.use_random_seed = false;
+    } else if (options.useRandomSeedOverride === false) {
+      const parsedSeed = Number.parseInt(options.seedOverride ?? '', 10);
+      if (Number.isFinite(parsedSeed)) {
+        params.seed = parsedSeed;
+        params.use_random_seed = false;
+      }
+    } else if (options.useRandomSeedOverride === true) {
+      params.use_random_seed = true;
     }
 
     // Server-side path: skip blob upload and let the server read directly from disk
@@ -1084,7 +1118,13 @@ export async function generateFromGenerationPanel(request: GenerationPanelReques
     bpm: request.bpm,
     keyScale: request.keyScale,
     duration: request.lengthSeconds,
-    guidanceScale: request.temperature,
+    guidanceScale: request.guidanceScale ?? request.temperature,
+    inferenceSteps: request.inferenceSteps,
+    shift: request.shift,
+    thinking: request.thinking,
+    model: request.model,
+    seed: request.seed,
+    useRandomSeed: request.useRandomSeed,
     temperature: request.temperature,
     styleTags: request.styleTags,
     lyrics: lyrics || undefined,

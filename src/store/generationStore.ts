@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
+import {
+  DEFAULT_BPM,
+  DEFAULT_DURATION,
+  DEFAULT_GENERATION,
+  DEFAULT_KEY_SCALE,
+  MAX_BPM,
+  MAX_DURATION,
+  MIN_BPM,
+  MIN_DURATION,
+} from '../constants/defaults';
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
 import {
@@ -189,6 +198,12 @@ export interface VariationSessionParams {
   keyScale: string;
   duration: number;
   guidanceScale: number;
+  inferenceSteps?: number;
+  shift?: number;
+  thinking?: boolean;
+  model?: string;
+  seed?: string;
+  useRandomSeed?: boolean;
   temperature?: number;
   styleTags?: string[];
   lyrics?: string;
@@ -214,6 +229,13 @@ export interface SubmittedGenerationRequest {
   keyScale: string;
   duration: number;
   temperature: number;
+  inferenceSteps: number;
+  guidanceScale: number;
+  shift: number;
+  thinking: boolean;
+  model: string;
+  seed?: string;
+  useRandomSeed: boolean;
   variationCount: number;
   styleTags: string[];
   lyrics?: string;
@@ -232,6 +254,13 @@ export interface GenerationFormState {
   keyScale: string;
   lengthSeconds: number;
   temperature: number;
+  inferenceSteps: number;
+  guidanceScale: number;
+  shift: number;
+  thinking: boolean;
+  model: string;
+  seed: string;
+  useRandomSeed: boolean;
   variationCount: number;
   selectedTrackId: string;
   lyrics: string;
@@ -258,6 +287,22 @@ function clampLengthSeconds(value: number) {
 
 function clampTemperature(value: number) {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))));
+}
+
+function clampInferenceSteps(value: number) {
+  return Math.max(1, Math.min(200, Math.round(value)));
+}
+
+function clampGuidanceScale(value: number) {
+  return Math.max(0, Math.min(20, Number(value.toFixed(2))));
+}
+
+function clampShift(value: number) {
+  return Math.max(0, Math.min(10, Number(value.toFixed(2))));
+}
+
+function normalizeSeed(value: string | undefined) {
+  return value?.trim() ?? '';
 }
 
 function clampVariationCount(value: number) {
@@ -290,7 +335,13 @@ function normalizeVariationSessionParams(
     variationCount: clampVariationCount(params.variationCount),
     bpm: clampBpm(params.bpm),
     duration: clampLengthSeconds(params.duration),
-    guidanceScale: clampTemperature(params.guidanceScale),
+    guidanceScale: clampGuidanceScale(params.guidanceScale),
+    inferenceSteps: clampInferenceSteps(params.inferenceSteps ?? DEFAULT_GENERATION.inferenceSteps),
+    shift: clampShift(params.shift ?? DEFAULT_GENERATION.shift),
+    thinking: params.thinking ?? DEFAULT_GENERATION.thinking,
+    model: (params.model ?? DEFAULT_GENERATION.model).trim(),
+    seed: normalizeSeed(params.seed) || undefined,
+    useRandomSeed: params.useRandomSeed ?? true,
     temperature: clampTemperature(params.temperature ?? params.guidanceScale),
     styleTags: normalizeStyleTags(params.styleTags ?? []),
     lyrics: params.lyrics?.trim() || undefined,
@@ -307,6 +358,13 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     keyScale: DEFAULT_KEY_SCALE,
     lengthSeconds: DEFAULT_DURATION,
     temperature: 0.7,
+    inferenceSteps: DEFAULT_GENERATION.inferenceSteps,
+    guidanceScale: DEFAULT_GENERATION.guidanceScale,
+    shift: DEFAULT_GENERATION.shift,
+    thinking: DEFAULT_GENERATION.thinking,
+    model: DEFAULT_GENERATION.model,
+    seed: '',
+    useRandomSeed: true,
     variationCount: 2,
     selectedTrackId: '',
     lyrics: '',
@@ -361,6 +419,13 @@ export interface GenerationState {
   setGenerationKeyScale: (keyScale: string) => void;
   setGenerationLengthSeconds: (lengthSeconds: number) => void;
   setGenerationTemperature: (temperature: number) => void;
+  setGenerationInferenceSteps: (inferenceSteps: number) => void;
+  setGenerationGuidanceScale: (guidanceScale: number) => void;
+  setGenerationShift: (shift: number) => void;
+  setGenerationThinking: (thinking: boolean) => void;
+  setGenerationModel: (model: string) => void;
+  setGenerationSeed: (seed: string) => void;
+  setGenerationUseRandomSeed: (useRandomSeed: boolean) => void;
   setGenerationVariationCount: (variationCount: number) => void;
   setGenerationTargetTrack: (trackId: string) => void;
   setGenerationLyrics: (lyrics: string) => void;
@@ -473,6 +538,12 @@ export const useGenerationStore = create<GenerationState>()(
           bpm: updates.bpm !== undefined ? clampBpm(updates.bpm) : s.generationForm.bpm,
           lengthSeconds: updates.lengthSeconds !== undefined ? clampLengthSeconds(updates.lengthSeconds) : s.generationForm.lengthSeconds,
           temperature: updates.temperature !== undefined ? clampTemperature(updates.temperature) : s.generationForm.temperature,
+          inferenceSteps: updates.inferenceSteps !== undefined ? clampInferenceSteps(updates.inferenceSteps) : s.generationForm.inferenceSteps,
+          guidanceScale: updates.guidanceScale !== undefined ? clampGuidanceScale(updates.guidanceScale) : s.generationForm.guidanceScale,
+          shift: updates.shift !== undefined ? clampShift(updates.shift) : s.generationForm.shift,
+          model: updates.model !== undefined ? updates.model.trim() : s.generationForm.model,
+          seed: updates.seed !== undefined ? normalizeSeed(updates.seed) : s.generationForm.seed,
+          useRandomSeed: updates.useRandomSeed !== undefined ? updates.useRandomSeed : s.generationForm.useRandomSeed,
           variationCount: updates.variationCount !== undefined ? clampVariationCount(updates.variationCount) : s.generationForm.variationCount,
         },
       })),
@@ -538,6 +609,63 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: {
           ...s.generationForm,
           temperature: clampTemperature(temperature),
+          requestError: null,
+        },
+      })),
+
+      setGenerationInferenceSteps: (inferenceSteps) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          inferenceSteps: clampInferenceSteps(inferenceSteps),
+          requestError: null,
+        },
+      })),
+
+      setGenerationGuidanceScale: (guidanceScale) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          guidanceScale: clampGuidanceScale(guidanceScale),
+          requestError: null,
+        },
+      })),
+
+      setGenerationShift: (shift) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          shift: clampShift(shift),
+          requestError: null,
+        },
+      })),
+
+      setGenerationThinking: (thinking) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          thinking,
+          requestError: null,
+        },
+      })),
+
+      setGenerationModel: (model) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          model: model.trim(),
+          requestError: null,
+        },
+      })),
+
+      setGenerationSeed: (seed) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          seed: normalizeSeed(seed),
+          requestError: null,
+        },
+      })),
+
+      setGenerationUseRandomSeed: (useRandomSeed) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          useRandomSeed,
+          seed: useRandomSeed ? '' : s.generationForm.seed,
           requestError: null,
         },
       })),
@@ -631,7 +759,13 @@ export const useGenerationStore = create<GenerationState>()(
           bpm: generationForm.bpm,
           keyScale: generationForm.keyScale,
           duration: generationForm.lengthSeconds,
-          guidanceScale: generationForm.temperature,
+          guidanceScale: generationForm.guidanceScale,
+          inferenceSteps: generationForm.inferenceSteps,
+          shift: generationForm.shift,
+          thinking: generationForm.thinking,
+          model: generationForm.model,
+          seed: generationForm.useRandomSeed ? undefined : normalizeSeed(generationForm.seed) || undefined,
+          useRandomSeed: generationForm.useRandomSeed,
           temperature: generationForm.temperature,
           styleTags: generationForm.styleTags,
           lyrics: generationForm.lyrics.trim() || undefined,
@@ -647,6 +781,13 @@ export const useGenerationStore = create<GenerationState>()(
             keyScale: params.keyScale,
             duration: params.duration,
             temperature: params.temperature ?? params.guidanceScale,
+            inferenceSteps: params.inferenceSteps ?? DEFAULT_GENERATION.inferenceSteps,
+            guidanceScale: params.guidanceScale,
+            shift: params.shift ?? DEFAULT_GENERATION.shift,
+            thinking: params.thinking ?? DEFAULT_GENERATION.thinking,
+            model: params.model ?? DEFAULT_GENERATION.model,
+            seed: params.seed,
+            useRandomSeed: params.useRandomSeed ?? true,
             variationCount: params.variationCount,
             styleTags: params.styleTags ?? [],
             lyrics: params.lyrics,
@@ -696,6 +837,13 @@ export const useGenerationStore = create<GenerationState>()(
             keyScale: normalizedParams.keyScale,
             lengthSeconds: normalizedParams.duration,
             temperature: normalizedParams.temperature ?? normalizedParams.guidanceScale,
+            inferenceSteps: normalizedParams.inferenceSteps ?? DEFAULT_GENERATION.inferenceSteps,
+            guidanceScale: normalizedParams.guidanceScale,
+            shift: normalizedParams.shift ?? DEFAULT_GENERATION.shift,
+            thinking: normalizedParams.thinking ?? DEFAULT_GENERATION.thinking,
+            model: normalizedParams.model ?? DEFAULT_GENERATION.model,
+            seed: normalizedParams.seed ?? '',
+            useRandomSeed: normalizedParams.useRandomSeed ?? true,
             styleTags: normalizedParams.styleTags ?? [],
             lyrics: normalizedParams.lyrics ?? '',
             presetId: normalizedParams.presetId ?? get().generationForm.presetId,

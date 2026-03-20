@@ -62,10 +62,18 @@ export function GenerationSidePanel() {
   const cancelVariationSession = useGenerationStore((s) => s.cancelVariationSession);
   const clearVariationSession = useGenerationStore((s) => s.clearVariationSession);
 
+  const setGenerationInferenceSteps = useGenerationStore((s) => s.setGenerationInferenceSteps);
+  const setGenerationGuidanceScale = useGenerationStore((s) => s.setGenerationGuidanceScale);
+  const setGenerationShift = useGenerationStore((s) => s.setGenerationShift);
+  const setGenerationThinking = useGenerationStore((s) => s.setGenerationThinking);
+  const setGenerationSeed = useGenerationStore((s) => s.setGenerationSeed);
+  const setGenerationUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+
   const [showHistory, setShowHistory] = useState(false);
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
@@ -468,6 +476,53 @@ export function GenerationSidePanel() {
               disabled={isSessionActive}
               aria-label="Generation lyrics"
             />
+          )}
+        </section>
+
+        <section className="space-y-2" data-testid="advanced-params-section">
+          <button onClick={() => setShowAdvanced((v) => !v)} className="text-[11px] font-medium uppercase text-zinc-400 transition-colors hover:text-zinc-300" type="button">
+            Advanced Parameters {showAdvanced ? '[-]' : '[+]'}
+          </button>
+          {showAdvanced && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-inference-steps">Inference Steps</label>
+                  <span className="text-xs text-zinc-300">{generationForm.inferenceSteps}</span>
+                </div>
+                <input id="generation-inference-steps" type="range" min={1} max={200} step={1} value={generationForm.inferenceSteps} onChange={(e) => setGenerationInferenceSteps(Number(e.target.value))} className="mt-1 w-full accent-indigo-500" disabled={isSessionActive} aria-label="Inference steps" data-testid="generation-inference-steps" />
+                <div className="flex justify-between text-[10px] text-zinc-600"><span>Fast</span><span>Quality</span></div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-guidance-scale">Guidance Scale</label>
+                  <span className="text-xs text-zinc-300">{generationForm.guidanceScale.toFixed(1)}</span>
+                </div>
+                <input id="generation-guidance-scale" type="range" min={0} max={20} step={0.1} value={generationForm.guidanceScale} onChange={(e) => setGenerationGuidanceScale(Number(e.target.value))} className="mt-1 w-full accent-indigo-500" disabled={isSessionActive} aria-label="Guidance scale" data-testid="generation-guidance-scale" />
+                <div className="flex justify-between text-[10px] text-zinc-600"><span>Creative</span><span>Faithful</span></div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-shift">Shift</label>
+                  <span className="text-xs text-zinc-300">{generationForm.shift.toFixed(1)}</span>
+                </div>
+                <input id="generation-shift" type="range" min={0} max={10} step={0.1} value={generationForm.shift} onChange={(e) => setGenerationShift(Number(e.target.value))} className="mt-1 w-full accent-indigo-500" disabled={isSessionActive} aria-label="Shift" data-testid="generation-shift" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input id="generation-thinking" type="checkbox" checked={generationForm.thinking} onChange={(e) => setGenerationThinking(e.target.checked)} className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500" disabled={isSessionActive} aria-label="Thinking" data-testid="generation-thinking" />
+                <label htmlFor="generation-thinking" className="text-[11px] font-medium uppercase text-zinc-400">Thinking</label>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-seed">Seed</label>
+                  <label className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+                    <input type="checkbox" checked={generationForm.useRandomSeed} onChange={(e) => setGenerationUseRandomSeed(e.target.checked)} className="h-3 w-3 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500" disabled={isSessionActive} aria-label="Random seed" data-testid="generation-random-seed" />
+                    Random
+                  </label>
+                </div>
+                <input id="generation-seed" type="text" value={generationForm.seed} onChange={(e) => setGenerationSeed(e.target.value)} placeholder="Enter seed value" className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none disabled:opacity-50" disabled={isSessionActive || generationForm.useRandomSeed} aria-label="Seed" data-testid="generation-seed" />
+              </div>
+            </div>
           )}
         </section>
 

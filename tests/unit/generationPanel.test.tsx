@@ -63,7 +63,7 @@ describe('GenerationSidePanel', () => {
       bpm: 88,
       keyScale: 'D minor',
       duration: 45,
-      guidanceScale: 0.9,
+      guidanceScale: 7.0,
       temperature: 0.9,
       styleTags: ['Lo-Fi'],
       variationCount: 3,

@@ -91,6 +91,8 @@ export interface UIState {
   activePianoRollTool: PianoRollTool;
   /** Abbreviation of the currently selected chord shape for chord stamp (e.g. 'maj', 'min', '7', 'dim'). */
   activeChordShape: PianoRollChordShape;
+  /** Alias for activeChordShape — used by PianoRoll component and tests. */
+  activePianoRollChordShape: PianoRollChordShape;
   openEffectChainTrackId: string | null;
   openMidiEffectChainTrackId: string | null;
   drumMachineEditorHeight: number;
@@ -209,6 +211,8 @@ export interface UIState {
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
   setActiveChordShape: (abbr: PianoRollChordShape | string) => void;
+  /** Alias for setActiveChordShape. */
+  setActivePianoRollChordShape: (abbr: PianoRollChordShape | string) => void;
   togglePianoRollPencilTool: () => void;
   setOpenEffectChainTrackId: (id: string | null) => void;
   setOpenMidiEffectChainTrackId: (id: string | null) => void;
@@ -375,6 +379,7 @@ export const useUIStore = create<UIState>()(
   selectedPianoRollNoteIds: [],
   activePianoRollTool: 'select',
   activeChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
+  activePianoRollChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   openEffectChainTrackId: null,
   openMidiEffectChainTrackId: null,
   drumMachineEditorHeight: 400,
@@ -589,7 +594,14 @@ export const useUIStore = create<UIState>()(
   })),
   setSelectedPianoRollNoteIds: (noteIds) => set({ selectedPianoRollNoteIds: [...noteIds] }),
   setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
-  setActiveChordShape: (abbr) => set({ activeChordShape: clampPianoRollChordShape(abbr) }),
+  setActiveChordShape: (abbr) => {
+    const clamped = clampPianoRollChordShape(abbr);
+    set({ activeChordShape: clamped, activePianoRollChordShape: clamped });
+  },
+  setActivePianoRollChordShape: (abbr) => {
+    const clamped = clampPianoRollChordShape(abbr);
+    set({ activeChordShape: clamped, activePianoRollChordShape: clamped });
+  },
   togglePianoRollPencilTool: () => set((state) => ({
     activePianoRollTool: state.activePianoRollTool === 'pencil' ? 'select' : 'pencil',
   })),
@@ -787,6 +799,7 @@ export const useUIStore = create<UIState>()(
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
         activeChordShape: state.activeChordShape,
+        activePianoRollChordShape: state.activePianoRollChordShape,
         // Panel sizes
         mixerHeight: state.mixerHeight,
         drumMachineEditorHeight: state.drumMachineEditorHeight,

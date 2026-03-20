@@ -307,7 +307,7 @@ export function PianoRollCanvas({
     const height = rect.height;
     const noteAreaHeight = height - velocityHeight;
 
-    ctx.fillStyle = '#0a0a1e';
+    ctx.fillStyle = '#1a1a1e';
     ctx.fillRect(0, 0, width, height);
 
     drawPianoRollKeyboard({

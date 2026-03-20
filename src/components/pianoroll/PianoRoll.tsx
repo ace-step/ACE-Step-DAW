@@ -200,7 +200,7 @@ export function PianoRoll() {
       data-keyboard-context="pianoRoll"
       role="region"
       tabIndex={0}
-      className="border-t border-[#1a1a1a] bg-[#0a0a1e] flex flex-col select-none shrink-0"
+      className="border-t border-[#1a1a1a] bg-[#1a1a1e] flex flex-col select-none shrink-0"
       style={{ height: pianoRollHeight }}
       onMouseDownCapture={() => setHistoryFocusScope('pianoRoll')}
       onFocusCapture={() => setHistoryFocusScope('pianoRoll')}
@@ -213,7 +213,7 @@ export function PianoRoll() {
         onMouseDown={handleResizeMouseDown}
       />
 
-      <div className="px-3 py-2 border-b border-[#2a2a2a] bg-[#0e0e24] flex items-center gap-2 shrink-0 flex-wrap">
+      <div className="px-3 py-2 border-b border-[#2a2a2a] bg-[#1e1e22] flex items-center gap-2 shrink-0 flex-wrap">
         <div className="text-xs font-medium text-zinc-200">{track.displayName}</div>
 
         {PIANO_ROLL_TOOL_BUTTONS.map(({ tool, label, icon }) => {

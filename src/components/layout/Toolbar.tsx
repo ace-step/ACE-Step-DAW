@@ -186,6 +186,8 @@ export function Toolbar() {
   const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
   const showLibrary = useUIStore((s) => s.showLibrary);
   const setShowLibrary = useUIStore((s) => s.setShowLibrary);
+  const showModelLibrary = useUIStore((s) => s.showModelLibrary);
+  const setShowModelLibrary = useUIStore((s) => s.setShowModelLibrary);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
   const showAIAssistant = useUIStore((s) => s.showAIAssistant);
@@ -231,6 +233,17 @@ export function Toolbar() {
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <rect x="1" y="2" width="12" height="10" rx="1.5" />
             <line x1="5" y1="2" x2="5" y2="12" />
+          </svg>
+        </ControlBarButton>
+        <ControlBarButton
+          active={showModelLibrary}
+          onClick={() => setShowModelLibrary(!showModelLibrary)}
+          title="Model Library (Shift+M)"
+          disabled={!project}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
+            <rect x="1.5" y="2" width="11" height="10" rx="1.5" />
+            <path d="M4 5h6M4 7h6M4 9h3" strokeLinecap="round" />
           </svg>
         </ControlBarButton>
         <ControlBarButton

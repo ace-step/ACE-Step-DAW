@@ -36,6 +36,7 @@ vi.mock('../../src/components/controls/SmartControlsPanel', () => ({ SmartContro
 vi.mock('../../src/components/pianoroll/PianoRoll', () => ({ PianoRoll: () => <div>PianoRoll</div> }));
 vi.mock('../../src/components/mixer/EffectChain', () => ({ EffectChain: () => <div>EffectChain</div> }));
 vi.mock('../../src/components/session/SessionView', () => ({ SessionView: () => <div>SessionView</div> }));
+vi.mock('../../src/components/models/ModelLibraryPanel', () => ({ ModelLibraryPanel: () => <div>ModelLibraryPanel</div> }));
 vi.mock('../../src/components/ui/Toast', () => ({ ToastContainer: () => <div>ToastContainer</div> }));
 vi.mock('../../src/components/layout/UndoHistoryPanel', () => ({ UndoHistoryPanel: () => <div>UndoHistoryPanel</div> }));
 vi.mock('../../src/components/onboarding/FirstRunOnboarding', () => ({ FirstRunOnboarding: () => <div>FirstRunOnboarding</div> }));
@@ -78,5 +79,11 @@ describe('AppShell overlay orchestration', () => {
     expect(screen.queryByText('CommandPalette')).not.toBeInTheDocument();
     expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Enable audio playback')).not.toBeInTheDocument();
+  });
+
+  it('mounts the model library panel when a project is open', () => {
+    render(<AppShell />);
+
+    expect(screen.getByText('ModelLibraryPanel')).toBeInTheDocument();
   });
 });

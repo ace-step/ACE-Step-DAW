@@ -34,6 +34,7 @@ import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
 import { EffectChain } from '../mixer/EffectChain';
 import { SessionView } from '../session/SessionView';
+import { ModelLibraryPanel } from '../models/ModelLibraryPanel';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { FirstRunOnboarding } from '../onboarding/FirstRunOnboarding';
@@ -163,9 +164,10 @@ export function AppShell() {
           }
         }}
       >
-        {project && mainView === 'arrangement' && <TrackList />}
-        {mainView === 'arrangement' ? <Timeline /> : <SessionView />}
-        {project && <LoopBrowser />}
+      {project && mainView === 'arrangement' && <TrackList />}
+      {mainView === 'arrangement' ? <Timeline /> : <SessionView />}
+      {project && <LoopBrowser />}
+      {project && <ModelLibraryPanel />}
       </div>
 
       {project && <SmartControlsPanel />}

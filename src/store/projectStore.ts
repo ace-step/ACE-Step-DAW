@@ -447,6 +447,7 @@ export interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  setGenerationDefaults: (updates: Partial<Project['generationDefaults']>) => void;
   detectPlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
   /** Alias for detectPlaybackLatency – used by tests and external callers. */
   capturePlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
@@ -1655,6 +1656,23 @@ export const useProjectStore = create<ProjectState>()(
       );
     }
     set({ project: merged });
+  },
+
+  setGenerationDefaults: (updates) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Update generation defaults' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        generationDefaults: {
+          ...state.project.generationDefaults,
+          ...updates,
+        },
+      },
+    });
   },
 
   detectPlaybackLatency: (latency) => {

@@ -238,6 +238,16 @@ describe('useKeyboardShortcuts', () => {
     expect(useUIStore.getState().snapEnabled).toBe(true);
   });
 
+  it('toggles the model library panel with Shift+M', () => {
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', shiftKey: true }));
+    expect(useUIStore.getState().showModelLibrary).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', shiftKey: true }));
+    expect(useUIStore.getState().showModelLibrary).toBe(false);
+  });
+
   it('suppresses single-key shortcuts while typing in editable fields', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);

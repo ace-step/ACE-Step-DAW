@@ -161,19 +161,12 @@ export function SettingsDialog() {
       store.updateProject({ bpm, keyScale, timeSignature, measures, globalCaption });
       const parsedManualLatency = manualLatencyText.trim() === '' ? null : Number.parseFloat(manualLatencyText);
       store.setPlaybackLatencyOverride(Number.isFinite(parsedManualLatency) ? parsedManualLatency : null);
-      useProjectStore.setState({
-        project: {
-          ...useProjectStore.getState().project!,
-          updatedAt: Date.now(),
-          generationDefaults: {
-            ...store.project.generationDefaults,
-            inferenceSteps: steps,
-            guidanceScale: guidance,
-            shift,
-            thinking,
-            model,
-          },
-        },
+      store.setGenerationDefaults({
+        inferenceSteps: steps,
+        guidanceScale: guidance,
+        shift,
+        thinking,
+        model,
       });
     }
     setBackendUrl(backendUrl);

@@ -104,6 +104,7 @@ export interface UIState {
   effectChainHeight: number;
   showSmartControls: boolean;
   showLibrary: boolean;
+  showModelLibrary: boolean;
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
   activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null;
 
@@ -237,6 +238,7 @@ export interface UIState {
   setEffectChainHeight: (v: number) => void;
   setShowSmartControls: (v: boolean) => void;
   setShowLibrary: (v: boolean) => void;
+  setShowModelLibrary: (v: boolean) => void;
   setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null) => void;
 
   // Tempo lane
@@ -414,6 +416,7 @@ export const useUIStore = create<UIState>()(
   effectChainHeight: 320,
   showSmartControls: false,
   showLibrary: false,
+  showModelLibrary: false,
   activeBottomPanel: null,
 
   showTempoLane: false,
@@ -674,6 +677,7 @@ export const useUIStore = create<UIState>()(
   setEffectChainHeight: (v) => set({ effectChainHeight: Math.min(520, Math.max(180, v)) }),
   setShowSmartControls: (v) => set({ showSmartControls: v }),
   setShowLibrary: (v) => set({ showLibrary: v }),
+  setShowModelLibrary: (v) => set({ showModelLibrary: v }),
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
 
   toggleTempoLane: () => set((s) => ({ showTempoLane: !s.showTempoLane })),
@@ -848,6 +852,7 @@ export const useUIStore = create<UIState>()(
         // Panel open/close states
         showMixer: state.showMixer,
         showLibrary: state.showLibrary,
+        showModelLibrary: state.showModelLibrary,
         loopBrowserOpen: state.loopBrowserOpen,
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,

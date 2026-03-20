@@ -160,6 +160,9 @@ export function useKeyboardShortcuts() {
         } else if (ui.showAIAssistant) {
           event.preventDefault();
           ui.setShowAIAssistant(false);
+        } else if (ui.showModelLibrary) {
+          event.preventDefault();
+          ui.setShowModelLibrary(false);
         } else if (ui.bounceInPlaceTrackId !== null) {
           event.preventDefault();
           ui.closeBounceInPlaceDialog();
@@ -356,6 +359,7 @@ export function useKeyboardShortcuts() {
       if (matches('panels.mixer')) { event.preventDefault(); ui.setShowMixer(!ui.showMixer); return; }
       if (matches('panels.smartControls')) { event.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
       if (matches('panels.library')) { event.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }
+      if (matches('panels.modelLibrary')) { event.preventDefault(); ui.setShowModelLibrary(!ui.showModelLibrary); return; }
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }
       if (matches('panels.generation')) { event.preventDefault(); ui.toggleGenerationPanel(); return; }

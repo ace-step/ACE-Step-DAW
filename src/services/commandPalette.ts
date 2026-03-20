@@ -69,7 +69,6 @@ export interface CommandPaletteContext {
     zoomTimelineToSelection: () => void;
     zoomTimelineToProject: () => void;
     setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
-    openPostProduction: (taskType?: 'repair' | 'extend' | 'polish') => Promise<void>;
     addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
     addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
     updateProject: (updates: Partial<Pick<Project, 'bpm'>>) => void;
@@ -367,7 +366,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
 
   commands.push(
     createTrackCommand(
-      context.isPlaying ? 'transport.pause' : 'transport.play',
+      'transport:play-pause',
       context.isPlaying ? 'Pause Playback' : 'Play Playback',
       'Transport',
       'action',
@@ -384,7 +383,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Transport control',
     ),
     createTrackCommand(
-      'transport.stop',
+      'transport:stop',
       'Stop Playback',
       'Transport',
       'action',
@@ -397,7 +396,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Transport control',
     ),
     createTrackCommand(
-      'transport.loop.toggle',
+      'transport:toggle-loop',
       context.loopEnabled ? 'Disable Loop' : 'Enable Loop',
       'Transport',
       'action',
@@ -408,7 +407,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Transport control',
     ),
     createTrackCommand(
-      'transport.metronome.toggle',
+      'transport:toggle-metronome',
       context.metronomeEnabled ? 'Disable Metronome' : 'Enable Metronome',
       'Transport',
       'action',
@@ -502,7 +501,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
 
   commands.push(
     createTrackCommand(
-      'panel.toggle.library',
+      'panel:library',
       context.showLibrary ? 'Hide Library' : 'Show Library',
       'Panels',
       'action',
@@ -513,7 +512,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Panel toggle',
     ),
     createTrackCommand(
-      'panel.toggle.mixer',
+      'panel:mixer',
       context.showMixer ? 'Hide Mixer' : 'Show Mixer',
       'Panels',
       'action',
@@ -524,7 +523,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Panel toggle',
     ),
     createTrackCommand(
-      'panel.toggle.smartControls',
+      'panel:smart-controls',
       context.showSmartControls ? 'Hide Smart Controls' : 'Show Smart Controls',
       'Panels',
       'action',
@@ -535,7 +534,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Panel toggle',
     ),
     createTrackCommand(
-      'panel.toggle.loopBrowser',
+      'panel:loop-browser',
       context.loopBrowserOpen ? 'Hide Loop Browser' : 'Show Loop Browser',
       'Panels',
       'action',
@@ -546,7 +545,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Panel toggle',
     ),
     createTrackCommand(
-      'panel.toggle.tempoLane',
+      'panel:tempo-lane',
       context.showTempoLane ? 'Hide Tempo Lane' : 'Show Tempo Lane',
       'Panels',
       'action',
@@ -557,7 +556,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Panel toggle',
     ),
     createTrackCommand(
-      'panel.toggle.aiAssistant',
+      'panel:ai-assistant',
       context.showAIAssistant ? 'Hide AI Assistant' : 'Show AI Assistant',
       'Panels',
       'action',
@@ -571,62 +570,32 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
 
   commands.push(
     createTrackCommand(
-      'postProduction.open',
-      'Open Post-Production Copilot',
-      'Post-Production',
+      'generation:silence',
+      'Generate from Silence',
+      'Generation',
       'action',
-      ['copilot', 'post production', 'repair', 'extend', 'polish', 'ai music'],
-      ['open copilot', 'open post production', 'ai post production'],
-      () => {
-        void context.actions.openPostProduction('repair');
-      },
-      ['Cmd', 'Alt', 'P'],
-      'Unified repair / extend / polish workflow',
-    ),
-    createTrackCommand(
-      'postProduction.open.repair',
-      'Open Repair in Copilot',
-      'Post-Production',
-      'action',
-      ['repair', 'repaint', 'fix lyric', 'wrong word', 'partial regenerate'],
-      ['repair this clip', 'fix one section', 'open repair'],
-      () => {
-        void context.actions.openPostProduction('repair');
-      },
+      ['generate', 'ai', 'silence', 'clip'],
+      ['generate clip', 'ai generate', 'create clip from silence'],
+      () => context.actions.setBatchGenerateMode('silence'),
       ['Cmd', 'G'],
-      'Repair workflow',
+      'AI generation',
     ),
     createTrackCommand(
-      'postProduction.open.extend',
-      'Open Extend in Copilot',
-      'Post-Production',
+      'generation:context',
+      'Generate from Context',
+      'Generation',
       'action',
-      ['extend', 'continue', 'add layer', 'context', 'continue song'],
-      ['open extend', 'continue from context', 'add new layer'],
-      () => {
-        void context.actions.openPostProduction('extend');
-      },
+      ['generate', 'ai', 'context', 'clip'],
+      ['generate from context', 'continue idea', 'ai continue region'],
+      () => context.actions.setBatchGenerateMode('context'),
       ['Cmd', 'Shift', 'G'],
-      'Extend workflow',
-    ),
-    createTrackCommand(
-      'postProduction.open.polish',
-      'Open Polish in Copilot',
-      'Post-Production',
-      'action',
-      ['polish', 'mastering', 'master', 'mix fix', 'loudness'],
-      ['open polish', 'ai mastering', 'finish song'],
-      () => {
-        void context.actions.openPostProduction('polish');
-      },
-      undefined,
-      'Polish workflow',
+      'AI generation',
     ),
   );
 
   commands.push(
     createTrackCommand(
-      'track.add.drums',
+      'track:add-drums',
       'Add Drums Track',
       'Tracks',
       'action',
@@ -639,7 +608,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Track action',
     ),
     createTrackCommand(
-      'track.add.bass',
+      'track:add-bass',
       'Add Bass Track',
       'Tracks',
       'action',
@@ -652,7 +621,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Track action',
     ),
     createTrackCommand(
-      'track.add.piano',
+      'track:add-piano',
       'Add Piano Track',
       'Tracks',
       'action',
@@ -665,7 +634,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Track action',
     ),
     createTrackCommand(
-      'track.add.sampler',
+      'track:add-sampler',
       'Add Sampler Track',
       'Tracks',
       'action',
@@ -678,7 +647,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'Track action',
     ),
     createTrackCommand(
-      'track.add.drumMachine',
+      'track:add-drum-machine',
       'Add Drum Machine Track',
       'Tracks',
       'action',

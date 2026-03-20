@@ -11,7 +11,6 @@ import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
 import { AudioAnalysisPanel } from '../generation/AudioAnalysisPanel';
 import { StemSeparationModal } from '../generation/StemSeparationModal';
 import { AudioToMidiModal } from '../generation/AudioToMidiModal';
-import { PostProductionCopilotPanel } from '../generation/PostProductionCopilotPanel';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
 import { InstrumentPicker } from '../dialogs/InstrumentPicker';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -197,7 +196,6 @@ export function AppShell() {
       <StemSeparationModal />
       <AudioToMidiModal />
       <ShareDialog />
-      <PostProductionCopilotPanel />
       {!hasPriorityBlocker && !hasBlockingDialog && <AIAssistantPanel />}
     </div>
   );

@@ -150,7 +150,6 @@ export interface UIState {
   aiAssistantStreaming: boolean;
   aiAssistantSuggestions: string[];
   aiAssistantError: string | null;
-  aiAssistantDraft: string;
   showOnboarding: boolean;
   onboardingCompleted: boolean;
   onboardingSkipped: boolean;
@@ -278,7 +277,6 @@ export interface UIState {
   addAIChatMessage: (msg: AIChatMessage) => void;
   clearAIChatMessages: () => void;
   setAIAssistantStreaming: (v: boolean) => void;
-  setAIAssistantDraft: (value: string) => void;
   updateAIChatMessage: (id: string, updater: (message: AIChatMessage) => AIChatMessage) => void;
   refreshAIAssistantSuggestions: () => void;
   askAIAssistant: (question: string, options?: { delayMs?: number }) => Promise<void>;
@@ -432,7 +430,6 @@ export const useUIStore = create<UIState>()(
   aiAssistantStreaming: false,
   aiAssistantSuggestions: [],
   aiAssistantError: null,
-  aiAssistantDraft: '',
   showOnboarding: false,
   onboardingCompleted: false,
   onboardingSkipped: false,
@@ -714,7 +711,6 @@ export const useUIStore = create<UIState>()(
     aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
   })),
   setAIAssistantStreaming: (v) => set({ aiAssistantStreaming: v }),
-  setAIAssistantDraft: (value) => set({ aiAssistantDraft: value }),
   updateAIChatMessage: (id, updater) => set((state) => ({
     aiChatMessages: state.aiChatMessages.map((message) => (
       message.id === id ? updater(message) : message
@@ -735,72 +731,11 @@ export const useUIStore = create<UIState>()(
       showAIAssistant: true,
       aiAssistantStreaming: true,
       aiAssistantError: null,
-      aiAssistantDraft: '',
       aiChatMessages: [...state.aiChatMessages, userMessage, assistantMessage],
       aiAssistantSuggestions: getAssistantSuggestions(context),
     }));
 
     try {
-      const runtime = (window as unknown as Record<string, unknown>).__agentCli as
-        | { execute?: (id: string, args?: Record<string, unknown>) => Promise<{ ok: boolean; value?: unknown; error?: { message?: string } }> }
-        | undefined;
-      const lower = trimmed.toLowerCase();
-      const selectedClipId = [...get().selectedClipIds][0];
-      const selectedTrackIds = [...get().selectedTrackIds];
-      const selectionWindow = get().selectWindow;
-      const isRepairIntent = /repair|repaint|fix|wrong word|wrong lyric|修|改词|改这句/u.test(lower);
-      const isExtendIntent = /extend|continue|add layer|layer|续|加一轨|继续/u.test(lower);
-      const isPolishIntent = /polish|master|mastering|mix fix|混音|母带/u.test(lower);
-      const isCoverIntent = /cover|翻唱|洗歌/u.test(lower);
-
-      if (runtime?.execute && (isRepairIntent || isExtendIntent || isPolishIntent || isCoverIntent)) {
-        let assistantResponse = '';
-        if (isRepairIntent) {
-          const result = await runtime.execute('postProduction.open', { taskType: 'repair' });
-          assistantResponse = result.ok
-            ? 'I opened Repair for the current selection. You can refine it from the contextual actions or tell me how you want that section changed.'
-            : (result.error?.message ?? 'I could not open Repair right now.');
-        } else if (isExtendIntent) {
-          const args: Record<string, unknown> = {
-            taskType: 'extend',
-          };
-          if (selectionWindow) {
-            args.startTime = selectionWindow.startTime;
-            args.endTime = selectionWindow.endTime;
-          }
-          if (selectedTrackIds.length > 0) {
-            args.trackIds = selectedTrackIds;
-          }
-          const result = await runtime.execute('postProduction.open', args);
-          assistantResponse = result.ok
-            ? 'I opened Extend for the current context. Tell me what should be added or continued and I can keep driving from there.'
-            : (result.error?.message ?? 'I could not open Extend right now.');
-        } else if (isPolishIntent) {
-          const result = await runtime.execute('postProduction.startPolish');
-          assistantResponse = result.ok
-            ? 'I started Polish on the current mix. You can A/B it now or ask me for a different mastering target.'
-            : (result.error?.message ?? 'I could not start Polish right now.');
-        } else if (isCoverIntent) {
-          if (selectedClipId) {
-            get().setCoverModal(selectedClipId);
-            assistantResponse = 'I opened Cover for the selected clip. If you want, tell me the target style and how far it should drift from the source.';
-          } else {
-            assistantResponse = 'Select one audio clip first, then I can open Cover directly for it.';
-          }
-        }
-
-        set((state) => ({
-          aiAssistantStreaming: false,
-          aiChatMessages: state.aiChatMessages.map((message) => (
-            message.id === assistantMessage.id
-              ? { ...message, content: assistantResponse }
-              : message
-          )),
-          aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-        }));
-        return;
-      }
-
       for await (const chunk of streamAssistantResponse(trimmed, context, options?.delayMs)) {
         set((state) => ({
           aiChatMessages: state.aiChatMessages.map((message) => (
@@ -913,7 +848,6 @@ export const useUIStore = create<UIState>()(
         showGenerationPanel: state.showGenerationPanel,
         // AI Assistant
         showAIAssistant: state.showAIAssistant,
-        aiAssistantDraft: state.aiAssistantDraft,
         // Onboarding
         onboardingCompleted: state.onboardingCompleted,
         onboardingSkipped: state.onboardingSkipped,
@@ -979,14 +913,6 @@ function buildCommandPaletteContext(state: UIState) {
       zoomTimelineToSelection: state.zoomTimelineToSelection,
       zoomTimelineToProject: state.zoomTimelineToProject,
       setBatchGenerateMode: state.setBatchGenerateMode,
-      openPostProduction: async (taskType = 'repair') => {
-        const runtime = (window as unknown as Record<string, unknown>).__agentCli as
-          | { execute?: (id: string, args?: Record<string, unknown>) => Promise<unknown> }
-          | undefined;
-        if (runtime?.execute) {
-          await runtime.execute('postProduction.open', { taskType });
-        }
-      },
       addTrack: projectStore.addTrack,
       addTrackEffect: projectStore.addTrackEffect,
       updateProject: projectStore.updateProject,

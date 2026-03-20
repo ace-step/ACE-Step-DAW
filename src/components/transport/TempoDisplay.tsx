@@ -22,7 +22,7 @@ export function TempoDisplay() {
 
   return (
     <div className="flex items-center gap-2 text-xs text-zinc-400">
-      <span className="font-medium text-zinc-300">
+      <span className="font-mono font-medium text-zinc-300">
         {currentBpm} BPM
         {hasTempoMap && currentBpm !== bpm && (
           <span className="text-amber-400/60 ml-0.5" title={`Project default: ${bpm} BPM`}>*</span>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { Button } from '../ui/Button';
 import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
 import {
   DEFAULT_BPM,
@@ -303,18 +304,12 @@ export function NewProjectDialog() {
         </div>
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
-          <button
-            onClick={() => setShow(false)}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
-          >
+          <Button variant="default" size="md" onClick={() => setShow(false)}>
             Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-accent hover:bg-daw-accent-hover text-white rounded transition-colors"
-          >
+          </Button>
+          <Button variant="primary" size="md" onClick={handleCreate}>
             Create
-          </button>
+          </Button>
         </div>
       </div>
     </div>

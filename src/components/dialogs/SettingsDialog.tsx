@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
+import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
@@ -611,18 +612,12 @@ export function SettingsDialog() {
         </div>
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
-          <button
-            onClick={() => setShow(false)}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
-          >
+          <Button variant="default" size="md" onClick={() => setShow(false)}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-accent hover:bg-daw-accent-hover text-white rounded transition-colors"
-          >
+          </Button>
+          <Button variant="primary" size="md" onClick={handleSave}>
             Save
-          </button>
+          </Button>
         </div>
       </div>
     </div>

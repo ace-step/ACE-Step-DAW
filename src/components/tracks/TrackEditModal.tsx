@@ -3,6 +3,7 @@ import type { Track, TrackType } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import { Knob } from '../ui/Knob';
+import { Button } from '../ui/Button';
 
 interface TrackEditModalProps {
   track: Track;
@@ -250,18 +251,12 @@ export function TrackEditModal({ track, onClose }: TrackEditModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-daw-border shrink-0">
-          <button
-            onClick={handleDelete}
-            className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/30 rounded transition-colors"
-          >
+          <Button variant="danger" size="md" onClick={handleDelete}>
             Delete Track
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 text-xs bg-daw-accent hover:bg-daw-accent-hover text-white rounded transition-colors"
-          >
+          </Button>
+          <Button variant="primary" size="md" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </div>
       </div>
     </div>

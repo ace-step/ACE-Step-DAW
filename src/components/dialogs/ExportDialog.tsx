@@ -19,6 +19,7 @@ import {
   estimateFileSize,
   formatFileSize,
 } from '../../utils/audioEncoders';
+import { Button } from '../ui/Button';
 
 const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'wav', label: 'WAV' },
@@ -347,19 +348,17 @@ export function ExportDialog() {
         </div>
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
-          <button
-            onClick={() => setShow(false)}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors"
-          >
+          <Button variant="default" size="md" onClick={() => setShow(false)}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleExport}
             disabled={exporting || !hasExportableContent}
-            className="px-4 py-1.5 text-xs font-medium bg-daw-accent text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-daw-accent-hover"
           >
             {exporting ? `Exporting... ${progress}%` : `Export ${exportOptions.format.toUpperCase()}`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import {
   ARRANGEMENT_HEADER_ROW_BG,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
+import { getButtonClasses } from '../ui/Button';
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -125,8 +126,8 @@ export function TrackHeader({
   const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
   const isTwoRow = laneHeight >= 60;
-  const primaryButtonClass = 'w-6 h-6 min-w-[20px] min-h-[20px] flex items-center justify-center rounded-md transition-colors';
-  const secondaryButtonClass = 'w-5 h-5 flex items-center justify-center rounded-md transition-colors';
+  const primaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'min-w-[20px] min-h-[20px]' });
+  const secondaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'w-5 h-5' });
 
   const cycleMonitor = useCallback(() => {
     const next: Record<InputMonitoringMode, InputMonitoringMode> = { off: 'auto', auto: 'on', on: 'off' };

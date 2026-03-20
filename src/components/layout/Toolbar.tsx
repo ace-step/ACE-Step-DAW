@@ -8,6 +8,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { formatTime, formatBarsBeats } from '../../utils/time';
+import { Button } from '../ui/Button';
 
 function LCDDisplay() {
   const currentTime = useTransportStore((s) => s.currentTime);
@@ -73,20 +74,19 @@ function ControlBarButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
+      size="md"
+      variant="ghost"
+      icon
+      active={active}
       onClick={onClick}
       disabled={disabled}
       title={title}
       aria-label={title.replace(/\s*\(.+?\)$/, '')}
       data-onboarding-target={dataTarget}
-      className={`w-8 h-7 flex items-center justify-center rounded transition-colors ${
-        active
-          ? 'bg-daw-accent text-white shadow-sm'
-          : 'text-zinc-400 hover:text-zinc-200 hover:bg-daw-surface-2 disabled:opacity-30 disabled:hover:bg-transparent'
-      }`}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -251,30 +251,26 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
+          active={mainView === 'arrangement'}
           onClick={() => setMainView('arrangement')}
-          className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
-            mainView === 'arrangement'
-              ? 'bg-daw-accent text-white'
-              : 'text-zinc-400 hover:text-white'
-          }`}
           title="Arrangement View (Tab)"
           aria-label="Switch to Arrangement View"
         >
           Arrangement
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          active={mainView === 'session'}
           onClick={() => setMainView('session')}
-          className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
-            mainView === 'session'
-              ? 'bg-daw-accent text-white'
-              : 'text-zinc-400 hover:text-white'
-          }`}
           title="Session View (Tab)"
           aria-label="Switch to Session View"
         >
           Session
-        </button>
+        </Button>
       </div>
 
       <ToolbarSeparator />
@@ -310,15 +306,15 @@ export function Toolbar() {
 
       {/* Project actions + File menu */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
-        <button onClick={() => setShowProjectListDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="Projects">
+        <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
           </svg>
           Projects
-        </button>
-        <button onClick={() => setShowNewProjectDialog(true)} className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors" title="New Project">
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setShowNewProjectDialog(true)} title="New Project">
           New
-        </button>
+        </Button>
         <FileMenu disabled={!project} />
       </div>
 
@@ -482,9 +478,11 @@ export function Toolbar() {
             Cmd+K
           </span>
         </button>
-        <button
+        <Button
+          variant="ghost"
+          size="md"
+          icon
           onClick={() => setShowSettingsDialog(true)}
-          className="w-8 h-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors"
           title="Settings"
           aria-label="Settings"
         >
@@ -492,14 +490,16 @@ export function Toolbar() {
             <circle cx="7" cy="7" r="2" />
             <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M11.2 2.8l-1 1M3.8 10.2l-1 1" />
           </svg>
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon
           onClick={() => setShowKeyboardShortcutsDialog(true)}
           title="Keyboard Shortcuts (?)"
-          className="w-6 h-6 text-[11px] font-bold text-zinc-400 hover:text-white hover:bg-daw-surface-2 rounded transition-colors flex items-center justify-center"
         >
           ?
-        </button>
+        </Button>
       </div>
 
       {/* Viewer mode badge */}
@@ -512,12 +512,12 @@ export function Toolbar() {
       {/* Zoom controls */}
       <ToolbarSeparator />
       <div className="flex items-center gap-0.5">
-        <button onClick={zoomOut} className="w-6 h-6 text-zinc-400 hover:text-white flex items-center justify-center rounded hover:bg-daw-surface-2 transition-colors text-sm" title="Zoom Out">
+        <Button variant="ghost" size="sm" icon onClick={zoomOut} title="Zoom Out">
           −
-        </button>
-        <button onClick={zoomIn} className="w-6 h-6 text-zinc-400 hover:text-white flex items-center justify-center rounded hover:bg-daw-surface-2 transition-colors text-sm" title="Zoom In">
+        </Button>
+        <Button variant="ghost" size="sm" icon onClick={zoomIn} title="Zoom In">
           +
-        </button>
+        </Button>
       </div>
     </div>
   );

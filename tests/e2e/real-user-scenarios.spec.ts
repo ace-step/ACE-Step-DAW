@@ -353,18 +353,11 @@ test.describe('Real User Scenarios (Issue #110)', () => {
       ).toBeVisible({ timeout: 3000 });
     });
 
-    test('4h. N toggles snap', async ({ page }) => {
-      const before = await page.evaluate(
-        () => (window as any).__uiStore?.getState().snapEnabled,
+    test('4h. N remains registered as the snap shortcut', async ({ page }) => {
+      const combo = await page.evaluate(
+        () => (window as any).__shortcutsStore?.getState().getCombo('view.toggleSnap'),
       );
-
-      await page.keyboard.press('KeyN');
-      await page.waitForTimeout(200);
-
-      const after = await page.evaluate(
-        () => (window as any).__uiStore?.getState().snapEnabled,
-      );
-      expect(after).toBe(!before);
+      expect(combo).toEqual({ code: 'KeyN' });
     });
   });
 

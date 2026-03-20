@@ -4,6 +4,8 @@ import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { generateRepaintClip } from '../../services/generationPipeline';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
+import type { RepaintMode } from '../../types/api';
+import { modelSupportsTaskType } from '../../services/aceStepApi';
 
 function fmt(s: number) {
   return `${s.toFixed(2)}s`;
@@ -27,6 +29,8 @@ export function RepaintModal() {
   const [selEnd, setSelEnd] = useState(clipEnd);
   const [prompt, setPrompt] = useState('');
   const [globalCaption, setGlobalCaption] = useState('');
+  const [repaintMode, setRepaintMode] = useState<RepaintMode>('balanced');
+  const [repaintStrength, setRepaintStrength] = useState(0.5);
 
   // Initialise form when clip/range changes
   useEffect(() => {
@@ -64,12 +68,15 @@ export function RepaintModal() {
       repaintEnd: selEnd,
       prompt,
       globalCaption: globalCaption || undefined,
+      repaintMode,
+      repaintStrength,
     });
-  }, [repaintClipId, selStart, selEnd, prompt, globalCaption, isGenerating, onClose]);
+  }, [repaintClipId, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, onClose]);
 
   if (!repaintClipId || !clip || !track) return null;
 
   const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
+  const repaintSupported = modelSupportsTaskType('repaint');
   const totalDur = project?.totalDuration ?? clipEnd;
 
   return (
@@ -108,6 +115,11 @@ export function RepaintModal() {
             {!hasAudio && (
               <p className="text-[10px] text-rose-400 mt-1">
                 No audio generated yet — generate the clip first.
+              </p>
+            )}
+            {!repaintSupported && (
+              <p className="text-[10px] text-rose-400 mt-1">
+                The currently loaded model does not support repaint. Load a model that supports the &quot;repaint&quot; task type.
               </p>
             )}
           </div>
@@ -197,6 +209,59 @@ export function RepaintModal() {
             />
           </div>
 
+          {/* Repaint mode & strength */}
+          <div className="bg-[#222]/60 rounded px-3 py-2.5 border border-[#3a3a3a] space-y-2.5">
+            <div>
+              <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
+                Repaint mode
+              </label>
+              <div className="flex gap-1">
+                {(['conservative', 'balanced', 'aggressive'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setRepaintMode(mode)}
+                    className={`flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-colors ${
+                      repaintMode === mode
+                        ? 'bg-rose-600/80 text-white border border-rose-500'
+                        : 'bg-[#333] text-zinc-400 border border-[#444] hover:bg-[#3a3a3a]'
+                    }`}
+                  >
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[8px] text-zinc-600 mt-1">
+                {repaintMode === 'conservative' && 'Maximum source preservation — subtle changes only.'}
+                {repaintMode === 'balanced' && 'Tunable blend between source preservation and fresh generation.'}
+                {repaintMode === 'aggressive' && 'Pure diffusion — fully regenerates the region.'}
+              </p>
+            </div>
+
+            {repaintMode === 'balanced' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-medium text-zinc-400">
+                    Repaint strength
+                  </label>
+                  <span className="text-[10px] font-mono text-rose-300">{repaintStrength.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={repaintStrength}
+                  onChange={(e) => setRepaintStrength(Number(e.target.value))}
+                  className="w-full h-1.5 accent-rose-500 cursor-pointer"
+                />
+                <div className="flex justify-between text-[8px] text-zinc-600 mt-0.5">
+                  <span>Preserve source</span>
+                  <span>Fresh generation</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           <p className="text-[9px] text-zinc-600">
             Only the selected range will be regenerated. Audio outside the repaint region is preserved.
           </p>
@@ -212,9 +277,9 @@ export function RepaintModal() {
           </button>
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || !hasAudio || selEnd <= selStart}
+            disabled={isGenerating || !hasAudio || !repaintSupported || selEnd <= selStart}
             className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
-              isGenerating || !hasAudio || selEnd <= selStart
+              isGenerating || !hasAudio || !repaintSupported || selEnd <= selStart
                 ? 'bg-[#444] text-zinc-500 cursor-not-allowed'
                 : 'bg-rose-600 hover:bg-rose-500 text-white'
             }`}

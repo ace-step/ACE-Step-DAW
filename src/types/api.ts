@@ -3,7 +3,7 @@ export interface CoverTaskParams {
   task_type: 'cover';
   caption: string;        // Style/genre description
   lyrics: string;
-  cover_strength: number; // 0.0–1.0: how much to deviate from original
+  audio_cover_strength: number; // 0.0–1.0: how much to deviate from original
   audio_duration: number;
   inference_steps: number;
   guidance_scale: number;
@@ -16,12 +16,15 @@ export interface CoverTaskParams {
   use_random_seed?: boolean;
 }
 
+export type RepaintMode = 'conservative' | 'balanced' | 'aggressive';
+
 /** Parameters for repaint — partially regenerates a section of an existing clip */
 export interface RepaintTaskParams {
   task_type: 'repaint';
   prompt: string;
   global_caption: string;
   lyrics: string;
+  instruction: string;
   repainting_start: number;
   repainting_end: number;
   audio_duration: number;
@@ -32,8 +35,11 @@ export interface RepaintTaskParams {
   audio_format: 'wav';
   thinking: boolean;
   model: string;
+  repaint_mode?: RepaintMode;
+  repaint_strength?: number; // 0.0–1.0: balanced-mode intensity (0=conservative, 1=aggressive)
   seed?: number;
   use_random_seed?: boolean;
+  src_audio_path?: string;
 }
 
 export type StemCount = 2 | 4 | 6;
@@ -132,6 +138,7 @@ export interface ModelEntry {
   name: string;
   is_default: boolean;
   is_loaded: boolean;
+  supported_task_types?: string[];
 }
 
 export interface LmModelEntry {

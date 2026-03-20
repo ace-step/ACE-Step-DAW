@@ -15,7 +15,10 @@ tests/gpu-integration/
     ├── 02-batch-context.md          # Suite 2: Batch Generate from Context (LEGO)
     ├── 03-add-layer.md              # Suite 3: Add Layer Modal
     ├── 04-multi-track.md            # Suite 4: Multi-Track Generate Modal
-    └── 05-error-handling.md         # Suite 5: Error handling and edge cases
+    ├── 05-error-handling.md         # Suite 5: Error handling and edge cases
+    ├── 06-cover-generation.md       # Suite 6: Cover Generation (CoverModal, Vocal2BGM)
+    ├── 07-repaint-generation.md     # Suite 7: Repaint Generation (RepaintModal, RegionRegenerate)
+    └── 08-mask-modes.md             # Suite 8: Mask Modes (Auto vs Explicit)
 ```
 
 ## How It Works
@@ -113,8 +116,6 @@ Every story file follows this structure:
 
 ## Scope
 
-Currently covers **from silence** and **from context** generation only:
-
 | Suite | Feature | Mode |
 |-------|---------|------|
 | 0 | Backend connectivity | — |
@@ -123,5 +124,8 @@ Currently covers **from silence** and **from context** generation only:
 | 3 | Add Layer Modal | context |
 | 4 | Multi-Track Generate Modal | context/silence |
 | 5 | Error handling | — |
+| 6 | Cover Generation | cover (CoverModal, Vocal2BGM) |
+| 7 | Repaint Generation | repaint (RepaintModal, RegionRegenerate) |
+| 8 | Mask Modes | auto/explicit mask, chunk/full instruction |
 
-Out of scope (to be added when model support is ready): Cover, Repaint, Vocal2BGM, Stem Separation, Audio Analysis.
+Out of scope (to be added when model support is ready): Stem Separation, Audio Analysis.

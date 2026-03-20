@@ -7,7 +7,7 @@ import {
   type VariationStatus,
 } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
-import type { LegoTaskParams, CoverTaskParams, TaskResultEntry, TaskResultItem } from '../types/api';
+import type { LegoTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
@@ -441,8 +441,17 @@ async function generateClipInternal(
       `audioDuration=${audioDuration}s`,
     );
 
-    // Build instruction
-    const instruction = `Generate the ${track.trackName.toUpperCase().replace('_', ' ')} track based on the audio context:`;
+    // Build instruction — detect chunk vs full mode based on whether the
+    // generation region covers the entire audio duration.  The backend's
+    // conditioning_text.py checks for "a segment" in the instruction to
+    // switch caption formatting (chunk omits Global: prefix).
+    const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
+    const repaintStart = options.repaintRange?.start ?? clip.startTime;
+    const repaintEnd = options.repaintRange?.end ?? (clip.startTime + clip.duration);
+    const isChunkMode = repaintStart > 0.5 || repaintEnd < audioDuration - 0.5;
+    const instruction = isChunkMode
+      ? `Generate a segment of the ${trackLabel} track based on the audio context:`
+      : `Generate the ${trackLabel} track based on the audio context:`;
 
     // Build params — 'auto' = ACE-Step infers, null/undefined = project defaults, value = manual
     const resolvedBpm = clip.bpm === 'auto' ? null : (clip.bpm ?? project.bpm);
@@ -464,8 +473,8 @@ async function generateClipInternal(
       global_caption: effectiveGlobalCaption,
       lyrics: effectiveLyrics,
       instruction,
-      repainting_start: options.repaintRange?.start ?? clip.startTime,
-      repainting_end: options.repaintRange?.end ?? (clip.startTime + clip.duration),
+      repainting_start: repaintStart,
+      repainting_end: repaintEnd,
       audio_duration: audioDuration,
       bpm: resolvedBpm,
       key_scale: resolvedKey,
@@ -1339,7 +1348,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
         task_type: 'cover',
         caption,
         lyrics,
-        cover_strength: coverStrength,
+        audio_cover_strength: coverStrength,
         audio_duration: sourceClip.duration,
         inference_steps: project.generationDefaults.inferenceSteps,
         guidance_scale: project.generationDefaults.guidanceScale,
@@ -1430,6 +1439,233 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// generateRepaintInternal — sends task_type='repaint' with proper instruction
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function generateRepaintInternal(
+  clipId: string,
+  srcAudioBlob: Blob,
+  repaintStart: number,
+  repaintEnd: number,
+  prompt: string,
+  globalCaption: string,
+  repaintMode: RepaintMode = 'balanced',
+  repaintStrength: number = 0.5,
+): Promise<GenerationOutcome> {
+  const store = useProjectStore.getState();
+  const genStore = useGenerationStore.getState();
+  const project = store.project;
+  if (!project) return { cumulativeBlob: null, succeeded: false, errorMessage: 'No project' };
+
+  const clip = store.getClipById(clipId);
+  const track = store.getTrackForClip(clipId);
+  if (!clip || !track) {
+    return { cumulativeBlob: null, succeeded: false, errorMessage: 'Clip or track not found' };
+  }
+
+  const jobId = uuidv4();
+  genStore.addJob({
+    id: jobId,
+    clipId,
+    trackName: track.trackName,
+    status: 'queued',
+    progress: 'Queued',
+    stage: 'Queued',
+    progressPercent: null,
+    etaSeconds: null,
+    etaConfidence: 'none',
+  });
+  store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
+
+  try {
+    const audioDuration = useProjectStore.getState().getAudioDuration();
+
+    const params: RepaintTaskParams = {
+      task_type: 'repaint',
+      prompt,
+      global_caption: globalCaption,
+      lyrics: clip.lyrics || '',
+      instruction: 'Repaint the mask area based on the given conditions:',
+      repainting_start: repaintStart,
+      repainting_end: repaintEnd,
+      audio_duration: audioDuration,
+      inference_steps: project.generationDefaults.inferenceSteps,
+      guidance_scale: project.generationDefaults.guidanceScale,
+      shift: project.generationDefaults.shift,
+      batch_size: 1,
+      audio_format: 'wav',
+      thinking: project.generationDefaults.thinking,
+      model: project.generationDefaults.model,
+      repaint_mode: repaintMode,
+      repaint_strength: repaintStrength,
+    };
+
+    const jobStartedAt = Date.now();
+    {
+      const currentJob = genStore.jobs.find((job) => job.id === jobId);
+      genStore.updateJob(jobId, {
+        status: 'generating',
+        startedAt: jobStartedAt,
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'generating',
+          progress: 'Submitting...',
+          stage: 'Submitting request',
+          now: jobStartedAt,
+        }),
+      });
+    }
+    store.updateClipStatus(clipId, 'generating');
+
+    const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
+    const taskId = releaseResp.task_id;
+    genStore.updateJob(jobId, { taskId });
+
+    const startTime = Date.now();
+    let resultAudioPath: string | null = null;
+    let firstResult: TaskResultItem | null = null;
+
+    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+      await sleep(POLL_INTERVAL_MS);
+
+      const entries = await api.queryResult([taskId]);
+      const entry = entries?.[0];
+      if (!entry) continue;
+
+      const { stage, progressPercent } = extractProgressMetadata(entry);
+      const etaSeconds = computeEta(jobStartedAt, progressPercent ?? undefined) ?? undefined;
+
+      {
+        const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+        useGenerationStore.getState().updateJob(jobId, {
+          ...deriveGenerationJobProgress(currentJob, {
+            status: 'generating',
+            progress: entry.progress_text || 'Repainting...',
+            stage,
+            progressPercent,
+          }),
+        });
+      }
+
+      if (entry.status === 1) {
+        const resultItems: TaskResultItem[] = JSON.parse(entry.result);
+        firstResult = resultItems?.[0] ?? null;
+        resultAudioPath = firstResult?.file ?? null;
+        break;
+      } else if (entry.status === 2) {
+        throw new Error(`Repaint failed: ${entry.result}`);
+      }
+    }
+
+    if (!resultAudioPath) {
+      throw new Error('Repaint timed out — the server did not return a result within the time limit.');
+    }
+
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'processing',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'processing',
+          progress: 'Downloading audio...',
+          stage: 'Downloading audio',
+          progressPercent: 95,
+        }),
+      });
+    }
+    useProjectStore.getState().updateClipStatus(clipId, 'processing');
+
+    const cumulativeBlob = await api.downloadAudio(resultAudioPath);
+    logger.debug(`Downloaded repaint audio: size=${cumulativeBlob.size}, path=${resultAudioPath}`);
+
+    const cumulativeKey = await saveAudioBlob(project.id, clipId, 'cumulative', cumulativeBlob);
+
+    const engine = getAudioEngine();
+    const fullBuffer = await engine.decodeAudioData(cumulativeBlob);
+
+    const currentClip = useProjectStore.getState().getClipById(clipId);
+    const clipStart = currentClip?.startTime ?? clip.startTime;
+    const clipDuration = currentClip?.duration ?? clip.duration;
+
+    const sampleRate = fullBuffer.sampleRate;
+    const startSample = Math.round(clipStart * sampleRate);
+    const endSample = Math.min(
+      Math.round((clipStart + clipDuration) * sampleRate),
+      fullBuffer.length,
+    );
+    const trimmedLength = Math.max(1, endSample - startSample);
+    const trimmedBuffer = engine.ctx.createBuffer(
+      fullBuffer.numberOfChannels,
+      trimmedLength,
+      sampleRate,
+    );
+    for (let ch = 0; ch < fullBuffer.numberOfChannels; ch++) {
+      const src = fullBuffer.getChannelData(ch);
+      const dst = trimmedBuffer.getChannelData(ch);
+      for (let i = 0; i < trimmedLength; i++) {
+        dst[i] = src[startSample + i];
+      }
+    }
+
+    const isolatedBlob = audioBufferToWavBlob(trimmedBuffer);
+    const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
+    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+
+    const inferredMetas: InferredMetas | undefined = firstResult
+      ? {
+          bpm: firstResult.metas?.bpm,
+          keyScale: firstResult.metas?.keyscale,
+          timeSignature: firstResult.metas?.timesignature,
+          genres: firstResult.metas?.genres,
+          seed: firstResult.seed_value,
+          ditModel: firstResult.dit_model,
+        }
+      : undefined;
+
+    useProjectStore.getState().updateClipStatus(clipId, 'ready', {
+      cumulativeMixKey: cumulativeKey,
+      isolatedAudioKey: isolatedKey,
+      waveformPeaks: peaks,
+      inferredMetas,
+      audioDuration: clipDuration,
+      audioOffset: 0,
+      generatedFromContext: true,
+      serverCumulativePath: extractServerPath(resultAudioPath) ?? undefined,
+    });
+
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'done',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'done',
+          progress: 'Done',
+          stage: 'Complete',
+          progressPercent: 100,
+        }),
+      });
+    }
+
+    return { cumulativeBlob, succeeded: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
+    {
+      const currentJob = useGenerationStore.getState().jobs.find((job) => job.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, {
+        status: 'error',
+        ...deriveGenerationJobProgress(currentJob, {
+          status: 'error',
+          progress: message,
+          stage: 'Repaint failed',
+          error: message,
+        }),
+      });
+    }
+    return { cumulativeBlob: null, succeeded: false, errorMessage: message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // generateRepaintClip — regenerates a selected sub-range of an existing clip
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1439,6 +1675,8 @@ export interface GenerateRepaintOptions {
   repaintEnd: number;
   prompt: string;
   globalCaption?: string;
+  repaintMode?: RepaintMode;
+  repaintStrength?: number;
 }
 
 export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<void> {
@@ -1458,13 +1696,23 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
       if (clip.cumulativeMixKey) {
         srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
       }
+      if (!srcBlob) {
+        const audioDuration = store.getAudioDuration();
+        srcBlob = generateSilenceWav(audioDuration);
+      }
 
-      const outcome = await generateClipInternal(opts.clipId, srcBlob, {
-        forceSilence: !srcBlob,
-        localDescription: opts.prompt,
-        globalCaptionOverride: opts.globalCaption,
-        repaintRange: { start: opts.repaintStart, end: opts.repaintEnd },
-      });
+      const globalCaption = opts.globalCaption || store.project?.globalCaption || '';
+
+      const outcome = await generateRepaintInternal(
+        opts.clipId,
+        srcBlob,
+        opts.repaintStart,
+        opts.repaintEnd,
+        opts.prompt,
+        globalCaption,
+        opts.repaintMode ?? 'balanced',
+        opts.repaintStrength ?? 0.5,
+      );
 
       if (outcome.succeeded) {
         store.saveClipVersion(opts.clipId);
@@ -1492,6 +1740,8 @@ export interface RegionRegenerateOptions {
   prompt: string;
   /** Optional global song description override */
   globalCaption?: string;
+  repaintMode?: RepaintMode;
+  repaintStrength?: number;
 }
 
 /**
@@ -1532,6 +1782,8 @@ export async function regenerateTimelineRegion(opts: RegionRegenerateOptions): P
 
       if (affectedClips.length === 0) return false;
 
+      const globalCaption = opts.globalCaption || project.globalCaption || '';
+
       let allSucceeded = true;
       for (const { clipId, repaintStart, repaintEnd } of affectedClips) {
         const clip = store.getClipById(clipId);
@@ -1543,13 +1795,21 @@ export async function regenerateTimelineRegion(opts: RegionRegenerateOptions): P
         if (clip.cumulativeMixKey) {
           srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
         }
+        if (!srcBlob) {
+          const audioDuration = store.getAudioDuration();
+          srcBlob = generateSilenceWav(audioDuration);
+        }
 
-        const outcome = await generateClipInternal(clipId, srcBlob, {
-          forceSilence: !srcBlob,
-          localDescription: opts.prompt,
-          globalCaptionOverride: opts.globalCaption,
-          repaintRange: { start: repaintStart, end: repaintEnd },
-        });
+        const outcome = await generateRepaintInternal(
+          clipId,
+          srcBlob,
+          repaintStart,
+          repaintEnd,
+          opts.prompt,
+          globalCaption,
+          opts.repaintMode ?? 'balanced',
+          opts.repaintStrength ?? 0.5,
+        );
 
         allSucceeded = allSucceeded && outcome.succeeded;
         if (outcome.succeeded) {
@@ -1639,7 +1899,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
         task_type: 'cover',
         caption: `accompaniment for vocals: ${caption}`,
         lyrics: '',
-        cover_strength: 0.8,
+        audio_cover_strength: 0.8,
         audio_duration: sourceClip.duration,
         inference_steps: project.generationDefaults.inferenceSteps,
         guidance_scale: project.generationDefaults.guidanceScale,

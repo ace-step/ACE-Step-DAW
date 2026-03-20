@@ -74,7 +74,7 @@ export function AudioAnalysisPanel() {
         task_type: 'cover' as const,
         caption: 'analyze audio properties',
         lyrics: '',
-        cover_strength: 0.0, // No transformation — just analyze
+        audio_cover_strength: 0.0, // No transformation — just analyze
         audio_duration: clip.duration,
         inference_steps: 10, // Minimal steps for fast analysis
         guidance_scale: 1.0,

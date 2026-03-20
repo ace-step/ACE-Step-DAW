@@ -21,6 +21,9 @@ Run suites in order. Stop if Suite 0 fails.
 4. Suite 3 — Add Layer Modal (`stories/03-add-layer.md`)
 5. Suite 4 — Multi-Track Generate Modal (`stories/04-multi-track.md`)
 6. Suite 5 — Error Handling (`stories/05-error-handling.md`)
+7. Suite 6 — Cover Generation (`stories/06-cover-generation.md`)
+8. Suite 7 — Repaint Generation (`stories/07-repaint-generation.md`)
+9. Suite 8 — Mask Modes (`stories/08-mask-modes.md`)
 
 ## MCP Browser Tool Workflow
 
@@ -187,6 +190,9 @@ After all suites complete, produce a summary:
 | 3 — Add Layer | 8 | ? | ? | ? | ? |
 | 4 — Multi-Track | 5 | ? | ? | ? | ? |
 | 5 — Error | 3 | ? | ? | ? | ? |
+| 6 — Cover | 9 | ? | ? | ? | ? |
+| 7 — Repaint | 9 | ? | ? | ? | ? |
+| 8 — Mask Modes | 9 | ? | ? | ? | ? |
 
 ### Issues Filed
 - #NNN — [title]

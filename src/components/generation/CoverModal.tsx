@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { generateCoverClip } from '../../services/generationPipeline';
+import { modelSupportsTaskType } from '../../services/aceStepApi';
 
 export function CoverModal() {
   const coverClipId = useUIStore((s) => s.coverClipId);
@@ -48,6 +49,7 @@ export function CoverModal() {
   if (!coverClipId || !clip || !track) return null;
 
   const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
+  const coverSupported = modelSupportsTaskType('cover');
 
   return (
     <div
@@ -83,6 +85,11 @@ export function CoverModal() {
             {!hasAudio && (
               <p className="text-[10px] text-amber-400 mt-1">
                 No audio generated yet — generate the clip first before creating a cover.
+              </p>
+            )}
+            {!coverSupported && (
+              <p className="text-[10px] text-amber-400 mt-1">
+                The currently loaded model does not support cover generation. Load a model that supports the &quot;cover&quot; task type.
               </p>
             )}
           </div>
@@ -164,9 +171,9 @@ export function CoverModal() {
           </button>
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || !hasAudio}
+            disabled={isGenerating || !hasAudio || !coverSupported}
             className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
-              isGenerating || !hasAudio
+              isGenerating || !hasAudio || !coverSupported
                 ? 'bg-[#444] text-zinc-500 cursor-not-allowed'
                 : 'bg-amber-600 hover:bg-amber-500 text-white'
             }`}

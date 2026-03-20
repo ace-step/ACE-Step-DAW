@@ -120,13 +120,30 @@ export async function listModels(): Promise<ModelsListResponse> {
   }
 
   const data = envelopeData;
-  return {
+  const result: ModelsListResponse = {
     models: Array.isArray(data?.models) ? data.models : [],
     default_model: data?.default_model ?? null,
     lm_models: Array.isArray(data?.lm_models) ? data.lm_models : [],
     loaded_lm_model: data?.loaded_lm_model ?? null,
     llm_initialized: Boolean(data?.llm_initialized),
   };
+  _cachedInventory = result;
+  return result;
+}
+
+let _cachedInventory: ModelsListResponse | null = null;
+
+/**
+ * Check whether the currently loaded (or default) model supports a given task type.
+ * Uses the cached model inventory from the last `listModels()` call.
+ * Returns true if the information is unavailable (optimistic fallback).
+ */
+export function modelSupportsTaskType(taskType: string): boolean {
+  if (!_cachedInventory) return true;
+  const loaded = _cachedInventory.models.find((m) => m.is_loaded);
+  if (!loaded) return true;
+  if (!loaded.supported_task_types || loaded.supported_task_types.length === 0) return true;
+  return loaded.supported_task_types.includes(taskType);
 }
 
 export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {

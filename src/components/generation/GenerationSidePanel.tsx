@@ -5,8 +5,10 @@ import {
   getGenerationValidationError,
   useGenerationStore,
   type VariationStatus,
+  type ModelOverride,
 } from '../../store/generationStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useModelStore } from '../../store/modelStore';
 import { KEY_SCALES } from '../../constants/tracks';
 import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/defaults';
 import { GENERATION_PRESETS, PRESET_CATEGORIES } from '../../constants/generationPresets';
@@ -68,6 +70,10 @@ export function GenerationSidePanel() {
   const setGenerationThinking = useGenerationStore((s) => s.setGenerationThinking);
   const setGenerationSeed = useGenerationStore((s) => s.setGenerationSeed);
   const setGenerationUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const setCompareModelsEnabled = useGenerationStore((s) => s.setCompareModelsEnabled);
+  const setCompareModelOverrides = useGenerationStore((s) => s.setCompareModelOverrides);
+
+  const availableModels = useModelStore((s) => s.availableModels);
 
   const [showHistory, setShowHistory] = useState(false);
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
@@ -526,6 +532,120 @@ export function GenerationSidePanel() {
           )}
         </section>
 
+        <section className="space-y-2" data-testid="compare-models-section">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase text-zinc-400">Compare Models</span>
+            <button
+              type="button"
+              onClick={() => setCompareModelsEnabled(!generationForm.compareModelsEnabled)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${
+                generationForm.compareModelsEnabled ? 'bg-indigo-600' : 'bg-zinc-600'
+              }`}
+              disabled={isSessionActive}
+              aria-label="Toggle compare models"
+              data-testid="compare-models-toggle"
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                  generationForm.compareModelsEnabled ? 'translate-x-4' : ''
+                }`}
+              />
+            </button>
+          </div>
+          {generationForm.compareModelsEnabled && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-zinc-500">Assign a model to each variation slot</p>
+              {Array.from({ length: generationForm.variationCount }, (_, slotIndex) => {
+                const currentOverride = generationForm.compareModelOverrides[slotIndex];
+                return (
+                  <div key={slotIndex} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#333] text-[10px] font-bold text-zinc-400">
+                        {slotIndex + 1}
+                      </span>
+                      <select
+                        value={currentOverride?.modelName ?? ''}
+                        onChange={(e) => {
+                          const newOverrides = [...generationForm.compareModelOverrides];
+                          // Pad array to have enough entries
+                          while (newOverrides.length <= slotIndex) {
+                            newOverrides.push({ modelName: '' });
+                          }
+                          newOverrides[slotIndex] = {
+                            ...newOverrides[slotIndex],
+                            modelName: e.target.value,
+                          };
+                          setCompareModelOverrides(newOverrides);
+                        }}
+                        className="flex-1 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+                        disabled={isSessionActive}
+                        aria-label={`Model for variation ${slotIndex + 1}`}
+                        data-testid={`compare-model-select-${slotIndex}`}
+                      >
+                        <option value="">Default model</option>
+                        {availableModels.map((model) => (
+                          <option key={model.name} value={model.name}>
+                            {model.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {currentOverride?.modelName && (
+                      <div className="ml-7 flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-[9px] text-zinc-500" htmlFor={`compare-steps-${slotIndex}`}>Steps</label>
+                          <input
+                            id={`compare-steps-${slotIndex}`}
+                            type="number"
+                            min={1}
+                            max={200}
+                            value={currentOverride.inferenceSteps ?? ''}
+                            placeholder="Default"
+                            onChange={(e) => {
+                              const newOverrides = [...generationForm.compareModelOverrides];
+                              newOverrides[slotIndex] = {
+                                ...newOverrides[slotIndex],
+                                inferenceSteps: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setCompareModelOverrides(newOverrides);
+                            }}
+                            className="w-full rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
+                            disabled={isSessionActive}
+                            data-testid={`compare-steps-${slotIndex}`}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[9px] text-zinc-500" htmlFor={`compare-guidance-${slotIndex}`}>Guidance</label>
+                          <input
+                            id={`compare-guidance-${slotIndex}`}
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={0.1}
+                            value={currentOverride.guidanceScale ?? ''}
+                            placeholder="Default"
+                            onChange={(e) => {
+                              const newOverrides = [...generationForm.compareModelOverrides];
+                              newOverrides[slotIndex] = {
+                                ...newOverrides[slotIndex],
+                                guidanceScale: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setCompareModelOverrides(newOverrides);
+                            }}
+                            className="w-full rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
+                            disabled={isSessionActive}
+                            data-testid={`compare-guidance-${slotIndex}`}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <button
           onClick={handleGenerate}
           disabled={Boolean(validationError) || isSessionActive}
@@ -641,6 +761,14 @@ export function GenerationSidePanel() {
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${VARIATION_STATUS_COLORS[variation.status]}`}>
                         {VARIATION_STATUS_LABELS[variation.status]}
                       </span>
+                      {variation.modelName && (
+                        <span
+                          className="rounded bg-cyan-900/40 px-1.5 py-0.5 text-[9px] font-medium text-cyan-300"
+                          data-testid={`variation-model-badge-${variation.index}`}
+                        >
+                          {variation.modelName}
+                        </span>
+                      )}
                       {variation.status === 'generating' && (
                         <div className="h-2.5 w-2.5 rounded-full border border-indigo-400 border-t-transparent animate-spin" />
                       )}

@@ -179,6 +179,20 @@ export interface Variation {
   progressPercent?: number;
   /** Estimated seconds remaining */
   etaSeconds?: number;
+  /** Model used for this variation (cross-model comparison) */
+  modelName?: string;
+  /** LM model used for this variation */
+  lmModelName?: string;
+  /** Per-variation inference steps override */
+  inferenceSteps?: number;
+  /** Per-variation guidance scale override */
+  guidanceScale?: number;
+}
+
+export interface ModelOverride {
+  modelName: string;
+  inferenceSteps?: number;
+  guidanceScale?: number;
 }
 
 export interface VariationSessionParams {
@@ -199,6 +213,10 @@ export interface VariationSessionParams {
   thinking?: boolean;
   seed?: string;
   useRandomSeed?: boolean;
+  /** Comparison mode: 'cross-model' enables per-variation model switching */
+  comparisonMode?: 'same-model' | 'cross-model';
+  /** Per-variation model overrides for cross-model comparison */
+  modelOverrides?: ModelOverride[];
 }
 
 export interface VariationSession {
@@ -248,6 +266,8 @@ export interface GenerationFormState {
   thinking: boolean;
   seed: string;
   useRandomSeed: boolean;
+  compareModelsEnabled: boolean;
+  compareModelOverrides: ModelOverride[];
 }
 
 export interface GenerationValidationInput {
@@ -324,6 +344,8 @@ function normalizeVariationSessionParams(
     thinking: params.thinking,
     seed: params.seed,
     useRandomSeed: params.useRandomSeed,
+    comparisonMode: params.comparisonMode,
+    modelOverrides: params.modelOverrides,
   };
 }
 
@@ -346,6 +368,8 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     thinking: DEFAULT_GENERATION.thinking,
     seed: '',
     useRandomSeed: true,
+    compareModelsEnabled: false,
+    compareModelOverrides: [],
   };
 }
 
@@ -411,6 +435,9 @@ export interface GenerationState {
   getGenerationValidationError: () => string | null;
   canSubmitGeneration: () => boolean;
   submitGenerationRequest: (context?: { globalCaption?: string | null }) => VariationSessionParams | null;
+
+  setCompareModelsEnabled: (enabled: boolean) => void;
+  setCompareModelOverrides: (overrides: ModelOverride[]) => void;
 
   startVariationSession: (params: VariationSessionParams) => void;
   updateVariation: (index: number, updates: Partial<Omit<Variation, 'index'>>) => void;
@@ -626,6 +653,14 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: { ...s.generationForm, useRandomSeed: useRandom, requestError: null },
       })),
 
+      setCompareModelsEnabled: (enabled) => set((s) => ({
+        generationForm: { ...s.generationForm, compareModelsEnabled: enabled, requestError: null },
+      })),
+
+      setCompareModelOverrides: (overrides) => set((s) => ({
+        generationForm: { ...s.generationForm, compareModelOverrides: overrides, requestError: null },
+      })),
+
       setGenerationRequestError: (message) => set((s) => ({
         generationForm: {
           ...s.generationForm,
@@ -702,6 +737,12 @@ export const useGenerationStore = create<GenerationState>()(
           thinking: generationForm.thinking,
           seed: generationForm.useRandomSeed ? undefined : generationForm.seed || undefined,
           useRandomSeed: generationForm.useRandomSeed,
+          ...(generationForm.compareModelsEnabled && generationForm.compareModelOverrides.length > 0
+            ? {
+                comparisonMode: 'cross-model' as const,
+                modelOverrides: generationForm.compareModelOverrides,
+              }
+            : {}),
         }, generationForm.presetId);
 
         set({

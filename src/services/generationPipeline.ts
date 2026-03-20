@@ -5,7 +5,9 @@ import {
   deriveGenerationJobProgress,
   type VariationSessionParams,
   type VariationStatus,
+  type ModelOverride,
 } from '../store/generationStore';
+import { useModelStore } from '../store/modelStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
@@ -283,23 +285,84 @@ export async function generateVariationSession(
       return clip.id;
     });
 
-    const results = await Promise.allSettled(
-      clipIds.map((clipId, index) =>
-        generateClip(clipId, null, {
-          forceSilence: true,
-          localDescription: params.prompt,
-          globalCaptionOverride: params.globalCaption,
-          lyricsOverride: params.lyrics,
-          variationIndex: index,
-          guidanceScaleOverride: params.guidanceScale,
-          inferenceStepsOverride: params.inferenceSteps,
-          shiftOverride: params.shift,
-          thinkingOverride: params.thinking,
-          seedOverride: params.seed ? Number(params.seed) : undefined,
-          useRandomSeedOverride: params.useRandomSeed,
-        }),
-      ),
-    );
+    const isCrossModel = params.comparisonMode === 'cross-model' && params.modelOverrides && params.modelOverrides.length > 0;
+
+    let results: PromiseSettledResult<GenerationOutcome>[];
+
+    if (isCrossModel) {
+      // Cross-model mode: generate sequentially, switching models between variations
+      const outcomes: PromiseSettledResult<GenerationOutcome>[] = [];
+      const currentModelId = useModelStore.getState().activeModelId;
+
+      for (let index = 0; index < clipIds.length; index++) {
+        const clipId = clipIds[index];
+        const override: ModelOverride | undefined = params.modelOverrides![index];
+        const targetModel = override?.modelName;
+
+        // Switch model if needed
+        if (targetModel && targetModel !== useModelStore.getState().activeModelId) {
+          try {
+            await api.initModel({ model: targetModel });
+            // Update model store to reflect the switch
+            useModelStore.setState({ activeModelId: targetModel });
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            useGenerationStore.getState().updateVariation(index, {
+              status: 'error',
+              error: `Model switch failed: ${errorMsg}`,
+              completedAt: Date.now(),
+            });
+            outcomes.push({ status: 'fulfilled', value: { cumulativeBlob: null, succeeded: false, errorMessage: errorMsg } });
+            continue;
+          }
+        }
+
+        try {
+          const outcome = await generateClip(clipId, null, {
+            forceSilence: true,
+            localDescription: params.prompt,
+            globalCaptionOverride: params.globalCaption,
+            lyricsOverride: params.lyrics,
+            variationIndex: index,
+            guidanceScaleOverride: override?.guidanceScale ?? params.guidanceScale,
+            inferenceStepsOverride: override?.inferenceSteps ?? params.inferenceSteps,
+            shiftOverride: params.shift,
+            thinkingOverride: params.thinking,
+            seedOverride: params.seed ? Number(params.seed) : undefined,
+            useRandomSeedOverride: params.useRandomSeed,
+          });
+          outcomes.push({ status: 'fulfilled', value: outcome });
+        } catch (err) {
+          outcomes.push({ status: 'rejected', reason: err });
+        }
+
+        // Record model name on the variation
+        if (targetModel) {
+          useGenerationStore.getState().updateVariation(index, { modelName: targetModel });
+        }
+      }
+
+      results = outcomes;
+    } else {
+      // Same-model mode: generate in parallel (existing behavior)
+      results = await Promise.allSettled(
+        clipIds.map((clipId, index) =>
+          generateClip(clipId, null, {
+            forceSilence: true,
+            localDescription: params.prompt,
+            globalCaptionOverride: params.globalCaption,
+            lyricsOverride: params.lyrics,
+            variationIndex: index,
+            guidanceScaleOverride: params.guidanceScale,
+            inferenceStepsOverride: params.inferenceSteps,
+            shiftOverride: params.shift,
+            thinkingOverride: params.thinking,
+            seedOverride: params.seed ? Number(params.seed) : undefined,
+            useRandomSeedOverride: params.useRandomSeed,
+          }),
+        ),
+      );
+    }
 
     const firstCompletedVariation = useGenerationStore.getState().variationSession?.variations.find(
       (variation) => variation.status === 'done' && variation.clipId,

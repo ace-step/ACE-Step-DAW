@@ -49,7 +49,7 @@ describe('useKeyboardShortcuts', () => {
     render(<Harness />);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM' }));
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', shiftKey: true }));
 
     const track = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id);
     expect(track?.muted).toBe(true);

@@ -51,7 +51,7 @@ const logicProMap: ShortcutMap = {
   'view.zoomToFit':         { code: 'KeyZ' },
   'view.toggleSnap':        { code: 'KeyN' },
   'tracks.mute':            { code: 'KeyM' },
-  'tracks.solo':            { code: 'KeyS' },
+  'tracks.solo':            { code: 'KeyS', shift: true },
   'panels.mixer':           { code: 'KeyX' },
   'panels.smartControls':   { code: 'KeyB' },
   'panels.library':         { code: 'KeyY' },
@@ -74,7 +74,7 @@ const flStudioMap: ShortcutMap = {
   'clips.split':            { code: 'KeyS', mod: true, shift: true },
   'clips.selectAll':        { code: 'KeyA', mod: true },
   'tracks.mute':            { code: 'KeyM' },
-  'tracks.solo':            { code: 'KeyS' },
+  'tracks.solo':            { code: 'KeyS', shift: true },
   'view.zoomIn':            { code: 'Equal', mod: true },
   'view.zoomOut':           { code: 'Minus', mod: true },
   'view.zoomToSelection':   { code: 'KeyZ' },
@@ -101,7 +101,7 @@ const proToolsMap: ShortcutMap = {
   'clips.split':            { code: 'KeyB' },               // B = separate clip in Pro Tools
   'clips.selectAll':        { code: 'KeyA', mod: true },
   'tracks.mute':            { code: 'KeyM' },
-  'tracks.solo':            { code: 'KeyS' },
+  'tracks.solo':            { code: 'KeyS', shift: true },
   'view.zoomIn':            { code: 'KeyT' },               // T = zoom in on Pro Tools
   'view.zoomOut':           { code: 'KeyR' },               // R = zoom out on Pro Tools
   'view.zoomToSelection':   { code: 'KeyZ' },

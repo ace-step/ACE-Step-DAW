@@ -3,6 +3,7 @@ import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
+import { useTransportStore } from '../../store/transportStore';
 import { useGeneration } from '../../hooks/useGeneration';
 import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
@@ -73,6 +74,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
+  const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
@@ -84,6 +86,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
+  const [scissorLine, setScissorLine] = useState<number | null>(null);
+  const scissorRef = useRef(false);
 
   const editingClipId = useUIStore((s) => s.editingClipId);
   useEffect(() => {
@@ -140,6 +144,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    // Skip scissor tool on fade handles
+    if ((e.target as HTMLElement).closest('[data-fade-handle]')) return;
     e.stopPropagation();
     e.preventDefault();
 
@@ -153,6 +159,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const bpm = project?.bpm ?? 120;
     const totalDuration = project?.totalDuration ?? 600;
     dragRef.current = false;
+    scissorRef.current = false;
     let isShiftCopy = e.shiftKey;
 
     const isMultiSelected = selectedClipIds.size > 1 && selectedClipIds.has(clip.id);
@@ -163,10 +170,40 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const clipRect = clipBlockRef.current?.getBoundingClientRect();
     const clickOffsetPx = clipRect ? startX - clipRect.left : 0;
 
+    // --- Long-press scissor detection (only for move mode) ---
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    if (mode === 'move' && (clip.generationStatus === 'ready' || Boolean(clip.midiData))) {
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        scissorRef.current = true;
+        // Calculate initial scissor line position
+        if (clipRect) {
+          const relX = startX - clipRect.left;
+          const splitTime = origStart + relX / pixelsPerSecond;
+          const snapped = e.altKey ? splitTime : snapToGrid(splitTime, bpm, 1);
+          const snappedPx = (snapped - origStart) * pixelsPerSecond;
+          setScissorLine(Math.max(0, Math.min(snappedPx, clipW)));
+        }
+        // Override cursor
+        document.body.style.cursor = 'crosshair';
+      }, 300);
+    }
+
     const onMouseMove = (ev: MouseEvent) => {
+      // If in scissor mode, just update the split line position
+      if (scissorRef.current && clipRect) {
+        const relX = ev.clientX - clipRect.left;
+        const splitTime = origStart + relX / pixelsPerSecond;
+        const snapped = ev.altKey ? splitTime : snapToGrid(splitTime, bpm, 1);
+        const snappedPx = (snapped - origStart) * pixelsPerSecond;
+        setScissorLine(Math.max(0, Math.min(snappedPx, clipW)));
+        return;
+      }
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
+      // Cancel long-press timer once real drag starts
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       if (!dragRef.current) beginDrag();
       dragRef.current = true;
       isShiftCopy = ev.shiftKey;
@@ -259,6 +296,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      // Cancel scissor mode
+      if (scissorRef.current) {
+        scissorRef.current = false;
+        setScissorLine(null);
+        document.body.style.cursor = '';
+        return;
+      }
       setDragGhost(null);
       if (dragRef.current) {
         // Restore original state for multi-select batch moves
@@ -283,6 +328,23 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+
+      // Execute scissor split
+      if (scissorRef.current && clipRect) {
+        scissorRef.current = false;
+        setScissorLine(null);
+        document.body.style.cursor = '';
+        const relX = ev.clientX - clipRect.left;
+        const splitTime = origStart + relX / pixelsPerSecond;
+        const snapped = ev.altKey ? splitTime : snapToGrid(splitTime, bpm, 1);
+        // Only split if within clip bounds (not at edges)
+        if (snapped > origStart + 0.01 && snapped < origStart + origDuration - 0.01) {
+          void splitClipAtZeroCrossing(clip.id, snapped);
+        }
+        return;
+      }
+
       setDragGhost(null);
       endDrag();
 
@@ -320,7 +382,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing]);
+  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, clip.generationStatus, clip.midiData, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, splitClipAtZeroCrossing]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -632,6 +694,19 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         )}
 
         <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} isMidiClip={isMidiClip} />
+
+        {scissorLine !== null && (
+          <div
+            className="absolute top-0 bottom-0 w-px pointer-events-none z-30"
+            style={{
+              left: scissorLine,
+              background: 'rgba(250, 204, 21, 0.9)',
+              boxShadow: '0 0 4px rgba(250, 204, 21, 0.5)',
+            }}
+          >
+            <div className="absolute -top-1 -left-[5px] w-[11px] h-[11px] border-2 border-yellow-400 bg-zinc-900 rounded-full" />
+          </div>
+        )}
       </div>
 
       {ctxMenu && (
@@ -643,6 +718,11 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           onRegenerate={() => { closeCtxMenu(); regenerateClip(clip.id); }}
           onOpenMidi={() => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); }}
           onExportMidi={() => { closeCtxMenu(); exportMidiClip(clip.id); }}
+          onSplitAtPlayhead={() => {
+            closeCtxMenu();
+            const currentTime = useTransportStore.getState().currentTime;
+            void splitClipAtZeroCrossing(clip.id, currentTime);
+          }}
           onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
           onConsolidate={() => { void handleConsolidate(); }}
           onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}

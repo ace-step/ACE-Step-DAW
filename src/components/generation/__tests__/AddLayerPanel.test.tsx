@@ -30,7 +30,9 @@ function setupProject() {
 
 describe('AddLayerPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     setupProject();
+    useGenerationStore.setState({ isGenerating: false });
   });
 
   it('renders nothing when addLayerOpen is false', () => {
@@ -69,7 +71,7 @@ describe('AddLayerPanel', () => {
     render(<AddLayerPanel />);
     const bassButton = screen.getByRole('button', { name: 'Target track: Bass' });
     expect(bassButton.className).toContain('bg-white/10');
-    expect(screen.getByText(`Generate into ${bassTrack!.displayName}`)).toBeInTheDocument();
+    expect(screen.getByText(`Generate into selected row: ${bassTrack!.displayName}`)).toBeInTheDocument();
   });
 
   it('creates a new preset track instead of falling back to the first existing track when the selection is on an empty row', async () => {

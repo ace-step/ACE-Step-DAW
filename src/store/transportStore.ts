@@ -157,7 +157,11 @@ export const useTransportStore = create<TransportState>((set) => ({
     scrubPreviewRate: 0,
   }),
   toggleLoop: () => set((s) => ({ loopEnabled: !s.loopEnabled })),
-  setLoopRegion: (start, end) => set({ loopStart: start, loopEnd: end }),
+  setLoopRegion: (start, end) => set(() => {
+    const normalizedStart = Math.max(0, Math.min(start, end));
+    const normalizedEnd = Math.max(normalizedStart, Math.max(start, end));
+    return { loopStart: normalizedStart, loopEnd: normalizedEnd };
+  }),
   toggleMetronome: () => set((s) => ({ metronomeEnabled: !s.metronomeEnabled })),
   setMetronomeSound: (sound) => set({ metronomeSound: sound }),
   setMetronomeVolume: (volume) => set({ metronomeVolume: Math.max(0, Math.min(1, volume)) }),

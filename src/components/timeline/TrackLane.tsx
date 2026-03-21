@@ -18,6 +18,10 @@ import {
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
   ARRANGEMENT_SELECTED_LANE_BG,
 } from '../arrangement/rowSurface';
+import {
+  getArrangementLaneHeightForRenderedRowHeight,
+  getArrangementRowHeight,
+} from '../arrangement/rowLayout';
 
 interface TrackLaneProps {
   track: Track;
@@ -89,24 +93,42 @@ export function TrackLane({ track }: TrackLaneProps) {
   } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
 
-  const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
+  const resizeRef = useRef<{ startY: number; startRowHeight: number; startLaneHeight: number } | null>(null);
   const laneHeight = track.laneHeight ?? 64;
+  const rowHeight = getArrangementRowHeight(track);
 
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+    const minRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MIN_LANE_HEIGHT });
+    const maxRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MAX_LANE_HEIGHT });
+
+    resizeRef.current = {
+      startY: e.clientY,
+      startRowHeight: rowHeight,
+      startLaneHeight: laneHeight,
+    };
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!resizeRef.current) return;
       const delta = ev.clientY - resizeRef.current.startY;
-      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
-      updateTrack(track.id, { laneHeight: newH });
+      const nextRenderedRowHeight = Math.min(
+        maxRenderedRowHeight,
+        Math.max(minRenderedRowHeight, resizeRef.current.startRowHeight + delta),
+      );
+      const nextLaneHeight = Math.min(
+        MAX_LANE_HEIGHT,
+        Math.max(
+          MIN_LANE_HEIGHT,
+          getArrangementLaneHeightForRenderedRowHeight(track, nextRenderedRowHeight),
+        ),
+      );
+      updateTrack(track.id, { laneHeight: nextLaneHeight });
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape') return;
       if (resizeRef.current) {
-        updateTrack(track.id, { laneHeight: resizeRef.current.startH });
+        updateTrack(track.id, { laneHeight: resizeRef.current.startLaneHeight });
       }
       resizeRef.current = null;
       window.removeEventListener('mousemove', onMouseMove);
@@ -122,7 +144,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [laneHeight, track.id, updateTrack]);
+  }, [rowHeight, track, updateTrack]);
 
   if (!project) return null;
 
@@ -298,7 +320,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         className={`relative border-b ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
         style={{
           width: totalWidth,
-          height: laneHeight,
+          height: rowHeight,
           opacity: track.muted ? 0.4 : 1,
           borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
         }}

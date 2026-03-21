@@ -12,6 +12,10 @@ import {
   ARRANGEMENT_HEADER_ROW_BG,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
+import {
+  getArrangementLaneHeightForRenderedRowHeight,
+  getArrangementRowHeight,
+} from '../arrangement/rowLayout';
 import { getButtonClasses } from '../ui/Button';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
 
@@ -122,6 +126,7 @@ export function TrackHeader({
   }, [track.displayName]);
 
   const laneHeight = track.laneHeight ?? 64;
+  const rowHeight = getArrangementRowHeight(track);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const isCompact = laneHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
@@ -148,12 +153,25 @@ export function TrackHeader({
   const onHeightResizeDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+    const minRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MIN_LANE_HEIGHT });
+    const maxRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MAX_LANE_HEIGHT });
+
+    resizeRef.current = { startY: e.clientY, startH: rowHeight };
     const onMouseMove = (ev: MouseEvent) => {
       if (!resizeRef.current) return;
       const delta = ev.clientY - resizeRef.current.startY;
-      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
-      updateTrack(track.id, { laneHeight: newH });
+      const nextRenderedRowHeight = Math.min(
+        maxRenderedRowHeight,
+        Math.max(minRenderedRowHeight, resizeRef.current.startH + delta),
+      );
+      const nextLaneHeight = Math.min(
+        MAX_LANE_HEIGHT,
+        Math.max(
+          MIN_LANE_HEIGHT,
+          getArrangementLaneHeightForRenderedRowHeight(track, nextRenderedRowHeight),
+        ),
+      );
+      updateTrack(track.id, { laneHeight: nextLaneHeight });
     };
     const onMouseUp = () => {
       resizeRef.current = null;
@@ -162,7 +180,7 @@ export function TrackHeader({
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [laneHeight, track.id, updateTrack]);
+  }, [rowHeight, track, updateTrack]);
 
   const handleHeaderDoubleClick = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
@@ -200,7 +218,7 @@ export function TrackHeader({
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
-        height: track.isGroup ? Math.max(40, laneHeight * 0.7) : laneHeight,
+        height: rowHeight,
         paddingLeft: isCollapsed ? 0 : isChild ? 24 : 8,
         paddingRight: isCollapsed ? 0 : 8,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,

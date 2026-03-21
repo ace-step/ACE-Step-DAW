@@ -27,6 +27,7 @@ import {
   DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT,
   getArrangementEmptyTrackId,
 } from '../arrangement/trackSlotLayout';
+import { DEFAULT_ARRANGEMENT_ROW_HEIGHT } from '../arrangement/rowLayout';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -792,7 +793,7 @@ export function Timeline() {
 }
 
 /** Empty placeholder rows below tracks — infinite grid like ACE Studio */
-const PLACEHOLDER_ROW_HEIGHT = 64; // matches default track height
+const PLACEHOLDER_ROW_HEIGHT = DEFAULT_ARRANGEMENT_ROW_HEIGHT;
 const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT;  // enough to fill any viewport
 
 function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {

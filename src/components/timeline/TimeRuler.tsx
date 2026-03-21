@@ -8,16 +8,27 @@ import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tem
 import { getScrubPreviewRate } from '../../utils/scrubMath';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 
+const LOOP_MIN_DURATION = 0.01;
+const LOOP_HANDLE_WIDTH = 10;
+
 export function TimeRuler() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const loopStart = useTransportStore((s) => s.loopStart);
   const loopEnd = useTransportStore((s) => s.loopEnd);
+  const setLoopRegion = useTransportStore((s) => s.setLoopRegion);
   const isScrubbing = useTransportStore((s) => s.isScrubbing);
   const currentTime = useTransportStore((s) => s.currentTime);
   const { startScrub, scrubTo, endScrub } = useTransport();
   const scrubStateRef = useRef<{ x: number; time: number; stamp: number } | null>(null);
+  const loopDragRef = useRef<{
+    kind: 'start' | 'end' | 'move';
+    pointerId: number;
+    originX: number;
+    startLoopStart: number;
+    startLoopEnd: number;
+  } | null>(null);
 
   const getTimeFromX = useCallback((clientX: number, container: HTMLElement) => {
     if (!project) return;
@@ -74,6 +85,55 @@ export function TimeRuler() {
       container.releasePointerCapture(e.pointerId);
     }
   }, [endScrub, isScrubbing]);
+
+  const beginLoopDrag = useCallback((kind: 'start' | 'end' | 'move') => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!project || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    loopDragRef.current = {
+      kind,
+      pointerId: e.pointerId,
+      originX: e.clientX,
+      startLoopStart: loopStart,
+      startLoopEnd: loopEnd,
+    };
+    if ('setPointerCapture' in e.currentTarget) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  }, [loopEnd, loopStart, project]);
+
+  const handleLoopDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!project || !loopDragRef.current || loopDragRef.current.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const drag = loopDragRef.current;
+    const deltaSeconds = (e.clientX - drag.originX) / pixelsPerSecond;
+
+    if (drag.kind === 'move') {
+      const duration = drag.startLoopEnd - drag.startLoopStart;
+      const nextStart = Math.max(0, Math.min(drag.startLoopStart + deltaSeconds, project.totalDuration - duration));
+      setLoopRegion(nextStart, nextStart + duration);
+      return;
+    }
+
+    if (drag.kind === 'start') {
+      const nextStart = Math.max(0, Math.min(drag.startLoopStart + deltaSeconds, drag.startLoopEnd - LOOP_MIN_DURATION));
+      setLoopRegion(nextStart, drag.startLoopEnd);
+      return;
+    }
+
+    const nextEnd = Math.max(drag.startLoopStart + LOOP_MIN_DURATION, Math.min(drag.startLoopEnd + deltaSeconds, project.totalDuration));
+    setLoopRegion(drag.startLoopStart, nextEnd);
+  }, [pixelsPerSecond, project, setLoopRegion]);
+
+  const endLoopDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!loopDragRef.current || loopDragRef.current.pointerId !== e.pointerId) return;
+    loopDragRef.current = null;
+    if ('releasePointerCapture' in e.currentTarget && e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }, []);
 
   const markers = useMemo(() => {
     if (!project) return [];
@@ -160,6 +220,7 @@ export function TimeRuler() {
       {loopEnabled && loopEnd > loopStart && (
         <div
           className="absolute top-0 h-full"
+          data-testid="timeline-loop-region"
           style={{
             left: loopStart * pixelsPerSecond,
             width: (loopEnd - loopStart) * pixelsPerSecond,
@@ -167,7 +228,45 @@ export function TimeRuler() {
             borderLeft: '1px solid rgba(234,179,8,0.5)',
             borderRight: '1px solid rgba(234,179,8,0.5)',
           }}
-        />
+        >
+          <div
+            className="absolute inset-y-0 left-0 cursor-col-resize bg-amber-300/20 hover:bg-amber-300/35"
+            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(-50%)' }}
+            role="slider"
+            aria-label="Adjust loop start"
+            aria-valuemin={0}
+            aria-valuemax={loopEnd}
+            aria-valuenow={loopStart}
+            data-testid="timeline-loop-start-handle"
+            onPointerDown={beginLoopDrag('start')}
+            onPointerMove={handleLoopDrag}
+            onPointerUp={endLoopDrag}
+            onPointerCancel={endLoopDrag}
+          />
+          <div
+            className="absolute inset-y-0 right-0 cursor-col-resize bg-amber-300/20 hover:bg-amber-300/35"
+            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(50%)' }}
+            role="slider"
+            aria-label="Adjust loop end"
+            aria-valuemin={loopStart}
+            aria-valuemax={project.totalDuration}
+            aria-valuenow={loopEnd}
+            data-testid="timeline-loop-end-handle"
+            onPointerDown={beginLoopDrag('end')}
+            onPointerMove={handleLoopDrag}
+            onPointerUp={endLoopDrag}
+            onPointerCancel={endLoopDrag}
+          />
+          <div
+            className="absolute inset-y-0 left-2 right-2 cursor-grab active:cursor-grabbing"
+            aria-label="Move loop region"
+            data-testid="timeline-loop-move-handle"
+            onPointerDown={beginLoopDrag('move')}
+            onPointerMove={handleLoopDrag}
+            onPointerUp={endLoopDrag}
+            onPointerCancel={endLoopDrag}
+          />
+        </div>
       )}
 
       {/* Bar and beat markers — labels at top, tick marks extend down */}
@@ -181,7 +280,7 @@ export function TimeRuler() {
           <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5a75]' : 'h-2/3 bg-[color:var(--color-daw-grid-bar)]'}`} />
           {/* Label beside tick */}
           <span
-            className={`absolute bottom-[4px] left-[4px] font-medium whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
+            className={`absolute bottom-px left-[4px] font-medium leading-none whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
           >
             {label}
             {tsLabel && (
@@ -215,7 +314,7 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   const svgH = 12;
   return (
     <div
-      className="absolute bottom-[4px] z-30 pointer-events-none"
+      className="absolute bottom-[-1px] z-30 pointer-events-none"
       style={{ left: x, transform: `translate(-${Math.floor(svgW / 2)}px, 0px)` }}
     >
       <svg

@@ -40,11 +40,8 @@ describe('TimeRuler scrubbing', () => {
     useUIStore.getState().setPixelsPerSecond(100);
   });
 
-  it('enters scrub mode and updates transport position while dragging the ruler', () => {
-    render(<TimeRuler />);
-
-    const ruler = screen.getByRole('slider', { name: 'Timeline scrub ruler' });
-    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({
+  function mockRulerRect(element: HTMLElement) {
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
       left: 0,
@@ -55,6 +52,13 @@ describe('TimeRuler scrubbing', () => {
       height: 24,
       toJSON: () => ({}),
     });
+  }
+
+  it('enters scrub mode and updates transport position while dragging the ruler', () => {
+    render(<TimeRuler />);
+
+    const ruler = screen.getByRole('slider', { name: 'Timeline scrub ruler' });
+    mockRulerRect(ruler);
 
     fireEvent.pointerDown(ruler, {
       button: 0,
@@ -89,5 +93,120 @@ describe('TimeRuler scrubbing', () => {
     state = useTransportStore.getState();
     expect(state.isScrubbing).toBe(false);
     expect(state.scrubPreviewRate).toBe(0);
+  });
+
+  it('renders the loop region overlay when looping is enabled', () => {
+    useTransportStore.getState().setLoopRegion(1, 3);
+    useTransportStore.getState().toggleLoop();
+
+    render(<TimeRuler />);
+
+    expect(screen.getByTestId('timeline-loop-region')).toBeInTheDocument();
+    expect(screen.getByLabelText('Move loop region')).toBeInTheDocument();
+    expect(screen.getByLabelText('Adjust loop start')).toBeInTheDocument();
+    expect(screen.getByLabelText('Adjust loop end')).toBeInTheDocument();
+  });
+
+  it('drags the loop start handle with beat snapping by default', () => {
+    useTransportStore.getState().setLoopRegion(1.25, 3.25);
+    useTransportStore.getState().toggleLoop();
+
+    render(<TimeRuler />);
+
+    const ruler = screen.getByRole('slider', { name: 'Timeline scrub ruler' });
+    mockRulerRect(ruler);
+
+    const startHandle = screen.getByLabelText('Adjust loop start');
+
+    fireEvent.pointerDown(startHandle, {
+      button: 0,
+      clientX: 125,
+      clientY: 12,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(startHandle, {
+      clientX: 210,
+      clientY: 12,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(startHandle, {
+      clientX: 210,
+      clientY: 12,
+      pointerId: 1,
+    });
+
+    const state = useTransportStore.getState();
+    expect(state.loopStart).toBeCloseTo(2);
+    expect(state.loopEnd).toBeCloseTo(3.25);
+    expect(state.isScrubbing).toBe(false);
+  });
+
+  it('moves the full loop region and preserves its duration', () => {
+    useTransportStore.getState().setLoopRegion(1, 3);
+    useTransportStore.getState().toggleLoop();
+
+    render(<TimeRuler />);
+
+    const ruler = screen.getByRole('slider', { name: 'Timeline scrub ruler' });
+    mockRulerRect(ruler);
+
+    const loopRegion = screen.getByLabelText('Move loop region');
+
+    fireEvent.pointerDown(loopRegion, {
+      button: 0,
+      clientX: 150,
+      clientY: 12,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(loopRegion, {
+      clientX: 260,
+      clientY: 12,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(loopRegion, {
+      clientX: 260,
+      clientY: 12,
+      pointerId: 1,
+    });
+
+    const state = useTransportStore.getState();
+    expect(state.loopStart).toBeCloseTo(2);
+    expect(state.loopEnd).toBeCloseTo(4);
+  });
+
+  it('allows free loop end positioning while Alt-dragging', () => {
+    useTransportStore.getState().setLoopRegion(1, 3);
+    useTransportStore.getState().toggleLoop();
+
+    render(<TimeRuler />);
+
+    const ruler = screen.getByRole('slider', { name: 'Timeline scrub ruler' });
+    mockRulerRect(ruler);
+
+    const endHandle = screen.getByLabelText('Adjust loop end');
+
+    fireEvent.pointerDown(endHandle, {
+      button: 0,
+      clientX: 300,
+      clientY: 12,
+      pointerId: 1,
+      altKey: true,
+    });
+    fireEvent.pointerMove(endHandle, {
+      clientX: 345,
+      clientY: 12,
+      pointerId: 1,
+      altKey: true,
+    });
+    fireEvent.pointerUp(endHandle, {
+      clientX: 345,
+      clientY: 12,
+      pointerId: 1,
+      altKey: true,
+    });
+
+    const state = useTransportStore.getState();
+    expect(state.loopStart).toBeCloseTo(1);
+    expect(state.loopEnd).toBeCloseTo(3.45);
   });
 });

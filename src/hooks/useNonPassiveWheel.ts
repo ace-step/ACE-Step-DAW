@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Attaches a non-passive wheel event listener to a DOM element.
@@ -10,21 +10,30 @@ import { useEffect, useRef, type RefObject } from 'react';
  *
  * This hook uses `addEventListener` with `{ passive: false }` so that
  * `preventDefault()` actually works.
+ *
+ * Returns a callback ref that should be passed to the element's `ref` prop.
+ * This ensures the listener is attached even when the element mounts late
+ * (e.g. behind a conditional render).
  */
 export function useNonPassiveWheel(
-  ref: RefObject<HTMLElement | null>,
   handler: (e: WheelEvent) => void,
 ) {
-  // Keep handler in a ref so the effect doesn't re-run on every render
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
+  const [element, setElement] = useState<HTMLElement | null>(null);
+
+  const callbackRef = useCallback((el: HTMLElement | null) => {
+    setElement(el);
+  }, []);
+
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    if (!element) return;
 
     const listener = (e: WheelEvent) => handlerRef.current(e);
-    el.addEventListener('wheel', listener, { passive: false });
-    return () => el.removeEventListener('wheel', listener);
-  }, [ref]);
+    element.addEventListener('wheel', listener, { passive: false });
+    return () => element.removeEventListener('wheel', listener);
+  }, [element]);
+
+  return callbackRef;
 }

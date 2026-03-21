@@ -266,7 +266,12 @@ export function Timeline() {
   );
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
-  useNonPassiveWheel(scrollRef, handleWheel);
+  const wheelRef = useNonPassiveWheel(handleWheel);
+  // Merge scrollRef (used throughout) with wheelRef (callback ref from hook)
+  const mergedScrollRef = useCallback((el: HTMLDivElement | null) => {
+    (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const handleMouseDownCapture = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -413,7 +418,7 @@ export function Timeline() {
     <>
       <Minimap />
       <div
-        ref={scrollRef}
+        ref={mergedScrollRef}
         data-keyboard-context="timeline"
         role="grid"
         tabIndex={0}

@@ -102,12 +102,18 @@ describe('Timeline zoom anchor', () => {
       toJSON: () => ({}),
     });
 
-    fireEvent.wheel(timeline, {
-      deltaY: -120,
-      ctrlKey: true,
-      clientX: 250,
-      clientY: 100,
-    });
+    // Dispatch a native WheelEvent (not React synthetic) because the handler
+    // is now attached via addEventListener({ passive: false }), not onWheel
+    timeline.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -120,
+        ctrlKey: true,
+        clientX: 250,
+        clientY: 100,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
 
     expect(useUIStore.getState().pixelsPerSecond).toBe(100);
     expect(timeline.scrollLeft).toBe(850);

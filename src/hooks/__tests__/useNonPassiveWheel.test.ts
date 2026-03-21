@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import { useRef } from 'react';
+import { renderHook, act } from '@testing-library/react';
 import { useNonPassiveWheel } from '../useNonPassiveWheel';
 
 describe('useNonPassiveWheel', () => {
@@ -15,9 +14,10 @@ describe('useNonPassiveWheel', () => {
     const addSpy = vi.spyOn(div, 'addEventListener');
     const handler = vi.fn();
 
-    renderHook(() => {
-      const ref = useRef<HTMLElement>(div);
-      useNonPassiveWheel(ref, handler);
+    const { result } = renderHook(() => useNonPassiveWheel(handler));
+
+    act(() => {
+      result.current(div);
     });
 
     const call = addSpy.mock.calls.find(([type]) => type === 'wheel');
@@ -30,9 +30,10 @@ describe('useNonPassiveWheel', () => {
   it('calls the handler when a wheel event fires', () => {
     const handler = vi.fn();
 
-    renderHook(() => {
-      const ref = useRef<HTMLElement>(div);
-      useNonPassiveWheel(ref, handler);
+    const { result } = renderHook(() => useNonPassiveWheel(handler));
+
+    act(() => {
+      result.current(div);
     });
 
     const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true });
@@ -47,9 +48,10 @@ describe('useNonPassiveWheel', () => {
       e.preventDefault();
     });
 
-    renderHook(() => {
-      const ref = useRef<HTMLElement>(div);
-      useNonPassiveWheel(ref, handler);
+    const { result } = renderHook(() => useNonPassiveWheel(handler));
+
+    act(() => {
+      result.current(div);
     });
 
     const event = new WheelEvent('wheel', {
@@ -66,9 +68,10 @@ describe('useNonPassiveWheel', () => {
     const removeSpy = vi.spyOn(div, 'removeEventListener');
     const handler = vi.fn();
 
-    const { unmount } = renderHook(() => {
-      const ref = useRef<HTMLElement>(div);
-      useNonPassiveWheel(ref, handler);
+    const { result, unmount } = renderHook(() => useNonPassiveWheel(handler));
+
+    act(() => {
+      result.current(div);
     });
 
     unmount();
@@ -84,19 +87,20 @@ describe('useNonPassiveWheel', () => {
     const handler2 = vi.fn();
     const addSpy = vi.spyOn(div, 'addEventListener');
 
-    const { rerender } = renderHook(
-      ({ handler }) => {
-        const ref = useRef<HTMLElement>(div);
-        useNonPassiveWheel(ref, handler);
-      },
+    const { result, rerender } = renderHook(
+      ({ handler }) => useNonPassiveWheel(handler),
       { initialProps: { handler: handler1 } },
     );
+
+    act(() => {
+      result.current(div);
+    });
 
     const initialCallCount = addSpy.mock.calls.filter(([t]) => t === 'wheel').length;
 
     rerender({ handler: handler2 });
 
-    // Should not re-attach
+    // Should not re-attach (element didn't change)
     const afterCallCount = addSpy.mock.calls.filter(([t]) => t === 'wheel').length;
     expect(afterCallCount).toBe(initialCallCount);
 
@@ -106,5 +110,54 @@ describe('useNonPassiveWheel', () => {
     expect(handler2).toHaveBeenCalledTimes(1);
 
     addSpy.mockRestore();
+  });
+
+  it('attaches listener when callback ref is called with an element (late mount)', () => {
+    const handler = vi.fn();
+    const addSpy = vi.spyOn(div, 'addEventListener');
+
+    const { result } = renderHook(() => useNonPassiveWheel(handler));
+
+    // No listener attached yet (ref not called)
+    expect(addSpy.mock.calls.filter(([t]) => t === 'wheel').length).toBe(0);
+
+    // Simulate late mount via callback ref
+    act(() => {
+      result.current(div);
+    });
+
+    const call = addSpy.mock.calls.find(([type]) => type === 'wheel');
+    expect(call).toBeDefined();
+    expect(call![2]).toEqual({ passive: false });
+
+    // Handler should work
+    div.dispatchEvent(new WheelEvent('wheel', { deltaY: 10 }));
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    addSpy.mockRestore();
+  });
+
+  it('cleans up when callback ref is called with null', () => {
+    const handler = vi.fn();
+    const removeSpy = vi.spyOn(div, 'removeEventListener');
+
+    const { result } = renderHook(() => useNonPassiveWheel(handler));
+
+    act(() => {
+      result.current(div);
+    });
+
+    act(() => {
+      result.current(null);
+    });
+
+    const call = removeSpy.mock.calls.find(([type]) => type === 'wheel');
+    expect(call).toBeDefined();
+
+    // Handler should no longer fire
+    div.dispatchEvent(new WheelEvent('wheel', { deltaY: 10 }));
+    expect(handler).not.toHaveBeenCalled();
+
+    removeSpy.mockRestore();
   });
 });

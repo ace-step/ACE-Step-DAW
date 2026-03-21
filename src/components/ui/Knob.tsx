@@ -87,7 +87,11 @@ export function Knob({
     onChange(applyStep(value + delta));
   }, [value, min, max, onChange, disabled, applyStep]);
 
-  useNonPassiveWheel(knobRef, onWheelHandler);
+  const wheelRef = useNonPassiveWheel(onWheelHandler);
+  const mergedKnobRef = useCallback((el: HTMLDivElement | null) => {
+    (knobRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const onContextMenu = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
@@ -136,7 +140,7 @@ export function Knob({
       title={`${label ?? ''}: ${displayValue}${unit ?? ''} (double-click to reset)`}
     >
       <div
-        ref={knobRef}
+        ref={mergedKnobRef}
         onMouseDown={onMouseDown}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}

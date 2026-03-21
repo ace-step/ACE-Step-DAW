@@ -983,7 +983,11 @@ export function PianoRollCanvas({
   );
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
-  useNonPassiveWheel(canvasRef, handleWheel);
+  const wheelRef = useNonPassiveWheel(handleWheel);
+  const mergedCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
+    (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const clipboardNotes = useMemo(
     () => notes.filter((note) => selectedNoteIds.has(note.id)),
@@ -1317,7 +1321,7 @@ export function PianoRollCanvas({
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
       <canvas
-        ref={canvasRef}
+        ref={mergedCanvasRef}
         aria-label="Piano roll editor"
         data-active-tool={activeTool}
         className="absolute inset-0"

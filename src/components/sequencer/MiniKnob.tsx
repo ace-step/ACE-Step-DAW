@@ -117,7 +117,11 @@ export function MiniKnob({
     [value, min, max, onChange],
   );
 
-  useNonPassiveWheel(knobRef, handleWheel);
+  const wheelRef = useNonPassiveWheel(handleWheel);
+  const mergedKnobRef = useCallback((el: HTMLDivElement | null) => {
+    (knobRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -134,7 +138,7 @@ export function MiniKnob({
 
   return (
     <div
-      ref={knobRef}
+      ref={mergedKnobRef}
       className="flex flex-col items-center gap-0 cursor-ns-resize"
       title={label ? `${label}: ${displayVal}%` : `${displayVal}%`}
       onMouseDown={handleMouseDown}

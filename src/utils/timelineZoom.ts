@@ -3,11 +3,36 @@ export interface TimelineZoomRange {
   endTime: number;
 }
 
-export const TIMELINE_ZOOM_LEVELS = [10, 25, 50, 100, 200, 500] as const;
+export const TIMELINE_ZOOM_LEVELS = [
+  10,
+  12,
+  15,
+  18,
+  22,
+  25,
+  30,
+  36,
+  43,
+  50,
+  60,
+  72,
+  86,
+  100,
+  120,
+  144,
+  172,
+  206,
+  247,
+  296,
+  355,
+  426,
+  500,
+] as const;
 export const DEFAULT_TIMELINE_PIXELS_PER_SECOND = 50;
 export const MIN_TIMELINE_PIXELS_PER_SECOND = TIMELINE_ZOOM_LEVELS[0];
 export const MAX_TIMELINE_PIXELS_PER_SECOND = TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1];
 export const PLAYHEAD_ZOOM_ANCHOR_THRESHOLD_PX = 72;
+export const TIMELINE_WHEEL_ZOOM_THRESHOLD_PX = 96;
 
 interface TimelineFitOptions {
   minPixelsPerSecond?: number;

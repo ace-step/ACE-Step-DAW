@@ -93,6 +93,17 @@ select:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
+.arrangement-scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.arrangement-scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* Playhead blink animation (ACE Studio style — smooth gradient) */
 @keyframes playhead-blink-line {
   0%, 30% { background-color: #ffffff; }

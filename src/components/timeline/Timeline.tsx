@@ -25,6 +25,7 @@ import {
   getTimelineContentWidth,
   getTimelineFitViewport,
   getTimelineZoomAnchor,
+  TIMELINE_WHEEL_ZOOM_THRESHOLD_PX,
   getZoomedTimelineViewport,
 } from '../../utils/timelineZoom';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
@@ -230,6 +231,7 @@ export function Timeline() {
   const [fileDragOver, setFileDragOver] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
   const dragCounterRef = useRef(0);
+  const wheelZoomDeltaRef = useRef(0);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -415,17 +417,33 @@ export function Timeline() {
     (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
+        const container = scrollRef.current;
+        if (!container) return;
+
+        const deltaScale = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? container.clientHeight || window.innerHeight || 1
+            : 1;
+        wheelZoomDeltaRef.current += e.deltaY * deltaScale;
+
+        if (Math.abs(wheelZoomDeltaRef.current) < TIMELINE_WHEEL_ZOOM_THRESHOLD_PX) {
+          return;
+        }
+
+        const direction = wheelZoomDeltaRef.current < 0 ? 'in' : 'out';
+        wheelZoomDeltaRef.current += direction === 'in'
+          ? TIMELINE_WHEEL_ZOOM_THRESHOLD_PX
+          : -TIMELINE_WHEEL_ZOOM_THRESHOLD_PX;
+
         const nextPixelsPerSecond = getNextTimelineZoomLevel(
           pixelsPerSecond,
-          e.deltaY < 0 ? 'in' : 'out',
+          direction,
         );
 
         if (nextPixelsPerSecond === pixelsPerSecond) {
           return;
         }
-
-        const container = scrollRef.current;
-        if (!container) return;
         const rect = container.getBoundingClientRect();
         const cursorOffsetX = e.clientX - rect.left;
         const playheadAnchorTime = isPlaying ? currentTime : playStartTime;
@@ -691,7 +709,7 @@ export function Timeline() {
         role="grid"
         tabIndex={0}
         data-onboarding-target="timeline"
-        className="flex-1 overflow-auto bg-[#1c1d22] relative group"
+        className="arrangement-scrollbar-hidden flex-1 overflow-auto bg-[#1c1d22] relative group"
         onScroll={(e) => {
           const el = e.currentTarget;
           setScrollX(el.scrollLeft);

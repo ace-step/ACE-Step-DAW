@@ -617,11 +617,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const handleResizeHandleEnter = useCallback((edge: 'left' | 'right') => () => {
     setHoveredResizeEdge(edge);
+    if (clipBlockRef.current) {
+      clipBlockRef.current.style.cursor = 'col-resize';
+    }
     document.body.style.cursor = 'col-resize';
   }, []);
 
   const handleResizeHandleLeave = useCallback(() => {
     setHoveredResizeEdge(null);
+    if (clipBlockRef.current?.style.cursor === 'col-resize') {
+      clipBlockRef.current.style.cursor = '';
+    }
     if (document.body.style.cursor === 'col-resize') {
       document.body.style.cursor = '';
     }
@@ -761,16 +767,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <div
           className="absolute top-0 bottom-0 left-0 w-[16px] cursor-col-resize z-10 group/resize-left"
           data-testid="resize-handle-left"
+          style={{ cursor: 'col-resize' }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
         >
           <div
-            className="absolute inset-y-0 left-0 w-full transition-colors duration-100"
+            className="absolute inset-y-0 left-0 w-full transition-colors duration-100 pointer-events-none"
             style={{ background: hoveredResizeEdge === 'left' ? 'linear-gradient(90deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)' : 'transparent' }}
             data-testid="resize-hover-zone-left"
           />
           <div
-            className="absolute top-0 bottom-0 left-0 w-[2px] transition-colors duration-100"
+            className="absolute top-0 bottom-0 left-0 w-[2px] transition-colors duration-100 pointer-events-none"
             style={{ backgroundColor: hoveredResizeEdge === 'left' ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0)' }}
             data-testid="resize-indicator-left"
           />
@@ -778,16 +785,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <div
           className="absolute top-0 bottom-0 right-0 w-[16px] cursor-col-resize z-10 group/resize-right"
           data-testid="resize-handle-right"
+          style={{ cursor: 'col-resize' }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
         >
           <div
-            className="absolute inset-y-0 right-0 w-full transition-colors duration-100"
+            className="absolute inset-y-0 right-0 w-full transition-colors duration-100 pointer-events-none"
             style={{ background: hoveredResizeEdge === 'right' ? 'linear-gradient(270deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)' : 'transparent' }}
             data-testid="resize-hover-zone-right"
           />
           <div
-            className="absolute top-0 bottom-0 right-0 w-[2px] transition-colors duration-100"
+            className="absolute top-0 bottom-0 right-0 w-[2px] transition-colors duration-100 pointer-events-none"
             style={{ backgroundColor: hoveredResizeEdge === 'right' ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0)' }}
             data-testid="resize-indicator-right"
           />

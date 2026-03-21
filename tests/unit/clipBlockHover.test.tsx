@@ -122,17 +122,21 @@ describe('ClipBlock hover and active feedback', () => {
     render(<ClipBlock clip={clip} track={track} />);
 
     const leftHandle = screen.getByTestId('resize-handle-left');
+    const clipEl = screen.getByTestId(`clip-${clip.id}`) as HTMLElement;
     const leftIndicator = screen.getByTestId('resize-indicator-left') as HTMLElement;
     const leftHoverZone = screen.getByTestId('resize-hover-zone-left') as HTMLElement;
 
     fireEvent.mouseEnter(leftHandle);
 
+    expect(leftHandle.style.cursor).toBe('col-resize');
+    expect(clipEl.style.cursor).toBe('col-resize');
     expect(document.body.style.cursor).toBe('col-resize');
     expect(leftIndicator.style.backgroundColor).toContain('255, 255, 255');
     expect(leftHoverZone.style.background).toContain('linear-gradient');
 
     fireEvent.mouseLeave(leftHandle);
 
+    expect(clipEl.style.cursor).toBe('');
     expect(document.body.style.cursor).toBe('');
   });
 

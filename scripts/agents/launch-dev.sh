@@ -264,17 +264,31 @@ PROMPT=$(cat "$WT/agent-prompt.txt")
 log "Phase 1: initial implementation for #$ISSUE"
 run_agent "$PROMPT"
 
-# Post-agent: verify + push + rebase + push + PR
+# Post-agent: verify + rebase (agent resolves conflicts) + push + PR
 cd "$WT" || exit 0
 AHEAD=$(git rev-list origin/main..HEAD --count 2>/dev/null)
 [ "$AHEAD" = "0" ] && { log "No commits produced, exiting"; exit 0; }
-# Push raw commits first (safety net — work is on remote even if rebase fails)
-git push origin "$BRANCH" --force-with-lease 2>/dev/null
-# Then rebase for clean history
+
+# Rebase onto latest main before pushing
 git fetch origin main 2>/dev/null
-git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Rebase conflict, raw commits preserved on remote"; }
-# Push rebased version
-git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
+if ! git rebase origin/main 2>/dev/null; then
+  # Rebase conflict — let the coding agent resolve it
+  git rebase --abort 2>/dev/null
+  log "Rebase conflict on #$ISSUE — delegating to agent to resolve"
+  run_agent "Your branch fix/issue-$ISSUE has rebase conflicts with origin/main.
+Please resolve them:
+1. git fetch origin main
+2. git rebase origin/main
+3. For each conflicted file: edit to resolve, then git add <file>
+4. git rebase --continue
+5. Run quality gates: npx tsc --noEmit && npm run build && npx vitest run tests/unit/
+6. If gates fail, fix the code and amend the commit.
+Do NOT push."
+  cd "$WT" || exit 0
+fi
+
+# Push
+git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed for #$ISSUE"; }
 
 # Create PR (or get existing PR number)
 # Unregister from registry
@@ -340,15 +354,23 @@ Do NOT push."
   cd "$WT" || exit 0
   run_agent "$FIX_PROMPT"
 
-  # Push the fix
+  # Push the fix (with rebase conflict resolution)
   cd "$WT" || exit 0
-  # Push raw commits first (safety net — work is on remote even if rebase fails)
-  git push origin "$BRANCH" --force-with-lease 2>/dev/null
-  # Then rebase for clean history
   git fetch origin main 2>/dev/null
-  git rebase origin/main 2>/dev/null || { git rebase --abort 2>/dev/null; log "Rebase conflict, raw commits preserved on remote"; }
-  # Push rebased version
-  git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed after rebase"; }
+  if ! git rebase origin/main 2>/dev/null; then
+    git rebase --abort 2>/dev/null
+    log "Rebase conflict in fix round $ROUND for #$ISSUE — delegating to agent"
+    run_agent "Your branch fix/issue-$ISSUE has rebase conflicts with origin/main after fix round $ROUND.
+Resolve them:
+1. git fetch origin main
+2. git rebase origin/main
+3. For each conflicted file: edit to resolve, then git add <file>
+4. git rebase --continue
+5. Run quality gates: npx tsc --noEmit && npm run build && npx vitest run tests/unit/
+Do NOT push."
+    cd "$WT" || exit 0
+  fi
+  git push origin "$BRANCH" --force-with-lease 2>/dev/null || { log "Push failed round $ROUND for #$ISSUE"; }
   log "Fix pushed (round $ROUND), looping back to wait for CI"
 done
 

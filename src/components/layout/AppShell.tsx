@@ -1,9 +1,8 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect } from 'react';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
 import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
-import { Z } from '../../utils/zIndex';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
@@ -51,7 +50,7 @@ import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useShareLink } from '../../hooks/useShareLink';
 
 function EditorShell() {
-  const { resumeOnGesture } = useAudioEngine();
+  useAudioEngine();
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
@@ -61,8 +60,6 @@ function EditorShell() {
   const onboardingSkipped = useUIStore((s) => s.onboardingSkipped);
   const setShowOnboarding = useUIStore((s) => s.setShowOnboarding);
   const mainView = useUIStore((s) => s.mainView);
-  const showCommandPalette = useUIStore((s) => s.showCommandPalette);
-  const showAIAssistant = useUIStore((s) => s.showAIAssistant);
   const showNewProjectDialog = useUIStore((s) => s.showNewProjectDialog);
   const showInstrumentPicker = useUIStore((s) => s.showInstrumentPicker);
   const showExportDialog = useUIStore((s) => s.showExportDialog);
@@ -71,15 +68,8 @@ function EditorShell() {
   const bounceInPlaceTrackId = useUIStore((s) => s.bounceInPlaceTrackId);
   const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const showShortcutEditorDialog = useUIStore((s) => s.showShortcutEditorDialog);
-  const [audioResumed, setAudioResumed] = useState(false);
-
-  const handleClick = useCallback(async () => {
-    await resumeOnGesture();
-    setAudioResumed(true);
-  }, [resumeOnGesture]);
 
   const hasPriorityBlocker = showOnboarding || activeTutorialStep !== null;
-  const hasForegroundInteractiveSurface = showCommandPalette || showAIAssistant;
   const hasBlockingDialog =
     showNewProjectDialog ||
     showInstrumentPicker ||
@@ -89,12 +79,6 @@ function EditorShell() {
     bounceInPlaceTrackId !== null ||
     showKeyboardShortcutsDialog ||
     showShortcutEditorDialog;
-  const showAudioResumeOverlay =
-    !audioResumed &&
-    !!project &&
-    !hasPriorityBlocker &&
-    !hasForegroundInteractiveSurface &&
-    !hasBlockingDialog;
 
   useEffect(() => {
     if (!project) {
@@ -126,36 +110,10 @@ function EditorShell() {
   return (
     <div
       className="flex flex-col h-screen bg-daw-bg text-zinc-300"
-      onClick={handleClick}
       role="application"
       aria-label="ACE-Step DAW"
       tabIndex={-1}
     >
-      {/* Audio context overlay — shown until user's first click resumes audio */}
-      {showAudioResumeOverlay && (
-        <div
-          className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
-          style={{ zIndex: Z.appOverlay }}
-          role="button"
-          tabIndex={0}
-          aria-label="Enable audio playback"
-          onClick={() => {
-            void handleClick();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              void handleClick();
-            }
-          }}
-        >
-          <div className="text-center">
-            <div className="text-4xl mb-3">🎵</div>
-            <div className="text-lg font-medium text-white mb-1">Click anywhere to enable audio</div>
-            <div className="text-xs text-zinc-400">Browser requires a user gesture to start the audio engine</div>
-          </div>
-        </div>
-      )}
       <Toolbar />
 
       <div

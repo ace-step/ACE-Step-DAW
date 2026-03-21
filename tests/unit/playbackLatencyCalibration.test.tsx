@@ -5,7 +5,7 @@ import '@testing-library/jest-dom';
 import { SettingsDialog } from '../../src/components/dialogs/SettingsDialog';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
-import { getAudioEngine, useAudioEngine } from '../../src/hooks/useAudioEngine';
+import { getAudioEngine, useAudioEngine, _setAudioResumed } from '../../src/hooks/useAudioEngine';
 
 const {
   toneStart,
@@ -87,6 +87,8 @@ describe('playback latency calibration', () => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    // Disable auto-resume so tests can measure explicit resumeOnGesture calls
+    _setAudioResumed(true);
     toneStart.mockClear();
     mockSetTimeUpdateCallback.mockClear();
     mockEngineResume.mockClear();

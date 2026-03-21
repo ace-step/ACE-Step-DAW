@@ -5,6 +5,12 @@ import { useTransportStore } from '../store/transportStore';
 import { useProjectStore } from '../store/projectStore';
 
 let _engineInstance: AudioEngine | null = null;
+let _audioResumed = false;
+
+/** @internal Set audio-resumed flag — for tests only */
+export function _setAudioResumed(value: boolean) {
+  _audioResumed = value;
+}
 
 export function getAudioEngine(): AudioEngine {
   if (!_engineInstance) {
@@ -45,6 +51,27 @@ export function useAudioEngine() {
         : 0,
     );
   }, []);
+
+  // Auto-resume AudioContext on first user interaction (click or keydown)
+  useEffect(() => {
+    if (_audioResumed) return;
+
+    const handler = () => {
+      if (_audioResumed) return;
+      _audioResumed = true;
+      void resumeOnGesture();
+      window.removeEventListener('click', handler, true);
+      window.removeEventListener('keydown', handler, true);
+    };
+
+    window.addEventListener('click', handler, true);
+    window.addEventListener('keydown', handler, true);
+
+    return () => {
+      window.removeEventListener('click', handler, true);
+      window.removeEventListener('keydown', handler, true);
+    };
+  }, [resumeOnGesture]);
 
   return { engine: engineRef.current, resumeOnGesture };
 }

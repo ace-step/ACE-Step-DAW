@@ -270,15 +270,32 @@ interface MasterStripProps {
 
 function MasterStrip({ faderHeight }: MasterStripProps) {
   const project = useProjectStore((s) => s.project);
-  const updateProject = useProjectStore((s) => s.updateProject);
+  const setMasterVolume = useProjectStore((s) => s.setMasterVolume);
+  const addMasterEffect = useProjectStore((s) => s.addMasterEffect);
   const showSpectrum = useUIStore((s) => s.showSpectrumAnalyzer);
   const toggleSpectrum = useUIStore((s) => s.toggleSpectrumAnalyzer);
   if (!project) return null;
   const masterVol = project.masterVolume ?? 1.0;
-  const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
+  const masterEffects = project.masterEffects ?? [];
+  const handleChange = (v: number) => {
+    setMasterVolume(v);
+    getAudioEngine().masterVolume = v;
+  };
+  const handleReset = () => {
+    handleChange(1);
+  };
 
   return (
-    <div className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2">
+    <div
+      data-testid="master-channel-strip"
+      role="group"
+      aria-label="Mixer master channel"
+      className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2"
+    >
+      <div className="flex w-full shrink-0 items-center gap-2 pb-2">
+        <div className="h-1.5 flex-1 rounded-full bg-[#4a90d9]" />
+        <span className="rounded bg-[#1f3346] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200">MST</span>
+      </div>
       <div className="flex w-full shrink-0 items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Master</span>
         <button
@@ -293,6 +310,36 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         </button>
       </div>
       <div data-testid="master-controls-region" className="mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div data-testid="master-inserts-section" className="w-full py-1">
+          <div className="mb-1 text-[10px] uppercase tracking-widest text-zinc-400">Master Inserts</div>
+          <div className="flex flex-col gap-1">
+            {Array.from({ length: MAX_INSERT_SLOTS }).map((_, i) => {
+              const effect = masterEffects[i];
+              return (
+                <button
+                  key={i}
+                  data-testid={`master-insert-slot-${i}`}
+                  className={`text-[10px] w-full rounded px-1.5 py-1 text-left truncate transition-colors ${
+                    effect
+                      ? effect.enabled
+                        ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
+                        : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
+                      : 'bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]'
+                  }`}
+                  title={effect ? `${EFFECT_SHORT_NAMES[effect.type] ?? effect.type}` : 'Add master insert effect'}
+                  onClick={() => {
+                    if (!effect) {
+                      addMasterEffect('reverb');
+                    }
+                  }}
+                >
+                  {effect ? (EFFECT_SHORT_NAMES[effect.type] ?? effect.type) : '+'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="w-4/5 self-center border-t border-[#3a3a3a]" />
         {showSpectrum && <SpectrumAnalyzer width={220} height={120} />}
         <MasteringPanel />
       </div>
@@ -303,6 +350,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
           <input
             type="range" min={0} max={1.5} step={0.01} value={masterVol}
             onChange={(e) => handleChange(parseFloat(e.target.value))}
+            onDoubleClick={handleReset}
             aria-label="Master volume fader"
             className="appearance-none bg-transparent cursor-pointer"
             style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4a90d9' }}

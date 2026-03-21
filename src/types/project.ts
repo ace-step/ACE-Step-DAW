@@ -667,6 +667,10 @@ export interface Project {
   globalCaption?: string;
   /** Master output fader level (0–1), default 1.0 */
   masterVolume?: number;
+  /** Insert effects applied on the master bus before AI mastering. */
+  masterEffects?: TrackEffect[];
+  /** True when the master insert chain is bypassed. */
+  masterEffectsBypassed?: boolean;
   /** AI mastering state for the master bus. */
   mastering?: MasteringState;
   /** Persistent asset clips — survives clip/track removal. */

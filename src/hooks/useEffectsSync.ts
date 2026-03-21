@@ -10,13 +10,24 @@ import { effectsEngine } from '../engine/EffectsEngine';
 import { getAudioEngine } from './useAudioEngine';
 import type { CompressorParams } from '../types/project';
 
+const MASTER_BUS_ID = '__master__';
+
 export function useEffectsSync() {
-  const tracks = useProjectStore((s) => s.project?.tracks);
+  const project = useProjectStore((s) => s.project);
+  const tracks = project?.tracks;
+  const masterEffects = project?.masterEffects;
+  const masterEffectsBypassed = project?.masterEffectsBypassed;
 
   useEffect(() => {
     if (!tracks) return;
 
     const engine = getAudioEngine();
+
+    effectsEngine.rebuildChain(MASTER_BUS_ID, masterEffects ?? [], masterEffectsBypassed ?? false);
+    engine.spliceMasterEffects(
+      effectsEngine.getInputNode(MASTER_BUS_ID),
+      effectsEngine.getOutputNode(MASTER_BUS_ID),
+    );
 
     // First pass: rebuild all effect chains
     for (const track of tracks) {
@@ -57,5 +68,5 @@ export function useEffectsSync() {
         }
       }
     }
-  }, [tracks]);
+  }, [tracks, masterEffects, masterEffectsBypassed]);
 }

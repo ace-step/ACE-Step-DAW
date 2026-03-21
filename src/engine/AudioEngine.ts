@@ -106,6 +106,8 @@ export class AudioEngine {
   private readonly masterOutputAnalyserData: Uint8Array<ArrayBuffer>;
   private readonly masterInputTimeDomainData: Float32Array<ArrayBuffer>;
   private readonly masterOutputTimeDomainData: Float32Array<ArrayBuffer>;
+  private masterEffectsInput: AudioNode | null = null;
+  private masterEffectsOutput: AudioNode | null = null;
   private masterInputClipped = false;
   private masterOutputClipped = false;
 
@@ -235,6 +237,28 @@ export class AudioEngine {
     this.scrubGain.gain.value = 0;
     this.scrubGain.connect(this.ctx.destination);
     this.refreshPlaybackLatencyCompensation();
+  }
+
+  spliceMasterEffects(input: AudioNode | null, output: AudioNode | null) {
+    try { this.masterInputAnalyser.disconnect(this.masterDryGain); } catch {}
+    try { this.masterInputAnalyser.disconnect(this.masterEqLow); } catch {}
+
+    if (this.masterEffectsOutput) {
+      try { this.masterEffectsOutput.disconnect(this.masterDryGain); } catch {}
+      try { this.masterEffectsOutput.disconnect(this.masterEqLow); } catch {}
+    }
+
+    if (input && output) {
+      this.masterInputAnalyser.connect(input);
+      output.connect(this.masterDryGain);
+      output.connect(this.masterEqLow);
+    } else {
+      this.masterInputAnalyser.connect(this.masterDryGain);
+      this.masterInputAnalyser.connect(this.masterEqLow);
+    }
+
+    this.masterEffectsInput = input;
+    this.masterEffectsOutput = output;
   }
 
   async resume() {

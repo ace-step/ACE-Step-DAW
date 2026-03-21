@@ -417,6 +417,9 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
       return {
         ...current,
         updatedAt: Date.now(),
+        masterVolume: snapshot.masterVolume ?? 1,
+        masterEffects: structuredClone(snapshot.masterEffects ?? []),
+        masterEffectsBypassed: snapshot.masterEffectsBypassed ?? false,
         mastering: structuredClone(snapshot.mastering),
         returnTracks: structuredClone(snapshot.returnTracks ?? []),
       };
@@ -447,6 +450,8 @@ export interface ProjectState {
   endDrag: () => void;
 
   updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  setMasterVolume: (volume: number) => void;
+  resetMasterVolume: () => void;
   detectPlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
   /** Alias for detectPlaybackLatency – used by tests and external callers. */
   capturePlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
@@ -457,6 +462,7 @@ export interface ProjectState {
   toggleMasteringPreview: () => void;
   setMasteringEnabled: (enabled: boolean) => void;
   removeMastering: () => void;
+  toggleMasterEffectsBypass: () => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
   toggleTrackEffectsBypass: (trackId: string) => void;
   setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
@@ -610,6 +616,9 @@ export interface ProjectState {
   removeTrackEffect: (trackId: string, effectId: string) => void;
   reorderTrackEffect: (trackId: string, fromIndex: number, toIndex: number) => void;
   setSidechainSource: (trackId: string, effectId: string, sourceTrackId: string | undefined) => void;
+  addMasterEffect: (type: TrackEffectType) => string | undefined;
+  updateMasterEffect: (effectId: string, updates: Partial<TrackEffect>) => void;
+  removeMasterEffect: (effectId: string) => void;
 
   // WAP Plugins
   addPlugin: (trackId: string, plugin: PluginInstance) => void;
@@ -910,9 +919,26 @@ function ensureProjectSession(project: Project): Project {
 
   return {
     ...project,
+    masterVolume: project.masterVolume ?? 1,
+    masterEffects: project.masterEffects ?? [],
+    masterEffectsBypassed: project.masterEffectsBypassed ?? false,
     playbackLatency: ensurePlaybackLatencySettings(project.playbackLatency),
     session,
   };
+}
+
+function clampMasterVolume(volume: number): number {
+  return Math.max(0, Math.min(1.5, volume));
+}
+
+function syncMasterVolumeWithEngine(volume: number) {
+  const engine =
+    'getExistingAudioEngine' in audioEngineHooks
+      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
+      : null;
+  if (engine) {
+    engine.masterVolume = volume;
+  }
 }
 
 function autoAssignClipToSession(session: SessionState, trackId: string, clipId: string): SessionState {
@@ -1508,6 +1534,8 @@ export const useProjectStore = create<ProjectState>()(
     const migratedBase: Project = {
       ...project,
       trackPresets: project.trackPresets ?? [],
+      masterEffects: project.masterEffects ?? [],
+      masterEffectsBypassed: project.masterEffectsBypassed ?? false,
       tracks: project.tracks.map((t) => {
         if (t.trackType) return t;
         const inferred: TrackType =
@@ -1641,6 +1669,9 @@ export const useProjectStore = create<ProjectState>()(
       trackPresets: [],
       generationDefaults: { ...DEFAULT_GENERATION },
       globalCaption: '',
+      masterVolume: 1,
+      masterEffects: [],
+      masterEffectsBypassed: false,
       mastering: createDefaultMasteringState(),
       playbackLatency: detectPlaybackLatencyFromEngine(),
       session: createDefaultSessionState(),
@@ -1664,6 +1695,20 @@ export const useProjectStore = create<ProjectState>()(
       );
     }
     set({ project: merged });
+  },
+
+  setMasterVolume: (volume) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Adjust master volume' });
+    set({
+      project: {
+        ...state.project,
+        masterVolume: Math.max(0, Math.min(2, volume)),
+        updatedAt: Date.now(),
+      },
+    });
   },
 
   detectPlaybackLatency: (latency) => {
@@ -4902,6 +4947,21 @@ export const useProjectStore = create<ProjectState>()(
     return effect.id;
   },
 
+  addMasterEffect: (type) => {
+    const state = get();
+    if (!state.project) return undefined;
+    const effect = createDefaultTrackEffect(type);
+    _pushHistory(state.project, { scope: 'mixer', label: 'Add master effect' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        masterEffects: [...(state.project.masterEffects ?? []), effect],
+      },
+    });
+    return effect.id;
+  },
+
   updateTrackEffect: (trackId, effectId, updates) => {
     const state = get();
     if (!state.project) return;
@@ -4919,6 +4979,21 @@ export const useProjectStore = create<ProjectState>()(
             ),
           };
         }),
+      },
+    });
+  },
+
+  updateMasterEffect: (effectId, updates) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Update master effect' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        masterEffects: (state.project.masterEffects ?? []).map((effect) =>
+          effect.id === effectId ? { ...effect, ...updates } as TrackEffect : effect,
+        ),
       },
     });
   },
@@ -4961,6 +5036,22 @@ export const useProjectStore = create<ProjectState>()(
           effects.splice(toIndex, 0, moved);
           return { ...track, effects };
         }),
+      },
+    });
+  },
+
+  removeMasterEffect: (effectId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Remove master effect' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        automationLanes: (state.project.automationLanes ?? []).filter(
+          (lane) => lane.parameter.type !== 'effect' || lane.parameter.effectId !== effectId,
+        ),
+        masterEffects: (state.project.masterEffects ?? []).filter((effect) => effect.id !== effectId),
       },
     });
   },

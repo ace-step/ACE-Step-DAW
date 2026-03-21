@@ -9,12 +9,18 @@ vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
 
+const audioEngineMock = {
+  masterVolume: 1,
+  getMasterLevel: () => 0,
+  getTrackLevel: () => 0,
+  getMasterMeter: () => ({ level: 0, clipped: false }),
+  getTrackMeter: () => ({ level: 0, clipped: false }),
+  resetTrackClip: vi.fn(),
+  resetMasterClip: vi.fn(),
+};
+
 vi.mock('../../src/hooks/useAudioEngine', () => ({
-  getAudioEngine: () => ({
-    masterVolume: 1,
-    getMasterLevel: () => 0,
-    getTrackLevel: () => 0,
-  }),
+  getAudioEngine: () => audioEngineMock,
 }));
 
 describe('MixerPanel', () => {
@@ -22,6 +28,9 @@ describe('MixerPanel', () => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
+    audioEngineMock.masterVolume = 1;
+    audioEngineMock.resetTrackClip.mockReset();
+    audioEngineMock.resetMasterClip.mockReset();
 
     useProjectStore.getState().createProject({ name: 'Mixer Layout Test' });
     useProjectStore.getState().addTrack('drums');
@@ -112,5 +121,52 @@ describe('MixerPanel', () => {
     expect(screen.getByLabelText('Mixer navigation status')).toHaveTextContent('Scope: Mixer');
     expect(screen.getByLabelText('Mixer navigation status')).toHaveTextContent('Bass');
     expect(bassStrip).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('renders a visually distinct master strip with insert slots', () => {
+    render(<MixerPanel />);
+
+    const masterStrip = screen.getByTestId('master-channel-strip');
+    expect(masterStrip).toHaveClass('border-l-2');
+    expect(masterStrip).toHaveClass('bg-[#252525]');
+
+    const insertSection = screen.getByTestId('master-inserts-section');
+    expect(insertSection).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^master-insert-slot-/)).toHaveLength(4);
+  });
+
+  it('adds a master insert effect from the first empty slot', () => {
+    render(<MixerPanel />);
+
+    fireEvent.click(screen.getByTestId('master-insert-slot-0'));
+
+    const masterEffects = useProjectStore.getState().project?.masterEffects ?? [];
+    expect(masterEffects).toHaveLength(1);
+    expect(masterEffects[0]?.type).toBe('reverb');
+    expect(screen.getByTestId('master-insert-slot-0')).toHaveTextContent('Reverb');
+  });
+
+  it('updates the store and audio engine when the master fader moves', () => {
+    render(<MixerPanel />);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Master volume fader' }), {
+      target: { value: '0.73' },
+    });
+
+    expect(useProjectStore.getState().project?.masterVolume).toBeCloseTo(0.73);
+    expect(audioEngineMock.masterVolume).toBeCloseTo(0.73);
+  });
+
+  it('resets the master fader to 0 dB on double click', () => {
+    useProjectStore.getState().setMasterVolume(0.52);
+    audioEngineMock.masterVolume = 0.52;
+
+    render(<MixerPanel />);
+
+    fireEvent.doubleClick(screen.getByRole('slider', { name: 'Master volume fader' }));
+
+    expect(useProjectStore.getState().project?.masterVolume).toBe(1);
+    expect(audioEngineMock.masterVolume).toBe(1);
+    expect(screen.getByText('+0.0')).toBeInTheDocument();
   });
 });

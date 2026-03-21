@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
@@ -48,15 +48,21 @@ export function GenerationHistoryPanel() {
       search,
       timeRange,
     }),
-    [getGenerationHistoryRecords, modelFilter, search, timeRange],
+    [getGenerationHistoryRecords, generationHistory, modelFilter, search, timeRange],
   );
+
+  useEffect(() => {
+    if (!show) {
+      stopGenerationHistoryPreview();
+    }
+  }, [show, stopGenerationHistoryPreview]);
 
   if (!show) return null;
 
   return (
     <aside
       className="fixed right-4 top-14 bottom-8 flex w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-white/10 bg-[#14161d]/95 shadow-2xl backdrop-blur"
-      style={{ zIndex: Z.commandPalette }}
+      style={{ zIndex: Z.panel }}
       aria-label="Generation history panel"
     >
       <div className="flex items-start gap-3 border-b border-white/10 px-4 py-3">

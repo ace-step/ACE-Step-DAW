@@ -4,6 +4,7 @@ import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, DEFAULT_GENERATION, M
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
+import { loadGenerationHistoryRecords, saveGenerationHistoryRecords, MAX_GENERATION_HISTORY_RECORDS } from '../services/generationHistoryStorage';
 import {
   applyPromptAutocompleteSuggestion as applyPromptAutocompleteSuggestionToPrompt,
   getPromptAutocompleteSuggestions as getPromptAutocompleteSuggestionsForPrompt,
@@ -515,6 +516,10 @@ function normalizeGenerationHistorySearch(search?: string): string[] {
     ?? [];
 }
 
+function persistGenerationHistory(records: GenerationHistoryRecord[]) {
+  void saveGenerationHistoryRecords(records);
+}
+
 export const useGenerationStore = create<GenerationState>()(
   persist(
     (set, get) => ({
@@ -642,7 +647,9 @@ export const useGenerationStore = create<GenerationState>()(
             : [nextRecord, ...state.generationHistory];
 
           nextHistory.sort((a, b) => b.updatedAt - a.updatedAt);
-          return { generationHistory: nextHistory };
+          const trimmedHistory = nextHistory.slice(0, MAX_GENERATION_HISTORY_RECORDS);
+          persistGenerationHistory(trimmedHistory);
+          return { generationHistory: trimmedHistory };
         });
         return get().generationHistory.find((entry) => entry.clipId === record.clipId || entry.id === recordId)?.id ?? recordId;
       },
@@ -663,20 +670,26 @@ export const useGenerationStore = create<GenerationState>()(
         if (!record?.audioKey) return false;
 
         stopActiveHistoryPreview();
-        const blob = await loadAudioBlobByKey(record.audioKey);
-        if (!blob) return false;
+        try {
+          const blob = await loadAudioBlobByKey(record.audioKey);
+          if (!blob) return false;
 
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        activeHistoryPreviewUrl = url;
-        activeHistoryPreviewAudio = audio;
-        audio.addEventListener('ended', () => {
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          activeHistoryPreviewUrl = url;
+          activeHistoryPreviewAudio = audio;
+          audio.addEventListener('ended', () => {
+            stopActiveHistoryPreview();
+            set({ previewingHistoryId: null });
+          }, { once: true });
+          await audio.play();
+          set({ previewingHistoryId: recordId });
+          return true;
+        } catch {
           stopActiveHistoryPreview();
           set({ previewingHistoryId: null });
-        }, { once: true });
-        await audio.play();
-        set({ previewingHistoryId: recordId });
-        return true;
+          return false;
+        }
       },
 
       stopGenerationHistoryPreview: () => {
@@ -1073,9 +1086,13 @@ export const useGenerationStore = create<GenerationState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         promptHistory: state.promptHistory,
-        generationHistory: state.generationHistory,
         generationForm: state.generationForm,
       }),
     },
   ),
 );
+
+void loadGenerationHistoryRecords().then((generationHistory) => {
+  if (generationHistory.length === 0) return;
+  useGenerationStore.setState({ generationHistory });
+});

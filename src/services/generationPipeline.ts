@@ -467,6 +467,7 @@ async function generateClipInternal(
   }
 
   const trackType = track.trackType ?? 'stems';
+  const historyTrackName = track.displayName ?? track.trackName;
   if (trackType !== 'stems') {
     logger.warn(`Skipping generation for non-stems track (type=${trackType}, track=${track.displayName})`);
     return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Track type is not generatable' };
@@ -579,7 +580,7 @@ async function generateClipInternal(
     genStore.upsertGenerationHistoryRecord({
       clipId,
       trackId: track.id,
-      trackName: track.trackName,
+      trackName: historyTrackName,
       prompt: effectivePrompt,
       model: params.model ?? '',
       duration: clip.duration,
@@ -644,7 +645,7 @@ async function generateClipInternal(
     genStore.upsertGenerationHistoryRecord({
       clipId,
       trackId: track.id,
-      trackName: track.trackName,
+      trackName: historyTrackName,
       prompt: effectivePrompt,
       model: params.model ?? '',
       duration: clip.duration,
@@ -826,7 +827,7 @@ async function generateClipInternal(
     genStore.upsertGenerationHistoryRecord({
       clipId,
       trackId: track.id,
-      trackName: track.trackName,
+      trackName: historyTrackName,
       prompt: effectivePrompt,
       model: params.model ?? '',
       duration: clip.duration,
@@ -848,7 +849,7 @@ async function generateClipInternal(
     genStore.upsertGenerationHistoryRecord({
       clipId,
       trackId: track.id,
-      trackName: track.trackName,
+      trackName: historyTrackName,
       prompt: clip.prompt ?? '',
       model: project.generationDefaults.model ?? '',
       duration: clip.duration,

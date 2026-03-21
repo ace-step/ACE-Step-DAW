@@ -9,6 +9,7 @@ import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
 import { drawVelocityLane } from './VelocityLane';
 import { DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import {
   generateNoteId,
   getPianoRollToolShortcut,
@@ -958,7 +959,7 @@ export function PianoRollCanvas({
   ]);
 
   const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLCanvasElement>) => {
+    (e: WheelEvent) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const delta = e.deltaY > 0 ? -0.25 : 0.25;
@@ -980,6 +981,9 @@ export function PianoRollCanvas({
     },
     [onZoomXChange],
   );
+
+  // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
+  useNonPassiveWheel(canvasRef, handleWheel);
 
   const clipboardNotes = useMemo(
     () => notes.filter((note) => selectedNoteIds.has(note.id)),
@@ -1324,7 +1328,6 @@ export function PianoRollCanvas({
         onClick={handleClick}
         onMouseDown={handleMouseDown}
         onDoubleClick={handleDoubleClick}
-        onWheel={handleWheel}
         onContextMenu={handleContextMenu}
         onMouseMove={handleCanvasMouseMove}
         onMouseLeave={handleCanvasMouseLeave}

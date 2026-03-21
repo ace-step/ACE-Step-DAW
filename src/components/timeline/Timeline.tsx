@@ -20,6 +20,7 @@ import { TimelineEmptyState } from './TimelineEmptyState';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
 import { getTimelineFitViewport } from '../../utils/timelineZoom';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -232,7 +233,7 @@ export function Timeline() {
   }, [project, selectWindow, selectedClipIds, setPixelsPerSecond, setScrollX, timelineZoomRequest]);
 
   const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+    (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
@@ -249,7 +250,8 @@ export function Timeline() {
           return;
         }
 
-        const container = e.currentTarget;
+        const container = scrollRef.current;
+        if (!container) return;
         const rect = container.getBoundingClientRect();
         const cursorOffsetX = e.clientX - rect.left;
         const timeAtCursor = (container.scrollLeft + cursorOffsetX) / pixelsPerSecond;
@@ -262,6 +264,9 @@ export function Timeline() {
     },
     [pixelsPerSecond, setPixelsPerSecond, setScrollX],
   );
+
+  // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
+  useNonPassiveWheel(scrollRef, handleWheel);
 
   const handleMouseDownCapture = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -418,7 +423,6 @@ export function Timeline() {
           const el = e.currentTarget;
           setScrollY(el.scrollTop);
         }}
-        onWheel={handleWheel}
         onMouseDownCapture={handleMouseDownCapture}
         onFocus={() => { setKeyboardContext('timeline'); setTimelineFocused(true); }}
         onBlur={() => setTimelineFocused(false)}

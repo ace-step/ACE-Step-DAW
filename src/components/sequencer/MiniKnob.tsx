@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState } from 'react';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { PrecisionInput, clampValue } from '../ui/PrecisionInput';
 
 interface MiniKnobProps {
@@ -106,7 +107,7 @@ export function MiniKnob({
   );
 
   const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+    (e: WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
       const range = max - min;
@@ -115,6 +116,8 @@ export function MiniKnob({
     },
     [value, min, max, onChange],
   );
+
+  useNonPassiveWheel(knobRef, handleWheel);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -136,7 +139,6 @@ export function MiniKnob({
       title={label ? `${label}: ${displayVal}%` : `${displayVal}%`}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
-      onWheel={handleWheel}
       onContextMenu={handleContextMenu}
       aria-label={`${label ?? 'Control'} mini knob`}
     >

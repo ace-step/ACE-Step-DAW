@@ -52,6 +52,15 @@ describe('tempoMap utilities', () => {
       expect(getTempoAtBeat(map, 0, 120)).toBe(100);
       expect(getTempoAtBeat(map, 8, 120)).toBe(140);
     });
+
+    it('applies curve shaping during a ramp', () => {
+      const map: TempoEvent[] = [
+        { beat: 0, bpm: 100 },
+        { beat: 8, bpm: 140, ramp: true, curve: 1 },
+      ];
+      expect(getTempoAtBeat(map, 4, 120)).toBeLessThan(120);
+      expect(getTempoAtBeat(map, 6, 120)).toBeLessThan(130);
+    });
   });
 
   describe('beatToTime', () => {
@@ -74,7 +83,21 @@ describe('tempoMap utilities', () => {
         { beat: 0, bpm: 60 },
         { beat: 4, bpm: 120, ramp: true },
       ];
-      expect(beatToTime(4, map, 120)).toBeCloseTo(2.6667, 3);
+      expect(beatToTime(4, map, 120)).toBeCloseTo(2.7726, 3);
+    });
+
+    it('takes longer through a positive ramp curve than a linear ramp at the midpoint', () => {
+      const linearMap: TempoEvent[] = [
+        { beat: 0, bpm: 60 },
+        { beat: 4, bpm: 120, ramp: true, curve: 0 },
+      ];
+      const curvedMap: TempoEvent[] = [
+        { beat: 0, bpm: 60 },
+        { beat: 4, bpm: 120, ramp: true, curve: 1 },
+      ];
+
+      expect(beatToTime(2, curvedMap, 120)).toBeGreaterThan(beatToTime(2, linearMap, 120));
+      expect(beatToTime(4, curvedMap, 120)).toBeGreaterThan(beatToTime(4, linearMap, 120));
     });
 
     it('handles empty tempoMap', () => {
@@ -94,6 +117,17 @@ describe('tempoMap utilities', () => {
       ];
       expect(timeToBeat(6.0, map, 120)).toBeCloseTo(8);
       expect(timeToBeat(2.0, map, 120)).toBeCloseTo(4);
+    });
+
+    it('inverts beatToTime with curved ramps', () => {
+      const map: TempoEvent[] = [
+        { beat: 0, bpm: 90 },
+        { beat: 8, bpm: 150, ramp: true, curve: -0.75 },
+      ];
+      const beat = 5.5;
+      const time = beatToTime(beat, map, 120);
+
+      expect(timeToBeat(time, map, 120)).toBeCloseTo(beat, 4);
     });
 
     it('handles empty tempoMap', () => {

@@ -697,8 +697,10 @@ export interface TempoEvent {
   beat: number;
   /** BPM value at this point. */
   bpm: number;
-  /** Optional: if set, linearly ramp from previous BPM to this BPM over the beat range. */
+  /** Optional: if set, ramp from previous BPM to this BPM over the beat range. */
   ramp?: boolean;
+  /** Optional curve amount for a ramp, from -1 (fast start) to +1 (slow start). */
+  curve?: number;
 }
 
 /** A time signature change at a specific bar position. */

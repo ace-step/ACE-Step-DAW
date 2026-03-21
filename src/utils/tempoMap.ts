@@ -1,5 +1,8 @@
 import type { TempoEvent, TimeSignatureEvent } from '../types/project';
 
+const TEMPO_CURVE_EPSILON = 0.01;
+const TEMPO_CURVE_SAMPLES = 32;
+
 export function getTimeSignatureBeatLength(denominator: number): number {
   return 4 / Math.max(1, denominator);
 }
@@ -8,9 +11,64 @@ export function getTimeSignatureBarLength(numerator: number, denominator: number
   return Math.max(1, numerator) * getTimeSignatureBeatLength(denominator);
 }
 
+export function clampTempoCurve(curve: number | undefined): number {
+  return Math.max(-1, Math.min(1, curve ?? 0));
+}
+
+export function getTempoCurveProgress(progress: number, curve: number | undefined): number {
+  const t = Math.max(0, Math.min(1, progress));
+  const clampedCurve = clampTempoCurve(curve);
+  if (Math.abs(clampedCurve) < TEMPO_CURVE_EPSILON) {
+    return t;
+  }
+
+  return clampedCurve > 0
+    ? Math.pow(t, 1 + clampedCurve * 3)
+    : 1 - Math.pow(1 - t, 1 + Math.abs(clampedCurve) * 3);
+}
+
+export function interpolateTempoRamp(
+  startBpm: number,
+  endBpm: number,
+  progress: number,
+  curve: number | undefined,
+): number {
+  const curvedProgress = getTempoCurveProgress(progress, curve);
+  return startBpm + (endBpm - startBpm) * curvedProgress;
+}
+
+function integrateTempoRamp(
+  startBpm: number,
+  endBpm: number,
+  segmentBeats: number,
+  partialBeats: number,
+  curve: number | undefined,
+): number {
+  if (segmentBeats <= 0 || partialBeats <= 0) {
+    return 0;
+  }
+
+  const beats = Math.max(0, Math.min(segmentBeats, partialBeats));
+  const steps = Math.max(8, Math.ceil(TEMPO_CURVE_SAMPLES * (beats / segmentBeats)));
+  const beatSize = beats / steps;
+  let seconds = 0;
+
+  for (let i = 0; i < steps; i++) {
+    const beatMidpoint = (i + 0.5) * beatSize;
+    const progress = beatMidpoint / segmentBeats;
+    const bpm = Math.max(
+      1e-6,
+      interpolateTempoRamp(startBpm, endBpm, progress, curve),
+    );
+    seconds += (beatSize / bpm) * 60;
+  }
+
+  return seconds;
+}
+
 /**
  * Get the BPM at a specific beat position.
- * If a ramp is active, interpolates linearly between the previous and current event BPMs.
+ * If a ramp is active, interpolates between the previous and current event BPMs.
  */
 export function getTempoAtBeat(
   tempoMap: TempoEvent[] | undefined,
@@ -29,7 +87,7 @@ export function getTempoAtBeat(
         const range = ev.beat - prevBeat;
         if (range <= 0) return ev.bpm;
         const t = (beat - prevBeat) / range;
-        return prevBpm + (ev.bpm - prevBpm) * t;
+        return interpolateTempoRamp(prevBpm, ev.bpm, t, ev.curve);
       }
       return prevBpm;
     }
@@ -60,12 +118,13 @@ export function beatToTime(
     if (ev.beat >= beat) {
       if (ev.ramp && ev.beat > currentBeat) {
         const segBeats = beat - currentBeat;
-        const fullSegBeats = ev.beat - currentBeat;
-        const t = segBeats / fullSegBeats;
-        const startBpm = currentBpm;
-        const endBpm = currentBpm + (ev.bpm - currentBpm) * t;
-        const avgBpm = (startBpm + endBpm) / 2;
-        time += (segBeats / avgBpm) * 60;
+        time += integrateTempoRamp(
+          currentBpm,
+          ev.bpm,
+          ev.beat - currentBeat,
+          segBeats,
+          ev.curve,
+        );
       } else {
         time += ((beat - currentBeat) / currentBpm) * 60;
       }
@@ -75,8 +134,7 @@ export function beatToTime(
     const segBeats = ev.beat - currentBeat;
     if (segBeats > 0) {
       if (ev.ramp) {
-        const avgBpm = (currentBpm + ev.bpm) / 2;
-        time += (segBeats / avgBpm) * 60;
+        time += integrateTempoRamp(currentBpm, ev.bpm, segBeats, segBeats, ev.curve);
       } else {
         time += (segBeats / currentBpm) * 60;
       }
@@ -110,8 +168,7 @@ export function timeToBeat(
     if (segBeats > 0) {
       let segTime: number;
       if (ev.ramp) {
-        const avgBpm = (currentBpm + ev.bpm) / 2;
-        segTime = (segBeats / avgBpm) * 60;
+        segTime = integrateTempoRamp(currentBpm, ev.bpm, segBeats, segBeats, ev.curve);
       } else {
         segTime = (segBeats / currentBpm) * 60;
       }
@@ -119,17 +176,18 @@ export function timeToBeat(
       if (time + segTime >= targetTime) {
         const remaining = targetTime - time;
         if (ev.ramp) {
-          const bpmRate = (ev.bpm - currentBpm) / segBeats;
-          let b = remaining * currentBpm / 60;
-          for (let iter = 0; iter < 10; iter++) {
-            const endBpm = currentBpm + bpmRate * b;
-            const avgBpm = (currentBpm + endBpm) / 2;
-            const actualTime = (b / avgBpm) * 60;
-            const error = remaining - actualTime;
-            if (Math.abs(error) < 1e-9) break;
-            b += error * currentBpm / 60;
+          let lo = 0;
+          let hi = segBeats;
+          for (let iter = 0; iter < 24; iter++) {
+            const mid = (lo + hi) / 2;
+            const elapsed = integrateTempoRamp(currentBpm, ev.bpm, segBeats, mid, ev.curve);
+            if (elapsed < remaining) {
+              lo = mid;
+            } else {
+              hi = mid;
+            }
           }
-          return currentBeat + Math.max(0, b);
+          return currentBeat + (lo + hi) / 2;
         } else {
           return currentBeat + (remaining / 60) * currentBpm;
         }

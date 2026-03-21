@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
-import { TrackHeightPresetSelector } from './TrackHeightPresetSelector';
+import { TrackListDisplayToggle } from './TrackListDisplayToggle';
 import {
   ARRANGEMENT_MARKERS_HEIGHT,
   TEMPO_LANE_HEIGHT,
@@ -15,10 +15,12 @@ export function TrackList() {
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
   const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
+  const trackListDisplayMode = useUIStore((s) => s.trackListDisplayMode);
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
   const scrollY = useUIStore((s) => s.scrollY);
   const trackListScrollRef = useRef<HTMLDivElement>(null);
+  const isCollapsed = trackListDisplayMode === 'collapsed';
 
   // Sync vertical scroll with timeline
   useEffect(() => {
@@ -89,6 +91,7 @@ export function TrackList() {
 
   return (
     <div
+      id="arrangement-track-list"
       className="flex flex-col bg-[#2a2a2a] border-r border-[#1a1a1a] relative shrink-0"
       style={{ width: trackListWidth }}
       onDragLeave={(e) => {
@@ -99,11 +102,11 @@ export function TrackList() {
     >
       {/* Header spacer aligned with TimeRuler */}
       <div
-        className="shrink-0 border-b border-[#3a3a3a] bg-[#333] flex items-center px-2 justify-between"
+        className={`shrink-0 border-b border-[#3a3a3a] bg-[#333] flex items-center ${isCollapsed ? 'px-1.5 justify-center' : 'px-2 justify-between'}`}
         style={{ height: TIMELINE_RULER_HEIGHT }}
       >
-        <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-medium">Tracks</span>
-        <TrackHeightPresetSelector />
+        {!isCollapsed && <span className="text-[10px] text-zinc-400 uppercase tracking-[0.24em] font-medium">Tracks</span>}
+        <TrackListDisplayToggle />
       </div>
 
       {showsArrangementMarkers && (
@@ -127,6 +130,7 @@ export function TrackList() {
           <TrackHeader
             key={track.id}
             track={track}
+            isCollapsed={isCollapsed}
             isChild={!!track.parentTrackId}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
@@ -137,14 +141,16 @@ export function TrackList() {
         ))}
 
         {/* Empty placeholder rows matching timeline — click to add track */}
-        <EmptyTrackHeaderRows />
+        <EmptyTrackHeaderRows isCollapsed={isCollapsed} />
       </div>
 
       {/* Right-edge resize handle */}
-      <div
-        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-daw-accent/30 transition-colors z-10"
-        onMouseDown={onResizeMouseDown}
-      />
+      {!isCollapsed && (
+        <div
+          className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-daw-accent/30 transition-colors z-10"
+          onMouseDown={onResizeMouseDown}
+        />
+      )}
     </div>
   );
 }
@@ -152,7 +158,7 @@ export function TrackList() {
 const PLACEHOLDER_ROW_HEIGHT = 64;
 const PLACEHOLDER_ROW_COUNT = 20;
 
-function EmptyTrackHeaderRows() {
+function EmptyTrackHeaderRows({ isCollapsed }: { isCollapsed: boolean }) {
   const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   return (
@@ -174,7 +180,7 @@ function EmptyTrackHeaderRows() {
             {isSelected && (
               <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
             )}
-            <span className="text-zinc-600 text-lg opacity-0 group-hover:opacity-100 transition-opacity">+</span>
+            <span className={`text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${isCollapsed ? 'text-sm' : 'text-lg'}`}>+</span>
           </div>
         );
       })}

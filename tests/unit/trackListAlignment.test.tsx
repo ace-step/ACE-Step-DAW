@@ -17,8 +17,8 @@ vi.mock('../../src/components/tracks/AddTrackButton', () => ({
   AddTrackButton: () => <div>Add Track</div>,
 }));
 
-vi.mock('../../src/components/tracks/TrackHeightPresetSelector', () => ({
-  TrackHeightPresetSelector: () => <div>Preset</div>,
+vi.mock('../../src/components/tracks/TrackListDisplayToggle', () => ({
+  TrackListDisplayToggle: () => <div>Toggle</div>,
 }));
 
 describe('TrackList alignment spacers', () => {

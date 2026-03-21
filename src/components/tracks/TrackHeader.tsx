@@ -20,6 +20,7 @@ const MAX_LANE_HEIGHT = 400;
 
 interface TrackHeaderProps {
   track: Track;
+  isCollapsed?: boolean;
   isChild?: boolean;
   onDragStart: (id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
@@ -30,6 +31,7 @@ interface TrackHeaderProps {
 
 export function TrackHeader({
   track,
+  isCollapsed = false,
   isChild,
   onDragStart,
   onDragOver,
@@ -131,6 +133,12 @@ export function TrackHeader({
   const isTwoRow = laneHeight >= 60;
   const primaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'min-w-[20px] min-h-[20px]' });
   const secondaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'w-5 h-5' });
+  const collapsedLabel = track.displayName
+    .split(/\s+/)
+    .map((segment) => segment.slice(0, 1))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || track.displayName.slice(0, 2).toUpperCase();
 
   const cycleMonitor = useCallback(() => {
     const next: Record<InputMonitoringMode, InputMonitoringMode> = { off: 'auto', auto: 'on', on: 'off' };
@@ -193,8 +201,8 @@ export function TrackHeader({
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
         height: track.isGroup ? Math.max(40, laneHeight * 0.7) : laneHeight,
-        paddingLeft: isChild ? 24 : 8,
-        paddingRight: 8,
+        paddingLeft: isCollapsed ? 0 : isChild ? 24 : 8,
+        paddingRight: isCollapsed ? 0 : 8,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,
         borderBottom: isDragOver && dragOverPosition === 'after' ? '2px solid var(--color-daw-accent)' : undefined,
         opacity: isImpliedMute ? 0.45 : undefined,
@@ -260,6 +268,60 @@ export function TrackHeader({
         }}
       />
 
+      {isCollapsed ? (
+        <div className="flex h-full w-full flex-col items-center justify-between py-2">
+          {track.isGroup ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(track.id); }}
+              className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:bg-white/5 hover:text-zinc-200 transition-colors"
+              title={track.collapsed ? 'Expand group' : 'Collapse group'}
+              aria-label={track.collapsed ? `Expand group ${track.displayName}` : `Collapse group ${track.displayName}`}
+              aria-expanded={!track.collapsed}
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transform: track.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}
+              >
+                <path d="M2 3.5L5 6.5L8 3.5" />
+              </svg>
+            </button>
+          ) : (
+            <div className="text-zinc-600 text-[10px] leading-none select-none" title="Drag to reorder">⠿</div>
+          )}
+
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            style={{ backgroundColor: track.color + '20' }}
+            title={track.isGroup ? 'Group' : info.displayName}
+          >
+            {track.isGroup ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 4h4l2 2h6v7H2V4z" fill={track.color + '40'} />
+              </svg>
+            ) : info.emoji}
+          </div>
+
+          <span
+            data-testid="track-header-collapsed-label"
+            className="text-[9px] font-semibold tracking-[0.22em] text-zinc-400 text-center"
+            title={track.displayName}
+          >
+            {collapsedLabel}
+          </span>
+
+          <div className="w-full px-2">
+            <TrackHeaderMeter trackId={track.id} />
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Group collapse toggle or drag handle */}
       {track.isGroup ? (
         <button
@@ -695,6 +757,8 @@ export function TrackHeader({
               </button>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
 

@@ -12,6 +12,11 @@ import { getAssistantSuggestions, streamAssistantResponse } from '../services/ai
 import type { ShortcutContext } from '../types/shortcuts';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
+  TRACK_LIST_COLLAPSED_WIDTH,
+  TRACK_LIST_DEFAULT_WIDTH,
+  clampTrackListWidth,
+} from '../constants/trackList';
+import {
   buildCommandPaletteCommands,
   buildCommandPaletteRegistry,
   searchCommandsForQuery,
@@ -77,7 +82,9 @@ export interface UIState {
   mixerHeight: number;
   showAssetsPanel: boolean;
   assetsPanelWidth: number;
+  trackListDisplayMode: 'expanded' | 'collapsed';
   trackListWidth: number;
+  expandedTrackListWidth: number;
   /** Global context window set by Option/Alt+drag on the timeline. */
   contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Multi-track select window set by Cmd/Ctrl+drag on the timeline. */
@@ -228,6 +235,8 @@ export interface UIState {
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
   setAssetsPanelWidth: (v: number) => void;
+  setTrackListDisplayMode: (mode: 'expanded' | 'collapsed') => void;
+  toggleTrackListDisplayMode: () => void;
   setTrackListWidth: (v: number) => void;
   setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
   setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
@@ -374,6 +383,8 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
         showSmartControls: true,
         showTempoLane: false,
         trackListWidth: 200,
+        expandedTrackListWidth: 200,
+        trackListDisplayMode: 'expanded' as const,
         pixelsPerSecond: 50,
       };
     case 'advanced':
@@ -385,6 +396,8 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
         showSmartControls: false,
         showTempoLane: true,
         trackListWidth: 250,
+        expandedTrackListWidth: 250,
+        trackListDisplayMode: 'expanded' as const,
         pixelsPerSecond: 100,
       };
     case 'standard':
@@ -396,7 +409,9 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
         loopBrowserOpen: false,
         showSmartControls: false,
         showTempoLane: false,
-        trackListWidth: 220,
+        trackListWidth: TRACK_LIST_DEFAULT_WIDTH,
+        expandedTrackListWidth: TRACK_LIST_DEFAULT_WIDTH,
+        trackListDisplayMode: 'expanded' as const,
         pixelsPerSecond: 50,
       };
   }
@@ -438,7 +453,9 @@ export const useUIStore = create<UIState>()(
   mixerHeight: 420,
   showAssetsPanel: false,
   assetsPanelWidth: 240,
-  trackListWidth: 220,
+  trackListDisplayMode: 'expanded',
+  trackListWidth: TRACK_LIST_DEFAULT_WIDTH,
+  expandedTrackListWidth: TRACK_LIST_DEFAULT_WIDTH,
   contextWindow: null,
   selectWindow: null,
   timelineZoomRequest: null,
@@ -661,7 +678,42 @@ export const useUIStore = create<UIState>()(
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
   setAssetsPanelWidth: (v) => set({ assetsPanelWidth: Math.min(500, Math.max(160, v)) }),
-  setTrackListWidth: (v) => set({ trackListWidth: Math.min(400, Math.max(120, v)) }),
+  setTrackListDisplayMode: (mode) => set((state) => {
+    if (mode === 'collapsed') {
+      return {
+        trackListDisplayMode: 'collapsed',
+        trackListWidth: TRACK_LIST_COLLAPSED_WIDTH,
+      };
+    }
+
+    const expandedTrackListWidth = clampTrackListWidth(state.expandedTrackListWidth);
+    return {
+      trackListDisplayMode: 'expanded',
+      expandedTrackListWidth,
+      trackListWidth: expandedTrackListWidth,
+    };
+  }),
+  toggleTrackListDisplayMode: () => set((state) => {
+    if (state.trackListDisplayMode === 'collapsed') {
+      const expandedTrackListWidth = clampTrackListWidth(state.expandedTrackListWidth);
+      return {
+        trackListDisplayMode: 'expanded',
+        expandedTrackListWidth,
+        trackListWidth: expandedTrackListWidth,
+      };
+    }
+
+    return {
+      trackListDisplayMode: 'collapsed',
+      expandedTrackListWidth: clampTrackListWidth(state.trackListWidth),
+      trackListWidth: TRACK_LIST_COLLAPSED_WIDTH,
+    };
+  }),
+  setTrackListWidth: (v) => set({
+    trackListDisplayMode: 'expanded',
+    trackListWidth: clampTrackListWidth(v),
+    expandedTrackListWidth: clampTrackListWidth(v),
+  }),
   setContextWindow: (v) => set({ contextWindow: v }),
   setSelectWindow: (v) => set({ selectWindow: v }),
   zoomTimelineToSelection: () => set((state) => ({
@@ -953,7 +1005,9 @@ export const useUIStore = create<UIState>()(
         virtualKeyboardOctave: state.virtualKeyboardOctave,
         virtualKeyboardVelocity: state.virtualKeyboardVelocity,
         assetsPanelWidth: state.assetsPanelWidth,
+        trackListDisplayMode: state.trackListDisplayMode,
         trackListWidth: state.trackListWidth,
+        expandedTrackListWidth: state.expandedTrackListWidth,
         // Zoom level
         arrangementView: state.arrangementView,
         mainView: state.mainView,

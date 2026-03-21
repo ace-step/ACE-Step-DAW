@@ -147,6 +147,17 @@ describe('TrackHeader layout improvements (#546)', () => {
     });
   });
 
+  describe('collapsed thumbnail rail mode', () => {
+    it('renders a compact label and hides the standard detail rows', () => {
+      render(<TrackHeader track={makeTrack({ displayName: 'Lead Vocal' })} isCollapsed {...defaultProps} />);
+
+      expect(screen.getByTestId('track-header-collapsed-label')).toHaveTextContent('LV');
+      expect(screen.queryByTestId('track-header-row1')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('track-header-row2')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Mute (M)')).not.toBeInTheDocument();
+    });
+  });
+
   describe('level meter minimum width', () => {
     it('level meter container has min-w-[6px] class', () => {
       render(<TrackHeader track={makeTrack()} {...defaultProps} />);

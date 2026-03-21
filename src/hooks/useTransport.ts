@@ -13,6 +13,10 @@ import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
 import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
 import type { Clip, Project, Track } from '../types/project';
+import {
+  getClipAudibleStartTime,
+  getClipAudibleTimelineDuration,
+} from '../utils/clipAudio';
 import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
 
@@ -103,15 +107,18 @@ function collectTimelineScrubClips(project: Project): TimelineScrubClip[] {
       if (clip.generationStatus !== 'ready' || clip.muted) return [];
       const bufferKey = clip.isolatedAudioKey ?? clip.cumulativeMixKey;
       if (!bufferKey) return [];
+      const audibleStartTime = getClipAudibleStartTime(clip);
+      const audibleDuration = getClipAudibleTimelineDuration(clip);
+      if (audibleDuration <= 0) return [];
 
       return [{
         clipId: clip.id,
         trackId: track.id,
-        startTime: clip.startTime,
-        clipDuration: clip.duration,
+        startTime: audibleStartTime,
+        clipDuration: audibleDuration,
         audioOffset: clip.isolatedAudioKey
           ? (clip.audioOffset ?? 0)
-          : clip.startTime + (clip.audioOffset ?? 0),
+          : audibleStartTime,
         timeStretchRate: clip.timeStretchRate ?? 1,
         bufferKey,
       }];
@@ -214,6 +221,9 @@ export function useTransport() {
 
       for (const clip of clipsToSchedule) {
         if (clip.generationStatus !== 'ready') continue;
+        const audibleStartTime = getClipAudibleStartTime(clip);
+        const audibleDuration = getClipAudibleTimelineDuration(clip);
+        if (audibleDuration <= 0) continue;
 
         // Try isolated audio first (pre-trimmed to clip region at generation),
         // fall back to cumulative mix (full project-length, needs trimming).
@@ -232,7 +242,8 @@ export function useTransport() {
         const rawBuffer = await engine.decodeAudioData(blob);
         const buffer = alreadyTrimmed
           ? rawBuffer
-          : trimBuffer(engine.ctx, rawBuffer, clip.startTime, clip.duration);
+          : trimBuffer(engine.ctx, rawBuffer, audibleStartTime, audibleDuration);
+        const scheduleAudioOffset = alreadyTrimmed ? (clip.audioOffset ?? 0) : 0;
 
         if (mainView === 'session') {
           const launch = sessionTrackMap.get(track.id)?.launch;
@@ -246,10 +257,10 @@ export function useTransport() {
             clipBuffers.push({
               clipId: `${clip.id}-session-${loopIndex}`,
               trackId: track.id,
-              startTime: loopStart,
+              startTime: loopStart + (audibleStartTime - clip.startTime),
               buffer,
-              audioOffset: clip.audioOffset ?? 0,
-              clipDuration,
+              audioOffset: scheduleAudioOffset,
+              clipDuration: audibleDuration,
               timeStretchRate: clip.timeStretchRate,
               gainEnvelope: clip.gainEnvelope,
             });
@@ -261,10 +272,10 @@ export function useTransport() {
         clipBuffers.push({
           clipId: clip.id,
           trackId: track.id,
-          startTime: clip.startTime,
+          startTime: audibleStartTime,
           buffer,
-          audioOffset: clip.audioOffset ?? 0,
-          clipDuration: clip.duration,
+          audioOffset: scheduleAudioOffset,
+          clipDuration: audibleDuration,
           fadeInDuration: clip.fadeInDuration,
           fadeOutDuration: clip.fadeOutDuration,
           fadeInCurve: clip.fadeInCurve,

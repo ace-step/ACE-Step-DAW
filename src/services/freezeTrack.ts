@@ -4,6 +4,7 @@ import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrack
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import type { SynthPreset, DrumKitName } from '../types/project';
 
@@ -148,7 +149,7 @@ export async function flattenTrackToAudio(trackId: string): Promise<void> {
 
   const engine = getAudioEngine();
   const buf = await engine.decodeAudioData(blob);
-  const peaks = computeWaveformPeaks(buf, 200);
+  const peaks = computeWaveformPeaks(buf, CLIP_WAVEFORM_PEAK_COUNT);
   const duration = buf.duration;
 
   useProjectStore.getState().flattenTrack(trackId, audioKey, peaks, duration);

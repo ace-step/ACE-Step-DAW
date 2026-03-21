@@ -6,6 +6,7 @@ import { useProjectStore } from '../store/projectStore';
 import { toastError, toastInfo, toastSuccess } from './useToast';
 import { saveAudioBlob } from '../services/audioFileManager';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 
 /** Map of trackId to clipId used during loop recording to accumulate takes. */
@@ -91,7 +92,7 @@ export function useRecording() {
 
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const isolatedAudioKey = await saveAudioBlob(project.id, clipId, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
         updateClipStatus(clipId, 'ready', {
           isolatedAudioKey,
           waveformPeaks,
@@ -102,7 +103,7 @@ export function useRecording() {
       } else {
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
         addTake(clipId, audioKey, waveformPeaks);
       }
     }
@@ -143,7 +144,7 @@ export function useRecording() {
         if (clipId) {
           const wavBlob = audioBufferToWavBlob(result.audioBuffer);
           const audioKey = await saveAudioBlob(project.id, `${clipId}-take-${Date.now()}`, 'isolated', wavBlob);
-          const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+          const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
           addTake(clipId, audioKey, waveformPeaks);
           createdCount += 1;
         }
@@ -165,7 +166,7 @@ export function useRecording() {
         });
         const wavBlob = audioBufferToWavBlob(result.audioBuffer);
         const isolatedAudioKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, 200);
+        const waveformPeaks = computeWaveformPeaks(result.audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
         updateClipStatus(clip.id, 'ready', {
           isolatedAudioKey,

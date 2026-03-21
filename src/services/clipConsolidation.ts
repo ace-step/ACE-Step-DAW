@@ -4,6 +4,7 @@ import { interpolateGainEnvelope } from '../utils/gainEnvelope';
 import { timeToBeat } from '../utils/tempoMap';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { loadAudioBlobByKey, saveAudioBlob } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 
@@ -225,9 +226,8 @@ export async function renderConsolidatedAudioClip(project: Project, clips: Clip[
   return {
     id: clipId,
     isolatedAudioKey,
-    waveformPeaks: computeWaveformPeaks(outputBuffer, 256),
+    waveformPeaks: computeWaveformPeaks(outputBuffer, CLIP_WAVEFORM_PEAK_COUNT),
     duration: merged.duration,
     audioDuration: merged.duration,
   };
 }
-

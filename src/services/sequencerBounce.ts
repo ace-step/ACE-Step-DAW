@@ -2,6 +2,7 @@ import type { SequencerPattern } from '../types/project';
 import { getSample } from './sampleManager';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { saveAudioBlob } from './audioFileManager';
 import { useProjectStore } from '../store/projectStore';
 import { getAudioEngine } from '../hooks/useAudioEngine';
@@ -96,7 +97,7 @@ export async function bounceSequencerToAudio(
   }
 
   const wavBlob = audioBufferToWavBlob(trimmed);
-  const peaks = computeWaveformPeaks(trimmed, 200);
+  const peaks = computeWaveformPeaks(trimmed, CLIP_WAVEFORM_PEAK_COUNT);
 
   const store = useProjectStore.getState();
   const project = store.project;

@@ -18,6 +18,7 @@ import { getAudioEngine } from '../hooks/useAudioEngine';
 import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { extractContextAudioLazy } from './lazyContextAudioExtractor';
 import { computeEta } from '../utils/generationProgress';
@@ -778,7 +779,7 @@ async function generateClipInternal(
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
 
     // Compute waveform peaks from the trimmed buffer (full buffer = clip region)
-    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     // Build inferred metadata from result
     const inferredMetas: InferredMetas | undefined = firstResult
@@ -1563,7 +1564,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
       const coverBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(coverBlob);
-      const peaks = computeWaveformPeaks(buffer, 200);
+      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, targetClipId, 'isolated', coverBlob);
       const cumulativeKey = await saveAudioBlob(project.id, targetClipId, 'cumulative', coverBlob);
@@ -1761,7 +1762,7 @@ async function generateRepaintInternal(
 
     const isolatedBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clipId, 'isolated', isolatedBlob);
-    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     const inferredMetas: InferredMetas | undefined = firstResult
       ? {
@@ -2116,7 +2117,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
       const bgmBlob = await api.downloadAudio(resultAudioPath);
       const engine = getAudioEngine();
       const buffer = await engine.decodeAudioData(bgmBlob);
-      const peaks = computeWaveformPeaks(buffer, 200);
+      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
 
       const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', bgmBlob);
       const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', bgmBlob);

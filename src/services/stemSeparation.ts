@@ -3,6 +3,7 @@ import { useGenerationStore } from '../store/generationStore';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { TRACK_CATALOG } from '../constants/tracks';
@@ -216,7 +217,7 @@ export async function separateClipAudioToStems(options: {
           displayName: label.displayName,
           color: label.color,
           audioBlob: audioBufferToWavBlob(buffer),
-          waveformPeaks: computeWaveformPeaks(buffer, 200),
+          waveformPeaks: computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT),
           audioDuration: buffer.duration,
         };
       }),

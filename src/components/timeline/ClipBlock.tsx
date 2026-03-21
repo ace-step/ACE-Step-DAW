@@ -5,9 +5,18 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useGeneration } from '../../hooks/useGeneration';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { hexToRgba } from '../../utils/color';
 import { snapToGrid } from '../../utils/time';
 import { Z } from '../../utils/zIndex';
+import { computeWaveformPeaks } from '../../utils/waveformPeaks';
+import {
+  CLIP_WAVEFORM_PEAK_COUNT,
+  getClipAudibleSourceEnd,
+  getClipContentOffset,
+  getClipSourceSpan,
+} from '../../utils/clipAudio';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
@@ -22,9 +31,12 @@ interface ClipBlockProps {
   track: Track;
 }
 
-const EDGE_HANDLE_PX = 10;
+const EDGE_HANDLE_PX = 16;
 const FADE_HANDLE_HIT_TARGET_PX = 14;
 const MIN_CLIP_DURATION = 0.5;
+const CLIP_DRAG_EPSILON = 0.0001;
+
+const waveformUpgradeInFlight = new Set<string>();
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
 
@@ -111,6 +123,58 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const activeVersionIdx = clip.activeVersionIdx ?? (versions.length > 0 ? versions.length - 1 : -1);
   const totalVersions = versions.length;
 
+  useEffect(() => {
+    if (clip.generationStatus !== 'ready' || !clip.isolatedAudioKey) return;
+    if (clip.waveformPeaks && clip.waveformPeaks.length >= CLIP_WAVEFORM_PEAK_COUNT) return;
+    if (waveformUpgradeInFlight.has(clip.id)) return;
+
+    let cancelled = false;
+    waveformUpgradeInFlight.add(clip.id);
+
+    void (async () => {
+      try {
+        const blob = await loadAudioBlobByKey(clip.isolatedAudioKey!);
+        if (!blob || cancelled) return;
+
+        const buffer = await getAudioEngine().decodeAudioData(blob);
+        if (cancelled) return;
+
+        const upgradedPeaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
+        useProjectStore.setState((state) => {
+          if (!state.project) return state;
+          return {
+            ...state,
+            project: {
+              ...state.project,
+              updatedAt: Date.now(),
+              tracks: state.project.tracks.map((candidate) => ({
+                ...candidate,
+                clips: candidate.clips.map((candidateClip) => (
+                  candidateClip.id === clip.id
+                    ? {
+                        ...candidateClip,
+                        waveformPeaks: upgradedPeaks,
+                        audioDuration: candidateClip.audioDuration ?? buffer.duration,
+                      }
+                    : candidateClip
+                )),
+              })),
+            },
+          };
+        });
+      } catch {
+        // Keep the existing waveform if the upgrade pass fails.
+      } finally {
+        waveformUpgradeInFlight.delete(clip.id);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      waveformUpgradeInFlight.delete(clip.id);
+    };
+  }, [clip.audioDuration, clip.generationStatus, clip.id, clip.isolatedAudioKey, clip.waveformPeaks]);
+
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = selectedClipIds.has(clip.id);
@@ -173,6 +237,11 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const origDuration = clip.duration;
     const origAudioOffset = clip.audioOffset ?? 0;
     const origAudioDuration = clip.audioDuration ?? clip.duration;
+    const origContentOffset = getClipContentOffset(clip);
+    const origTimeStretchRate = clip.timeStretchRate;
+    const origStretchMode = clip.stretchMode;
+    const origSourceSpan = getClipSourceSpan(clip);
+    const origAudibleSourceEnd = getClipAudibleSourceEnd(clip);
     const bpm = project?.bpm ?? 120;
     const totalDuration = project?.totalDuration ?? 600;
     dragRef.current = false;
@@ -296,20 +365,41 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         const maxStart = origStart + origDuration - MIN_CLIP_DURATION;
         newStart = Math.min(newStart, maxStart);
 
-        const shift = newStart - origStart;
-        let newAudioOffset = origAudioOffset + shift;
-
-        if (newAudioOffset < 0) {
-          newAudioOffset = 0;
-          newStart = origStart - origAudioOffset;
-        }
-        if (newAudioOffset > origAudioDuration - MIN_CLIP_DURATION) {
-          newAudioOffset = origAudioDuration - MIN_CLIP_DURATION;
-          newStart = origStart + (newAudioOffset - origAudioOffset);
-        }
-
         const newDuration = origDuration + (origStart - newStart);
-        updateClip(clip.id, { startTime: newStart, duration: newDuration, audioOffset: newAudioOffset });
+        if (ev.shiftKey) {
+          updateClip(clip.id, {
+            startTime: newStart,
+            duration: newDuration,
+            contentOffset: undefined,
+            timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
+            stretchMode: 'repitch',
+          });
+          return;
+        }
+
+        if (newStart < origStart) {
+          const extension = origStart - newStart;
+          updateClip(clip.id, {
+            startTime: newStart,
+            duration: newDuration,
+            contentOffset: origContentOffset + extension,
+            timeStretchRate: undefined,
+            stretchMode: undefined,
+          });
+          return;
+        }
+
+        const trimAmount = newStart - origStart;
+        const silenceTrim = Math.min(origContentOffset, trimAmount);
+        const audioTrim = trimAmount - silenceTrim;
+        updateClip(clip.id, {
+          startTime: newStart,
+          duration: newDuration,
+          contentOffset: Math.max(0, origContentOffset - silenceTrim) || undefined,
+          audioOffset: Math.min(origAudioDuration, origAudioOffset + audioTrim),
+          timeStretchRate: undefined,
+          stretchMode: undefined,
+        });
       } else if (mode === 'slip') {
         const maxOffset = Math.max(0, origAudioDuration - origDuration);
         if (maxOffset > 0) {
@@ -320,7 +410,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         let newDuration = ev.altKey ? origDuration + deltaSec : snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
-        updateClip(clip.id, { duration: newDuration });
+        if (ev.shiftKey) {
+          updateClip(clip.id, {
+            duration: newDuration,
+            contentOffset: undefined,
+            timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
+            stretchMode: 'repitch',
+          });
+          return;
+        }
+        updateClip(clip.id, {
+          duration: newDuration,
+          contentOffset: Math.min(origContentOffset, newDuration) || undefined,
+          timeStretchRate: undefined,
+          stretchMode: undefined,
+        });
       }
     };
 
@@ -345,9 +449,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         } else if (mode === 'move') {
           updateClip(clip.id, { startTime: origStart });
         } else if (mode === 'resize-left') {
-          updateClip(clip.id, { startTime: origStart, duration: origDuration, audioOffset: origAudioOffset });
+          updateClip(clip.id, {
+            startTime: origStart,
+            duration: origDuration,
+            audioOffset: origAudioOffset,
+            contentOffset: origContentOffset || undefined,
+            timeStretchRate: origTimeStretchRate,
+            stretchMode: origStretchMode,
+          });
         } else if (mode === 'resize-right') {
-          updateClip(clip.id, { duration: origDuration });
+          updateClip(clip.id, {
+            duration: origDuration,
+            contentOffset: origContentOffset || undefined,
+            timeStretchRate: origTimeStretchRate,
+            stretchMode: origStretchMode,
+          });
         } else if (mode === 'slip') {
           updateClip(clip.id, { audioOffset: origAudioOffset });
         }
@@ -391,8 +507,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       setDragGhost(null);
       endDrag();
 
-      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current) {
-        void snapClipEdgeToZeroCrossing(clip.id, mode === 'resize-left' ? 'left' : 'right');
+      if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !ev.shiftKey) {
+        const currentClip = useProjectStore.getState().getClipById(clip.id);
+        if (currentClip) {
+          if (mode === 'resize-left') {
+            const trimmedAudioLeft = (currentClip.audioOffset ?? 0) > origAudioOffset + CLIP_DRAG_EPSILON;
+            if (trimmedAudioLeft) {
+              void snapClipEdgeToZeroCrossing(clip.id, 'left');
+            }
+          } else {
+            const trimmedAudioRight = getClipAudibleSourceEnd(currentClip) < origAudibleSourceEnd - CLIP_DRAG_EPSILON;
+            if (trimmedAudioRight) {
+              void snapClipEdgeToZeroCrossing(clip.id, 'right');
+            }
+          }
+        }
       }
 
       if (mode === 'move' && dragRef.current) {
@@ -425,7 +554,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip.id, clip.startTime, clip.duration, clip.audioOffset, clip.audioDuration, clip.generationStatus, clip.midiData, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, splitClipAtZeroCrossing]);
+  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, splitClipAtZeroCrossing]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -553,6 +682,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const peaks = clip.waveformPeaks;
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
+  const contentOffset = getClipContentOffset(clip);
   const selectedActionClipIds = selectedClipIds.has(clip.id) ? [...selectedClipIds] : [clip.id];
   const selectedActionClips = selectedActionClipIds
     .map((clipId) => project?.tracks.flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
@@ -598,10 +728,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         onMouseMove={handleMouseMoveLocal}
         onContextMenu={handleContextMenu}
       >
-        <div className="absolute top-0 bottom-0 left-0 w-[10px] cursor-col-resize z-10 group/resize-left" data-testid="resize-handle-left">
+        <div className="absolute top-0 bottom-0 left-0 w-[16px] cursor-col-resize z-10 group/resize-left" data-testid="resize-handle-left">
           <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-white/0 group-hover/resize-left:bg-white/20 transition-colors duration-100" data-testid="resize-indicator-left" />
         </div>
-        <div className="absolute top-0 bottom-0 right-0 w-[10px] cursor-col-resize z-10 group/resize-right" data-testid="resize-handle-right">
+        <div className="absolute top-0 bottom-0 right-0 w-[16px] cursor-col-resize z-10 group/resize-right" data-testid="resize-handle-right">
           <div className="absolute top-0 bottom-0 right-0 w-[2px] bg-white/0 group-hover/resize-right:bg-white/20 transition-colors duration-100" data-testid="resize-indicator-right" />
         </div>
 
@@ -616,6 +746,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           audioDuration={audioDuration}
           audioOffset={audioOffset}
           clipDuration={clip.duration}
+          contentOffset={contentOffset}
+          timeStretchRate={clip.timeStretchRate}
+          stretchMode={clip.stretchMode}
           width={width}
           color={clipColor}
         />
@@ -945,6 +1078,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               audioDuration={audioDuration}
               audioOffset={audioOffset}
               clipDuration={clip.duration}
+              contentOffset={contentOffset}
+              timeStretchRate={clip.timeStretchRate}
+              stretchMode={clip.stretchMode}
               width={width}
               color={clipColor}
               opacityClassName="opacity-50"

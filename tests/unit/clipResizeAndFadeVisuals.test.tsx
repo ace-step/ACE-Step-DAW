@@ -68,13 +68,13 @@ describe('Clip resize handle width and fade visuals', () => {
     useProjectStore.getState().updateClip(readyClip.id, { id: 'clip-1' });
   });
 
-  it('resize handle divs are 10px wide', () => {
+  it('resize handle divs are 16px wide', () => {
     const { container } = renderClip();
     const handles = container.querySelectorAll('.cursor-col-resize');
     expect(handles.length).toBeGreaterThanOrEqual(2);
     // Check the first two (left and right resize handles)
-    expect(handles[0].className).toContain('w-[10px]');
-    expect(handles[1].className).toContain('w-[10px]');
+    expect(handles[0].className).toContain('w-[16px]');
+    expect(handles[1].className).toContain('w-[16px]');
   });
 
   it('does not render fade controls or overlays for zero-fade clips', () => {

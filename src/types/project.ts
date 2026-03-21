@@ -336,6 +336,7 @@ export interface Clip {
   // Crop support: original audio duration and offset into it
   audioDuration?: number;  // Full audio buffer duration (set at gen/import)
   audioOffset?: number;    // Offset into audio buffer (seconds), default 0
+  contentOffset?: number;  // Silent padding before audible content inside the clip container
   /** True when this clip was generated with a previous cumulative as context (not from silence). */
   generatedFromContext?: boolean;
   /** Server-side file path of the cumulative audio, used to skip re-upload on next context generation. */

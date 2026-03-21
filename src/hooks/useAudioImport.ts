@@ -4,6 +4,7 @@ import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { saveAudioBlob, loadAudioBlobByKey } from '../services/audioFileManager';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { parseMidiFile } from '../utils/midi';
 import { toastError, toastInfo, toastSuccess } from './useToast';
@@ -110,7 +111,7 @@ export function useAudioImport() {
     const trimmedBuffer = trimAudioBuffer(engine, audioBuffer, clipDuration);
     const wavBlob = audioBufferToWavBlob(trimmedBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
@@ -157,7 +158,7 @@ export function useAudioImport() {
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
 
     // Compute waveform peaks
-    const peaks = computeWaveformPeaks(trimmedBuffer, 200);
+    const peaks = computeWaveformPeaks(trimmedBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     // Mark clip as ready with uploaded source
     updateClipStatus(clip.id, 'ready', {
@@ -350,7 +351,7 @@ export function useAudioImport() {
 
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = computeWaveformPeaks(audioBuffer, 200);
+    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,
@@ -392,7 +393,7 @@ export function useAudioImport() {
 
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const isolatedKey = await saveAudioBlob(project.id, clip.id, 'isolated', wavBlob);
-    const peaks = asset.waveformPeaks ?? computeWaveformPeaks(audioBuffer, 200);
+    const peaks = asset.waveformPeaks ?? computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     updateClipStatus(clip.id, 'ready', {
       isolatedAudioKey: isolatedKey,

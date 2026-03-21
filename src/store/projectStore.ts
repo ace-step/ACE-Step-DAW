@@ -1533,6 +1533,7 @@ export const useProjectStore = create<ProjectState>()(
     // Migration: backfill trackType for projects created before the field existed
     const migratedBase: Project = {
       ...project,
+      masterVolume: project.masterVolume ?? 1,
       trackPresets: project.trackPresets ?? [],
       masterEffects: project.masterEffects ?? [],
       masterEffectsBypassed: project.masterEffectsBypassed ?? false,
@@ -1694,6 +1695,10 @@ export const useProjectStore = create<ProjectState>()(
         merged.timeSignature,
       );
     }
+    if ('masterVolume' in updates && typeof merged.masterVolume === 'number') {
+      merged.masterVolume = clampMasterVolume(merged.masterVolume);
+      syncMasterVolumeWithEngine(merged.masterVolume);
+    }
     set({ project: merged });
   },
 
@@ -1701,11 +1706,28 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (_isViewerMode()) return;
     if (!state.project) return;
+    const nextVolume = clampMasterVolume(volume);
     _pushHistory(state.project, { scope: 'mixer', label: 'Adjust master volume' });
+    syncMasterVolumeWithEngine(nextVolume);
     set({
       project: {
         ...state.project,
-        masterVolume: Math.max(0, Math.min(2, volume)),
+        masterVolume: nextVolume,
+        updatedAt: Date.now(),
+      },
+    });
+  },
+
+  resetMasterVolume: () => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Reset master volume' });
+    syncMasterVolumeWithEngine(1);
+    set({
+      project: {
+        ...state.project,
+        masterVolume: 1,
         updatedAt: Date.now(),
       },
     });

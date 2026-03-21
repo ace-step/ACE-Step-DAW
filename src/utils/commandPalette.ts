@@ -1,6 +1,7 @@
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
+import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from './timelineZoom';
 
 export interface Command {
   id: string;
@@ -158,7 +159,11 @@ export function buildCommandList(): Command[] {
       label: 'Reset Zoom',
       category: 'View',
       shortcut: `${mod}0`,
-      action: () => useUIStore.getState().setPixelsPerSecond(50),
+      action: () => {
+        const ui = useUIStore.getState();
+        if (ui.keyboardContext.scope === 'timeline') ui.zoomReset();
+        else ui.setPixelsPerSecond(DEFAULT_TIMELINE_PIXELS_PER_SECOND);
+      },
     },
 
     // Edit

@@ -20,14 +20,13 @@ import {
 } from '../services/arrowKeyNavigation';
 import { resolveFocusedTrackId } from '../services/focusResolution';
 import type { KeyCombo } from '../types/shortcuts';
+import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from '../utils/timelineZoom';
 
 function isInputFocused(event: KeyboardEvent): boolean {
   return isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement);
 }
 
 const NUDGE_SECONDS = 5;
-const DEFAULT_PIXELS_PER_SECOND = 50;
-
 function eventMatchesCombo(event: KeyboardEvent, combo: KeyCombo): boolean {
   const mod = event.metaKey || event.ctrlKey;
   return (
@@ -217,7 +216,12 @@ export function useKeyboardShortcuts() {
 
       if (matches('view.zoomIn')) { event.preventDefault(); ui.zoomIn(); return; }
       if (matches('view.zoomOut')) { event.preventDefault(); ui.zoomOut(); return; }
-      if (matches('view.zoomReset')) { event.preventDefault(); ui.setPixelsPerSecond(DEFAULT_PIXELS_PER_SECOND); return; }
+      if (matches('view.zoomReset')) {
+        event.preventDefault();
+        if (ui.keyboardContext.scope === 'timeline') ui.zoomReset();
+        else ui.setPixelsPerSecond(DEFAULT_TIMELINE_PIXELS_PER_SECOND);
+        return;
+      }
 
       if (matches('project.settings')) { event.preventDefault(); if (!anyModalOpen) ui.setShowSettingsDialog(true); return; }
       if (matches('project.new')) { event.preventDefault(); if (!anyModalOpen) ui.setShowNewProjectDialog(true); return; }

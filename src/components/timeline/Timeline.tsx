@@ -19,7 +19,14 @@ import { ArrangementMarkers } from './ArrangementMarkers';
 import { TimelineEmptyState } from './TimelineEmptyState';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
-import { getTimelineFitViewport } from '../../utils/timelineZoom';
+import {
+  DEFAULT_TIMELINE_PIXELS_PER_SECOND,
+  getNextTimelineZoomLevel,
+  getTimelineContentWidth,
+  getTimelineFitViewport,
+  getTimelineZoomAnchor,
+  getZoomedTimelineViewport,
+} from '../../utils/timelineZoom';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { convertTimelineWindowMode, moveTimelineWindow, type TimelineWindowRange } from './timelineWindowUtils';
 import {
@@ -188,6 +195,9 @@ export function Timeline() {
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const seek = useTransportStore((s) => s.seek);
+  const currentTime = useTransportStore((s) => s.currentTime);
+  const playStartTime = useTransportStore((s) => s.playStartTime);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const setTimelineFocused = useUIStore((s) => s.setTimelineFocused);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
@@ -217,6 +227,7 @@ export function Timeline() {
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const dragCounterRef = useRef(0);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
 
@@ -300,7 +311,9 @@ export function Timeline() {
     [sortedTracks],
   );
 
-  const totalWidth = project ? project.totalDuration * pixelsPerSecond : 0;
+  const totalWidth = project
+    ? getTimelineContentWidth(project.totalDuration, pixelsPerSecond, viewportWidth)
+    : 0;
   const selectedClipLabel = useMemo(() => {
     if (!project || selectedClipIds.size === 0) return 'No clip selected';
     const selectedId = Array.from(selectedClipIds)[0];
@@ -318,7 +331,7 @@ export function Timeline() {
     if (!project || !timelineZoomRequest || !scrollRef.current) return;
 
     const container = scrollRef.current;
-    const viewportWidth = container.clientWidth || window.innerWidth || 1;
+    const nextViewportWidth = container.clientWidth || window.innerWidth || 1;
     const projectRange = { startTime: 0, endTime: project.totalDuration };
 
     let targetRange = projectRange;
@@ -344,7 +357,39 @@ export function Timeline() {
       }
     }
 
-    const nextViewport = getTimelineFitViewport(targetRange, viewportWidth);
+    if (timelineZoomRequest.mode === 'stepIn'
+      || timelineZoomRequest.mode === 'stepOut'
+      || timelineZoomRequest.mode === 'reset') {
+      const nextPixelsPerSecond = timelineZoomRequest.mode === 'reset'
+        ? DEFAULT_TIMELINE_PIXELS_PER_SECOND
+        : getNextTimelineZoomLevel(
+            pixelsPerSecond,
+            timelineZoomRequest.mode === 'stepIn' ? 'in' : 'out',
+          );
+
+      if (nextPixelsPerSecond === pixelsPerSecond) return;
+
+      const playheadAnchorTime = isPlaying ? currentTime : playStartTime;
+      const anchor = getTimelineZoomAnchor({
+        pixelsPerSecond,
+        scrollLeft: container.scrollLeft,
+        viewportWidth: nextViewportWidth,
+        playheadTime: playheadAnchorTime,
+      });
+      const nextViewport = getZoomedTimelineViewport({
+        pixelsPerSecond,
+        scrollLeft: container.scrollLeft,
+        viewportWidth: nextViewportWidth,
+        totalDuration: project.totalDuration,
+      }, nextPixelsPerSecond, anchor);
+
+      setPixelsPerSecond(nextViewport.pixelsPerSecond);
+      setScrollX(nextViewport.scrollLeft);
+      container.scrollLeft = nextViewport.scrollLeft;
+      return;
+    }
+
+    const nextViewport = getTimelineFitViewport(targetRange, nextViewportWidth, project.totalDuration);
     setPixelsPerSecond(nextViewport.pixelsPerSecond);
     setScrollX(nextViewport.scrollLeft);
     container.scrollLeft = nextViewport.scrollLeft;
@@ -352,21 +397,27 @@ export function Timeline() {
     if (usedFallback) {
       toastInfo('Nothing is selected, so the timeline zoomed to the full project.');
     }
-  }, [project, selectWindow, selectedClipIds, setPixelsPerSecond, setScrollX, timelineZoomRequest]);
+  }, [
+    currentTime,
+    isPlaying,
+    pixelsPerSecond,
+    playStartTime,
+    project,
+    selectWindow,
+    selectedClipIds,
+    setPixelsPerSecond,
+    setScrollX,
+    timelineZoomRequest,
+  ]);
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
-        const currentIdx = ZOOM_LEVELS.findIndex((z) => z >= pixelsPerSecond);
-        let nextPixelsPerSecond = pixelsPerSecond;
-
-        if (e.deltaY < 0 && currentIdx < ZOOM_LEVELS.length - 1) {
-          nextPixelsPerSecond = ZOOM_LEVELS[currentIdx + 1];
-        } else if (e.deltaY > 0 && currentIdx > 0) {
-          nextPixelsPerSecond = ZOOM_LEVELS[currentIdx - 1];
-        }
+        const nextPixelsPerSecond = getNextTimelineZoomLevel(
+          pixelsPerSecond,
+          e.deltaY < 0 ? 'in' : 'out',
+        );
 
         if (nextPixelsPerSecond === pixelsPerSecond) {
           return;
@@ -376,16 +427,40 @@ export function Timeline() {
         if (!container) return;
         const rect = container.getBoundingClientRect();
         const cursorOffsetX = e.clientX - rect.left;
-        const timeAtCursor = (container.scrollLeft + cursorOffsetX) / pixelsPerSecond;
+        const playheadAnchorTime = isPlaying ? currentTime : playStartTime;
+        const anchor = getTimelineZoomAnchor({
+          pixelsPerSecond,
+          scrollLeft: container.scrollLeft,
+          viewportWidth: container.clientWidth || window.innerWidth || 1,
+          pointerViewportX: cursorOffsetX,
+          playheadTime: playheadAnchorTime,
+        });
+        const nextViewport = getZoomedTimelineViewport({
+          pixelsPerSecond,
+          scrollLeft: container.scrollLeft,
+          viewportWidth: container.clientWidth || window.innerWidth || 1,
+          totalDuration: project?.totalDuration ?? 0,
+        }, nextPixelsPerSecond, anchor);
 
-        setPixelsPerSecond(nextPixelsPerSecond);
-        const nextScrollLeft = Math.max(0, timeAtCursor * nextPixelsPerSecond - cursorOffsetX);
-        setScrollX(nextScrollLeft);
-        container.scrollLeft = nextScrollLeft;
+        setPixelsPerSecond(nextViewport.pixelsPerSecond);
+        setScrollX(nextViewport.scrollLeft);
+        container.scrollLeft = nextViewport.scrollLeft;
       }
     },
-    [pixelsPerSecond, setPixelsPerSecond, setScrollX],
+    [currentTime, isPlaying, pixelsPerSecond, playStartTime, project?.totalDuration, setPixelsPerSecond, setScrollX],
   );
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const updateViewportWidth = () => setViewportWidth(container.clientWidth || window.innerWidth || 0);
+    updateViewportWidth();
+
+    const ro = new ResizeObserver(updateViewportWidth);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
   const wheelRef = useNonPassiveWheel(handleWheel);
@@ -614,6 +689,7 @@ export function Timeline() {
         className="flex-1 overflow-auto bg-[#1c1d22] relative group"
         onScroll={(e) => {
           const el = e.currentTarget;
+          setScrollX(el.scrollLeft);
           setScrollY(el.scrollTop);
         }}
         onMouseDownCapture={handleMouseDownCapture}
@@ -647,7 +723,7 @@ export function Timeline() {
             </div>
           </div>
         )}
-        <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
+        <div className="relative" style={{ width: totalWidth || '100%' }}>
           <TimeRuler />
           <ArrangementMarkers />
           {showTempoLane && <TempoLane />}

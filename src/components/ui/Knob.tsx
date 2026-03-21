@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 
 interface KnobProps {
   value: number;
@@ -76,8 +77,8 @@ export function Knob({
     onChange(defaultValue);
   }, [defaultValue, onChange, disabled]);
 
-  // Scroll wheel support
-  const onWheel = useCallback((e: React.WheelEvent) => {
+  // Scroll wheel support — non-passive so preventDefault() blocks native page scroll
+  const onWheelHandler = useCallback((e: WheelEvent) => {
     if (disabled) return;
     e.preventDefault();
     e.stopPropagation();
@@ -85,6 +86,12 @@ export function Knob({
     const delta = -e.deltaY * (range / 500);
     onChange(applyStep(value + delta));
   }, [value, min, max, onChange, disabled, applyStep]);
+
+  const wheelRef = useNonPassiveWheel(onWheelHandler);
+  const mergedKnobRef = useCallback((el: HTMLDivElement | null) => {
+    (knobRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const onContextMenu = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
@@ -133,10 +140,9 @@ export function Knob({
       title={`${label ?? ''}: ${displayValue}${unit ?? ''} (double-click to reset)`}
     >
       <div
-        ref={knobRef}
+        ref={mergedKnobRef}
         onMouseDown={onMouseDown}
         onDoubleClick={onDoubleClick}
-        onWheel={onWheel}
         onContextMenu={onContextMenu}
         aria-label={`${label ?? 'Control'} knob`}
         className={`relative transition-transform duration-150 ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize hover:scale-110'}`}

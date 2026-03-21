@@ -15,6 +15,7 @@ import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
+import { TimeSignatureLane } from './TimeSignatureLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
 import { TimelineEmptyState } from './TimelineEmptyState';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
@@ -520,7 +521,12 @@ export function Timeline() {
         <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
           <TimeRuler />
           <ArrangementMarkers />
-          {showTempoLane && <TempoLane />}
+          {showTempoLane && (
+            <>
+              <TempoLane />
+              <TimeSignatureLane />
+            </>
+          )}
 
           <div ref={trackAreaRef} className="relative">
             <GridOverlay />

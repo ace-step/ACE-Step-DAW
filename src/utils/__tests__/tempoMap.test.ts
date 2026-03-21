@@ -149,5 +149,21 @@ describe('tempoMap utilities', () => {
       expect(getBarAtBeat(10, map, 4)).toBe(3);
       expect(getBarAtBeat(11, map, 4)).toBe(4);
     });
+
+    it('accounts for denominator changes using quarter-note beat space', () => {
+      const map: TimeSignatureEvent[] = [
+        { bar: 1, numerator: 6, denominator: 8 },
+      ];
+
+      expect(getBeatAtBar(1, map, 4)).toBe(0);
+      expect(getBeatAtBar(2, map, 4)).toBe(3);
+      expect(getBeatAtBar(3, map, 4)).toBe(6);
+
+      expect(getBarAtBeat(0, map, 4)).toBe(1);
+      expect(getBarAtBeat(2.99, map, 4)).toBe(1);
+      expect(getBarAtBeat(3, map, 4)).toBe(2);
+      expect(getBarAtBeat(5.99, map, 4)).toBe(2);
+      expect(getBarAtBeat(6, map, 4)).toBe(3);
+    });
   });
 });

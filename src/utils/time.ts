@@ -1,5 +1,12 @@
 import type { TempoEvent, TimeSignatureEvent } from '../types/project';
-import { beatToTime, timeToBeat, getBarAtBeat, getBeatAtBar, getTimeSignatureAtBar } from './tempoMap';
+import {
+  beatToTime,
+  timeToBeat,
+  getBarAtBeat,
+  getBeatAtBar,
+  getTimeSignatureAtBar,
+  getTimeSignatureBeatLength,
+} from './tempoMap';
 
 export function secondsToBeats(seconds: number, bpm: number): number {
   return (seconds / 60) * bpm;
@@ -18,11 +25,12 @@ export function secondsToBarsBeats(
 ): { bars: number; beats: number; ticks: number } {
   const totalBeats = timeToBeat(seconds, tempoMap, bpm);
   const bar = getBarAtBeat(totalBeats, timeSignatureMap, timeSignature);
-  const { numerator } = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+  const { numerator, denominator } = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
   const barStartBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
   const beatsIntoBar = totalBeats - barStartBeat;
-  const beatInBar = Math.floor(beatsIntoBar);
-  const ticks = Math.round((beatsIntoBar % 1) * 100);
+  const beatLength = getTimeSignatureBeatLength(denominator);
+  const beatInBar = Math.floor(beatsIntoBar / beatLength);
+  const ticks = Math.round((((beatsIntoBar / beatLength) % 1) + Number.EPSILON) * 100);
   return { bars: bar, beats: Math.min(beatInBar, numerator - 1) + 1, ticks };
 }
 

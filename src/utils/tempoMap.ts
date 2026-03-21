@@ -1,5 +1,13 @@
 import type { TempoEvent, TimeSignatureEvent } from '../types/project';
 
+export function getTimeSignatureBeatLength(denominator: number): number {
+  return 4 / Math.max(1, denominator);
+}
+
+export function getTimeSignatureBarLength(numerator: number, denominator: number): number {
+  return Math.max(1, numerator) * getTimeSignatureBeatLength(denominator);
+}
+
 /**
  * Get the BPM at a specific beat position.
  * If a ramp is active, interpolates linearly between the previous and current event BPMs.
@@ -176,24 +184,26 @@ export function getBarAtBeat(
   let currentBeat = 0;
   let currentBar = 1;
   let currentNum = fallbackNumerator;
+  let currentDen = 4;
 
   for (const ev of tsMap) {
     const barsToEvent = ev.bar - currentBar;
-    const beatsToEvent = barsToEvent * currentNum;
+    const beatsToEvent = barsToEvent * getTimeSignatureBarLength(currentNum, currentDen);
     const eventBeat = currentBeat + beatsToEvent;
 
     if (beat < eventBeat) {
       const beatsIntoSection = beat - currentBeat;
-      return currentBar + Math.floor(beatsIntoSection / currentNum);
+      return currentBar + Math.floor(beatsIntoSection / getTimeSignatureBarLength(currentNum, currentDen));
     }
 
     currentBeat = eventBeat;
     currentBar = ev.bar;
     currentNum = ev.numerator;
+    currentDen = ev.denominator;
   }
 
   const beatsIntoSection = beat - currentBeat;
-  return currentBar + Math.floor(beatsIntoSection / currentNum);
+  return currentBar + Math.floor(beatsIntoSection / getTimeSignatureBarLength(currentNum, currentDen));
 }
 
 /**
@@ -211,15 +221,17 @@ export function getBeatAtBar(
   let currentBeat = 0;
   let currentBar = 1;
   let currentNum = fallbackNumerator;
+  let currentDen = 4;
 
   for (const ev of tsMap) {
     if (ev.bar > bar) break;
     const barsToEvent = ev.bar - currentBar;
-    currentBeat += barsToEvent * currentNum;
+    currentBeat += barsToEvent * getTimeSignatureBarLength(currentNum, currentDen);
     currentBar = ev.bar;
     currentNum = ev.numerator;
+    currentDen = ev.denominator;
   }
 
   const remainingBars = bar - currentBar;
-  return currentBeat + remainingBars * currentNum;
+  return currentBeat + remainingBars * getTimeSignatureBarLength(currentNum, currentDen);
 }

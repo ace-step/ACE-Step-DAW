@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getBeatDuration, getBarDuration } from '../../utils/time';
-import { beatToTime, getBeatAtBar } from '../../utils/tempoMap';
+import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 
 /**
  * Adaptive grid: resolution auto-adjusts based on zoom level.
@@ -48,31 +48,23 @@ export function GridOverlay() {
       return result;
     }
 
-    // Tempo-map/time-sig-aware path: iterate by beat subdivisions
-    const { division } = getGridDivision(pixelsPerSecond, bpm);
+    // Tempo-map/time-sig-aware path: iterate by bars so mixed meters align cleanly.
     const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
 
-    const maxBeat = totalDuration * (300 / 60) * 2; // generous upper bound
-    let currentBar = 1;
-    let nextBarBeat = getBeatAtBar(2, timeSignatureMap, timeSignature);
+    for (let bar = 1; bar <= 999; bar++) {
+      const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
+      const barTime = beatToTime(barBeat, tempoMap, bpm);
+      if (barTime > totalDuration) break;
 
-    for (let beat = 0; beat < maxBeat; beat += division) {
-      const time = beatToTime(beat, tempoMap, bpm);
-      if (time > totalDuration) break;
+      result.push({ x: barTime * pixelsPerSecond, strength: 'bar' });
 
-      while (beat >= nextBarBeat) {
-        currentBar++;
-        nextBarBeat = getBeatAtBar(currentBar + 1, timeSignatureMap, timeSignature);
+      const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+      const beatLength = getTimeSignatureBeatLength(ts.denominator);
+      for (let beat = 1; beat < ts.numerator; beat++) {
+        const beatTime = beatToTime(barBeat + beat * beatLength, tempoMap, bpm);
+        if (beatTime > totalDuration) break;
+        result.push({ x: beatTime * pixelsPerSecond, strength: 'beat' });
       }
-
-      const barBeat = getBeatAtBar(currentBar, timeSignatureMap, timeSignature);
-      const isBar = Math.abs(beat - barBeat) < 0.001;
-      const isBeat = Math.abs(beat - Math.round(beat)) < 0.001;
-
-      result.push({
-        x: time * pixelsPerSecond,
-        strength: isBar ? 'bar' : isBeat ? 'beat' : 'sub',
-      });
     }
     return result;
   }, [project, pixelsPerSecond]);

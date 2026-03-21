@@ -154,10 +154,10 @@ describe('timeSignatureMap store actions', () => {
   describe('totalDuration recomputation', () => {
     it('recomputes totalDuration when time signature event changes beats per bar', () => {
       const durationBefore = useProjectStore.getState().project!.totalDuration;
-      // Changing to 6/8 effectively increases beats per bar from 4 to 6
+      // Changing to 6/8 reduces each bar from 4 quarter-note beats to 3 quarter-note beats.
       useProjectStore.getState().addTimeSignatureEvent({ bar: 1, numerator: 6, denominator: 8 });
       const durationAfter = useProjectStore.getState().project!.totalDuration;
-      expect(durationAfter).toBeGreaterThan(durationBefore);
+      expect(durationAfter).toBeLessThan(durationBefore);
     });
   });
 });

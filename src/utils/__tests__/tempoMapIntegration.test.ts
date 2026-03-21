@@ -47,6 +47,15 @@ describe('tempo-map-aware time utilities', () => {
       expect(result.bars).toBe(3);
       expect(result.beats).toBe(3);
     });
+
+    it('treats 6/8 as six eighth-notes within a three-quarter-note bar', () => {
+      const tsMap: TimeSignatureEvent[] = [
+        { bar: 1, numerator: 6, denominator: 8 },
+      ];
+
+      const result = secondsToBarsBeats(1.25, 120, 4, undefined, tsMap);
+      expect(result).toEqual({ bars: 1, beats: 6, ticks: 0 });
+    });
   });
 
   describe('formatBarsBeats with tempoMap', () => {

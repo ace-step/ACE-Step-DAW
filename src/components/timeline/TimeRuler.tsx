@@ -4,7 +4,12 @@ import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getBarDuration, getBeatDuration } from '../../utils/time';
-import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tempoMap';
+import {
+  beatToTime,
+  getBeatAtBar,
+  getTimeSignatureAtBar,
+  getTimeSignatureBeatLength,
+} from '../../utils/tempoMap';
 import { getScrubPreviewRate } from '../../utils/scrubMath';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 
@@ -125,7 +130,11 @@ export function TimeRuler() {
           ? getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4)
           : { numerator: timeSignature, denominator: 4 };
         for (let beat = 2; beat <= ts.numerator; beat++) {
-          const beatTime = beatToTime(barBeat + (beat - 1), tempoMap, bpm);
+          const beatTime = beatToTime(
+            barBeat + (beat - 1) * getTimeSignatureBeatLength(ts.denominator),
+            tempoMap,
+            bpm,
+          );
           if (beatTime > totalDuration) break;
           result.push({ label: `${bar}.${beat}`, x: beatTime * pixelsPerSecond, isBar: false });
         }

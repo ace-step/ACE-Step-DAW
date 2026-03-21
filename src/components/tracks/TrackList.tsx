@@ -7,6 +7,7 @@ import { TrackHeightPresetSelector } from './TrackHeightPresetSelector';
 import {
   ARRANGEMENT_MARKERS_HEIGHT,
   TEMPO_LANE_HEIGHT,
+  TIME_SIGNATURE_LANE_HEIGHT,
   TIMELINE_RULER_HEIGHT,
 } from '../timeline/timelineLayout';
 
@@ -108,7 +109,7 @@ export function TrackList() {
       {showTempoLane && (
         <div
           className="shrink-0 border-b border-white/10 bg-[rgba(245,158,11,0.03)]"
-          style={{ height: TEMPO_LANE_HEIGHT }}
+          style={{ height: TEMPO_LANE_HEIGHT + TIME_SIGNATURE_LANE_HEIGHT }}
           data-testid="tracklist-tempo-spacer"
         />
       )}

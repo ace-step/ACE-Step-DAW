@@ -698,7 +698,7 @@ export interface ProjectState {
   /** Export all MIDI clips from a track merged into a single .mid file. */
   exportTrackMidi: (trackId: string) => void;
   /** Export all MIDI tracks as a multi-track .mid file for sharing with other DAWs. */
-  exportProjectMidi: () => void;
+  exportProjectMidi: (options?: { trackIds?: string[] }) => void;
   /** Import a .mid file, creating piano roll tracks for each MIDI track/channel. */
   importMidiFile: (file: File, options?: { startTime?: number; applyMetadata?: boolean }) => Promise<string[]>;
 
@@ -6250,7 +6250,7 @@ export const useProjectStore = create<ProjectState>()(
     toastSuccess(`Exported MIDI from ${track.displayName}`);
   },
 
-  exportProjectMidi: () => {
+  exportProjectMidi: (options) => {
     const project = get().project;
     if (!project) {
       toastError('Create or open a project before exporting MIDI');
@@ -6265,7 +6265,11 @@ export const useProjectStore = create<ProjectState>()(
     const exportTracks: MidiExportTrack[] = [];
     let channelIndex = 0;
 
+    const targetTrackIds = options?.trackIds ? new Set(options.trackIds) : null;
+
     for (const track of project.tracks) {
+      if (targetTrackIds && !targetTrackIds.has(track.id)) continue;
+
       const allNotes: MidiNote[] = [];
       for (const clip of track.clips) {
         if (!clip.midiData?.notes.length) continue;
@@ -6297,6 +6301,8 @@ export const useProjectStore = create<ProjectState>()(
     const encoded = encodeMultiTrackMidiFile(exportTracks, {
       bpm,
       timeSignature: { bar: 1, numerator, denominator },
+      tempoMap: project.tempoMap,
+      timeSignatureMap: project.timeSignatureMap,
     });
 
     const fileName = sanitizeFileNameSegment(project.name);

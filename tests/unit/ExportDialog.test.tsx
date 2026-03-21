@@ -15,8 +15,20 @@ const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
 let resolveExport: ((blob: Blob) => void) | null = null;
 
+vi.mock('../../src/services/projectStorage', () => ({
+  saveProject: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/services/audioFileManager', () => ({
+  loadAudioBlobByKey: vi.fn(),
+}));
+
 vi.mock('../../src/hooks/useAudioEngine', () => ({
   getAudioEngine: () => mockGetAudioEngine(),
+}));
+
+vi.mock('../../src/engine/exportMix', () => ({
+  exportMix: (...args: unknown[]) => mockExportMix(...args),
 }));
 
 vi.mock('../../src/engine/offlineRender', () => ({
@@ -25,16 +37,12 @@ vi.mock('../../src/engine/offlineRender', () => ({
   renderSequencerTrackOffline: (...args: unknown[]) => mockRenderSequencerTrackOffline(...args),
 }));
 
-vi.mock('../../src/engine/exportMix', () => ({
-  exportMix: (...args: unknown[]) => mockExportMix(...args),
+vi.mock('../../src/engine/SamplerEngine', () => ({
+  createSamplerConfig: vi.fn(),
 }));
 
 vi.mock('../../src/services/browserDownload', () => ({
   downloadBlob: (...args: unknown[]) => mockDownloadBlob(...args),
-}));
-
-vi.mock('../../src/services/audioFileManager', () => ({
-  loadAudioBlobByKey: vi.fn(),
 }));
 
 vi.mock('../../src/hooks/useToast', () => ({
@@ -42,12 +50,9 @@ vi.mock('../../src/hooks/useToast', () => ({
   toastError: (...args: unknown[]) => mockToastError(...args),
 }));
 
-vi.mock('../../src/services/projectStorage', () => ({
-  saveProject: vi.fn().mockResolvedValue(undefined),
-}));
-
 describe('ExportDialog', () => {
   beforeEach(() => {
+    localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     mockGetAudioEngine.mockReset();
@@ -73,7 +78,7 @@ describe('ExportDialog', () => {
       decodeAudioData: vi.fn(),
     });
     mockRenderMidiTrackOffline.mockResolvedValue(buffer);
-    mockExportMix.mockImplementation((_clips, _totalDuration, options, onProgress) => {
+    mockExportMix.mockImplementation((_clips, _totalDuration, _options, onProgress) => {
       onProgress?.({ stage: 'encoding', progress: 0.5 });
       return new Promise((resolve) => {
         resolveExport = resolve;
@@ -81,6 +86,10 @@ describe('ExportDialog', () => {
     });
 
     useProjectStore.getState().createProject({ name: 'MP3 Export Test', bpm: 120 });
+    useUIStore.getState().setShowExportDialog(true);
+  });
+
+  it('shows MP3 bitrate controls and forwards the selected bitrate with progress updates', async () => {
     const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
     useProjectStore.getState().addClip(track.id, {
       startTime: 0,
@@ -102,10 +111,7 @@ describe('ExportDialog', () => {
         ],
       },
     });
-    useUIStore.getState().setShowExportDialog(true);
-  });
 
-  it('shows MP3 bitrate controls and forwards the selected bitrate with progress updates', async () => {
     render(<ExportDialog />);
 
     fireEvent.change(screen.getByTestId('export-format-select'), {
@@ -141,5 +147,34 @@ describe('ExportDialog', () => {
       expect(mockDownloadBlob).toHaveBeenCalledOnce();
       expect(mockToastSuccess).toHaveBeenCalledWith('MP3 exported successfully');
     });
+  });
+
+  it('offers MIDI export with selected-track scope and routes the selected track ids through the store action', () => {
+    const piano = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+    useProjectStore.getState().updateTrack(piano.id, { displayName: 'Lead' });
+    const clip = useProjectStore.getState().ensureMidiClip(piano.id);
+    useProjectStore.getState().addMidiNote(clip.id, {
+      pitch: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 0.8,
+    });
+
+    useProjectStore.getState().addTrack('drums');
+    useUIStore.getState().selectTracks([piano.id]);
+
+    const exportProjectMidi = vi.fn();
+    useProjectStore.setState({ exportProjectMidi });
+
+    render(<ExportDialog />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'MIDI' }));
+    expect(screen.getByLabelText('All MIDI tracks')).toBeInTheDocument();
+    expect(screen.getByLabelText('Selected tracks only')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Selected tracks only'));
+    fireEvent.click(screen.getByRole('button', { name: 'Export MIDI' }));
+
+    expect(exportProjectMidi).toHaveBeenCalledWith({ trackIds: [piano.id] });
   });
 });

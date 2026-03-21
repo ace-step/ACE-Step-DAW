@@ -1,4 +1,5 @@
-import type { MidiNote, TimeSignatureEvent } from '../types/project';
+import type { MidiNote, TempoEvent, TimeSignatureEvent } from '../types/project';
+import { getBeatAtBar } from './tempoMap';
 
 export interface MidiExportTrack {
   name: string;
@@ -9,6 +10,8 @@ export interface MidiExportTrack {
 export interface MidiExportOptions {
   bpm?: number;
   timeSignature?: TimeSignatureEvent;
+  tempoMap?: TempoEvent[];
+  timeSignatureMap?: TimeSignatureEvent[];
   trackName?: string;
 }
 
@@ -45,25 +48,66 @@ function encodeMidiEvent(delta: number, status: number, data: number[]): number[
   return [...writeVLQ(delta), status, ...data];
 }
 
-function buildTempoTrack(bpm: number, ts?: TimeSignatureEvent): number[] {
-  const events: number[] = [];
+interface TempoMetaEvent {
+  tick: number;
+  type: number;
+  data: number[];
+}
 
-  const microsPerQuarter = Math.round(60000000 / bpm);
-  events.push(
-    ...encodeMeta(0, 0x51, [
-      (microsPerQuarter >>> 16) & 0xff,
-      (microsPerQuarter >>> 8) & 0xff,
-      microsPerQuarter & 0xff,
-    ]),
-  );
+function buildTempoTrack(
+  bpm: number,
+  ts?: TimeSignatureEvent,
+  tempoMap?: TempoEvent[],
+  timeSignatureMap?: TimeSignatureEvent[],
+): number[] {
+  const events: TempoMetaEvent[] = [];
+  const normalizedTempoMap = tempoMap && tempoMap.length > 0
+    ? tempoMap
+    : [{ beat: 0, bpm }];
+  const normalizedTimeSignatureMap = timeSignatureMap && timeSignatureMap.length > 0
+    ? timeSignatureMap
+    : ts
+      ? [{ bar: ts.bar ?? 1, numerator: ts.numerator, denominator: ts.denominator }]
+      : [];
 
-  if (ts) {
-    const denomLog2 = Math.round(Math.log2(ts.denominator));
-    events.push(...encodeMeta(0, 0x58, [ts.numerator, denomLog2, 0x18, 0x08]));
+  for (const tempoEvent of normalizedTempoMap) {
+    const microsPerQuarter = Math.round(60000000 / tempoEvent.bpm);
+    events.push({
+      tick: Math.round(tempoEvent.beat * ENCODER_TPQN),
+      type: 0x51,
+      data: [
+        (microsPerQuarter >>> 16) & 0xff,
+        (microsPerQuarter >>> 8) & 0xff,
+        microsPerQuarter & 0xff,
+      ],
+    });
   }
 
-  events.push(...encodeMeta(0, 0x2f, []));
-  return events;
+  const fallbackNumerator = normalizedTimeSignatureMap[0]?.numerator ?? ts?.numerator ?? 4;
+  for (const signatureEvent of normalizedTimeSignatureMap) {
+    const denomLog2 = Math.round(Math.log2(signatureEvent.denominator));
+    const beat = getBeatAtBar(signatureEvent.bar, normalizedTimeSignatureMap, fallbackNumerator);
+    events.push({
+      tick: Math.round(beat * ENCODER_TPQN),
+      type: 0x58,
+      data: [signatureEvent.numerator, denomLog2, 0x18, 0x08],
+    });
+  }
+
+  events.sort((a, b) => {
+    if (a.tick !== b.tick) return a.tick - b.tick;
+    return a.type - b.type;
+  });
+
+  const encoded: number[] = [];
+  let previousTick = 0;
+  for (const event of events) {
+    encoded.push(...encodeMeta(event.tick - previousTick, event.type, event.data));
+    previousTick = event.tick;
+  }
+
+  encoded.push(...encodeMeta(0, 0x2f, []));
+  return encoded;
 }
 
 interface NoteEvent {
@@ -138,7 +182,9 @@ export function encodeMidiFile(
   }
 
   const trackChunks: number[][] = [];
-  trackChunks.push(wrapTrackChunk(buildTempoTrack(bpm, options.timeSignature)));
+  trackChunks.push(wrapTrackChunk(
+    buildTempoTrack(bpm, options.timeSignature, options.tempoMap, options.timeSignatureMap),
+  ));
 
   for (const track of tracks) {
     trackChunks.push(wrapTrackChunk(buildNoteTrack(track.notes, track.channel, track.name)));

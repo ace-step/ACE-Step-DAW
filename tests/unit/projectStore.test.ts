@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Project } from '../../src/types/project';
+import type { Project, Track } from '../../src/types/project';
 import { useProjectStore } from '../../src/store/projectStore';
+import { useUIStore } from '../../src/store/uiStore';
 import { createDefaultMasteringState } from '../../src/utils/mastering';
+import { parseMidiFile } from '../../src/utils/midi';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -87,9 +89,50 @@ function makeProject(): Project {
 }
 
 describe('projectStore', () => {
+  function captureDownload() {
+    let downloadedBlob: Blob | null = null;
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob: Blob | MediaSource) => {
+      downloadedBlob = blob as Blob;
+      return 'blob:mid';
+    });
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const click = vi.fn();
+    const anchor = { click, href: '', download: '' } as unknown as HTMLAnchorElement;
+    const originalCreateElement = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+
+    return {
+      anchor,
+      click,
+      getDownloadedBlob: () => downloadedBlob,
+      restore: () => {
+        createElement.mockRestore();
+        revokeObjectURL.mockRestore();
+        createObjectURL.mockRestore();
+      },
+    };
+  }
+
+  function addMidiTrack(name: string, pitch: number, startTime = 0): Track {
+    const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+    useProjectStore.getState().updateTrack(track.id, { displayName: name });
+    const clip = useProjectStore.getState().ensureMidiClip(track.id, startTime, 2);
+    useProjectStore.getState().addMidiNote(clip.id, {
+      pitch,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 0.8,
+    });
+    return useProjectStore.getState().project!.tracks.find((candidate) => candidate.id === track.id)!;
+  }
+
   beforeEach(() => {
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
     mockLoadAudioBlobByKey.mockReset();
     mockSaveAudioBlob.mockReset();
     mockToastSuccess.mockReset();
@@ -459,39 +502,42 @@ describe('projectStore', () => {
     });
 
     it('exports all MIDI tracks as a multi-track .mid file', () => {
-      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mid');
-      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-      const click = vi.fn();
-      const anchor = { click, href: '', download: '' } as unknown as HTMLAnchorElement;
-      const originalCreateElement = document.createElement.bind(document);
-      const createElement = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
-        if (tagName === 'a') return anchor;
-        return originalCreateElement(tagName);
-      }) as typeof document.createElement);
+      const download = captureDownload();
 
-      const track1 = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
-      useProjectStore.getState().updateTrack(track1.id, { displayName: 'Piano' });
-      const clip1 = useProjectStore.getState().ensureMidiClip(track1.id);
-      useProjectStore.getState().addMidiNote(clip1.id, {
-        pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8,
-      });
-
-      const track2 = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
-      useProjectStore.getState().updateTrack(track2.id, { displayName: 'Bass' });
-      const clip2 = useProjectStore.getState().ensureMidiClip(track2.id);
-      useProjectStore.getState().addMidiNote(clip2.id, {
-        pitch: 36, startBeat: 0, durationBeats: 2, velocity: 1.0,
-      });
+      addMidiTrack('Piano', 60);
+      addMidiTrack('Bass', 36);
 
       useProjectStore.getState().exportProjectMidi();
 
-      expect(createObjectURL).toHaveBeenCalledOnce();
-      expect(anchor.download).toBe('Project MIDI Export.mid');
-      expect(click).toHaveBeenCalledOnce();
+      expect(download.anchor.download).toBe('Project MIDI Export.mid');
+      expect(download.click).toHaveBeenCalledOnce();
 
-      createElement.mockRestore();
-      revokeObjectURL.mockRestore();
-      createObjectURL.mockRestore();
+      download.restore();
+    });
+
+    it('exports only the requested MIDI tracks and preserves tempo + time signature metadata', async () => {
+      const download = captureDownload();
+      useProjectStore.getState().updateProject({ bpm: 132, timeSignature: 3 });
+
+      const piano = addMidiTrack('Piano', 60);
+      addMidiTrack('Bass', 36);
+      useUIStore.getState().selectTracks([piano.id]);
+
+      useProjectStore.getState().exportProjectMidi({ trackIds: [piano.id] });
+
+      const blob = download.getDownloadedBlob();
+      expect(blob).toBeInstanceOf(Blob);
+
+      const parsed = parseMidiFile(await blob!.arrayBuffer());
+
+      expect(parsed.format).toBe(1);
+      expect(parsed.bpm).toBe(132);
+      expect(parsed.timeSignature).toEqual({ bar: 1, numerator: 3, denominator: 4 });
+      expect(parsed.tracks).toHaveLength(1);
+      expect(parsed.tracks[0].name).toBe('Piano');
+      expect(parsed.tracks[0].notes[0].pitch).toBe(60);
+
+      download.restore();
     });
 
     it('shows error when no MIDI tracks have notes', () => {

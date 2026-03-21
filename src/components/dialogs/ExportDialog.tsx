@@ -21,6 +21,9 @@ import {
 } from '../../utils/audioEncoders';
 import { Button } from '../ui/Button';
 
+type ExportMode = 'audio' | 'midi';
+type MidiTrackScope = 'all' | 'selected';
+
 const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'wav', label: 'WAV' },
   { value: 'mp3', label: 'MP3' },
@@ -69,8 +72,12 @@ function mapExportProgressToPercent(stage: 'rendering' | 'encoding' | 'complete'
 export function ExportDialog() {
   const show = useUIStore((s) => s.showExportDialog);
   const setShow = useUIStore((s) => s.setShowExportDialog);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const project = useProjectStore((s) => s.project);
+  const exportProjectMidi = useProjectStore((s) => s.exportProjectMidi);
   const [exporting, setExporting] = useState(false);
+  const [exportMode, setExportMode] = useState<ExportMode>('audio');
+  const [midiTrackScope, setMidiTrackScope] = useState<MidiTrackScope>('all');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [progress, setProgress] = useState(0);
   const [metadata, setMetadata] = useState<ExportMetadata>({
@@ -81,6 +88,13 @@ export function ExportDialog() {
   if (!show || !project) return null;
 
   const handleExport = async () => {
+    if (exportMode === 'midi') {
+      const trackIds = midiTrackScope === 'selected' ? selectedMidiTrackIds : undefined;
+      exportProjectMidi(trackIds ? { trackIds } : undefined);
+      setShow(false);
+      return;
+    }
+
     setExporting(true);
     setProgress(0);
     try {
@@ -187,6 +201,13 @@ export function ExportDialog() {
     t.clips.filter((c) => c.generationStatus === 'ready' && c.isolatedAudioKey),
   );
   const anySoloed = project.tracks.some((t) => t.soloed);
+  const midiTracks = project.tracks.filter((track) =>
+    track.trackType === 'pianoRoll'
+    && track.clips.some((clip) => (clip.midiData?.notes?.length ?? 0) > 0),
+  );
+  const selectedMidiTrackIds = midiTracks
+    .filter((track) => selectedTrackIds.has(track.id))
+    .map((track) => track.id);
   const hasExportableContent = project.tracks.some((track) => {
     if (track.muted) return false;
     if (anySoloed && !track.soloed) return false;
@@ -199,6 +220,9 @@ export function ExportDialog() {
 
     return hasReadyAudio || hasMidiNotes || Boolean(hasSequencerSteps);
   });
+  const hasMidiExportableContent = midiTrackScope === 'selected'
+    ? selectedMidiTrackIds.length > 0
+    : midiTracks.length > 0;
 
   const estimatedSize = estimateFileSize(
     project.totalDuration,
@@ -223,6 +247,68 @@ export function ExportDialog() {
         </div>
 
         <div className="p-4 space-y-3">
+          <div className="space-y-2">
+            <label className="block text-xs text-zinc-400">Export Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={exportMode === 'audio' ? 'primary' : 'default'}
+                size="md"
+                onClick={() => setExportMode('audio')}
+                aria-pressed={exportMode === 'audio'}
+              >
+                Audio
+              </Button>
+              <Button
+                variant={exportMode === 'midi' ? 'primary' : 'default'}
+                size="md"
+                onClick={() => setExportMode('midi')}
+                aria-pressed={exportMode === 'midi'}
+              >
+                MIDI
+              </Button>
+            </div>
+          </div>
+
+          {exportMode === 'midi' ? (
+            <div className="space-y-3">
+              <fieldset className="space-y-2">
+                <legend className="block text-xs text-zinc-400 mb-1">MIDI Track Scope</legend>
+                <label className="flex items-start gap-2 rounded border border-daw-border bg-daw-surface-2 px-3 py-2 text-xs text-zinc-200">
+                  <input
+                    type="radio"
+                    name="midi-track-scope"
+                    checked={midiTrackScope === 'all'}
+                    onChange={() => setMidiTrackScope('all')}
+                    className="mt-0.5"
+                  />
+                  <span>All MIDI tracks</span>
+                </label>
+                <label className="flex items-start gap-2 rounded border border-daw-border bg-daw-surface-2 px-3 py-2 text-xs text-zinc-200">
+                  <input
+                    type="radio"
+                    name="midi-track-scope"
+                    checked={midiTrackScope === 'selected'}
+                    onChange={() => setMidiTrackScope('selected')}
+                    className="mt-0.5"
+                  />
+                  <span>Selected tracks only</span>
+                </label>
+              </fieldset>
+
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span>
+                  {midiTrackScope === 'selected'
+                    ? `${selectedMidiTrackIds.length} selected MIDI track${selectedMidiTrackIds.length !== 1 ? 's' : ''}`
+                    : `${midiTracks.length} MIDI track${midiTracks.length !== 1 ? 's' : ''} ready`}
+                </span>
+                <span>Type 1 .mid</span>
+              </div>
+              <div className="text-[11px] text-zinc-500">
+                Includes project tempo and time signature metadata.
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Format selector */}
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Format</label>
@@ -363,6 +449,8 @@ export function ExportDialog() {
               />
             </div>
           )}
+            </>
+          )}
         </div>
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
@@ -373,9 +461,13 @@ export function ExportDialog() {
             variant="primary"
             size="md"
             onClick={handleExport}
-            disabled={exporting || !hasExportableContent}
+            disabled={exporting || (exportMode === 'audio' ? !hasExportableContent : !hasMidiExportableContent)}
           >
-            {exporting ? `Exporting... ${progress}%` : `Export ${exportOptions.format.toUpperCase()}`}
+            {exporting
+              ? `Exporting... ${progress}%`
+              : exportMode === 'audio'
+                ? `Export ${exportOptions.format.toUpperCase()}`
+                : 'Export MIDI'}
           </Button>
         </div>
       </div>

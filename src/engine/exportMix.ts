@@ -1,8 +1,11 @@
 import { audioBufferToWavBlob } from '../utils/wav';
 import { encodeToMp3, encodeToFlac, encodeToOgg } from '../utils/audioEncoders';
-import type { ExportOptions } from '../utils/audioEncoders';
-import type { MasteringState, TrackEffect } from '../types/project';
+import type { ExportFormat, ExportOptions } from '../utils/audioEncoders';
+import type { MasteringState, Project, Track, TrackEffect } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
+import { loadAudioBlobByKey } from '../services/audioFileManager';
+import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from './offlineRender';
+import { createSamplerConfig } from './SamplerEngine';
 
 export interface ExportClip {
   startTime: number;
@@ -15,6 +18,196 @@ export interface ExportClip {
 export interface ExportProgressUpdate {
   stage: 'rendering' | 'encoding' | 'complete';
   progress: number;
+}
+
+export type StemExportScope = 'all-audible' | 'selected';
+
+export interface StemExportTrackOptions {
+  scope: StemExportScope;
+  selectedTrackIds?: Iterable<string>;
+}
+
+export interface StemExportResult {
+  blob: Blob;
+  fileName: string;
+  track: Track;
+}
+
+export interface StemExportProgress {
+  completed: number;
+  total: number;
+  track: Track;
+  fileName: string;
+}
+
+interface AudioDecoder {
+  decodeAudioData(audioData: Blob): Promise<AudioBuffer>;
+}
+
+function fileExtension(format: ExportFormat): string {
+  switch (format) {
+    case 'mp3': return '.mp3';
+    case 'flac': return '.flac';
+    case 'ogg': return '.ogg';
+    default: return '.wav';
+  }
+}
+
+function sanitizeFileNameSegment(value: string): string {
+  const sanitized = value.replace(/[^a-zA-Z0-9\-_ ]/g, '').trim();
+  return sanitized || 'Untitled';
+}
+
+export function buildStemFileName(
+  projectName: string,
+  trackDisplayName: string,
+  format: ExportFormat,
+): string {
+  return `${sanitizeFileNameSegment(projectName)}_${sanitizeFileNameSegment(trackDisplayName)}${fileExtension(format)}`;
+}
+
+export function isTrackAudible(track: Track, anySoloed: boolean): boolean {
+  if (track.muted) return false;
+  if (anySoloed && !track.soloed) return false;
+  return true;
+}
+
+export function trackHasExportableContent(track: Track): boolean {
+  const hasReadyAudio = track.clips.some((clip) => clip.generationStatus === 'ready' && clip.isolatedAudioKey);
+  const hasMidiNotes = track.trackType === 'pianoRoll'
+    && track.clips.some((clip) => (clip.midiData?.notes.length ?? 0) > 0);
+  const hasSequencerSteps = track.trackType === 'sequencer'
+    && track.sequencerPattern?.rows.some((row) => !row.muted && row.steps.some((step) => step.active));
+
+  return hasReadyAudio || hasMidiNotes || Boolean(hasSequencerSteps);
+}
+
+export function getStemExportTracks(
+  project: Project,
+  options: StemExportTrackOptions,
+): Track[] {
+  const anySoloed = project.tracks.some((track) => track.soloed);
+  const selectedTrackIds = new Set(options.selectedTrackIds ?? []);
+
+  return project.tracks.filter((track) => {
+    if (options.scope === 'selected' && !selectedTrackIds.has(track.id)) {
+      return false;
+    }
+
+    return isTrackAudible(track, anySoloed);
+  });
+}
+
+export async function buildTrackExportClips(
+  project: Project,
+  track: Track,
+  audioDecoder: AudioDecoder,
+): Promise<ExportClip[]> {
+  const clips: ExportClip[] = [];
+
+  if (track.trackType === 'pianoRoll') {
+    for (const clip of track.clips) {
+      const notes = clip.midiData?.notes ?? [];
+      if (notes.length === 0) continue;
+
+      let buffer: AudioBuffer | null = null;
+      if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
+        const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
+        if (samplerBlob) {
+          const sampleBuffer = await audioDecoder.decodeAudioData(samplerBlob);
+          buffer = await renderSamplerTrackOffline(
+            notes,
+            clip.startTime,
+            project.bpm,
+            sampleBuffer,
+            track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
+              rootNote: track.sampler.rootNote,
+              trimEnd: track.sampler.sampleDuration,
+              loopEnd: track.sampler.sampleDuration,
+            }),
+            project.totalDuration,
+          );
+        }
+      } else {
+        buffer = await renderMidiTrackOffline(
+          notes,
+          clip.startTime,
+          project.bpm,
+          track.synthPreset ?? 'piano',
+          project.totalDuration,
+        );
+      }
+
+      if (!buffer) continue;
+      clips.push({
+        startTime: 0,
+        buffer,
+        volume: track.volume,
+        pan: track.pan ?? 0,
+        effects: track.effects,
+      });
+    }
+  }
+
+  if (track.trackType === 'sequencer' && track.sequencerPattern) {
+    const buffer = await renderSequencerTrackOffline(
+      track.sequencerPattern,
+      project.bpm,
+      project.totalDuration,
+      track.drumKit ?? '808',
+    );
+    clips.push({
+      startTime: 0,
+      buffer,
+      volume: track.volume,
+      pan: track.pan ?? 0,
+      effects: track.effects,
+    });
+  }
+
+  for (const clip of track.clips) {
+    if (clip.generationStatus !== 'ready' || !clip.isolatedAudioKey) continue;
+    const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
+    if (!blob) continue;
+
+    const buffer = await audioDecoder.decodeAudioData(blob);
+    clips.push({
+      startTime: clip.startTime,
+      buffer,
+      volume: track.volume,
+      pan: track.pan ?? 0,
+      effects: track.effects,
+    });
+  }
+
+  return clips;
+}
+
+export async function exportTrackStems(
+  project: Project,
+  tracks: Track[],
+  options: ExportOptions,
+  audioDecoder: AudioDecoder,
+  onProgress?: (progress: StemExportProgress) => void,
+): Promise<StemExportResult[]> {
+  const results: StemExportResult[] = [];
+
+  for (const [index, track] of tracks.entries()) {
+    const clips = await buildTrackExportClips(project, track, audioDecoder);
+    if (clips.length === 0) continue;
+
+    const blob = await exportMix(clips, project.totalDuration, options);
+    const fileName = buildStemFileName(project.name, track.displayName, options.format);
+    results.push({ blob, fileName, track });
+    onProgress?.({
+      completed: index + 1,
+      total: tracks.length,
+      track,
+      fileName,
+    });
+  }
+
+  return results;
 }
 
 function buildOfflineMasteringChain(

@@ -75,7 +75,7 @@ import {
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
-import { exportStemToWav, type ExportClip } from '../engine/exportMix';
+import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
@@ -5998,68 +5998,22 @@ export const useProjectStore = create<ProjectState>()(
     if (!project) return;
 
     const engine = audioEngineHooks.getAudioEngine();
-    const totalDuration = project.totalDuration;
+    const exportableTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
+    const stemExports = await exportTrackStems(
+      project,
+      exportableTracks,
+      {
+        format: 'wav',
+        sampleRate: 48000,
+        bitDepth: 16,
+        mp3Bitrate: 320,
+        oggQuality: 0.5,
+      },
+      engine,
+    );
 
-    for (const track of project.tracks) {
-      const clips: ExportClip[] = [];
-
-      if (track.trackType === 'pianoRoll') {
-        for (const clip of track.clips) {
-          const notes = clip.midiData?.notes ?? [];
-          if (notes.length === 0) continue;
-          let buffer: AudioBuffer | null = null;
-          if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-            const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
-            if (samplerBlob) {
-              const sampleBuffer = await engine.decodeAudioData(samplerBlob);
-              buffer = await renderSamplerTrackOffline(
-                notes,
-                clip.startTime,
-                project.bpm,
-                sampleBuffer,
-                track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-                  rootNote: track.sampler.rootNote,
-                  trimEnd: track.sampler.sampleDuration,
-                  loopEnd: track.sampler.sampleDuration,
-                }),
-                totalDuration,
-              );
-            }
-          } else {
-            buffer = await renderMidiTrackOffline(
-              notes, clip.startTime, project.bpm,
-              track.synthPreset ?? 'piano', totalDuration,
-            );
-          }
-          if (!buffer) continue;
-          clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-        }
-      }
-
-      if (track.trackType === 'sequencer' && track.sequencerPattern) {
-        const buffer = await renderSequencerTrackOffline(
-          track.sequencerPattern, project.bpm, totalDuration, track.drumKit ?? '808',
-        );
-        clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-      }
-
-      for (const clip of track.clips) {
-        if (clip.generationStatus === 'ready' && clip.isolatedAudioKey) {
-          const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
-          if (blob) {
-            const buffer = await engine.decodeAudioData(blob);
-            clips.push({ startTime: clip.startTime, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-          }
-        }
-      }
-
-      if (clips.length === 0) continue;
-
-      const wavBlob = await exportStemToWav(clips, totalDuration);
-      downloadBlob(
-        wavBlob,
-        `${sanitizeFileNameSegment(project.name)}_${sanitizeFileNameSegment(track.displayName)}.wav`,
-      );
+    for (const stemExport of stemExports) {
+      downloadBlob(stemExport.blob, stemExport.fileName);
     }
   },
 

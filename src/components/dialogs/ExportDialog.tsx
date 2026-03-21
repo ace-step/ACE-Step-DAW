@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { downloadBlob } from '../../services/browserDownload';
-import { exportMix, type ExportClip } from '../../engine/exportMix';
-import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../../engine/offlineRender';
-import { createSamplerConfig } from '../../engine/SamplerEngine';
+import {
+  buildTrackExportClips,
+  exportMix,
+  exportTrackStems,
+  getStemExportTracks,
+  trackHasExportableContent,
+  type StemExportScope,
+} from '../../engine/exportMix';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import {
   type ExportFormat,
@@ -66,12 +70,17 @@ function mapExportProgressToPercent(stage: 'rendering' | 'encoding' | 'complete'
   }
 }
 
+type ExportMode = 'mix' | 'stems';
+
 export function ExportDialog() {
   const show = useUIStore((s) => s.showExportDialog);
   const setShow = useUIStore((s) => s.setShowExportDialog);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const project = useProjectStore((s) => s.project);
   const [exporting, setExporting] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
+  const [exportMode, setExportMode] = useState<ExportMode>('mix');
+  const [stemScope, setStemScope] = useState<StemExportScope>('all-audible');
   const [progress, setProgress] = useState(0);
   const [metadata, setMetadata] = useState<ExportMetadata>({
     title: project?.name ?? '',
@@ -85,94 +94,51 @@ export function ExportDialog() {
     setProgress(0);
     try {
       const engine = getAudioEngine();
-      const clips: ExportClip[] = [];
-
-      const anySoloed = project.tracks.some((t) => t.soloed);
-      const totalTracks = project.tracks.length;
-      let processedTracks = 0;
-
-      for (const track of project.tracks) {
-        if (track.muted) { processedTracks++; continue; }
-        if (anySoloed && !track.soloed) { processedTracks++; continue; }
-
-        if (track.trackType === 'pianoRoll') {
-          for (const clip of track.clips) {
-            const notes = clip.midiData?.notes ?? [];
-            if (notes.length === 0) continue;
-
-            let buffer: AudioBuffer | null = null;
-            if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-              const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
-              if (samplerBlob) {
-                const sampleBuffer = await engine.decodeAudioData(samplerBlob);
-                buffer = await renderSamplerTrackOffline(
-                  notes,
-                  clip.startTime,
-                  project.bpm,
-                  sampleBuffer,
-                  track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-                    rootNote: track.sampler.rootNote,
-                    trimEnd: track.sampler.sampleDuration,
-                    loopEnd: track.sampler.sampleDuration,
-                  }),
-                  project.totalDuration,
-                );
-              }
-            } else {
-              buffer = await renderMidiTrackOffline(
-                notes,
-                clip.startTime,
-                project.bpm,
-                track.synthPreset ?? 'piano',
-                project.totalDuration,
-              );
-            }
-            if (!buffer) continue;
-            clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-          }
-        }
-
-        if (track.trackType === 'sequencer' && track.sequencerPattern) {
-          const buffer = await renderSequencerTrackOffline(
-            track.sequencerPattern,
-            project.bpm,
-            project.totalDuration,
-            track.drumKit ?? '808',
-          );
-          clips.push({ startTime: 0, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-        }
-
-        for (const clip of track.clips) {
-          if (clip.generationStatus === 'ready' && clip.isolatedAudioKey) {
-            const blob = await loadAudioBlobByKey(clip.isolatedAudioKey);
-            if (blob) {
-              const buffer = await engine.decodeAudioData(blob);
-              clips.push({ startTime: clip.startTime, buffer, volume: track.volume, pan: track.pan ?? 0, effects: track.effects });
-            }
-          }
-        }
-
-        processedTracks++;
-        setProgress(Math.round((processedTracks / totalTracks) * 50));
-      }
-
-      setProgress(60);
       const optionsWithMeta = {
         ...exportOptions,
         metadata: (metadata.title || metadata.artist) ? metadata : undefined,
       };
-      const blob = await exportMix(
-        clips,
-        project.totalDuration,
-        optionsWithMeta,
-        (update) => {
-          setProgress(mapExportProgressToPercent(update.stage, update.progress));
-        },
-      );
 
-      downloadBlob(blob, `${project.name}${fileExtension(exportOptions.format)}`);
-      setProgress(100);
-      toastSuccess(`${exportOptions.format.toUpperCase()} exported successfully`);
+      if (exportMode === 'stems') {
+        const stemTracks = getStemExportTracks(project, {
+          scope: stemScope,
+          selectedTrackIds,
+        }).filter(trackHasExportableContent);
+
+        const exports = await exportTrackStems(
+          project,
+          stemTracks,
+          optionsWithMeta,
+          engine,
+          ({ completed, total }) => setProgress(Math.round((completed / total) * 100)),
+        );
+
+        for (const stemExport of exports) {
+          downloadBlob(stemExport.blob, stemExport.fileName);
+        }
+
+        setProgress(100);
+        toastSuccess(`Exported ${exports.length} stem${exports.length === 1 ? '' : 's'} as ${exportOptions.format.toUpperCase()}`);
+      } else {
+        const stemTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
+        const clips = (await Promise.all(
+          stemTracks.map((track) => buildTrackExportClips(project, track, engine)),
+        )).flat();
+
+        setProgress(60);
+        const blob = await exportMix(
+          clips,
+          project.totalDuration,
+          optionsWithMeta,
+          (update) => {
+            setProgress(mapExportProgressToPercent(update.stage, update.progress));
+          },
+        );
+
+        downloadBlob(blob, `${project.name}${fileExtension(exportOptions.format)}`);
+        setProgress(100);
+        toastSuccess(`${exportOptions.format.toUpperCase()} exported successfully`);
+      }
       setShow(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -186,24 +152,23 @@ export function ExportDialog() {
   const readyClips = project.tracks.flatMap((t) =>
     t.clips.filter((c) => c.generationStatus === 'ready' && c.isolatedAudioKey),
   );
-  const anySoloed = project.tracks.some((t) => t.soloed);
-  const hasExportableContent = project.tracks.some((track) => {
-    if (track.muted) return false;
-    if (anySoloed && !track.soloed) return false;
-
-    const hasReadyAudio = track.clips.some((clip) => clip.generationStatus === 'ready' && clip.isolatedAudioKey);
-    const hasMidiNotes = track.trackType === 'pianoRoll'
-      && track.clips.some((clip) => (clip.midiData?.notes?.length ?? 0) > 0);
-    const hasSequencerSteps = track.trackType === 'sequencer'
-      && track.sequencerPattern?.rows.some((row) => !row.muted && row.steps.some((step) => step.active));
-
-    return hasReadyAudio || hasMidiNotes || Boolean(hasSequencerSteps);
-  });
+  const exportableStemTracks = getStemExportTracks(project, {
+    scope: stemScope,
+    selectedTrackIds,
+  }).filter(trackHasExportableContent);
+  const exportableMixTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
+  const hasExportableContent = exportMode === 'stems'
+    ? exportableStemTracks.length > 0
+    : exportableMixTracks.length > 0;
+  const selectedTrackCount = selectedTrackIds.size;
+  const estimatedChannels = exportMode === 'stems'
+    ? Math.max(exportableStemTracks.length, 1) * 2
+    : 2;
 
   const estimatedSize = estimateFileSize(
     project.totalDuration,
     exportOptions.sampleRate,
-    2,
+    estimatedChannels,
     exportOptions,
   );
 
@@ -213,7 +178,7 @@ export function ExportDialog() {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-[400px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
-          <h2 className="text-sm font-medium">Export Mix</h2>
+          <h2 className="text-sm font-medium">Export Audio</h2>
           <button
             onClick={() => setShow(false)}
             className="text-zinc-400 hover:text-zinc-300 text-lg leading-none"
@@ -223,6 +188,60 @@ export function ExportDialog() {
         </div>
 
         <div className="p-4 space-y-3">
+          <div className="space-y-2">
+            <span className="block text-xs text-zinc-400">Export Mode</span>
+            <label className="flex items-start gap-2 rounded border border-daw-border bg-daw-surface-2 px-3 py-2 text-xs text-zinc-200">
+              <input
+                aria-label="Export Mix"
+                type="radio"
+                name="export-mode"
+                checked={exportMode === 'mix'}
+                onChange={() => setExportMode('mix')}
+              />
+              <span>Export Mix</span>
+            </label>
+            <label className="flex items-start gap-2 rounded border border-daw-border bg-daw-surface-2 px-3 py-2 text-xs text-zinc-200">
+              <input
+                aria-label="Export Stems"
+                type="radio"
+                name="export-mode"
+                checked={exportMode === 'stems'}
+                onChange={() => setExportMode('stems')}
+              />
+              <span>Export Stems</span>
+            </label>
+          </div>
+
+          {exportMode === 'stems' && (
+            <div className="space-y-2 rounded border border-daw-border bg-daw-surface-2 p-3">
+              <span className="block text-xs text-zinc-400">Tracks</span>
+              <label className="flex items-start gap-2 text-xs text-zinc-200">
+                <input
+                  aria-label="All audible tracks"
+                  type="radio"
+                  name="stem-scope"
+                  checked={stemScope === 'all-audible'}
+                  onChange={() => setStemScope('all-audible')}
+                />
+                <span>All audible tracks</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs text-zinc-200">
+                <input
+                  aria-label="Selected tracks only"
+                  type="radio"
+                  name="stem-scope"
+                  checked={stemScope === 'selected'}
+                  onChange={() => setStemScope('selected')}
+                  disabled={selectedTrackCount === 0}
+                />
+                <span>
+                  Selected tracks only
+                  <span className="ml-1 text-zinc-500">({selectedTrackCount} selected)</span>
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Format selector */}
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Format</label>
@@ -375,7 +394,11 @@ export function ExportDialog() {
             onClick={handleExport}
             disabled={exporting || !hasExportableContent}
           >
-            {exporting ? `Exporting... ${progress}%` : `Export ${exportOptions.format.toUpperCase()}`}
+            {exporting
+              ? `Exporting... ${progress}%`
+              : exportMode === 'stems'
+                ? `Export ${exportableStemTracks.length || selectedTrackCount || project.tracks.length} Stem${(exportableStemTracks.length || selectedTrackCount || project.tracks.length) === 1 ? '' : 's'}`
+                : `Export ${exportOptions.format.toUpperCase()}`}
           </Button>
         </div>
       </div>

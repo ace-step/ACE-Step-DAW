@@ -90,6 +90,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const scissorRef = useRef(false);
+  const suppressContextMenuRef = useRef(false);
 
   // Cleanup cursor on unmount if scissor mode was active
   useEffect(() => {
@@ -153,11 +154,15 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
     // Skip scissor tool on fade handles
     if ((e.target as HTMLElement).closest('[data-fade-handle]')) return;
+    const isSecondaryPress = e.button === 2 || (e.button === 0 && e.ctrlKey);
+    if (e.button !== 0 && !isSecondaryPress) return;
+
     e.stopPropagation();
-    e.preventDefault();
+    if (e.button === 0) {
+      e.preventDefault();
+    }
 
     const mode = getDragMode(e);
     const startX = e.clientX;
@@ -179,13 +184,18 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const clipH = clipBlockRef.current?.offsetHeight ?? 48;
     const clipRect = clipBlockRef.current?.getBoundingClientRect();
     const clickOffsetPx = clipRect ? startX - clipRect.left : 0;
+    const supportsScissor = clip.generationStatus === 'ready' || Boolean(clip.midiData);
+    const canStartLongPressScissor = supportsScissor && isSecondaryPress && mode === 'move';
+    let secondaryMoved = false;
 
-    // --- Long-press scissor detection (only for move mode) ---
+    // --- Long-press scissor detection (secondary press only) ---
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-    if (mode === 'move' && (clip.generationStatus === 'ready' || Boolean(clip.midiData))) {
+    if (mode === 'move' && canStartLongPressScissor) {
+      e.preventDefault();
       longPressTimer = setTimeout(() => {
         longPressTimer = null;
         scissorRef.current = true;
+        suppressContextMenuRef.current = true;
         // Calculate initial scissor line position
         if (clipRect) {
           const relX = startX - clipRect.left;
@@ -213,6 +223,15 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       }
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
+      if (isSecondaryPress && (Math.abs(dx) >= 3 || Math.abs(dy) >= 3)) {
+        secondaryMoved = true;
+      }
+      if (isSecondaryPress && !scissorRef.current) {
+        if (Math.abs(dx) >= 3 || Math.abs(dy) >= 3) {
+          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }
+        return;
+      }
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3 && !dragRef.current) return;
       // Cancel long-press timer once real drag starts
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -359,6 +378,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         return;
       }
 
+      if (isSecondaryPress) {
+        if (!secondaryMoved && !suppressContextMenuRef.current) {
+          setCtxMenu({ x: ev.clientX, y: ev.clientY });
+        }
+        suppressContextMenuRef.current = false;
+        return;
+      }
+
       setDragGhost(null);
       endDrag();
 
@@ -416,6 +443,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   }, [isMidiClip, setOpenPianoRoll, track.id, clip.id]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (suppressContextMenuRef.current) {
+      suppressContextMenuRef.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     setCtxMenu({ x: e.clientX, y: e.clientY });

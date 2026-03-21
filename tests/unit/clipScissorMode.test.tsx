@@ -146,7 +146,7 @@ describe('ClipBlock scissor mode', () => {
     expect(document.body.style.cursor).toBe('');
   });
 
-  it('executes split on mouseup after long-press (happy path)', () => {
+  it('does not execute split on mouseup after primary-button long press', () => {
     const clip = makeClip({ startTime: 2.0, duration: 4.0 });
     const track = makeTrack({ clips: [clip] });
 
@@ -176,11 +176,37 @@ describe('ClipBlock scissor mode', () => {
       window.dispatchEvent(new MouseEvent('mouseup', { clientX: 350, clientY: 24 }));
     });
 
-    // Should have called splitClipAtZeroCrossing with clip-1 and a time around 3.5s (snapped to grid)
+    expect(mockSplitClipAtZeroCrossing).not.toHaveBeenCalled();
+  });
+
+  it('executes split on mouseup after secondary-button long press', () => {
+    const clip = makeClip({ startTime: 2.0, duration: 4.0 });
+    const track = makeTrack({ clips: [clip] });
+
+    useUIStore.setState({ pixelsPerSecond: 100 });
+
+    const { container } = render(<ClipBlock clip={clip} track={track} />);
+    const clipEl = container.querySelector('[data-clip-block]') as HTMLElement;
+    if (!clipEl) return;
+
+    vi.spyOn(clipEl, 'getBoundingClientRect').mockReturnValue({
+      left: 200, right: 600, top: 0, bottom: 48, width: 400, height: 48,
+      x: 200, y: 0, toJSON: () => {},
+    });
+
+    act(() => {
+      clipEl.dispatchEvent(new MouseEvent('mousedown', { clientX: 350, clientY: 24, button: 2, bubbles: true }));
+    });
+
+    act(() => { vi.advanceTimersByTime(400); });
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mouseup', { clientX: 350, clientY: 24, button: 2 }));
+    });
+
     expect(mockSplitClipAtZeroCrossing).toHaveBeenCalledOnce();
     expect(mockSplitClipAtZeroCrossing).toHaveBeenCalledWith('clip-1', expect.any(Number));
     const splitTime = mockSplitClipAtZeroCrossing.mock.calls[0][1];
-    // Should be within clip bounds (2.0 to 6.0) and roughly near 3.5s
     expect(splitTime).toBeGreaterThan(2.01);
     expect(splitTime).toBeLessThan(5.99);
   });

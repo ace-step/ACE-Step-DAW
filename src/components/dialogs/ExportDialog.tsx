@@ -54,6 +54,18 @@ function fileExtension(format: ExportFormat): string {
   }
 }
 
+function mapExportProgressToPercent(stage: 'rendering' | 'encoding' | 'complete', progress: number): number {
+  switch (stage) {
+    case 'rendering':
+      return 60 + Math.round(progress * 10);
+    case 'encoding':
+      return 70 + Math.round(progress * 20);
+    case 'complete':
+    default:
+      return 90;
+  }
+}
+
 export function ExportDialog() {
   const show = useUIStore((s) => s.showExportDialog);
   const setShow = useUIStore((s) => s.setShowExportDialog);
@@ -149,8 +161,14 @@ export function ExportDialog() {
         ...exportOptions,
         metadata: (metadata.title || metadata.artist) ? metadata : undefined,
       };
-      const blob = await exportMix(clips, project.totalDuration, optionsWithMeta);
-      setProgress(90);
+      const blob = await exportMix(
+        clips,
+        project.totalDuration,
+        optionsWithMeta,
+        (update) => {
+          setProgress(mapExportProgressToPercent(update.stage, update.progress));
+        },
+      );
 
       downloadBlob(blob, `${project.name}${fileExtension(exportOptions.format)}`);
       setProgress(100);

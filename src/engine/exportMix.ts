@@ -12,6 +12,11 @@ export interface ExportClip {
   effects?: TrackEffect[];
 }
 
+export interface ExportProgressUpdate {
+  stage: 'rendering' | 'encoding' | 'complete';
+  progress: number;
+}
+
 function buildOfflineMasteringChain(
   ctx: OfflineAudioContext,
   mastering: MasteringState,
@@ -309,20 +314,31 @@ export async function exportMix(
   clips: ExportClip[],
   totalDuration: number,
   options: ExportOptions,
+  onProgress?: (update: ExportProgressUpdate) => void,
 ): Promise<Blob> {
+  onProgress?.({ stage: 'rendering', progress: 0 });
   const rendered = await renderMixOffline(clips, totalDuration, options.sampleRate);
+  onProgress?.({ stage: 'encoding', progress: 0 });
 
+  let blob: Blob;
   switch (options.format) {
     case 'mp3':
-      return encodeToMp3(rendered, options.mp3Bitrate, options.metadata);
+      blob = encodeToMp3(rendered, options.mp3Bitrate, options.metadata);
+      break;
     case 'flac':
-      return encodeToFlac(rendered, options.bitDepth, options.metadata);
+      blob = encodeToFlac(rendered, options.bitDepth, options.metadata);
+      break;
     case 'ogg':
-      return encodeToOgg(rendered, options.oggQuality);
+      blob = await encodeToOgg(rendered, options.oggQuality);
+      break;
     case 'wav':
     default:
-      return audioBufferToWavBlob(rendered, options.bitDepth);
+      blob = audioBufferToWavBlob(rendered, options.bitDepth);
+      break;
   }
+
+  onProgress?.({ stage: 'complete', progress: 1 });
+  return blob;
 }
 
 /**

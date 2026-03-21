@@ -163,6 +163,6 @@ describe('bounceInPlace service', () => {
     expect(mockSaveAudioBlob).toHaveBeenCalledOnce();
     expect(result.audioKey).toBe('bounce-audio-key');
     expect(result.duration).toBe(3);
-    expect(result.waveformPeaks).toHaveLength(1024);
+    expect(result.waveformPeaks).toHaveLength(1024 * 4);
   });
 });

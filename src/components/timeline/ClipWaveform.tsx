@@ -1,5 +1,6 @@
 import type { MidiClipData, StretchMode } from '../../types/project';
 import { getClipSourceSpan, getClipWaveformLayout } from '../../utils/clipAudio';
+import { PEAK_STRIDE } from '../../utils/waveformPeaks';
 
 interface ClipWaveformProps {
   peaks: number[] | null;
@@ -37,14 +38,38 @@ export function ClipWaveform({
     stretchMode,
   };
   const waveformLayout = getClipWaveformLayout(clipWindow, contentWidth);
-  const peakSlice = getVisiblePeakSlice(peaks, audioDuration, audioOffset, getClipSourceSpan(clipWindow));
 
-  if (!peaks || peakSlice.numBars === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) {
+  if (!peaks || peaks.length === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) {
     return null;
   }
 
+  const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
+  if (logicalPeakCount === 0) {
+    // Legacy mono fallback: old peaks with no stride structure
+    return null;
+  }
+
+  const peakSlice = getVisiblePeakSlice(logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow));
+  if (peakSlice.numBars === 0) return null;
+
   const columnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnWidth = waveformLayout.widthPx / columnCount;
+
+  // Each channel occupies its own vertical half.
+  // Left channel: y = 0..50, center at y = 25
+  // Right channel: y = 50..100, center at y = 75
+  const leftPath = buildChannelPath(
+    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
+    0, // channelOffset in stride: 0 = Lmax, 1 = Lmin
+    25, // centerY for left channel
+    23, // maxAmplitude (px in SVG units, leaves 2px padding)
+  );
+  const rightPath = buildChannelPath(
+    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
+    2, // channelOffset in stride: 2 = Rmax, 3 = Rmin
+    75, // centerY for right channel
+    23,
+  );
 
   return (
     <div className="absolute inset-0 flex items-center overflow-hidden">
@@ -55,25 +80,105 @@ export function ClipWaveform({
         preserveAspectRatio="none"
         className={opacityClassName}
       >
-        {Array.from({ length: columnCount }, (_, index) => {
-          const peak = getPeakForColumn(peaks, peakSlice, index, columnCount);
-          const height = peak * 80;
-
-          return (
-            <rect
-              key={index}
-              x={waveformLayout.leftPx + index * columnWidth}
-              y={50 - height / 2}
-              width={Math.max(columnWidth, 1)}
-              height={Math.max(height, 1)}
-              fill={color}
-              rx={0.4}
-            />
-          );
-        })}
+        {/* Thin center divider between channels */}
+        <line
+          x1={waveformLayout.leftPx}
+          y1={50}
+          x2={waveformLayout.leftPx + waveformLayout.widthPx}
+          y2={50}
+          stroke={color}
+          strokeOpacity={0.2}
+          strokeWidth={0.5}
+        />
+        <path d={leftPath} fill={color} data-testid="waveform-left-channel" />
+        <path d={rightPath} fill={color} data-testid="waveform-right-channel" />
       </svg>
     </div>
   );
+}
+
+/**
+ * Build an SVG path for one channel's waveform.
+ * Draws the positive envelope (max) left-to-right, then negative envelope (min) right-to-left,
+ * creating a filled shape around the channel's center line.
+ */
+function buildChannelPath(
+  peaks: number[],
+  peakSlice: { startPeakIdx: number; numBars: number },
+  columnCount: number,
+  columnWidth: number,
+  leftPx: number,
+  channelOffset: number, // 0 for left (Lmax at +0, Lmin at +1), 2 for right (Rmax at +2, Rmin at +3)
+  centerY: number,
+  maxAmplitude: number,
+): string {
+  // Upper contour (max values, positive peaks going upward from center)
+  const upperPoints: string[] = [];
+  // Lower contour (min values, negative peaks going downward from center)
+  const lowerPoints: string[] = [];
+
+  for (let i = 0; i < columnCount; i++) {
+    const x = leftPx + (i + 0.5) * columnWidth;
+    const { max, min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    // max >= 0, maps upward from center; min <= 0, maps downward from center
+    const yTop = centerY - max * maxAmplitude;
+    const yBottom = centerY - min * maxAmplitude; // min is negative, so this goes below center
+    upperPoints.push(`${x} ${yTop}`);
+    lowerPoints.push(`${x} ${yBottom}`);
+  }
+
+  // Build closed path: upper left-to-right, then lower right-to-left
+  return `M ${upperPoints[0]} L ${upperPoints.join(' L ')} L ${lowerPoints.reverse().join(' L ')} Z`;
+}
+
+function getVisiblePeakSlice(
+  logicalPeakCount: number,
+  audioDuration: number,
+  audioOffset: number,
+  sourceSpan: number,
+) {
+  if (logicalPeakCount === 0 || audioDuration <= 0) {
+    return { startPeakIdx: 0, numBars: 0 };
+  }
+
+  const startPeakIdx = Math.floor((audioOffset / audioDuration) * logicalPeakCount);
+  const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - audioOffset));
+  const endPeakIdx = Math.min(
+    Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * logicalPeakCount),
+    logicalPeakCount,
+  );
+
+  return {
+    startPeakIdx,
+    numBars: Math.max(0, endPeakIdx - startPeakIdx),
+  };
+}
+
+/**
+ * For a given display column, find the min and max sample values across
+ * the corresponding peak range for a specific channel.
+ */
+function getMinMaxForColumn(
+  peaks: number[],
+  peakSlice: { startPeakIdx: number; numBars: number },
+  columnIndex: number,
+  columnCount: number,
+  channelOffset: number, // 0 for L, 2 for R
+): { max: number; min: number } {
+  const start = peakSlice.startPeakIdx + Math.floor((columnIndex / columnCount) * peakSlice.numBars);
+  const end = peakSlice.startPeakIdx + Math.ceil(((columnIndex + 1) / columnCount) * peakSlice.numBars);
+  let max = 0;
+  let min = 0;
+
+  for (let i = start; i < end; i++) {
+    const idx = i * PEAK_STRIDE + channelOffset;
+    const peakMax = peaks[idx] ?? 0;
+    const peakMin = peaks[idx + 1] ?? 0;
+    if (peakMax > max) max = peakMax;
+    if (peakMin < min) min = peakMin;
+  }
+
+  return { max, min };
 }
 
 interface ClipMidiThumbnailProps {
@@ -110,44 +215,4 @@ export function ClipMidiThumbnail({ midiData, width, duration, bpm, color }: Cli
       </svg>
     </div>
   );
-}
-
-function getVisiblePeakSlice(
-  peaks: number[] | null,
-  audioDuration: number,
-  audioOffset: number,
-  sourceSpan: number,
-) {
-  if (!peaks || peaks.length === 0 || audioDuration <= 0) {
-    return { startPeakIdx: 0, numBars: 0 };
-  }
-
-  const startPeakIdx = Math.floor((audioOffset / audioDuration) * peaks.length);
-  const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - audioOffset));
-  const endPeakIdx = Math.min(
-    Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * peaks.length),
-    peaks.length,
-  );
-
-  return {
-    startPeakIdx,
-    numBars: Math.max(0, endPeakIdx - startPeakIdx),
-  };
-}
-
-function getPeakForColumn(
-  peaks: number[],
-  peakSlice: { startPeakIdx: number; numBars: number },
-  columnIndex: number,
-  columnCount: number,
-) {
-  const start = peakSlice.startPeakIdx + Math.floor((columnIndex / columnCount) * peakSlice.numBars);
-  const end = peakSlice.startPeakIdx + Math.ceil(((columnIndex + 1) / columnCount) * peakSlice.numBars);
-  let maxPeak = 0;
-
-  for (let index = start; index < Math.min(end, peaks.length); index += 1) {
-    maxPeak = Math.max(maxPeak, peaks[index] ?? 0);
-  }
-
-  return maxPeak;
 }

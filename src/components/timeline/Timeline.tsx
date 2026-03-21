@@ -2,6 +2,8 @@ import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
+import { TrackHeader } from '../tracks/TrackHeader';
+import { TrackListDisplayToggle } from '../tracks/TrackListDisplayToggle';
 import { TimeRuler } from './TimeRuler';
 import { TrackLane } from './TrackLane';
 import { Playhead } from './Playhead';
@@ -15,6 +17,7 @@ import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
+import { TimeSignatureLane } from './TimeSignatureLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
@@ -35,6 +38,12 @@ import {
   getArrangementEmptyTrackId,
 } from '../arrangement/trackSlotLayout';
 import { DEFAULT_ARRANGEMENT_ROW_HEIGHT } from '../arrangement/rowLayout';
+import {
+  ARRANGEMENT_MARKERS_HEIGHT,
+  TEMPO_LANE_HEIGHT,
+  TIME_SIGNATURE_LANE_HEIGHT,
+  TIMELINE_RULER_HEIGHT,
+} from './timelineLayout';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -45,7 +54,7 @@ const WINDOW_CONTROL_BAR_HEIGHT = 24;
 interface DragRect { left: number; width: number; top: number; height: number }
 
 function getIntersectedTrackIds(container: HTMLElement, minY: number, maxY: number): string[] {
-  const lanes = container.querySelectorAll<HTMLElement>('[data-track-id]');
+  const lanes = container.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
   const cRect = container.getBoundingClientRect();
   const ids: string[] = [];
   for (const lane of lanes) {
@@ -60,7 +69,7 @@ function getIntersectedTrackIds(container: HTMLElement, minY: number, maxY: numb
 }
 
 function getTrackRowIndex(container: HTMLElement, trackId: string): number | null {
-  const lanes = Array.from(container.querySelectorAll<HTMLElement>('[data-track-id]'));
+  const lanes = Array.from(container.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]'));
   const rowIndex = lanes.findIndex((lane) => lane.dataset.trackId === trackId);
   return rowIndex === -1 ? null : rowIndex;
 }
@@ -73,7 +82,7 @@ function getTrackVerticalRange(
   let minTop = Infinity;
   let maxBot = -Infinity;
   const idSet = new Set(trackIds);
-  const lanes = container.querySelectorAll<HTMLElement>('[data-track-id]');
+  const lanes = container.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
   for (const lane of lanes) {
     if (!idSet.has(lane.dataset.trackId!)) continue;
     const r = lane.getBoundingClientRect();
@@ -194,6 +203,9 @@ export function Timeline() {
   const project = useProjectStore((s) => s.project);
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
+  const reorderTrack = useProjectStore((s) => s.reorderTrack);
+  const moveTrackToOrder = useProjectStore((s) => s.moveTrackToOrder);
+  const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const seek = useTransportStore((s) => s.seek);
   const currentTime = useTransportStore((s) => s.currentTime);
   const playStartTime = useTransportStore((s) => s.playStartTime);
@@ -204,6 +216,9 @@ export function Timeline() {
   const setTimelineViewportWidth = useUIStore((s) => s.setTimelineViewportWidth);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
+  const trackListWidth = useUIStore((s) => s.trackListWidth);
+  const trackListDisplayMode = useUIStore((s) => s.trackListDisplayMode);
+  const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const setContextWindow = useUIStore((s) => s.setContextWindow);
   const selectWindow = useUIStore((s) => s.selectWindow);
@@ -229,12 +244,18 @@ export function Timeline() {
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+  const [dragOverEmptySlotIndex, setDragOverEmptySlotIndex] = useState<number | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after'>('before');
   const dragCounterRef = useRef(0);
+  const draggedTrackIdRef = useRef<string | null>(null);
+  const trackListResizeRef = useRef<{ startX: number; startW: number } | null>(null);
   const zoomAnimationFrameRef = useRef<number | null>(null);
   const zoomTargetRef = useRef(pixelsPerSecond);
   const zoomAnchorRef = useRef<{ time: number; viewportX: number } | null>(null);
   const zoomFrameTimeRef = useRef<number | null>(null);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
+  const isTrackListCollapsed = trackListDisplayMode === 'collapsed';
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     const types = e.dataTransfer.types;
@@ -309,12 +330,103 @@ export function Timeline() {
     };
   }, []);
 
-  const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
+  const handleTrackHeaderDragStart = useCallback((trackId: string) => {
+    draggedTrackIdRef.current = trackId;
+  }, []);
+
+  const handleTrackHeaderDragOver = useCallback((e: React.DragEvent, trackId: string) => {
+    e.preventDefault();
+    if (!draggedTrackIdRef.current || draggedTrackIdRef.current === trackId) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDragOverTrackId(trackId);
+    setDragOverEmptySlotIndex(null);
+    setDragOverPosition(e.clientY < midY ? 'before' : 'after');
+  }, []);
+
+  const handleTrackHeaderDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const draggedTrackId = draggedTrackIdRef.current;
+    if (!draggedTrackId || draggedTrackId === targetId) {
+      setDragOverTrackId(null);
+      setDragOverEmptySlotIndex(null);
+      draggedTrackIdRef.current = null;
+      return;
+    }
+    reorderTrack(draggedTrackId, targetId, dragOverPosition);
+    setDragOverTrackId(null);
+    setDragOverEmptySlotIndex(null);
+    draggedTrackIdRef.current = null;
+  }, [dragOverPosition, reorderTrack]);
+
+  const handleEmptyTrackHeaderDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    if (!draggedTrackIdRef.current || !project) return;
+    const draggedTrack = project.tracks.find((track) => track.id === draggedTrackIdRef.current);
+    if (draggedTrack?.isGroup) return;
+    setDragOverTrackId(null);
+    setDragOverEmptySlotIndex(slotIndex);
+  }, [project]);
+
+  const handleEmptyTrackHeaderDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    const draggedTrackId = draggedTrackIdRef.current;
+    if (!draggedTrackId || !project) {
+      setDragOverTrackId(null);
+      setDragOverEmptySlotIndex(null);
+      draggedTrackIdRef.current = null;
+      return;
+    }
+    const draggedTrack = project.tracks.find((track) => track.id === draggedTrackId);
+    if (draggedTrack?.isGroup) {
+      setDragOverTrackId(null);
+      setDragOverEmptySlotIndex(null);
+      draggedTrackIdRef.current = null;
+      return;
+    }
+    moveTrackToOrder(draggedTrackId, slotIndex + 1);
+    setDragOverTrackId(null);
+    setDragOverEmptySlotIndex(null);
+    draggedTrackIdRef.current = null;
+  }, [moveTrackToOrder, project]);
+
+  const handleTrackListResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    trackListResizeRef.current = { startX: e.clientX, startW: trackListWidth };
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!trackListResizeRef.current) return;
+      const delta = ev.clientX - trackListResizeRef.current.startX;
+      setTrackListWidth(trackListResizeRef.current.startW + delta);
+    };
+    const onMouseUp = () => {
+      trackListResizeRef.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [setTrackListWidth, trackListWidth]);
+
   const sortedTracks = project ? getVisibleTracks() : [];
   const arrangementRows = useMemo(
     () => buildArrangementTrackSlots(sortedTracks, PLACEHOLDER_ROW_COUNT),
     [sortedTracks],
   );
+  const blockedEmptySlotOrders = useMemo(() => {
+    if (!project) return new Set<number>();
+    const collapsedGroupIds = new Set(
+      project.tracks
+        .filter((track) => track.isGroup && track.collapsed)
+        .map((track) => track.id),
+    );
+
+    return new Set(
+      project.tracks
+        .filter((track) => track.parentTrackId && collapsedGroupIds.has(track.parentTrackId))
+        .map((track) => track.order),
+    );
+  }, [project]);
+  const showsArrangementMarkers = (project?.markers?.length ?? 0) > 0;
 
   const totalWidth = project
     ? getTimelineContentWidth(project.totalDuration, pixelsPerSecond, viewportWidth)
@@ -336,7 +448,7 @@ export function Timeline() {
     if (!project || !timelineZoomRequest || !scrollRef.current) return;
 
     const container = scrollRef.current;
-    const nextViewportWidth = container.clientWidth || window.innerWidth || 1;
+    const nextViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
     const projectRange = { startTime: 0, endTime: project.totalDuration };
 
     let targetRange = projectRange;
@@ -412,6 +524,7 @@ export function Timeline() {
     selectedClipIds,
     setPixelsPerSecond,
     setScrollX,
+    trackListWidth,
     timelineZoomRequest,
   ]);
 
@@ -422,12 +535,17 @@ export function Timeline() {
         const container = scrollRef.current;
         if (!container) return;
         const rect = container.getBoundingClientRect();
-        const cursorOffsetX = e.clientX - rect.left;
+        const target = e.target as HTMLElement | null;
+        const isTrackColumnTarget = !!target?.closest?.('[data-track-column-region="true"]');
+        const timelineViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
+        const cursorOffsetX = isTrackColumnTarget
+          ? Math.min(120, timelineViewportWidth - 1)
+          : Math.max(0, Math.min(timelineViewportWidth - 1, e.clientX - rect.left - trackListWidth));
         const playheadAnchorTime = isPlaying ? currentTime : playStartTime;
         const anchor = getTimelineZoomAnchor({
           pixelsPerSecond,
           scrollLeft: container.scrollLeft,
-          viewportWidth: container.clientWidth || window.innerWidth || 1,
+          viewportWidth: timelineViewportWidth,
           pointerViewportX: cursorOffsetX,
           playheadTime: playheadAnchorTime,
         });
@@ -469,7 +587,7 @@ export function Timeline() {
           const nextViewport = getZoomedTimelineViewport({
             pixelsPerSecond: currentPixels,
             scrollLeft: liveContainer.scrollLeft,
-            viewportWidth: liveContainer.clientWidth || window.innerWidth || 1,
+            viewportWidth: Math.max(1, (liveContainer.clientWidth - trackListWidth) || window.innerWidth || 1),
             totalDuration: project?.totalDuration ?? 0,
           }, nextPixelsPerSecond, liveAnchor);
 
@@ -489,7 +607,7 @@ export function Timeline() {
         zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom);
       }
     },
-    [currentTime, isPlaying, pixelsPerSecond, playStartTime, project?.totalDuration, setPixelsPerSecond, setScrollX],
+    [currentTime, isPlaying, pixelsPerSecond, playStartTime, project?.totalDuration, setPixelsPerSecond, setScrollX, trackListWidth],
   );
 
   useEffect(() => () => {
@@ -503,7 +621,7 @@ export function Timeline() {
     if (!container) return;
 
     const updateViewportWidth = () => {
-      const nextWidth = container.clientWidth || window.innerWidth || 0;
+      const nextWidth = Math.max(0, (container.clientWidth - trackListWidth) || window.innerWidth || 0);
       setViewportWidth(nextWidth);
       setTimelineViewportWidth(nextWidth);
     };
@@ -512,7 +630,7 @@ export function Timeline() {
     const ro = new ResizeObserver(updateViewportWidth);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [setTimelineViewportWidth]);
+  }, [project, setTimelineViewportWidth, trackListWidth]);
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
   const wheelRef = useNonPassiveWheel(handleWheel);
@@ -529,6 +647,7 @@ export function Timeline() {
       const target = e.target as HTMLElement;
       if (target.closest?.('[data-window-overlay-control="true"]')) return;
       if (target.closest?.('[data-clip-block]')) return;
+      if (target.closest?.('[data-track-column-region="true"]')) return;
       if (target.closest?.('.fixed')) return;
       if (target.closest?.('[data-sequencer-grid]')) return;
       if (target.closest?.('[data-timeline-scrubber="true"]')) return;
@@ -546,9 +665,10 @@ export function Timeline() {
       const bpm = project?.bpm ?? 120;
       const scrollLeft = container.scrollLeft;
       const cRect = container.getBoundingClientRect();
+      const timelineRectLeft = cRect.left + trackListWidth;
       const startClientX = e.clientX;
       const startClientY = e.clientY;
-      const startViewX = startClientX - cRect.left;
+      const startViewX = startClientX - timelineRectLeft;
       const startViewY = startClientY - cRect.top + container.scrollTop;
       const primaryTrackId = getIntersectedTrackIds(container, startViewY, startViewY + 1)[0];
 
@@ -560,7 +680,7 @@ export function Timeline() {
         if (!hasDragged && Math.abs(dx) < DRAG_THRESHOLD_PX) return;
         hasDragged = true;
 
-        const curViewX = ev.clientX - cRect.left;
+        const curViewX = ev.clientX - timelineRectLeft;
         const curViewY = ev.clientY - cRect.top + container.scrollTop;
 
         const left = Math.min(startViewX, curViewX) + scrollLeft;
@@ -598,7 +718,7 @@ export function Timeline() {
           return;
         }
 
-        const endViewX = ev.clientX - cRect.left;
+        const endViewX = ev.clientX - timelineRectLeft;
         const endViewY = ev.clientY - cRect.top + container.scrollTop;
 
         const leftPx = Math.min(startViewX, endViewX) + scrollLeft;
@@ -637,7 +757,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, seek, setTimelineFocused],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, seek, setTimelineFocused, trackListWidth],
   );
 
   const startWindowMove = useCallback(
@@ -657,12 +777,13 @@ export function Timeline() {
       const bpm = project.bpm ?? 120;
       const totalDuration = project.totalDuration;
       const rect = container.getBoundingClientRect();
+      const timelineRectLeft = rect.left + trackListWidth;
       const setWindow = kind === 'context' ? setContextWindow : setSelectWindow;
-      const pointerTimeAtStart = (e.clientX - rect.left + container.scrollLeft) / pixelsPerSecond;
+      const pointerTimeAtStart = (e.clientX - timelineRectLeft + container.scrollLeft) / pixelsPerSecond;
       const pointerOffsetTime = pointerTimeAtStart - windowRange.startTime;
 
       const applyMove = (clientX: number) => {
-        const pointerTime = (clientX - rect.left + container.scrollLeft) / pixelsPerSecond;
+        const pointerTime = (clientX - timelineRectLeft + container.scrollLeft) / pixelsPerSecond;
         const desiredStartTime = snapToGrid(pointerTime - pointerOffsetTime, bpm, 1);
         setWindow(moveTimelineWindow(windowRange, desiredStartTime, totalDuration));
       };
@@ -680,7 +801,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, trackListWidth],
   );
 
   const switchTimelineWindow = useCallback(
@@ -728,6 +849,10 @@ export function Timeline() {
         return { top: vr.top - taTop, height: vr.height };
       })()
     : null;
+  const trackColumnHeaderHeight = TIMELINE_RULER_HEIGHT
+    + (showsArrangementMarkers ? ARRANGEMENT_MARKERS_HEIGHT : 0)
+    + (showTempoLane ? TEMPO_LANE_HEIGHT + TIME_SIGNATURE_LANE_HEIGHT : 0);
+  const arrangementSurfaceWidth = trackListWidth + Math.max(totalWidth, viewportWidth);
 
   return (
     <>
@@ -742,10 +867,6 @@ export function Timeline() {
         className="arrangement-scrollbar-hidden flex-1 overflow-auto bg-[#1c1d22] relative group"
         onScroll={(e) => {
           const el = e.currentTarget;
-          const trackListContent = document.getElementById('arrangement-track-list-content');
-          if (trackListContent) {
-            trackListContent.style.transform = `translateY(-${el.scrollTop}px)`;
-          }
           setScrollX(el.scrollLeft);
           setScrollY(el.scrollTop);
         }}
@@ -760,6 +881,7 @@ export function Timeline() {
         onContextMenu={(e) => {
           // Only show canvas context menu on empty area
           const target = e.target as HTMLElement;
+          if (target.closest?.('[data-track-column-region="true"]')) return;
           if (target.closest?.('[data-clip-block]')) return;
           if (target.closest?.('[data-sequencer-grid]')) return;
           // Don't interfere with select window region context menu
@@ -780,118 +902,221 @@ export function Timeline() {
             </div>
           </div>
         )}
-        <div className="relative" style={{ width: totalWidth || '100%' }}>
-          <TimeRuler />
-          <ArrangementMarkers />
-          {showTempoLane && <TempoLane />}
+        <div
+          className="relative grid"
+          style={{
+            width: arrangementSurfaceWidth || '100%',
+            gridTemplateColumns: `${trackListWidth}px ${totalWidth}px`,
+            gridTemplateRows: `${trackColumnHeaderHeight}px auto`,
+          }}
+        >
+          <div
+            id="arrangement-track-list"
+            data-track-column-region="true"
+            className="sticky top-0 left-0 z-40 flex flex-col bg-[#2a2a2a] border-r border-[#1a1a1a]"
+            style={{ gridColumn: '1', gridRow: '1', width: trackListWidth, height: trackColumnHeaderHeight }}
+          >
+            <div
+              className={`shrink-0 border-b border-[#3a3a3a] bg-[#333] flex items-center ${isTrackListCollapsed ? 'px-1.5 justify-center' : 'px-2 justify-between'}`}
+              style={{ height: TIMELINE_RULER_HEIGHT }}
+            >
+              {!isTrackListCollapsed && (
+                <span className="text-[10px] text-zinc-400 uppercase tracking-[0.24em] font-medium">Tracks</span>
+              )}
+              <TrackListDisplayToggle />
+            </div>
 
-          {/* Grid and playhead span full height (tracks + empty space below) */}
-          <GridOverlay />
-          <Playhead />
-
-          <div ref={trackAreaRef} className="relative">
-
-            {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
-            {ctxLeft !== null && ctxWidth !== null && ctxVRange && (
-              <TimelineWindowOverlay
-                kind="context"
-                left={ctxLeft}
-                width={ctxWidth}
-                top={ctxVRange.top}
-                height={ctxVRange.height}
-                label="context window"
-                switchLabel="SEL"
-                switchAriaLabel="Convert context window into select window"
-                accentTextColor="#5AC8FA"
-                fillColor="rgba(90, 200, 250, 0.10)"
-                borderColor="rgba(90, 200, 250, 0.35)"
-                edgeColor="rgba(90, 200, 250, 0.7)"
-                align="left"
-                onMoveStart={(e) => startWindowMove('context', contextWindow!, e)}
-                onSwitch={() => switchTimelineWindow('context')}
-              />
-            )}
-
-            {/* Committed select window overlay — Apple Purple (#AF52DE) */}
-            {selLeft !== null && selWidth !== null && selVRange && (
-              <TimelineWindowOverlay
-                kind="select"
-                left={selLeft}
-                width={selWidth}
-                top={selVRange.top}
-                height={selVRange.height}
-                label="select window"
-                switchLabel="CTX"
-                switchAriaLabel="Convert select window into context window"
-                accentTextColor="#AF52DE"
-                fillColor="rgba(175, 82, 222, 0.10)"
-                borderColor="rgba(175, 82, 222, 0.35)"
-                edgeColor="rgba(175, 82, 222, 0.7)"
-                align="right"
-                onMoveStart={(e) => startWindowMove('select', selectWindow!, e)}
-                onSwitch={() => switchTimelineWindow('select')}
-                onContextMenu={(e) => {
-                  setRegionCtxMenu({ x: e.clientX, y: e.clientY });
-                }}
-              />
-            )}
-
-            {/* Floating toolbar below select window */}
-            <SelectionFloatingToolbar
-              selLeft={selLeft}
-              selWidth={selWidth}
-              selBottom={selVRange ? selVRange.top + selVRange.height : null}
-            />
-
-            {/* Live context drag overlay — Apple Teal (#5AC8FA) */}
-            {ctxDrag && (
+            {showsArrangementMarkers && (
               <div
-                className="absolute pointer-events-none z-10"
-                style={{
-                  left: ctxDrag.left,
-                  width: ctxDrag.width,
-                  top: ctxDrag.top,
-                  height: ctxDrag.height,
-                  background: 'rgba(90, 200, 250, 0.12)',
-                  borderLeft: '1px solid rgba(90, 200, 250, 0.5)',
-                  borderRight: '1px solid rgba(90, 200, 250, 0.5)',
-                  borderTop: '1px solid rgba(90, 200, 250, 0.3)',
-                  borderBottom: '1px solid rgba(90, 200, 250, 0.3)',
-                }}
+                className="shrink-0 border-b border-[#333] bg-[#242424]"
+                style={{ height: ARRANGEMENT_MARKERS_HEIGHT }}
+                data-testid="tracklist-marker-spacer"
               />
             )}
 
-            {/* Live select drag overlay — Apple Purple (#AF52DE) */}
-            {selDrag && (
+            {showTempoLane && (
               <div
-                className="absolute pointer-events-none z-10"
-                style={{
-                  left: selDrag.left,
-                  width: selDrag.width,
-                  top: selDrag.top,
-                  height: selDrag.height,
-                  background: 'rgba(175, 82, 222, 0.12)',
-                  borderLeft: '1px solid rgba(175, 82, 222, 0.5)',
-                  borderRight: '1px solid rgba(175, 82, 222, 0.5)',
-                  borderTop: '1px solid rgba(175, 82, 222, 0.3)',
-                  borderBottom: '1px solid rgba(175, 82, 222, 0.3)',
-                }}
+                className="shrink-0 border-b border-white/10 bg-[rgba(245,158,11,0.03)]"
+                style={{ height: TEMPO_LANE_HEIGHT + TIME_SIGNATURE_LANE_HEIGHT }}
+                data-testid="tracklist-tempo-spacer"
               />
             )}
+
+            {!isTrackListCollapsed && (
+              <div
+                className="absolute top-0 right-0 w-1.5 cursor-col-resize bg-transparent hover:bg-daw-accent/30 transition-colors z-10"
+                style={{ height: trackColumnHeaderHeight }}
+                onMouseDown={handleTrackListResizeMouseDown}
+              />
+            )}
+          </div>
+
+          <div
+            className="sticky top-0 z-30 bg-[#1c1d22]"
+            style={{ gridColumn: '2', gridRow: '1', width: totalWidth }}
+          >
+            <TimeRuler />
+            <ArrangementMarkers />
+            {showTempoLane && (
+              <>
+                <TempoLane />
+                <TimeSignatureLane />
+              </>
+            )}
+          </div>
+
+          <div
+            data-track-column-region="true"
+            className="sticky left-0 z-20 bg-[#2a2a2a] border-r border-[#1a1a1a]"
+            style={{ gridColumn: '1', gridRow: '2', width: trackListWidth }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverTrackId(null);
+                setDragOverEmptySlotIndex(null);
+              }
+            }}
+          >
             {arrangementRows.map((row) => (row.kind === 'track' ? (
-              <TrackLane key={row.track.id} track={row.track} />
+              <TrackHeader
+                key={row.track.id}
+                track={row.track}
+                isCollapsed={isTrackListCollapsed}
+                isChild={!!row.track.parentTrackId}
+                onDragStart={handleTrackHeaderDragStart}
+                onDragOver={handleTrackHeaderDragOver}
+                onDrop={handleTrackHeaderDrop}
+                isDragOver={dragOverTrackId === row.track.id}
+                dragOverPosition={dragOverTrackId === row.track.id ? dragOverPosition : null}
+              />
             ) : (
-              <EmptyTrackRow key={getArrangementEmptyTrackId(row.slotIndex)} slotIndex={row.slotIndex} />
+              <ArrangementEmptyTrackHeaderRow
+                key={getArrangementEmptyTrackId(row.slotIndex)}
+                slotIndex={row.slotIndex}
+                isCollapsed={isTrackListCollapsed}
+                isDropDisabled={blockedEmptySlotOrders.has(row.slotIndex + 1)}
+                isDragOver={dragOverEmptySlotIndex === row.slotIndex}
+                onDragOver={handleEmptyTrackHeaderDragOver}
+                onDrop={handleEmptyTrackHeaderDrop}
+              />
             )))}
 
-            {/* Inline AI suggestion badges */}
-            {suggestionFrequency !== 'off' && inlineSuggestions.map((s) => (
-              <InlineSuggestionBadge
-                key={s.id}
-                suggestion={s}
-                pixelsPerSecond={pixelsPerSecond}
+            {!isTrackListCollapsed && (
+              <div
+                className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize bg-transparent hover:bg-daw-accent/30 transition-colors z-10"
+                onMouseDown={handleTrackListResizeMouseDown}
               />
-            ))}
+            )}
+          </div>
+
+          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
+            {/* Grid and playhead span full height (tracks + empty space below) */}
+            <GridOverlay />
+            <Playhead />
+
+            <div ref={trackAreaRef} className="relative">
+
+              {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
+              {ctxLeft !== null && ctxWidth !== null && ctxVRange && (
+                <TimelineWindowOverlay
+                  kind="context"
+                  left={ctxLeft}
+                  width={ctxWidth}
+                  top={ctxVRange.top}
+                  height={ctxVRange.height}
+                  label="context window"
+                  switchLabel="SEL"
+                  switchAriaLabel="Convert context window into select window"
+                  accentTextColor="#5AC8FA"
+                  fillColor="rgba(90, 200, 250, 0.10)"
+                  borderColor="rgba(90, 200, 250, 0.35)"
+                  edgeColor="rgba(90, 200, 250, 0.7)"
+                  align="left"
+                  onMoveStart={(e) => startWindowMove('context', contextWindow!, e)}
+                  onSwitch={() => switchTimelineWindow('context')}
+                />
+              )}
+
+              {/* Committed select window overlay — Apple Purple (#AF52DE) */}
+              {selLeft !== null && selWidth !== null && selVRange && (
+                <TimelineWindowOverlay
+                  kind="select"
+                  left={selLeft}
+                  width={selWidth}
+                  top={selVRange.top}
+                  height={selVRange.height}
+                  label="select window"
+                  switchLabel="CTX"
+                  switchAriaLabel="Convert select window into context window"
+                  accentTextColor="#AF52DE"
+                  fillColor="rgba(175, 82, 222, 0.10)"
+                  borderColor="rgba(175, 82, 222, 0.35)"
+                  edgeColor="rgba(175, 82, 222, 0.7)"
+                  align="right"
+                  onMoveStart={(e) => startWindowMove('select', selectWindow!, e)}
+                  onSwitch={() => switchTimelineWindow('select')}
+                  onContextMenu={(e) => {
+                    setRegionCtxMenu({ x: e.clientX, y: e.clientY });
+                  }}
+                />
+              )}
+
+              {/* Floating toolbar below select window */}
+              <SelectionFloatingToolbar
+                selLeft={selLeft}
+                selWidth={selWidth}
+                selBottom={selVRange ? selVRange.top + selVRange.height : null}
+              />
+
+              {/* Live context drag overlay — Apple Teal (#5AC8FA) */}
+              {ctxDrag && (
+                <div
+                  className="absolute pointer-events-none z-10"
+                  style={{
+                    left: ctxDrag.left,
+                    width: ctxDrag.width,
+                    top: ctxDrag.top,
+                    height: ctxDrag.height,
+                    background: 'rgba(90, 200, 250, 0.12)',
+                    borderLeft: '1px solid rgba(90, 200, 250, 0.5)',
+                    borderRight: '1px solid rgba(90, 200, 250, 0.5)',
+                    borderTop: '1px solid rgba(90, 200, 250, 0.3)',
+                    borderBottom: '1px solid rgba(90, 200, 250, 0.3)',
+                  }}
+                />
+              )}
+
+              {/* Live select drag overlay — Apple Purple (#AF52DE) */}
+              {selDrag && (
+                <div
+                  className="absolute pointer-events-none z-10"
+                  style={{
+                    left: selDrag.left,
+                    width: selDrag.width,
+                    top: selDrag.top,
+                    height: selDrag.height,
+                    background: 'rgba(175, 82, 222, 0.12)',
+                    borderLeft: '1px solid rgba(175, 82, 222, 0.5)',
+                    borderRight: '1px solid rgba(175, 82, 222, 0.5)',
+                    borderTop: '1px solid rgba(175, 82, 222, 0.3)',
+                    borderBottom: '1px solid rgba(175, 82, 222, 0.3)',
+                  }}
+                />
+              )}
+              {arrangementRows.map((row) => (row.kind === 'track' ? (
+                <TrackLane key={row.track.id} track={row.track} />
+              ) : (
+                <EmptyTrackRow key={getArrangementEmptyTrackId(row.slotIndex)} slotIndex={row.slotIndex} />
+              )))}
+
+              {/* Inline AI suggestion badges */}
+              {suggestionFrequency !== 'off' && inlineSuggestions.map((s) => (
+                <InlineSuggestionBadge
+                  key={s.id}
+                  suggestion={s}
+                  pixelsPerSecond={pixelsPerSecond}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -926,6 +1151,50 @@ export function Timeline() {
 /** Empty placeholder rows below tracks — infinite grid like ACE Studio */
 const PLACEHOLDER_ROW_HEIGHT = DEFAULT_ARRANGEMENT_ROW_HEIGHT;
 const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT;  // enough to fill any viewport
+
+function ArrangementEmptyTrackHeaderRow({
+  slotIndex,
+  isCollapsed,
+  isDropDisabled,
+  isDragOver,
+  onDragOver,
+  onDrop,
+}: {
+  slotIndex: number;
+  isCollapsed: boolean;
+  isDropDisabled: boolean;
+  isDragOver: boolean;
+  onDragOver: (e: React.DragEvent, slotIndex: number) => void;
+  onDrop: (e: React.DragEvent, slotIndex: number) => void;
+}) {
+  const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const virtualId = getArrangementEmptyTrackId(slotIndex);
+  const isSelected = selectedTrackIds.has(virtualId);
+
+  return (
+    <div
+      className="relative flex items-center justify-center border-b cursor-pointer group"
+      style={{
+        height: PLACEHOLDER_ROW_HEIGHT,
+        borderColor: 'var(--color-daw-arrangement-separator)',
+        backgroundColor: isDragOver ? 'rgba(94, 89, 255, 0.12)' : undefined,
+        boxShadow: isDragOver ? 'inset 0 0 0 1px rgba(94, 89, 255, 0.45)' : undefined,
+      }}
+      onClick={() => setShowInstrumentPicker(true)}
+      onDragOver={isDropDisabled ? undefined : (e) => onDragOver(e, slotIndex)}
+      onDrop={isDropDisabled ? undefined : (e) => onDrop(e, slotIndex)}
+      aria-label={`Empty track slot ${slotIndex + 1}`}
+      data-drop-disabled={isDropDisabled ? 'true' : 'false'}
+      data-testid={`empty-header-row-${slotIndex}`}
+    >
+      {isSelected && (
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+      )}
+      <span className={`text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${isCollapsed ? 'text-sm' : 'text-lg'}`}>+</span>
+    </div>
+  );
+}
 
 function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);

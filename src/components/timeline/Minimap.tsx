@@ -2,7 +2,7 @@
  * Minimap.tsx — Project overview strip at top of timeline.
  * Shows all tracks and clips as colored blocks. Click to navigate.
  */
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TIMELINE_MINIMAP_HEIGHT } from './timelineLayout';
@@ -14,23 +14,8 @@ export function Minimap() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const scrollX = useUIStore((s) => s.scrollX);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [viewportWidthPx, setViewportWidthPx] = useState(0);
-
-  // Observe the scroll container width so the viewport indicator stays accurate
-  useEffect(() => {
-    const scrollContainer = containerRef.current?.parentElement?.querySelector(
-      '.overflow-auto',
-    ) as HTMLElement | null;
-    if (!scrollContainer) return;
-
-    const update = () => setViewportWidthPx(scrollContainer.clientWidth);
-    update();
-
-    const ro = new ResizeObserver(update);
-    ro.observe(scrollContainer);
-    return () => ro.disconnect();
-  }, []);
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -43,10 +28,10 @@ export function Minimap() {
       const scrollContainer = containerRef.current.parentElement?.querySelector('.overflow-auto');
       if (scrollContainer) {
         const targetPx = targetTime * pixelsPerSecond;
-        scrollContainer.scrollLeft = Math.max(0, targetPx - scrollContainer.clientWidth / 2);
+        scrollContainer.scrollLeft = Math.max(0, targetPx - timelineViewportWidth / 2);
       }
     },
-    [project, pixelsPerSecond],
+    [project, pixelsPerSecond, timelineViewportWidth],
   );
 
   if (!project || project.tracks.length === 0) return null;
@@ -98,7 +83,7 @@ export function Minimap() {
         totalDuration={totalDur}
         pixelsPerSecond={pixelsPerSecond}
         scrollX={scrollX}
-        viewportWidthPx={viewportWidthPx}
+        viewportWidthPx={timelineViewportWidth}
       />
     </div>
   );

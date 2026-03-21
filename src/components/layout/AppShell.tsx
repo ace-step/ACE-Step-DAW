@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Toolbar } from './Toolbar';
-import { TrackList } from '../tracks/TrackList';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
@@ -107,7 +106,6 @@ function EditorShell() {
           }
         }}
       >
-        {project && mainView === 'arrangement' && <TrackList />}
         {mainView === 'arrangement' ? <Timeline /> : <SessionView />}
         {project && <LoopBrowser />}
       </div>

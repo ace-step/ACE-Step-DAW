@@ -6,7 +6,6 @@ import { useUIStore } from '../../../store/uiStore';
 import { useGenerationStore } from '../../../store/generationStore';
 import { generateFromAddLayer } from '../../../services/generationPipeline';
 
-// Mock external dependencies
 vi.mock('../../../services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
@@ -157,10 +156,8 @@ describe('AddLayerPanel', () => {
 
   it('shows lyrics textarea when Vocal layer type is selected', () => {
     render(<AddLayerPanel />);
-    // Lyrics should not be visible by default (Song Track selected)
     expect(screen.queryByPlaceholderText('Song lyrics...')).not.toBeInTheDocument();
 
-    // Click Vocal
     fireEvent.click(screen.getByText('Vocal'));
     expect(screen.getByPlaceholderText('Song lyrics...')).toBeInTheDocument();
   });
@@ -183,7 +180,6 @@ describe('AddLayerPanel', () => {
   it('has a collapsed Advanced section by default', () => {
     render(<AddLayerPanel />);
     expect(screen.getByText(/Advanced/)).toBeInTheDocument();
-    // Seed input should not be visible
     expect(screen.queryByPlaceholderText('Leave empty for random')).not.toBeInTheDocument();
   });
 
@@ -214,7 +210,6 @@ describe('AddLayerPanel', () => {
 
   it('has no backdrop overlay — floating panel only', () => {
     const { container } = render(<AddLayerPanel />);
-    // The panel should not have a fixed inset-0 backdrop
     const backdrop = container.querySelector('.fixed.inset-0');
     expect(backdrop).toBeNull();
   });
@@ -292,7 +287,6 @@ describe('AddLayerPanel', () => {
   it('applies active styling to selected layer type pill', () => {
     render(<AddLayerPanel />);
     const songBtn = screen.getByText('Song Track');
-    // Song Track should have teal active styling
     expect(songBtn.className).toContain('bg-teal-600');
 
     const vocalBtn = screen.getByText('Vocal');

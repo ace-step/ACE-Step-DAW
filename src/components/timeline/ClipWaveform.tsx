@@ -19,7 +19,7 @@ export function ClipWaveform({
   color,
   opacityClassName = 'opacity-60',
 }: ClipWaveformProps) {
-  const contentWidth = Math.max(width - 3, 0);
+  const contentWidth = Math.max(width, 0);
   const peakSlice = getVisiblePeakSlice(peaks, audioDuration, audioOffset, clipDuration);
 
   if (!peaks || peakSlice.numBars === 0 || contentWidth <= 0) {

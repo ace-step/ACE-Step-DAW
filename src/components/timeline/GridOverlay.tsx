@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { getBeatDuration, getBarDuration } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
+import { useMetaKeyDown } from '../../hooks/useMetaKeyDown';
 
 /**
  * Adaptive grid: resolution auto-adjusts based on zoom level.
@@ -23,6 +24,7 @@ export function GridOverlay() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
+  const isMetaDown = useMetaKeyDown();
 
   const lines = useMemo(() => {
     if (!project) return [];
@@ -85,18 +87,22 @@ export function GridOverlay() {
     <div className="absolute inset-0 pointer-events-none" style={{ width: totalWidth, minHeight: '100vh' }}>
       {lines
         .filter((line) => line.strength !== 'sub')
-        .map((line, i) => (
-        <div
-          key={i}
-          className="absolute top-0 bottom-0"
-          style={{
-            left: line.x,
-            width: line.strength === 'bar' ? 1 : 0,
-            backgroundColor: line.strength === 'bar' ? colors.bar : undefined,
-            borderLeft: line.strength === 'beat' ? `1px dashed ${colors.beat}` : undefined,
-          }}
-        />
-      ))}
+        .map((line, i) => {
+          const color = line.strength === 'bar' ? colors.bar : colors.beat;
+          return (
+            <div
+              key={i}
+              className="absolute top-0 bottom-0"
+              data-testid={`grid-line-${line.strength}`}
+              style={{
+                left: line.x,
+                ...(isMetaDown
+                  ? { borderLeft: `1px dashed ${color}` }
+                  : { width: 1, backgroundColor: color }),
+              }}
+            />
+          );
+        })}
     </div>
   );
 }

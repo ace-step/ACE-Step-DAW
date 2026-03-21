@@ -181,7 +181,7 @@ export function TimeRuler() {
           <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5a75]' : 'h-2/3 bg-[color:var(--color-daw-grid-bar)]'}`} />
           {/* Label beside tick */}
           <span
-            className={`absolute bottom-[4px] left-[4px] font-medium whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
+            className={`absolute bottom-px left-[4px] font-medium leading-none whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}
           >
             {label}
             {tsLabel && (
@@ -215,7 +215,7 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   const svgH = 12;
   return (
     <div
-      className="absolute bottom-[4px] z-30 pointer-events-none"
+      className="absolute bottom-[-1px] z-30 pointer-events-none"
       style={{ left: x, transform: `translate(-${Math.floor(svgW / 2)}px, 0px)` }}
     >
       <svg

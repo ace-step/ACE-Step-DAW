@@ -7,6 +7,7 @@ import { getBarDuration, getBeatDuration } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tempoMap';
 import { getScrubPreviewRate } from '../../utils/scrubMath';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 const LOOP_MIN_DURATION = 0.01;
 const LOOP_HANDLE_WIDTH = 10;
@@ -14,6 +15,7 @@ const LOOP_HANDLE_WIDTH = 10;
 export function TimeRuler() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const loopStart = useTransportStore((s) => s.loopStart);
   const loopEnd = useTransportStore((s) => s.loopEnd);
@@ -138,6 +140,7 @@ export function TimeRuler() {
   const markers = useMemo(() => {
     if (!project) return [];
     const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
     const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;
     const beatDur = getBeatDuration(bpm);
@@ -147,7 +150,7 @@ export function TimeRuler() {
 
     if (!hasTempoMap && !hasTsMap) {
       const barDur = getBarDuration(bpm, timeSignature);
-      const totalBars = Math.ceil(totalDuration / barDur);
+      const totalBars = Math.ceil(visualDuration / barDur);
       const result: { label: string; x: number; isBar: boolean; tsLabel?: string }[] = [];
       for (let bar = 1; bar <= totalBars; bar++) {
         const barTime = (bar - 1) * barDur;
@@ -155,7 +158,7 @@ export function TimeRuler() {
         if (showBeats) {
           for (let beat = 2; beat <= timeSignature; beat++) {
             const beatTime = barTime + (beat - 1) * beatDur;
-            if (beatTime > totalDuration) break;
+            if (beatTime > visualDuration) break;
             result.push({ label: `${bar}.${beat}`, x: beatTime * pixelsPerSecond, isBar: false });
           }
         }
@@ -168,7 +171,7 @@ export function TimeRuler() {
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
       const time = beatToTime(barBeat, tempoMap, bpm);
-      if (time > totalDuration) break;
+      if (time > visualDuration) break;
 
       let tsLabel: string | undefined;
       if (hasTsMap) {
@@ -186,17 +189,18 @@ export function TimeRuler() {
           : { numerator: timeSignature, denominator: 4 };
         for (let beat = 2; beat <= ts.numerator; beat++) {
           const beatTime = beatToTime(barBeat + (beat - 1), tempoMap, bpm);
-          if (beatTime > totalDuration) break;
+          if (beatTime > visualDuration) break;
           result.push({ label: `${bar}.${beat}`, x: beatTime * pixelsPerSecond, isBar: false });
         }
       }
     }
     return result;
-  }, [project, pixelsPerSecond]);
+  }, [project, pixelsPerSecond, timelineViewportWidth]);
 
   if (!project) return <div className="bg-[#1a1a28] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 
-  const totalWidth = project.totalDuration * pixelsPerSecond;
+  const visualDuration = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth);
+  const totalWidth = visualDuration * pixelsPerSecond;
 
   return (
     <div

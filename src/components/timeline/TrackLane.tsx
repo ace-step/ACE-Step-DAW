@@ -11,6 +11,7 @@ import { getBarDuration, snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import {
   ARRANGEMENT_EMPTY_LANE_BG,
@@ -60,6 +61,7 @@ const EMPTY_LANE_SURFACE_OVERLAY_OPACITY = 0.55;
 
 export function TrackLane({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const isSelected = useUIStore((s) => s.selectedTrackIds.has(track.id));
   const selectTrack = useUIStore((s) => s.selectTrack);
@@ -152,7 +154,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const isSequencer = trackType === 'sequencer';
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
-  const totalWidth = project.totalDuration * pixelsPerSecond;
+  const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
   const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature) * 4;
 
   const hitsClip = useCallback((clickTime: number): boolean => {

@@ -39,6 +39,15 @@ export function getTimelineContentWidth(
   return Math.max(0, totalDuration * pixelsPerSecond, viewportWidth);
 }
 
+export function getTimelineVisualDuration(
+  totalDuration: number,
+  pixelsPerSecond: number,
+  viewportWidth: number,
+) {
+  if (pixelsPerSecond <= 0) return totalDuration;
+  return Math.max(totalDuration, viewportWidth / pixelsPerSecond);
+}
+
 export function getTimelineMaxScrollLeft(
   totalDuration: number,
   pixelsPerSecond: number,

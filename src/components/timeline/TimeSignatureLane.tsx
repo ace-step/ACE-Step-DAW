@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar } from '../../utils/tempoMap';
 import { TIME_SIGNATURE_LANE_HEIGHT } from './timelineLayout';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 const HOVER_THRESHOLD_PX = 10;
 const MARKER_COLOR = '#22c55e';
@@ -31,6 +32,7 @@ export function TimeSignatureLane() {
   const endDrag = useProjectStore((s) => s.endDrag);
   const undo = useProjectStore((s) => s.undo);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const [hoveredBar, setHoveredBar] = useState<number | null>(null);
 
   const bpm = project?.bpm ?? 120;
@@ -38,7 +40,7 @@ export function TimeSignatureLane() {
   const timeSignature = project?.timeSignature ?? 4;
   const timeSignatureMap = project?.timeSignatureMap ?? [];
   const totalDuration = project?.totalDuration ?? 0;
-  const width = totalDuration * pixelsPerSecond;
+  const width = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
   const barStarts = useMemo(() => {
     if (!project) return [];

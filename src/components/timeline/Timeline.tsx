@@ -201,6 +201,7 @@ export function Timeline() {
   const setTimelineFocused = useUIStore((s) => s.setTimelineFocused);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
+  const setTimelineViewportWidth = useUIStore((s) => s.setTimelineViewportWidth);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
   const contextWindow = useUIStore((s) => s.contextWindow);
@@ -454,13 +455,17 @@ export function Timeline() {
     const container = scrollRef.current;
     if (!container) return;
 
-    const updateViewportWidth = () => setViewportWidth(container.clientWidth || window.innerWidth || 0);
+    const updateViewportWidth = () => {
+      const nextWidth = container.clientWidth || window.innerWidth || 0;
+      setViewportWidth(nextWidth);
+      setTimelineViewportWidth(nextWidth);
+    };
     updateViewportWidth();
 
     const ro = new ResizeObserver(updateViewportWidth);
     ro.observe(container);
     return () => ro.disconnect();
-  }, []);
+  }, [setTimelineViewportWidth]);
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
   const wheelRef = useNonPassiveWheel(handleWheel);

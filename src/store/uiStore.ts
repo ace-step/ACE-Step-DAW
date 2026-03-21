@@ -53,6 +53,7 @@ export interface UIState {
   keyboardContext: { scope: ShortcutContext; trackId: string | null };
   arrangementView: 'arrangement' | 'session';
   pixelsPerSecond: number;
+  timelineViewportWidth: number;
   snapEnabled: boolean;
   scrollX: number;
   scrollY: number;
@@ -199,6 +200,7 @@ export interface UIState {
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
+  setTimelineViewportWidth: (width: number) => void;
   setKeyboardContext: (scope: ShortcutContext, trackId?: string | null) => void;
   toggleArrangementView: () => void;
   setArrangementView: (view: 'arrangement' | 'session') => void;
@@ -425,6 +427,7 @@ export const useUIStore = create<UIState>()(
   keyboardContext: { scope: 'timeline', trackId: null },
   arrangementView: 'arrangement',
   pixelsPerSecond: DEFAULT_TIMELINE_PIXELS_PER_SECOND,
+  timelineViewportWidth: 0,
   snapEnabled: true,
   scrollX: 0,
   scrollY: 0,
@@ -537,6 +540,7 @@ export const useUIStore = create<UIState>()(
     return { mainView: nextView, arrangementView: nextView };
   }),
   setPixelsPerSecond: (pps) => set({ pixelsPerSecond: pps }),
+  setTimelineViewportWidth: (timelineViewportWidth) => set({ timelineViewportWidth }),
   setKeyboardContext: (scope, trackId = null) => set((state) => ({
     keyboardContext: {
       scope,

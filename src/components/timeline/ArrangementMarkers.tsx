@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { computeSections } from '../../utils/arrangementSections';
 import { ARRANGEMENT_MARKERS_HEIGHT } from './timelineLayout';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 /** Preset colors for common arrangement sections. */
 const SECTION_COLORS: Record<string, string> = {
@@ -29,6 +30,7 @@ export function ArrangementMarkers() {
   const removeMarker = useProjectStore((s) => s.removeMarker);
   const updateMarker = useProjectStore((s) => s.updateMarker);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const { seek } = useTransport();
 
   const markers = project?.markers ?? [];
@@ -87,7 +89,7 @@ export function ArrangementMarkers() {
 
   if (!project || sections.length === 0) return null;
 
-  const totalWidth = totalDuration * pixelsPerSecond;
+  const totalWidth = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
   return (
     <div

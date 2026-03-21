@@ -5,6 +5,7 @@ import { MIN_BPM, MAX_BPM } from '../../constants/defaults';
 import { beatToTime } from '../../utils/tempoMap';
 import type { TempoEvent } from '../../types/project';
 import { TEMPO_LANE_HEIGHT } from './timelineLayout';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 const POINT_RADIUS = 5;
 const COLOR = '#f59e0b'; // amber for tempo
@@ -24,11 +25,12 @@ export function TempoLane() {
   const endDrag = useProjectStore((s) => s.endDrag);
   const undo = useProjectStore((s) => s.undo);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
 
   const bpm = project?.bpm ?? 120;
   const tempoMap = project?.tempoMap;
   const totalDuration = project?.totalDuration ?? 30;
-  const width = totalDuration * pixelsPerSecond;
+  const width = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
   const beatToX = useCallback(
     (beat: number) => beatToTime(beat, tempoMap, bpm) * pixelsPerSecond,

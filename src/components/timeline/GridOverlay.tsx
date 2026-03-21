@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getBeatDuration, getBarDuration } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 /**
  * Adaptive grid: resolution auto-adjusts based on zoom level.
@@ -21,11 +22,13 @@ function getGridDivision(pixelsPerSecond: number, bpm: number): { division: numb
 export function GridOverlay() {
   const project = useProjectStore((s) => s.project);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
 
   const lines = useMemo(() => {
     if (!project) return [];
 
     const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
     const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;
 
@@ -37,7 +40,7 @@ export function GridOverlay() {
       const stepDuration = beatDuration * division;
 
       const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
-      for (let t = 0; t <= totalDuration; t += stepDuration) {
+      for (let t = 0; t <= visualDuration; t += stepDuration) {
         const isBar = Math.abs(t % barDuration) < 0.001 || Math.abs((t % barDuration) - barDuration) < 0.001;
         const isBeat = Math.abs(t % beatDuration) < 0.001 || Math.abs((t % beatDuration) - beatDuration) < 0.001;
         result.push({
@@ -54,7 +57,7 @@ export function GridOverlay() {
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
       const barTime = beatToTime(barBeat, tempoMap, bpm);
-      if (barTime > totalDuration) break;
+      if (barTime > visualDuration) break;
 
       result.push({ x: barTime * pixelsPerSecond, strength: 'bar' });
 
@@ -62,16 +65,16 @@ export function GridOverlay() {
       const beatLength = getTimeSignatureBeatLength(ts.denominator);
       for (let beat = 1; beat < ts.numerator; beat++) {
         const beatTime = beatToTime(barBeat + beat * beatLength, tempoMap, bpm);
-        if (beatTime > totalDuration) break;
+        if (beatTime > visualDuration) break;
         result.push({ x: beatTime * pixelsPerSecond, strength: 'beat' });
       }
     }
     return result;
-  }, [project, pixelsPerSecond]);
+  }, [project, pixelsPerSecond, timelineViewportWidth]);
 
   if (!project) return null;
 
-  const totalWidth = project.totalDuration * pixelsPerSecond;
+  const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
   const colors = {
     bar: 'var(--color-daw-grid-bar)',

@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import type { AutomationLane, AutomationParameter, AutomationPoint } from '../../types/project';
 import { getEffectAutomationColor, getEffectAutomationLabel } from '../../utils/effectAutomation';
+import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 
 const LANE_HEIGHT = 60;
 const POINT_RADIUS = 4;
@@ -14,6 +15,7 @@ interface AutomationLaneViewProps {
 export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 30);
   const addAutomationPoint = useProjectStore((s) => s.addAutomationPoint);
   const updateAutomationPoint = useProjectStore((s) => s.updateAutomationPoint);
@@ -25,7 +27,7 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
   );
 
   const color = getEffectAutomationColor(lane.parameter);
-  const width = totalDuration * pixelsPerSecond;
+  const width = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
   const timeToX = useCallback((time: number) => time * pixelsPerSecond, [pixelsPerSecond]);
   const valueToY = useCallback((value: number) => LANE_HEIGHT - value * LANE_HEIGHT, []);

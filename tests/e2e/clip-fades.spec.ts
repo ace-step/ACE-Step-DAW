@@ -35,7 +35,14 @@ test.describe('Clip fade handles', () => {
   });
 
   test('supports keyboard-adjustable fade handles on audio clips', async ({ page }) => {
-    await page.getByText('Click anywhere to enable audio').click();
+    await expect(page.getByRole('slider', { name: /fade in handle/i })).toHaveCount(0);
+    await expect(page.getByRole('slider', { name: /fade out handle/i })).toHaveCount(0);
+
+    await page.evaluate(() => {
+      const store = (window as any).__store;
+      const clip = store.getState().project.tracks[0].clips[0];
+      store.getState().setClipFade(clip.id, { fadeInDuration: 0.2, fadeOutDuration: 0.4 });
+    });
 
     const fadeInHandle = page.getByRole('slider', { name: /fade in handle/i });
     await expect(fadeInHandle).toBeVisible();
@@ -52,8 +59,8 @@ test.describe('Clip fade handles', () => {
       };
     });
 
-    expect(fadeState.fadeInDuration).toBe(0.6);
-    expect(fadeState.fadeOutDuration).toBe(0);
+    expect(fadeState.fadeInDuration).toBe(0.8);
+    expect(fadeState.fadeOutDuration).toBe(0.4);
 
     const fadeOutHandle = page.getByRole('slider', { name: /fade out handle/i });
     await fadeOutHandle.dblclick();
@@ -63,5 +70,6 @@ test.describe('Clip fade handles', () => {
     });
 
     expect(fadeOutAfterReset).toBe(0);
+    await expect(page.getByRole('slider', { name: /fade out handle/i })).toHaveCount(0);
   });
 });

@@ -54,8 +54,6 @@ type PianoRollTestStore = {
 type PianoRollUIStore = {
   getState(): {
     setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
-    skipOnboarding?: () => void;
-    setShowOnboarding?: (value: boolean) => void;
   };
 };
 
@@ -80,8 +78,6 @@ test.describe('Piano Roll Workflow', () => {
       const store = (window as unknown as { __store: PianoRollTestStore }).__store;
       const uiStore = (window as unknown as { __uiStore: PianoRollUIStore }).__uiStore;
       store.getState().createProject({ name: 'Piano Roll Test' });
-      uiStore.getState().skipOnboarding?.();
-      uiStore.getState().setShowOnboarding?.(false);
     });
   });
 

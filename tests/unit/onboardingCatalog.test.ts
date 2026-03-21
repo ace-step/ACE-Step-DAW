@@ -1,16 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { ONBOARDING_TUTORIAL_STEPS } from '../../src/data/onboardingCatalog';
+import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../src/data/onboardingCatalog';
 
-describe('onboarding tutorial catalog', () => {
-  it('covers the command palette with the Cmd+K shortcut in the 5-step flow', () => {
-    expect(ONBOARDING_TUTORIAL_STEPS).toHaveLength(5);
+describe('starter template catalog', () => {
+  it('provides at least one template and one demo starter', () => {
+    const templates = ONBOARDING_STARTERS.filter((s) => s.kind === 'template');
+    const demos = ONBOARDING_STARTERS.filter((s) => s.kind === 'demo');
+    expect(templates.length).toBeGreaterThanOrEqual(1);
+    expect(demos.length).toBeGreaterThanOrEqual(1);
+  });
 
-    const stepIds = ONBOARDING_TUTORIAL_STEPS.map((step) => step.id);
-    expect(stepIds).toEqual(['timeline', 'transport', 'genr', 'mixer', 'command-palette']);
+  it('returns a ProjectTemplate for template starters', () => {
+    const templateStarter = ONBOARDING_STARTERS.find((s) => s.kind === 'template');
+    expect(templateStarter).toBeDefined();
+    const template = getStarterTemplate(templateStarter!.id);
+    expect(template).toBeDefined();
+    expect(template!.name).toBe(templateStarter!.title);
+    expect(template!.bpm).toBe(templateStarter!.bpm);
+  });
 
-    const commandPaletteStep = ONBOARDING_TUTORIAL_STEPS[4];
-    expect(commandPaletteStep.selector).toBe('[data-onboarding-target="command-palette-button"]');
-    expect(commandPaletteStep.title).toBe('Command Palette');
-    expect(commandPaletteStep.body).toContain('Cmd+K');
+  it('instantiates a demo project with tracks and clips', () => {
+    const demoStarter = ONBOARDING_STARTERS.find((s) => s.kind === 'demo');
+    expect(demoStarter).toBeDefined();
+    const project = instantiateDemoProject(demoStarter!.id);
+    expect(project.name).toBe(demoStarter!.title);
+    expect(project.tracks.length).toBeGreaterThan(0);
   });
 });

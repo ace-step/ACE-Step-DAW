@@ -16,20 +16,6 @@ export interface OnboardingStarter {
   tracks: string[];
 }
 
-export interface OnboardingTutorialStep {
-  id: string;
-  selector: string;
-  title: string;
-  body: string;
-}
-
-export interface OnboardingTip {
-  id: string;
-  selector: string;
-  title: string;
-  body: string;
-}
-
 type TrackInput = {
   trackName: TrackName;
   trackType: TrackType;
@@ -486,56 +472,3 @@ export function instantiateDemoProject(id: string) {
   return createDemoProject(id);
 }
 
-export const ONBOARDING_TUTORIAL_STEPS: OnboardingTutorialStep[] = [
-  {
-    id: 'timeline',
-    selector: '[data-onboarding-target="timeline"]',
-    title: 'Timeline',
-    body: 'Arrange clips here. Drag regions, make selections, and build the song structure from left to right.',
-  },
-  {
-    id: 'transport',
-    selector: '[data-onboarding-target="transport"]',
-    title: 'Transport',
-    body: 'Use Space to play and stop. Record, loop, and navigate from the transport bar while you sketch.',
-  },
-  {
-    id: 'genr',
-    selector: '[data-onboarding-target="genr-button"]',
-    title: 'genr',
-    body: 'Open genr with Cmd+G to generate a first pass for the current arrangement or starter template.',
-  },
-  {
-    id: 'mixer',
-    selector: '[data-onboarding-target="mixer-button"]',
-    title: 'Mixer',
-    body: 'Toggle the mixer with X to balance level, pan, and effects once the first ideas are in place.',
-  },
-  {
-    id: 'command-palette',
-    selector: '[data-onboarding-target="command-palette-button"]',
-    title: 'Command Palette',
-    body: 'Press Cmd+K to search actions, settings, and workflow shortcuts without leaving the arrangement.',
-  },
-];
-
-export const ONBOARDING_TIPS: OnboardingTip[] = [
-  {
-    id: 'genr-first-pass',
-    selector: '[data-onboarding-target="genr-button"]',
-    title: 'Start with genr',
-    body: 'Use Cmd+G to open genr and generate the first pass against your starter tracks instead of building from silence.',
-  },
-  {
-    id: 'loop-browser',
-    selector: '[data-onboarding-target="loop-browser-button"]',
-    title: 'Quick Layering',
-    body: 'Press O to open the loop browser and drag a texture or groove directly into the timeline.',
-  },
-  {
-    id: 'timeline-selection',
-    selector: '[data-onboarding-target="timeline"]',
-    title: 'Fast Selection',
-    body: 'Hold Cmd or Ctrl while dragging on the timeline to define a generate window for a focused genr pass.',
-  },
-];

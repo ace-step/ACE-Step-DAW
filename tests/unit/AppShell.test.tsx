@@ -29,7 +29,6 @@ vi.mock('../../src/components/dialogs/BounceInPlaceDialog', () => ({ BounceInPla
 vi.mock('../../src/components/dialogs/ShareDialog', () => ({ ShareDialog: () => <div>ShareDialog</div> }));
 vi.mock('../../src/components/dialogs/AIAssistantPanel', () => ({ AIAssistantPanel: () => <div>AIAssistantPanel</div> }));
 vi.mock('../../src/components/mixer/MixerPanel', () => ({ MixerPanel: () => <div>MixerPanel</div> }));
-vi.mock('../../src/components/assets/AssetsPanel', () => ({ AssetsPanel: () => <div>AssetsPanel</div> }));
 vi.mock('../../src/components/assets/LoopBrowser', () => ({ LoopBrowser: () => <div>LoopBrowser</div> }));
 vi.mock('../../src/components/sequencer/SequencerEditor', () => ({ SequencerEditor: () => <div>SequencerEditor</div> }));
 vi.mock('../../src/components/sequencer/DrumMachineEditor', () => ({ DrumMachineEditor: () => <div>DrumMachineEditor</div> }));
@@ -40,9 +39,6 @@ vi.mock('../../src/components/session/SessionView', () => ({ SessionView: () => 
 vi.mock('../../src/components/midi/VirtualKeyboard', () => ({ VirtualKeyboard: () => <div>VirtualKeyboard</div> }));
 vi.mock('../../src/components/ui/Toast', () => ({ ToastContainer: () => <div>ToastContainer</div> }));
 vi.mock('../../src/components/layout/UndoHistoryPanel', () => ({ UndoHistoryPanel: () => <div>UndoHistoryPanel</div> }));
-vi.mock('../../src/components/onboarding/FirstRunOnboarding', () => ({ FirstRunOnboarding: () => <div>FirstRunOnboarding</div> }));
-vi.mock('../../src/components/onboarding/GuidedTutorialOverlay', () => ({ GuidedTutorialOverlay: () => <div>GuidedTutorialOverlay</div> }));
-vi.mock('../../src/components/onboarding/ContextualTips', () => ({ ContextualTips: () => <div>ContextualTips</div> }));
 vi.mock('../../src/hooks/useAudioEngine', () => ({ useAudioEngine: () => ({ resumeOnGesture: vi.fn().mockResolvedValue(undefined) }) }));
 vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('../../src/hooks/useEffectsSync', () => ({ useEffectsSync: vi.fn() }));
@@ -53,19 +49,6 @@ describe('AppShell overlay orchestration', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
     useUIStore.setState(useUIStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Overlay Test' });
-  });
-
-  it('hides command surfaces while onboarding is active', () => {
-    useUIStore.setState({
-      showOnboarding: true,
-      showCommandPalette: true,
-      showAIAssistant: true,
-    });
-
-    render(<AppShell />);
-
-    expect(screen.queryByText('CommandPalette')).not.toBeInTheDocument();
-    expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
   });
 
   it('hides command surfaces while a blocking dialog is open', () => {
@@ -79,6 +62,5 @@ describe('AppShell overlay orchestration', () => {
 
     expect(screen.queryByText('CommandPalette')).not.toBeInTheDocument();
     expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Enable audio playback')).not.toBeInTheDocument();
   });
 });

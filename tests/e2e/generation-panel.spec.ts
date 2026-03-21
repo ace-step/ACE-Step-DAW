@@ -25,14 +25,8 @@ test.describe('Generation Panel', () => {
             setShowGenerationPanel: (value: boolean) => void;
           };
         };
-        __uiStore: {
-          getState: () => {
-            skipOnboarding: () => void;
-          };
-        };
       };
 
-      browserWindow.__uiStore.getState().skipOnboarding();
       browserWindow.__store.getState().createProject({
         name: 'Generation Panel Test',
         bpm: 128,

@@ -21,6 +21,7 @@ import {
   type ProjectSummary,
   type TemplateSummary,
 } from '../../services/projectStorage';
+import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../data/onboardingCatalog';
 import { toastSuccess } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { ClipLayoutItem } from '../../utils/clipLayout';
@@ -152,7 +153,7 @@ export function NewProjectDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className={`${recentProjects.length > 0 || templates.length > 0 ? 'w-[600px]' : 'w-[400px]'} max-h-[80vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col`}>
+      <div className="w-[600px] max-h-[80vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <h2 className="text-sm font-medium">New Project</h2>
           <button
@@ -202,6 +203,46 @@ export function NewProjectDialog() {
               </div>
             </div>
           )}
+
+          {/* ── Starter Templates ── */}
+          <div className="p-4 border-b border-daw-border">
+            <h3 className="text-xs font-medium text-zinc-400 mb-3">Starter Templates</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {ONBOARDING_STARTERS.map((starter) => (
+                <button
+                  key={starter.id}
+                  type="button"
+                  data-starter-id={starter.id}
+                  onClick={() => {
+                    if (starter.kind === 'template') {
+                      const tmpl = getStarterTemplate(starter.id);
+                      if (tmpl) createProjectFromTemplate(tmpl);
+                    } else {
+                      setProject(instantiateDemoProject(starter.id));
+                    }
+                    toastSuccess(`Opened "${starter.title}"`);
+                    setShow(false);
+                  }}
+                  className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2"
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">{starter.kind === 'template' ? 'Template' : 'Demo'}</p>
+                    <p className="text-[10px] text-zinc-500">{starter.bpm} BPM</p>
+                  </div>
+                  <p className="text-xs text-zinc-200 font-medium">{starter.title}</p>
+                  <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">{starter.description}</p>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {starter.tracks.slice(0, 3).map((t) => (
+                      <span key={t} className="text-[9px] rounded bg-white/5 border border-white/10 px-1.5 py-0.5 text-zinc-400">{t}</span>
+                    ))}
+                    {starter.tracks.length > 3 && (
+                      <span className="text-[9px] text-zinc-500">+{starter.tracks.length - 3}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* ── Templates ── */}
           {templates.length > 0 && (

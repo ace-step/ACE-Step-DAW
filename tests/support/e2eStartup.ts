@@ -12,39 +12,13 @@ export async function loadFreshApp(page: Page) {
 }
 
 export async function loadReturningUserApp(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-    localStorage.setItem('ace-step-daw-ui', JSON.stringify({
-      state: {
-        onboardingCompleted: true,
-        onboardingSkipped: true,
-        showOnboarding: false,
-      },
-      version: 0,
-    }));
-  });
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
-  await waitForBrowserStores(page);
-}
-
-export async function ensureOnboardingVisible(page: Page) {
-  await expect(page.getByLabel('First-run onboarding')).toBeVisible({ timeout: 10000 });
-}
-
-export async function skipOnboardingToNewProject(page: Page) {
-  if (await page.getByLabel('First-run onboarding').isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Skip For Now' }).click();
-  }
-
-  await expect(page.getByRole('heading', { name: 'New Project' })).toBeVisible({
-    timeout: 10000,
-  });
+  await loadFreshApp(page);
 }
 
 export async function ensureNewProjectDialog(page: Page) {
-  await skipOnboardingToNewProject(page);
+  await expect(page.getByRole('heading', { name: 'New Project' })).toBeVisible({
+    timeout: 10000,
+  });
 }
 
 export async function createProjectViaDialog(

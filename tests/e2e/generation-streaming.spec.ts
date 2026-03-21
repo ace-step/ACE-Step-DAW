@@ -126,14 +126,8 @@ test.describe('Streaming Generation Variations', () => {
             setShowGenerationPanel: (value: boolean) => void;
           };
         };
-        __uiStore: {
-          getState: () => {
-            skipOnboarding: () => void;
-          };
-        };
       };
 
-      browserWindow.__uiStore.getState().skipOnboarding();
       browserWindow.__store.getState().createProject({
         name: 'Streaming Variations Test',
         bpm: 128,

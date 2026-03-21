@@ -20,7 +20,6 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   createProjectViaDialog,
   ensureNewProjectDialog,
-  ensureOnboardingVisible,
   focusApplicationShell,
   loadFreshApp,
 } from '../support/e2eStartup';
@@ -83,13 +82,8 @@ test.describe('Real User Scenarios (Issue #110)', () => {
   // 1. CREATE PROJECT VIA DIALOG
   // =========================================================================
   test.describe('1. Create project via dialog', () => {
-    test('1a. First launch shows onboarding before the setup dialog', async ({ page }) => {
-      await ensureOnboardingVisible(page);
-      await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden({
-        timeout: 5000,
-      });
-      await expect(page.locator('input[type="text"]').first()).toBeHidden({ timeout: 5000 });
-      await expect(page.locator('input[type="number"]').first()).toBeHidden({ timeout: 5000 });
+    test('1a. First launch shows new project dialog', async ({ page }) => {
+      await ensureNewProjectDialog(page);
     });
 
     test('1b. Filling name + clicking Create produces a project', async ({ page }) => {

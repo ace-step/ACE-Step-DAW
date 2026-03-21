@@ -32,11 +32,7 @@ test.describe('Visual Regression Screenshots', () => {
     await page.evaluate(() => {
       const store = (window as any).__store;
       const uiStore = (window as any).__uiStore;
-      uiStore.getState().setShowOnboarding(false);
       uiStore.getState().setShowNewProjectDialog(false);
-      uiStore.setState({
-        dismissedOnboardingTipIds: ['genr-first-pass', 'loop-browser', 'timeline-selection'],
-      });
       store.getState().createProject({ name: 'Arrangement Alignment Visual Test' });
       store.getState().addTrack('guitar');
       store.getState().addTrack('synth');
@@ -50,11 +46,7 @@ test.describe('Visual Regression Screenshots', () => {
     await page.evaluate(() => {
       const store = (window as any).__store;
       const uiStore = (window as any).__uiStore;
-      uiStore.getState().setShowOnboarding(false);
       uiStore.getState().setShowNewProjectDialog(false);
-      uiStore.setState({
-        dismissedOnboardingTipIds: ['genr-first-pass', 'loop-browser', 'timeline-selection'],
-      });
       store.getState().createProject({ name: 'Empty Stems Lane Gridline Test' });
       store.getState().addTrack('drums');
       store.getState().addTrack('keyboard', 'pianoRoll');
@@ -68,11 +60,7 @@ test.describe('Visual Regression Screenshots', () => {
     await page.evaluate(() => {
       const store = (window as any).__store;
       const uiStore = (window as any).__uiStore;
-      uiStore.getState().setShowOnboarding(false);
       uiStore.getState().setShowNewProjectDialog(false);
-      uiStore.setState({
-        dismissedOnboardingTipIds: ['genr-first-pass', 'loop-browser', 'timeline-selection'],
-      });
 
       store.getState().createProject({ name: 'Arrangement Header Alignment Visual Test', bpm: 120, keyScale: 'C major' });
 

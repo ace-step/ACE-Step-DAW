@@ -21,7 +21,6 @@ type ZoomTestWindow = Window & typeof globalThis & {
   __uiStore: {
     getState(): {
       setShowNewProjectDialog: (value: boolean) => void;
-      skipOnboarding?: () => void;
       selectClips: (clipIds: string[]) => void;
       setSelectWindow: (value: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
       pixelsPerSecond: number;
@@ -40,7 +39,6 @@ test.describe('Arrangement zoom shortcuts', () => {
     );
     await page.evaluate(() => {
       const testWindow = window as unknown as ZoomTestWindow;
-      testWindow.__uiStore.getState().skipOnboarding?.();
       testWindow.__store.getState().createProject({ name: 'Zoom Shortcuts E2E' });
       testWindow.__uiStore.getState().setShowNewProjectDialog(false);
     });

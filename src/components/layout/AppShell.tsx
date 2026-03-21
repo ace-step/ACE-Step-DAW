@@ -26,7 +26,6 @@ import { BounceInPlaceDialog } from '../dialogs/BounceInPlaceDialog';
 import { ShareDialog } from '../dialogs/ShareDialog';
 import { AIAssistantPanel } from '../dialogs/AIAssistantPanel';
 import { MixerPanel } from '../mixer/MixerPanel';
-import { AssetsPanel } from '../assets/AssetsPanel';
 import { LoopBrowser } from '../assets/LoopBrowser';
 import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { DrumMachineEditor } from '../sequencer/DrumMachineEditor';
@@ -39,9 +38,6 @@ import { SharedProjectPage } from '../sharing/SharedProjectPage';
 import { VirtualKeyboard } from '../midi/VirtualKeyboard';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
-import { FirstRunOnboarding } from '../onboarding/FirstRunOnboarding';
-import { GuidedTutorialOverlay } from '../onboarding/GuidedTutorialOverlay';
-import { ContextualTips } from '../onboarding/ContextualTips';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -54,11 +50,6 @@ function EditorShell() {
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
-  const showOnboarding = useUIStore((s) => s.showOnboarding);
-  const activeTutorialStep = useUIStore((s) => s.activeTutorialStep);
-  const onboardingCompleted = useUIStore((s) => s.onboardingCompleted);
-  const onboardingSkipped = useUIStore((s) => s.onboardingSkipped);
-  const setShowOnboarding = useUIStore((s) => s.setShowOnboarding);
   const mainView = useUIStore((s) => s.mainView);
   const showNewProjectDialog = useUIStore((s) => s.showNewProjectDialog);
   const showInstrumentPicker = useUIStore((s) => s.showInstrumentPicker);
@@ -69,7 +60,6 @@ function EditorShell() {
   const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const showShortcutEditorDialog = useUIStore((s) => s.showShortcutEditorDialog);
 
-  const hasPriorityBlocker = showOnboarding || activeTutorialStep !== null;
   const hasBlockingDialog =
     showNewProjectDialog ||
     showInstrumentPicker ||
@@ -80,24 +70,18 @@ function EditorShell() {
     showKeyboardShortcutsDialog ||
     showShortcutEditorDialog;
 
+  // Show new-project dialog on first load when no project exists
   useEffect(() => {
     if (!project) {
-      if (!onboardingCompleted && !onboardingSkipped) {
-        setShowOnboarding(true);
-        setShowNewProjectDialog(false);
-      } else {
-        setShowOnboarding(false);
-        setShowNewProjectDialog(true);
-      }
+      setShowNewProjectDialog(true);
     }
-  }, [onboardingCompleted, onboardingSkipped, project, setShowNewProjectDialog, setShowOnboarding]);
+  }, [project, setShowNewProjectDialog]);
 
   // Warn before closing tab with unsaved project
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (project) {
         e.preventDefault();
-        // Modern browsers ignore custom messages, but still show the dialog
       }
     };
     window.addEventListener('beforeunload', handler);
@@ -105,7 +89,7 @@ function EditorShell() {
   }, [project]);
 
   useKeyboardShortcuts();
-  useEffectsSync(); // Keep effects chain synced with store — always, not just when Mixer is open
+  useEffectsSync();
 
   return (
     <div
@@ -144,9 +128,6 @@ function EditorShell() {
       <StatusBar />
       <ToastContainer />
       <UndoHistoryPanel />
-      {project && !showOnboarding && <ContextualTips />}
-      <GuidedTutorialOverlay />
-      <FirstRunOnboarding />
 
       {/* Modals */}
       <NewProjectDialog />
@@ -156,7 +137,7 @@ function EditorShell() {
       <ProjectListDialog />
       <BounceInPlaceDialog />
       <KeyboardShortcutsDialog />
-      {!hasPriorityBlocker && !hasBlockingDialog && <CommandPalette />}
+      {!hasBlockingDialog && <CommandPalette />}
       <ShortcutEditorDialog />
       <CoverModal />
       <MusicEnhancerPanel />
@@ -166,7 +147,7 @@ function EditorShell() {
       <StemSeparationModal />
       <AudioToMidiModal />
       <ShareDialog />
-      {!hasPriorityBlocker && !hasBlockingDialog && <AIAssistantPanel />}
+      {!hasBlockingDialog && <AIAssistantPanel />}
     </div>
   );
 }

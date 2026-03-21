@@ -56,7 +56,6 @@ browser_navigate → http://127.0.0.1:5174
 browser_lock
 # Wait for page load and store availability
 # Then execute in browser console (if evaluate is available):
-#   window.__uiStore.getState().skipOnboarding()
 #   window.__store.getState().createProject({ name: 'QA GPU Test', bpm: 120, keyScale: 'C major' })
 #   ['drums','bass','guitar','keyboard','vocals'].forEach(t => window.__store.getState().addTrack(t))
 browser_unlock

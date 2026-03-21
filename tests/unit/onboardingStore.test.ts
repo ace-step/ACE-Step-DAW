@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useUIStore } from '../../src/store/uiStore';
 
-describe('onboarding store', () => {
+describe('workspace complexity', () => {
   beforeEach(() => {
     localStorage.clear();
     useUIStore.setState(useUIStore.getInitialState(), true);
@@ -28,25 +28,5 @@ describe('onboarding store', () => {
     expect(state.loopBrowserOpen).toBe(true);
     expect(state.showTempoLane).toBe(true);
     expect(state.pixelsPerSecond).toBe(100);
-  });
-
-  it('tracks tutorial completion after the fifth step', () => {
-    useUIStore.getState().startTutorial();
-
-    for (let i = 0; i < 5; i++) {
-      useUIStore.getState().nextTutorialStep();
-    }
-
-    const state = useUIStore.getState();
-    expect(state.activeTutorialStep).toBeNull();
-    expect(state.tutorialCompleted).toBe(true);
-    expect(state.tutorialSkipped).toBe(false);
-  });
-
-  it('persists dismissed onboarding tips without duplicates', () => {
-    useUIStore.getState().dismissOnboardingTip('genr-first-pass');
-    useUIStore.getState().dismissOnboardingTip('genr-first-pass');
-
-    expect(useUIStore.getState().dismissedOnboardingTipIds).toEqual(['genr-first-pass']);
   });
 });

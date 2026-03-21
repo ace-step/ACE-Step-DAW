@@ -22,7 +22,6 @@ import { fileURLToPath } from 'url';
 import {
   createProjectViaDialog,
   ensureNewProjectDialog,
-  ensureOnboardingVisible,
   focusApplicationShell,
   loadFreshApp,
 } from '../support/e2eStartup';
@@ -51,14 +50,11 @@ test.describe('QA Test Suite: Full Workflow', () => {
   // 1. NEW PROJECT CREATION
   // =========================================================================
   test.describe('1. New Project Creation', () => {
-    test('1a. First launch shows onboarding before the setup dialog', async ({ page }) => {
-      await ensureOnboardingVisible(page);
+    test('1a. First launch shows new project dialog', async ({ page }) => {
+      await ensureNewProjectDialog(page);
       await page.screenshot({
-        path: path.join(SCREENSHOT_DIR, '01a-first-run-onboarding.png'),
+        path: path.join(SCREENSHOT_DIR, '01a-new-project-dialog.png'),
         fullPage: true,
-      });
-      await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden({
-        timeout: 5000,
       });
     });
 

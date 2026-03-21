@@ -58,6 +58,28 @@ if [ -n "$STALE" ]; then
 fi
 
 # ═══════════════════════════════════════════
+# Step 2.5: CLEANUP — close orphan PRs for already-closed issues
+# ═══════════════════════════════════════════
+
+OPEN_PRS=$(gh pr list --repo "$REPO" --state open --json number,headRefName --jq '.[] | "\(.number)\t\(.headRefName)"' 2>/dev/null)
+while IFS=$'\t' read -r PR_NUM BRANCH_NAME; do
+  [ -z "$PR_NUM" ] && continue
+  ISSUE_NUM=$(echo "$BRANCH_NAME" | grep -oE '[0-9]+$')
+  [ -z "$ISSUE_NUM" ] && continue
+  ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json state -q '.state' 2>/dev/null)
+  if [ "$ISSUE_STATE" = "CLOSED" ]; then
+    log "Closing orphan PR #$PR_NUM (issue #$ISSUE_NUM already closed)"
+    gh pr close "$PR_NUM" --repo "$REPO" --comment "Auto-closing: issue #$ISSUE_NUM already resolved." 2>/dev/null
+    # Kill any zombie agent processes for this issue
+    ZOMBIE_PIDS=$(pgrep -f "agent-${ISSUE_NUM}[^0-9]" 2>/dev/null)
+    [ -n "$ZOMBIE_PIDS" ] && echo "$ZOMBIE_PIDS" | xargs kill 2>/dev/null && log "Killed zombie agent for #$ISSUE_NUM"
+    # Clean worktree
+    [ -d "/tmp/daw-worktrees/agent-$ISSUE_NUM" ] && rm -rf "/tmp/daw-worktrees/agent-$ISSUE_NUM"
+    bash scripts/agents/registry.sh unregister "$ISSUE_NUM" 2>/dev/null
+  fi
+done <<< "$OPEN_PRS"
+
+# ═══════════════════════════════════════════
 # Step 3: MERGE GREEN PRs
 # ═══════════════════════════════════════════
 

@@ -16,7 +16,6 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
 import { ArrangementMarkers } from './ArrangementMarkers';
-import { TimelineEmptyState } from './TimelineEmptyState';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
 import {
@@ -419,31 +418,6 @@ export function Timeline() {
         e.preventDefault();
         const container = scrollRef.current;
         if (!container) return;
-
-        const deltaScale = e.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? 16
-          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? container.clientHeight || window.innerHeight || 1
-            : 1;
-        wheelZoomDeltaRef.current += e.deltaY * deltaScale;
-
-        if (Math.abs(wheelZoomDeltaRef.current) < TIMELINE_WHEEL_ZOOM_THRESHOLD_PX) {
-          return;
-        }
-
-        const direction = wheelZoomDeltaRef.current < 0 ? 'in' : 'out';
-        wheelZoomDeltaRef.current += direction === 'in'
-          ? TIMELINE_WHEEL_ZOOM_THRESHOLD_PX
-          : -TIMELINE_WHEEL_ZOOM_THRESHOLD_PX;
-
-        const nextPixelsPerSecond = getNextTimelineZoomLevel(
-          pixelsPerSecond,
-          direction,
-        );
-
-        if (nextPixelsPerSecond === pixelsPerSecond) {
-          return;
-        }
         const rect = container.getBoundingClientRect();
         const cursorOffsetX = e.clientX - rect.left;
         const playheadAnchorTime = isPlaying ? currentTime : playStartTime;
@@ -454,6 +428,39 @@ export function Timeline() {
           pointerViewportX: cursorOffsetX,
           playheadTime: playheadAnchorTime,
         });
+
+        let nextPixelsPerSecond = pixelsPerSecond;
+        if (e.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
+          wheelZoomDeltaRef.current += e.deltaY;
+          const direction = wheelZoomDeltaRef.current < 0 ? 'in' : 'out';
+          const stepCount = Math.min(
+            2,
+            Math.floor(Math.abs(wheelZoomDeltaRef.current) / TIMELINE_WHEEL_ZOOM_THRESHOLD_PX),
+          );
+
+          if (stepCount === 0) {
+            return;
+          }
+
+          wheelZoomDeltaRef.current += direction === 'in'
+            ? stepCount * TIMELINE_WHEEL_ZOOM_THRESHOLD_PX
+            : -stepCount * TIMELINE_WHEEL_ZOOM_THRESHOLD_PX;
+
+          for (let i = 0; i < stepCount; i += 1) {
+            nextPixelsPerSecond = getNextTimelineZoomLevel(nextPixelsPerSecond, direction);
+          }
+        } else {
+          wheelZoomDeltaRef.current = 0;
+          nextPixelsPerSecond = getNextTimelineZoomLevel(
+            pixelsPerSecond,
+            e.deltaY < 0 ? 'in' : 'out',
+          );
+        }
+
+        if (nextPixelsPerSecond === pixelsPerSecond) {
+          return;
+        }
+
         const nextViewport = getZoomedTimelineViewport({
           pixelsPerSecond,
           scrollLeft: container.scrollLeft,
@@ -849,8 +856,6 @@ export function Timeline() {
             ) : (
               <EmptyTrackRow key={getArrangementEmptyTrackId(row.slotIndex)} slotIndex={row.slotIndex} />
             )))}
-
-            <TimelineEmptyState />
 
             {/* Inline AI suggestion badges */}
             {suggestionFrequency !== 'off' && inlineSuggestions.map((s) => (

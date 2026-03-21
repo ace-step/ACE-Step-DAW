@@ -934,7 +934,7 @@ function clampMasterVolume(volume: number): number {
 function syncMasterVolumeWithEngine(volume: number) {
   const engine =
     'getExistingAudioEngine' in audioEngineHooks
-      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
+      ? audioEngineHooks.getExistingAudioEngine?.() ?? audioEngineHooks.getAudioEngine?.() ?? null
       : null;
   if (engine) {
     engine.masterVolume = volume;
@@ -6272,6 +6272,9 @@ export const useProjectStore = create<ProjectState>()(
       trackPresets: [],
       generationDefaults: structuredClone(template.generationDefaults),
       globalCaption: '',
+      masterVolume: 1,
+      masterEffects: [],
+      masterEffectsBypassed: false,
       mastering: createDefaultMasteringState(),
     };
 

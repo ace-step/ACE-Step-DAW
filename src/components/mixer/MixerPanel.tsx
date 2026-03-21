@@ -1,7 +1,6 @@
 import { useRef, useCallback } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
@@ -271,19 +270,14 @@ interface MasterStripProps {
 function MasterStrip({ faderHeight }: MasterStripProps) {
   const project = useProjectStore((s) => s.project);
   const setMasterVolume = useProjectStore((s) => s.setMasterVolume);
+  const resetMasterVolume = useProjectStore((s) => s.resetMasterVolume);
   const addMasterEffect = useProjectStore((s) => s.addMasterEffect);
   const showSpectrum = useUIStore((s) => s.showSpectrumAnalyzer);
   const toggleSpectrum = useUIStore((s) => s.toggleSpectrumAnalyzer);
   if (!project) return null;
   const masterVol = project.masterVolume ?? 1.0;
   const masterEffects = project.masterEffects ?? [];
-  const handleChange = (v: number) => {
-    setMasterVolume(v);
-    getAudioEngine().masterVolume = v;
-  };
-  const handleReset = () => {
-    handleChange(1);
-  };
+  const handleChange = (v: number) => setMasterVolume(v);
 
   return (
     <div
@@ -350,7 +344,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
           <input
             type="range" min={0} max={1.5} step={0.01} value={masterVol}
             onChange={(e) => handleChange(parseFloat(e.target.value))}
-            onDoubleClick={handleReset}
+            onDoubleClick={resetMasterVolume}
             aria-label="Master volume fader"
             className="appearance-none bg-transparent cursor-pointer"
             style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4a90d9' }}

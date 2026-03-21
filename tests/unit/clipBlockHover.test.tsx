@@ -140,7 +140,10 @@ describe('ClipBlock hover and active feedback', () => {
     render(<ClipBlock clip={clip} track={track} />);
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
-    expect(clipEl.style.borderLeft).toContain('rgb(34, 197, 94)');
+    // Color strip is now a child overlay div (not borderLeft) for waveform alignment
+    const stripEl = clipEl.querySelector('.w-\\[3px\\]') as HTMLElement;
+    expect(stripEl).toBeTruthy();
+    expect(stripEl!.style.backgroundColor).toContain('rgb(34, 197, 94)');
     expect(clipEl.style.background).toContain('34, 197, 94');
   });
 
@@ -151,7 +154,10 @@ describe('ClipBlock hover and active feedback', () => {
     render(<ClipBlock clip={clip} track={track} />);
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
-    expect(clipEl.style.borderLeft).toContain('rgb(68, 136, 255)');
+    // Color strip is now a child overlay div (not borderLeft) for waveform alignment
+    const stripEl = clipEl.querySelector('.w-\\[3px\\]') as HTMLElement;
+    expect(stripEl).toBeTruthy();
+    expect(stripEl!.style.backgroundColor).toContain('rgb(68, 136, 255)');
     expect(clipEl.style.background).toContain('68, 136, 255');
   });
 });

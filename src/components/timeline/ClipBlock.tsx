@@ -551,7 +551,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           left,
           width: Math.max(width, 4),
           background: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.45)} 0%, ${hexToRgba(clipColor, 0.28)} 100%)`,
-          borderLeft: `3px solid ${clipColor}`,
           boxShadow: isSelected ? '0 0 10px rgba(0, 122, 255, 0.45), inset 0 0 0 1px rgba(0, 122, 255, 0.3)' : 'none',
           ...(isSelected ? { '--tw-ring-color': 'rgba(0, 122, 255, 0.85)' } as React.CSSProperties : {}),
         }}
@@ -570,6 +569,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         <div className="absolute top-0 bottom-0 right-0 w-[10px] cursor-col-resize z-10 group/resize-right" data-testid="resize-handle-right">
           <div className="absolute top-0 bottom-0 right-0 w-[2px] bg-white/0 group-hover/resize-right:bg-white/20 transition-colors duration-100" data-testid="resize-indicator-right" />
         </div>
+
+        {/* Color strip — overlay instead of borderLeft to avoid shifting waveform content */}
+        <div
+          className="absolute top-0 bottom-0 left-0 w-[3px] rounded-l-md z-[5] pointer-events-none"
+          style={{ backgroundColor: clipColor }}
+        />
 
         <ClipWaveform
           peaks={peaks}

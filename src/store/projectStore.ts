@@ -1908,6 +1908,20 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  toggleMasterEffectsBypass: () => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Toggle master FX bypass' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        masterEffectsBypassed: !(state.project.masterEffectsBypassed ?? false),
+      },
+    });
+  },
+
   updateTrackMixer: (trackId, updates) => {
     const state = get();
     if (_isViewerMode()) return;
@@ -4971,6 +4985,7 @@ export const useProjectStore = create<ProjectState>()(
 
   addMasterEffect: (type) => {
     const state = get();
+    if (_isViewerMode()) return undefined;
     if (!state.project) return undefined;
     const effect = createDefaultTrackEffect(type);
     _pushHistory(state.project, { scope: 'mixer', label: 'Add master effect' });
@@ -5007,6 +5022,7 @@ export const useProjectStore = create<ProjectState>()(
 
   updateMasterEffect: (effectId, updates) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'mixer', label: 'Update master effect' });
     set({
@@ -5064,6 +5080,7 @@ export const useProjectStore = create<ProjectState>()(
 
   removeMasterEffect: (effectId) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'mixer', label: 'Remove master effect' });
     set({

@@ -280,6 +280,18 @@ describe('useKeyboardShortcuts', () => {
     expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
   });
 
+  it('toggles the virtual keyboard overlay with Slash', () => {
+    render(<Harness />);
+
+    expect(useUIStore.getState().showVirtualKeyboard).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Slash' }));
+    expect(useUIStore.getState().showVirtualKeyboard).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Slash' }));
+    expect(useUIStore.getState().showVirtualKeyboard).toBe(false);
+  });
+
   it('suppresses single-key shortcuts while typing in editable fields', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     useUIStore.getState().setKeyboardContext('timeline', drums.id);

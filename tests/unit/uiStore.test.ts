@@ -99,6 +99,33 @@ describe('uiStore', () => {
       useUIStore.getState().setShowGenerationHistoryPanel(false);
       expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
     });
+
+    it('tracks virtual keyboard visibility, octave, velocity, and pressed pitches', () => {
+      const ui = useUIStore.getState();
+
+      expect(ui.showVirtualKeyboard).toBe(false);
+      expect(ui.virtualKeyboardOctave).toBe(4);
+      expect(ui.virtualKeyboardVelocity).toBe(96);
+      expect(ui.virtualKeyboardPressedPitches).toEqual([]);
+
+      ui.toggleVirtualKeyboard();
+      ui.setVirtualKeyboardOctave(6);
+      ui.adjustVirtualKeyboardOctave(-3);
+      ui.setVirtualKeyboardVelocity(140);
+      ui.adjustVirtualKeyboardVelocity(-20);
+      ui.pressVirtualKeyboardPitch(60);
+      ui.pressVirtualKeyboardPitch(64);
+      ui.releaseVirtualKeyboardPitch(60);
+
+      const state = useUIStore.getState();
+      expect(state.showVirtualKeyboard).toBe(true);
+      expect(state.virtualKeyboardOctave).toBe(3);
+      expect(state.virtualKeyboardVelocity).toBe(107);
+      expect(state.virtualKeyboardPressedPitches).toEqual([64]);
+
+      state.clearVirtualKeyboardPressedPitches();
+      expect(useUIStore.getState().virtualKeyboardPressedPitches).toEqual([]);
+    });
   });
 
   describe('selectedClipIds', () => {

@@ -65,6 +65,7 @@ export interface UIState {
   batchGenerateInitialRange: { startTime: number; duration: number } | null;
   showKeyboardShortcutsDialog: boolean;
   showShortcutEditorDialog: boolean;
+  showVirtualKeyboard: boolean;
   showCommandPalette: boolean;
   commandPaletteQuery: string;
   recentCommandIds: string[];
@@ -102,6 +103,9 @@ export interface UIState {
   sequencerEditorHeight: number;
   pianoRollHeight: number;
   effectChainHeight: number;
+  virtualKeyboardOctave: number;
+  virtualKeyboardVelocity: number;
+  virtualKeyboardPressedPitches: number[];
   showSmartControls: boolean;
   showLibrary: boolean;
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
@@ -210,6 +214,8 @@ export interface UIState {
   setBatchGenerateInitialRange: (v: { startTime: number; duration: number } | null) => void;
   setShowKeyboardShortcutsDialog: (v: boolean) => void;
   setShowShortcutEditorDialog: (v: boolean) => void;
+  setShowVirtualKeyboard: (v: boolean) => void;
+  toggleVirtualKeyboard: () => void;
   openCommandPalette: (query?: string) => void;
   closeCommandPalette: () => void;
   setCommandPaletteQuery: (query: string) => void;
@@ -243,6 +249,13 @@ export interface UIState {
   setSequencerEditorHeight: (v: number) => void;
   setPianoRollHeight: (v: number) => void;
   setEffectChainHeight: (v: number) => void;
+  setVirtualKeyboardOctave: (v: number) => void;
+  adjustVirtualKeyboardOctave: (delta: number) => void;
+  setVirtualKeyboardVelocity: (v: number) => void;
+  adjustVirtualKeyboardVelocity: (delta: number) => void;
+  pressVirtualKeyboardPitch: (pitch: number) => void;
+  releaseVirtualKeyboardPitch: (pitch: number) => void;
+  clearVirtualKeyboardPressedPitches: () => void;
   setShowSmartControls: (v: boolean) => void;
   setShowLibrary: (v: boolean) => void;
   setActiveBottomPanel: (v: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null) => void;
@@ -337,6 +350,18 @@ export interface UIState {
 
 const ZOOM_LEVELS = [10, 25, 50, 100, 200, 500];
 const TUTORIAL_STEP_COUNT = 5;
+const MIN_VIRTUAL_KEYBOARD_OCTAVE = 1;
+const MAX_VIRTUAL_KEYBOARD_OCTAVE = 7;
+const MIN_VIRTUAL_KEYBOARD_VELOCITY = 16;
+const MAX_VIRTUAL_KEYBOARD_VELOCITY = 127;
+
+function clampVirtualKeyboardOctave(value: number) {
+  return Math.min(MAX_VIRTUAL_KEYBOARD_OCTAVE, Math.max(MIN_VIRTUAL_KEYBOARD_OCTAVE, Math.round(value)));
+}
+
+function clampVirtualKeyboardVelocity(value: number) {
+  return Math.min(MAX_VIRTUAL_KEYBOARD_VELOCITY, Math.max(MIN_VIRTUAL_KEYBOARD_VELOCITY, Math.round(value)));
+}
 
 function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
   switch (tier) {
@@ -401,6 +426,7 @@ export const useUIStore = create<UIState>()(
   batchGenerateInitialRange: null,
   showKeyboardShortcutsDialog: false,
   showShortcutEditorDialog: false,
+  showVirtualKeyboard: false,
   showCommandPalette: false,
   commandPaletteQuery: '',
   recentCommandIds: [],
@@ -431,6 +457,9 @@ export const useUIStore = create<UIState>()(
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
   effectChainHeight: 320,
+  virtualKeyboardOctave: 4,
+  virtualKeyboardVelocity: 96,
+  virtualKeyboardPressedPitches: [],
   showSmartControls: false,
   showLibrary: false,
   activeBottomPanel: null,
@@ -571,6 +600,15 @@ export const useUIStore = create<UIState>()(
   setBatchGenerateInitialRange: (v) => set({ batchGenerateInitialRange: v }),
   setShowKeyboardShortcutsDialog: (v) => set({ showKeyboardShortcutsDialog: v }),
   setShowShortcutEditorDialog: (v) => set({ showShortcutEditorDialog: v }),
+  setShowVirtualKeyboard: (v) => set((state) => (
+    v
+      ? { showVirtualKeyboard: true }
+      : { showVirtualKeyboard: false, virtualKeyboardPressedPitches: [] }
+  )),
+  toggleVirtualKeyboard: () => set((state) => ({
+    showVirtualKeyboard: !state.showVirtualKeyboard,
+    virtualKeyboardPressedPitches: state.showVirtualKeyboard ? [] : state.virtualKeyboardPressedPitches,
+  })),
   openCommandPalette: (query = '') => set({ showCommandPalette: true, commandPaletteQuery: query }),
   closeCommandPalette: () => set({ showCommandPalette: false, commandPaletteQuery: '' }),
   setCommandPaletteQuery: (query) => set({ commandPaletteQuery: query }),
@@ -697,6 +735,23 @@ export const useUIStore = create<UIState>()(
   setSequencerEditorHeight: (v) => set({ sequencerEditorHeight: Math.min(600, Math.max(200, v)) }),
   setPianoRollHeight: (v) => set({ pianoRollHeight: Math.min(700, Math.max(220, v)) }),
   setEffectChainHeight: (v) => set({ effectChainHeight: Math.min(520, Math.max(180, v)) }),
+  setVirtualKeyboardOctave: (v) => set({ virtualKeyboardOctave: clampVirtualKeyboardOctave(v) }),
+  adjustVirtualKeyboardOctave: (delta) => set((state) => ({
+    virtualKeyboardOctave: clampVirtualKeyboardOctave(state.virtualKeyboardOctave + delta),
+  })),
+  setVirtualKeyboardVelocity: (v) => set({ virtualKeyboardVelocity: clampVirtualKeyboardVelocity(v) }),
+  adjustVirtualKeyboardVelocity: (delta) => set((state) => ({
+    virtualKeyboardVelocity: clampVirtualKeyboardVelocity(state.virtualKeyboardVelocity + delta),
+  })),
+  pressVirtualKeyboardPitch: (pitch) => set((state) => (
+    state.virtualKeyboardPressedPitches.includes(pitch)
+      ? {}
+      : { virtualKeyboardPressedPitches: [...state.virtualKeyboardPressedPitches, pitch].sort((a, b) => a - b) }
+  )),
+  releaseVirtualKeyboardPitch: (pitch) => set((state) => ({
+    virtualKeyboardPressedPitches: state.virtualKeyboardPressedPitches.filter((value) => value !== pitch),
+  })),
+  clearVirtualKeyboardPressedPitches: () => set({ virtualKeyboardPressedPitches: [] }),
   setShowSmartControls: (v) => set({ showSmartControls: v }),
   setShowLibrary: (v) => set({ showLibrary: v }),
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
@@ -883,6 +938,7 @@ export const useUIStore = create<UIState>()(
         showMixer: state.showMixer,
         showLibrary: state.showLibrary,
         loopBrowserOpen: state.loopBrowserOpen,
+        showVirtualKeyboard: state.showVirtualKeyboard,
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
@@ -894,6 +950,8 @@ export const useUIStore = create<UIState>()(
         sequencerEditorHeight: state.sequencerEditorHeight,
         pianoRollHeight: state.pianoRollHeight,
         effectChainHeight: state.effectChainHeight,
+        virtualKeyboardOctave: state.virtualKeyboardOctave,
+        virtualKeyboardVelocity: state.virtualKeyboardVelocity,
         assetsPanelWidth: state.assetsPanelWidth,
         trackListWidth: state.trackListWidth,
         // Zoom level

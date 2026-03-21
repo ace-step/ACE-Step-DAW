@@ -32,7 +32,6 @@ export const DEFAULT_TIMELINE_PIXELS_PER_SECOND = 50;
 export const MIN_TIMELINE_PIXELS_PER_SECOND = TIMELINE_ZOOM_LEVELS[0];
 export const MAX_TIMELINE_PIXELS_PER_SECOND = TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1];
 export const PLAYHEAD_ZOOM_ANCHOR_THRESHOLD_PX = 72;
-export const TIMELINE_WHEEL_ZOOM_THRESHOLD_PX = 24;
 
 interface TimelineFitOptions {
   minPixelsPerSecond?: number;
@@ -88,6 +87,10 @@ export function clampTimelineScrollLeft(
   viewportWidth: number,
 ) {
   return clamp(scrollLeft, 0, getTimelineMaxScrollLeft(totalDuration, pixelsPerSecond, viewportWidth));
+}
+
+export function clampTimelinePixelsPerSecond(pixelsPerSecond: number) {
+  return clamp(pixelsPerSecond, MIN_TIMELINE_PIXELS_PER_SECOND, MAX_TIMELINE_PIXELS_PER_SECOND);
 }
 
 export function getNextTimelineZoomLevel(

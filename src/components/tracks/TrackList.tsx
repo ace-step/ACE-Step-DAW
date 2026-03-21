@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useState, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
@@ -26,10 +26,11 @@ export function TrackList() {
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
   const scrollY = useUIStore((s) => s.scrollY);
+  const setScrollY = useUIStore((s) => s.setScrollY);
   const trackListScrollRef = useRef<HTMLDivElement>(null);
   const isCollapsed = trackListDisplayMode === 'collapsed';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (trackListScrollRef.current) {
       trackListScrollRef.current.scrollTop = scrollY;
     }
@@ -174,7 +175,19 @@ export function TrackList() {
         />
       )}
 
-      <div ref={trackListScrollRef} className="flex-1 overflow-y-hidden overflow-x-hidden">
+      <div
+        ref={trackListScrollRef}
+        id="arrangement-track-list-scroll"
+        className="arrangement-scrollbar-hidden flex-1 overflow-y-auto overflow-x-hidden"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const timelineScroll = document.getElementById('arrangement-timeline-scroll');
+          if (timelineScroll && Math.abs(timelineScroll.scrollTop - el.scrollTop) > 0.5) {
+            timelineScroll.scrollTop = el.scrollTop;
+          }
+          setScrollY(el.scrollTop);
+        }}
+      >
         {rows.map((row) => (row.kind === 'track' ? (
           <TrackHeader
             key={row.track.id}

@@ -19,12 +19,12 @@ import { ArrangementMarkers } from './ArrangementMarkers';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
 import {
+  clampTimelinePixelsPerSecond,
   DEFAULT_TIMELINE_PIXELS_PER_SECOND,
   getNextTimelineZoomLevel,
   getTimelineContentWidth,
   getTimelineFitViewport,
   getTimelineZoomAnchor,
-  TIMELINE_WHEEL_ZOOM_THRESHOLD_PX,
   getZoomedTimelineViewport,
 } from '../../utils/timelineZoom';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
@@ -230,7 +230,6 @@ export function Timeline() {
   const [fileDragOver, setFileDragOver] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
   const dragCounterRef = useRef(0);
-  const wheelZoomDeltaRef = useRef(0);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -429,35 +428,17 @@ export function Timeline() {
           playheadTime: playheadAnchorTime,
         });
 
-        let nextPixelsPerSecond = pixelsPerSecond;
-        if (e.deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
-          wheelZoomDeltaRef.current += e.deltaY;
-          const direction = wheelZoomDeltaRef.current < 0 ? 'in' : 'out';
-          const stepCount = Math.min(
-            2,
-            Math.floor(Math.abs(wheelZoomDeltaRef.current) / TIMELINE_WHEEL_ZOOM_THRESHOLD_PX),
-          );
+        const normalizedDelta = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? e.deltaY * 18
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? e.deltaY * (container.clientHeight || window.innerHeight || 1)
+            : e.deltaY;
+        const zoomFactor = Math.exp(-normalizedDelta * 0.0025);
+        const nextPixelsPerSecond = clampTimelinePixelsPerSecond(
+          pixelsPerSecond * zoomFactor,
+        );
 
-          if (stepCount === 0) {
-            return;
-          }
-
-          wheelZoomDeltaRef.current += direction === 'in'
-            ? stepCount * TIMELINE_WHEEL_ZOOM_THRESHOLD_PX
-            : -stepCount * TIMELINE_WHEEL_ZOOM_THRESHOLD_PX;
-
-          for (let i = 0; i < stepCount; i += 1) {
-            nextPixelsPerSecond = getNextTimelineZoomLevel(nextPixelsPerSecond, direction);
-          }
-        } else {
-          wheelZoomDeltaRef.current = 0;
-          nextPixelsPerSecond = getNextTimelineZoomLevel(
-            pixelsPerSecond,
-            e.deltaY < 0 ? 'in' : 'out',
-          );
-        }
-
-        if (nextPixelsPerSecond === pixelsPerSecond) {
+        if (Math.abs(nextPixelsPerSecond - pixelsPerSecond) < 0.5) {
           return;
         }
 
@@ -712,6 +693,7 @@ export function Timeline() {
       <Minimap />
       <div
         ref={mergedScrollRef}
+        id="arrangement-timeline-scroll"
         data-keyboard-context="timeline"
         role="grid"
         tabIndex={0}
@@ -719,6 +701,10 @@ export function Timeline() {
         className="arrangement-scrollbar-hidden flex-1 overflow-auto bg-[#1c1d22] relative group"
         onScroll={(e) => {
           const el = e.currentTarget;
+          const trackListScroll = document.getElementById('arrangement-track-list-scroll');
+          if (trackListScroll && Math.abs(trackListScroll.scrollTop - el.scrollTop) > 0.5) {
+            trackListScroll.scrollTop = el.scrollTop;
+          }
           setScrollX(el.scrollLeft);
           setScrollY(el.scrollTop);
         }}

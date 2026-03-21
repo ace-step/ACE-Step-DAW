@@ -97,6 +97,29 @@ describe('PianoRoll', () => {
     expect(useUIStore.getState().activePianoRollTool).toBe('erase');
   });
 
+  it('switches tools with ACE Studio single-key shortcuts while piano roll focus is active', () => {
+    render(<PianoRoll />);
+
+    const region = screen.getByRole('region');
+    region.focus();
+
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB' });
+    expect(useUIStore.getState().activePianoRollTool).toBe('pencil');
+    expect(screen.getByLabelText('Piano roll tool status')).toHaveTextContent('Pencil');
+
+    fireEvent.keyDown(window, { key: 'x', code: 'KeyX' });
+    expect(useUIStore.getState().activePianoRollTool).toBe('erase');
+    expect(screen.getByLabelText('Piano roll tool status')).toHaveTextContent('Erase');
+
+    fireEvent.keyDown(window, { key: 'v', code: 'KeyV' });
+    expect(useUIStore.getState().activePianoRollTool).toBe('select');
+    expect(screen.getByLabelText('Piano roll tool status')).toHaveTextContent('Select');
+
+    useUIStore.getState().setKeyboardContext('timeline', null);
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyB' });
+    expect(useUIStore.getState().activePianoRollTool).toBe('select');
+  });
+
   it('lets the user select the active chord stamp shape for Shift-click placement', () => {
     render(<PianoRoll />);
 

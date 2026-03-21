@@ -179,8 +179,24 @@ describe('useKeyboardShortcuts', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB' }));
     expect(useUIStore.getState().showSmartControls).toBe(false);
 
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyX' }));
+    expect(useUIStore.getState().showMixer).toBe(false);
+
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyO' }));
     expect(useUIStore.getState().loopBrowserOpen).toBe(true);
+  });
+
+  it('keeps V available for piano-roll tools without affecting global state', () => {
+    const keys = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
+    useUIStore.getState().setOpenPianoRoll(keys.id);
+    useUIStore.getState().setKeyboardContext('pianoRoll', keys.id);
+    useUIStore.getState().setShowMixer(true);
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV' }));
+
+    expect(useUIStore.getState().showMixer).toBe(true);
+    expect(useUIStore.getState().activePianoRollTool).toBe('select');
   });
 
   it('routes Cmd+Z to the active scoped history context', () => {

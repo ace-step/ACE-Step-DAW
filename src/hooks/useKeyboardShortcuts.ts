@@ -83,7 +83,7 @@ function shouldDeferToPianoRollTools(event: KeyboardEvent): boolean {
   const ui = useUIStore.getState();
   if (ui.keyboardContext.scope !== 'pianoRoll') return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
-  return ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'KeyB'].includes(event.code);
+  return ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'KeyV', 'KeyB', 'KeyX'].includes(event.code);
 }
 
 export function shouldDeferToDrumMachine(event: KeyboardEvent): boolean {

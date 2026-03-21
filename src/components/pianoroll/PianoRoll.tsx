@@ -51,7 +51,6 @@ export function PianoRoll() {
   const setSelectedPianoRollNoteIds = useUIStore((s) => s.setSelectedPianoRollNoteIds);
   const setActivePianoRollTool = useUIStore((s) => s.setActivePianoRollTool);
   const setActivePianoRollChordShape = useUIStore((s) => s.setActivePianoRollChordShape);
-  const togglePianoRollPencilTool = useUIStore((s) => s.togglePianoRollPencilTool);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
@@ -65,21 +64,27 @@ export function PianoRoll() {
       if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
       if (ui.keyboardContext.scope !== 'pianoRoll' || !ui.openPianoRollTrackId) return;
 
-      if (event.key === 'b' || event.key === 'B') {
-        event.preventDefault();
-        togglePianoRollPencilTool();
-        return;
-      }
+      const toolByCode: Partial<Record<KeyboardEvent['code'], PianoRollTool>> = {
+        KeyV: 'select',
+        KeyB: 'pencil',
+        KeyX: 'erase',
+        Digit1: 'select',
+        Digit2: 'pencil',
+        Digit3: 'paint',
+        Digit4: 'erase',
+        Digit5: 'slide',
+      };
 
-      if (event.key === '1') setActivePianoRollTool('select');
-      if (event.key === '2') setActivePianoRollTool('pencil');
-      if (event.key === '3') setActivePianoRollTool('paint');
-      if (event.key === '4') setActivePianoRollTool('erase');
+      const tool = toolByCode[event.code];
+      if (!tool) return;
+
+      event.preventDefault();
+      setActivePianoRollTool(tool);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActivePianoRollTool, togglePianoRollPencilTool]);
+  }, [setActivePianoRollTool]);
 
   const track = useMemo(
     () => project?.tracks.find((candidate) => candidate.id === openTrackId) ?? null,

@@ -14,6 +14,7 @@ import {
   DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT,
   getArrangementEmptyTrackId,
 } from '../arrangement/trackSlotLayout';
+import { DEFAULT_ARRANGEMENT_ROW_HEIGHT } from '../arrangement/rowLayout';
 
 export function TrackList() {
   const project = useProjectStore((s) => s.project);
@@ -209,7 +210,7 @@ export function TrackList() {
   );
 }
 
-const PLACEHOLDER_ROW_HEIGHT = 64;
+const PLACEHOLDER_ROW_HEIGHT = DEFAULT_ARRANGEMENT_ROW_HEIGHT;
 const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT;
 
 function EmptyTrackHeaderRow({

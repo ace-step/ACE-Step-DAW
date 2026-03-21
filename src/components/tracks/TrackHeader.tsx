@@ -12,6 +12,7 @@ import {
   ARRANGEMENT_HEADER_ROW_BG,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
+import { getArrangementRowHeight } from '../arrangement/rowLayout';
 import { getButtonClasses } from '../ui/Button';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
 
@@ -122,15 +123,16 @@ export function TrackHeader({
   }, [track.displayName]);
 
   const laneHeight = track.laneHeight ?? 64;
+  const rowHeight = getArrangementRowHeight(track);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
-  const isCompact = laneHeight < 52;
+  const isCompact = rowHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
   const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
   const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
   const effectsBypassed = track.effectsBypassed ?? false;
   const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane || effectsBypassed;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
-  const isTwoRow = laneHeight >= 60;
+  const isTwoRow = rowHeight >= 60;
   const primaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'min-w-[20px] min-h-[20px]' });
   const secondaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'w-5 h-5' });
   const collapsedLabel = track.displayName
@@ -200,7 +202,7 @@ export function TrackHeader({
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
-        height: track.isGroup ? Math.max(40, laneHeight * 0.7) : laneHeight,
+        height: rowHeight,
         paddingLeft: isCollapsed ? 0 : isChild ? 24 : 8,
         paddingRight: isCollapsed ? 0 : 8,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,

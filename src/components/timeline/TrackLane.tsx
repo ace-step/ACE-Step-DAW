@@ -18,6 +18,7 @@ import {
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
   ARRANGEMENT_SELECTED_LANE_BG,
 } from '../arrangement/rowSurface';
+import { getArrangementRowHeight } from '../arrangement/rowLayout';
 
 interface TrackLaneProps {
   track: Track;
@@ -91,6 +92,7 @@ export function TrackLane({ track }: TrackLaneProps) {
 
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const laneHeight = track.laneHeight ?? 64;
+  const rowHeight = getArrangementRowHeight(track);
 
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -298,7 +300,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         className={`relative border-b ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
         style={{
           width: totalWidth,
-          height: laneHeight,
+          height: rowHeight,
           opacity: track.muted ? 0.4 : 1,
           borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
         }}

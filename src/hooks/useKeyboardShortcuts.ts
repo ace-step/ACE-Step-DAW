@@ -145,6 +145,12 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      if (!mod && !event.shiftKey && !event.altKey && event.code === 'Slash' && !isInputFocused(event)) {
+        event.preventDefault();
+        ui.toggleVirtualKeyboard();
+        return;
+      }
+
       if (isInputFocused(event)) return;
 
       if (event.code === 'Escape') {

@@ -37,6 +37,7 @@ import { EffectChain } from '../mixer/EffectChain';
 import { SessionView } from '../session/SessionView';
 import { ModelLibraryPanel } from '../models/ModelLibraryPanel';
 import { SharedProjectPage } from '../sharing/SharedProjectPage';
+import { VirtualKeyboard } from '../midi/VirtualKeyboard';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { FirstRunOnboarding } from '../onboarding/FirstRunOnboarding';
@@ -180,6 +181,7 @@ function EditorShell() {
       {project && <GenerationSidePanel />}
       {project && <GenerationHistoryPanel />}
       {project && <ModelLibraryPanel />}
+      {project && <VirtualKeyboard />}
       {project && <AddLayerPanel />}
       <StatusBar />
       <ToastContainer />

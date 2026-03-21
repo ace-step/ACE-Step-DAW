@@ -37,6 +37,7 @@ vi.mock('../../src/components/controls/SmartControlsPanel', () => ({ SmartContro
 vi.mock('../../src/components/pianoroll/PianoRoll', () => ({ PianoRoll: () => <div>PianoRoll</div> }));
 vi.mock('../../src/components/mixer/EffectChain', () => ({ EffectChain: () => <div>EffectChain</div> }));
 vi.mock('../../src/components/session/SessionView', () => ({ SessionView: () => <div>SessionView</div> }));
+vi.mock('../../src/components/midi/VirtualKeyboard', () => ({ VirtualKeyboard: () => <div>VirtualKeyboard</div> }));
 vi.mock('../../src/components/ui/Toast', () => ({ ToastContainer: () => <div>ToastContainer</div> }));
 vi.mock('../../src/components/layout/UndoHistoryPanel', () => ({ UndoHistoryPanel: () => <div>UndoHistoryPanel</div> }));
 vi.mock('../../src/components/onboarding/FirstRunOnboarding', () => ({ FirstRunOnboarding: () => <div>FirstRunOnboarding</div> }));

@@ -117,6 +117,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
+  const showFadeInHandle = fadeInDuration > 0;
+  const showFadeOutHandle = fadeOutDuration > 0;
   const clipColor = clip.color ?? track.color;
 
   const dragRef = useRef(false);
@@ -642,44 +644,48 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 }}
               />
             )}
-            <button
-              type="button"
-              role="slider"
-              aria-label={`Fade in handle for clip ${clip.id}`}
-              aria-valuemin={0}
-              aria-valuemax={clip.duration}
-              aria-valuenow={fadeInDuration}
-              className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
-              style={{
-                left: Math.max(EDGE_HANDLE_PX, fadeInWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
-                width: FADE_HANDLE_HIT_TARGET_PX,
-              }}
-              data-fade-handle="in"
-              onMouseDown={handleFadeMouseDown('in')}
-              onKeyDown={handleFadeKeyDown('in')}
-              onDoubleClick={handleFadeReset('in')}
-            >
-              <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
-            </button>
-            <button
-              type="button"
-              role="slider"
-              aria-label={`Fade out handle for clip ${clip.id}`}
-              aria-valuemin={0}
-              aria-valuemax={clip.duration}
-              aria-valuenow={fadeOutDuration}
-              className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
-              style={{
-                left: Math.max(EDGE_HANDLE_PX, width - fadeOutWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
-                width: FADE_HANDLE_HIT_TARGET_PX,
-              }}
-              data-fade-handle="out"
-              onMouseDown={handleFadeMouseDown('out')}
-              onKeyDown={handleFadeKeyDown('out')}
-              onDoubleClick={handleFadeReset('out')}
-            >
-              <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
-            </button>
+            {showFadeInHandle && (
+              <button
+                type="button"
+                role="slider"
+                aria-label={`Fade in handle for clip ${clip.id}`}
+                aria-valuemin={0}
+                aria-valuemax={clip.duration}
+                aria-valuenow={fadeInDuration}
+                className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                style={{
+                  left: Math.max(EDGE_HANDLE_PX, fadeInWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
+                  width: FADE_HANDLE_HIT_TARGET_PX,
+                }}
+                data-fade-handle="in"
+                onMouseDown={handleFadeMouseDown('in')}
+                onKeyDown={handleFadeKeyDown('in')}
+                onDoubleClick={handleFadeReset('in')}
+              >
+                <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
+              </button>
+            )}
+            {showFadeOutHandle && (
+              <button
+                type="button"
+                role="slider"
+                aria-label={`Fade out handle for clip ${clip.id}`}
+                aria-valuemin={0}
+                aria-valuemax={clip.duration}
+                aria-valuenow={fadeOutDuration}
+                className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                style={{
+                  left: Math.max(EDGE_HANDLE_PX, width - fadeOutWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
+                  width: FADE_HANDLE_HIT_TARGET_PX,
+                }}
+                data-fade-handle="out"
+                onMouseDown={handleFadeMouseDown('out')}
+                onKeyDown={handleFadeKeyDown('out')}
+                onDoubleClick={handleFadeReset('out')}
+              >
+                <span className="pointer-events-none absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-white/80" />
+              </button>
+            )}
           </>
         )}
 

@@ -67,15 +67,24 @@ describe('ClipBlock fade handles', () => {
     useProjectStore.getState().updateClip(readyClip.id, { id: 'clip-1' });
   });
 
+  it('hides fade handles for zero-fade audio clips', () => {
+    renderClip();
+
+    expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Fade out handle for clip clip-1')).not.toBeInTheDocument();
+  });
+
   it('adjusts fade in with keyboard input', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 0.2 });
     renderClip();
 
     fireEvent.keyDown(screen.getByLabelText('Fade in handle for clip clip-1'), { key: 'ArrowRight' });
 
-    expect(getClip().fadeInDuration).toBe(0.1);
+    expect(getClip().fadeInDuration).toBe(0.3);
   });
 
   it('drags fade out from the clip edge', () => {
+    useProjectStore.getState().setClipFade('clip-1', { fadeOutDuration: 0.8 });
     const { container } = renderClip();
     const clipBlock = container.querySelector('[data-clip-block]') as HTMLDivElement;
     clipBlock.getBoundingClientRect = () => ({

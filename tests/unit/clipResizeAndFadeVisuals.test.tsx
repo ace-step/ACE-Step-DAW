@@ -77,6 +77,15 @@ describe('Clip resize handle width and fade visuals', () => {
     expect(handles[1].className).toContain('w-[10px]');
   });
 
+  it('does not render fade controls or overlays for zero-fade clips', () => {
+    const { container } = renderClip();
+
+    expect(container.querySelector('[data-testid="fade-in-overlay"]')).toBeNull();
+    expect(container.querySelector('[data-testid="fade-out-overlay"]')).toBeNull();
+    expect(screen.queryByLabelText('Fade in handle for clip clip-1')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Fade out handle for clip clip-1')).not.toBeInTheDocument();
+  });
+
   it('fade-in triangle uses correct clip path (upper-left triangle)', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
     const { container } = renderClip();

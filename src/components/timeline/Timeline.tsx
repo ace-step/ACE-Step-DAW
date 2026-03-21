@@ -230,6 +230,10 @@ export function Timeline() {
   const [fileDragOver, setFileDragOver] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
   const dragCounterRef = useRef(0);
+  const zoomAnimationFrameRef = useRef<number | null>(null);
+  const zoomTargetRef = useRef(pixelsPerSecond);
+  const zoomAnchorRef = useRef<{ time: number; viewportX: number } | null>(null);
+  const zoomFrameTimeRef = useRef<number | null>(null);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -433,29 +437,66 @@ export function Timeline() {
           : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
             ? e.deltaY * (container.clientHeight || window.innerHeight || 1)
             : e.deltaY;
-        const zoomFactor = Math.exp(-normalizedDelta * 0.0025);
-        const nextPixelsPerSecond = clampTimelinePixelsPerSecond(
-          pixelsPerSecond * zoomFactor,
-        );
+        const sensitivity = e.ctrlKey && !e.metaKey ? 0.0065 : 0.0042;
+        const zoomFactor = Math.exp(-normalizedDelta * sensitivity);
+        const currentBase = zoomAnimationFrameRef.current === null
+          ? pixelsPerSecond
+          : zoomTargetRef.current;
+        zoomTargetRef.current = clampTimelinePixelsPerSecond(currentBase * zoomFactor);
+        zoomAnchorRef.current = anchor;
 
-        if (Math.abs(nextPixelsPerSecond - pixelsPerSecond) < 0.5) {
+        if (zoomAnimationFrameRef.current !== null) {
           return;
         }
 
-        const nextViewport = getZoomedTimelineViewport({
-          pixelsPerSecond,
-          scrollLeft: container.scrollLeft,
-          viewportWidth: container.clientWidth || window.innerWidth || 1,
-          totalDuration: project?.totalDuration ?? 0,
-        }, nextPixelsPerSecond, anchor);
+        const animateZoom = (timestamp: number) => {
+          const liveContainer = scrollRef.current;
+          const liveAnchor = zoomAnchorRef.current;
+          if (!liveContainer || !liveAnchor) {
+            zoomAnimationFrameRef.current = null;
+            zoomFrameTimeRef.current = null;
+            return;
+          }
 
-        setPixelsPerSecond(nextViewport.pixelsPerSecond);
-        setScrollX(nextViewport.scrollLeft);
-        container.scrollLeft = nextViewport.scrollLeft;
+          const dt = zoomFrameTimeRef.current === null ? 16 : Math.max(8, timestamp - zoomFrameTimeRef.current);
+          zoomFrameTimeRef.current = timestamp;
+          const currentPixels = useUIStore.getState().pixelsPerSecond;
+          const alpha = 1 - Math.exp(-dt / 42);
+          const nextPixelsPerSecond = Math.abs(zoomTargetRef.current - currentPixels) < 0.02
+            ? zoomTargetRef.current
+            : currentPixels + (zoomTargetRef.current - currentPixels) * alpha;
+
+          const nextViewport = getZoomedTimelineViewport({
+            pixelsPerSecond: currentPixels,
+            scrollLeft: liveContainer.scrollLeft,
+            viewportWidth: liveContainer.clientWidth || window.innerWidth || 1,
+            totalDuration: project?.totalDuration ?? 0,
+          }, nextPixelsPerSecond, liveAnchor);
+
+          setPixelsPerSecond(nextViewport.pixelsPerSecond);
+          setScrollX(nextViewport.scrollLeft);
+          liveContainer.scrollLeft = nextViewport.scrollLeft;
+
+          if (Math.abs(zoomTargetRef.current - nextPixelsPerSecond) < 0.02) {
+            zoomAnimationFrameRef.current = null;
+            zoomFrameTimeRef.current = null;
+            return;
+          }
+
+          zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom);
+        };
+
+        zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom);
       }
     },
     [currentTime, isPlaying, pixelsPerSecond, playStartTime, project?.totalDuration, setPixelsPerSecond, setScrollX],
   );
+
+  useEffect(() => () => {
+    if (zoomAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(zoomAnimationFrameRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -701,9 +742,9 @@ export function Timeline() {
         className="arrangement-scrollbar-hidden flex-1 overflow-auto bg-[#1c1d22] relative group"
         onScroll={(e) => {
           const el = e.currentTarget;
-          const trackListScroll = document.getElementById('arrangement-track-list-scroll');
-          if (trackListScroll && Math.abs(trackListScroll.scrollTop - el.scrollTop) > 0.5) {
-            trackListScroll.scrollTop = el.scrollTop;
+          const trackListContent = document.getElementById('arrangement-track-list-content');
+          if (trackListContent) {
+            trackListContent.style.transform = `translateY(-${el.scrollTop}px)`;
           }
           setScrollX(el.scrollLeft);
           setScrollY(el.scrollTop);

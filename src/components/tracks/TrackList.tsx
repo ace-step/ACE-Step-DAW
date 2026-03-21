@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TrackHeader } from './TrackHeader';
 import { TrackListDisplayToggle } from './TrackListDisplayToggle';
+import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import {
   ARRANGEMENT_MARKERS_HEIGHT,
   TEMPO_LANE_HEIGHT,
@@ -26,15 +27,56 @@ export function TrackList() {
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
   const showTempoLane = useUIStore((s) => s.showTempoLane);
   const scrollY = useUIStore((s) => s.scrollY);
-  const setScrollY = useUIStore((s) => s.setScrollY);
-  const trackListScrollRef = useRef<HTMLDivElement>(null);
+  const trackListViewportRef = useRef<HTMLDivElement>(null);
   const isCollapsed = trackListDisplayMode === 'collapsed';
 
   useLayoutEffect(() => {
-    if (trackListScrollRef.current) {
-      trackListScrollRef.current.scrollTop = scrollY;
+    const content = document.getElementById('arrangement-track-list-content');
+    if (content) {
+      content.style.transform = `translateY(-${scrollY}px)`;
     }
   }, [scrollY]);
+
+  const handleTrackListWheel = useCallback((e: WheelEvent) => {
+    const timelineScroll = document.getElementById('arrangement-timeline-scroll');
+    if (!timelineScroll) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const timelineRect = timelineScroll.getBoundingClientRect();
+      const proxyClientX = Math.max(
+        timelineRect.left + 1,
+        Math.min(timelineRect.right - 1, timelineRect.left + 120),
+      );
+
+      timelineScroll.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        deltaMode: e.deltaMode,
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        clientX: proxyClientX,
+        clientY: e.clientY,
+      }));
+      return;
+    }
+
+    e.preventDefault();
+    const normalizedDelta = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+      ? e.deltaY * 18
+      : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+        ? e.deltaY * (timelineScroll.clientHeight || window.innerHeight || 1)
+        : e.deltaY;
+    timelineScroll.scrollTop += normalizedDelta;
+  }, []);
+
+  const wheelRef = useNonPassiveWheel(handleTrackListWheel);
+  const mergedViewportRef = useCallback((el: HTMLDivElement | null) => {
+    trackListViewportRef.current = el;
+    wheelRef(el);
+  }, [wheelRef]);
 
   const draggedIdRef = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -176,41 +218,38 @@ export function TrackList() {
       )}
 
       <div
-        ref={trackListScrollRef}
-        id="arrangement-track-list-scroll"
-        className="arrangement-scrollbar-hidden flex-1 overflow-y-auto overflow-x-hidden"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          const timelineScroll = document.getElementById('arrangement-timeline-scroll');
-          if (timelineScroll && Math.abs(timelineScroll.scrollTop - el.scrollTop) > 0.5) {
-            timelineScroll.scrollTop = el.scrollTop;
-          }
-          setScrollY(el.scrollTop);
-        }}
+        ref={mergedViewportRef}
+        id="arrangement-track-list-viewport"
+        className="flex-1 overflow-hidden"
       >
-        {rows.map((row) => (row.kind === 'track' ? (
-          <TrackHeader
-            key={row.track.id}
-            track={row.track}
-            isCollapsed={isCollapsed}
-            isChild={!!row.track.parentTrackId}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            isDragOver={dragOverId === row.track.id}
-            dragOverPosition={dragOverId === row.track.id ? dragOverPosition : null}
-          />
-        ) : (
-          <EmptyTrackHeaderRow
-            key={getArrangementEmptyTrackId(row.slotIndex)}
-            slotIndex={row.slotIndex}
-            isCollapsed={isCollapsed}
-            isDropDisabled={blockedEmptySlotOrders.has(row.slotIndex + 1)}
-            isDragOver={dragOverEmptySlotIndex === row.slotIndex}
-            onDragOver={handleEmptyRowDragOver}
-            onDrop={handleEmptyRowDrop}
-          />
-        )))}
+        <div
+          id="arrangement-track-list-content"
+          style={{ transform: `translateY(-${scrollY}px)`, willChange: 'transform' }}
+        >
+          {rows.map((row) => (row.kind === 'track' ? (
+            <TrackHeader
+              key={row.track.id}
+              track={row.track}
+              isCollapsed={isCollapsed}
+              isChild={!!row.track.parentTrackId}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              isDragOver={dragOverId === row.track.id}
+              dragOverPosition={dragOverId === row.track.id ? dragOverPosition : null}
+            />
+          ) : (
+            <EmptyTrackHeaderRow
+              key={getArrangementEmptyTrackId(row.slotIndex)}
+              slotIndex={row.slotIndex}
+              isCollapsed={isCollapsed}
+              isDropDisabled={blockedEmptySlotOrders.has(row.slotIndex + 1)}
+              isDragOver={dragOverEmptySlotIndex === row.slotIndex}
+              onDragOver={handleEmptyRowDragOver}
+              onDrop={handleEmptyRowDrop}
+            />
+          )))}
+        </div>
       </div>
 
       {!isCollapsed && (

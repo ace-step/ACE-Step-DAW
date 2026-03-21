@@ -2,6 +2,8 @@ export interface TimelineWindowRange {
   startTime: number;
   endTime: number;
   trackIds: string[];
+  primaryTrackId?: string;
+  targetRowIndex?: number;
 }
 
 export interface TimelineWindowPair {

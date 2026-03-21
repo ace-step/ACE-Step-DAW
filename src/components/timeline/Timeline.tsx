@@ -21,6 +21,11 @@ import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
 import { getTimelineFitViewport } from '../../utils/timelineZoom';
 import { convertTimelineWindowMode, moveTimelineWindow, type TimelineWindowRange } from './timelineWindowUtils';
+import {
+  buildArrangementTrackSlots,
+  DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT,
+  getArrangementEmptyTrackId,
+} from '../arrangement/trackSlotLayout';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -43,6 +48,12 @@ function getIntersectedTrackIds(container: HTMLElement, minY: number, maxY: numb
     }
   }
   return ids;
+}
+
+function getTrackRowIndex(container: HTMLElement, trackId: string): number | null {
+  const lanes = Array.from(container.querySelectorAll<HTMLElement>('[data-track-id]'));
+  const rowIndex = lanes.findIndex((lane) => lane.dataset.trackId === trackId);
+  return rowIndex === -1 ? null : rowIndex;
 }
 
 function getTrackVerticalRange(
@@ -282,6 +293,10 @@ export function Timeline() {
 
   const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const sortedTracks = project ? getVisibleTracks() : [];
+  const arrangementRows = useMemo(
+    () => buildArrangementTrackSlots(sortedTracks, PLACEHOLDER_ROW_COUNT),
+    [sortedTracks],
+  );
 
   const totalWidth = project ? project.totalDuration * pixelsPerSecond : 0;
   const selectedClipLabel = useMemo(() => {
@@ -397,6 +412,7 @@ export function Timeline() {
       const startClientY = e.clientY;
       const startViewX = startClientX - cRect.left;
       const startViewY = startClientY - cRect.top + container.scrollTop;
+      const primaryTrackId = getIntersectedTrackIds(container, startViewY, startViewY + 1)[0];
 
       let hasDragged = false;
       const setDrag = isCtx ? setCtxDrag : setSelDrag;
@@ -462,7 +478,19 @@ export function Timeline() {
           if (isCtx) {
             setContextWindow({ startTime, endTime, trackIds });
           } else {
-            setSelectWindow({ startTime, endTime, trackIds });
+            const nextSelectWindow: TimelineWindowRange = {
+              startTime,
+              endTime,
+              trackIds,
+            };
+            if (primaryTrackId !== undefined) {
+              nextSelectWindow.primaryTrackId = primaryTrackId;
+              const targetRowIndex = getTrackRowIndex(container, primaryTrackId);
+              if (targetRowIndex !== null) {
+                nextSelectWindow.targetRowIndex = targetRowIndex;
+              }
+            }
+            setSelectWindow(nextSelectWindow);
           }
         }
         setDrag(null);
@@ -707,14 +735,11 @@ export function Timeline() {
                 }}
               />
             )}
-
-
-            {sortedTracks.map((track) => (
-              <TrackLane key={track.id} track={track} />
-            ))}
-
-            {/* Empty placeholder rows — infinite grid like ACE Studio */}
-            <EmptyTrackRows />
+            {arrangementRows.map((row) => (row.kind === 'track' ? (
+              <TrackLane key={row.track.id} track={row.track} />
+            ) : (
+              <EmptyTrackRow key={getArrangementEmptyTrackId(row.slotIndex)} slotIndex={row.slotIndex} />
+            )))}
 
             <TimelineEmptyState />
 
@@ -759,33 +784,27 @@ export function Timeline() {
 
 /** Empty placeholder rows below tracks — infinite grid like ACE Studio */
 const PLACEHOLDER_ROW_HEIGHT = 64; // matches default track height
-const PLACEHOLDER_ROW_COUNT = 20;  // enough to fill any viewport
+const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT;  // enough to fill any viewport
 
-function EmptyTrackRows() {
+function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const virtualId = getArrangementEmptyTrackId(slotIndex);
+  const isSelected = selectedTrackIds.has(virtualId);
+
   return (
-    <>
-      {Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, i) => {
-        const virtualId = `__empty-${i}`;
-        const isSelected = selectedTrackIds.has(virtualId);
-        return (
-          <div
-            key={virtualId}
-            data-track-id={virtualId}
-            data-timeline-lane
-            className="relative"
-            style={{
-              height: PLACEHOLDER_ROW_HEIGHT,
-              borderBottom: '1px solid var(--color-daw-arrangement-separator)',
-            }}
-            data-testid={`empty-row-${i}`}
-          >
-            {isSelected && (
-              <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
-            )}
-          </div>
-        );
-      })}
-    </>
+    <div
+      data-track-id={virtualId}
+      data-timeline-lane
+      className="relative"
+      style={{
+        height: PLACEHOLDER_ROW_HEIGHT,
+        borderBottom: '1px solid var(--color-daw-arrangement-separator)',
+      }}
+      data-testid={`empty-row-${slotIndex}`}
+    >
+      {isSelected && (
+        <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+      )}
+    </div>
   );
 }

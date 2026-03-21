@@ -6,6 +6,10 @@ import { generateFromAddLayer } from '../../services/generationPipeline';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import type { TrackName } from '../../types/project';
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
+import {
+  getFirstSelectedEmptyTrackSlotIndex,
+  parseArrangementEmptyTrackSlotIndex,
+} from '../arrangement/trackSlotLayout';
 
 const VOCAL_TRACK_NAMES = new Set<string>(['vocals', 'backing_vocals']);
 const TARGET_TRACK_OPTIONS = TRACK_NAMES.map((trackName) => TRACK_CATALOG[trackName]);
@@ -25,6 +29,8 @@ const PANEL_MARGIN = 16;
 const PANEL_BOTTOM_GAP = 60;
 const FALLBACK_PANEL_HEIGHT = 680;
 
+type SelectWindow = NonNullable<ReturnType<typeof useUIStore.getState>['selectWindow']>;
+
 function fmt(s: number) {
   return `${s.toFixed(1)}s`;
 }
@@ -41,15 +47,38 @@ function getAudioTargetTracks(project: NonNullable<ReturnType<typeof useProjectS
 
 function getSelectedProjectTrack(
   project: NonNullable<ReturnType<typeof useProjectStore.getState>['project']>,
-  selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null,
+  selectWindow: SelectWindow | null,
 ) {
   if (!selectWindow) return null;
+  if (selectWindow.primaryTrackId !== undefined) {
+    return project.tracks.find((track) => track.id === selectWindow.primaryTrackId) ?? null;
+  }
   return project.tracks.find((track) => selectWindow.trackIds.includes(track.id)) ?? null;
+}
+
+function getSelectedEmptyTrackOrder(
+  selectWindow: SelectWindow | null,
+) {
+  if (!selectWindow) return null;
+  if (typeof selectWindow.targetRowIndex === 'number' && Number.isFinite(selectWindow.targetRowIndex)) {
+    return selectWindow.targetRowIndex + 1;
+  }
+  if (selectWindow.primaryTrackId) {
+    const primaryEmptySlotIndex = parseArrangementEmptyTrackSlotIndex(selectWindow.primaryTrackId);
+    if (primaryEmptySlotIndex !== null) {
+      return primaryEmptySlotIndex + 1;
+    }
+  }
+
+  const slotIndex = getFirstSelectedEmptyTrackSlotIndex(selectWindow.trackIds);
+  if (slotIndex === null) return null;
+
+  return slotIndex + 1;
 }
 
 function getDefaultTargetTrackName(
   project: NonNullable<ReturnType<typeof useProjectStore.getState>['project']>,
-  selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null,
+  selectWindow: SelectWindow | null,
   layerType: LayerTypeId,
 ) : TrackName {
   const targetTracks = getAudioTargetTracks(project);
@@ -61,7 +90,10 @@ function getDefaultTargetTrackName(
         : 'drums';
   }
 
-  const selectedTracks = targetTracks.filter((track) => selectWindow?.trackIds.includes(track.id));
+  const selectedTrackIds = selectWindow?.primaryTrackId
+    ? [selectWindow.primaryTrackId]
+    : (selectWindow?.trackIds ?? []);
+  const selectedTracks = targetTracks.filter((track) => selectedTrackIds.includes(track.id));
   const selectedPresetTrack = selectedTracks.find((track) => track.trackName !== 'custom');
   const preferredTrackName: TrackName | null =
     layerType === 'vocal'
@@ -143,6 +175,8 @@ export function AddLayerPanel() {
     startTime: number;
     endTime: number;
     trackIds: string[];
+    primaryTrackId?: string;
+    targetRowIndex?: number;
   } | null>(null);
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -154,6 +188,7 @@ export function AddLayerPanel() {
     () => (project ? getSelectedProjectTrack(project, selectWindow) : null),
     [project, selectWindow],
   );
+  const selectedEmptyTrackOrder = useMemo(() => getSelectedEmptyTrackOrder(selectWindow), [selectWindow]);
 
   const positionPanelNearBottomCenter = useCallback(() => {
     if (!panelRef.current) return;
@@ -367,17 +402,32 @@ export function AddLayerPanel() {
 
   const handleSelectWholeSong = () => {
     if (selectWindow) {
-      setSavedSelectionBeforeWholeSong({
+      const savedSelection: SelectWindow = {
         startTime: selectWindow.startTime,
         endTime: selectWindow.endTime,
         trackIds: [...selectWindow.trackIds],
-      });
+      };
+      if (selectWindow.primaryTrackId !== undefined) {
+        savedSelection.primaryTrackId = selectWindow.primaryTrackId;
+      }
+      if (typeof selectWindow.targetRowIndex === 'number') {
+        savedSelection.targetRowIndex = selectWindow.targetRowIndex;
+      }
+      setSavedSelectionBeforeWholeSong(savedSelection);
     }
-    useUIStore.getState().setSelectWindow({
+
+    const wholeSongSelection: SelectWindow = {
       startTime: 0,
       endTime: project.totalDuration,
       trackIds: selectWindow?.trackIds ?? [],
-    });
+    };
+    if (selectWindow?.primaryTrackId !== undefined) {
+      wholeSongSelection.primaryTrackId = selectWindow.primaryTrackId;
+    }
+    if (typeof selectWindow?.targetRowIndex === 'number') {
+      wholeSongSelection.targetRowIndex = selectWindow.targetRowIndex;
+    }
+    useUIStore.getState().setSelectWindow(wholeSongSelection);
   };
 
   const handleRestorePreviousWindow = () => {
@@ -391,7 +441,11 @@ export function AddLayerPanel() {
 
     let targetTrack = selectedWindowTrack;
     if (!targetTrack) {
-      targetTrack = addTrack(targetTrackName, 'stems');
+      targetTrack = addTrack(
+        targetTrackName,
+        'stems',
+        selectedEmptyTrackOrder !== null ? { order: selectedEmptyTrackOrder } : undefined,
+      );
     }
 
     if (style) {

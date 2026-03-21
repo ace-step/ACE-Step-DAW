@@ -468,7 +468,7 @@ export interface ProjectState {
   flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
   bounceInPlace: (trackId: string, options?: Partial<BounceInPlaceOptions>) => Promise<Clip | undefined>;
 
-  addTrack: (trackName: TrackName, trackType?: TrackType) => Track;
+  addTrack: (trackName: TrackName, trackType?: TrackType, options?: { order?: number }) => Track;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -1359,7 +1359,7 @@ function createTrackFromTemplate(
     trackType: _ignoredTrackType,
     trackName: _ignoredTrackName,
     displayName: overrideDisplayName,
-    order: _ignoredOrder,
+    order: overrideOrder,
     muted: _ignoredMuted,
     soloed: _ignoredSoloed,
     clips: _ignoredClips,
@@ -1380,7 +1380,7 @@ function createTrackFromTemplate(
     trackType,
     trackName,
     displayName: overrideDisplayName || autoDisplayName,
-    order: maxOrder + 1,
+    order: overrideOrder ?? maxOrder + 1,
     muted: false,
     soloed: false,
     clips: [],
@@ -2126,14 +2126,19 @@ export const useProjectStore = create<ProjectState>()(
     return resultClip;
   },
 
-  addTrack: (trackName, trackType) => {
+  addTrack: (trackName, trackType, options) => {
     const state = get();
     if (_isViewerMode()) return undefined as unknown as Track;
     if (!state.project) throw new Error('No project');
     _pushHistory(state.project, { scope: 'arrangement', label: 'Add track' });
 
     const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
-    const track = createTrackFromTemplate(state.project.tracks, trackName, resolvedType);
+    const track = createTrackFromTemplate(
+      state.project.tracks,
+      trackName,
+      resolvedType,
+      options?.order !== undefined ? { order: options.order } : undefined,
+    );
 
     const newTracks = [...state.project.tracks, track];
     const nextProject = ensureProjectSession({

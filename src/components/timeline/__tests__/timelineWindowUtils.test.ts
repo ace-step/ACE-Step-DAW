@@ -42,13 +42,21 @@ describe('timelineWindowUtils', () => {
   });
 
   it('clones track ids so mode switches do not share mutable arrays', () => {
-    const original = { startTime: 2, endTime: 6, trackIds: ['track-a'] };
+    const original = {
+      startTime: 2,
+      endTime: 6,
+      trackIds: ['track-a'],
+      primaryTrackId: '__empty-3',
+      targetRowIndex: 3,
+    };
     const cloned = cloneTimelineWindow(original);
 
     cloned.trackIds.push('track-b');
 
     expect(original.trackIds).toEqual(['track-a']);
     expect(cloned.trackIds).toEqual(['track-a', 'track-b']);
+    expect(cloned.primaryTrackId).toBe('__empty-3');
+    expect(cloned.targetRowIndex).toBe(3);
   });
 
   it('converts a select window into a context window', () => {

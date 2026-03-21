@@ -218,6 +218,14 @@ describe('projectStore', () => {
       expect(t2.order).toBeGreaterThan(t1.order);
     });
 
+    it('uses an explicit row order when creating a track in a selected empty slot', () => {
+      useProjectStore.getState().addTrack('drums');
+
+      const track = useProjectStore.getState().addTrack('bass', 'stems', { order: 4 });
+
+      expect(track.order).toBe(4);
+    });
+
     it('appends number when duplicate trackName', () => {
       useProjectStore.getState().addTrack('drums');
       const t2 = useProjectStore.getState().addTrack('drums');

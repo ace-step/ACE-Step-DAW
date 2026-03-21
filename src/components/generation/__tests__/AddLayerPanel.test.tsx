@@ -74,7 +74,7 @@ describe('AddLayerPanel', () => {
 
   it('creates a new preset track instead of falling back to the first existing track when the selection is on an empty row', async () => {
     useUIStore.setState({
-      selectWindow: { startTime: 3, endTime: 7, trackIds: ['__empty-0'] },
+      selectWindow: { startTime: 3, endTime: 7, trackIds: ['__empty-0'], primaryTrackId: '__empty-0', targetRowIndex: 0 },
     });
 
     const initialTrackCount = useProjectStore.getState().project!.tracks.length;
@@ -90,6 +90,50 @@ describe('AddLayerPanel', () => {
     const latestCall = vi.mocked(generateFromAddLayer).mock.calls.at(-1);
     expect(latestCall).toBeDefined();
     expect(latestCall![0].trackId).not.toBe(existingDrumsTrackId);
+  });
+
+  it('creates the generated track at the selected empty row order', async () => {
+    useProjectStore.getState().addTrack('drums');
+    useUIStore.setState({
+      selectWindow: { startTime: 3, endTime: 7, trackIds: ['__empty-3'], primaryTrackId: '__empty-3', targetRowIndex: 3 },
+    });
+
+    render(<AddLayerPanel />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project!.tracks).toHaveLength(2);
+    });
+
+    const generatedTrack = [...useProjectStore.getState().project!.tracks].sort((a, b) => a.order - b.order).at(-1);
+    expect(generatedTrack?.order).toBe(4);
+  });
+
+  it('prefers the dragged empty row over overlapped existing tracks when generating', async () => {
+    const thirdTrack = useProjectStore.getState().project!.tracks[2];
+    expect(thirdTrack).toBeDefined();
+
+    useUIStore.setState({
+      selectWindow: {
+        startTime: 3,
+        endTime: 7,
+        trackIds: [thirdTrack.id, '__empty-4'],
+        primaryTrackId: '__empty-4',
+        targetRowIndex: 4,
+      },
+    });
+
+    render(<AddLayerPanel />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().project!.tracks).toHaveLength(4);
+    });
+
+    const latestCall = vi.mocked(generateFromAddLayer).mock.calls.at(-1);
+    const generatedTrack = useProjectStore.getState().project!.tracks.find((track) => track.id === latestCall?.[0].trackId);
+    expect(generatedTrack?.order).toBe(5);
+    expect(generatedTrack?.id).not.toBe(thirdTrack.id);
   });
 
   it('displays the selection range from uiStore selectWindow', () => {

@@ -81,7 +81,15 @@ export interface UIState {
   /** Global context window set by Option/Alt+drag on the timeline. */
   contextWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
   /** Multi-track select window set by Cmd/Ctrl+drag on the timeline. */
-  selectWindow: { startTime: number; endTime: number; trackIds: string[] } | null;
+  selectWindow: {
+    startTime: number;
+    endTime: number;
+    trackIds: string[];
+    /** The lane where the user started the drag, used for row-aware follow-up actions. */
+    primaryTrackId?: string;
+    /** Absolute visual row index inside the arrangement lane stack. */
+    targetRowIndex?: number;
+  } | null;
   /** Latest timeline viewport request consumed by the arrangement surface. */
   timelineZoomRequest: { id: number; mode: 'selection' | 'project' } | null;
   /** Track whose inspector panel is currently expanded. */
@@ -230,7 +238,13 @@ export interface UIState {
   setAssetsPanelWidth: (v: number) => void;
   setTrackListWidth: (v: number) => void;
   setContextWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
-  setSelectWindow: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
+  setSelectWindow: (v: {
+    startTime: number;
+    endTime: number;
+    trackIds: string[];
+    primaryTrackId?: string;
+    targetRowIndex?: number;
+  } | null) => void;
   zoomTimelineToSelection: () => void;
   zoomTimelineToProject: () => void;
   setExpandedTrackId: (id: string | null) => void;

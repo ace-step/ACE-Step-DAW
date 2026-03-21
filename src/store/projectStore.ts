@@ -458,6 +458,7 @@ export interface ProjectState {
   setMasteringEnabled: (enabled: boolean) => void;
   removeMastering: () => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
+  toggleTrackEffectsBypass: (trackId: string) => void;
   setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
   setDualMonoPan: (trackId: string, left: number, right: number) => void;
   setTrackLocalCaption: (trackId: string, caption: string) => void;
@@ -801,6 +802,7 @@ function createNeutralBouncedTrack(track: Track, bouncedClip: Clip, displayName:
     compressorEnabled: false,
     compressorThreshold: -24,
     compressorRatio: 4,
+    effectsBypassed: false,
     reverbMix: 0,
     reverbRoomSize: 0.5,
     plugins: [],
@@ -1383,6 +1385,7 @@ function createTrackFromTemplate(
     soloed: false,
     clips: [],
     effects: cloneTrackEffectsWithNewIds(presetEffects),
+    effectsBypassed: overrides?.effectsBypassed ?? false,
     midiEffects: cloneMidiEffectsWithNewIds(presetMidiEffects),
   };
 
@@ -1428,6 +1431,7 @@ function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
     compressorEnabled: track.compressorEnabled,
     compressorThreshold: track.compressorThreshold,
     compressorRatio: track.compressorRatio,
+    effectsBypassed: track.effectsBypassed ?? false,
     reverbMix: track.reverbMix,
     reverbRoomSize: track.reverbRoomSize,
     localCaption: track.localCaption,
@@ -1450,6 +1454,7 @@ function ensureTrackDefaults(track: Track): Track {
     ...track,
     synthPreset: track.synthPreset ?? getDefaultTrackSynthPreset(track.trackName),
     effects: track.effects ?? [],
+    effectsBypassed: track.effectsBypassed ?? false,
     midiEffects: track.midiEffects ?? [],
     drumKit: track.drumKit ?? '808',
     clips: track.clips.map((clip) => ({
@@ -1847,6 +1852,24 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId ? { ...t, ...updates } : t,
+        ),
+      },
+    });
+  },
+
+  toggleTrackEffectsBypass: (trackId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Toggle FX bypass', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, effectsBypassed: !(track.effectsBypassed ?? false) }
+            : track,
         ),
       },
     });

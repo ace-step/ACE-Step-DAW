@@ -45,6 +45,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const updateTrackSend = useProjectStore((s) => s.updateTrackSend);
   const setGroupMuted = useProjectStore((s) => s.setGroupMuted);
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
@@ -61,6 +62,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const compRatio = track.compressorRatio ?? 4;
   const isFrozen = track.frozen ?? false;
   const effects = track.effects ?? [];
+  const effectsBypassed = track.effectsBypassed ?? false;
   const sends = track.sends ?? [];
   const isSelected = useUIStore((s) => s.keyboardContext.scope === 'mixer' && s.keyboardContext.trackId === track.id);
 
@@ -114,6 +116,19 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
             >
               S
             </button>
+            {!track.isGroup && (
+              <button
+                onClick={() => toggleTrackEffectsBypass(track.id)}
+                aria-label={`FX bypass ${track.displayName}`}
+                aria-keyshortcuts="P"
+                title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
+                className={`text-xs font-bold px-2 py-1 rounded transition-colors ${
+                  effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
+                }`}
+              >
+                FX
+              </button>
+            )}
           </div>
         </div>
 
@@ -126,7 +141,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
         <div className="w-4/5 border-t border-[#3a3a3a]" />
 
         {/* Inserts section — 4 effect slots */}
-        <div data-testid="inserts-section" className="w-full py-1">
+        <div data-testid="inserts-section" className={`w-full py-1 transition-opacity ${effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
           <div className="text-[10px] text-zinc-400 uppercase tracking-widest mb-1">Inserts</div>
           <div className="flex flex-col gap-1">
             {Array.from({ length: MAX_INSERT_SLOTS }).map((_, i) => {

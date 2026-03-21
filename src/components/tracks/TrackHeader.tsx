@@ -45,6 +45,7 @@ export function TrackHeader({
   const setTrackHeightPreset = useProjectStore((s) => s.setTrackHeightPreset);
   const setAllTracksHeightPreset = useProjectStore((s) => s.setAllTracksHeightPreset);
   const setInputMonitoring = useProjectStore((s) => s.setInputMonitoring);
+  const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const exportTrackMidi = useProjectStore((s) => s.exportTrackMidi);
   const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
   const toggleGroupCollapse = useProjectStore((s) => s.toggleGroupCollapse);
@@ -124,7 +125,8 @@ export function TrackHeader({
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
   const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
   const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
-  const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane;
+  const effectsBypassed = track.effectsBypassed ?? false;
+  const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane || effectsBypassed;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
   const isTwoRow = laneHeight >= 60;
   const primaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'min-w-[20px] min-h-[20px]' });
@@ -427,6 +429,24 @@ export function TrackHeader({
                   <path d="M4.65 10.1L6 8.75l1.35 1.35" />
                 </svg>
               </button>
+              {!track.isGroup && (
+                <button
+                  onClick={() => toggleTrackEffectsBypass(track.id)}
+                  className={`${secondaryButtonClass} ${
+                    effectsBypassed
+                      ? 'bg-orange-600/90 text-white'
+                      : 'text-zinc-400 hover:text-orange-300 hover:bg-[#444]'
+                  }`}
+                  title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
+                  aria-label={`${effectsBypassed ? 'Disable' : 'Enable'} FX bypass for ${track.displayName}`}
+                  aria-keyshortcuts="P"
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 1.5v4" />
+                    <path d="M3.2 2.6a4.5 4.5 0 105.6 0" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => {
                   const currentProject = useProjectStore.getState().project;
@@ -618,6 +638,24 @@ export function TrackHeader({
                   <path d="M4.65 10.1L6 8.75l1.35 1.35" />
                 </svg>
               </button>
+              {!track.isGroup && (
+                <button
+                  onClick={() => toggleTrackEffectsBypass(track.id)}
+                  className={`${secondaryButtonClass} ${
+                    effectsBypassed
+                      ? 'bg-orange-600/90 text-white'
+                      : 'text-zinc-400 hover:text-orange-300 hover:bg-[#444]'
+                  }`}
+                  title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
+                  aria-label={`${effectsBypassed ? 'Disable' : 'Enable'} FX bypass for ${track.displayName}`}
+                  aria-keyshortcuts="P"
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 1.5v4" />
+                    <path d="M3.2 2.6a4.5 4.5 0 105.6 0" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => {
                   const currentProject = useProjectStore.getState().project;

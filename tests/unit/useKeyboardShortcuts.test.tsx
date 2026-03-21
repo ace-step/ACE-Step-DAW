@@ -57,6 +57,19 @@ describe('useKeyboardShortcuts', () => {
     expect(track?.soloed).toBe(true);
   });
 
+  it('toggles FX bypass for the focused track with KeyP', () => {
+    const drums = useProjectStore.getState().addTrack('drums');
+    useProjectStore.getState().addTrackEffect(drums.id, 'delay');
+    useUIStore.getState().setKeyboardContext('timeline', drums.id);
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP' }));
+    expect(useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id)?.effectsBypassed).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP' }));
+    expect(useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === drums.id)?.effectsBypassed).toBe(false);
+  });
+
   it('moves keyboard focus between tracks and targets the next focused track', () => {
     const drums = useProjectStore.getState().addTrack('drums');
     const bass = useProjectStore.getState().addTrack('bass');

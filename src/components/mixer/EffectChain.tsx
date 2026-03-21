@@ -189,7 +189,7 @@ function EffectDevice({
     if (!preset) return;
     updateTrackEffect(track.id, effect.id, { params: preset.params } as Partial<TrackEffect>);
     effectsEngine.updateEffectParams(track.id, effect.id, preset.params, effect.type);
-    effectsEngine.rebuildChain(track.id, track.effects ?? []);
+    effectsEngine.rebuildChain(track.id, track.effects ?? [], track.effectsBypassed ?? false);
     // Wire Tone.js effect chain into the TrackNode audio graph
     const engine = getAudioEngine();
     const trackNode = engine.getOrCreateTrackNode(track.id);
@@ -350,7 +350,7 @@ export function EffectChain() {
   const effectsKey = track?.effects?.map((e) => `${e.id}:${e.enabled}`).join(',') ?? '';
   useEffect(() => {
     if (!track) return;
-    effectsEngine.rebuildChain(track.id, track.effects ?? []);
+    effectsEngine.rebuildChain(track.id, track.effects ?? [], track.effectsBypassed ?? false);
     // Wire rebuilt Tone.js chain into TrackNode audio graph
     const engine = getAudioEngine();
     const trackNode = engine.getOrCreateTrackNode(track.id);
@@ -360,7 +360,7 @@ export function EffectChain() {
         effectsEngine.getOutputNode(track.id),
       );
     }
-  }, [track?.id, effectsKey, track?.effects?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [track?.id, effectsKey, track?.effects?.length, track?.effectsBypassed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resize handle
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -416,6 +416,11 @@ export function EffectChain() {
         <span className="text-[10px] text-white/30 ml-1">
           — {effects.length} effect{effects.length !== 1 ? 's' : ''}
         </span>
+        {track.effectsBypassed && (
+          <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-orange-200">
+            Bypassed
+          </span>
+        )}
         <button
           onClick={() => setOpenEffectChainTrackId(null)}
           className="ml-auto text-xs text-zinc-400 hover:text-zinc-200"
@@ -425,7 +430,7 @@ export function EffectChain() {
       </div>
 
       {/* Effect devices row */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden flex items-start gap-2 p-3">
+      <div className={`flex-1 overflow-x-auto overflow-y-hidden flex items-start gap-2 p-3 transition-opacity ${track.effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
         {effects.map((effect, idx) => (
           <EffectDevice
             key={effect.id}

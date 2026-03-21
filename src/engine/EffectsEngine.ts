@@ -208,10 +208,12 @@ function scKey(trackId: string, effectId: string): string {
 
 class EffectsEngine {
   private chains = new Map<string, EffectNode[]>();
+  private bypassedTracks = new Map<string, boolean>();
   private sidechains = new Map<string, SidechainFollower>();
 
-  rebuildChain(trackId: string, effects: TrackEffect[]) {
+  rebuildChain(trackId: string, effects: TrackEffect[], bypassed = false) {
     this.disposeChain(trackId);
+    this.bypassedTracks.set(trackId, bypassed);
     const activeEffects = effects.filter((e) => e.enabled);
     const nodes = activeEffects.map(createNode);
     for (let i = 0; i < nodes.length - 1; i++) {
@@ -551,12 +553,14 @@ class EffectsEngine {
   }
 
   getInputNode(trackId: string): AudioNode | null {
+    if (this.bypassedTracks.get(trackId)) return null;
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
     return getEffectInput(nodes[0]) ?? null;
   }
 
   getOutputNode(trackId: string): AudioNode | null {
+    if (this.bypassedTracks.get(trackId)) return null;
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
 
@@ -571,6 +575,7 @@ class EffectsEngine {
   }
 
   disposeChain(trackId: string) {
+    this.bypassedTracks.delete(trackId);
     // Dispose all sidechains for this track
     for (const [key, follower] of this.sidechains) {
       if (key.startsWith(`${trackId}:`)) {
@@ -589,6 +594,7 @@ class EffectsEngine {
   }
 
   dispose() {
+    this.bypassedTracks.clear();
     for (const follower of this.sidechains.values()) {
       follower.dispose();
     }

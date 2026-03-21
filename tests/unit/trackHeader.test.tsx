@@ -173,7 +173,17 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       expect(screen.getByTitle('Record arm')).toBeInTheDocument();
       expect(screen.getByTitle(/Input monitoring/)).toBeInTheDocument();
       expect(screen.getByTitle(/Freeze Track/)).toBeInTheDocument();
+      expect(screen.getByTitle(/Bypass all track effects \(P\)/)).toBeInTheDocument();
       expect(screen.getByTitle(/automation/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('FX bypass toggle', () => {
+    it('shows the active FX bypass state on the track header', () => {
+      renderHeader({ effectsBypassed: true });
+      const bypassButton = screen.getByTitle(/Bypass all track effects \(P\).*active/i);
+      expect(bypassButton).toHaveClass('bg-orange-600/90');
+      expect(bypassButton.parentElement).toHaveClass('opacity-100');
     });
   });
 

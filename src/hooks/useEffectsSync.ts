@@ -21,7 +21,7 @@ export function useEffectsSync() {
     // First pass: rebuild all effect chains
     for (const track of tracks) {
       const effects = track.effects ?? [];
-      effectsEngine.rebuildChain(track.id, effects);
+      effectsEngine.rebuildChain(track.id, effects, track.effectsBypassed ?? false);
       const trackNode = engine.getOrCreateTrackNode(track.id);
       if (trackNode) {
         trackNode.spliceEffects(

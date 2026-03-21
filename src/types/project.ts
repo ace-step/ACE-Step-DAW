@@ -447,6 +447,7 @@ export interface TrackPresetSettings {
   compressorEnabled?: boolean;
   compressorThreshold?: number;
   compressorRatio?: number;
+  effectsBypassed?: boolean;
   reverbMix?: number;
   reverbRoomSize?: number;
   localCaption?: string;
@@ -484,6 +485,7 @@ export interface Track {
   synthPreset?: SynthPreset;
   sampler?: SamplerSettings;
   effects?: TrackEffect[];
+  effectsBypassed?: boolean;
   midiEffects?: MidiEffect[];
   drumKit?: DrumKitName;
   drumMachine?: DrumMachineConfig;

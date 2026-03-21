@@ -387,6 +387,11 @@ export function useKeyboardShortcuts() {
         void executeCoreKeyboardAction('tracks.solo', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
+      if (matches('tracks.bypassEffects')) {
+        event.preventDefault();
+        void executeCoreKeyboardAction('tracks.bypassEffects', { play, pause, toggleRecord, toggleArmTrack });
+        return;
+      }
 
       if (!event.shiftKey && !event.altKey) {
         if (ui.keyboardContext.scope === 'timeline') {

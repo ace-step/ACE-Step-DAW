@@ -91,6 +91,13 @@ describe('EffectsEngine sidechain management', () => {
     expect(output).toBeDefined();
   });
 
+  it('returns null chain endpoints when the track FX chain is globally bypassed', () => {
+    effectsEngine.rebuildChain('bass-track', [compressorEffect], true);
+    expect(effectsEngine.getInputNode('bass-track')).toBeNull();
+    expect(effectsEngine.getOutputNode('bass-track')).toBeNull();
+    expect(effectsEngine.getChain('bass-track')).toHaveLength(1);
+  });
+
   it('updateSidechainParams calls updateParams on the follower', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;

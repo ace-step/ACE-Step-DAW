@@ -145,6 +145,24 @@ describe('projectStore', () => {
       expect(project?.tracks).toHaveLength(1);
       expect(project?.tracks[0].id).toBe(bassTrack.id);
     });
+
+    it('toggles track-wide FX bypass without removing effects', () => {
+      const track = useProjectStore.getState().addTrack('drums');
+      const effectId = useProjectStore.getState().addTrackEffect(track.id, 'reverb');
+
+      useProjectStore.getState().toggleTrackEffectsBypass(track.id);
+
+      let updatedTrack = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === track.id);
+      expect(updatedTrack?.effectsBypassed).toBe(true);
+      expect(updatedTrack?.effects).toHaveLength(1);
+      expect(updatedTrack?.effects?.[0].id).toBe(effectId);
+
+      useProjectStore.getState().toggleTrackEffectsBypass(track.id);
+
+      updatedTrack = useProjectStore.getState().project?.tracks.find((candidate) => candidate.id === track.id);
+      expect(updatedTrack?.effectsBypassed).toBe(false);
+      expect(updatedTrack?.effects).toHaveLength(1);
+    });
   });
 
   describe('addClip basics', () => {

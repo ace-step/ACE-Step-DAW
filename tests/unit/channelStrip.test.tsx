@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { MixerPanel } from '../../src/components/mixer/MixerPanel';
@@ -68,6 +68,28 @@ describe('ChannelStrip — Inserts section', () => {
     const insertsSection = within(strips[0]).getByTestId('inserts-section');
     const slot = within(insertsSection).getByTestId('insert-slot-0');
     expect(slot).toHaveClass('opacity-50');
+  });
+
+  it('dims the inserts section and shows an active FX bypass button when the track bypass is enabled', () => {
+    const track = useProjectStore.getState().project!.tracks[0];
+    useProjectStore.getState().addTrackEffect(track.id, 'reverb');
+    useProjectStore.getState().toggleTrackEffectsBypass(track.id);
+
+    render(<MixerPanel />);
+
+    const strip = screen.getAllByTestId('channel-strip')[0];
+    expect(within(strip).getByRole('button', { name: /fx bypass drums/i })).toHaveClass('bg-orange-500');
+    expect(within(strip).getByTestId('inserts-section')).toHaveClass('opacity-45');
+  });
+
+  it('toggles track-wide FX bypass from the mixer channel button', () => {
+    const track = useProjectStore.getState().project!.tracks[0];
+    useProjectStore.getState().addTrackEffect(track.id, 'reverb');
+
+    render(<MixerPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: /fx bypass drums/i }));
+    expect(useProjectStore.getState().project!.tracks[0].effectsBypassed).toBe(true);
   });
 });
 

@@ -8,6 +8,7 @@ export type CoreDawShortcutActionId =
   | 'transport.loop'
   | 'tracks.solo'
   | 'tracks.mute'
+  | 'tracks.bypassEffects'
   | 'view.zoomToSelection'
   | 'view.zoomToFit';
 
@@ -83,6 +84,25 @@ function toggleFocusedTrackFlag(flag: 'muted' | 'soloed'): boolean {
   return true;
 }
 
+function toggleFocusedTrackEffectsBypass(): boolean {
+  const ui = useUIStore.getState();
+  if (!['timeline', 'mixer', 'pianoRoll'].includes(ui.keyboardContext.scope)) {
+    return false;
+  }
+
+  const trackId = resolveFocusedTrackId();
+  const projectStore = useProjectStore.getState();
+  const project = projectStore.project;
+  if (!project || !trackId) return false;
+
+  const track = project.tracks.find((candidate) => candidate.id === trackId);
+  if (!track || track.isGroup) return false;
+
+  projectStore.toggleTrackEffectsBypass(trackId);
+  ui.setKeyboardContext(ui.keyboardContext.scope, trackId);
+  return true;
+}
+
 function canZoomArrangement(): boolean {
   const scope = useUIStore.getState().keyboardContext.scope;
   return scope === 'timeline';
@@ -117,6 +137,8 @@ export async function executeCoreDawShortcut(actionId: CoreDawShortcutActionId):
       return toggleFocusedTrackFlag('soloed');
     case 'tracks.mute':
       return toggleFocusedTrackFlag('muted');
+    case 'tracks.bypassEffects':
+      return toggleFocusedTrackEffectsBypass();
     case 'view.zoomToSelection':
       if (!canZoomArrangement()) return false;
       ui.zoomTimelineToSelection();

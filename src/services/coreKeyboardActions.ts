@@ -10,6 +10,7 @@ const CORE_KEYBOARD_ACTION_IDS = [
   'transport.record',
   'tracks.mute',
   'tracks.solo',
+  'tracks.bypassEffects',
   'view.zoomToSelection',
   'view.zoomToFit',
 ] as const;
@@ -76,6 +77,23 @@ async function executeRecordAction({ toggleRecord, toggleArmTrack }: CoreKeyboar
   return false;
 }
 
+function toggleFocusedTrackEffectsBypass(): boolean {
+  const ui = useUIStore.getState();
+  if (!TRACK_SCOPES.has(ui.keyboardContext.scope)) return false;
+
+  const trackId = resolveFocusedTrackId();
+  const projectStore = useProjectStore.getState();
+  const project = projectStore.project;
+  if (!project || !trackId) return false;
+
+  const track = project.tracks.find((candidate) => candidate.id === trackId);
+  if (!track || track.isGroup) return false;
+
+  projectStore.toggleTrackEffectsBypass(trackId);
+  ui.setKeyboardContext(ui.keyboardContext.scope, trackId);
+  return true;
+}
+
 export async function executeCoreKeyboardAction(
   actionId: CoreKeyboardActionId | string,
   deps: CoreKeyboardActionDeps,
@@ -103,6 +121,9 @@ export async function executeCoreKeyboardAction(
 
     case 'tracks.solo':
       return toggleFocusedTrackFlag('soloed');
+
+    case 'tracks.bypassEffects':
+      return toggleFocusedTrackEffectsBypass();
 
     case 'view.zoomToSelection':
       if (ui.keyboardContext.scope !== 'timeline') return false;

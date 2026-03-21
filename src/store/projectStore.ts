@@ -495,6 +495,7 @@ export interface ProjectState {
   setTrackHeightPreset: (trackId: string, preset: TrackHeightPreset) => void;
   setAllTracksHeightPreset: (preset: TrackHeightPreset) => void;
   reorderTrack: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
+  moveTrackToOrder: (trackId: string, targetOrder: number) => void;
 
   addClip: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>) => Clip;
   ensureMidiClip: (trackId: string, startTime?: number, duration?: number) => Clip;
@@ -1410,6 +1411,47 @@ function createTrackFromTemplate(
 
   Object.assign(track, syncSamplerState(track, {}));
   return track;
+}
+
+function buildTrackOrderMapForMove(
+  tracks: Track[],
+  movedTrackId: string,
+  requestedOrder: number,
+): Map<string, number> {
+  const normalizedOrder = Math.max(1, Math.floor(requestedOrder));
+  const originalSortedTrackIds = [...tracks]
+    .sort((a, b) => a.order - b.order)
+    .map((track) => track.id);
+  const originalIndexByTrackId = new Map(originalSortedTrackIds.map((trackId, index) => [trackId, index]));
+  const items = tracks.map((track) => ({
+    track,
+    requestedOrder: track.id === movedTrackId
+      ? normalizedOrder
+      : Math.max(1, Math.floor(track.order) || 1),
+    isMovedTrack: track.id === movedTrackId,
+    originalIndex: originalIndexByTrackId.get(track.id) ?? Number.MAX_SAFE_INTEGER,
+  }));
+
+  items.sort((a, b) => {
+    if (a.requestedOrder !== b.requestedOrder) {
+      return a.requestedOrder - b.requestedOrder;
+    }
+    if (a.isMovedTrack !== b.isMovedTrack) {
+      return a.isMovedTrack ? -1 : 1;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
+
+  const orderMap = new Map<string, number>();
+  let nextAvailableOrder = 1;
+
+  for (const item of items) {
+    const resolvedOrder = Math.max(item.requestedOrder, nextAvailableOrder);
+    orderMap.set(item.track.id, resolvedOrder);
+    nextAvailableOrder = resolvedOrder + 1;
+  }
+
+  return orderMap;
 }
 
 function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
@@ -2613,6 +2655,49 @@ export const useProjectStore = create<ProjectState>()(
       ...t,
       order: idToNewOrder.get(t.id) ?? t.order,
     }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: updatedTracks,
+      },
+    });
+  },
+
+  moveTrackToOrder: (trackId, targetOrder) => {
+    const state = get();
+    if (!state.project) return;
+
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) return;
+    if (track.isGroup) return;
+
+    const normalizedOrder = Math.max(1, Math.floor(targetOrder));
+    if (track.order === normalizedOrder) return;
+
+    const collapsedGroupIds = new Set(
+      state.project.tracks
+        .filter((candidate) => candidate.isGroup && candidate.collapsed)
+        .map((candidate) => candidate.id),
+    );
+    const blockedOrders = new Set(
+      state.project.tracks
+        .filter((candidate) => (
+          candidate.id !== trackId
+          && candidate.parentTrackId
+          && collapsedGroupIds.has(candidate.parentTrackId)
+        ))
+        .map((candidate) => candidate.order),
+    );
+    if (blockedOrders.has(normalizedOrder)) return;
+
+    _pushHistory(state.project);
+    const orderMap = buildTrackOrderMapForMove(state.project.tracks, trackId, normalizedOrder);
+    const updatedTracks = state.project.tracks.map((candidate) => ({
+      ...candidate,
+      order: orderMap.get(candidate.id) ?? candidate.order,
+    }));
+
     set({
       project: {
         ...state.project,

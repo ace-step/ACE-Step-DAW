@@ -18,6 +18,7 @@ import {
 export function TrackList() {
   const project = useProjectStore((s) => s.project);
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
+  const moveTrackToOrder = useProjectStore((s) => s.moveTrackToOrder);
   const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const trackListDisplayMode = useUIStore((s) => s.trackListDisplayMode);
@@ -35,6 +36,7 @@ export function TrackList() {
 
   const draggedIdRef = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverEmptySlotIndex, setDragOverEmptySlotIndex] = useState<number | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after'>('before');
 
   const handleDragStart = useCallback((id: string) => {
@@ -47,21 +49,55 @@ export function TrackList() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     setDragOverId(id);
+    setDragOverEmptySlotIndex(null);
     setDragOverPosition(e.clientY < midY ? 'before' : 'after');
   }, []);
+
+  const handleEmptyRowDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    if (!draggedIdRef.current || !project) return;
+    const draggedTrack = project.tracks.find((track) => track.id === draggedIdRef.current);
+    if (draggedTrack?.isGroup) return;
+    setDragOverId(null);
+    setDragOverEmptySlotIndex(slotIndex);
+  }, [project]);
 
   const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     const draggedId = draggedIdRef.current;
     if (!draggedId || draggedId === targetId) {
       setDragOverId(null);
+      setDragOverEmptySlotIndex(null);
       draggedIdRef.current = null;
       return;
     }
     reorderTrack(draggedId, targetId, dragOverPosition);
     setDragOverId(null);
+    setDragOverEmptySlotIndex(null);
     draggedIdRef.current = null;
   }, [reorderTrack, dragOverPosition]);
+
+  const handleEmptyRowDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    const draggedId = draggedIdRef.current;
+    if (!draggedId || !project) {
+      setDragOverId(null);
+      setDragOverEmptySlotIndex(null);
+      draggedIdRef.current = null;
+      return;
+    }
+    const draggedTrack = project.tracks.find((track) => track.id === draggedId);
+    if (draggedTrack?.isGroup) {
+      setDragOverId(null);
+      setDragOverEmptySlotIndex(null);
+      draggedIdRef.current = null;
+      return;
+    }
+    moveTrackToOrder(draggedId, slotIndex + 1);
+    setDragOverId(null);
+    setDragOverEmptySlotIndex(null);
+    draggedIdRef.current = null;
+  }, [moveTrackToOrder, project]);
 
   const resizeDragRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -86,6 +122,19 @@ export function TrackList() {
 
   const visibleTracks = useMemo(() => getVisibleTracks(), [getVisibleTracks, project]);
   const rows = useMemo(() => buildArrangementTrackSlots(visibleTracks, PLACEHOLDER_ROW_COUNT), [visibleTracks]);
+  const blockedEmptySlotOrders = useMemo(() => {
+    const collapsedGroupIds = new Set(
+      project.tracks
+        .filter((track) => track.isGroup && track.collapsed)
+        .map((track) => track.id),
+    );
+
+    return new Set(
+      project.tracks
+        .filter((track) => track.parentTrackId && collapsedGroupIds.has(track.parentTrackId))
+        .map((track) => track.order),
+    );
+  }, [project]);
   const showsArrangementMarkers = (project.markers?.length ?? 0) > 0;
 
   return (
@@ -96,6 +145,7 @@ export function TrackList() {
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
           setDragOverId(null);
+          setDragOverEmptySlotIndex(null);
         }
       }}
     >
@@ -141,6 +191,10 @@ export function TrackList() {
             key={getArrangementEmptyTrackId(row.slotIndex)}
             slotIndex={row.slotIndex}
             isCollapsed={isCollapsed}
+            isDropDisabled={blockedEmptySlotOrders.has(row.slotIndex + 1)}
+            isDragOver={dragOverEmptySlotIndex === row.slotIndex}
+            onDragOver={handleEmptyRowDragOver}
+            onDrop={handleEmptyRowDrop}
           />
         )))}
       </div>
@@ -158,7 +212,21 @@ export function TrackList() {
 const PLACEHOLDER_ROW_HEIGHT = 64;
 const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT;
 
-function EmptyTrackHeaderRow({ slotIndex, isCollapsed }: { slotIndex: number; isCollapsed: boolean }) {
+function EmptyTrackHeaderRow({
+  slotIndex,
+  isCollapsed,
+  isDropDisabled,
+  isDragOver,
+  onDragOver,
+  onDrop,
+}: {
+  slotIndex: number;
+  isCollapsed: boolean;
+  isDropDisabled: boolean;
+  isDragOver: boolean;
+  onDragOver: (e: React.DragEvent, slotIndex: number) => void;
+  onDrop: (e: React.DragEvent, slotIndex: number) => void;
+}) {
   const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
@@ -170,8 +238,14 @@ function EmptyTrackHeaderRow({ slotIndex, isCollapsed }: { slotIndex: number; is
       style={{
         height: PLACEHOLDER_ROW_HEIGHT,
         borderColor: 'var(--color-daw-arrangement-separator)',
+        backgroundColor: isDragOver ? 'rgba(94, 89, 255, 0.12)' : undefined,
+        boxShadow: isDragOver ? 'inset 0 0 0 1px rgba(94, 89, 255, 0.45)' : undefined,
       }}
       onClick={() => setShowInstrumentPicker(true)}
+      onDragOver={isDropDisabled ? undefined : (e) => onDragOver(e, slotIndex)}
+      onDrop={isDropDisabled ? undefined : (e) => onDrop(e, slotIndex)}
+      aria-label={`Empty track slot ${slotIndex + 1}`}
+      data-drop-disabled={isDropDisabled ? 'true' : 'false'}
       data-testid={`empty-header-row-${slotIndex}`}
     >
       {isSelected && (

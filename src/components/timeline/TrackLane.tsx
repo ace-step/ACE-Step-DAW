@@ -18,7 +18,10 @@ import {
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
   ARRANGEMENT_SELECTED_LANE_BG,
 } from '../arrangement/rowSurface';
-import { getArrangementRowHeight } from '../arrangement/rowLayout';
+import {
+  getArrangementLaneHeightForRenderedRowHeight,
+  getArrangementRowHeight,
+} from '../arrangement/rowLayout';
 
 interface TrackLaneProps {
   track: Track;
@@ -97,13 +100,26 @@ export function TrackLane({ track }: TrackLaneProps) {
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+    const minRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MIN_LANE_HEIGHT });
+    const maxRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MAX_LANE_HEIGHT });
+
+    resizeRef.current = { startY: e.clientY, startH: rowHeight };
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!resizeRef.current) return;
       const delta = ev.clientY - resizeRef.current.startY;
-      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
-      updateTrack(track.id, { laneHeight: newH });
+      const nextRenderedRowHeight = Math.min(
+        maxRenderedRowHeight,
+        Math.max(minRenderedRowHeight, resizeRef.current.startH + delta),
+      );
+      const nextLaneHeight = Math.min(
+        MAX_LANE_HEIGHT,
+        Math.max(
+          MIN_LANE_HEIGHT,
+          getArrangementLaneHeightForRenderedRowHeight(track, nextRenderedRowHeight),
+        ),
+      );
+      updateTrack(track.id, { laneHeight: nextLaneHeight });
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape') return;
@@ -124,7 +140,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [laneHeight, track.id, updateTrack]);
+  }, [rowHeight, track, updateTrack]);
 
   if (!project) return null;
 

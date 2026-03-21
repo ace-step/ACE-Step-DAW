@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getTrackHeightForPreset } from '../../../constants/trackHeight';
 import {
   DEFAULT_ARRANGEMENT_ROW_HEIGHT,
+  getArrangementLaneHeightForRenderedRowHeight,
   getArrangementRowHeight,
 } from '../rowLayout';
 
@@ -21,5 +22,10 @@ describe('rowLayout', () => {
 
   it('respects the minimum group row height', () => {
     expect(getArrangementRowHeight({ isGroup: true, laneHeight: 48 })).toBe(40);
+  });
+
+  it('maps rendered group row heights back to lane heights for resizing', () => {
+    expect(getArrangementLaneHeightForRenderedRowHeight({ isGroup: true }, 70)).toBe(100);
+    expect(getArrangementLaneHeightForRenderedRowHeight({ isGroup: true }, 40)).toBe(40);
   });
 });

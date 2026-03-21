@@ -12,7 +12,10 @@ import {
   ARRANGEMENT_HEADER_ROW_BG,
   ARRANGEMENT_ROW_SEPARATOR_COLOR,
 } from '../arrangement/rowSurface';
-import { getArrangementRowHeight } from '../arrangement/rowLayout';
+import {
+  getArrangementLaneHeightForRenderedRowHeight,
+  getArrangementRowHeight,
+} from '../arrangement/rowLayout';
 import { getButtonClasses } from '../ui/Button';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
 
@@ -125,14 +128,14 @@ export function TrackHeader({
   const laneHeight = track.laneHeight ?? 64;
   const rowHeight = getArrangementRowHeight(track);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
-  const isCompact = rowHeight < 52;
+  const isCompact = laneHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
   const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
   const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
   const effectsBypassed = track.effectsBypassed ?? false;
   const showSecondaryActions = monitorMode !== 'off' || track.frozen || isFreezing || hasAutomationLane || effectsBypassed;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
-  const isTwoRow = rowHeight >= 60;
+  const isTwoRow = laneHeight >= 60;
   const primaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'min-w-[20px] min-h-[20px]' });
   const secondaryButtonClass = getButtonClasses({ size: 'sm', variant: 'ghost', icon: true, className: 'w-5 h-5' });
   const collapsedLabel = track.displayName
@@ -150,12 +153,25 @@ export function TrackHeader({
   const onHeightResizeDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    resizeRef.current = { startY: e.clientY, startH: laneHeight };
+    const minRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MIN_LANE_HEIGHT });
+    const maxRenderedRowHeight = getArrangementRowHeight({ ...track, laneHeight: MAX_LANE_HEIGHT });
+
+    resizeRef.current = { startY: e.clientY, startH: rowHeight };
     const onMouseMove = (ev: MouseEvent) => {
       if (!resizeRef.current) return;
       const delta = ev.clientY - resizeRef.current.startY;
-      const newH = Math.min(MAX_LANE_HEIGHT, Math.max(MIN_LANE_HEIGHT, resizeRef.current.startH + delta));
-      updateTrack(track.id, { laneHeight: newH });
+      const nextRenderedRowHeight = Math.min(
+        maxRenderedRowHeight,
+        Math.max(minRenderedRowHeight, resizeRef.current.startH + delta),
+      );
+      const nextLaneHeight = Math.min(
+        MAX_LANE_HEIGHT,
+        Math.max(
+          MIN_LANE_HEIGHT,
+          getArrangementLaneHeightForRenderedRowHeight(track, nextRenderedRowHeight),
+        ),
+      );
+      updateTrack(track.id, { laneHeight: nextLaneHeight });
     };
     const onMouseUp = () => {
       resizeRef.current = null;
@@ -164,7 +180,7 @@ export function TrackHeader({
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
-  }, [laneHeight, track.id, updateTrack]);
+  }, [rowHeight, track, updateTrack]);
 
   const handleHeaderDoubleClick = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;

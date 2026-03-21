@@ -48,6 +48,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.smartControls',  category: 'panels',    label: 'Toggle Smart Controls',       defaultCombo: { code: 'KeyB' }, contexts: ['global'] },
   { id: 'panels.library',        category: 'panels',    label: 'Toggle Library',              defaultCombo: { code: 'KeyY' }, contexts: ['global'] },
   { id: 'panels.loopBrowser',    category: 'panels',    label: 'Toggle Loop Browser',         defaultCombo: { code: 'KeyO' }, contexts: ['global'] },
+  { id: 'panels.trackList',      category: 'panels',    label: 'Toggle Track List Rail',      defaultCombo: { code: 'KeyW' }, contexts: ['timeline'] },
   { id: 'panels.tempoLane',      category: 'panels',    label: 'Toggle Tempo Lane',           defaultCombo: { code: 'KeyT' }, contexts: ['global'] },
   { id: 'panels.generation',     category: 'panels',    label: 'Toggle AI Generation Panel',  defaultCombo: { code: 'KeyG' }, contexts: ['global'] },
   { id: 'panels.generationHistory', category: 'panels', label: 'Toggle Generation History Panel', defaultCombo: { code: 'KeyH' }, contexts: ['global'] },

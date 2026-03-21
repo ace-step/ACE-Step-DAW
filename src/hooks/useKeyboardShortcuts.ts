@@ -371,6 +371,7 @@ export function useKeyboardShortcuts() {
       if (matches('panels.smartControls')) { event.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
       if (matches('panels.library')) { event.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
+      if (matches('panels.trackList')) { event.preventDefault(); ui.toggleTrackListDisplayMode(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }
       if (matches('panels.generation')) { event.preventDefault(); ui.toggleGenerationPanel(); return; }
       if (matches('panels.generationHistory')) { event.preventDefault(); ui.toggleGenerationHistoryPanel(); return; }

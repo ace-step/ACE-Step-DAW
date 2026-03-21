@@ -10,9 +10,10 @@ export function TrackListDisplayToggle() {
       type="button"
       data-testid="track-list-display-toggle"
       aria-label={isCollapsed ? 'Expand track list' : 'Collapse track list'}
+      aria-keyshortcuts="W"
       aria-controls="arrangement-track-list"
       aria-expanded={!isCollapsed}
-      title={isCollapsed ? 'Expand track list' : 'Collapse track list'}
+      title={isCollapsed ? 'Expand track list (W)' : 'Collapse track list (W)'}
       onClick={toggleTrackListDisplayMode}
       className={`flex items-center justify-center rounded-md border transition-colors ${
         isCollapsed

@@ -198,6 +198,18 @@ describe('useKeyboardShortcuts', () => {
     expect(useUIStore.getState().loopBrowserOpen).toBe(true);
   });
 
+  it('toggles the track-list rail with KeyW in timeline context', () => {
+    const drums = useProjectStore.getState().addTrack('drums');
+    useUIStore.getState().setKeyboardContext('timeline', drums.id);
+    render(<Harness />);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    expect(useUIStore.getState().trackListDisplayMode).toBe('collapsed');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    expect(useUIStore.getState().trackListDisplayMode).toBe('expanded');
+  });
+
   it('keeps V available for piano-roll tools without affecting global state', () => {
     const keys = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
     useUIStore.getState().setOpenPianoRoll(keys.id);

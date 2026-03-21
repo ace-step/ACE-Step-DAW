@@ -6,12 +6,9 @@ const SILENCE_UPLOAD_DURATION = 0.1;
 
 /**
  * Generate a minimal silence WAV for upload.
- * The actual generation duration is controlled by the audio_duration API param,
- * so we only need a tiny placeholder (0.1s at 16kHz mono = ~3.2KB instead of
- * full-duration 48kHz stereo which can exceed 11MB).
- *
- * The full-quality version is still available via generateSilenceWavFull() for
- * local playback/mixing.
+ * The actual generation length must be sent as `audio_duration` on the lego task
+ * (see `computeLegoTimingParams` in legoApiTiming.ts — from-silence uses clip/select-window
+ * seconds). This file only uploads a tiny placeholder (0.1s at 16kHz mono ≈ 3.2KB).
  */
 export function generateSilenceWav(_durationSeconds: number): Blob {
   const numSamples = Math.ceil(SILENCE_UPLOAD_RATE * SILENCE_UPLOAD_DURATION);

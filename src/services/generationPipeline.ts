@@ -13,6 +13,7 @@ import type { LegoTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, T
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
+import { computeLegoTimingParams } from './legoApiTiming';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { toastError, toastInfo, toastSuccess } from '../hooks/useToast';
@@ -502,15 +503,21 @@ async function generateClipInternal(
   store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
 
   try {
-    // Use actual audio duration (without timeline padding) for generation
-    const audioDuration = useProjectStore.getState().getAudioDuration();
+    const projectTimelineDuration = useProjectStore.getState().getAudioDuration();
+    const timing = computeLegoTimingParams(
+      Boolean(options.forceSilence),
+      clip,
+      projectTimelineDuration,
+      options.repaintRange,
+    );
 
     // Determine src_audio — prefer a server-side path (no upload), then
-    // previous cumulative blob, then synthesized silence.
+    // previous cumulative blob, then synthesized silence (tiny placeholder WAV;
+    // target length is carried by `audio_duration` in task params).
     const srcBlob = options.srcAudioPath
       ? null
       : (options.forceSilence ? null : previousCumulativeBlob);
-    const srcAudioBlob = srcBlob ?? generateSilenceWav(audioDuration);
+    const srcAudioBlob = srcBlob ?? generateSilenceWav(timing.audio_duration);
 
     logger.debug(
       `clip=${clipId} track=${track.trackName}`,
@@ -518,18 +525,14 @@ async function generateClipInternal(
         ? `srcAudioPath=${options.srcAudioPath}`
         : `srcAudio: ${srcBlob ? 'previousCumulative' : 'silence'}`,
       `forceSilence=${options.forceSilence ?? false}`,
-      `audioDuration=${audioDuration}s`,
+      `projectTimeline=${projectTimelineDuration}s`,
+      `apiAudioDuration=${timing.audio_duration}s`,
+      `repainting=${timing.repainting_start}..${timing.repainting_end}`,
     );
 
-    // Build instruction — detect chunk vs full mode based on whether the
-    // generation region covers the entire audio duration.  The backend's
-    // conditioning_text.py checks for "a segment" in the instruction to
-    // switch caption formatting (chunk omits Global: prefix).
+    // Chunk vs full: backend conditioning_text checks for "a segment" in the instruction.
     const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
-    const repaintStart = options.repaintRange?.start ?? clip.startTime;
-    const repaintEnd = options.repaintRange?.end ?? (clip.startTime + clip.duration);
-    const isChunkMode = repaintStart > 0.5 || repaintEnd < audioDuration - 0.5;
-    const instruction = isChunkMode
+    const instruction = timing.isChunkMode
       ? `Generate a segment of the ${trackLabel} track based on the audio context:`
       : `Generate the ${trackLabel} track based on the audio context:`;
 
@@ -553,9 +556,9 @@ async function generateClipInternal(
       global_caption: effectiveGlobalCaption,
       lyrics: effectiveLyrics,
       instruction,
-      repainting_start: repaintStart,
-      repainting_end: repaintEnd,
-      audio_duration: audioDuration,
+      repainting_start: timing.repainting_start,
+      repainting_end: timing.repainting_end,
+      audio_duration: timing.audio_duration,
       bpm: resolvedBpm,
       key_scale: resolvedKey,
       time_signature: resolvedTimeSig,

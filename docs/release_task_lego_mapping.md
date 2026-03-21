@@ -23,3 +23,7 @@ The DiT prompt uses either “Generate a segment…” or “Generate the … tr
 ## Related API types
 
 TypeScript shapes: `LegoTaskParams` in `src/types/api.ts`.
+
+## Regression to avoid
+
+Earlier builds sent `audio_duration = getAudioDuration()` (full timeline) for from-silence while uploading a **0.1s** placeholder WAV. That mismatch could produce wrong Metas / bad generations on the server. From-silence must send **clip/select-window seconds** as `audio_duration` and `repainting` `0` / `-1` as in the table above.

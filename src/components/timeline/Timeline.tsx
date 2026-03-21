@@ -20,11 +20,13 @@ import { TimelineEmptyState } from './TimelineEmptyState';
 import { SelectionFloatingToolbar } from './SelectionFloatingToolbar';
 import { toastInfo } from '../../hooks/useToast';
 import { getTimelineFitViewport } from '../../utils/timelineZoom';
+import { convertTimelineWindowMode, moveTimelineWindow, type TimelineWindowRange } from './timelineWindowUtils';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
 
 const DRAG_THRESHOLD_PX = 4;
+const WINDOW_CONTROL_BAR_HEIGHT = 24;
 
 interface DragRect { left: number; width: number; top: number; height: number }
 
@@ -62,6 +64,110 @@ function getTrackVerticalRange(
   }
   if (minTop === Infinity) return null;
   return { top: minTop, height: maxBot - minTop };
+}
+
+interface TimelineWindowOverlayProps {
+  kind: 'select' | 'context';
+  left: number;
+  width: number;
+  top: number;
+  height: number;
+  label: string;
+  switchLabel: string;
+  switchAriaLabel: string;
+  accentTextColor: string;
+  fillColor: string;
+  borderColor: string;
+  edgeColor: string;
+  align: 'left' | 'right';
+  onMoveStart: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onSwitch: () => void;
+  onContextMenu?: (e: React.MouseEvent<HTMLDivElement>) => void;
+}
+
+function TimelineWindowOverlay({
+  kind,
+  left,
+  width,
+  top,
+  height,
+  label,
+  switchLabel,
+  switchAriaLabel,
+  accentTextColor,
+  fillColor,
+  borderColor,
+  edgeColor,
+  align,
+  onMoveStart,
+  onSwitch,
+  onContextMenu,
+}: TimelineWindowOverlayProps) {
+  const justifyClass = align === 'left' ? 'justify-start' : 'justify-end';
+
+  return (
+    <div
+      className="absolute pointer-events-none z-10"
+      style={{
+        left,
+        width,
+        top,
+        height,
+        background: fillColor,
+        borderLeft: `2px solid ${edgeColor}`,
+        borderRight: `2px solid ${edgeColor}`,
+        borderTop: `2px solid ${borderColor}`,
+        borderBottom: `2px solid ${borderColor}`,
+      }}
+    >
+      <div
+        className={`absolute left-1 right-1 top-1 flex ${justifyClass}`}
+      >
+        <div
+          className="pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.22em] shadow-[0_6px_20px_rgba(0,0,0,0.22)] backdrop-blur-sm cursor-grab active:cursor-grabbing"
+          data-window-overlay-control="true"
+          data-window-overlay-type={kind}
+          aria-label={`${label} controls`}
+          onMouseDown={onMoveStart}
+          onContextMenu={(e) => {
+            if (!onContextMenu) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenu(e);
+          }}
+          style={{
+            minHeight: WINDOW_CONTROL_BAR_HEIGHT,
+            color: accentTextColor,
+            background: 'rgba(18, 19, 24, 0.82)',
+            borderColor,
+          }}
+        >
+          <span className="truncate select-none">{label}</span>
+          <button
+            type="button"
+            className="rounded border px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.18em] transition-colors hover:bg-white/8"
+            data-window-overlay-control="true"
+            aria-label={switchAriaLabel}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSwitch();
+            }}
+            style={{
+              color: accentTextColor,
+              borderColor,
+            }}
+          >
+            {switchLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function Timeline() {
@@ -268,6 +374,7 @@ export function Timeline() {
       if (e.button !== 0) return;
 
       const target = e.target as HTMLElement;
+      if (target.closest?.('[data-window-overlay-control="true"]')) return;
       if (target.closest?.('[data-clip-block]')) return;
       if (target.closest?.('.fixed')) return;
       if (target.closest?.('[data-sequencer-grid]')) return;
@@ -367,6 +474,58 @@ export function Timeline() {
     [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, seek, setTimelineFocused],
   );
 
+  const startWindowMove = useCallback(
+    (
+      kind: 'select' | 'context',
+      windowRange: TimelineWindowRange,
+      e: React.MouseEvent<HTMLDivElement>,
+    ) => {
+      if (e.button !== 0) return;
+
+      const container = scrollRef.current;
+      if (!container || !project) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const bpm = project.bpm ?? 120;
+      const totalDuration = project.totalDuration;
+      const rect = container.getBoundingClientRect();
+      const setWindow = kind === 'context' ? setContextWindow : setSelectWindow;
+      const pointerTimeAtStart = (e.clientX - rect.left + container.scrollLeft) / pixelsPerSecond;
+      const pointerOffsetTime = pointerTimeAtStart - windowRange.startTime;
+
+      const applyMove = (clientX: number) => {
+        const pointerTime = (clientX - rect.left + container.scrollLeft) / pixelsPerSecond;
+        const desiredStartTime = snapToGrid(pointerTime - pointerOffsetTime, bpm, 1);
+        setWindow(moveTimelineWindow(windowRange, desiredStartTime, totalDuration));
+      };
+
+      const onMouseMove = (ev: MouseEvent) => {
+        applyMove(ev.clientX);
+      };
+
+      const onMouseUp = (ev: MouseEvent) => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        applyMove(ev.clientX);
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    },
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow],
+  );
+
+  const switchTimelineWindow = useCallback(
+    (kind: 'select' | 'context') => {
+      const nextWindows = convertTimelineWindowMode(kind, { selectWindow, contextWindow });
+      setSelectWindow(nextWindows.selectWindow);
+      setContextWindow(nextWindows.contextWindow);
+    },
+    [contextWindow, selectWindow, setContextWindow, setSelectWindow],
+  );
+
 
   if (!project) {
     return (
@@ -463,57 +622,47 @@ export function Timeline() {
 
             {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
             {ctxLeft !== null && ctxWidth !== null && ctxVRange && (
-              <div
-                className="absolute pointer-events-none z-10"
-                style={{
-                  left: ctxLeft,
-                  width: ctxWidth,
-                  top: ctxVRange.top,
-                  height: ctxVRange.height,
-                  background: 'rgba(90, 200, 250, 0.10)',
-                  borderLeft: '2px solid rgba(90, 200, 250, 0.7)',
-                  borderRight: '2px solid rgba(90, 200, 250, 0.7)',
-                  borderTop: '2px solid rgba(90, 200, 250, 0.35)',
-                  borderBottom: '2px solid rgba(90, 200, 250, 0.35)',
-                }}
-              >
-                <span
-                  className="absolute top-0.5 left-1 text-[10px] font-mono select-none"
-                  style={{ color: '#5AC8FA', background: 'rgba(20,30,40,0.75)', padding: '0 4px', borderRadius: 3 }}
-                >
-                  context window
-                </span>
-              </div>
+              <TimelineWindowOverlay
+                kind="context"
+                left={ctxLeft}
+                width={ctxWidth}
+                top={ctxVRange.top}
+                height={ctxVRange.height}
+                label="context window"
+                switchLabel="SEL"
+                switchAriaLabel="Convert context window into select window"
+                accentTextColor="#5AC8FA"
+                fillColor="rgba(90, 200, 250, 0.10)"
+                borderColor="rgba(90, 200, 250, 0.35)"
+                edgeColor="rgba(90, 200, 250, 0.7)"
+                align="left"
+                onMoveStart={(e) => startWindowMove('context', contextWindow!, e)}
+                onSwitch={() => switchTimelineWindow('context')}
+              />
             )}
 
             {/* Committed select window overlay — Apple Purple (#AF52DE) */}
             {selLeft !== null && selWidth !== null && selVRange && (
-              <div
-                className="absolute z-10"
-                style={{
-                  left: selLeft,
-                  width: selWidth,
-                  top: selVRange.top,
-                  height: selVRange.height,
-                  background: 'rgba(175, 82, 222, 0.10)',
-                  borderLeft: '2px solid rgba(175, 82, 222, 0.7)',
-                  borderRight: '2px solid rgba(175, 82, 222, 0.7)',
-                  borderTop: '2px solid rgba(175, 82, 222, 0.35)',
-                  borderBottom: '2px solid rgba(175, 82, 222, 0.35)',
-                }}
+              <TimelineWindowOverlay
+                kind="select"
+                left={selLeft}
+                width={selWidth}
+                top={selVRange.top}
+                height={selVRange.height}
+                label="select window"
+                switchLabel="CTX"
+                switchAriaLabel="Convert select window into context window"
+                accentTextColor="#AF52DE"
+                fillColor="rgba(175, 82, 222, 0.10)"
+                borderColor="rgba(175, 82, 222, 0.35)"
+                edgeColor="rgba(175, 82, 222, 0.7)"
+                align="right"
+                onMoveStart={(e) => startWindowMove('select', selectWindow!, e)}
+                onSwitch={() => switchTimelineWindow('select')}
                 onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
                   setRegionCtxMenu({ x: e.clientX, y: e.clientY });
                 }}
-              >
-                <span
-                  className="absolute top-0.5 right-1 text-[10px] font-mono select-none pointer-events-none"
-                  style={{ color: '#AF52DE', background: 'rgba(20,20,35,0.75)', padding: '0 4px', borderRadius: 3 }}
-                >
-                  select window
-                </span>
-              </div>
+              />
             )}
 
             {/* Floating toolbar below select window */}

@@ -103,12 +103,13 @@ function AceStudioLink() {
       rel="noreferrer"
       title="Visit ACE Studio"
       data-testid="toolbar-acestudio-link"
-      className="flex items-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/8 px-2.5 py-1 text-[11px] text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-cyan-400/14"
+      className="flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-1 text-[11px] text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/14"
     >
-      <span className="font-semibold tracking-[0.14em] uppercase text-[10px] text-cyan-200">ACE Studio</span>
-      <span className="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
-        Official
-      </span>
+      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-6 w-6 rounded-full object-cover" />
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 3.5L9 7L4 10.5" />
+        <path d="M9.5 3.5L12 7L9.5 10.5" />
+      </svg>
     </a>
   );
 }
@@ -186,38 +187,6 @@ function FileMenu({ disabled }: { disabled: boolean }) {
         </div>
       )}
     </div>
-  );
-}
-
-function GenerateButton({ disabled }: { disabled: boolean }) {
-  const showGenerationPanel = useUIStore((s) => s.showGenerationPanel);
-  const setShowGenerationPanel = useUIStore((s) => s.setShowGenerationPanel);
-  const openGenerationPanelView = useUIStore((s) => s.openGenerationPanelView);
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (showGenerationPanel) {
-          setShowGenerationPanel(false);
-          return;
-        }
-        openGenerationPanelView('textToMusic');
-      }}
-      disabled={disabled}
-      data-onboarding-target="genr-button"
-      data-testid="generate-button"
-      aria-label="Generate"
-      aria-pressed={showGenerationPanel}
-      className={`rounded-md border px-3 py-1 text-[11px] font-semibold tracking-[0.12em] uppercase transition-colors ${
-        showGenerationPanel
-          ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-100'
-          : 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
-      } disabled:opacity-30`}
-      title="Generate panel"
-    >
-      Generate
-    </button>
   );
 }
 
@@ -319,15 +288,6 @@ export function Toolbar() {
           Session
         </Button>
       </div>
-
-      <ToolbarSeparator />
-
-      {/* Generation actions */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
-        <GenerateButton disabled={!project} />
-      </div>
-
-      <ToolbarSeparator />
 
       {/* Project actions + File menu */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">

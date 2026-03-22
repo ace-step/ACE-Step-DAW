@@ -32,7 +32,7 @@ vi.mock('../../../hooks/useAudioEngine', () => ({
   }),
 }));
 
-describe('GenerationSidePanel settings tab', () => {
+describe('GenerationSidePanel settings entrypoints', () => {
   beforeEach(() => {
     useProjectStore.setState({ project: null });
     useProjectStore.getState().createProject({ name: 'Settings Tab Test' });
@@ -53,13 +53,23 @@ describe('GenerationSidePanel settings tab', () => {
     });
   });
 
-  it('shows a settings tab in the unified generate panel', () => {
+  it('opens settings from the header gear inside the unified generate panel', () => {
     render(<GenerationSidePanel />);
 
-    fireEvent.click(screen.getByTestId('generation-panel-tab-settings'));
+    fireEvent.click(screen.getByTestId('generation-panel-settings-trigger'));
 
     expect(screen.getByTestId('generation-settings-section')).toBeInTheDocument();
     expect(screen.getByText('Model & Backend')).toBeInTheDocument();
     expect(screen.getByText('Generation Defaults')).toBeInTheDocument();
+  });
+
+  it('reopens the panel from the floating orb trigger after collapsing', () => {
+    render(<GenerationSidePanel />);
+
+    fireEvent.click(screen.getByTestId('generation-panel-collapse'));
+    expect(useUIStore.getState().showGenerationPanel).toBe(false);
+
+    fireEvent.click(screen.getByTestId('generate-orb-trigger'));
+    expect(useUIStore.getState().showGenerationPanel).toBe(true);
   });
 });

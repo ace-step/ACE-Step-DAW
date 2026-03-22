@@ -127,19 +127,14 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const { container } = render(<Toolbar />);
     // Look for group containers with background styling
     const groups = container.querySelectorAll('[data-testid="toolbar-group"]');
-    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, gen, transport-area, right panels
+    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
   });
 
-  it('uses a single Generate button that opens the unified panel', () => {
+  it('removes the top toolbar Generate button in favor of the side orb entry', () => {
     render(<Toolbar />);
 
-    const generateButton = screen.getByTestId('generate-button');
-    expect(generateButton).toBeInTheDocument();
-    expect(screen.queryByTestId('generate-dropdown-trigger')).not.toBeInTheDocument();
-
-    fireEvent.click(generateButton);
-    expect(useUIStore.getState().showGenerationPanel).toBe(true);
-    expect(useUIStore.getState().generationPanelView).toBe('textToMusic');
+    expect(screen.queryByTestId('generate-button')).not.toBeInTheDocument();
+    expect(screen.queryByText('GENERATE')).not.toBeInTheDocument();
   });
 
   it('provides tooltip titles on all right-side icon buttons', () => {
@@ -167,7 +162,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const link = screen.getByTestId('toolbar-acestudio-link');
     expect(link).toHaveAttribute('href', 'https://acestudio.ai/');
     expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveTextContent('ACE Studio');
+    expect(screen.getByAltText('ACE Studio')).toBeInTheDocument();
   });
 
   it('shows the loaded model badge and opens the library panel when clicked', () => {

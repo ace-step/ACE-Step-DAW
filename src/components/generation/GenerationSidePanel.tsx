@@ -40,6 +40,7 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
 export function GenerationSidePanel() {
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
+  const openGenerationPanelView = useUIStore((s) => s.openGenerationPanelView);
   const generationPanelView = useUIStore((s) => s.generationPanelView);
   const setGenerationPanelView = useUIStore((s) => s.setGenerationPanelView);
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
@@ -86,6 +87,7 @@ export function GenerationSidePanel() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [renderPanel, setRenderPanel] = useState(show);
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
@@ -211,31 +213,92 @@ export function GenerationSidePanel() {
     setBatchGenerateMode('silence');
   }, [batchGenerateMode, setBatchGenerateMode, setGenerationPanelView]);
 
-  if (!show) return null;
+  useEffect(() => {
+    if (show) {
+      setRenderPanel(true);
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setRenderPanel(false), 260);
+    return () => window.clearTimeout(timeout);
+  }, [show]);
+
+  if (!project) return null;
 
   return (
-    <aside
-      className="fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl"
-      style={{ zIndex: Z.panel }}
-      data-testid="generation-side-panel"
-      aria-label="Generate panel"
-    >
-      <div className="flex items-center justify-between border-b border-[#333] px-3 py-2">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
-          <p className="text-[11px] text-zinc-400">{panelCopy.description}</p>
-        </div>
-        <button
-          onClick={() => setShow(false)}
-          className="text-lg leading-none text-zinc-400 transition-colors hover:text-zinc-300"
-          aria-label="Close generation panel"
-        >
-          &times;
-        </button>
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => openGenerationPanelView(generationPanelView)}
+        className={`fixed right-5 top-16 flex h-12 w-12 items-center justify-center rounded-full border border-indigo-300/30 bg-gradient-to-br from-indigo-500 via-violet-500 to-cyan-400 text-white shadow-[0_12px_30px_rgba(61,82,255,0.35)] transition-all duration-300 ${
+          show ? 'pointer-events-none translate-x-4 scale-90 opacity-0' : 'translate-x-0 scale-100 opacity-100 hover:scale-105'
+        }`}
+        style={{ zIndex: Z.panel + 1 }}
+        aria-label="Open Generate panel"
+        title="Open Generate panel"
+        data-testid="generate-orb-trigger"
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 1.5v4" />
+          <path d="M9 12.5v4" />
+          <path d="M1.5 9h4" />
+          <path d="M12.5 9h4" />
+          <path d="M4 4l2.4 2.4" />
+          <path d="M11.6 11.6L14 14" />
+          <path d="M14 4l-2.4 2.4" />
+          <path d="M4 14l2.4-2.4" />
+          <circle cx="9" cy="9" r="2.1" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
 
-      <div className="border-b border-[#333] px-3 py-2">
-        <div className="grid grid-cols-4 gap-1 rounded-lg border border-[#3a3a3a] bg-[#202020] p-1" data-testid="generation-panel-tabs">
+      {renderPanel && (
+        <aside
+          className={`fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl transition-all duration-300 ease-out ${
+            show ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[calc(100%+28px)] opacity-0'
+          }`}
+          style={{ zIndex: Z.panel }}
+          data-testid="generation-side-panel"
+          aria-label="Generate panel"
+          aria-hidden={!show}
+        >
+          <button
+            type="button"
+            onClick={() => setShow(false)}
+            className="absolute -left-5 top-16 flex h-10 w-10 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-300 shadow-lg transition-colors hover:border-[#545454] hover:text-white"
+            aria-label="Collapse generation panel"
+            title="Collapse Generate panel"
+            data-testid="generation-panel-collapse"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3l5 5-5 5" />
+            </svg>
+          </button>
+
+          <div className="flex items-start justify-between border-b border-[#333] px-5 py-2">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
+              <p className="text-[11px] text-zinc-400">{panelCopy.description}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGenerationPanelView('settings')}
+              className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                generationPanelView === 'settings'
+                  ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
+                  : 'border-[#404040] bg-[#262626] text-zinc-400 hover:border-[#555] hover:text-zinc-200'
+              }`}
+              aria-label="Open Generate settings"
+              title="Generate settings"
+              data-testid="generation-panel-settings-trigger"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="8" r="2.2" />
+                <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="border-b border-[#333] px-3 py-2">
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#3a3a3a] bg-[#202020] p-1" data-testid="generation-panel-tabs">
           <button
             type="button"
             onClick={() => setGenerationPanelView('textToMusic')}
@@ -274,19 +337,6 @@ export function GenerationSidePanel() {
             aria-pressed={generationPanelView === 'history'}
           >
             History
-          </button>
-          <button
-            type="button"
-            onClick={() => setGenerationPanelView('settings')}
-            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-              generationPanelView === 'settings'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-            }`}
-            data-testid="generation-panel-tab-settings"
-            aria-pressed={generationPanelView === 'settings'}
-          >
-            Settings
           </button>
         </div>
       </div>
@@ -926,7 +976,9 @@ export function GenerationSidePanel() {
           </section>
         )}
       </div>
+          )}
+        </aside>
       )}
-    </aside>
+    </>
   );
 }

@@ -529,26 +529,24 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       <div className="flex items-center gap-0.5 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
+        <ControlBarButton
           active={mainView === 'arrangement'}
           onClick={() => setMainView('arrangement')}
           title="Arrangement View (Tab)"
-          aria-label="Switch to Arrangement View"
         >
-          Arrangement
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M2 4h10M2 7h10M2 10h10" />
+          </svg>
+        </ControlBarButton>
+        <ControlBarButton
           active={mainView === 'session'}
           onClick={() => setMainView('session')}
           title="Session View (Tab)"
-          aria-label="Switch to Session View"
         >
-          Session
-        </Button>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M4 2v10M7 2v10M10 2v10" />
+          </svg>
+        </ControlBarButton>
       </div>
 
       <ToolbarSeparator />

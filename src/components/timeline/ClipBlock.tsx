@@ -59,7 +59,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const selectWindow = useUIStore((s) => s.selectWindow);
-  const setCoverModal = useUIStore((s) => s.setCoverModal);
   const setRepaintModal = useUIStore((s) => s.setRepaintModal);
   const setVocal2BGMModal = useUIStore((s) => s.setVocal2BGMModal);
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
@@ -82,7 +81,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const duplicateClip = useProjectStore((s) => s.duplicateClip);
   const consolidateClips = useProjectStore((s) => s.consolidateClips);
   const snapClipEdgeToZeroCrossing = useProjectStore((s) => s.snapClipEdgeToZeroCrossing);
-  const convertAudioToMidi = useProjectStore((s) => s.convertAudioToMidi);
   const createQuickSamplerFromClip = useProjectStore((s) => s.createQuickSamplerFromClip);
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
@@ -1017,41 +1015,19 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         )}
       </div>
 
-      {ctxMenu && (
-        <ClipContextMenu
-          x={ctxMenu.x}
-          y={ctxMenu.y}
-          onEdit={() => { closeCtxMenu(); setEditModalOpen(true); }}
-          onGenerate={() => { closeCtxMenu(); generateClip(clip.id); }}
-          onRegenerate={() => { closeCtxMenu(); regenerateClip(clip.id); }}
-          onOpenMidi={() => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); }}
-          onExportMidi={() => { closeCtxMenu(); exportMidiClip(clip.id); }}
-          onSplitAtPlayhead={() => {
+      {ctxMenu && (() => {
+        const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
+        const isReady = clip.generationStatus === 'ready';
+        const isVocalTrack = track.trackName === 'vocals' || track.trackName === 'backing_vocals';
+        const hasWarpMarkers = !!(clip.warpMarkers && clip.warpMarkers.length > 0);
+
+        const clipAIContext = (!isMidiClip && isReady) ? {
+          onRegenerate: () => { closeCtxMenu(); regenerateClip(clip.id); },
+          hasPrompt: !!clip.prompt,
+          isReady,
+          onCreateCover: () => { closeCtxMenu(); useUIStore.getState().setMusicEnhancerOpen(true); },
+          onRepaint: () => {
             closeCtxMenu();
-            const currentTime = useTransportStore.getState().currentTime;
-            if (currentTime > clip.startTime + 0.01 && currentTime < clip.startTime + clip.duration - 0.01) {
-              void splitClipAtZeroCrossing(clip.id, currentTime);
-            }
-          }}
-          onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
-          onAssignColor={(color) => {
-            closeCtxMenu();
-            updateClipColors(selectedActionClipIds, color);
-          }}
-          onResetColor={() => {
-            closeCtxMenu();
-            updateClipColors(selectedActionClipIds, undefined);
-          }}
-          onConsolidate={() => { void handleConsolidate(); }}
-          onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
-          onAddLayer={() => { closeCtxMenu(); useUIStore.getState().setAddLayerOpen(true); }}
-          onCreateCover={() => {
-            closeCtxMenu();
-            useUIStore.getState().setMusicEnhancerOpen(true);
-          }}
-          onRepaint={() => {
-            closeCtxMenu();
-            // Compute repaint range from selectWindow if it overlaps this clip
             let range: { start: number; end: number } | null = null;
             if (selectWindow) {
               const rs = Math.max(selectWindow.startTime, clip.startTime);
@@ -1059,60 +1035,81 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               if (re > rs) range = { start: rs, end: re };
             }
             setRepaintModal(clip.id, range);
-          }}
-          onVocal2BGM={() => {
-            closeCtxMenu();
-            setVocal2BGMModal(clip.id);
-          }}
-          onAnalyze={() => {
-            closeCtxMenu();
-            setAnalysisPanel(clip.id);
-          }}
-          onSeparateStems={() => {
-            closeCtxMenu();
-            setStemSeparationModal(clip.id);
-          }}
-          onConvertToMidi={() => {
-            closeCtxMenu();
-            setAudioToMidiModal(clip.id);
-          }}
-          onCreateQuickSampler={() => {
-            closeCtxMenu();
-            const samplerTrack = createQuickSamplerFromClip(track.id, clip.id);
-            if (samplerTrack) {
-              useUIStore.getState().setOpenPianoRoll(samplerTrack.id);
+          },
+          ...(hasAudio ? { onSeparateStems: () => { closeCtxMenu(); setStemSeparationModal(clip.id); } } : {}),
+          ...(isVocalTrack ? { onGenerateAccompaniment: () => { closeCtxMenu(); setVocal2BGMModal(clip.id); } } : {}),
+          onAnalyze: () => { closeCtxMenu(); setAnalysisPanel(clip.id); },
+          ...(hasAudio ? {
+            onConvertToMidi: () => { closeCtxMenu(); setAudioToMidiModal(clip.id); },
+            onCreateQuickSampler: () => {
+              closeCtxMenu();
+              const samplerTrack = createQuickSamplerFromClip(track.id, clip.id);
+              if (samplerTrack) useUIStore.getState().setOpenPianoRoll(samplerTrack.id);
+            },
+            onQuantizeAudio: () => { closeCtxMenu(); applyAudioQuantize(clip.id); },
+            ...(hasWarpMarkers ? { onClearAudioQuantize: () => { closeCtxMenu(); clearAudioQuantize(clip.id); } } : {}),
+          } : {}),
+        } : undefined;
+
+        return (
+          <ClipContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            onClose={closeCtxMenu}
+            onInspireMe={() => { closeCtxMenu(); useUIStore.getState().setShowGenerationPanel(true); }}
+            onAddLayer={() => { closeCtxMenu(); useUIStore.getState().setAddLayerOpen(true); }}
+            onMusicEnhancer={() => { closeCtxMenu(); useUIStore.getState().setMusicEnhancerOpen(true); }}
+            clipAIContext={clipAIContext}
+            onOpenMidi={isMidiClip ? () => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); } : undefined}
+            onExportMidi={isMidiClip ? () => { closeCtxMenu(); exportMidiClip(clip.id); } : undefined}
+            onEdit={() => { closeCtxMenu(); setEditModalOpen(true); }}
+            onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}
+            onSplitAtPlayhead={() => {
+              closeCtxMenu();
+              const currentTime = useTransportStore.getState().currentTime;
+              if (currentTime > clip.startTime + 0.01 && currentTime < clip.startTime + clip.duration - 0.01) {
+                void splitClipAtZeroCrossing(clip.id, currentTime);
+              }
+            }}
+            onConsolidate={() => { void handleConsolidate(); }}
+            onDelete={() => { closeCtxMenu(); removeClip(clip.id); }}
+            onSelectAll={() => {
+              closeCtxMenu();
+              const p = useProjectStore.getState().project;
+              if (p) {
+                const allClipIds = p.tracks.flatMap((t) => t.clips.map((c) => c.id));
+                useUIStore.getState().selectClips(allClipIds);
+              }
+            }}
+            onLoopSelection={() => {
+              closeCtxMenu();
+              const sw = useUIStore.getState().selectWindow;
+              if (sw) {
+                useTransportStore.getState().setLoopRegion(sw.startTime, sw.endTime);
+                if (!useTransportStore.getState().loopEnabled) {
+                  useTransportStore.getState().toggleLoop();
+                }
+              }
+            }}
+            onToggleMute={() => {
+              closeCtxMenu();
+              useProjectStore.getState().toggleClipMuted(selectedActionClipIds);
+            }}
+            isMuted={selectedActionClipIds.length > 1
+              ? selectedActionClipIds.every((id) => {
+                  const c = project?.tracks.flatMap((t) => t.clips).find((cl) => cl.id === id);
+                  return c?.muted;
+                })
+              : !!clip.muted
             }
-          }}
-          onQuantizeAudio={() => {
-            closeCtxMenu();
-            applyAudioQuantize(clip.id);
-          }}
-          onClearAudioQuantize={() => {
-            closeCtxMenu();
-            clearAudioQuantize(clip.id);
-          }}
-          onToggleMute={() => {
-            closeCtxMenu();
-            useProjectStore.getState().toggleClipMuted(selectedActionClipIds);
-          }}
-          onClose={closeCtxMenu}
-          isMuted={selectedActionClipIds.length > 1
-            ? selectedActionClipIds.every((id) => {
-                const c = project?.tracks.flatMap((t) => t.clips).find((cl) => cl.id === id);
-                return c?.muted;
-              })
-            : !!clip.muted
-          }
-          hasPrompt={!!clip.prompt}
-          isReady={clip.generationStatus === 'ready'}
-          isMidiClip={isMidiClip}
-          isVocalTrack={track.trackName === 'vocals' || track.trackName === 'backing_vocals'}
-          hasAudio={!!(clip.isolatedAudioKey || clip.cumulativeMixKey)}
-          hasWarpMarkers={!!(clip.warpMarkers && clip.warpMarkers.length > 0)}
-          canConsolidate={canConsolidate}
-          hasCustomColor={hasCustomColor}
-        />
-      )}
+            onAssignColor={(color) => { closeCtxMenu(); updateClipColors(selectedActionClipIds, color); }}
+            onResetColor={() => { closeCtxMenu(); updateClipColors(selectedActionClipIds, undefined); }}
+            hasCustomColor={hasCustomColor}
+            canConsolidate={canConsolidate}
+            isMidiClip={isMidiClip}
+          />
+        );
+      })()}
 
       {addLayerOpen && (
         <AddLayerModal

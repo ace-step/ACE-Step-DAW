@@ -1,11 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import {
   ContextMenuWrapper,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuSubmenu,
-  CONTEXT_MENU,
 } from '../ui/ContextMenu';
+import { AIToolsSubmenu } from './AIToolsSubmenu';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -17,8 +16,6 @@ interface CanvasContextMenuProps {
 }
 
 export function CanvasContextMenu({ x, y, onClose }: CanvasContextMenuProps) {
-  const [showAISubmenu, setShowAISubmenu] = useState(false);
-
   const handleInspireMe = useCallback(() => {
     useUIStore.getState().setShowGenerationPanel(true);
     onClose();
@@ -56,51 +53,11 @@ export function CanvasContextMenu({ x, y, onClose }: CanvasContextMenuProps) {
 
   return (
     <ContextMenuWrapper x={x} y={y} onClose={onClose} minWidth={180} testId="canvas-context-menu">
-      {/* AI Tools with hover submenu */}
-      <div
-        className="relative"
-        onMouseEnter={() => setShowAISubmenu(true)}
-        onMouseLeave={() => setShowAISubmenu(false)}
-      >
-        <button
-          className="w-full text-left flex items-center justify-between cursor-pointer"
-          style={{
-            padding: '5px 12px',
-            fontSize: CONTEXT_MENU.fontSize,
-            border: 'none',
-            background: showAISubmenu ? CONTEXT_MENU.hoverBg : 'transparent',
-            color: showAISubmenu ? '#fff' : CONTEXT_MENU.textColor,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = CONTEXT_MENU.hoverBg;
-            e.currentTarget.style.color = '#fff';
-          }}
-          onMouseLeave={(e) => {
-            if (!showAISubmenu) {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = CONTEXT_MENU.textColor;
-            }
-          }}
-        >
-          <span>AI Tools</span>
-          <span style={{ fontSize: 10, color: '#666', marginLeft: 12 }}>&#9654;</span>
-        </button>
-
-        {showAISubmenu && (
-          <div className="absolute left-full top-0" style={{ marginLeft: -2 }}>
-            <ContextMenuSubmenu>
-              <ContextMenuItem label="Inspire Me" onClick={handleInspireMe} color="#a78bfa" />
-              <ContextMenuItem label="Add a Layer" onClick={handleAddLayer} color="#67e8f9" />
-              <ContextMenuItem label="Music Enhancer" onClick={handleMusicEnhancer} color="#6ee7b7" />
-              <ContextMenuSeparator />
-              <ContextMenuItem label="Voice Changer" onClick={() => {}} disabled />
-              <ContextMenuItem label="Stem Splitter" onClick={() => {}} disabled />
-              <ContextMenuItem label="Sound Effects" onClick={() => {}} disabled />
-            </ContextMenuSubmenu>
-          </div>
-        )}
-      </div>
-
+      <AIToolsSubmenu
+        onInspireMe={handleInspireMe}
+        onAddLayer={handleAddLayer}
+        onMusicEnhancer={handleMusicEnhancer}
+      />
       <ContextMenuSeparator />
       <ContextMenuItem label="Paste" onClick={() => onClose()} shortcut="⌘V" disabled />
       <ContextMenuItem label="Select All" onClick={handleSelectAll} shortcut="⌘A" />

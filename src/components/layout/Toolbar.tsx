@@ -31,7 +31,7 @@ function LCDDisplay() {
   const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
-    <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center">
+    <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center shrink-0">
       <span className={`text-[13px] font-mono tabular-nums tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[11px] font-mono tabular-nums text-zinc-400">{formatTime(currentTime)}</span>
       {project && !countInActive && (
@@ -225,9 +225,12 @@ export function Toolbar() {
   }, [pause, play, stop]);
 
   return (
-    <div className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none">
+    <div
+      className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none overflow-x-auto"
+      style={{ scrollbarWidth: 'none' }}
+    >
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showLibrary}
           onClick={() => setShowLibrary(!showLibrary)}
@@ -256,7 +259,7 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5">
+      <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -282,7 +285,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Generation actions */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <button
           onClick={() => setBatchGenerateMode('silence')}
           disabled={!project}
@@ -324,7 +327,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Project actions + File menu */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -342,7 +345,7 @@ export function Toolbar() {
 
       {/* Center: Transport controls — prominent pill container */}
       <div
-        className="flex items-center gap-0.5 bg-[#353535] rounded-full px-2 py-0.5"
+        className="flex items-center gap-0.5 bg-[#353535] rounded-full px-2 py-0.5 shrink-0"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
@@ -405,7 +408,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -450,7 +453,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}
@@ -496,7 +499,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Settings + Shortcuts */}
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 shrink-0">
         <button
           onClick={() => openCommandPalette()}
           className="flex items-center gap-2 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-surface-2 hover:text-white"
@@ -546,7 +549,7 @@ export function Toolbar() {
 
       {/* Zoom controls */}
       <ToolbarSeparator />
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 shrink-0">
         <Button variant="ghost" size="sm" icon onClick={zoomOut} title="Zoom Out">
           −
         </Button>

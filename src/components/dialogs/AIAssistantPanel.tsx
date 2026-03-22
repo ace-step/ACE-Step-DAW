@@ -4,12 +4,28 @@ import { Z } from '../../utils/zIndex';
 import type { AIChatMessage } from '../../types/aiAssistant';
 
 const CHAT_PROVIDERS_KEY = 'ace-step-daw-chat-providers';
+const CHAT_PROMPTS_KEY = 'ace-step-daw-chat-prompts';
+const CHAT_SKILLS_KEY = 'ace-step-daw-chat-skills';
 
 interface ChatProvider {
   id: string;
   name: string;
   apiKey: string;
   baseUrl: string;
+  enabled: boolean;
+}
+
+interface ChatPrompt {
+  id: string;
+  name: string;
+  content: string;
+  enabled: boolean;
+}
+
+interface ChatSkill {
+  id: string;
+  name: string;
+  url: string;
   enabled: boolean;
 }
 
@@ -20,47 +36,315 @@ const DEFAULT_PROVIDERS: ChatProvider[] = [
   { id: 'openrouter', name: 'OpenRouter', apiKey: '', baseUrl: 'https://openrouter.ai/api/v1', enabled: false },
   { id: 'deepseek', name: 'DeepSeek', apiKey: '', baseUrl: 'https://api.deepseek.com/v1', enabled: false },
   { id: 'groq', name: 'Groq', apiKey: '', baseUrl: 'https://api.groq.com/openai/v1', enabled: false },
+  { id: 'xai', name: 'xAI', apiKey: '', baseUrl: 'https://api.xai.io/v1', enabled: false },
 ];
 
-function loadProviders(): ChatProvider[] {
+const DEFAULT_PROMPTS: ChatPrompt[] = [
+  { id: 'system', name: 'System Prompt', content: 'You are an AI music production assistant for ACE-Step DAW. Help with mixing, production techniques, effects, and workflows.', enabled: true },
+];
+
+function loadFromStorage<T>(key: string, defaults: T[]): T[] {
   try {
-    const stored = localStorage.getItem(CHAT_PROVIDERS_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as ChatProvider[];
-      // Merge with defaults to pick up newly added providers
-      return DEFAULT_PROVIDERS.map((dp) => {
-        const existing = parsed.find((p) => p.id === dp.id);
-        return existing ? { ...dp, ...existing } : dp;
-      });
-    }
+    const stored = localStorage.getItem(key);
+    if (stored) return JSON.parse(stored) as T[];
   } catch { /* ignore */ }
-  return DEFAULT_PROVIDERS.map((p) => ({ ...p }));
+  return defaults.map((d) => ({ ...d }));
 }
 
-function saveProviders(providers: ChatProvider[]) {
-  localStorage.setItem(CHAT_PROVIDERS_KEY, JSON.stringify(providers));
+function saveToStorage<T>(key: string, data: T[]) {
+  localStorage.setItem(key, JSON.stringify(data));
 }
 
-function ChatProvidersSettings({ onClose }: { onClose: () => void }) {
+function loadProviders(): ChatProvider[] {
+  const stored = loadFromStorage<ChatProvider>(CHAT_PROVIDERS_KEY, DEFAULT_PROVIDERS);
+  return DEFAULT_PROVIDERS.map((dp) => {
+    const existing = stored.find((p) => p.id === dp.id);
+    return existing ? { ...dp, ...existing } : dp;
+  });
+}
+
+type SettingsTab = 'providers' | 'prompts' | 'skills';
+
+const inputClass = 'w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-daw-accent/50 focus:outline-none';
+const labelClass = 'block text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1';
+
+function SettingsNavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+        active ? 'bg-daw-accent/15 text-daw-accent' : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+/* ── Providers tab ── */
+function ProvidersTab() {
   const [providers, setProviders] = useState<ChatProvider[]>(loadProviders);
   const [selectedId, setSelectedId] = useState(providers[0]?.id ?? 'anthropic');
   const selected = providers.find((p) => p.id === selectedId) ?? providers[0];
+  const [showKey, setShowKey] = useState(false);
 
   const updateProvider = (id: string, updates: Partial<ChatProvider>) => {
     setProviders((prev) => {
       const next = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
-      saveProviders(next);
+      saveToStorage(CHAT_PROVIDERS_KEY, next);
       return next;
     });
   };
 
-  const [showKey, setShowKey] = useState(false);
+  return (
+    <div className="flex flex-1 min-h-0">
+      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+        {providers.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => { setSelectedId(p.id); setShowKey(false); }}
+            className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+              selectedId === p.id
+                ? 'bg-daw-accent/20 text-daw-accent'
+                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+          >
+            {p.apiKey && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="API key set" />}
+            <span className="truncate">{p.name}</span>
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+          <div className="text-[13px] font-medium text-zinc-200">{selected.name}</div>
+          <div>
+            <label className={labelClass}>API Key</label>
+            <div className="flex gap-1">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={selected.apiKey}
+                onChange={(e) => updateProvider(selected.id, { apiKey: e.target.value })}
+                placeholder={`Enter ${selected.name} API key`}
+                className={`flex-1 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-daw-accent/50 focus:outline-none`}
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#444] bg-[#2a2a2a] text-zinc-400 hover:bg-[#333] hover:text-zinc-300"
+                title={showKey ? 'Hide key' : 'Show key'}
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  {showKey ? (
+                    <><path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" /><circle cx="7" cy="7" r="1.5" /></>
+                  ) : (
+                    <><path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" /><path d="M2 12L12 2" /></>
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className={labelClass}>API Base URL</label>
+            <input type="text" value={selected.baseUrl} onChange={(e) => updateProvider(selected.id, { baseUrl: e.target.value })} className={inputClass} />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => updateProvider(selected.id, { enabled: !selected.enabled })} className={`relative h-5 w-9 rounded-full transition-colors ${selected.enabled ? 'bg-daw-accent' : 'bg-[#444]'}`}>
+              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${selected.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </button>
+            <span className="text-[11px] text-zinc-400">{selected.enabled ? 'Enabled' : 'Disabled'}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Prompts tab ── */
+function PromptsTab() {
+  const [prompts, setPrompts] = useState<ChatPrompt[]>(() => loadFromStorage(CHAT_PROMPTS_KEY, DEFAULT_PROMPTS));
+  const [selectedId, setSelectedId] = useState(prompts[0]?.id ?? 'system');
+  const selected = prompts.find((p) => p.id === selectedId);
+
+  const updatePrompt = (id: string, updates: Partial<ChatPrompt>) => {
+    setPrompts((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      saveToStorage(CHAT_PROMPTS_KEY, next);
+      return next;
+    });
+  };
+
+  const addPrompt = () => {
+    const id = `prompt-${Date.now()}`;
+    setPrompts((prev) => {
+      const next = [...prev, { id, name: 'New Prompt', content: '', enabled: true }];
+      saveToStorage(CHAT_PROMPTS_KEY, next);
+      return next;
+    });
+    setSelectedId(id);
+  };
+
+  const deletePrompt = (id: string) => {
+    if (id === 'system') return; // Don't delete system prompt
+    setPrompts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      saveToStorage(CHAT_PROMPTS_KEY, next);
+      return next;
+    });
+    setSelectedId('system');
+  };
+
+  return (
+    <div className="flex flex-1 min-h-0">
+      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+        {prompts.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setSelectedId(p.id)}
+            className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+              selectedId === p.id ? 'bg-daw-accent/20 text-daw-accent' : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+          >
+            {p.enabled && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
+            <span className="truncate">{p.name}</span>
+          </button>
+        ))}
+        <button onClick={addPrompt} className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-zinc-500 hover:text-zinc-300">
+          + Add
+        </button>
+      </div>
+      {selected && (
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <input
+              type="text"
+              value={selected.name}
+              onChange={(e) => updatePrompt(selected.id, { name: e.target.value })}
+              className="bg-transparent text-[13px] font-medium text-zinc-200 focus:outline-none border-b border-transparent focus:border-daw-accent/50"
+            />
+            {selected.id !== 'system' && (
+              <button onClick={() => deletePrompt(selected.id)} className="text-[10px] text-zinc-500 hover:text-red-400">Delete</button>
+            )}
+          </div>
+          <div>
+            <label className={labelClass}>Content</label>
+            <textarea
+              value={selected.content}
+              onChange={(e) => updatePrompt(selected.id, { content: e.target.value })}
+              placeholder="Enter prompt instructions..."
+              className={`${inputClass} resize-none h-40`}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => updatePrompt(selected.id, { enabled: !selected.enabled })} className={`relative h-5 w-9 rounded-full transition-colors ${selected.enabled ? 'bg-daw-accent' : 'bg-[#444]'}`}>
+              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${selected.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </button>
+            <span className="text-[11px] text-zinc-400">{selected.enabled ? 'Active' : 'Inactive'}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── MCP tab ── */
+function SkillsTab() {
+  const [servers, setServers] = useState<ChatSkill[]>(() => loadFromStorage<ChatSkill>(CHAT_SKILLS_KEY, []));
+  const [selectedId, setSelectedId] = useState(servers[0]?.id ?? '');
+  const selected = servers.find((s) => s.id === selectedId);
+
+  const updateServer = (id: string, updates: Partial<ChatSkill>) => {
+    setServers((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
+      saveToStorage(CHAT_SKILLS_KEY, next);
+      return next;
+    });
+  };
+
+  const addServer = () => {
+    const id = `skill-${Date.now()}`;
+    const newServer: ChatSkill = { id, name: 'New Skill', url: '', enabled: true };
+    setServers((prev) => {
+      const next = [...prev, newServer];
+      saveToStorage(CHAT_SKILLS_KEY, next);
+      return next;
+    });
+    setSelectedId(id);
+  };
+
+  const deleteServer = (id: string) => {
+    setServers((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveToStorage(CHAT_SKILLS_KEY, next);
+      return next;
+    });
+    setSelectedId(servers.find((s) => s.id !== id)?.id ?? '');
+  };
+
+  return (
+    <div className="flex flex-1 min-h-0">
+      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+        {servers.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSelectedId(s.id)}
+            className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+              selectedId === s.id ? 'bg-daw-accent/20 text-daw-accent' : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+          >
+            {s.enabled && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
+            <span className="truncate">{s.name}</span>
+          </button>
+        ))}
+        <button onClick={addServer} className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-zinc-500 hover:text-zinc-300">
+          + Add
+        </button>
+      </div>
+      {selected ? (
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <input
+              type="text"
+              value={selected.name}
+              onChange={(e) => updateServer(selected.id, { name: e.target.value })}
+              className="bg-transparent text-[13px] font-medium text-zinc-200 focus:outline-none border-b border-transparent focus:border-daw-accent/50"
+            />
+            <button onClick={() => deleteServer(selected.id)} className="text-[10px] text-zinc-500 hover:text-red-400">Delete</button>
+          </div>
+          <div>
+            <label className={labelClass}>Endpoint URL</label>
+            <input
+              type="text"
+              value={selected.url}
+              onChange={(e) => updateServer(selected.id, { url: e.target.value })}
+              placeholder="https://example.com/skill"
+              className={inputClass}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => updateServer(selected.id, { enabled: !selected.enabled })} className={`relative h-5 w-9 rounded-full transition-colors ${selected.enabled ? 'bg-daw-accent' : 'bg-[#444]'}`}>
+              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${selected.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </button>
+            <span className="text-[11px] text-zinc-400">{selected.enabled ? 'Active' : 'Inactive'}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-[11px] text-zinc-500">
+          No skills configured. Click + Add to create one.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Chat Settings (main container) ── */
+function ChatSettings({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<SettingsTab>('providers');
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[#333] px-3 py-2 shrink-0">
-        <span className="text-[12px] font-medium text-zinc-200">Providers</span>
+        <span className="text-[12px] font-medium text-zinc-200">Settings</span>
         <button
           onClick={onClose}
           className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-[#333] hover:text-zinc-300"
@@ -73,96 +357,32 @@ function ChatProvidersSettings({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        {/* Provider list */}
-        <div className="w-[110px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
-          {providers.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => { setSelectedId(p.id); setShowKey(false); }}
-              className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors ${
-                selectedId === p.id
-                  ? 'bg-daw-accent/20 text-daw-accent'
-                  : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-              }`}
-            >
-              {p.apiKey && (
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="API key set" />
-              )}
-              <span className="truncate">{p.name}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Provider details */}
-        {selected && (
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-            <div className="text-[13px] font-medium text-zinc-200">{selected.name}</div>
-
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1">
-                API Key
-              </label>
-              <div className="flex gap-1">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={selected.apiKey}
-                  onChange={(e) => updateProvider(selected.id, { apiKey: e.target.value })}
-                  placeholder={`Enter ${selected.name} API key`}
-                  className="flex-1 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-daw-accent/50 focus:outline-none"
-                />
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  className="flex h-7 w-7 items-center justify-center rounded border border-[#444] bg-[#2a2a2a] text-zinc-400 hover:bg-[#333] hover:text-zinc-300"
-                  title={showKey ? 'Hide key' : 'Show key'}
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-                    {showKey ? (
-                      <>
-                        <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                        <circle cx="7" cy="7" r="1.5" />
-                      </>
-                    ) : (
-                      <>
-                        <path d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z" />
-                        <path d="M2 12L12 2" />
-                      </>
-                    )}
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1">
-                API Base URL
-              </label>
-              <input
-                type="text"
-                value={selected.baseUrl}
-                onChange={(e) => updateProvider(selected.id, { baseUrl: e.target.value })}
-                className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-daw-accent/50 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => updateProvider(selected.id, { enabled: !selected.enabled })}
-                className={`relative h-5 w-9 rounded-full transition-colors ${
-                  selected.enabled ? 'bg-daw-accent' : 'bg-[#444]'
-                }`}
-              >
-                <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                  selected.enabled ? 'translate-x-4' : 'translate-x-0.5'
-                }`} />
-              </button>
-              <span className="text-[11px] text-zinc-400">
-                {selected.enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
-          </div>
-        )}
+      {/* Navigation */}
+      <div className="border-b border-[#333] py-1 shrink-0">
+        <SettingsNavItem
+          label="Providers"
+          active={tab === 'providers'}
+          onClick={() => setTab('providers')}
+          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M7 1v3M7 10v3M1 7h3M10 7h3" strokeLinecap="round" /><circle cx="7" cy="7" r="2.5" /></svg>}
+        />
+        <SettingsNavItem
+          label="Prompts"
+          active={tab === 'prompts'}
+          onClick={() => setTab('prompts')}
+          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 3h10M2 6h7M2 9h5M2 12h8" /></svg>}
+        />
+        <SettingsNavItem
+          label="Skills"
+          active={tab === 'skills'}
+          onClick={() => setTab('skills')}
+          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M7 1l2 4h4l-3.5 3 1.5 4.5L7 10l-4 2.5 1.5-4.5L1 5h4z" /></svg>}
+        />
       </div>
+
+      {/* Tab content */}
+      {tab === 'providers' && <ProvidersTab />}
+      {tab === 'prompts' && <PromptsTab />}
+      {tab === 'skills' && <SkillsTab />}
     </div>
   );
 }
@@ -236,7 +456,7 @@ export function AIAssistantPanel() {
       aria-label="AI Assistant"
     >
       {showSettings ? (
-        <ChatProvidersSettings onClose={() => setShowSettings(false)} />
+        <ChatSettings onClose={() => setShowSettings(false)} />
       ) : (
       <>
       <div className="flex items-center justify-between border-b border-[#333] px-3 py-2 shrink-0">

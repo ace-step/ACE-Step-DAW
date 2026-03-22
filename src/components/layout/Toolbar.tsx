@@ -274,7 +274,7 @@ function ControlBarButton({
 }
 
 function ToolbarSeparator() {
-  return <div className="w-px h-5 bg-[#444]/50" data-testid="toolbar-separator" />;
+  return <div className="w-px h-5 bg-daw-hover/50" data-testid="toolbar-separator" />;
 }
 
 function AceStudioLink() {
@@ -334,7 +334,7 @@ function FileMenu({ disabled }: { disabled: boolean }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-48 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 py-1" data-testid="file-menu-dropdown">
+        <div className="absolute top-full left-0 mt-1 w-48 bg-daw-surface-2 border border-daw-hover rounded-lg shadow-xl z-50 py-1" data-testid="file-menu-dropdown">
           <button
             onClick={() => { setShowExportDialog(true); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
@@ -353,7 +353,7 @@ function FileMenu({ disabled }: { disabled: boolean }) {
           >
             Import Audio/MIDI
           </button>
-          <div className="w-full h-px bg-[#444]/50 my-1" />
+          <div className="w-full h-px bg-daw-hover/50 my-1" />
           <button
             onClick={() => { setShowUndoHistoryPanel(!showUndoHistoryPanel); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
@@ -413,11 +413,11 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none overflow-x-auto"
+      className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-daw-border-strong shrink-0 select-none overflow-x-auto"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-daw-surface-2/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -461,7 +461,7 @@ export function Toolbar() {
       <ProjectSettingsStrip disabled={!project} />
 
       {/* Project actions + File menu */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-daw-surface-2/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -541,7 +541,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-daw-surface-2/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -586,7 +586,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 bg-daw-surface-2/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}

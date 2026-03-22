@@ -214,7 +214,7 @@ export function TrackHeader({
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
       className={`relative flex items-center gap-2 border-b group select-none animate-[fadeIn_150ms_ease-out] ${
-        isDragOver ? 'bg-[#383838]' : ''
+        isDragOver ? 'bg-daw-hover-subtle' : ''
       }`}
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
@@ -345,7 +345,7 @@ export function TrackHeader({
       {track.isGroup ? (
         <button
           onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(track.id); }}
-          className="flex-shrink-0 ml-1 w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#444] transition-colors"
+          className="flex-shrink-0 ml-1 w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-daw-hover transition-colors"
           title={track.collapsed ? 'Expand group' : 'Collapse group'}
           aria-label={track.collapsed ? `Expand group ${track.displayName}` : `Collapse group ${track.displayName}`}
           aria-expanded={!track.collapsed}
@@ -395,7 +395,7 @@ export function TrackHeader({
                     if (e.key === 'Enter') commitRename();
                     if (e.key === 'Escape') cancelEditing();
                   }}
-                  className="text-[11px] font-medium text-zinc-100 bg-[#1a1a1a] rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
+                  className="text-[11px] font-medium text-zinc-100 bg-daw-border-strong rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
                   autoFocus
                 />
               ) : (
@@ -418,7 +418,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   track.muted
                     ? 'bg-amber-600/90 text-white'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-daw-hover'
                 }`}
                 title="Mute (M)"
                 aria-label={`Mute ${track.displayName}`}
@@ -442,7 +442,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   track.soloed
                     ? 'bg-emerald-600/90 text-white'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-daw-hover'
                 }`}
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
@@ -457,7 +457,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   isArmed
                     ? 'bg-red-600/90 text-white'
-                    : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+                    : 'text-red-400 hover:text-red-300 hover:bg-daw-hover'
                 }`}
                 title="Record arm"
                 aria-label={`Record arm ${track.displayName}`}
@@ -482,7 +482,7 @@ export function TrackHeader({
                     ? 'bg-cyan-600/90 text-white'
                     : monitorMode === 'auto'
                       ? 'bg-cyan-600/50 text-cyan-200'
-                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-daw-hover'
                 }`}
                 title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
                 aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
@@ -501,7 +501,7 @@ export function TrackHeader({
                     ? 'bg-cyan-600/90 text-white'
                     : isFreezing
                       ? 'text-cyan-400 animate-pulse'
-                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-daw-hover'
                 }`}
                 title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
                 aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
@@ -521,7 +521,7 @@ export function TrackHeader({
                   className={`${secondaryButtonClass} ${
                     effectsBypassed
                       ? 'bg-orange-600/90 text-white'
-                      : 'text-zinc-400 hover:text-orange-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-orange-300 hover:bg-daw-hover'
                   }`}
                   title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
                   aria-label={`${effectsBypassed ? 'Disable' : 'Enable'} FX bypass for ${track.displayName}`}
@@ -553,7 +553,7 @@ export function TrackHeader({
                 className={`${secondaryButtonClass} ${
                   hasAutomationLane
                     ? 'bg-amber-600/80 text-white'
-                    : 'text-zinc-400 hover:text-amber-300 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-amber-300 hover:bg-daw-hover'
                 }`}
                 title="Toggle automation lane (A)"
                 aria-label={`Toggle automation ${track.displayName}`}
@@ -597,7 +597,7 @@ export function TrackHeader({
                   if (e.key === 'Enter') commitRename();
                   if (e.key === 'Escape') cancelEditing();
                 }}
-                className="text-[11px] font-medium text-zinc-100 bg-[#1a1a1a] rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
+                className="text-[11px] font-medium text-zinc-100 bg-daw-border-strong rounded px-1 py-px min-w-0 outline-none border border-daw-accent/60"
                 autoFocus
               />
             ) : (
@@ -626,7 +626,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   track.muted
                     ? 'bg-amber-600/90 text-white'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-daw-hover'
                 }`}
                 title="Mute (M)"
                 aria-label={`Mute ${track.displayName}`}
@@ -650,7 +650,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   track.soloed
                     ? 'bg-emerald-600/90 text-white'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-daw-hover'
                 }`}
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
@@ -665,7 +665,7 @@ export function TrackHeader({
                 className={`${primaryButtonClass} ${
                   isArmed
                     ? 'bg-red-600/90 text-white'
-                    : 'text-red-400 hover:text-red-300 hover:bg-[#444]'
+                    : 'text-red-400 hover:text-red-300 hover:bg-daw-hover'
                 }`}
                 title="Record arm"
                 aria-label={`Record arm ${track.displayName}`}
@@ -691,7 +691,7 @@ export function TrackHeader({
                     ? 'bg-cyan-600/90 text-white'
                     : monitorMode === 'auto'
                       ? 'bg-cyan-600/50 text-cyan-200'
-                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-daw-hover'
                 }`}
                 title={`Input monitoring: ${monitorMode} (click to cycle off→auto→on)`}
                 aria-label={`Input monitoring ${track.displayName}: ${monitorMode}`}
@@ -710,7 +710,7 @@ export function TrackHeader({
                     ? 'bg-cyan-600/90 text-white'
                     : isFreezing
                       ? 'text-cyan-400 animate-pulse'
-                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-cyan-300 hover:bg-daw-hover'
                 }`}
                 title={track.frozen ? 'Unfreeze Track' : 'Freeze Track'}
                 aria-label={`${track.frozen ? 'Unfreeze' : 'Freeze'} ${track.displayName}`}
@@ -730,7 +730,7 @@ export function TrackHeader({
                   className={`${secondaryButtonClass} ${
                     effectsBypassed
                       ? 'bg-orange-600/90 text-white'
-                      : 'text-zinc-400 hover:text-orange-300 hover:bg-[#444]'
+                      : 'text-zinc-400 hover:text-orange-300 hover:bg-daw-hover'
                   }`}
                   title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
                   aria-label={`${effectsBypassed ? 'Disable' : 'Enable'} FX bypass for ${track.displayName}`}
@@ -762,7 +762,7 @@ export function TrackHeader({
                 className={`${secondaryButtonClass} ${
                   hasAutomationLane
                     ? 'bg-amber-600/80 text-white'
-                    : 'text-zinc-400 hover:text-amber-300 hover:bg-[#444]'
+                    : 'text-zinc-400 hover:text-amber-300 hover:bg-daw-hover'
                 }`}
                 title="Toggle automation lane (A)"
                 aria-label={`Toggle automation ${track.displayName}`}

@@ -66,7 +66,7 @@ export function StatusBar() {
 
   return (
     <>
-      <div className="border-t border-[#1a1a1a] bg-gradient-to-b from-[#2a2a2a] to-[#232323] text-[10px] text-zinc-400" data-testid="status-bar">
+      <div className="border-t border-daw-border-strong bg-gradient-to-b from-daw-surface-2 to-daw-surface-3 text-[10px] text-daw-text-muted" data-testid="status-bar">
         {hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate">
@@ -90,7 +90,7 @@ export function StatusBar() {
           >
             <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
           </div>
-          <span className="truncate text-zinc-400" data-testid="status-model-name">{resolvedModelName}</span>
+          <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
           <div className="flex items-center gap-1.5 text-zinc-400">
             <button

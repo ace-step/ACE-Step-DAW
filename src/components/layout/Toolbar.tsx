@@ -57,19 +57,26 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
+const inputClass = 'h-6 rounded bg-transparent px-1.5 text-center text-[11px] font-mono text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-6 rounded bg-transparent px-1.5 text-[11px] text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
+
+const VALID_DENOMINATORS = [2, 4, 8, 16];
+
 function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
   const project = useProjectStore((s) => s.project);
   const updateProject = useProjectStore((s) => s.updateProject);
   const [bpmInput, setBpmInput] = useState('120');
   const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
   const [tsNumeratorInput, setTsNumeratorInput] = useState('4');
+  const [tsDenominatorInput, setTsDenominatorInput] = useState('4');
 
   useEffect(() => {
     if (!project) return;
     setBpmInput(String(project.bpm));
     setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
     setTsNumeratorInput(String(project.timeSignature ?? 4));
-  }, [project?.bpm, project?.measures, project?.timeSignature, project]);
+    setTsDenominatorInput(String(project.timeSignatureDenominator ?? 4));
+  }, [project?.bpm, project?.measures, project?.timeSignature, project?.timeSignatureDenominator, project]);
 
   const keyScale = splitKeyScale(project?.keyScale);
 
@@ -93,7 +100,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     }
   };
 
-  const commitTimeSignature = () => {
+  const commitTimeSignatureNumerator = () => {
     const parsed = Number.parseInt(tsNumeratorInput, 10);
     const nextTs = Number.isNaN(parsed)
       ? (project?.timeSignature ?? 4)
@@ -104,6 +111,21 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     }
   };
 
+  const commitTimeSignatureDenominator = () => {
+    const parsed = Number.parseInt(tsDenominatorInput, 10);
+    const nextDenom = Number.isNaN(parsed) || !VALID_DENOMINATORS.includes(parsed)
+      ? (project?.timeSignatureDenominator ?? 4)
+      : parsed;
+    setTsDenominatorInput(String(nextDenom));
+    if (project && nextDenom !== (project.timeSignatureDenominator ?? 4)) {
+      updateProject({ timeSignatureDenominator: nextDenom } as never);
+    }
+  };
+
+  const blurOnEnter = (event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (event.key === 'Enter') event.currentTarget.blur();
+  };
+
   const updateKeyScale = (nextRoot: string, nextMode: string) => {
     if (!project) return;
     updateProject({ keyScale: `${nextRoot} ${nextMode}` });
@@ -111,71 +133,71 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 px-0.5 py-0.5"
+      className="flex items-center gap-0.5 px-0.5"
       data-testid="toolbar-project-settings"
     >
-      <div className="flex items-center rounded-md px-0.5 py-0.5">
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={bpmInput}
+        onChange={(event) => setBpmInput(event.target.value)}
+        onBlur={commitBpm}
+        onKeyDown={blurOnEnter}
+        min={40}
+        max={300}
+        disabled={disabled}
+        aria-label="Project BPM"
+        title="Project BPM"
+        className={`${inputClass} w-[3.35rem]`}
+      />
+
+      <ToolbarSeparator />
+
+      <div className="flex items-center">
         <input
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          value={bpmInput}
-          onChange={(event) => setBpmInput(event.target.value)}
-          onBlur={commitBpm}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            }
-          }}
-          min={40}
-          max={300}
-          disabled={disabled}
-          aria-label="Project BPM"
-          title="Project BPM"
-          className="h-6 w-[3.35rem] rounded-md border border-daw-border bg-daw-surface-2 px-2 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
-        />
-      </div>
-
-      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
-
-      <div className="flex items-center gap-0.5 rounded-md px-0.5 py-0.5">
-        <input
-          type="number"
           value={tsNumeratorInput}
           onChange={(event) => setTsNumeratorInput(event.target.value)}
-          onBlur={commitTimeSignature}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            }
-          }}
+          onBlur={commitTimeSignatureNumerator}
+          onKeyDown={blurOnEnter}
           min={1}
           max={12}
           disabled={disabled}
           aria-label="Time signature numerator"
           title="Time signature numerator"
-          className="h-6 w-8 rounded-md border border-daw-border bg-daw-surface-2 px-1 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className={`${inputClass} w-7`}
         />
-        <span className="text-[11px] text-zinc-400">/</span>
-        <span
+        <span className="text-[10px] text-zinc-500">/</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={tsDenominatorInput}
+          onChange={(event) => setTsDenominatorInput(event.target.value)}
+          onBlur={commitTimeSignatureDenominator}
+          onKeyDown={blurOnEnter}
+          min={2}
+          max={16}
+          disabled={disabled}
           aria-label="Time signature denominator"
           title="Time signature denominator"
-          className="h-6 w-8 flex items-center justify-center rounded-md border border-daw-border bg-daw-surface-2 text-center text-[11px] font-mono text-zinc-400"
-        >
-          4
-        </span>
+          className={`${inputClass} w-7`}
+        />
       </div>
 
-      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
+      <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5 rounded-md px-0.5 py-0.5">
+      <div className="flex items-center gap-0.5">
         <select
           value={keyScale.root}
           onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
           disabled={disabled}
           aria-label="Project key root"
           title="Project key root"
-          className="h-6 w-11 rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className={`${selectClass} w-11`}
         >
           {KEY_ROOTS.map((root) => (
             <option key={root} value={root}>
@@ -189,7 +211,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project scale mode"
           title="Project scale mode"
-          className="h-6 w-[3.7rem] rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className={`${selectClass} w-[3.7rem]`}
         >
           {SCALE_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -199,27 +221,21 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         </select>
       </div>
 
-      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
+      <ToolbarSeparator />
 
-      <div className="flex items-center rounded-md px-0.5 py-0.5">
-        <input
-          type="number"
-          value={measuresInput}
-          onChange={(event) => setMeasuresInput(event.target.value)}
-          onBlur={commitMeasures}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            }
-          }}
-          min={4}
-          max={512}
-          disabled={disabled}
-          aria-label="Project measures"
-          title="Project measures"
-          className="h-6 w-11 rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
-        />
-      </div>
+      <input
+        type="number"
+        value={measuresInput}
+        onChange={(event) => setMeasuresInput(event.target.value)}
+        onBlur={commitMeasures}
+        onKeyDown={blurOnEnter}
+        min={4}
+        max={512}
+        disabled={disabled}
+        aria-label="Project measures"
+        title="Project measures"
+        className={`${inputClass} w-11`}
+      />
     </div>
   );
 }

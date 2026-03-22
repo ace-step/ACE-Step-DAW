@@ -41,6 +41,7 @@ const DEFAULT_PROJECT = {
   name: 'Test',
   bpm: 120,
   timeSignature: 4,
+  timeSignatureDenominator: 4,
   measures: 64,
   totalDuration: 128,
   tracks: [],
@@ -58,12 +59,15 @@ describe('Time signature number inputs', () => {
     useProjectStore.setState({ project: DEFAULT_PROJECT as never });
   });
 
-  it('renders numerator as a number input instead of a dropdown', () => {
+  it('renders numerator and denominator as separate editable inputs', () => {
     render(<Toolbar />);
 
     const numerator = screen.getByLabelText('Time signature numerator');
+    const denominator = screen.getByLabelText('Time signature denominator');
     expect(numerator).toBeInTheDocument();
     expect(numerator.tagName).toBe('INPUT');
+    expect(denominator).toBeInTheDocument();
+    expect(denominator.tagName).toBe('INPUT');
   });
 
   it('does not render a time signature dropdown select', () => {
@@ -71,13 +75,6 @@ describe('Time signature number inputs', () => {
 
     const select = screen.queryByLabelText('Project time signature');
     expect(select).toBeNull();
-  });
-
-  it('shows denominator label', () => {
-    render(<Toolbar />);
-
-    const denominator = screen.getByLabelText('Time signature denominator');
-    expect(denominator).toBeInTheDocument();
   });
 
   it('updates numerator on blur', () => {
@@ -89,5 +86,16 @@ describe('Time signature number inputs', () => {
 
     const state = useProjectStore.getState();
     expect(state.project?.timeSignature).toBe(3);
+  });
+
+  it('updates denominator on blur', () => {
+    render(<Toolbar />);
+
+    const denominator = screen.getByLabelText('Time signature denominator');
+    fireEvent.change(denominator, { target: { value: '8' } });
+    fireEvent.blur(denominator);
+
+    const state = useProjectStore.getState();
+    expect(state.project?.timeSignatureDenominator).toBe(8);
   });
 });

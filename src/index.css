@@ -8,8 +8,8 @@
   --color-daw-surface-2: #2a2c30;
   --color-daw-surface-3: #353840;
   --color-daw-border: #3a3c42;
-  --color-daw-accent: #4a90d9;
-  --color-daw-accent-hover: #5ba3ec;
+  --color-daw-accent: #4A5FFF;
+  --color-daw-accent-hover: #5B6FFF;
   --color-daw-playhead: #5e59ff;
   --color-daw-arrangement-header-bg: #1e1e2e;
   --color-daw-arrangement-group-bg: #252538;
@@ -52,13 +52,13 @@ input[type="range"]::-webkit-slider-thumb {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #4a90d9;
+  background: #4A5FFF;
   cursor: pointer;
   border: 1px solid rgba(255,255,255,0.15);
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  background: #5ba3ec;
+  background: #5B6FFF;
 }
 
 /* #548 — Focus-visible indicators for keyboard accessibility */
@@ -66,7 +66,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(74, 144, 217, 0.5);
+  outline: 2px solid rgba(74, 95, 255, 0.5);
   outline-offset: 1px;
 }
 

@@ -93,9 +93,6 @@ select:focus-visible,
 }
 
 .gb-lcd {
-  background: linear-gradient(180deg, #1a1a1a 0%, #222222 100%);
-  border: 1px solid #555;
-  border-radius: 4px;
   font-variant-numeric: tabular-nums;
 }
 

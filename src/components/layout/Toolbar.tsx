@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
@@ -97,10 +98,10 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 rounded-xl border border-daw-border bg-daw-surface-2 px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+      className="flex items-center gap-1 px-0.5 py-0.5"
       data-testid="toolbar-project-settings"
     >
-      <div className="flex items-center rounded-md px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <input
           type="text"
           inputMode="numeric"
@@ -122,9 +123,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         />
       </div>
 
-      <div className="h-4 w-px bg-daw-border" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center rounded-md px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <select
           value={project?.timeSignature ?? 4}
           onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
@@ -141,9 +142,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         </select>
       </div>
 
-      <div className="h-4 w-px bg-daw-border" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center gap-0.5 rounded-md px-1 py-0.5">
+      <div className="flex items-center gap-0.5 rounded-md px-0.5 py-0.5">
         <select
           value={keyScale.root}
           onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
@@ -174,9 +175,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         </select>
       </div>
 
-      <div className="h-4 w-px bg-daw-border" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center rounded-md px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <input
           type="number"
           value={measuresInput}
@@ -274,7 +275,7 @@ function ControlBarButton({
 }
 
 function ToolbarSeparator() {
-  return <div className="w-px h-5 bg-daw-border/80" data-testid="toolbar-separator" />;
+  return <div className="w-px h-5 bg-white/8" data-testid="toolbar-separator" />;
 }
 
 function AceStudioLink() {
@@ -299,26 +300,52 @@ function AceStudioLink() {
 function FileMenu({ disabled }: { disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const setShowExportDialog = useUIStore((s) => s.setShowExportDialog);
   const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
   const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
   const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
   const { openFilePicker } = useAudioImport();
 
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 6,
+      left: rect.left,
+    });
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
+    function closeMenu() {
+      setOpen(false);
+    }
+
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const clickedTrigger = triggerRef.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+      if (!clickedTrigger && !clickedMenu) {
         setOpen(false);
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
   }, [open]);
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative">
       <button
+        ref={triggerRef}
         onClick={() => setOpen(!open)}
         disabled={disabled}
         data-testid="file-menu-trigger"
@@ -333,8 +360,13 @@ function FileMenu({ disabled }: { disabled: boolean }) {
           <path d="M1 2.5L4 5.5L7 2.5" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-48 rounded-lg border border-daw-border bg-daw-surface-2 py-1 shadow-xl z-50" data-testid="file-menu-dropdown">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[100] w-48 rounded-lg border border-daw-border bg-daw-surface-2 py-1 shadow-2xl"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+          data-testid="file-menu-dropdown"
+        >
           <button
             onClick={() => { setShowExportDialog(true); setOpen(false); }}
             className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
@@ -366,7 +398,8 @@ function FileMenu({ disabled }: { disabled: boolean }) {
           >
             Share Project
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -413,11 +446,10 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-11 items-center gap-1 overflow-x-auto border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none"
-      style={{ scrollbarWidth: 'none' }}
+      className="flex h-11 min-w-0 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none"
     >
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 rounded-lg border border-daw-border bg-daw-surface-2 px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -435,7 +467,7 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5 rounded-lg border border-daw-border bg-daw-surface-2 p-0.5 shrink-0">
+      <div className="flex items-center gap-0.5 rounded-lg border border-white/8 bg-black/10 p-0.5 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -461,7 +493,7 @@ export function Toolbar() {
       <ProjectSettingsStrip disabled={!project} />
 
       {/* Project actions + File menu */}
-      <div className="flex items-center gap-0.5 rounded-lg border border-daw-border bg-daw-surface-2 px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -478,7 +510,7 @@ export function Toolbar() {
 
       {/* Center: Transport controls — prominent pill container */}
       <div
-        className="flex items-center gap-0.5 rounded-full border border-daw-border bg-daw-surface-2 px-2 py-0.5 shrink-0"
+        className="flex items-center gap-0.5 rounded-full border border-white/8 bg-black/10 px-1.5 py-0.5 shrink-0"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
@@ -541,7 +573,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 rounded-lg border border-daw-border bg-daw-surface-2 px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -586,7 +618,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 rounded-lg border border-daw-border bg-daw-surface-2 px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}

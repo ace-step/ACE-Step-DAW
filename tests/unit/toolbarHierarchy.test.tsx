@@ -118,6 +118,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByText('Import Audio/MIDI')).toBeInTheDocument();
     expect(screen.getByText('Undo History')).toBeInTheDocument();
     expect(screen.getByText('Share Project')).toBeInTheDocument();
+    expect(screen.getByTestId('file-menu-dropdown').className).toContain('fixed');
   });
 
   it('uses softer separators (thinner, more subtle)', () => {
@@ -136,6 +137,11 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     // Look for group containers with background styling
     const groups = container.querySelectorAll('[data-testid="toolbar-group"]');
     expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
+  });
+
+  it('does not make the toolbar itself horizontally scrollable', () => {
+    const { container } = render(<Toolbar />);
+    expect(container.firstChild).not.toHaveClass('overflow-x-auto');
   });
 
   it('removes the top toolbar Generate button in favor of the side dock entry', () => {

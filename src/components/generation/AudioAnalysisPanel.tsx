@@ -210,7 +210,7 @@ export function AudioAnalysisPanel() {
 
           {/* Analysis results */}
           {result && (
-            <div className="bg-[#1a1a2a]/60 rounded px-3 py-2.5 border border-cyan-900/40 space-y-1">
+            <div className="bg-[#1a1c20]/60 rounded px-3 py-2.5 border border-cyan-900/40 space-y-1">
               <p className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">Analysis Results</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                 {result.bpm && (

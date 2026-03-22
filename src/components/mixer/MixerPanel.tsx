@@ -305,7 +305,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
             onChange={(e) => handleChange(parseFloat(e.target.value))}
             aria-label="Master volume fader"
             className="appearance-none bg-transparent cursor-pointer"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4a90d9' }}
+            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4A5FFF' }}
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>

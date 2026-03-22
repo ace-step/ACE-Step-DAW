@@ -197,14 +197,14 @@ export function TimeRuler() {
     return result;
   }, [project, pixelsPerSecond, timelineViewportWidth]);
 
-  if (!project) return <div className="bg-[#1a1a28] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
+  if (!project) return <div className="bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 
   const visualDuration = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth);
   const totalWidth = visualDuration * pixelsPerSecond;
 
   return (
     <div
-      className="relative bg-[#1a1a28] border-b border-[color:var(--color-daw-grid-bar)] select-none cursor-pointer z-30"
+      className="relative bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)] select-none cursor-pointer z-30"
       style={{ width: totalWidth, height: TIMELINE_RULER_HEIGHT }}
       role="slider"
       aria-label="Timeline scrub ruler"
@@ -281,7 +281,7 @@ export function TimeRuler() {
           style={{ left: x }}
         >
           {/* Vertical tick line from top */}
-          <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5a75]' : 'h-2/3 bg-[color:var(--color-daw-grid-bar)]'}`} />
+          <div className={`absolute top-0 w-px ${isBar ? 'h-full bg-[#5a5c65]' : 'h-2/3 bg-[color:var(--color-daw-grid-bar)]'}`} />
           {/* Label beside tick */}
           <span
             className={`absolute bottom-px left-[4px] font-medium leading-none whitespace-nowrap ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}

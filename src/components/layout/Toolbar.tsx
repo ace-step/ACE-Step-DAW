@@ -7,9 +7,197 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
+import { DEFAULT_MEASURES } from '../../constants/defaults';
+import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { Button } from '../ui/Button';
-import { ModelStatusBadge } from './ModelStatusBadge';
+
+const KEY_ROOT_LABELS: Record<string, string> = {
+  C: 'C',
+  'C#': 'C#/Db',
+  D: 'D',
+  'D#': 'D#/Eb',
+  E: 'E',
+  F: 'F',
+  'F#': 'F#/Gb',
+  G: 'G',
+  'G#': 'G#/Ab',
+  A: 'A',
+  'A#': 'A#/Bb',
+  B: 'B',
+};
+
+const KEY_ROOTS = Array.from(
+  new Set(KEY_SCALES.map((keyScale) => keyScale.slice(0, keyScale.lastIndexOf(' ')))),
+);
+
+const SCALE_MODES = Array.from(
+  new Set(KEY_SCALES.map((keyScale) => keyScale.slice(keyScale.lastIndexOf(' ') + 1))),
+);
+
+const SCALE_MODE_LABELS: Record<string, string> = {
+  major: 'Maj',
+  minor: 'Min',
+};
+
+function splitKeyScale(keyScale?: string) {
+  if (!keyScale) {
+    return { root: 'C', mode: 'major' };
+  }
+  const splitIndex = keyScale.lastIndexOf(' ');
+  if (splitIndex === -1) {
+    return { root: 'C', mode: 'major' };
+  }
+  const root = keyScale.slice(0, splitIndex);
+  const mode = keyScale.slice(splitIndex + 1).toLowerCase();
+  return {
+    root: KEY_ROOTS.includes(root) ? root : 'C',
+    mode: SCALE_MODES.includes(mode) ? mode : 'major',
+  };
+}
+
+function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
+  const project = useProjectStore((s) => s.project);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const [bpmInput, setBpmInput] = useState('120');
+  const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
+
+  useEffect(() => {
+    if (!project) return;
+    setBpmInput(String(project.bpm));
+    setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
+  }, [project?.bpm, project?.measures, project]);
+
+  const keyScale = splitKeyScale(project?.keyScale);
+
+  const commitBpm = () => {
+    const parsed = Number.parseInt(bpmInput, 10);
+    const nextBpm = Number.isNaN(parsed) ? (project?.bpm ?? 120) : Math.min(300, Math.max(40, parsed));
+    setBpmInput(String(nextBpm));
+    if (project && nextBpm !== project.bpm) {
+      updateProject({ bpm: nextBpm });
+    }
+  };
+
+  const commitMeasures = () => {
+    const parsed = Number.parseInt(measuresInput, 10);
+    const nextMeasures = Number.isNaN(parsed)
+      ? (project?.measures ?? DEFAULT_MEASURES)
+      : Math.min(512, Math.max(4, parsed));
+    setMeasuresInput(String(nextMeasures));
+    if (project && nextMeasures !== project.measures) {
+      updateProject({ measures: nextMeasures });
+    }
+  };
+
+  const updateKeyScale = (nextRoot: string, nextMode: string) => {
+    if (!project) return;
+    updateProject({ keyScale: `${nextRoot} ${nextMode}` });
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1 rounded-xl border border-[#434343] bg-[#1c1c1c] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+      data-testid="toolbar-project-settings"
+    >
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={bpmInput}
+          onChange={(event) => setBpmInput(event.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            }
+          }}
+          min={40}
+          max={300}
+          disabled={disabled}
+          aria-label="Project BPM"
+          title="Project BPM"
+          className="h-6 w-[3.35rem] rounded-md border border-[#383838] bg-[#262626] px-2 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        />
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <select
+          value={project?.timeSignature ?? 4}
+          onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
+          disabled={disabled}
+          aria-label="Project time signature"
+          title="Project time signature"
+          className="h-6 w-[3.5rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {TIME_SIGNATURES.map((timeSignature) => (
+            <option key={timeSignature} value={timeSignature}>
+              {timeSignature} / 4
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center gap-0.5 rounded-md bg-black/10 px-1 py-0.5">
+        <select
+          value={keyScale.root}
+          onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
+          disabled={disabled}
+          aria-label="Project key root"
+          title="Project key root"
+          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {KEY_ROOTS.map((root) => (
+            <option key={root} value={root}>
+              {KEY_ROOT_LABELS[root] ?? root}
+            </option>
+          ))}
+        </select>
+        <select
+          value={keyScale.mode}
+          onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
+          disabled={disabled}
+          aria-label="Project scale mode"
+          title="Project scale mode"
+          className="h-6 w-[3.7rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {SCALE_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {SCALE_MODE_LABELS[mode] ?? `${mode[0].toUpperCase()}${mode.slice(1)}`}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <input
+          type="number"
+          value={measuresInput}
+          onChange={(event) => setMeasuresInput(event.target.value)}
+          onBlur={commitMeasures}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            }
+          }}
+          min={4}
+          max={512}
+          disabled={disabled}
+          aria-label="Project measures"
+          title="Project measures"
+          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        />
+      </div>
+    </div>
+  );
+}
 
 function LCDDisplay() {
   const currentTime = useTransportStore((s) => s.currentTime);
@@ -34,12 +222,6 @@ function LCDDisplay() {
     <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center shrink-0">
       <span className={`text-[13px] font-mono tabular-nums tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[11px] font-mono tabular-nums text-zinc-400">{formatTime(currentTime)}</span>
-      {project && !countInActive && (
-        <>
-          <span className="text-[11px] font-mono tabular-nums text-zinc-400">{project.bpm} bpm</span>
-          <span className="text-[10px] text-emerald-600/60" title="Project auto-saved to browser storage">●</span>
-        </>
-      )}
       {countInActive && (
         <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>
       )}
@@ -93,6 +275,25 @@ function ControlBarButton({
 
 function ToolbarSeparator() {
   return <div className="w-px h-5 bg-[#444]/50" data-testid="toolbar-separator" />;
+}
+
+function AceStudioLink() {
+  return (
+    <a
+      href="https://acestudio.ai/"
+      target="_blank"
+      rel="noreferrer"
+      title="Visit ACE Studio"
+      data-testid="toolbar-acestudio-link"
+      className="flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-1 text-[11px] text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/14"
+    >
+      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-6 w-6 rounded-full object-cover" />
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 3.5L9 7L4 10.5" />
+        <path d="M9.5 3.5L12 7L9.5 10.5" />
+      </svg>
+    </a>
+  );
 }
 
 function FileMenu({ disabled }: { disabled: boolean }) {
@@ -173,29 +374,17 @@ function FileMenu({ disabled }: { disabled: boolean }) {
 
 export function Toolbar() {
   const project = useProjectStore((s) => s.project);
-  const modelName = useProjectStore((s) => s.project?.generationDefaults.model ?? '');
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
-  const setShowSettingsDialog = useUIStore((s) => s.setShowSettingsDialog);
   const setShowProjectListDialog = useUIStore((s) => s.setShowProjectListDialog);
-  const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const mainView = useUIStore((s) => s.mainView);
   const setMainView = useUIStore((s) => s.setMainView);
-  const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const showMixer = useUIStore((s) => s.showMixer);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
-  const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
-  const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
-  const showLibrary = useUIStore((s) => s.showLibrary);
-  const setShowLibrary = useUIStore((s) => s.setShowLibrary);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
   const showAIAssistant = useUIStore((s) => s.showAIAssistant);
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
-  const showGenerationPanel = useUIStore((s) => s.showGenerationPanel);
-  const toggleGenerationPanel = useUIStore((s) => s.toggleGenerationPanel);
-  const showGenerationHistoryPanel = useUIStore((s) => s.showGenerationHistoryPanel);
-  const toggleGenerationHistoryPanel = useUIStore((s) => s.toggleGenerationHistoryPanel);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { toggleRecord } = useRecording();
 
@@ -207,8 +396,6 @@ export function Toolbar() {
   const toggleLoopRecording = useTransportStore((s) => s.toggleLoopRecording);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
-  const zoomIn = useUIStore((s) => s.zoomIn);
-  const zoomOut = useUIStore((s) => s.zoomOut);
   const autoScrollEnabled = useUIStore((s) => s.autoScrollEnabled);
   const toggleAutoScroll = useUIStore((s) => s.toggleAutoScroll);
 
@@ -231,17 +418,6 @@ export function Toolbar() {
     >
       {/* Left: Panel toggle buttons */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
-        <ControlBarButton
-          active={showLibrary}
-          onClick={() => setShowLibrary(!showLibrary)}
-          title="Library (Y)"
-          disabled={!project}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <rect x="1" y="2" width="12" height="10" rx="1.5" />
-            <line x1="5" y1="2" x2="5" y2="12" />
-          </svg>
-        </ControlBarButton>
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -282,49 +458,7 @@ export function Toolbar() {
         </Button>
       </div>
 
-      <ToolbarSeparator />
-
-      {/* Generation actions */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
-        <button
-          onClick={() => setBatchGenerateMode('silence')}
-          disabled={!project}
-          data-onboarding-target="genr-button"
-          aria-label="Open genr"
-          className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-cyan-200 uppercase transition-colors hover:bg-cyan-400/20 disabled:opacity-30"
-          title="genr (Cmd+G)"
-        >
-          genr
-        </button>
-        <button
-          onClick={toggleGenerationPanel}
-          disabled={!project}
-          aria-pressed={showGenerationPanel}
-          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-            showGenerationPanel
-              ? 'border border-indigo-400/50 bg-indigo-500/20 text-indigo-100'
-              : 'border border-[#4b4b4b] bg-[#242424] text-zinc-300 hover:bg-daw-surface-2'
-          } disabled:opacity-30`}
-          title="AI Generation Panel (G)"
-        >
-          AI
-        </button>
-        <button
-          onClick={toggleGenerationHistoryPanel}
-          disabled={!project}
-          aria-pressed={showGenerationHistoryPanel}
-          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-            showGenerationHistoryPanel
-              ? 'border border-emerald-400/50 bg-emerald-500/20 text-emerald-100'
-              : 'border border-[#4b4b4b] bg-[#242424] text-zinc-300 hover:bg-daw-surface-2'
-          } disabled:opacity-30`}
-          title="Generation History Panel (H)"
-        >
-          Hist
-        </button>
-      </div>
-
-      <ToolbarSeparator />
+      <ProjectSettingsStrip disabled={!project} />
 
       {/* Project actions + File menu */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
@@ -338,7 +472,6 @@ export function Toolbar() {
           New
         </Button>
         <FileMenu disabled={!project} />
-        <ModelStatusBadge modelName={modelName} onClick={() => setShowLibrary(true)} />
       </div>
 
       <div className="flex-1" />
@@ -471,18 +604,6 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton
-          active={loopBrowserOpen}
-          onClick={toggleLoopBrowser}
-          title="Loop Browser (O)"
-          disabled={!project}
-          dataTarget="loop-browser-button"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <circle cx="6" cy="6" r="4" />
-            <path d="M9 9l3.5 3.5" strokeLinecap="round" />
-          </svg>
-        </ControlBarButton>
-        <ControlBarButton
           active={showAIAssistant}
           onClick={toggleAIAssistant}
           title="AI Assistant (Cmd+/)"
@@ -498,11 +619,11 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      {/* Settings + Shortcuts */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      {/* Command Palette + ACE Studio */}
+      <div className="flex items-center gap-2">
         <button
           onClick={() => openCommandPalette()}
-          className="flex items-center gap-2 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-surface-2 hover:text-white"
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-surface-2 hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"
@@ -511,33 +632,11 @@ export function Toolbar() {
             <circle cx="6" cy="6" r="3.75" />
             <path d="M8.8 8.8L12 12" strokeLinecap="round" />
           </svg>
-          <span>Command</span>
           <span className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
             Cmd+K
           </span>
         </button>
-        <Button
-          variant="ghost"
-          size="md"
-          icon
-          onClick={() => setShowSettingsDialog(true)}
-          title="Settings"
-          aria-label="Settings"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-            <circle cx="7" cy="7" r="2" />
-            <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1 1M10.2 10.2l1 1M11.2 2.8l-1 1M3.8 10.2l-1 1" />
-          </svg>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon
-          onClick={() => setShowKeyboardShortcutsDialog(true)}
-          title="Keyboard Shortcuts (?)"
-        >
-          ?
-        </Button>
+        <AceStudioLink />
       </div>
 
       {/* Viewer mode badge */}
@@ -546,17 +645,6 @@ export function Toolbar() {
           VIEWER
         </div>
       )}
-
-      {/* Zoom controls */}
-      <ToolbarSeparator />
-      <div className="flex items-center gap-0.5 shrink-0">
-        <Button variant="ghost" size="sm" icon onClick={zoomOut} title="Zoom Out">
-          −
-        </Button>
-        <Button variant="ghost" size="sm" icon onClick={zoomIn} title="Zoom In">
-          +
-        </Button>
-      </div>
     </div>
   );
 }

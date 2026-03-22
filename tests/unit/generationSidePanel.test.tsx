@@ -13,6 +13,7 @@ vi.mock('../../src/services/projectStorage', () => ({
 
 vi.mock('../../src/services/generationPipeline', () => ({
   generateVariationSession: vi.fn(() => Promise.resolve(true)),
+  generateBatch: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 describe('GenerationSidePanel', () => {
@@ -250,5 +251,40 @@ describe('GenerationSidePanel', () => {
     fireEvent.change(promptInput, { target: { value: 'lof' } });
 
     expect(screen.getByRole('listbox', { name: 'Prompt autocomplete suggestions' })).toBeInTheDocument();
+  });
+
+  it('switches between text-to-music, multi-track, and history inside the same side panel', () => {
+    render(<GenerationSidePanel />);
+
+    expect(screen.getByRole('button', { name: 'Full Song' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('generation-panel-tab-multi-track'));
+    expect(screen.getByTestId('multi-track-generation-section')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('generation-panel-tab-history'));
+    expect(screen.getByTestId('generation-history-section')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('generation-panel-tab-text-to-music'));
+    expect(screen.getByRole('combobox', { name: 'Generation target track' })).toBeInTheDocument();
+  });
+
+  it('lets users add or remove multi-track rows and choose from the 12 default track roles', () => {
+    render(<GenerationSidePanel />);
+
+    fireEvent.click(screen.getByTestId('generation-panel-tab-multi-track'));
+
+    const firstRoleSelect = screen.getByTestId('multi-track-role-select-0');
+    expect(within(firstRoleSelect).getAllByRole('option')).toHaveLength(12);
+
+    const beforeCount = screen.getAllByLabelText(/Target track type for row/i).length;
+    fireEvent.click(screen.getByTestId('multi-track-add-row'));
+    expect(screen.getAllByLabelText(/Target track type for row/i)).toHaveLength(beforeCount + 1);
+
+    const newRoleSelect = screen.getByTestId(`multi-track-role-select-${beforeCount}`);
+    fireEvent.change(newRoleSelect, { target: { value: 'vocals' } });
+    expect(screen.getAllByText('Lyrics').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByLabelText(`Remove track row ${beforeCount + 1}`));
+    expect(screen.getAllByLabelText(/Target track type for row/i)).toHaveLength(beforeCount);
   });
 });

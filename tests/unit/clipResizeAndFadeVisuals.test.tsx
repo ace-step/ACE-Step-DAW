@@ -43,7 +43,8 @@ describe('Clip resize handle width and fade visuals', () => {
     useProjectStore.setState({ project: null });
     useUIStore.setState({
       pixelsPerSecond: 50,
-      selectedClipIds: new Set(['clip-1']),
+      selectedClipIds: new Set(),
+      selectedTrackIds: new Set(),
       editingClipId: null,
       contextWindow: null,
       selectWindow: null,
@@ -66,15 +67,43 @@ describe('Clip resize handle width and fade visuals', () => {
 
     const readyClip = useProjectStore.getState().project!.tracks[0].clips[0];
     useProjectStore.getState().updateClip(readyClip.id, { id: 'clip-1' });
+    useUIStore.setState({
+      selectedClipIds: new Set(['clip-1']),
+      selectedTrackIds: new Set([track.id]),
+    });
   });
 
   it('resize handle divs are 16px wide', () => {
+    renderClip();
+    const leftHandle = screen.getByTestId('resize-handle-left');
+    const rightHandle = screen.getByTestId('resize-handle-right');
+
+    expect(leftHandle.className).toContain('w-[16px]');
+    expect(rightHandle.className).toContain('w-[16px]');
+    expect(leftHandle.className).toContain('cursor-w-resize');
+    expect(rightHandle.className).toContain('cursor-e-resize');
+  });
+
+  it('renders a dedicated header rail and an ivory selected body surface', () => {
     const { container } = renderClip();
-    const handles = container.querySelectorAll('.cursor-col-resize');
-    expect(handles.length).toBeGreaterThanOrEqual(2);
-    // Check the first two (left and right resize handles)
-    expect(handles[0].className).toContain('w-[16px]');
-    expect(handles[1].className).toContain('w-[16px]');
+    const headerRail = container.querySelector('[data-testid="clip-header-rail"]') as HTMLElement;
+    const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
+
+    expect(headerRail).toBeTruthy();
+    expect(headerRail.getAttribute('aria-label')).toBe('Move clip clip-1');
+    expect(bodySurface).toBeTruthy();
+    expect(bodySurface.style.background).toContain('253, 251, 246');
+  });
+
+  it('uses the non-selected clip surface when its track is no longer selected', () => {
+    useUIStore.setState({ selectedTrackIds: new Set(['other-track']) });
+
+    const { container } = renderClip();
+    const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
+    const clipEl = container.querySelector('[data-testid="clip-clip-1"]') as HTMLElement;
+
+    expect(bodySurface.style.background).not.toContain('253, 251, 246');
+    expect(clipEl.className).not.toContain('ring-2');
   });
 
   it('does not render fade controls or overlays for zero-fade clips', () => {

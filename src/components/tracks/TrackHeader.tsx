@@ -79,6 +79,7 @@ export function TrackHeader({
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [heightSubmenu, setHeightSubmenu] = useState(false);
   const [groupSubmenu, setGroupSubmenu] = useState(false);
+  const [moreSubmenu, setMoreSubmenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isFreezing, setIsFreezing] = useState(false);
 
@@ -804,7 +805,6 @@ export function TrackHeader({
         <ContextMenuItem label="Open Effect Chain..." onClick={() => { setCtxMenu(null); setOpenEffectChainTrackId(track.id); }} />
         <ContextMenuItem label="Rename Track" onClick={() => { setCtxMenu(null); startEditing(); }} />
         <ContextMenuItem label="Track Settings..." onClick={() => { setCtxMenu(null); setEditModalOpen(true); }} />
-        <ContextMenuItem label="Save as Track Preset..." onClick={() => { setCtxMenu(null); handleSavePreset(); }} />
         {/* Track Height submenu */}
         <div
           className="relative"
@@ -826,7 +826,7 @@ export function TrackHeader({
                   />
                 ))}
                 <ContextMenuSeparator />
-                {(['small', 'medium', 'large', 'auto'] as const).map((preset) => (
+                {(['small', 'large'] as const).map((preset) => (
                   <ContextMenuItem
                     key={`all-${preset}`}
                     label={<span className="capitalize">All Tracks {preset}</span>}
@@ -881,13 +881,28 @@ export function TrackHeader({
           ) : null;
         })()}
         <ContextMenuSeparator />
-        <ContextMenuItem label="Bounce in Place..." onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }} />
-        {track.clips.some((c) => c.midiData?.notes.length) && (
-          <ContextMenuItem label="Export MIDI" onClick={() => { setCtxMenu(null); exportTrackMidi(track.id); }} />
-        )}
-        <ContextMenuSeparator />
-        <ContextMenuItem label={track.frozen ? 'Unfreeze Track' : 'Freeze Track'} onClick={() => { setCtxMenu(null); void handleFreeze(); }} />
-        <ContextMenuItem label="Flatten Track" onClick={() => { setCtxMenu(null); void handleFlatten(); }} />
+        {/* More... submenu — infrequent actions */}
+        <div
+          className="relative"
+          onMouseEnter={() => setMoreSubmenu(true)}
+          onMouseLeave={() => setMoreSubmenu(false)}
+        >
+          <ContextMenuItem
+            label={<span className="flex items-center justify-between w-full">More...<span style={{ fontSize: 9, color: '#666', marginLeft: 8 }}>&#8250;</span></span>}
+            onClick={() => {/* submenu trigger */}}
+          />
+          {moreSubmenu && (
+            <div className="absolute left-full top-0">
+              <ContextMenuSubmenu>
+                <ContextMenuItem label="Save as Track Preset..." onClick={() => { setCtxMenu(null); setMoreSubmenu(false); handleSavePreset(); }} />
+                {track.clips.some((c) => c.midiData?.notes.length) && (
+                  <ContextMenuItem label="Export MIDI" onClick={() => { setCtxMenu(null); setMoreSubmenu(false); exportTrackMidi(track.id); }} />
+                )}
+                <ContextMenuItem label="Flatten Track" onClick={() => { setCtxMenu(null); setMoreSubmenu(false); void handleFlatten(); }} />
+              </ContextMenuSubmenu>
+            </div>
+          )}
+        </div>
         <ContextMenuSeparator />
         <ContextMenuItem
           label={track.isGroup ? 'Delete Group (keeps children)' : 'Delete Track'}

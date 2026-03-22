@@ -4,7 +4,6 @@ import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
-import { GenerationHistoryPanel } from '../generation/GenerationHistoryPanel';
 import { CoverModal } from '../generation/CoverModal';
 import { MusicEnhancerPanel } from '../generation/MusicEnhancerPanel';
 import { RepaintModal } from '../generation/RepaintModal';
@@ -36,6 +35,7 @@ import { SharedProjectPage } from '../sharing/SharedProjectPage';
 import { VirtualKeyboard } from '../midi/VirtualKeyboard';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
+import { StatusBar } from './StatusBar';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -110,6 +110,8 @@ function EditorShell() {
         {project && <LoopBrowser />}
       </div>
 
+      <StatusBar />
+
       {project && <SmartControlsPanel />}
       {project && <SequencerEditor />}
       {project && <DrumMachineEditor />}
@@ -118,7 +120,6 @@ function EditorShell() {
       {project && <MixerPanel />}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
-      {project && <GenerationHistoryPanel />}
       {project && <ModelLibraryPanel />}
       {project && <VirtualKeyboard />}
       {project && <AddLayerPanel />}

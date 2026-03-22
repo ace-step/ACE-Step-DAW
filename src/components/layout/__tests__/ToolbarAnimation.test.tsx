@@ -41,10 +41,9 @@ describe('Toolbar button micro-animations', () => {
     useProjectStore.getState().createProject();
     render(<Toolbar />);
 
-    // Check the Library toggle button (first ControlBarButton)
-    const libraryButton = screen.getByLabelText('Library');
-    expect(libraryButton.className).toContain('active:scale-95');
-    expect(libraryButton.className).toContain('duration-150');
+    const smartControlsButton = screen.getByLabelText('Smart Controls');
+    expect(smartControlsButton.className).toContain('active:scale-95');
+    expect(smartControlsButton.className).toContain('duration-150');
   });
 
   it('applies active:scale-95 to the play button', () => {

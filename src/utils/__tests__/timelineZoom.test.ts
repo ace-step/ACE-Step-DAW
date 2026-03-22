@@ -4,6 +4,7 @@ import {
   getNextTimelineZoomLevel,
   getTimelineFitViewport,
   getTimelineZoomAnchor,
+  TIMELINE_ZOOM_LEVELS,
   getZoomedTimelineViewport,
 } from '../timelineZoom';
 
@@ -68,9 +69,13 @@ describe('timelineZoom', () => {
 
   it('steps through discrete zoom levels', () => {
     expect(getNextTimelineZoomLevel(50, 'in')).toBe(60);
-    expect(getNextTimelineZoomLevel(50, 'out')).toBe(43);
-    expect(getNextTimelineZoomLevel(86, 'in')).toBe(100);
-    expect(getNextTimelineZoomLevel(86, 'out')).toBe(72);
+    expect(getNextTimelineZoomLevel(50, 'out')).toBe(40);
+    expect(getNextTimelineZoomLevel(100, 'in')).toBe(110);
+    expect(getNextTimelineZoomLevel(100, 'out')).toBe(90);
     expect(getNextTimelineZoomLevel(500, 'in')).toBe(500);
+  });
+
+  it('exposes fifty zoom steps for footer controls', () => {
+    expect(TIMELINE_ZOOM_LEVELS).toHaveLength(50);
   });
 });

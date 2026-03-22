@@ -601,7 +601,7 @@ export function SettingsDialog() {
 
         <div className="px-4 pt-3 pb-1 space-y-2">
           <a
-            href="http://acestudio.ai/"
+            href="https://acestudio.ai/"
             target="_blank"
             rel="noopener noreferrer"
             className="block w-full px-3 py-2 rounded bg-gradient-to-r from-violet-900/40 to-indigo-900/40 border border-violet-700/30 hover:border-violet-600/50 transition-colors text-center"

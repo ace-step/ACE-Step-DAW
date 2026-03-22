@@ -9,11 +9,19 @@ import { useModelStore } from '../../src/store/modelStore';
 
 // Mock all external dependencies
 vi.mock('../../src/store/collaborationStore', () => ({
-  useCollaborationStore: (sel: (s: Record<string, unknown>) => unknown) =>
-    sel({
-      setShowShareDialog: vi.fn(),
-      isViewerMode: false,
-    }),
+  useCollaborationStore: Object.assign(
+    (sel: (s: Record<string, unknown>) => unknown) =>
+      sel({
+        setShowShareDialog: vi.fn(),
+        isViewerMode: false,
+      }),
+    {
+      getState: () => ({
+        setShowShareDialog: vi.fn(),
+        isViewerMode: false,
+      }),
+    },
+  ),
 }));
 
 vi.mock('../../src/hooks/useAudioImport', () => ({
@@ -127,86 +135,108 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const { container } = render(<Toolbar />);
     // Look for group containers with background styling
     const groups = container.querySelectorAll('[data-testid="toolbar-group"]');
-    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, gen, transport-area, right panels
+    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
+  });
+
+  it('removes the top toolbar Generate button in favor of the side dock entry', () => {
+    render(<Toolbar />);
+
+    expect(screen.queryByTestId('generate-button')).not.toBeInTheDocument();
+    expect(screen.queryByText('GENERATE')).not.toBeInTheDocument();
+  });
+
+  it('moves project defaults into a dedicated top-toolbar strip', () => {
+    render(<Toolbar />);
+
+    const projectStrip = screen.getByTestId('toolbar-project-settings');
+    expect(projectStrip).toBeInTheDocument();
+    expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
+    expect(screen.getByLabelText('Project time signature')).toHaveValue('4');
+    expect(screen.getByLabelText('Project key root')).toHaveValue('C');
+    expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
+    expect(screen.getByLabelText('Project measures')).toHaveValue(64);
+  });
+
+  it('updates project key settings from the top-toolbar strip', () => {
+    render(<Toolbar />);
+
+    fireEvent.change(screen.getByLabelText('Project key root'), { target: { value: 'D' } });
+    fireEvent.change(screen.getByLabelText('Project scale mode'), { target: { value: 'minor' } });
+
+    expect(useProjectStore.getState().project?.keyScale).toBe('D minor');
   });
 
   it('provides tooltip titles on all right-side icon buttons', () => {
     render(<Toolbar />);
-    // Mixer, Loop Browser, AI Assistant, Settings, Shortcuts should all have titles
+    // Mixer, Loop Browser, AI Assistant should have titles directly visible
     expect(screen.getByTitle('Mixer (X)')).toBeInTheDocument();
-    expect(screen.getByTitle('Loop Browser (O)')).toBeInTheDocument();
     expect(screen.getByTitle('AI Assistant (Cmd+/)')).toBeInTheDocument();
-    expect(screen.getByTitle('Settings')).toBeInTheDocument();
-    expect(screen.getByTitle('Keyboard Shortcuts (?)')).toBeInTheDocument();
-    expect(screen.getByTitle('Zoom Out')).toBeInTheDocument();
-    expect(screen.getByTitle('Zoom In')).toBeInTheDocument();
+    expect(screen.getByTitle('Visit ACE Studio')).toBeInTheDocument();
   });
 
-  it('shows the loaded model badge and opens the library panel when clicked', () => {
+  it('keeps settings and shortcuts out of the top toolbar', () => {
+    render(<Toolbar />);
+
+    expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('overflow-menu-trigger')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Zoom Out')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Zoom In')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Library (Y)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Loop Browser (O)')).not.toBeInTheDocument();
+  });
+
+  it('shows an ACE Studio external link on the right side', () => {
+    render(<Toolbar />);
+
+    const link = screen.getByTestId('toolbar-acestudio-link');
+    expect(link).toHaveAttribute('href', 'https://acestudio.ai/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.getByAltText('ACE Studio')).toBeInTheDocument();
+  });
+
+  it('keeps the original command palette label and shortcut badge visible', () => {
     useProjectStore.setState((state) => ({
       project: state.project
         ? {
           ...state.project,
           generationDefaults: {
-            ...state.project.generationDefaults,
-            model: 'ace-step-large',
-          },
-        }
+          ...state.project.generationDefaults,
+          model: 'ace-step-large',
+        },
+      }
         : state.project,
     }));
-    useModelStore.setState({
-      connected: true,
-      activeModelId: 'ace-step-large',
-      modelLoadingState: 'idle',
-      availableModels: [
-        { name: 'ace-step-large', is_default: true, is_loaded: true } as any,
-      ],
-    });
 
     render(<Toolbar />);
 
-    const badge = screen.getByRole('button', { name: /model status: ace-step-large/i });
-    expect(badge).toHaveTextContent('ace-step-large');
-    expect(badge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-emerald-500');
-
-    fireEvent.click(badge);
-    expect(useUIStore.getState().showLibrary).toBe(true);
+    expect(screen.getByText('Cmd+K')).toBeInTheDocument();
   });
 
-  it('shows loading and empty badge states as the model status changes', () => {
-    // Start with no model selected, connected but nothing loaded
+  it('moves model status out of the top toolbar and leaves it to the status area', () => {
     useModelStore.setState({
       connected: true,
-      activeModelId: null,
+      activeModelId: 'switching-model',
       modelLoadingState: 'idle',
       availableModels: [
-        { name: 'switching-model', is_default: true, is_loaded: false } as any,
+        { name: 'switching-model', is_default: true, is_loaded: true } as any,
       ],
     });
-
-    const { rerender } = render(<Toolbar />);
-
-    const emptyBadge = screen.getByRole('button', { name: /model status: no model/i });
-    expect(emptyBadge).toHaveTextContent('No model');
-    expect(emptyBadge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-zinc-500');
-
-    // Now set a model name and put the store in loading state
     useProjectStore.setState((state) => ({
       project: state.project
         ? {
           ...state.project,
           generationDefaults: {
-            ...state.project.generationDefaults,
-            model: 'switching-model',
-          },
-        }
+          ...state.project.generationDefaults,
+          model: 'switching-model',
+        },
+      }
         : state.project,
     }));
-    useModelStore.setState({ modelLoadingState: 'loading' });
-    rerender(<Toolbar />);
 
-    const loadingBadge = screen.getByRole('button', { name: /model status: switching-model/i });
-    expect(loadingBadge).toHaveTextContent('switching-model');
-    expect(loadingBadge.querySelector('[data-testid="toolbar-model-status-dot"]')).toHaveClass('bg-amber-400');
+    render(<Toolbar />);
+
+    expect(screen.queryByRole('button', { name: /model status:/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('switching-model')).not.toBeInTheDocument();
   });
 });

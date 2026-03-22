@@ -279,16 +279,17 @@ describe('useKeyboardShortcuts', () => {
     expect(useUIStore.getState().snapEnabled).toBe(true);
   });
 
-  it('toggles generation history panel with KeyH', () => {
+  it('toggles generation history inside the unified generation panel with KeyH', () => {
     render(<Harness />);
 
-    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+    expect(useUIStore.getState().showGenerationPanel).toBe(false);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
-    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(true);
+    expect(useUIStore.getState().showGenerationPanel).toBe(true);
+    expect(useUIStore.getState().generationPanelView).toBe('history');
 
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
-    expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+    expect(useUIStore.getState().showGenerationPanel).toBe(false);
   });
 
   it('toggles the virtual keyboard overlay with Slash', () => {

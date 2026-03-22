@@ -42,10 +42,10 @@ describe('StatusBar', () => {
   describe('height', () => {
     it('uses h-6 (24px) instead of h-5 (20px)', () => {
       healthCheckMock.mockResolvedValue(false);
-      const { container } = render(<StatusBar />);
-      const bar = container.firstElementChild as HTMLElement;
-      expect(bar.className).toContain('h-6');
-      expect(bar.className).not.toContain('h-5');
+      render(<StatusBar />);
+      const metaRow = screen.getByTestId('status-bar-meta-row');
+      expect(metaRow.className).toContain('h-6');
+      expect(metaRow.className).not.toContain('h-5');
     });
   });
 
@@ -80,10 +80,10 @@ describe('StatusBar', () => {
   describe('spacing', () => {
     it('uses gap-3 instead of gap-4', () => {
       healthCheckMock.mockResolvedValue(false);
-      const { container } = render(<StatusBar />);
-      const bar = container.firstElementChild as HTMLElement;
-      expect(bar.className).toContain('gap-3');
-      expect(bar.className).not.toContain('gap-4');
+      render(<StatusBar />);
+      const metaRow = screen.getByTestId('status-bar-meta-row');
+      expect(metaRow.className).toContain('gap-3');
+      expect(metaRow.className).not.toContain('gap-4');
     });
   });
 

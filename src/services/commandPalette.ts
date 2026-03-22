@@ -57,7 +57,7 @@ export interface CommandPaletteContext {
     toggleMetronome: () => void;
     setShowNewProjectDialog: (v: boolean) => void;
     setShowProjectListDialog: (v: boolean) => void;
-    setShowSettingsDialog: (v: boolean) => void;
+    openGenerationSettings: () => void;
     setShowExportDialog: (v: boolean) => void;
     setShowKeyboardShortcutsDialog: (v: boolean) => void;
     setShowLibrary: (v: boolean) => void;
@@ -444,14 +444,14 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
     createTrackCommand(
       'project:settings',
-      'Open Settings',
+      'Open Generate Settings',
       'Project',
       'setting',
-      ['settings', 'preferences', 'project'],
-      ['preferences', 'project settings'],
-      () => context.actions.setShowSettingsDialog(true),
+      ['settings', 'preferences', 'project', 'model', 'backend', 'generate'],
+      ['preferences', 'project settings', 'generate settings', 'model settings'],
+      () => context.actions.openGenerationSettings(),
       ['Cmd', ','],
-      'Project dialog',
+      'Generate panel',
     ),
     createTrackCommand(
       'project:export',

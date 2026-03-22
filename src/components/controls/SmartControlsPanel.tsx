@@ -1,9 +1,9 @@
-import { useRef, useCallback } from 'react';
+import { useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { Knob } from '../ui/Knob';
 import type { Track } from '../../types/project';
-import { TRACK_CATALOG } from '../../constants/tracks';
+import { TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/tracks';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -11,11 +11,103 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SmartKnobGroup({ children, label }: { children: React.ReactNode; label: string }) {
+function Divider() {
+  return <div className="w-px h-16 bg-[#444] self-center" />;
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="flex gap-2">{children}</div>
-      <span className="text-[10px] text-zinc-400 uppercase tracking-wider">{label}</span>
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0">{label}</span>
+      <span className="text-[11px] text-zinc-300 truncate">{value}</span>
+    </div>
+  );
+}
+
+/** Track-type-specific detail panel shown to the right of Volume/Pan. */
+function TrackTypeDetails({ track }: { track: Track }) {
+  const trackType = track.trackType ?? 'stems';
+  const typeInfo = TRACK_TYPE_CATALOG[trackType];
+
+  if (trackType === 'stems' || !track.trackType) {
+    const clipCount = track.clips.length;
+    const readyCount = track.clips.filter((c) => c.generationStatus === 'ready').length;
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Generation</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Stems'} />
+        <InfoRow label="Clips" value={`${readyCount}/${clipCount} ready`} />
+        {track.localCaption ? (
+          <InfoRow label="Caption" value={track.localCaption} />
+        ) : (
+          <InfoRow label="Caption" value={track.trackName} />
+        )}
+      </div>
+    );
+  }
+
+  if (trackType === 'sequencer') {
+    const pattern = track.sequencerPattern;
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Sequencer</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Sequencer'} />
+        {pattern ? (
+          <>
+            <InfoRow label="Pattern" value={pattern.name} />
+            <InfoRow label="Rows" value={String(pattern.rows.length)} />
+            <InfoRow label="Steps" value={`${pattern.stepsPerBar} x ${pattern.bars} bar${pattern.bars > 1 ? 's' : ''}`} />
+            {pattern.swing > 0 && <InfoRow label="Swing" value={`${Math.round(pattern.swing * 100)}%`} />}
+          </>
+        ) : (
+          <span className="text-[10px] text-zinc-500 italic">No pattern loaded</span>
+        )}
+      </div>
+    );
+  }
+
+  if (trackType === 'pianoRoll') {
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Piano Roll</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Piano Roll'} />
+        {track.synthPreset && <InfoRow label="Synth" value={track.synthPreset} />}
+        {track.samplerConfig && <InfoRow label="Sampler" value={`Root: ${track.samplerConfig.rootNote}`} />}
+        <InfoRow label="Clips" value={String(track.clips.length)} />
+      </div>
+    );
+  }
+
+  if (trackType === 'sample') {
+    const clipCount = track.clips.length;
+    const uploadedCount = track.clips.filter((c) => c.source === 'uploaded').length;
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Sample</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Sample'} />
+        <InfoRow label="Clips" value={String(clipCount)} />
+        {uploadedCount > 0 && <InfoRow label="Uploaded" value={String(uploadedCount)} />}
+      </div>
+    );
+  }
+
+  if (trackType === 'drumMachine') {
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Drum Machine</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Drum Machine'} />
+        {track.drumKit && <InfoRow label="Kit" value={track.drumKit} />}
+        {track.drumMachine && <InfoRow label="Pads" value={String(track.drumMachine.pads.length)} />}
+      </div>
+    );
+  }
+
+  // Fallback for unknown types
+  return (
+    <div className="flex flex-col gap-1 min-w-[160px]">
+      <SectionLabel>Track Info</SectionLabel>
+      <InfoRow label="Type" value={trackType} />
+      <InfoRow label="Clips" value={String(track.clips.length)} />
     </div>
   );
 }
@@ -27,16 +119,11 @@ function TrackSmartControls({ track }: { track: Track }) {
 
   const vol = track.volume;
   const pan = track.pan ?? 0;
-  const eqLow = track.eqLowGain ?? 0;
-  const eqMid = track.eqMidGain ?? 0;
-  const eqHigh = track.eqHighGain ?? 0;
-  const compEnabled = track.compressorEnabled ?? false;
-  const compThresh = track.compressorThreshold ?? -24;
-  const compRatio = track.compressorRatio ?? 4;
+  const trackType = track.trackType ?? 'stems';
 
   return (
     <div className="flex items-start gap-6 px-4">
-      {/* Track info */}
+      {/* Track identity */}
       <div className="flex flex-col items-center gap-1 min-w-[80px]">
         <div
           className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
@@ -45,12 +132,12 @@ function TrackSmartControls({ track }: { track: Track }) {
           {info.emoji}
         </div>
         <span className="text-[11px] text-zinc-300 font-medium truncate max-w-[80px]">{track.displayName}</span>
-        <span className="text-[10px] text-zinc-400">{track.trackType ?? 'stems'}</span>
+        <span className="text-[10px] text-zinc-400">{trackType}</span>
       </div>
 
-      <div className="w-px h-16 bg-[#444] self-center" />
+      <Divider />
 
-      {/* Volume & Pan */}
+      {/* Volume & Pan — quick-access essentials */}
       <div className="flex flex-col items-center gap-1">
         <SectionLabel>Level</SectionLabel>
         <div className="flex gap-3">
@@ -59,41 +146,15 @@ function TrackSmartControls({ track }: { track: Track }) {
         </div>
       </div>
 
-      <div className="w-px h-16 bg-[#444] self-center" />
+      <Divider />
 
-      {/* EQ */}
-      <div className="flex flex-col items-center gap-1">
-        <SectionLabel>Tone</SectionLabel>
-        <div className="flex gap-2">
-          <Knob value={eqLow} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqLowGain: v })} label="Bass" unit="dB" size={36} step={0.5} />
-          <Knob value={eqMid} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqMidGain: v })} label="Mid" unit="dB" size={36} step={0.5} />
-          <Knob value={eqHigh} min={-15} max={15} defaultValue={0} onChange={(v) => updateTrackMixer(track.id, { eqHighGain: v })} label="Treble" unit="dB" size={36} step={0.5} />
-        </div>
-      </div>
+      {/* Track-type-specific details */}
+      <TrackTypeDetails track={track} />
 
-      <div className="w-px h-16 bg-[#444] self-center" />
-
-      {/* Compressor */}
-      <div className="flex flex-col items-center gap-1">
-        <SectionLabel>Compressor</SectionLabel>
-        <button
-          onClick={() => updateTrackMixer(track.id, { compressorEnabled: !compEnabled })}
-          className={`text-[10px] font-semibold px-3 py-1 rounded mb-1 transition-colors ${
-            compEnabled ? 'bg-daw-accent text-white' : 'bg-[#444] text-zinc-400 hover:bg-[#555]'
-          }`}
-        >
-          {compEnabled ? 'ON' : 'OFF'}
-        </button>
-        <div className="flex gap-2">
-          <Knob value={compThresh} min={-60} max={0} defaultValue={-24} onChange={(v) => updateTrackMixer(track.id, { compressorThreshold: v })} label="Thresh" unit="dB" size={34} step={1} disabled={!compEnabled} />
-          <Knob value={compRatio} min={1} max={20} defaultValue={4} onChange={(v) => updateTrackMixer(track.id, { compressorRatio: v })} label="Ratio" size={34} step={0.5} disabled={!compEnabled} />
-        </div>
-      </div>
-
-      {/* Local caption for stems */}
-      {(track.trackType === 'stems' || !track.trackType) && (
+      {/* Local caption editor for stems tracks */}
+      {(trackType === 'stems') && (
         <>
-          <div className="w-px h-16 bg-[#444] self-center" />
+          <Divider />
           <div className="flex flex-col gap-1 min-w-[160px] max-w-[240px]">
             <SectionLabel>Local Caption</SectionLabel>
             <textarea

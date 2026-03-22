@@ -59,7 +59,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'project.new',           category: 'project',   label: 'New Project',                 defaultCombo: { code: 'KeyN', mod: true }, contexts: ['global'] },
   { id: 'project.open',          category: 'project',   label: 'Open Project List',           defaultCombo: { code: 'KeyO', mod: true }, contexts: ['global'] },
   { id: 'project.bounceInPlace', category: 'project',   label: 'Bounce Selected/Focused Track', defaultCombo: { code: 'KeyB', mod: true }, contexts: ['global'] },
-  { id: 'project.settings',      category: 'project',   label: 'Settings',                    defaultCombo: { code: 'Comma', mod: true }, contexts: ['global'] },
+  { id: 'project.settings',      category: 'project',   label: 'Open Generate Settings',      defaultCombo: { code: 'Comma', mod: true }, contexts: ['global'] },
   { id: 'project.export',        category: 'project',   label: 'Export',                      defaultCombo: { code: 'KeyE', mod: true, shift: true }, contexts: ['global'] },
   { id: 'project.addTrack',      category: 'project',   label: 'Add Track',                   defaultCombo: { code: 'KeyI', mod: true, shift: true }, contexts: ['global'] },
   { id: 'project.help',          category: 'project',   label: 'Keyboard Shortcuts Help',     defaultCombo: { code: 'Slash', shift: true }, contexts: ['global'] },

@@ -92,32 +92,31 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(playButton.className).not.toMatch(/shadow/);
   });
 
-  it('consolidates file actions into a File dropdown menu', () => {
+  it('consolidates project and file actions into a unified Project menu', () => {
     render(<Toolbar />);
-    // There should be a file menu trigger (icon-only)
-    const fileButton = screen.getByTestId('file-menu-trigger');
-    expect(fileButton).toBeInTheDocument();
+    // There should be a project menu trigger (icon-only)
+    const menuButton = screen.getByTestId('project-menu-trigger');
+    expect(menuButton).toBeInTheDocument();
 
-    // Individual file action buttons should NOT be visible by default
-    expect(screen.queryByText('Export')).not.toBeInTheDocument();
-    expect(screen.queryByText('MIDI')).not.toBeInTheDocument();
-    expect(screen.queryByText('Import')).not.toBeInTheDocument();
-    expect(screen.queryByText('History')).not.toBeInTheDocument();
-    expect(screen.queryByText('Share')).not.toBeInTheDocument();
+    // Individual action buttons should NOT be visible by default
+    expect(screen.queryByText('Export Audio')).not.toBeInTheDocument();
+    expect(screen.queryByText('New Project')).not.toBeInTheDocument();
   });
 
-  it('shows file actions when File dropdown is clicked', () => {
+  it('shows all project and file actions when Project menu is clicked', () => {
     render(<Toolbar />);
-    const fileButton = screen.getByTestId('file-menu-trigger');
-    fireEvent.click(fileButton);
+    const menuButton = screen.getByTestId('project-menu-trigger');
+    fireEvent.click(menuButton);
 
-    // File menu items should now be visible
+    // Project menu items should now be visible
+    expect(screen.getByText('Projects')).toBeInTheDocument();
+    expect(screen.getByText('New Project')).toBeInTheDocument();
     expect(screen.getByText('Export Audio')).toBeInTheDocument();
     expect(screen.getByText('Export MIDI')).toBeInTheDocument();
     expect(screen.getByText('Import Audio/MIDI')).toBeInTheDocument();
     expect(screen.getByText('Undo History')).toBeInTheDocument();
     expect(screen.getByText('Share Project')).toBeInTheDocument();
-    expect(screen.getByTestId('file-menu-dropdown').className).toContain('fixed');
+    expect(screen.getByTestId('project-menu-dropdown').className).toContain('fixed');
   });
 
   it('uses softer separators (thinner, more subtle)', () => {

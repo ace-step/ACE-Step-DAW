@@ -484,9 +484,6 @@ export function Toolbar() {
   const toggleLoopRecording = useTransportStore((s) => s.toggleLoopRecording);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
-  const autoScrollEnabled = useUIStore((s) => s.autoScrollEnabled);
-  const toggleAutoScroll = useUIStore((s) => s.toggleAutoScroll);
-
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__commandPaletteRuntime = {
       play,
@@ -645,21 +642,6 @@ export function Toolbar() {
             <path d="M4 13L7 1l3 12" />
             <path d="M3 13h8" />
             <path d="M7 5l4-2" />
-          </svg>
-        </ControlBarButton>
-        <ControlBarButton
-          active={autoScrollEnabled}
-          onClick={toggleAutoScroll}
-          title="Auto-Scroll / Follow Playhead (Shift+F)"
-          disabled={!project}
-          dataTarget="auto-scroll-button"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7 1v12" />
-            <path d="M7 1l-2.5 3" />
-            <path d="M7 1l2.5 3" />
-            <path d="M1 5h4" />
-            <path d="M9 5h4" />
           </svg>
         </ControlBarButton>
       </div>

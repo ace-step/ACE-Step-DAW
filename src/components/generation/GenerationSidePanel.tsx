@@ -375,23 +375,6 @@ export function GenerationSidePanel() {
             <div className="mt-0.5 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setGenerationPanelView('settings')}
-                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
-                  generationPanelView === 'settings'
-                    ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
-                    : 'border-[#404040] bg-[#262626] text-zinc-400 hover:border-[#555] hover:text-zinc-200'
-                }`}
-                aria-label="Open Generate settings"
-                title="Generate settings"
-                data-testid="generation-panel-settings-trigger"
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="8" cy="8" r="2.2" />
-                  <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
                 onClick={() => setShow(false)}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-400 transition-colors hover:border-[#555] hover:text-zinc-200"
                 aria-label="Collapse generation panel"

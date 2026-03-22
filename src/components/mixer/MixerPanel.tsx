@@ -122,7 +122,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                 aria-label={`FX bypass ${track.displayName}`}
                 aria-keyshortcuts="P"
                 title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
-                className={`text-xs font-bold px-2 py-1 rounded transition-colors ${
+                className={`flex h-[18px] min-w-[26px] items-center justify-center rounded-sm px-1.5 text-[9px] font-semibold leading-none transition-colors ${
                   effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
                 }`}
               >

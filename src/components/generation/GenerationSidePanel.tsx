@@ -237,9 +237,9 @@ export function GenerationSidePanel() {
         style={{ zIndex: Z.panel + 1 }}
         data-testid="generation-dock"
       >
-        <div className="flex items-center gap-1.5 rounded-[18px] px-1.5 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)' }}>
+        <div className="flex items-center gap-2 rounded-[18px] px-2 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
           {/* Left group: Library + Mixer */}
-          <div className="flex items-center gap-1 rounded-[14px] px-1 py-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+          <div className="flex items-center gap-1 rounded-[14px] px-1 py-0.5" style={{ border: '1px solid rgb(56, 63, 76)' }}>
             <button
               type="button"
               onClick={toggleLoopBrowser}
@@ -289,7 +289,7 @@ export function GenerationSidePanel() {
           </div>
 
           {/* Right group: Inspire Me + Chat + Settings */}
-          <div className="flex items-center gap-1 rounded-[14px] px-1 py-0.5" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+          <div className="flex items-center gap-1 rounded-[14px] px-1 py-0.5" style={{ border: '1px solid rgb(56, 63, 76)' }}>
             <button
               type="button"
               onClick={() => {

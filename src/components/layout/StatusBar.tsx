@@ -65,7 +65,6 @@ export function StatusBar() {
         </span>
       )}
       <span className="flex-1" />
-      <img src="/logo.png" alt="" width={12} height={12} className="rounded-sm opacity-30" />
     </div>
   );
 }

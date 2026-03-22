@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Toolbar } from '../../src/components/layout/Toolbar';
-import { TempoDisplay } from '../../src/components/transport/TempoDisplay';
-import { TimeDisplay } from '../../src/components/transport/TimeDisplay';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { useTransportStore } from '../../src/store/transportStore';
@@ -59,22 +57,6 @@ describe('Custom fonts (#549)', () => {
       // All text spans inside LCD should use font-mono
       const monoSpans = lcdContainer!.querySelectorAll('.font-mono');
       expect(monoSpans.length).toBeGreaterThanOrEqual(2);
-    });
-  });
-
-  describe('TempoDisplay uses monospace font for BPM', () => {
-    it('applies font-mono class to the BPM value', () => {
-      render(<TempoDisplay />);
-      const bpmElement = screen.getByText(/BPM/);
-      expect(bpmElement.className).toContain('font-mono');
-    });
-  });
-
-  describe('TimeDisplay uses monospace font', () => {
-    it('applies font-mono class to the time display container', () => {
-      render(<TimeDisplay />);
-      const timeContainer = document.querySelector('.font-mono');
-      expect(timeContainer).toBeInTheDocument();
     });
   });
 

@@ -195,7 +195,7 @@ export function GenerationSidePanel() {
       case 'settings':
         return {
           title: 'Generate',
-          description: 'Tune models, backend, and project defaults without leaving the generation workflow.',
+          description: 'Tune models, backend, and generation defaults without leaving the generation workflow.',
         };
       default:
         return {
@@ -226,29 +226,45 @@ export function GenerationSidePanel() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => openGenerationPanelView(generationPanelView)}
-        className={`fixed right-5 top-16 flex h-12 w-12 items-center justify-center rounded-full border border-indigo-300/30 bg-gradient-to-br from-indigo-500 via-violet-500 to-cyan-400 text-white shadow-[0_12px_30px_rgba(61,82,255,0.35)] transition-all duration-300 ${
-          show ? 'pointer-events-none translate-x-4 scale-90 opacity-0' : 'translate-x-0 scale-100 opacity-100 hover:scale-105'
-        }`}
+      <div
+        className="fixed bottom-16 left-1/2 z-[120] -translate-x-1/2"
         style={{ zIndex: Z.panel + 1 }}
-        aria-label="Open Generate panel"
-        title="Open Generate panel"
-        data-testid="generate-orb-trigger"
+        data-testid="generation-dock"
       >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 1.5v4" />
-          <path d="M9 12.5v4" />
-          <path d="M1.5 9h4" />
-          <path d="M12.5 9h4" />
-          <path d="M4 4l2.4 2.4" />
-          <path d="M11.6 11.6L14 14" />
-          <path d="M14 4l-2.4 2.4" />
-          <path d="M4 14l2.4-2.4" />
-          <circle cx="9" cy="9" r="2.1" fill="currentColor" stroke="none" />
-        </svg>
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (show) {
+              setShow(false);
+              return;
+            }
+            openGenerationPanelView(generationPanelView);
+          }}
+          className={`group flex items-center gap-2 rounded-[18px] border px-3 py-2 transition-all duration-200 ${
+            show
+              ? 'border-cyan-300/35 bg-[#243145] text-cyan-50 shadow-[0_10px_22px_rgba(58,88,192,0.24)]'
+              : 'border-white/8 bg-[#1c1c1c]/96 text-zinc-300 shadow-[0_12px_26px_rgba(0,0,0,0.32)] hover:border-[#5a5a5a] hover:bg-[#232323]'
+          }`}
+          aria-label={show ? 'Hide Generate panel' : 'Open Generate panel'}
+          title={show ? 'Hide Inspire Me panel' : 'Open Inspire Me panel'}
+          data-testid="generation-dock-app-generate"
+        >
+          <span
+            className={`flex h-8 w-8 items-center justify-center rounded-[11px] border ${
+              show
+                ? 'border-cyan-300/25 bg-cyan-300/8'
+                : 'border-white/8 bg-white/[0.04]'
+            }`}
+            aria-hidden="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="9" r="1.6" fill="currentColor" stroke="none" />
+              <path d="M9 2.1v2.2M9 13.7v2.2M2.1 9h2.2M13.7 9h2.2M4.1 4.1l1.6 1.6M12.3 12.3l1.6 1.6M13.9 4.1l-1.6 1.6M5.7 12.3l-1.6 1.6" />
+            </svg>
+          </span>
+          <span className="text-[12px] font-medium tracking-[0.02em]">Inspire Me</span>
+        </button>
+      </div>
 
       {renderPanel && (
         <aside
@@ -260,41 +276,42 @@ export function GenerationSidePanel() {
           aria-label="Generate panel"
           aria-hidden={!show}
         >
-          <button
-            type="button"
-            onClick={() => setShow(false)}
-            className="absolute -left-5 top-16 flex h-10 w-10 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-300 shadow-lg transition-colors hover:border-[#545454] hover:text-white"
-            aria-label="Collapse generation panel"
-            title="Collapse Generate panel"
-            data-testid="generation-panel-collapse"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-          </button>
-
           <div className="flex items-start justify-between border-b border-[#333] px-5 py-2">
             <div>
               <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
               <p className="text-[11px] text-zinc-400">{panelCopy.description}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setGenerationPanelView('settings')}
-              className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
-                generationPanelView === 'settings'
-                  ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
-                  : 'border-[#404040] bg-[#262626] text-zinc-400 hover:border-[#555] hover:text-zinc-200'
-              }`}
-              aria-label="Open Generate settings"
-              title="Generate settings"
-              data-testid="generation-panel-settings-trigger"
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="8" cy="8" r="2.2" />
-                <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
-              </svg>
-            </button>
+            <div className="mt-0.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGenerationPanelView('settings')}
+                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                  generationPanelView === 'settings'
+                    ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
+                    : 'border-[#404040] bg-[#262626] text-zinc-400 hover:border-[#555] hover:text-zinc-200'
+                }`}
+                aria-label="Open Generate settings"
+                title="Generate settings"
+                data-testid="generation-panel-settings-trigger"
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="8" cy="8" r="2.2" />
+                  <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShow(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-400 transition-colors hover:border-[#555] hover:text-zinc-200"
+                aria-label="Collapse generation panel"
+                title="Collapse Generate panel"
+                data-testid="generation-panel-collapse"
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 3.5L10 8L5 12.5" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="border-b border-[#333] px-3 py-2">

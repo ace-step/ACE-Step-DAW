@@ -61,15 +61,16 @@ describe('GenerationSidePanel settings entrypoints', () => {
     expect(screen.getByTestId('generation-settings-section')).toBeInTheDocument();
     expect(screen.getByText('Model & Backend')).toBeInTheDocument();
     expect(screen.getByText('Generation Defaults')).toBeInTheDocument();
+    expect(screen.queryByText('Song Defaults')).not.toBeInTheDocument();
   });
 
-  it('reopens the panel from the floating orb trigger after collapsing', () => {
+  it('reopens the panel from the dock launcher after collapsing', () => {
     render(<GenerationSidePanel />);
 
     fireEvent.click(screen.getByTestId('generation-panel-collapse'));
     expect(useUIStore.getState().showGenerationPanel).toBe(false);
 
-    fireEvent.click(screen.getByTestId('generate-orb-trigger'));
+    fireEvent.click(screen.getByTestId('generation-dock-app-generate'));
     expect(useUIStore.getState().showGenerationPanel).toBe(true);
   });
 });

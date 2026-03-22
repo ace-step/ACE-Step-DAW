@@ -9,11 +9,19 @@ import { useModelStore } from '../../src/store/modelStore';
 
 // Mock all external dependencies
 vi.mock('../../src/store/collaborationStore', () => ({
-  useCollaborationStore: (sel: (s: Record<string, unknown>) => unknown) =>
-    sel({
-      setShowShareDialog: vi.fn(),
-      isViewerMode: false,
-    }),
+  useCollaborationStore: Object.assign(
+    (sel: (s: Record<string, unknown>) => unknown) =>
+      sel({
+        setShowShareDialog: vi.fn(),
+        isViewerMode: false,
+      }),
+    {
+      getState: () => ({
+        setShowShareDialog: vi.fn(),
+        isViewerMode: false,
+      }),
+    },
+  ),
 }));
 
 vi.mock('../../src/hooks/useAudioImport', () => ({
@@ -130,11 +138,32 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
   });
 
-  it('removes the top toolbar Generate button in favor of the side orb entry', () => {
+  it('removes the top toolbar Generate button in favor of the side dock entry', () => {
     render(<Toolbar />);
 
     expect(screen.queryByTestId('generate-button')).not.toBeInTheDocument();
     expect(screen.queryByText('GENERATE')).not.toBeInTheDocument();
+  });
+
+  it('moves project defaults into a dedicated top-toolbar strip', () => {
+    render(<Toolbar />);
+
+    const projectStrip = screen.getByTestId('toolbar-project-settings');
+    expect(projectStrip).toBeInTheDocument();
+    expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
+    expect(screen.getByLabelText('Project time signature')).toHaveValue('4');
+    expect(screen.getByLabelText('Project key root')).toHaveValue('C');
+    expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
+    expect(screen.getByLabelText('Project measures')).toHaveValue(64);
+  });
+
+  it('updates project key settings from the top-toolbar strip', () => {
+    render(<Toolbar />);
+
+    fireEvent.change(screen.getByLabelText('Project key root'), { target: { value: 'D' } });
+    fireEvent.change(screen.getByLabelText('Project scale mode'), { target: { value: 'minor' } });
+
+    expect(useProjectStore.getState().project?.keyScale).toBe('D minor');
   });
 
   it('provides tooltip titles on all right-side icon buttons', () => {
@@ -154,6 +183,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.queryByTestId('overflow-menu-trigger')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Zoom Out')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Zoom In')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Library (Y)')).not.toBeInTheDocument();
   });
 
   it('shows an ACE Studio external link on the right side', () => {

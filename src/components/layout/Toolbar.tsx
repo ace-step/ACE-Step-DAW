@@ -7,9 +7,198 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
+import { DEFAULT_MEASURES } from '../../constants/defaults';
+import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { Button } from '../ui/Button';
 import { ModelStatusBadge } from './ModelStatusBadge';
+
+const KEY_ROOT_LABELS: Record<string, string> = {
+  C: 'C',
+  'C#': 'C#/Db',
+  D: 'D',
+  'D#': 'D#/Eb',
+  E: 'E',
+  F: 'F',
+  'F#': 'F#/Gb',
+  G: 'G',
+  'G#': 'G#/Ab',
+  A: 'A',
+  'A#': 'A#/Bb',
+  B: 'B',
+};
+
+const KEY_ROOTS = Array.from(
+  new Set(KEY_SCALES.map((keyScale) => keyScale.slice(0, keyScale.lastIndexOf(' ')))),
+);
+
+const SCALE_MODES = Array.from(
+  new Set(KEY_SCALES.map((keyScale) => keyScale.slice(keyScale.lastIndexOf(' ') + 1))),
+);
+
+const SCALE_MODE_LABELS: Record<string, string> = {
+  major: 'Maj',
+  minor: 'Min',
+};
+
+function splitKeyScale(keyScale?: string) {
+  if (!keyScale) {
+    return { root: 'C', mode: 'major' };
+  }
+  const splitIndex = keyScale.lastIndexOf(' ');
+  if (splitIndex === -1) {
+    return { root: 'C', mode: 'major' };
+  }
+  const root = keyScale.slice(0, splitIndex);
+  const mode = keyScale.slice(splitIndex + 1).toLowerCase();
+  return {
+    root: KEY_ROOTS.includes(root) ? root : 'C',
+    mode: SCALE_MODES.includes(mode) ? mode : 'major',
+  };
+}
+
+function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
+  const project = useProjectStore((s) => s.project);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const [bpmInput, setBpmInput] = useState('120');
+  const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
+
+  useEffect(() => {
+    if (!project) return;
+    setBpmInput(String(project.bpm));
+    setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
+  }, [project?.bpm, project?.measures, project]);
+
+  const keyScale = splitKeyScale(project?.keyScale);
+
+  const commitBpm = () => {
+    const parsed = Number.parseInt(bpmInput, 10);
+    const nextBpm = Number.isNaN(parsed) ? (project?.bpm ?? 120) : Math.min(300, Math.max(40, parsed));
+    setBpmInput(String(nextBpm));
+    if (project && nextBpm !== project.bpm) {
+      updateProject({ bpm: nextBpm });
+    }
+  };
+
+  const commitMeasures = () => {
+    const parsed = Number.parseInt(measuresInput, 10);
+    const nextMeasures = Number.isNaN(parsed)
+      ? (project?.measures ?? DEFAULT_MEASURES)
+      : Math.min(512, Math.max(4, parsed));
+    setMeasuresInput(String(nextMeasures));
+    if (project && nextMeasures !== project.measures) {
+      updateProject({ measures: nextMeasures });
+    }
+  };
+
+  const updateKeyScale = (nextRoot: string, nextMode: string) => {
+    if (!project) return;
+    updateProject({ keyScale: `${nextRoot} ${nextMode}` });
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1 rounded-xl border border-[#434343] bg-[#1c1c1c] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+      data-testid="toolbar-project-settings"
+    >
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={bpmInput}
+          onChange={(event) => setBpmInput(event.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            }
+          }}
+          min={40}
+          max={300}
+          disabled={disabled}
+          aria-label="Project BPM"
+          title="Project BPM"
+          className="h-6 w-[3.35rem] rounded-md border border-[#383838] bg-[#262626] px-2 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        />
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <select
+          value={project?.timeSignature ?? 4}
+          onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
+          disabled={disabled}
+          aria-label="Project time signature"
+          title="Project time signature"
+          className="h-6 w-[3.5rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {TIME_SIGNATURES.map((timeSignature) => (
+            <option key={timeSignature} value={timeSignature}>
+              {timeSignature} / 4
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center gap-0.5 rounded-md bg-black/10 px-1 py-0.5">
+        <select
+          value={keyScale.root}
+          onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
+          disabled={disabled}
+          aria-label="Project key root"
+          title="Project key root"
+          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {KEY_ROOTS.map((root) => (
+            <option key={root} value={root}>
+              {KEY_ROOT_LABELS[root] ?? root}
+            </option>
+          ))}
+        </select>
+        <select
+          value={keyScale.mode}
+          onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
+          disabled={disabled}
+          aria-label="Project scale mode"
+          title="Project scale mode"
+          className="h-6 w-[3.7rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        >
+          {SCALE_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {SCALE_MODE_LABELS[mode] ?? `${mode[0].toUpperCase()}${mode.slice(1)}`}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+
+      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+        <input
+          type="number"
+          value={measuresInput}
+          onChange={(event) => setMeasuresInput(event.target.value)}
+          onBlur={commitMeasures}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            }
+          }}
+          min={4}
+          max={512}
+          disabled={disabled}
+          aria-label="Project measures"
+          title="Project measures"
+          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        />
+      </div>
+    </div>
+  );
+}
 
 function LCDDisplay() {
   const currentTime = useTransportStore((s) => s.currentTime);
@@ -34,12 +223,6 @@ function LCDDisplay() {
     <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center">
       <span className={`text-[13px] font-mono tabular-nums tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[11px] font-mono tabular-nums text-zinc-400">{formatTime(currentTime)}</span>
-      {project && !countInActive && (
-        <>
-          <span className="text-[11px] font-mono tabular-nums text-zinc-400">{project.bpm} bpm</span>
-          <span className="text-[10px] text-emerald-600/60" title="Project auto-saved to browser storage">●</span>
-        </>
-      )}
       {countInActive && (
         <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>
       )}
@@ -202,7 +385,6 @@ export function Toolbar() {
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
   const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
-  const showLibrary = useUIStore((s) => s.showLibrary);
   const setShowLibrary = useUIStore((s) => s.setShowLibrary);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
@@ -238,17 +420,6 @@ export function Toolbar() {
     <div className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none">
       {/* Left: Panel toggle buttons */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">
-        <ControlBarButton
-          active={showLibrary}
-          onClick={() => setShowLibrary(!showLibrary)}
-          title="Library (Y)"
-          disabled={!project}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <rect x="1" y="2" width="12" height="10" rx="1.5" />
-            <line x1="5" y1="2" x2="5" y2="12" />
-          </svg>
-        </ControlBarButton>
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -288,6 +459,8 @@ export function Toolbar() {
           Session
         </Button>
       </div>
+
+      <ProjectSettingsStrip disabled={!project} />
 
       {/* Project actions + File menu */}
       <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5" data-testid="toolbar-group">

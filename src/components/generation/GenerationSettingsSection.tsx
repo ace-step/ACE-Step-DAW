@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
-import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
+import { DEFAULT_GENERATION } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { LmModelEntry, ModelEntry } from '../../types/api';
 
 function modelSupportsThinking(modelName: string): boolean {
@@ -13,15 +12,6 @@ function modelSupportsThinking(modelName: string): boolean {
 
 export function GenerationSettingsSection({ active }: { active: boolean }) {
   const project = useProjectStore((s) => s.project);
-
-  const [bpm, setBpm] = useState(120);
-  const [bpmText, setBpmText] = useState('120');
-  const tapTimesRef = useRef<number[]>([]);
-  const tapResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [keyScale, setKeyScale] = useState('');
-  const [timeSignature, setTimeSignature] = useState(4);
-  const [measures, setMeasures] = useState(DEFAULT_MEASURES);
   const [globalCaption, setGlobalCaption] = useState('');
   const [manualLatencyText, setManualLatencyText] = useState('');
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
@@ -40,35 +30,6 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
   const [initError, setInitError] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
   const prevActiveRef = useRef(false);
-
-  const handleTapTempo = useCallback(() => {
-    void getAudioEngine().previewMetronomeClick();
-    const now = Date.now();
-    const taps = tapTimesRef.current;
-
-    if (taps.length > 0 && now - taps[taps.length - 1] > 3000) {
-      tapTimesRef.current = [];
-    }
-
-    tapTimesRef.current = [...tapTimesRef.current, now];
-
-    if (tapResetRef.current) clearTimeout(tapResetRef.current);
-    tapResetRef.current = setTimeout(() => {
-      tapTimesRef.current = [];
-    }, 3000);
-
-    if (tapTimesRef.current.length >= 2) {
-      const intervals: number[] = [];
-      for (let i = 1; i < tapTimesRef.current.length; i += 1) {
-        intervals.push(tapTimesRef.current[i] - tapTimesRef.current[i - 1]);
-      }
-      const avgInterval = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
-      const calculatedBpm = Math.round(60000 / avgInterval);
-      const clamped = Math.min(300, Math.max(40, calculatedBpm));
-      setBpm(clamped);
-      setBpmText(String(clamped));
-    }
-  }, []);
 
   const handleModelChange = useCallback((newModel: string) => {
     setModel(newModel);
@@ -121,12 +82,6 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
 
   const hydrateFromProject = useCallback(() => {
     const generationDefaults = project?.generationDefaults ?? DEFAULT_GENERATION;
-    const projectBpm = project?.bpm ?? 120;
-    setBpm(projectBpm);
-    setBpmText(String(projectBpm));
-    setKeyScale(project?.keyScale ?? '');
-    setTimeSignature(project?.timeSignature ?? 4);
-    setMeasures(project?.measures ?? DEFAULT_MEASURES);
     setGlobalCaption(project?.globalCaption ?? '');
     setManualLatencyText(
       project?.playbackLatency?.manualOverrideMs !== null && project?.playbackLatency?.manualOverrideMs !== undefined
@@ -151,12 +106,6 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
     }
     prevActiveRef.current = active;
   }, [active, hydrateFromProject]);
-
-  useEffect(() => () => {
-    if (tapResetRef.current) {
-      clearTimeout(tapResetRef.current);
-    }
-  }, []);
 
   const selectedModelEntry = availableModels.find((entry) => entry.name === model);
   const selectedLmEntry = availableLmModels.find((entry) => entry.name === selectedLmModel);
@@ -212,7 +161,7 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
   const handleSave = useCallback(() => {
     const store = useProjectStore.getState();
     if (store.project) {
-      store.updateProject({ bpm, keyScale, timeSignature, measures, globalCaption });
+      store.updateProject({ globalCaption });
       const parsedManualLatency = manualLatencyText.trim() === '' ? null : Number.parseFloat(manualLatencyText);
       store.setPlaybackLatencyOverride(Number.isFinite(parsedManualLatency) ? parsedManualLatency : null);
       useProjectStore.setState({
@@ -232,7 +181,7 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
     }
     setBackendUrl(backendUrl);
     setSaveMessage('Generate settings saved to this project.');
-  }, [backendUrl, bpm, globalCaption, guidance, keyScale, manualLatencyText, measures, model, shift, steps, thinking, timeSignature]);
+  }, [backendUrl, globalCaption, guidance, manualLatencyText, model, shift, steps, thinking]);
 
   return (
     <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3" data-testid="generation-settings-section">
@@ -330,74 +279,8 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
 
       <section className="rounded-lg border border-[#353535] bg-[#232323] p-3 space-y-3">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Song Defaults</h3>
-          <p className="text-[11px] text-zinc-400">Project-level defaults that shape new full-song generations.</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase text-zinc-400">BPM</label>
-            <div className="flex gap-1.5">
-              <input
-                type="number"
-                value={bpmText}
-                onChange={(event) => setBpmText(event.target.value)}
-                onBlur={() => {
-                  const parsed = parseInt(bpmText, 10);
-                  const valid = Number.isNaN(parsed) ? 120 : Math.min(300, Math.max(30, parsed));
-                  setBpm(valid);
-                  setBpmText(String(valid));
-                }}
-                min={40}
-                max={300}
-                className="min-w-[3.5rem] flex-1 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm text-zinc-200 focus:border-indigo-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleTapTempo}
-                className="rounded border border-[#444] px-2 py-1.5 text-[10px] font-medium text-zinc-300 transition-colors hover:border-indigo-500 hover:text-white"
-                title="Tap to detect BPM"
-                aria-label="Tap tempo"
-              >
-                TAP
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium uppercase text-zinc-400">Key</label>
-            <input
-              type="text"
-              value={keyScale}
-              onChange={(event) => setKeyScale(event.target.value)}
-              placeholder="e.g. C major"
-              className="w-full rounded border border-[#444] bg-[#2a2a2a] px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium uppercase text-zinc-400">Time Sig</label>
-            <input
-              type="number"
-              value={timeSignature}
-              onChange={(event) => setTimeSignature(parseInt(event.target.value, 10) || 4)}
-              min={1}
-              max={16}
-              className="w-full rounded border border-[#444] bg-[#2a2a2a] px-3 py-1.5 text-sm text-zinc-200 focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium uppercase text-zinc-400">Measures</label>
-            <input
-              type="number"
-              value={measures}
-              onChange={(event) => setMeasures(Math.max(4, parseInt(event.target.value, 10) || DEFAULT_MEASURES))}
-              min={4}
-              max={512}
-              className="w-full rounded border border-[#444] bg-[#2a2a2a] px-3 py-1.5 text-sm text-zinc-200 focus:border-indigo-500 focus:outline-none"
-            />
-          </div>
+          <h3 className="text-sm font-semibold text-zinc-100">Song Context</h3>
+          <p className="text-[11px] text-zinc-400">Keep prompt-like guidance here. Tempo, key, time signature, and bar count now live in the top toolbar.</p>
         </div>
 
         <div>
@@ -409,6 +292,9 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
             placeholder="Describe the overall song style, mood, and genre..."
             className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-3 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
           />
+          <p className="mt-2 text-[10px] text-zinc-500">
+            Use this as project-wide generation guidance when you want every new prompt to inherit the same mood or instrumentation.
+          </p>
         </div>
       </section>
 
@@ -518,10 +404,12 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
         </div>
       )}
 
-      <div className="sticky bottom-0 -mx-3 border-t border-[#333] bg-[#1e1e1e]/95 px-3 pt-3 backdrop-blur">
-        <Button variant="primary" size="md" onClick={handleSave}>
-          Apply Settings
-        </Button>
+      <div className="sticky bottom-0 -mx-3 border-t border-[#333] bg-[#1e1e1e]/95 px-3 pb-3 pt-3 backdrop-blur">
+        <div className="flex justify-center">
+          <Button variant="primary" size="md" onClick={handleSave}>
+            Apply Settings
+          </Button>
+        </div>
       </div>
     </div>
   );

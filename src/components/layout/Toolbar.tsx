@@ -35,10 +35,7 @@ function LCDDisplay() {
       <span className={`text-[13px] font-mono tabular-nums tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[11px] font-mono tabular-nums text-zinc-400">{formatTime(currentTime)}</span>
       {project && !countInActive && (
-        <>
-          <span className="text-[11px] font-mono tabular-nums text-zinc-400">{project.bpm} bpm</span>
-          <span className="text-[10px] text-emerald-600/60" title="Project auto-saved to browser storage">●</span>
-        </>
+        <span className="text-[11px] font-mono tabular-nums text-zinc-400">{project.bpm} bpm</span>
       )}
       {countInActive && (
         <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>

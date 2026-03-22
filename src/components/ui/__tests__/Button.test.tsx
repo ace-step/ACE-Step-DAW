@@ -53,7 +53,7 @@ describe('Button component', () => {
       render(<Button variant="default">Default</Button>);
       const btn = screen.getByRole('button');
       expect(btn.className).toContain('bg-daw-surface-2');
-      expect(btn.className).toContain('hover:bg-[#484848]');
+      expect(btn.className).toContain('hover:bg-daw-hover');
     });
 
     it('applies primary variant classes', () => {
@@ -67,7 +67,7 @@ describe('Button component', () => {
       render(<Button variant="ghost">Ghost</Button>);
       const btn = screen.getByRole('button');
       expect(btn.className).toContain('bg-transparent');
-      expect(btn.className).toContain('hover:bg-daw-surface-2');
+      expect(btn.className).toContain('hover:bg-daw-hover-subtle');
     });
 
     it('applies danger variant classes', () => {

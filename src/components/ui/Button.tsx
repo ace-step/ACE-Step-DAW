@@ -29,11 +29,11 @@ const ICON_SIZE_CLASSES: Record<ButtonSize, string> = {
 /* ── Variant tokens ── */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   default:
-    'bg-daw-surface-2 hover:bg-[#484848] text-zinc-300 font-medium',
+    'bg-daw-surface-2 hover:bg-daw-hover text-zinc-300 font-medium',
   primary:
     'bg-daw-accent hover:bg-daw-accent-hover text-white font-medium',
   ghost:
-    'bg-transparent hover:bg-daw-surface-2 text-zinc-400 hover:text-zinc-200',
+    'bg-transparent hover:bg-daw-hover-subtle text-zinc-400 hover:text-zinc-100',
   danger:
     'bg-transparent hover:bg-red-900/30 text-red-400 hover:text-red-300',
 };

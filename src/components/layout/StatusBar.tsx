@@ -66,7 +66,7 @@ export function StatusBar() {
 
   return (
     <>
-      <div className="border-t border-daw-border-strong bg-gradient-to-b from-daw-surface-2 to-daw-surface-3 text-[10px] text-daw-text-muted" data-testid="status-bar">
+      <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar">
         {hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate">
@@ -92,14 +92,14 @@ export function StatusBar() {
           </div>
           <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
-          <div className="flex items-center gap-1.5 text-zinc-400">
+          <div className="flex items-center gap-1.5 text-daw-text-muted">
             <button
               type="button"
               onClick={() => setShowKeyboardShortcutsDialog(true)}
               className={`flex h-[18px] w-[18px] items-center justify-center rounded border transition-colors ${
                 showKeyboardShortcutsDialog
                   ? 'border-white/12 bg-white/[0.06] text-zinc-100'
-                  : 'border-transparent bg-transparent text-zinc-400 hover:border-white/8 hover:bg-white/[0.04] hover:text-zinc-200'
+                  : 'border-transparent bg-transparent text-daw-text-muted hover:border-white/8 hover:bg-daw-hover-subtle hover:text-zinc-200'
               }`}
               title="Keyboard shortcuts"
               data-testid="status-shortcuts-trigger"
@@ -111,11 +111,11 @@ export function StatusBar() {
               </svg>
             </button>
 
-            <div className="flex items-center gap-1 rounded-md border border-white/6 bg-black/10 px-1.5 py-0.5" data-testid="status-zoom-controls">
+            <div className="flex items-center gap-1 rounded-md border border-white/6 bg-transparent px-1.5 py-0.5" data-testid="status-zoom-controls">
               <button
                 type="button"
                 onClick={zoomOut}
-                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-daw-text-muted transition-colors hover:bg-daw-hover-subtle hover:text-zinc-200"
                 title="Zoom out"
                 aria-label="Zoom out"
               >
@@ -140,7 +140,7 @@ export function StatusBar() {
               <button
                 type="button"
                 onClick={zoomIn}
-                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-daw-text-muted transition-colors hover:bg-daw-hover-subtle hover:text-zinc-200"
                 title="Zoom in"
                 aria-label="Zoom in"
               >

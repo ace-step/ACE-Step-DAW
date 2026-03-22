@@ -92,14 +92,14 @@ export function StatusBar() {
           </div>
           <span className="truncate text-zinc-400" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
-          <div className="flex items-center gap-1.5 text-zinc-500">
+          <div className="flex items-center gap-1.5 text-zinc-400">
             <button
               type="button"
               onClick={() => setShowKeyboardShortcutsDialog(true)}
               className={`flex h-[18px] w-[18px] items-center justify-center rounded border transition-colors ${
                 showKeyboardShortcutsDialog
                   ? 'border-white/12 bg-white/[0.06] text-zinc-100'
-                  : 'border-transparent bg-transparent text-zinc-500 hover:border-white/8 hover:bg-white/[0.04] hover:text-zinc-200'
+                  : 'border-transparent bg-transparent text-zinc-400 hover:border-white/8 hover:bg-white/[0.04] hover:text-zinc-200'
               }`}
               title="Keyboard shortcuts"
               data-testid="status-shortcuts-trigger"
@@ -115,7 +115,7 @@ export function StatusBar() {
               <button
                 type="button"
                 onClick={zoomOut}
-                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
                 title="Zoom out"
                 aria-label="Zoom out"
               >
@@ -133,14 +133,14 @@ export function StatusBar() {
                     setPixelsPerSecond(level);
                   }
                 }}
-                className="w-[88px] accent-zinc-500 opacity-70 transition-opacity hover:opacity-100"
+                className="w-[88px] accent-zinc-400 opacity-70 transition-opacity hover:opacity-100"
                 aria-label="Timeline zoom"
                 data-testid="status-zoom-slider"
               />
               <button
                 type="button"
                 onClick={zoomIn}
-                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                className="flex h-4 w-4 items-center justify-center rounded text-[11px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200"
                 title="Zoom in"
                 aria-label="Zoom in"
               >

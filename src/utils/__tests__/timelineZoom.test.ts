@@ -72,10 +72,19 @@ describe('timelineZoom', () => {
     expect(getNextTimelineZoomLevel(50, 'out')).toBe(40);
     expect(getNextTimelineZoomLevel(100, 'in')).toBe(110);
     expect(getNextTimelineZoomLevel(100, 'out')).toBe(90);
-    expect(getNextTimelineZoomLevel(500, 'in')).toBe(500);
+    expect(getNextTimelineZoomLevel(500, 'in')).toBe(550);
+    expect(getNextTimelineZoomLevel(2000, 'in')).toBe(2000);
   });
 
-  it('exposes fifty zoom steps for footer controls', () => {
-    expect(TIMELINE_ZOOM_LEVELS).toHaveLength(50);
+  it('exposes zoom steps covering the full range up to deep zoom', () => {
+    expect(TIMELINE_ZOOM_LEVELS.length).toBeGreaterThanOrEqual(50);
+    expect(TIMELINE_ZOOM_LEVELS[0]).toBe(10);
+    expect(TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1]).toBe(2000);
+  });
+
+  it('allows beatPx ≥ 640 at 120 BPM for 1/64 subdivision visibility', () => {
+    const maxPps = TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1];
+    const beatPxAt120 = maxPps * (60 / 120);
+    expect(beatPxAt120).toBeGreaterThanOrEqual(640);
   });
 });

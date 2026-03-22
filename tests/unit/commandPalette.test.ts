@@ -39,7 +39,7 @@ function createContext(): CommandPaletteContext {
       toggleMetronome: transportStore.toggleMetronome,
       setShowNewProjectDialog: () => {},
       setShowProjectListDialog: () => {},
-      setShowSettingsDialog: () => {},
+      openGenerationSettings: () => {},
       setShowExportDialog: () => {},
       setShowKeyboardShortcutsDialog: () => {},
       setShowLibrary: () => {},

@@ -5,7 +5,6 @@ import {
   getGenerationValidationError,
   useGenerationStore,
   type VariationStatus,
-  type ModelOverride,
 } from '../../store/generationStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useModelStore } from '../../store/modelStore';
@@ -16,6 +15,9 @@ import type { PresetCategory } from '../../constants/generationPresets';
 import { generateVariationSession } from '../../services/generationPipeline';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { computeEta, formatEtaDisplay } from '../../utils/generationProgress';
+import { MultiTrackGenerateSection } from './MultiTrackGenerateSection';
+import { GenerationHistorySection } from './GenerationHistorySection';
+import { GenerationSettingsSection } from './GenerationSettingsSection';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -38,7 +40,11 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
 export function GenerationSidePanel() {
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
-  const toggleGenerationHistoryPanel = useUIStore((s) => s.toggleGenerationHistoryPanel);
+  const openGenerationPanelView = useUIStore((s) => s.openGenerationPanelView);
+  const generationPanelView = useUIStore((s) => s.generationPanelView);
+  const setGenerationPanelView = useUIStore((s) => s.setGenerationPanelView);
+  const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
+  const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const selectClip = useUIStore((s) => s.selectClip);
   const project = useProjectStore((s) => s.project);
 
@@ -76,17 +82,17 @@ export function GenerationSidePanel() {
 
   const availableModels = useModelStore((s) => s.availableModels);
 
-  const [showHistory, setShowHistory] = useState(false);
+  const [showPromptHistory, setShowPromptHistory] = useState(false);
   const [presetCategory, setPresetCategory] = useState<PresetCategory | 'All'>('All');
   const [showLyrics, setShowLyrics] = useState(false);
   const [styleTagsInput, setStyleTagsInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [renderPanel, setRenderPanel] = useState(show);
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
     [project?.tracks],
   );
-  const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing');
   const projectBpm = project?.bpm;
   const projectKeyScale = project?.keyScale;
   const projectGuidanceScale = project?.generationDefaults.guidanceScale;
@@ -163,7 +169,7 @@ export function GenerationSidePanel() {
 
   const handleHistorySelect = useCallback((historyPrompt: string) => {
     setGenerationPrompt(historyPrompt);
-    setShowHistory(false);
+    setShowPromptHistory(false);
   }, [setGenerationPrompt]);
 
   const commitStyleTagsInput = useCallback(() => {
@@ -174,40 +180,196 @@ export function GenerationSidePanel() {
     setGenerationStyleTags(nextTags);
   }, [setGenerationStyleTags, styleTagsInput]);
 
-  if (!show) return null;
+  const panelCopy = useMemo(() => {
+    switch (generationPanelView) {
+      case 'multiTrack':
+        return {
+          title: 'Generate',
+          description: 'Generate several tracks together with shared context, prompts, and seed control.',
+        };
+      case 'history':
+        return {
+          title: 'Generate',
+          description: 'Browse, preview, and reuse earlier AI generations from one place.',
+        };
+      case 'settings':
+        return {
+          title: 'Generate',
+          description: 'Tune models, backend, and generation defaults without leaving the generation workflow.',
+        };
+      default:
+        return {
+          title: 'Generate',
+          description: 'Create a full-song text-to-music idea without leaving the arrangement.',
+        };
+    }
+  }, [generationPanelView]);
+
+  const openMultiTrackView = useCallback(() => {
+    if (batchGenerateMode) {
+      setGenerationPanelView('multiTrack');
+      return;
+    }
+    setBatchGenerateMode('silence');
+  }, [batchGenerateMode, setBatchGenerateMode, setGenerationPanelView]);
+
+  useEffect(() => {
+    if (show) {
+      setRenderPanel(true);
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setRenderPanel(false), 260);
+    return () => window.clearTimeout(timeout);
+  }, [show]);
+
+  if (!project) return null;
 
   return (
-    <aside
-      className="fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl"
-      style={{ zIndex: Z.panel }}
-      data-testid="generation-side-panel"
-      aria-label="AI generation panel"
-    >
-      <div className="flex items-center justify-between border-b border-[#333] px-3 py-2">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-100">AI Generation</h2>
-          <p className="text-[11px] text-zinc-400">Prompt a new idea without leaving the arrangement.</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <>
+      <div
+        className="fixed bottom-16 left-1/2 z-[120] -translate-x-1/2"
+        style={{ zIndex: Z.panel + 1 }}
+        data-testid="generation-dock"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (show) {
+              setShow(false);
+              return;
+            }
+            openGenerationPanelView(generationPanelView);
+          }}
+          className={`group flex items-center gap-2 rounded-[18px] border px-3 py-2 transition-all duration-200 ${
+            show
+              ? 'border-cyan-300/35 bg-[#243145] text-cyan-50 shadow-[0_10px_22px_rgba(58,88,192,0.24)]'
+              : 'border-white/8 bg-[#1c1c1c]/96 text-zinc-300 shadow-[0_12px_26px_rgba(0,0,0,0.32)] hover:border-[#5a5a5a] hover:bg-[#232323]'
+          }`}
+          aria-label={show ? 'Hide Generate panel' : 'Open Generate panel'}
+          title={show ? 'Hide Inspire Me panel' : 'Open Inspire Me panel'}
+          data-testid="generation-dock-app-generate"
+        >
+          <span
+            className={`flex h-8 w-8 items-center justify-center rounded-[11px] border ${
+              show
+                ? 'border-cyan-300/25 bg-cyan-300/8'
+                : 'border-white/8 bg-white/[0.04]'
+            }`}
+            aria-hidden="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="9" r="1.6" fill="currentColor" stroke="none" />
+              <path d="M9 2.1v2.2M9 13.7v2.2M2.1 9h2.2M13.7 9h2.2M4.1 4.1l1.6 1.6M12.3 12.3l1.6 1.6M13.9 4.1l-1.6 1.6M5.7 12.3l-1.6 1.6" />
+            </svg>
+          </span>
+          <span className="text-[12px] font-medium tracking-[0.02em]">Inspire Me</span>
+        </button>
+      </div>
+
+      {renderPanel && (
+        <aside
+          className={`fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl transition-all duration-300 ease-out ${
+            show ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[calc(100%+28px)] opacity-0'
+          }`}
+          style={{ zIndex: Z.panel }}
+          data-testid="generation-side-panel"
+          aria-label="Generate panel"
+          aria-hidden={!show}
+        >
+          <div className="flex items-start justify-between border-b border-[#333] px-5 py-2">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
+              <p className="text-[11px] text-zinc-400">{panelCopy.description}</p>
+            </div>
+            <div className="mt-0.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGenerationPanelView('settings')}
+                className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                  generationPanelView === 'settings'
+                    ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
+                    : 'border-[#404040] bg-[#262626] text-zinc-400 hover:border-[#555] hover:text-zinc-200'
+                }`}
+                aria-label="Open Generate settings"
+                title="Generate settings"
+                data-testid="generation-panel-settings-trigger"
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="8" cy="8" r="2.2" />
+                  <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShow(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-400 transition-colors hover:border-[#555] hover:text-zinc-200"
+                aria-label="Collapse generation panel"
+                title="Collapse Generate panel"
+                data-testid="generation-panel-collapse"
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 3.5L10 8L5 12.5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="border-b border-[#333] px-3 py-2">
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#3a3a3a] bg-[#202020] p-1" data-testid="generation-panel-tabs">
           <button
             type="button"
-            onClick={toggleGenerationHistoryPanel}
-            className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200 transition-colors hover:bg-emerald-500/20"
+            onClick={() => setGenerationPanelView('textToMusic')}
+            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              generationPanelView === 'textToMusic'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+            data-testid="generation-panel-tab-text-to-music"
+            aria-pressed={generationPanelView === 'textToMusic'}
           >
-            History
+            Full Song
           </button>
           <button
-            onClick={() => setShow(false)}
-            className="text-lg leading-none text-zinc-400 transition-colors hover:text-zinc-300"
-            aria-label="Close generation panel"
+            type="button"
+            onClick={openMultiTrackView}
+            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              generationPanelView === 'multiTrack'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+            data-testid="generation-panel-tab-multi-track"
+            aria-pressed={generationPanelView === 'multiTrack'}
           >
-            &times;
+            Multi-Track
+          </button>
+          <button
+            type="button"
+            onClick={() => setGenerationPanelView('history')}
+            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              generationPanelView === 'history'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+            }`}
+            data-testid="generation-panel-tab-history"
+            aria-pressed={generationPanelView === 'history'}
+          >
+            History
           </button>
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
-        {statusMessage && (
+      {generationPanelView === 'multiTrack' ? (
+        <MultiTrackGenerateSection
+          mode={batchGenerateMode ?? 'silence'}
+          onModeChange={setBatchGenerateMode}
+        />
+      ) : generationPanelView === 'history' ? (
+        <GenerationHistorySection />
+      ) : generationPanelView === 'settings' ? (
+        <GenerationSettingsSection active={generationPanelView === 'settings'} />
+      ) : (
+        <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
+          {statusMessage && (
           <div
             className={`rounded-md border px-3 py-2 text-xs ${
               generationForm.requestError || variationError
@@ -251,11 +413,11 @@ export function GenerationSidePanel() {
             </label>
             {promptHistory.length > 0 && (
               <button
-                onClick={() => setShowHistory((value) => !value)}
+                onClick={() => setShowPromptHistory((value) => !value)}
                 className="text-[10px] text-indigo-400 transition-colors hover:text-indigo-300"
                 type="button"
               >
-                {showHistory ? 'Hide history' : 'Prompt history'}
+                {showPromptHistory ? 'Hide history' : 'Prompt history'}
               </button>
             )}
           </div>
@@ -267,7 +429,7 @@ export function GenerationSidePanel() {
             applySuggestion={applyPromptAutocompleteSuggestion}
           />
 
-          {showHistory && promptHistory.length > 0 && (
+          {showPromptHistory && promptHistory.length > 0 && (
             <div className="max-h-32 overflow-y-auto rounded border border-[#444] bg-[#2a2a2a]">
               {promptHistory.slice(0, 10).map((entry) => (
                 <button
@@ -831,6 +993,9 @@ export function GenerationSidePanel() {
           </section>
         )}
       </div>
-    </aside>
+          )}
+        </aside>
+      )}
+    </>
   );
 }

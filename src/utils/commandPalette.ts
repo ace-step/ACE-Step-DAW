@@ -67,10 +67,10 @@ export function buildCommandList(): Command[] {
     },
     {
       id: 'settings',
-      label: 'Settings',
+      label: 'Generate Settings',
       category: 'Project',
       shortcut: `${mod},`,
-      action: () => useUIStore.getState().setShowSettingsDialog(true),
+      action: () => useUIStore.getState().openGenerationPanelView('settings'),
     },
     {
       id: 'export',

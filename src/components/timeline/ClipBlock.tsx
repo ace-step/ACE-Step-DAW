@@ -35,6 +35,7 @@ const EDGE_HANDLE_PX = 16;
 const FADE_HANDLE_HIT_TARGET_PX = 14;
 const MIN_CLIP_DURATION = 0.5;
 const CLIP_DRAG_EPSILON = 0.0001;
+const HEADER_RAIL_HEIGHT_PX = 20;
 
 const waveformUpgradeInFlight = new Set<string>();
 
@@ -51,9 +52,47 @@ interface DragGhostInfo {
   isShiftCopy?: boolean;
 }
 
+interface ClipPresentation {
+  waveformColor: string;
+  titleColor: string;
+  metaColor: string;
+  headerBackground: string;
+  bodyBackground: string;
+  bodyBorderColor: string;
+  containerShadow: string;
+  selectionRingColor: string;
+}
+
+function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresentation {
+  if (isSelected) {
+    return {
+      waveformColor: '#16181f',
+      titleColor: '#181b22',
+      metaColor: 'rgba(24, 27, 34, 0.72)',
+      headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.88)} 100%)`,
+      bodyBackground: 'linear-gradient(180deg, rgba(253, 251, 246, 0.98) 0%, rgba(244, 238, 228, 0.96) 100%)',
+      bodyBorderColor: 'rgba(255, 255, 255, 0.92)',
+      containerShadow: '0 0 0 1px rgba(255,255,255,0.96), 0 14px 28px rgba(0,0,0,0.22)',
+      selectionRingColor: 'rgba(255,255,255,0.96)',
+    };
+  }
+
+  return {
+    waveformColor: '#1a1d26',
+    titleColor: '#18161a',
+    metaColor: 'rgba(24, 22, 26, 0.7)',
+    headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.9)} 100%)`,
+    bodyBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.56)} 0%, ${hexToRgba(clipColor, 0.42)} 100%)`,
+    bodyBorderColor: hexToRgba(clipColor, 0.34),
+    containerShadow: '0 8px 18px rgba(0,0,0,0.14)',
+    selectionRingColor: hexToRgba(clipColor, 0.42),
+  };
+}
+
 export function ClipBlock({ clip, track }: ClipBlockProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const selectClip = useUIStore((s) => s.selectClip);
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -87,6 +126,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
+  const sliceClipToRange = useProjectStore((s) => s.sliceClipToRange);
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
@@ -101,17 +141,19 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
   const [scissorLine, setScissorLine] = useState<number | null>(null);
+  const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const [hoveredResizeEdge, setHoveredResizeEdge] = useState<'left' | 'right' | null>(null);
   const [hoverSeekX, setHoverSeekX] = useState<number | null>(null);
   const scissorRef = useRef(false);
   const suppressContextMenuRef = useRef(false);
+  const rangePreviewCommittedRef = useRef(false);
 
   // Cleanup cursor on unmount if scissor mode was active
   useEffect(() => {
     return () => {
       if (scissorRef.current) document.body.style.cursor = '';
-      if (document.body.style.cursor === 'col-resize') document.body.style.cursor = '';
-      if (document.documentElement.style.cursor === 'col-resize') document.documentElement.style.cursor = '';
+      if (/(?:^|-)resize$/.test(document.body.style.cursor)) document.body.style.cursor = '';
+      if (/(?:^|-)resize$/.test(document.documentElement.style.cursor)) document.documentElement.style.cursor = '';
     };
   }, []);
 
@@ -181,13 +223,16 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
-  const isSelected = selectedClipIds.has(clip.id);
+  const isClipSelected = selectedClipIds.has(clip.id);
+  const isTrackSelected = selectedTrackIds.has(track.id);
+  const isSelected = isClipSelected && isTrackSelected;
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
   const showFadeInHandle = fadeInDuration > 0;
   const showFadeOutHandle = fadeOutDuration > 0;
   const clipColor = clip.color ?? track.color;
+  const clipPresentation = getClipPresentation(clipColor, isSelected);
 
   const dragRef = useRef(false);
 
@@ -229,12 +274,79 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const isSecondaryPress = e.button === 2 || (e.button === 0 && e.ctrlKey);
     if (e.button !== 0 && !isSecondaryPress) return;
 
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const isHeaderRailTarget = relY <= HEADER_RAIL_HEIGHT_PX
+      || Boolean((e.target as HTMLElement).closest('[data-clip-header-rail="true"]'));
+
+    const mode = getDragMode(e);
+    const canStartPrimaryDrag = mode === 'resize-left'
+      || mode === 'resize-right'
+      || (isHeaderRailTarget && (mode === 'move' || mode === 'slip'));
+    const canStartSecondaryGesture = isSecondaryPress && mode === 'move';
+
+    if (!isSecondaryPress && !canStartPrimaryDrag && mode === 'move') {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const clipRect = clipBlockRef.current?.getBoundingClientRect();
+      if (!clipRect) return;
+
+      const startRelX = Math.max(0, Math.min(e.clientX - clipRect.left, clipRect.width));
+      let didDrag = false;
+
+      const updatePreview = (clientX: number) => {
+        const currentRelX = Math.max(0, Math.min(clientX - clipRect.left, clipRect.width));
+        const leftPx = Math.min(startRelX, currentRelX);
+        const widthPx = Math.abs(currentRelX - startRelX);
+        setRangePreview(widthPx > 0 ? { left: leftPx, width: widthPx } : null);
+        return { leftPx, widthPx };
+      };
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const { widthPx } = updatePreview(ev.clientX);
+        if (widthPx >= 3) {
+          didDrag = true;
+        }
+      };
+
+      const onMouseUp = (ev: MouseEvent) => {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+
+        const { leftPx, widthPx } = updatePreview(ev.clientX);
+        setRangePreview(null);
+
+        if (!didDrag || widthPx < 3) {
+          return;
+        }
+
+        rangePreviewCommittedRef.current = true;
+
+        const previewStartTime = clip.startTime + (leftPx / pixelsPerSecond);
+        const previewEndTime = clip.startTime + ((leftPx + widthPx) / pixelsPerSecond);
+
+        void sliceClipToRange(clip.id, previewStartTime, previewEndTime).then((selectedClipId) => {
+          if (!selectedClipId) return;
+          selectClip(selectedClipId, false);
+          useUIStore.getState().selectTrack(track.id, false);
+        });
+      };
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      return;
+    }
+
+    if (!canStartPrimaryDrag && !canStartSecondaryGesture) {
+      return;
+    }
+
     e.stopPropagation();
     if (e.button === 0) {
       e.preventDefault();
     }
 
-    const mode = getDragMode(e);
     const startX = e.clientX;
     const startY = e.clientY;
     const origStart = clip.startTime;
@@ -317,6 +429,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
       const deltaSec = dx / pixelsPerSecond;
 
       if (mode === 'move') {
+        document.body.style.cursor = isShiftCopy ? 'copy' : 'grabbing';
         if (isShiftCopy) {
           if (isMultiSelected && lastBatchOffset !== 0) {
             batchMoveClips([...selectedClipIds], -lastBatchOffset);
@@ -405,6 +518,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           stretchMode: undefined,
         });
       } else if (mode === 'slip') {
+        document.body.style.cursor = 'ew-resize';
         const maxOffset = Math.max(0, origAudioDuration - origDuration);
         if (maxOffset > 0) {
           const newOffset = Math.max(0, Math.min(origAudioOffset + deltaSec, maxOffset));
@@ -446,6 +560,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         return;
       }
       setDragGhost(null);
+      document.body.style.cursor = '';
       if (dragRef.current) {
         // Restore original state for multi-select batch moves
         if (isMultiSelected && lastBatchOffset !== 0) {
@@ -510,6 +625,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
       setDragGhost(null);
       endDrag();
+      document.body.style.cursor = '';
 
       if ((mode === 'resize-left' || mode === 'resize-right') && dragRef.current && !ev.shiftKey) {
         const currentClip = useProjectStore.getState().getClipById(clip.id);
@@ -558,11 +674,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, splitClipAtZeroCrossing]);
+  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (dragRef.current) return;
+    if (dragRef.current || rangePreviewCommittedRef.current) {
+      rangePreviewCommittedRef.current = false;
+      return;
+    }
     setCtxMenu(null);
     const isMultiSelect = e.metaKey || e.ctrlKey;
     selectClip(clip.id, isMultiSelect);
@@ -577,7 +696,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (dragRef.current) return;
+    if (dragRef.current || rangePreviewCommittedRef.current) {
+      rangePreviewCommittedRef.current = false;
+      return;
+    }
     if (isMidiClip) {
       setOpenPianoRoll(track.id, clip.id);
       return;
@@ -599,37 +721,46 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
-  const setResizeCursor = useCallback((active: boolean) => {
-    const cursor = active ? 'col-resize' : '';
+  const setResizeCursor = useCallback((cursor: 'w-resize' | 'e-resize' | null) => {
+    const nextCursor = cursor ?? '';
     if (clipBlockRef.current) {
-      clipBlockRef.current.style.cursor = cursor;
+      clipBlockRef.current.style.cursor = nextCursor;
     }
-    document.body.style.cursor = cursor;
-    document.documentElement.style.cursor = cursor;
+    document.body.style.cursor = nextCursor;
+    document.documentElement.style.cursor = nextCursor;
   }, []);
 
-  const syncHoverState = useCallback((clientX: number, altKey: boolean, currentTarget: HTMLElement) => {
+  const syncHoverState = useCallback((clientX: number, clientY: number, altKey: boolean, currentTarget: HTMLElement) => {
     const rect = currentTarget.getBoundingClientRect();
     const relX = clientX - rect.left;
+    const relY = clientY - rect.top;
 
     if (relX <= EDGE_HANDLE_PX || relX >= rect.width - EDGE_HANDLE_PX) {
-      setHoveredResizeEdge(relX <= EDGE_HANDLE_PX ? 'left' : 'right');
+      const edge = relX <= EDGE_HANDLE_PX ? 'left' : 'right';
+      const cursor = edge === 'left' ? 'w-resize' : 'e-resize';
+      setHoveredResizeEdge(edge);
       setHoverSeekX(null);
-      setResizeCursor(true);
+      setResizeCursor(cursor);
+      currentTarget.style.cursor = cursor;
     } else {
       setHoveredResizeEdge(null);
-      setHoverSeekX(relX);
-      currentTarget.style.cursor = altKey ? 'ew-resize' : 'grab';
-      setResizeCursor(false);
+      setResizeCursor(null);
+      if (relY <= HEADER_RAIL_HEIGHT_PX) {
+        setHoverSeekX(null);
+        currentTarget.style.cursor = altKey ? 'ew-resize' : 'grab';
+      } else {
+        setHoverSeekX(relX);
+        currentTarget.style.cursor = '';
+      }
     }
   }, [setResizeCursor]);
 
   const handleMouseEnterLocal = useCallback((e: React.MouseEvent) => {
-    syncHoverState(e.clientX, e.altKey, e.currentTarget as HTMLElement);
+    syncHoverState(e.clientX, e.clientY, e.altKey, e.currentTarget as HTMLElement);
   }, [syncHoverState]);
 
   const handleMouseMoveLocal = useCallback((e: React.MouseEvent) => {
-    syncHoverState(e.clientX, e.altKey, e.currentTarget as HTMLElement);
+    syncHoverState(e.clientX, e.clientY, e.altKey, e.currentTarget as HTMLElement);
   }, [syncHoverState]);
 
   const handleMouseLeaveLocal = useCallback((e: React.MouseEvent) => {
@@ -637,17 +768,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     setHoveredResizeEdge(null);
     setHoverSeekX(null);
     el.style.cursor = '';
-    setResizeCursor(false);
+    setResizeCursor(null);
   }, [setResizeCursor]);
 
   const handleResizeHandleEnter = useCallback((edge: 'left' | 'right') => () => {
     setHoveredResizeEdge(edge);
-    setResizeCursor(true);
+    setResizeCursor(edge === 'left' ? 'w-resize' : 'e-resize');
   }, [setResizeCursor]);
 
   const handleResizeHandleLeave = useCallback(() => {
     setHoveredResizeEdge(null);
-    setResizeCursor(false);
+    setResizeCursor(null);
   }, [setResizeCursor]);
 
   const updateFadeFromPointer = useCallback((edge: 'in' | 'out', clientX: number) => {
@@ -767,9 +898,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         style={{
           left,
           width: Math.max(width, 4),
-          background: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.45)} 0%, ${hexToRgba(clipColor, 0.28)} 100%)`,
-          boxShadow: isSelected ? '0 0 10px rgba(0, 122, 255, 0.45), inset 0 0 0 1px rgba(0, 122, 255, 0.3)' : 'none',
-          ...(isSelected ? { '--tw-ring-color': 'rgba(0, 122, 255, 0.85)' } as React.CSSProperties : {}),
+          boxShadow: clipPresentation.containerShadow,
+          ...(isSelected ? { '--tw-ring-color': clipPresentation.selectionRingColor } as React.CSSProperties : {}),
         }}
         data-clip-block
         data-clip-id={clip.id}
@@ -781,11 +911,34 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         onMouseMove={handleMouseMoveLocal}
         onMouseLeave={handleMouseLeaveLocal}
         onContextMenu={handleContextMenu}
-      >
+        >
         <div
-          className="absolute top-0 bottom-0 left-0 w-[16px] cursor-col-resize z-10 group/resize-left"
+          data-clip-header-rail="true"
+          data-testid="clip-header-rail"
+          aria-label={`Move clip ${clip.id}`}
+          className="absolute left-0 right-0 top-0 z-[6] flex items-center rounded-t-md border-b px-2"
+          style={{
+            height: HEADER_RAIL_HEIGHT_PX,
+            background: clipPresentation.headerBackground,
+            borderBottomColor: hexToRgba(clipColor, 0.38),
+          }}
+        />
+
+        <div
+          className="absolute left-0 right-0 bottom-0 rounded-b-md overflow-hidden"
+          data-testid="clip-body-surface"
+          style={{
+            top: HEADER_RAIL_HEIGHT_PX,
+            background: clipPresentation.bodyBackground,
+            borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
+            borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
+          }}
+        />
+
+        <div
+          className="absolute top-0 bottom-0 left-0 w-[16px] cursor-w-resize z-10 group/resize-left"
           data-testid="resize-handle-left"
-          style={{ cursor: 'col-resize' }}
+          style={{ cursor: 'w-resize' }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
         >
@@ -801,9 +954,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           />
         </div>
         <div
-          className="absolute top-0 bottom-0 right-0 w-[16px] cursor-col-resize z-10 group/resize-right"
+          className="absolute top-0 bottom-0 right-0 w-[16px] cursor-e-resize z-10 group/resize-right"
           data-testid="resize-handle-right"
-          style={{ cursor: 'col-resize' }}
+          style={{ cursor: 'e-resize' }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
         >
@@ -825,25 +978,32 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           style={{ backgroundColor: clipColor }}
         />
 
-        <ClipWaveform
-          peaks={peaks}
-          audioDuration={audioDuration}
-          audioOffset={audioOffset}
-          clipDuration={clip.duration}
-          contentOffset={contentOffset}
-          timeStretchRate={clip.timeStretchRate}
-          stretchMode={clip.stretchMode}
-          width={width}
-          color={clipColor}
-        />
+        <div
+          className="absolute left-0 right-0 bottom-0 overflow-hidden"
+          style={{ top: HEADER_RAIL_HEIGHT_PX }}
+        >
+          <ClipWaveform
+            peaks={peaks}
+            audioDuration={audioDuration}
+            audioOffset={audioOffset}
+            clipDuration={clip.duration}
+            contentOffset={contentOffset}
+            timeStretchRate={clip.timeStretchRate}
+            stretchMode={clip.stretchMode}
+            width={width}
+            color={clipPresentation.waveformColor}
+            opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
+          />
+        </div>
 
         {!isMidiClip && hasAudioBody && (
           <>
             {fadeInWidth > 0 && (
               <div
-                className="absolute inset-y-0 left-0 pointer-events-none"
+                className="absolute left-0 bottom-0 pointer-events-none"
                 data-testid="fade-in-overlay"
                 style={{
+                  top: HEADER_RAIL_HEIGHT_PX,
                   width: fadeInWidth,
                   background: 'linear-gradient(90deg, rgba(10, 12, 18, 0.35) 0%, rgba(10, 12, 18, 0.05) 100%)',
                   clipPath: 'polygon(0 0, 100% 0, 0 100%)',
@@ -852,9 +1012,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             )}
             {fadeOutWidth > 0 && (
               <div
-                className="absolute inset-y-0 right-0 pointer-events-none"
+                className="absolute bottom-0 right-0 pointer-events-none"
                 data-testid="fade-out-overlay"
                 style={{
+                  top: HEADER_RAIL_HEIGHT_PX,
                   width: fadeOutWidth,
                   background: 'linear-gradient(270deg, rgba(10, 12, 18, 0.35) 0%, rgba(10, 12, 18, 0.05) 100%)',
                   clipPath: 'polygon(0 0, 100% 0, 100% 100%)',
@@ -869,8 +1030,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 aria-valuemin={0}
                 aria-valuemax={clip.duration}
                 aria-valuenow={fadeInDuration}
-                className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                className="absolute z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
                 style={{
+                  top: HEADER_RAIL_HEIGHT_PX + 1,
+                  bottom: 1,
                   left: Math.max(EDGE_HANDLE_PX, fadeInWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
                   width: FADE_HANDLE_HIT_TARGET_PX,
                 }}
@@ -890,8 +1053,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 aria-valuemin={0}
                 aria-valuemax={clip.duration}
                 aria-valuenow={fadeOutDuration}
-                className="absolute top-1 bottom-1 z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                className="absolute z-20 rounded-full border border-white/40 bg-black/55 shadow-[0_0_0_1px_rgba(0,0,0,0.18)] hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
                 style={{
+                  top: HEADER_RAIL_HEIGHT_PX + 1,
+                  bottom: 1,
                   left: Math.max(EDGE_HANDLE_PX, width - fadeOutWidth - FADE_HANDLE_HIT_TARGET_PX / 2),
                   width: FADE_HANDLE_HIT_TARGET_PX,
                 }}
@@ -931,12 +1096,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             width={width}
             duration={clip.duration}
             bpm={project?.bpm ?? 120}
-            color={clipColor}
+            color={clipPresentation.waveformColor}
           />
         )}
 
-        <div className="absolute top-0 left-1.5 text-[10px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm pointer-events-none"
-          style={{ right: totalVersions >= 1 ? '52px' : '6px' }}
+        <div
+          className="absolute left-1.5 text-[10px] font-medium truncate leading-4 z-10 pointer-events-none"
+          style={{
+            top: 1,
+            right: totalVersions >= 1 ? '52px' : '6px',
+            color: clipPresentation.titleColor,
+          }}
         >
           {isMidiClip ? `${clip.midiData?.notes.length ?? 0} notes` : (clip.prompt || '(no prompt)')}
         </div>
@@ -950,12 +1120,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             <button
               onClick={(e) => { e.stopPropagation(); setActiveVersion(clip.id, activeVersionIdx - 1); }}
               disabled={activeVersionIdx <= 0}
-              className="text-[8px] text-white/80 hover:text-white disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              className="text-[8px] disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              style={{ color: clipPresentation.metaColor }}
               title="Previous version"
             >
               ◀
             </button>
-            <span className="text-[8px] text-white/70 font-mono leading-4">
+            <span className="text-[8px] font-mono leading-4" style={{ color: clipPresentation.metaColor }}>
               {activeVersionIdx + 1}/{totalVersions}
             </span>
             <button
@@ -968,7 +1139,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 }
               }}
               disabled={clip.generationStatus === 'generating' || clip.generationStatus === 'queued'}
-              className="text-[8px] text-white/80 hover:text-white disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              className="text-[8px] disabled:opacity-30 px-0.5 leading-4 transition-opacity"
+              style={{ color: clipPresentation.metaColor }}
               title={activeVersionIdx >= totalVersions - 1 ? 'Generate new version' : 'Next version'}
             >
               {clip.generationStatus === 'generating' || clip.generationStatus === 'queued'
@@ -992,9 +1164,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {hoverSeekX !== null && (
           <div
-            className="absolute top-0 bottom-0 pointer-events-none z-20"
+            className="absolute bottom-0 pointer-events-none z-20"
             data-testid="hover-seek-line"
             style={{
+              top: HEADER_RAIL_HEIGHT_PX,
               left: hoverSeekX,
               width: 1,
               background: 'rgba(255, 255, 255, 0.18)',
@@ -1005,8 +1178,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {scissorLine !== null && (
           <div
-            className="absolute top-0 bottom-0 w-px pointer-events-none z-30"
+            className="absolute bottom-0 w-px pointer-events-none z-30"
             style={{
+              top: HEADER_RAIL_HEIGHT_PX,
               left: scissorLine,
               background: 'rgba(250, 204, 21, 0.9)',
               boxShadow: '0 0 4px rgba(250, 204, 21, 0.5)',
@@ -1014,6 +1188,20 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           >
             <div className="absolute -top-1 -left-[5px] w-[11px] h-[11px] border-2 border-yellow-400 bg-zinc-900 rounded-full" />
           </div>
+        )}
+
+        {rangePreview && (
+          <div
+            className="absolute bottom-0 pointer-events-none z-20"
+            data-testid="clip-range-preview"
+            style={{
+              top: HEADER_RAIL_HEIGHT_PX,
+              left: rangePreview.left,
+              width: rangePreview.width,
+              background: 'rgba(255, 255, 255, 0.26)',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.7)',
+            }}
+          />
         )}
       </div>
 
@@ -1164,25 +1352,41 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               height: dragGhost.targetLaneRect
                 ? dragGhost.targetLaneRect.height - 8
                 : dragGhost.height,
-              backgroundColor: hexToRgba(clipColor, 0.45),
+              background: clipPresentation.bodyBackground,
               borderLeft: `2px solid ${clipColor}`,
-              boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${hexToRgba(clipColor, 0.5)}`,
+              boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${clipPresentation.bodyBorderColor}`,
               transition: 'top 80ms ease-out',
             }}
           >
-            <ClipWaveform
-              peaks={peaks}
-              audioDuration={audioDuration}
-              audioOffset={audioOffset}
-              clipDuration={clip.duration}
-              contentOffset={contentOffset}
-              timeStretchRate={clip.timeStretchRate}
-              stretchMode={clip.stretchMode}
-              width={width}
-              color={clipColor}
-              opacityClassName="opacity-50"
+            <div
+              className="absolute left-0 right-0 top-0"
+              style={{
+                height: HEADER_RAIL_HEIGHT_PX,
+                background: clipPresentation.headerBackground,
+                borderBottom: `1px solid ${hexToRgba(clipColor, 0.38)}`,
+              }}
             />
-            <div className="absolute top-0 left-1.5 right-1.5 text-[10px] font-medium text-white truncate leading-4 z-10 drop-shadow-sm">
+            <div
+              className="absolute left-0 right-0 bottom-0 overflow-hidden"
+              style={{ top: HEADER_RAIL_HEIGHT_PX }}
+            >
+              <ClipWaveform
+                peaks={peaks}
+                audioDuration={audioDuration}
+                audioOffset={audioOffset}
+                clipDuration={clip.duration}
+                contentOffset={contentOffset}
+                timeStretchRate={clip.timeStretchRate}
+                stretchMode={clip.stretchMode}
+                width={width}
+                color={clipPresentation.waveformColor}
+                opacityClassName="opacity-85"
+              />
+            </div>
+            <div
+              className="absolute left-1.5 right-1.5 text-[10px] font-medium truncate leading-4 z-10"
+              style={{ top: 1, color: clipPresentation.titleColor }}
+            >
               {clip.prompt || track.displayName}
             </div>
             {dragGhost.isShiftCopy && (

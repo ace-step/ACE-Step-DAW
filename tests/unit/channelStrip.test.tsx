@@ -91,6 +91,16 @@ describe('ChannelStrip — Inserts section', () => {
     fireEvent.click(screen.getByRole('button', { name: /fx bypass drums/i }));
     expect(useProjectStore.getState().project!.tracks[0].effectsBypassed).toBe(true);
   });
+
+  it('keeps the FX bypass button visually compact beside mute and solo', () => {
+    render(<MixerPanel />);
+
+    const fxButton = screen.getByRole('button', { name: /fx bypass drums/i });
+    expect(fxButton).toHaveClass('h-[18px]');
+    expect(fxButton).toHaveClass('min-w-[26px]');
+    expect(fxButton).toHaveClass('rounded-sm');
+    expect(fxButton).toHaveClass('text-[9px]');
+  });
 });
 
 describe('ChannelStrip — Sends section', () => {

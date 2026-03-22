@@ -168,9 +168,6 @@ export function useKeyboardShortcuts() {
         } else if (ui.editingClipId !== null) {
           event.preventDefault();
           ui.setEditingClip(null);
-        } else if (ui.batchGenerateMode !== null) {
-          event.preventDefault();
-          ui.setBatchGenerateMode(null);
         } else if (ui.showKeyboardShortcutsDialog) {
           event.preventDefault();
           ui.setShowKeyboardShortcutsDialog(false);
@@ -204,7 +201,6 @@ export function useKeyboardShortcuts() {
       const anyModalOpen =
         ui.showCommandPalette ||
         ui.editingClipId !== null ||
-        ui.batchGenerateMode !== null ||
         ui.bounceInPlaceTrackId !== null ||
         ui.showKeyboardShortcutsDialog ||
         ui.showShortcutEditorDialog ||
@@ -223,7 +219,7 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      if (matches('project.settings')) { event.preventDefault(); if (!anyModalOpen) ui.setShowSettingsDialog(true); return; }
+      if (matches('project.settings')) { event.preventDefault(); if (!anyModalOpen) ui.openGenerationPanelView('settings'); return; }
       if (matches('project.new')) { event.preventDefault(); if (!anyModalOpen) ui.setShowNewProjectDialog(true); return; }
       if (matches('project.open')) { event.preventDefault(); if (!anyModalOpen) ui.setShowProjectListDialog(true); return; }
       if (matches('project.export')) { event.preventDefault(); if (!anyModalOpen) ui.setShowExportDialog(true); return; }

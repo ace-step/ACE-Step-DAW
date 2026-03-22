@@ -60,24 +60,26 @@ describe('uiStore', () => {
   });
 
   describe('panel toggles', () => {
-    it('updates mixer, loop browser, and library panel visibility', () => {
+    it('updates mixer, loop browser, and library panel visibility (mutually exclusive)', () => {
+      // Opening mixer
       useUIStore.getState().setShowMixer(true);
+      expect(useUIStore.getState().showMixer).toBe(true);
+
+      // Opening loop browser closes mixer (mutual exclusion)
       useUIStore.getState().toggleLoopBrowser();
+      expect(useUIStore.getState().loopBrowserOpen).toBe(true);
+      expect(useUIStore.getState().showMixer).toBe(false);
+
+      // showLibrary is not a right-side panel, so it stays independent
       useUIStore.getState().setShowLibrary(true);
+      expect(useUIStore.getState().showLibrary).toBe(true);
 
-      let state = useUIStore.getState();
-      expect(state.showMixer).toBe(true);
-      expect(state.loopBrowserOpen).toBe(true);
-      expect(state.showLibrary).toBe(true);
-
-      useUIStore.getState().setShowMixer(false);
+      // Closing loop browser
       useUIStore.getState().toggleLoopBrowser();
-      useUIStore.getState().setShowLibrary(false);
+      expect(useUIStore.getState().loopBrowserOpen).toBe(false);
 
-      state = useUIStore.getState();
-      expect(state.showMixer).toBe(false);
-      expect(state.loopBrowserOpen).toBe(false);
-      expect(state.showLibrary).toBe(false);
+      useUIStore.getState().setShowLibrary(false);
+      expect(useUIStore.getState().showLibrary).toBe(false);
     });
 
     it('toggles the primary arrangement/session view', () => {
@@ -88,14 +90,26 @@ describe('uiStore', () => {
       expect(useUIStore.getState().mainView).toBe('arrangement');
     });
 
-    it('toggles the generation history panel', () => {
-      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+    it('routes generation history into the unified generation panel', () => {
+      expect(useUIStore.getState().showGenerationPanel).toBe(false);
+      expect(useUIStore.getState().generationPanelView).toBe('textToMusic');
 
       useUIStore.getState().toggleGenerationHistoryPanel();
-      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(true);
+      expect(useUIStore.getState().showGenerationPanel).toBe(true);
+      expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+      expect(useUIStore.getState().generationPanelView).toBe('history');
 
       useUIStore.getState().setShowGenerationHistoryPanel(false);
+      expect(useUIStore.getState().showGenerationPanel).toBe(false);
       expect(useUIStore.getState().showGenerationHistoryPanel).toBe(false);
+    });
+
+    it('opens the multi-track view when batch generation mode is requested', () => {
+      useUIStore.getState().setBatchGenerateMode('context');
+
+      expect(useUIStore.getState().showGenerationPanel).toBe(true);
+      expect(useUIStore.getState().generationPanelView).toBe('multiTrack');
+      expect(useUIStore.getState().batchGenerateMode).toBe('context');
     });
 
     it('tracks virtual keyboard visibility, octave, velocity, and pressed pitches', () => {

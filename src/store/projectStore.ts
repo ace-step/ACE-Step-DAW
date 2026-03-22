@@ -97,6 +97,14 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
+  getClipAudibleEndTime,
+  getClipAudibleStartTime,
+  getClipContentOffset,
+  getClipPlaybackRate,
+  isClipRepitchStretched,
+} from '../utils/clipAudio';
+import { snapToGrid } from '../utils/time';
+import {
   createDefaultPlaybackLatencySettings,
   detectPlaybackLatencySettings,
   normalizePlaybackLatencySettings,
@@ -120,6 +128,116 @@ function getBarDurationSec(bpm: number, timeSig: number): number {
 function sanitizeFileNameSegment(value: string) {
   const trimmed = value.trim().replace(/[\\/:*?"<>|]/g, ' ');
   return trimmed.replace(/\s+/g, ' ').trim() || 'untitled';
+}
+
+const CLIP_RANGE_SLICE_EPSILON = 0.01;
+
+function buildSlicedMidiData(
+  clip: Clip,
+  startTime: number,
+  endTime: number,
+  bpm: number,
+): Clip['midiData'] {
+  if (!clip.midiData) return undefined;
+
+  const secPerBeat = 60 / Math.max(1, bpm);
+  const rangeStartSec = Math.max(0, startTime - clip.startTime);
+  const rangeEndSec = Math.max(rangeStartSec, endTime - clip.startTime);
+
+  return {
+    ...clip.midiData,
+    notes: clip.midiData.notes.flatMap((note) => {
+      const noteStartSec = note.startBeat * secPerBeat;
+      const noteEndSec = (note.startBeat + note.durationBeats) * secPerBeat;
+      const clippedStart = Math.max(noteStartSec, rangeStartSec);
+      const clippedEnd = Math.min(noteEndSec, rangeEndSec);
+
+      if (clippedEnd <= clippedStart) return [];
+
+      return [{
+        ...note,
+        startBeat: (clippedStart - rangeStartSec) / secPerBeat,
+        durationBeats: (clippedEnd - clippedStart) / secPerBeat,
+      }];
+    }),
+  };
+}
+
+function buildClipSegmentFromRange(
+  sourceClip: Clip,
+  startTime: number,
+  endTime: number,
+  bpm: number,
+  id: string,
+): Clip {
+  const relativeStart = Math.max(0, startTime - sourceClip.startTime);
+  const duration = Math.max(0, endTime - startTime);
+  const nextClip: Clip = {
+    ...sourceClip,
+    id,
+    startTime,
+    duration,
+  };
+
+  if (sourceClip.midiData) {
+    nextClip.midiData = buildSlicedMidiData(sourceClip, startTime, endTime, bpm);
+  }
+
+  if (isClipRepitchStretched(sourceClip)) {
+    const playbackRate = getClipPlaybackRate(sourceClip);
+    const sourceOffset = (sourceClip.audioOffset ?? 0) + relativeStart * playbackRate;
+    nextClip.audioOffset = Math.max(0, sourceOffset);
+    nextClip.contentOffset = undefined;
+  } else {
+    const contentOffset = getClipContentOffset(sourceClip);
+    const silenceTrim = Math.min(contentOffset, relativeStart);
+    const audioTrim = Math.max(0, relativeStart - silenceTrim);
+    const nextContentOffset = Math.max(0, contentOffset - silenceTrim);
+    const audioDuration = sourceClip.audioDuration ?? sourceClip.duration;
+
+    nextClip.audioOffset = Math.min(audioDuration, (sourceClip.audioOffset ?? 0) + audioTrim);
+    nextClip.contentOffset = nextContentOffset > 0 ? Math.min(nextContentOffset, duration) : undefined;
+  }
+
+  const clampedFades = clampClipFadeDurations({
+    clipDuration: duration,
+    fadeInDuration: sourceClip.fadeInDuration,
+    fadeOutDuration: sourceClip.fadeOutDuration,
+  });
+  nextClip.fadeInDuration = clampedFades.fadeInDuration;
+  nextClip.fadeOutDuration = clampedFades.fadeOutDuration;
+
+  return nextClip;
+}
+
+function snapClipBoundaryToAudio(
+  clip: Clip,
+  boundaryTime: number,
+  samples: Float32Array,
+  sampleRate: number,
+): number {
+  const audibleStart = getClipAudibleStartTime(clip);
+  const audibleEnd = getClipAudibleEndTime(clip);
+  if (boundaryTime <= audibleStart || boundaryTime >= audibleEnd) {
+    return boundaryTime;
+  }
+
+  const audioOffset = clip.audioOffset ?? 0;
+  const snappedSourceTime = isClipRepitchStretched(clip)
+    ? snapTimeToZeroCrossing(
+        samples,
+        sampleRate,
+        audioOffset + (boundaryTime - clip.startTime) * getClipPlaybackRate(clip),
+      )
+    : snapTimeToZeroCrossing(
+        samples,
+        sampleRate,
+        audioOffset + (boundaryTime - audibleStart),
+      );
+
+  return isClipRepitchStretched(clip)
+    ? clip.startTime + ((snappedSourceTime - audioOffset) / getClipPlaybackRate(clip))
+    : audibleStart + (snappedSourceTime - audioOffset);
 }
 
 function buildConsolidatedPrompt(clips: Clip[], fallback: string) {
@@ -538,6 +656,7 @@ export interface ProjectState {
 
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
+  sliceClipToRange: (clipId: string, startTime: number, endTime: number) => Promise<string | null>;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
   snapClipEdgeToZeroCrossing: (clipId: string, edge: 'left' | 'right') => Promise<void>;
@@ -3121,6 +3240,103 @@ export const useProjectStore = create<ProjectState>()(
     );
     envelope.sort((a, b) => a.time - b.time);
     get().updateClip(clipId, { gainEnvelope: envelope });
+  },
+
+  sliceClipToRange: async (clipId, startTime, endTime) => {
+    const state = get();
+    if (!state.project) return null;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const track of state.project.tracks) {
+      const clip = track.clips.find((candidate) => candidate.id === clipId);
+      if (clip) {
+        sourceClip = clip;
+        trackId = track.id;
+        break;
+      }
+    }
+    if (!sourceClip || !trackId) return null;
+
+    const originalStart = sourceClip.startTime;
+    const originalEnd = sourceClip.startTime + sourceClip.duration;
+    let rangeStart = Math.max(originalStart, Math.min(startTime, endTime));
+    let rangeEnd = Math.min(originalEnd, Math.max(startTime, endTime));
+
+    if (sourceClip.midiData) {
+      const bpm = state.project.bpm ?? 120;
+      rangeStart = Math.max(originalStart, snapToGrid(rangeStart, bpm, 1));
+      rangeEnd = Math.min(originalEnd, snapToGrid(rangeEnd, bpm, 1));
+    } else {
+      const audioKey = sourceClip.isolatedAudioKey ?? sourceClip.cumulativeMixKey;
+      if (audioKey) {
+        try {
+          const blob = await loadAudioBlobByKey(audioKey);
+          if (blob) {
+            const engine = audioEngineHooks.getAudioEngine();
+            const buffer = await engine.decodeAudioData(blob);
+            const samples = buffer.getChannelData(0);
+            rangeStart = snapClipBoundaryToAudio(sourceClip, rangeStart, samples, buffer.sampleRate);
+            rangeEnd = snapClipBoundaryToAudio(sourceClip, rangeEnd, samples, buffer.sampleRate);
+          }
+        } catch {
+          // Keep the original boundaries if audio decoding or zero-cross lookup fails.
+        }
+      }
+    }
+
+    rangeStart = Math.max(originalStart, rangeStart);
+    rangeEnd = Math.min(originalEnd, rangeEnd);
+
+    if (rangeEnd - rangeStart <= CLIP_RANGE_SLICE_EPSILON) {
+      return null;
+    }
+
+    const hasLeftRemainder = rangeStart > originalStart + CLIP_RANGE_SLICE_EPSILON;
+    const hasRightRemainder = rangeEnd < originalEnd - CLIP_RANGE_SLICE_EPSILON;
+    if (!hasLeftRemainder && !hasRightRemainder) {
+      return clipId;
+    }
+
+    const bpm = state.project.bpm ?? 120;
+    const selectedClip = buildClipSegmentFromRange(sourceClip, rangeStart, rangeEnd, bpm, clipId);
+    const extraClips: Clip[] = [];
+
+    if (hasLeftRemainder) {
+      extraClips.push(buildClipSegmentFromRange(sourceClip, originalStart, rangeStart, bpm, uuidv4()));
+    }
+    if (hasRightRemainder) {
+      extraClips.push(buildClipSegmentFromRange(sourceClip, rangeEnd, originalEnd, bpm, uuidv4()));
+    }
+
+    _pushHistory(state.project);
+
+    const nextTracks = state.project.tracks.map((track) => {
+      if (track.id !== trackId) return track;
+      return {
+        ...track,
+        clips: [...track.clips.filter((clip) => clip.id !== clipId), selectedClip, ...extraClips]
+          .sort((a, b) => a.startTime - b.startTime),
+      };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(
+          nextTracks,
+          state.project.measures,
+          state.project.bpm,
+          state.project.timeSignature,
+          state.project.tempoMap,
+          state.project.timeSignatureMap,
+        ),
+        tracks: nextTracks,
+      },
+    });
+
+    return clipId;
   },
 
   splitClip: (clipId, splitTime) => {

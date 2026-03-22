@@ -509,25 +509,7 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
-        <ControlBarButton
-          active={showSmartControls}
-          onClick={() => setShowSmartControls(!showSmartControls)}
-          title="Smart Controls (B)"
-          disabled={!project}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <circle cx="4" cy="7" r="2.5" />
-            <circle cx="10" cy="7" r="2.5" />
-            <line x1="4" y1="4.5" x2="4" y2="2" />
-            <line x1="10" y1="4.5" x2="10" y2="2" />
-          </svg>
-        </ControlBarButton>
-      </div>
-
-      <ToolbarSeparator />
-
+      {/* Arrangement / Session view toggle */}
       <div className="flex items-center gap-0.5 shrink-0">
         <ControlBarButton
           active={mainView === 'arrangement'}
@@ -551,9 +533,29 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      <ProjectSettingsStrip disabled={!project} />
+      {/* Smart Controls toggle */}
+      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
+        <ControlBarButton
+          active={showSmartControls}
+          onClick={() => setShowSmartControls(!showSmartControls)}
+          title="Smart Controls (B)"
+          disabled={!project}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+            <circle cx="4" cy="7" r="2.5" />
+            <circle cx="10" cy="7" r="2.5" />
+            <line x1="4" y1="4.5" x2="4" y2="2" />
+            <line x1="10" y1="4.5" x2="10" y2="2" />
+          </svg>
+        </ControlBarButton>
+      </div>
 
       <div className="flex-1" />
+
+      {/* Project settings (BPM, time sig, key, measures) */}
+      <ProjectSettingsStrip disabled={!project} />
+
+      <ToolbarSeparator />
 
       {/* Center: Transport controls */}
       <div

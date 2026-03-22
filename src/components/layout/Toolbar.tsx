@@ -260,18 +260,18 @@ function LCDDisplay() {
   const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
-    <div className="gb-lcd flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center shrink-0">
-      <span className={`text-[13px] font-mono tabular-nums tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
-      <span className="text-[11px] font-mono tabular-nums text-zinc-400">{formatTime(currentTime)}</span>
+    <div className="flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center shrink-0 font-mono tabular-nums">
+      <span className={`text-[13px] tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
+      <span className="text-[11px] text-zinc-500">{formatTime(currentTime)}</span>
       {countInActive && (
-        <span className="text-[11px] font-mono text-red-400 animate-pulse">REC</span>
+        <span className="text-[11px] text-red-400 animate-pulse">REC</span>
       )}
       {!countInActive && sessionArrangementRecording && (
-        <span className="text-[11px] font-mono text-red-400 animate-pulse">SESSION REC</span>
+        <span className="text-[11px] text-red-400 animate-pulse">SESSION REC</span>
       )}
       {showLoopCycleBadge && (
         <span
-          className="text-[10px] font-mono font-semibold text-orange-400 bg-orange-900/30 rounded px-1.5 py-0.5"
+          className="text-[10px] font-semibold text-orange-400"
           title={`Loop recording pass ${loopCycleCount}`}
           data-testid="loop-cycle-badge"
         >
@@ -326,10 +326,10 @@ function AceStudioLink() {
       rel="noreferrer"
       title="Visit ACE Studio"
       data-testid="toolbar-acestudio-link"
-      className="flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-1.5 py-1 text-[11px] text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/14"
+      className="flex items-center gap-1 rounded px-1 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-zinc-200"
     >
-      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-6 w-6 rounded-full object-cover" />
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-5 w-5 rounded-full object-cover" />
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 3.5L9 7L4 10.5" />
         <path d="M9.5 3.5L12 7L9.5 10.5" />
       </svg>
@@ -389,15 +389,11 @@ function FileMenu({ disabled }: { disabled: boolean }) {
         onClick={() => setOpen(!open)}
         disabled={disabled}
         data-testid="file-menu-trigger"
-        className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white disabled:opacity-30"
+        className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-white disabled:opacity-30"
         title="File actions"
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
           <path d="M2 3h8M2 6h8M2 9h8" strokeLinecap="round" />
-        </svg>
-        File
-        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className="opacity-50">
-          <path d="M1 2.5L4 5.5L7 2.5" />
         </svg>
       </button>
       {open && createPortal(
@@ -486,10 +482,11 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-11 min-w-0 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none"
+      className="flex h-11 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none overflow-x-auto"
+      style={{ scrollbarWidth: 'none' }}
     >
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -507,7 +504,7 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5 rounded-lg border border-white/8 bg-black/10 p-0.5 shrink-0">
+      <div className="flex items-center gap-0.5 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -530,10 +527,14 @@ export function Toolbar() {
         </Button>
       </div>
 
+      <ToolbarSeparator />
+
       <ProjectSettingsStrip disabled={!project} />
 
+      <ToolbarSeparator />
+
       {/* Project actions + File menu */}
-      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -548,9 +549,9 @@ export function Toolbar() {
 
       <div className="flex-1" />
 
-      {/* Center: Transport controls — prominent pill container */}
+      {/* Center: Transport controls */}
       <div
-        className="flex items-center gap-0.5 rounded-full border border-white/8 bg-black/10 px-1.5 py-0.5 shrink-0"
+        className="flex items-center gap-0.5 shrink-0"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
@@ -561,23 +562,23 @@ export function Toolbar() {
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
         </ControlBarButton>
-        {/* Play/Pause — larger for prominence */}
+        {/* Play/Pause */}
         <button
           onClick={() => void (isPlaying ? pause() : play())}
-          className={`w-10 h-9 flex items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 active:scale-95 ${
+          className={`w-8 h-7 flex items-center justify-center rounded transition-[color,background-color,transform] duration-150 active:scale-95 ${
             isPlaying
-              ? 'bg-daw-accent text-white shadow-md'
-              : 'text-white hover:bg-daw-hover-subtle hover:text-white'
+              ? 'bg-daw-accent text-white'
+              : 'text-zinc-400 hover:bg-daw-hover-subtle hover:text-white'
           }`}
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
-            <svg width="14" height="16" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="14" height="16" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
@@ -613,7 +614,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -658,7 +659,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}
@@ -692,10 +693,10 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Command Palette + ACE Studio */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => openCommandPalette()}
-          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
+          className="flex items-center gap-1 rounded px-1.5 py-1 text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"
@@ -704,16 +705,13 @@ export function Toolbar() {
             <circle cx="6" cy="6" r="3.75" />
             <path d="M8.8 8.8L12 12" strokeLinecap="round" />
           </svg>
-          <span className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
-            Cmd+K
-          </span>
         </button>
         <AceStudioLink />
       </div>
 
       {/* Viewer mode badge */}
       {isViewerMode && (
-        <div className="px-2 py-0.5 text-[10px] font-medium text-amber-400 bg-amber-950/40 rounded border border-amber-800/40" title="Read-only viewer mode">
+        <div className="px-2 py-0.5 text-[10px] font-medium text-amber-400" title="Read-only viewer mode">
           VIEWER
         </div>
       )}

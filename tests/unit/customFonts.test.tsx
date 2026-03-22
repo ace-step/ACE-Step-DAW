@@ -52,11 +52,9 @@ describe('Custom fonts (#549)', () => {
   describe('LCD Display uses monospace font', () => {
     it('applies font-mono class to bars/beats display in toolbar LCD', () => {
       const { container } = render(<Toolbar />);
-      const lcdContainer = container.querySelector('.gb-lcd');
+      // LCD container uses font-mono and tabular-nums directly
+      const lcdContainer = container.querySelector('.font-mono.tabular-nums');
       expect(lcdContainer).toBeInTheDocument();
-      // All text spans inside LCD should use font-mono
-      const monoSpans = lcdContainer!.querySelectorAll('.font-mono');
-      expect(monoSpans.length).toBeGreaterThanOrEqual(2);
     });
   });
 

@@ -76,28 +76,27 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     useProjectStore.getState().createProject({ name: 'Toolbar Test' });
   });
 
-  it('renders a transport pill container with distinct background', () => {
-    const { container } = render(<Toolbar />);
+  it('renders a flat transport container without borders or shadows', () => {
+    render(<Toolbar />);
     const transportBar = screen.getByTestId('transport-bar');
-    // Transport should have a pill-style container with a distinct background
-    expect(transportBar.className).toMatch(/bg-/);
-    expect(transportBar.className).toMatch(/rounded/);
+    // Transport should be flat — no border, no bg, no rounded-full pill
+    expect(transportBar.className).not.toMatch(/border/);
+    expect(transportBar.className).not.toMatch(/bg-/);
+    expect(transportBar.className).not.toMatch(/rounded-full/);
   });
 
-  it('renders the play/pause button larger than other transport buttons', () => {
+  it('renders the play/pause button in a compact flat style', () => {
     render(<Toolbar />);
     const playButton = screen.getByTitle('Play (Space)');
-    // Play button should be bigger - w-10 h-9 vs w-8 h-7 for others
-    expect(playButton.className).toMatch(/w-10/);
-    expect(playButton.className).toMatch(/h-9/);
+    // Play button should exist with flat styling — no shadow
+    expect(playButton.className).not.toMatch(/shadow/);
   });
 
   it('consolidates file actions into a File dropdown menu', () => {
     render(<Toolbar />);
-    // There should be a "File" dropdown button instead of individual Export/MIDI/Import/History/Share buttons
+    // There should be a file menu trigger (icon-only)
     const fileButton = screen.getByTestId('file-menu-trigger');
     expect(fileButton).toBeInTheDocument();
-    expect(fileButton).toHaveTextContent('File');
 
     // Individual file action buttons should NOT be visible by default
     expect(screen.queryByText('Export')).not.toBeInTheDocument();
@@ -139,9 +138,9 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
   });
 
-  it('does not make the toolbar itself horizontally scrollable', () => {
+  it('makes the toolbar horizontally scrollable for small viewports', () => {
     const { container } = render(<Toolbar />);
-    expect(container.firstChild).not.toHaveClass('overflow-x-auto');
+    expect(container.firstChild).toHaveClass('overflow-x-auto');
   });
 
   it('removes the top toolbar Generate button in favor of the side dock entry', () => {
@@ -201,22 +200,11 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByAltText('ACE Studio')).toBeInTheDocument();
   });
 
-  it('keeps the original command palette label and shortcut badge visible', () => {
-    useProjectStore.setState((state) => ({
-      project: state.project
-        ? {
-          ...state.project,
-          generationDefaults: {
-          ...state.project.generationDefaults,
-          model: 'ace-step-large',
-        },
-      }
-        : state.project,
-    }));
-
+  it('renders a command palette button with search icon', () => {
     render(<Toolbar />);
 
-    expect(screen.getByText('Cmd+K')).toBeInTheDocument();
+    const cmdButton = screen.getByTitle('Command Palette (Cmd/Ctrl+K)');
+    expect(cmdButton).toBeInTheDocument();
   });
 
   it('moves model status out of the top toolbar and leaves it to the status area', () => {

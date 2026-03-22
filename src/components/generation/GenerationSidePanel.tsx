@@ -192,7 +192,7 @@ export function GenerationSidePanel() {
       default:
         return {
           title: 'Generate',
-          description: 'Prompt a full-song idea without leaving the arrangement.',
+          description: 'Create a full-song text-to-music idea without leaving the arrangement.',
         };
     }
   }, [generationPanelView]);
@@ -241,7 +241,7 @@ export function GenerationSidePanel() {
             data-testid="generation-panel-tab-text-to-music"
             aria-pressed={generationPanelView === 'textToMusic'}
           >
-            Text to Music
+            Full Song
           </button>
           <button
             type="button"

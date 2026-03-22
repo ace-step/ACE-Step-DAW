@@ -229,7 +229,7 @@ export function GenerationSidePanel() {
   return (
     <>
       <div
-        className="fixed bottom-[72px] left-1/2 z-[120] -translate-x-1/2"
+        className="fixed bottom-[52px] left-1/2 z-[120] -translate-x-1/2"
         style={{ zIndex: Z.panel + 1 }}
         data-testid="generation-dock"
       >

@@ -64,6 +64,24 @@ export function StatusBar() {
     <>
       <div className="border-t border-[#1a1a1a] bg-gradient-to-b from-[#2a2a2a] to-[#232323] text-[10px] text-zinc-400">
         <div className="flex h-6 items-center gap-3 px-3">
+          <div
+            className="flex items-center"
+            title={connected ? 'Backend connected' : 'Backend offline'}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          </div>
+          {activeJobs.length > 0 && (
+            <span className="text-daw-accent truncate">
+              Generating: {primaryJob?.trackName ?? 'unknown'}
+              {primaryJob?.stage ? ` \u2022 ${primaryJob.stage}` : ''}
+              {primaryJob?.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}
+              {' '}({jobLabel})
+            </span>
+          )}
+          <span className="flex-1" />
+        </div>
+
+        <div className="flex h-6 items-center gap-3 border-t border-white/4 px-3">
           {model && <span className="truncate text-zinc-400">{model}</span>}
           <span className="flex-1" />
           <div className="flex items-center gap-1.5 text-zinc-500">
@@ -122,24 +140,6 @@ export function StatusBar() {
               </button>
             </div>
           </div>
-        </div>
-
-        <div className="flex h-6 items-center gap-3 border-t border-white/4 px-3">
-          <div
-            className="flex items-center"
-            title={connected ? 'Backend connected' : 'Backend offline'}
-          >
-            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-          </div>
-          {activeJobs.length > 0 && (
-            <span className="text-daw-accent truncate">
-              Generating: {primaryJob?.trackName ?? 'unknown'}
-              {primaryJob?.stage ? ` \u2022 ${primaryJob.stage}` : ''}
-              {primaryJob?.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}
-              {' '}({jobLabel})
-            </span>
-          )}
-          <span className="flex-1" />
         </div>
       </div>
     </>

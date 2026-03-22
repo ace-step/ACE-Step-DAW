@@ -467,12 +467,8 @@ export function Toolbar() {
   const openCommandPalette = useUIStore((s) => s.openCommandPalette);
   const mainView = useUIStore((s) => s.mainView);
   const setMainView = useUIStore((s) => s.setMainView);
-  const showMixer = useUIStore((s) => s.showMixer);
-  const setShowMixer = useUIStore((s) => s.setShowMixer);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
-  const showAIAssistant = useUIStore((s) => s.showAIAssistant);
-  const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { toggleRecord } = useRecording();
 
@@ -647,40 +643,6 @@ export function Toolbar() {
       </div>
 
       <div className="flex-1" />
-
-      {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
-        <ControlBarButton
-          active={showMixer}
-          onClick={() => setShowMixer(!showMixer)}
-          title="Mixer (X)"
-          disabled={!project}
-          dataTarget="mixer-button"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <line x1="3" y1="2" x2="3" y2="12" />
-            <line x1="7" y1="2" x2="7" y2="12" />
-            <line x1="11" y1="2" x2="11" y2="12" />
-            <circle cx="3" cy="8" r="1.5" fill="currentColor" />
-            <circle cx="7" cy="5" r="1.5" fill="currentColor" />
-            <circle cx="11" cy="9" r="1.5" fill="currentColor" />
-          </svg>
-        </ControlBarButton>
-        <ControlBarButton
-          active={showAIAssistant}
-          onClick={toggleAIAssistant}
-          title="AI Assistant (Cmd+/)"
-          dataTarget="assistant-button"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
-            <circle cx="7" cy="7" r="5.5" />
-            <path d="M5 6.5h4M5 8.5h2.5" strokeLinecap="round" />
-            <circle cx="7" cy="4.5" r="0.8" fill="currentColor" />
-          </svg>
-        </ControlBarButton>
-      </div>
-
-      <ToolbarSeparator />
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">

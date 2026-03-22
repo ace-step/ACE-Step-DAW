@@ -134,7 +134,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const { container } = render(<Toolbar />);
     // Look for group containers with background styling
     const groups = container.querySelectorAll('[data-testid="toolbar-group"]');
-    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
+    expect(groups.length).toBeGreaterThanOrEqual(2); // At least: smart controls, cycle+metronome
   });
 
   it('makes the toolbar horizontally scrollable for small viewports', () => {
@@ -172,9 +172,9 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
   it('provides tooltip titles on all right-side icon buttons', () => {
     render(<Toolbar />);
-    // Mixer, Loop Browser, AI Assistant should have titles directly visible
-    expect(screen.getByTitle('Mixer (X)')).toBeInTheDocument();
-    expect(screen.getByTitle('AI Assistant (Cmd+/)')).toBeInTheDocument();
+    // Mixer and AI Assistant moved to StatusBar; ACE Studio link remains
+    expect(screen.queryByTitle('Mixer (X)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('AI Assistant (Cmd+/)')).not.toBeInTheDocument();
     expect(screen.getByTitle('Visit ACE Studio')).toBeInTheDocument();
   });
 

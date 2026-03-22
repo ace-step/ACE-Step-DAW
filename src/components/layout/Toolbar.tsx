@@ -9,7 +9,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { DEFAULT_MEASURES } from '../../constants/defaults';
-import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
+import { KEY_SCALES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { Button } from '../ui/Button';
 
@@ -60,17 +60,23 @@ function splitKeyScale(keyScale?: string) {
 const inputClass = 'h-6 rounded bg-transparent px-1.5 text-center text-[11px] font-mono text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
 const selectClass = 'h-6 rounded bg-transparent px-1.5 text-[11px] text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
 
+const VALID_DENOMINATORS = [2, 4, 8, 16];
+
 function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
   const project = useProjectStore((s) => s.project);
   const updateProject = useProjectStore((s) => s.updateProject);
   const [bpmInput, setBpmInput] = useState('120');
   const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
+  const [tsNumeratorInput, setTsNumeratorInput] = useState('4');
+  const [tsDenominatorInput, setTsDenominatorInput] = useState('4');
 
   useEffect(() => {
     if (!project) return;
     setBpmInput(String(project.bpm));
     setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
-  }, [project?.bpm, project?.measures, project]);
+    setTsNumeratorInput(String(project.timeSignature ?? 4));
+    setTsDenominatorInput(String(project.timeSignatureDenominator ?? 4));
+  }, [project?.bpm, project?.measures, project?.timeSignature, project?.timeSignatureDenominator, project]);
 
   const keyScale = splitKeyScale(project?.keyScale);
 
@@ -94,6 +100,32 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     }
   };
 
+  const commitTimeSignatureNumerator = () => {
+    const parsed = Number.parseInt(tsNumeratorInput, 10);
+    const nextTs = Number.isNaN(parsed)
+      ? (project?.timeSignature ?? 4)
+      : Math.min(12, Math.max(1, parsed));
+    setTsNumeratorInput(String(nextTs));
+    if (project && nextTs !== project.timeSignature) {
+      updateProject({ timeSignature: nextTs });
+    }
+  };
+
+  const commitTimeSignatureDenominator = () => {
+    const parsed = Number.parseInt(tsDenominatorInput, 10);
+    const nextDenom = Number.isNaN(parsed) || !VALID_DENOMINATORS.includes(parsed)
+      ? (project?.timeSignatureDenominator ?? 4)
+      : parsed;
+    setTsDenominatorInput(String(nextDenom));
+    if (project && nextDenom !== (project.timeSignatureDenominator ?? 4)) {
+      updateProject({ timeSignatureDenominator: nextDenom } as never);
+    }
+  };
+
+  const blurOnEnter = (event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (event.key === 'Enter') event.currentTarget.blur();
+  };
+
   const updateKeyScale = (nextRoot: string, nextMode: string) => {
     if (!project) return;
     updateProject({ keyScale: `${nextRoot} ${nextMode}` });
@@ -111,11 +143,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         value={bpmInput}
         onChange={(event) => setBpmInput(event.target.value)}
         onBlur={commitBpm}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur();
-          }
-        }}
+        onKeyDown={blurOnEnter}
         min={40}
         max={300}
         disabled={disabled}
@@ -126,20 +154,39 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
       <ToolbarSeparator />
 
-      <select
-        value={project?.timeSignature ?? 4}
-        onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
-        disabled={disabled}
-        aria-label="Project time signature"
-        title="Project time signature"
-        className={`${selectClass} w-[3.5rem]`}
-      >
-        {TIME_SIGNATURES.map((timeSignature) => (
-          <option key={timeSignature} value={timeSignature}>
-            {timeSignature} / 4
-          </option>
-        ))}
-      </select>
+      <div className="flex items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={tsNumeratorInput}
+          onChange={(event) => setTsNumeratorInput(event.target.value)}
+          onBlur={commitTimeSignatureNumerator}
+          onKeyDown={blurOnEnter}
+          min={1}
+          max={12}
+          disabled={disabled}
+          aria-label="Time signature numerator"
+          title="Time signature numerator"
+          className={`${inputClass} w-7`}
+        />
+        <span className="text-[10px] text-zinc-500">/</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={tsDenominatorInput}
+          onChange={(event) => setTsDenominatorInput(event.target.value)}
+          onBlur={commitTimeSignatureDenominator}
+          onKeyDown={blurOnEnter}
+          min={2}
+          max={16}
+          disabled={disabled}
+          aria-label="Time signature denominator"
+          title="Time signature denominator"
+          className={`${inputClass} w-7`}
+        />
+      </div>
 
       <ToolbarSeparator />
 
@@ -181,11 +228,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         value={measuresInput}
         onChange={(event) => setMeasuresInput(event.target.value)}
         onBlur={commitMeasures}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur();
-          }
-        }}
+        onKeyDown={blurOnEnter}
         min={4}
         max={512}
         disabled={disabled}

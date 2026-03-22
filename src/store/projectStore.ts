@@ -564,7 +564,7 @@ export interface ProjectState {
   /** Call when a drag/continuous operation ends to re-enable normal history. */
   endDrag: () => void;
 
-  updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'name' | 'masterVolume' | 'measures'>>) => void;
+  updateProject: (updates: Partial<Pick<Project, 'globalCaption' | 'bpm' | 'keyScale' | 'timeSignature' | 'timeSignatureDenominator' | 'name' | 'masterVolume' | 'measures'>>) => void;
   detectPlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;
   /** Alias for detectPlaybackLatency – used by tests and external callers. */
   capturePlaybackLatency: (latency: { baseLatency?: number | null; outputLatency?: number | null }) => void;

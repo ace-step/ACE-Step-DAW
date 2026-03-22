@@ -156,7 +156,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const projectStrip = screen.getByTestId('toolbar-project-settings');
     expect(projectStrip).toBeInTheDocument();
     expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
-    expect(screen.getByLabelText('Project time signature')).toHaveValue('4');
+    expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');
     expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
     expect(screen.getByLabelText('Project measures')).toHaveValue(64);

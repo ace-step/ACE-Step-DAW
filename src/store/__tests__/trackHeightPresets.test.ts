@@ -37,8 +37,8 @@ describe('track height presets', () => {
     });
 
     it('returns track-type default for auto preset', () => {
-      expect(getTrackHeightForPreset('auto', 'stems')).toBe(64);
-      expect(getTrackHeightForPreset('auto', 'sample')).toBe(64);
+      expect(getTrackHeightForPreset('auto', 'stems')).toBe(80);
+      expect(getTrackHeightForPreset('auto', 'sample')).toBe(80);
       expect(getTrackHeightForPreset('auto', 'sequencer')).toBe(80);
       expect(getTrackHeightForPreset('auto', 'pianoRoll')).toBe(88);
     });
@@ -87,7 +87,7 @@ describe('track height presets', () => {
       useProjectStore.getState().addTrack('stems', 'pianoRoll');
       useProjectStore.getState().setAllTracksHeightPreset('auto');
       const tracks = useProjectStore.getState().project!.tracks;
-      expect(tracks[0].laneHeight).toBe(64);
+      expect(tracks[0].laneHeight).toBe(80);
       expect(tracks[1].laneHeight).toBe(80);
       expect(tracks[2].laneHeight).toBe(88);
     });

@@ -69,7 +69,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const [fileDragOver, setFileDragOver] = useState(false);
 
   const resizeRef = useRef<{ startY: number; startRowHeight: number; startLaneHeight: number } | null>(null);
-  const laneHeight = track.laneHeight ?? 64;
+  const laneHeight = track.laneHeight ?? 80;
   const rowHeight = getArrangementRowHeight(track);
 
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {

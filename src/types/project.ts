@@ -509,7 +509,7 @@ export interface Track {
   // Track Inspector
   /** Default prompt for clips on this track; falls back to track display name if empty. */
   localCaption?: string;
-  /** Per-track lane height in pixels (default 64, min 40, max 200). */
+  /** Per-track lane height in pixels (default 80, min 40, max 200). */
   laneHeight?: number;
   /** Sends to return tracks (mixer bus routing). */
   sends?: Send[];

@@ -126,7 +126,7 @@ export function TrackHeader({
     setEditValue(track.displayName);
   }, [track.displayName]);
 
-  const laneHeight = track.laneHeight ?? 64;
+  const laneHeight = track.laneHeight ?? 80;
   const rowHeight = getArrangementRowHeight(track);
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const isCompact = laneHeight < 52;

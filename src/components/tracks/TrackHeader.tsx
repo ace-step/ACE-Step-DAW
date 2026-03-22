@@ -861,7 +861,7 @@ export function TrackHeader({
                         key={g.id}
                         label={g.displayName}
                         onClick={() => { setCtxMenu(null); setGroupSubmenu(false); moveTrackToGroup(track.id, g.id); }}
-                        color={track.parentTrackId === g.id ? '#4a90d9' : undefined}
+                        color={track.parentTrackId === g.id ? '#4A5FFF' : undefined}
                       />
                     ))}
                     {track.parentTrackId && (

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 export const CONTEXT_MENU = {
   bg: '#2a2a2a',
   border: '#444',
-  hoverBg: 'rgba(74, 144, 217, 0.25)', // daw-accent at 25%
+  hoverBg: 'rgba(74, 95, 255, 0.25)', // daw-accent at 25%
   dangerColor: '#e74c3c',
   dangerHoverBg: 'rgba(231, 76, 60, 0.15)',
   textColor: '#d4d4d8', // zinc-300

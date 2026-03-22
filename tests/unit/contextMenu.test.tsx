@@ -115,7 +115,7 @@ describe('ContextMenuItem', () => {
     render(<ContextMenuItem label="Edit" onClick={vi.fn()} />);
     const btn = screen.getByText('Edit').closest('button')!;
     fireEvent.mouseEnter(btn);
-    expect(btn.style.background).toContain('rgba(74, 144, 217');
+    expect(btn.style.background).toContain('rgba(74, 95, 255');
   });
 
   it('resets hover background on mouseLeave', () => {

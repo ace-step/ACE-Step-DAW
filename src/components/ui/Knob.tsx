@@ -161,7 +161,7 @@ export function Knob({
           <path
             d={fillPath}
             fill="none"
-            stroke="#4a90d9"
+            stroke="#4A5FFF"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
           />

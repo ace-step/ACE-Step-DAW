@@ -35,7 +35,6 @@ const DEFAULT_PROVIDERS: ChatProvider[] = [
   { id: 'google', name: 'Google AI', apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', enabled: false },
   { id: 'openrouter', name: 'OpenRouter', apiKey: '', baseUrl: 'https://openrouter.ai/api/v1', enabled: false },
   { id: 'deepseek', name: 'DeepSeek', apiKey: '', baseUrl: 'https://api.deepseek.com/v1', enabled: false },
-  { id: 'groq', name: 'Groq', apiKey: '', baseUrl: 'https://api.groq.com/openai/v1', enabled: false },
   { id: 'xai', name: 'xAI', apiKey: '', baseUrl: 'https://api.xai.io/v1', enabled: false },
 ];
 
@@ -55,6 +54,40 @@ function saveToStorage<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+const PROVIDER_ICONS: Record<string, React.ReactNode> = {
+  anthropic: (
+    <svg width="12" height="12" viewBox="50 50 412 412" fill="currentColor" aria-hidden="true">
+      <path d="M142.27 316.619l73.655-41.326 1.238-3.589-1.238-1.996-3.589-.001-12.31-.759-42.084-1.138-36.498-1.516-35.361-1.896-8.897-1.895-8.34-10.995.859-5.484 7.482-5.03 10.717.935 23.683 1.617 35.537 2.452 25.782 1.517 38.193 3.968h6.064l.86-2.451-2.073-1.517-1.618-1.517-36.776-24.922-39.81-26.338-20.852-15.166-11.273-7.683-5.687-7.204-2.451-15.721 10.237-11.273 13.75.935 3.513.936 13.928 10.716 29.749 23.027 38.848 28.612 5.687 4.727 2.275-1.617.278-1.138-2.553-4.271-21.13-38.193-22.546-38.848-10.035-16.101-2.654-9.655c-.935-3.968-1.617-7.304-1.617-11.374l11.652-15.823 6.445-2.073 15.545 2.073 6.547 5.687 9.655 22.092 15.646 34.78 24.265 47.291 7.103 14.028 3.791 12.992 1.416 3.968 2.449-.001v-2.275l1.997-26.641 3.69-32.707 3.589-42.084 1.239-11.854 5.863-14.206 11.652-7.683 9.099 4.348 7.482 10.716-1.036 6.926-4.449 28.915-8.72 45.294-5.687 30.331h3.313l3.792-3.791 15.342-20.372 25.782-32.227 11.374-12.789 13.27-14.129 8.517-6.724 16.1-.001 11.854 17.617-5.307 18.199-16.581 21.029-13.75 17.819-19.716 26.54-12.309 21.231 1.138 1.694 2.932-.278 44.536-9.479 24.062-4.347 28.714-4.928 12.992 6.066 1.416 6.167-5.106 12.613-30.71 7.583-36.018 7.204-53.636 12.689-.657.48.758.935 24.164 2.275 10.337.556h25.301l47.114 3.514 12.309 8.139 7.381 9.959-1.238 7.583-18.957 9.655-25.579-6.066-59.702-14.205-20.474-5.106-2.83-.001v1.694l17.061 16.682 31.266 28.233 39.152 36.397 1.997 8.999-5.03 7.102-5.307-.758-34.401-25.883-13.27-11.651-30.053-25.302-1.996-.001v2.654l6.926 10.136 36.574 54.975 1.895 16.859-2.653 5.485-9.479 3.311-10.414-1.895-21.408-30.054-22.092-33.844-17.819-30.331-2.173 1.238-10.515 113.261-4.929 5.788-11.374 4.348-9.478-7.204-5.03-11.652 5.03-23.027 6.066-30.052 4.928-23.886 4.449-29.674 2.654-9.858-.177-.657-2.173.278-22.37 30.71-34.021 45.977-26.919 28.815-6.445 2.553-11.173-5.789 1.037-10.337 6.243-9.2 37.257-47.392 22.47-29.371 14.508-16.961-.101-2.451h-.859l-98.954 64.251-17.618 2.275-7.583-7.103.936-11.652 3.589-3.791 29.749-20.474z" />
+    </svg>
+  ),
+  openai: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M22.28 9.37a5.93 5.93 0 00-.51-4.89 6.05 6.05 0 00-6.5-2.87A5.93 5.93 0 0010.8.16a6.05 6.05 0 00-5.77 4.17 5.93 5.93 0 00-3.97 2.88 6.05 6.05 0 00.74 7.1 5.93 5.93 0 00.51 4.89 6.05 6.05 0 006.5 2.87 5.93 5.93 0 004.47 1.45 6.05 6.05 0 005.77-4.17 5.93 5.93 0 003.97-2.88 6.05 6.05 0 00-.74-7.1zM13.27 22.18a4.48 4.48 0 01-2.88-1.05l.14-.08 4.78-2.76a.78.78 0 00.39-.67v-6.74l2.02 1.17a.07.07 0 01.04.05v5.58a4.52 4.52 0 01-4.49 4.5zM3.6 18.12a4.48 4.48 0 01-.54-3.02l.14.08 4.78 2.76a.78.78 0 00.78 0l5.83-3.37v2.33a.07.07 0 01-.03.06l-4.83 2.79a4.52 4.52 0 01-6.13-1.63zM2.34 7.9a4.48 4.48 0 012.34-1.97V11.6a.78.78 0 00.39.67l5.83 3.37-2.02 1.17a.07.07 0 01-.07 0L4 14.02A4.52 4.52 0 012.34 7.9zm17.23 4.02l-5.83-3.37 2.02-1.17a.07.07 0 01.07 0l4.83 2.79a4.52 4.52 0 01-.7 8.14v-5.72a.78.78 0 00-.39-.67zm2.01-3.03l-.14-.08-4.78-2.76a.78.78 0 00-.78 0L10.05 9.42V7.09a.07.07 0 01.03-.06l4.83-2.79a4.52 4.52 0 016.67 4.65zM8.89 12.62l-2.02-1.17a.07.07 0 01-.04-.05V5.82a4.52 4.52 0 017.37-3.49l-.14.08-4.78 2.76a.78.78 0 00-.39.67zm1.1-2.36l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5z" />
+    </svg>
+  ),
+  google: (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+      <text x="2" y="11" fill="currentColor" stroke="none" fontSize="12" fontWeight="700" fontFamily="Arial,sans-serif">G</text>
+    </svg>
+  ),
+  openrouter: (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M2 7h3l2-4 2 8 2-4h3" />
+    </svg>
+  ),
+  deepseek: (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="5" />
+      <path d="M7 4v3l2 2" />
+    </svg>
+  ),
+  xai: (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M3 3l8 8M11 3l-8 8" />
+    </svg>
+  ),
+};
+
 function loadProviders(): ChatProvider[] {
   const stored = loadFromStorage<ChatProvider>(CHAT_PROVIDERS_KEY, DEFAULT_PROVIDERS);
   return DEFAULT_PROVIDERS.map((dp) => {
@@ -68,19 +101,6 @@ type SettingsTab = 'providers' | 'prompts' | 'skills';
 const inputClass = 'w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-daw-accent/50 focus:outline-none';
 const labelClass = 'block text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1';
 
-function SettingsNavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
-        active ? 'bg-daw-accent/15 text-daw-accent' : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
 
 /* ── Providers tab ── */
 function ProvidersTab() {
@@ -110,8 +130,9 @@ function ProvidersTab() {
                 : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
             }`}
           >
-            {p.apiKey && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="API key set" />}
+            <span className="shrink-0 opacity-70">{PROVIDER_ICONS[p.id]}</span>
             <span className="truncate">{p.name}</span>
+            {p.apiKey && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 ml-auto" title="API key set" />}
           </button>
         ))}
       </div>
@@ -340,49 +361,43 @@ function SkillsTab() {
 function ChatSettings({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<SettingsTab>('providers');
 
+  const tabClass = (t: SettingsTab) =>
+    `px-3 py-1.5 text-[11px] font-medium transition-colors ${
+      tab === t
+        ? 'text-daw-accent border-b-2 border-daw-accent'
+        : 'text-zinc-500 hover:text-zinc-300 border-b-2 border-transparent'
+    }`;
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#333] px-3 py-2 shrink-0">
-        <span className="text-[12px] font-medium text-zinc-200">Settings</span>
+      <div className="flex items-center gap-2 border-b border-[#333] px-3 py-2 shrink-0">
         <button
           onClick={onClose}
-          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-[#333] hover:text-zinc-300"
+          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-[#333] hover:text-zinc-200"
           title="Back to Chat"
           aria-label="Back to Chat"
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M2 2l8 8M10 2l-8 8" />
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M8 2L4 6l4 4" />
           </svg>
         </button>
+        <span className="text-[12px] font-medium text-zinc-200">Settings</span>
       </div>
 
-      {/* Navigation */}
-      <div className="border-b border-[#333] py-1 shrink-0">
-        <SettingsNavItem
-          label="Providers"
-          active={tab === 'providers'}
-          onClick={() => setTab('providers')}
-          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M7 1v3M7 10v3M1 7h3M10 7h3" strokeLinecap="round" /><circle cx="7" cy="7" r="2.5" /></svg>}
-        />
-        <SettingsNavItem
-          label="Prompts"
-          active={tab === 'prompts'}
-          onClick={() => setTab('prompts')}
-          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 3h10M2 6h7M2 9h5M2 12h8" /></svg>}
-        />
-        <SettingsNavItem
-          label="Skills"
-          active={tab === 'skills'}
-          onClick={() => setTab('skills')}
-          icon={<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M7 1l2 4h4l-3.5 3 1.5 4.5L7 10l-4 2.5 1.5-4.5L1 5h4z" /></svg>}
-        />
+      {/* Tab bar */}
+      <div className="flex border-b border-[#333] shrink-0">
+        <button className={tabClass('providers')} onClick={() => setTab('providers')}>Providers</button>
+        <button className={tabClass('prompts')} onClick={() => setTab('prompts')}>Prompts</button>
+        <button className={tabClass('skills')} onClick={() => setTab('skills')}>Skills</button>
       </div>
 
       {/* Tab content */}
-      {tab === 'providers' && <ProvidersTab />}
-      {tab === 'prompts' && <PromptsTab />}
-      {tab === 'skills' && <SkillsTab />}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {tab === 'providers' && <ProvidersTab />}
+        {tab === 'prompts' && <PromptsTab />}
+        {tab === 'skills' && <SkillsTab />}
+      </div>
     </div>
   );
 }

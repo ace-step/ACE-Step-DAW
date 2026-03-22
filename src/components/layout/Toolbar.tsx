@@ -446,7 +446,8 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-11 min-w-0 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none"
+      className="flex h-11 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none overflow-x-auto"
+      style={{ scrollbarWidth: 'none' }}
     >
       {/* Left: Panel toggle buttons */}
       <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">

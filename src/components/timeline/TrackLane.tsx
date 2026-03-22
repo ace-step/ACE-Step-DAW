@@ -9,7 +9,7 @@ import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { getBarDuration, snapToGrid } from '../../utils/time';
 import { useAudioImport } from '../../hooks/useAudioImport';
-import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
+import { CanvasContextMenu } from './CanvasContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
@@ -28,32 +28,6 @@ interface TrackLaneProps {
   track: Track;
 }
 
-interface LaneContextMenuProps {
-  x: number;
-  y: number;
-  onAddLayer: () => void;
-  onOpenSequencer?: () => void;
-  onOpenPianoRoll?: () => void;
-  onCreateQuickSampler?: () => void;
-  onClose: () => void;
-}
-
-function LaneContextMenu({ x, y, onAddLayer, onOpenSequencer, onOpenPianoRoll, onCreateQuickSampler, onClose }: LaneContextMenuProps) {
-  return (
-    <ContextMenuWrapper x={x} y={y} onClose={onClose}>
-      {onOpenSequencer && (
-        <ContextMenuItem label="Open Sequencer Editor..." onClick={() => { onClose(); onOpenSequencer(); }} color="#6ee7b7" />
-      )}
-      {onOpenPianoRoll && (
-        <ContextMenuItem label="Open Piano Roll..." onClick={() => { onClose(); onOpenPianoRoll(); }} color="#c4b5fd" />
-      )}
-      {onCreateQuickSampler && (
-        <ContextMenuItem label="Create Quick Sampler..." onClick={() => { onClose(); onCreateQuickSampler(); }} color="#fcd34d" />
-      )}
-      <ContextMenuItem label="Add Layer..." onClick={() => { onClose(); onAddLayer(); }} />
-    </ContextMenuWrapper>
-  );
-}
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -91,7 +65,6 @@ export function TrackLane({ track }: TrackLaneProps) {
     importMidiFile,
     importLoopToTrack,
     importAssetToTrack,
-    openQuickSamplerFilePicker,
   } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
 
@@ -403,25 +376,9 @@ export function TrackLane({ track }: TrackLaneProps) {
         </>
 
         {ctxMenu && (
-          <LaneContextMenu
+          <CanvasContextMenu
             x={ctxMenu.x}
             y={ctxMenu.y}
-            onAddLayer={() => setAddLayerTarget({ startTime: ctxMenu.startTime, duration: ctxMenu.duration })}
-            onOpenSequencer={isSequencer ? () => setOpenSequencerTrackId(track.id) : undefined}
-            onOpenPianoRoll={isPianoRoll ? () => {
-              const clip = addClip(track.id, {
-                startTime: ctxMenu.startTime,
-                duration: defaultClipDuration,
-                prompt: 'MIDI Clip',
-                globalCaption: '',
-                lyrics: '',
-                midiData: { notes: [], grid: '1/16' },
-                source: 'uploaded',
-              });
-              selectClip(clip.id);
-              setOpenPianoRoll(track.id, clip.id);
-            } : undefined}
-            onCreateQuickSampler={() => openQuickSamplerFilePicker()}
             onClose={() => setCtxMenu(null)}
           />
         )}

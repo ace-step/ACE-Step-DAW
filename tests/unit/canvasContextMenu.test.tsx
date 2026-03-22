@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { CanvasContextMenu } from '../../src/components/timeline/CanvasContextMenu';
 
 describe('CanvasContextMenu', () => {
@@ -11,6 +11,7 @@ describe('CanvasContextMenu', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   it('renders with correct test id', () => {
@@ -50,8 +51,9 @@ describe('CanvasContextMenu', () => {
 
   it('shows AI Tools submenu on hover', () => {
     render(<CanvasContextMenu {...defaultProps} />);
-    const aiToolsBtn = screen.getByText('AI Tools').closest('div')!;
-    fireEvent.mouseEnter(aiToolsBtn);
+    const trigger = screen.getByTestId('ai-tools-submenu-trigger');
+    fireEvent.mouseEnter(trigger);
+    act(() => { vi.advanceTimersByTime(100); });
     expect(screen.getByText('Inspire Me')).toBeInTheDocument();
     expect(screen.getByText('Add a Layer')).toBeInTheDocument();
     expect(screen.getByText('Music Enhancer')).toBeInTheDocument();
@@ -62,17 +64,20 @@ describe('CanvasContextMenu', () => {
 
   it('hides AI Tools submenu on mouse leave', () => {
     render(<CanvasContextMenu {...defaultProps} />);
-    const aiToolsBtn = screen.getByText('AI Tools').closest('div')!;
-    fireEvent.mouseEnter(aiToolsBtn);
+    const trigger = screen.getByTestId('ai-tools-submenu-trigger');
+    fireEvent.mouseEnter(trigger);
+    act(() => { vi.advanceTimersByTime(100); });
     expect(screen.getByText('Inspire Me')).toBeInTheDocument();
-    fireEvent.mouseLeave(aiToolsBtn);
+    fireEvent.mouseLeave(trigger);
+    act(() => { vi.advanceTimersByTime(200); });
     expect(screen.queryByText('Inspire Me')).not.toBeInTheDocument();
   });
 
   it('marks Voice Changer, Stem Splitter, Sound Effects as disabled', () => {
     render(<CanvasContextMenu {...defaultProps} />);
-    const aiToolsBtn = screen.getByText('AI Tools').closest('div')!;
-    fireEvent.mouseEnter(aiToolsBtn);
+    const trigger = screen.getByTestId('ai-tools-submenu-trigger');
+    fireEvent.mouseEnter(trigger);
+    act(() => { vi.advanceTimersByTime(100); });
 
     const voiceChanger = screen.getByText('Voice Changer').closest('button')!;
     const stemSplitter = screen.getByText('Stem Splitter').closest('button')!;
@@ -85,8 +90,9 @@ describe('CanvasContextMenu', () => {
 
   it('calls onClose when clicking Inspire Me', () => {
     render(<CanvasContextMenu {...defaultProps} />);
-    const aiToolsBtn = screen.getByText('AI Tools').closest('div')!;
-    fireEvent.mouseEnter(aiToolsBtn);
+    const trigger = screen.getByTestId('ai-tools-submenu-trigger');
+    fireEvent.mouseEnter(trigger);
+    act(() => { vi.advanceTimersByTime(100); });
     fireEvent.click(screen.getByText('Inspire Me'));
     expect(defaultProps.onClose).toHaveBeenCalled();
   });

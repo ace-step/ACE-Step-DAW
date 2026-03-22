@@ -38,7 +38,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     'bg-transparent hover:bg-red-900/30 text-red-400 hover:text-red-300',
 };
 
-const ACTIVE_CLASSES = 'bg-daw-accent text-white shadow-sm';
+const ACTIVE_CLASSES = 'bg-daw-accent text-white';
 
 const BASE_CLASSES =
   'inline-flex items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed select-none';

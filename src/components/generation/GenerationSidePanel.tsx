@@ -239,11 +239,11 @@ export function GenerationSidePanel() {
       >
         <div className="flex items-center gap-2">
           {/* Left group: Library + Mixer */}
-          <div className="flex items-center gap-1 rounded-[16px] px-1.5 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)', border: '1px solid rgb(56, 63, 76)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+          <div className="flex items-center gap-1 rounded-[12px] px-1.5 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)', border: '1px solid rgb(56, 63, 76)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
             <button
               type="button"
               onClick={toggleLoopBrowser}
-              className={`group relative flex h-11 w-11 items-center justify-center rounded-[14px] transition-all duration-200 ${
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-all duration-200 ${
                 loopBrowserOpen
                   ? 'bg-white/10 text-white'
                   : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200'
@@ -264,7 +264,7 @@ export function GenerationSidePanel() {
             <button
               type="button"
               onClick={() => setShowMixer(!showMixer)}
-              className={`group relative flex h-11 w-11 items-center justify-center rounded-[14px] transition-all duration-200 ${
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-all duration-200 ${
                 showMixer
                   ? 'bg-white/10 text-white'
                   : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200'
@@ -289,7 +289,7 @@ export function GenerationSidePanel() {
           </div>
 
           {/* Right group: Inspire Me + Chat + Settings */}
-          <div className="flex items-center gap-1 rounded-[16px] px-1.5 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)', border: '1px solid rgb(56, 63, 76)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+          <div className="flex items-center gap-1 rounded-[12px] px-1.5 py-1.5" style={{ backgroundColor: 'rgb(35, 38, 43)', border: '1px solid rgb(56, 63, 76)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
             <button
               type="button"
               onClick={() => {
@@ -299,7 +299,7 @@ export function GenerationSidePanel() {
                 }
                 openGenerationPanelView(generationPanelView);
               }}
-              className={`group relative flex h-11 w-11 items-center justify-center rounded-[14px] transition-all duration-200 ${
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-all duration-200 ${
                 show
                   ? 'bg-white/10 text-white'
                   : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200'
@@ -320,7 +320,7 @@ export function GenerationSidePanel() {
             <button
               type="button"
               onClick={toggleAIAssistant}
-              className={`group relative flex h-11 w-11 items-center justify-center rounded-[14px] transition-all duration-200 ${
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-all duration-200 ${
                 showAIAssistant
                   ? 'bg-white/10 text-white'
                   : 'text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200'
@@ -340,7 +340,7 @@ export function GenerationSidePanel() {
             <button
               type="button"
               onClick={() => useUIStore.getState().setShowSettingsDialog(true)}
-              className="group relative flex h-11 w-11 items-center justify-center rounded-[14px] text-zinc-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-zinc-200"
+              className="group relative flex h-10 w-10 items-center justify-center rounded-[10px] text-zinc-400 transition-all duration-200 hover:bg-white/[0.06] hover:text-zinc-200"
               aria-label="Settings"
               title="Settings"
               data-testid="dock-settings-toggle"

@@ -119,7 +119,7 @@ function ProvidersTab() {
 
   return (
     <div className="flex flex-1 min-h-0">
-      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+      <div className="w-[120px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
         {providers.map((p) => (
           <button
             key={p.id}
@@ -216,7 +216,7 @@ function PromptsTab() {
 
   return (
     <div className="flex flex-1 min-h-0">
-      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+      <div className="w-[120px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
         {prompts.map((p) => (
           <button
             key={p.id}
@@ -303,7 +303,7 @@ function SkillsTab() {
 
   return (
     <div className="flex flex-1 min-h-0">
-      <div className="w-[100px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
+      <div className="w-[120px] shrink-0 border-r border-[#333] overflow-y-auto py-1">
         {servers.map((s) => (
           <button
             key={s.id}

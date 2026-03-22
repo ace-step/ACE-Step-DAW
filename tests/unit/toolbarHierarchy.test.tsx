@@ -139,9 +139,9 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
   });
 
-  it('does not make the toolbar itself horizontally scrollable', () => {
+  it('makes the toolbar horizontally scrollable for small viewports', () => {
     const { container } = render(<Toolbar />);
-    expect(container.firstChild).not.toHaveClass('overflow-x-auto');
+    expect(container.firstChild).toHaveClass('overflow-x-auto');
   });
 
   it('removes the top toolbar Generate button in favor of the side dock entry', () => {

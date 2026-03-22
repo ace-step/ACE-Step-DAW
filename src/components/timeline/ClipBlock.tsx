@@ -92,6 +92,7 @@ function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresen
 export function ClipBlock({ clip, track }: ClipBlockProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const selectClip = useUIStore((s) => s.selectClip);
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -148,8 +149,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   useEffect(() => {
     return () => {
       if (scissorRef.current) document.body.style.cursor = '';
-      if (document.body.style.cursor === 'col-resize') document.body.style.cursor = '';
-      if (document.documentElement.style.cursor === 'col-resize') document.documentElement.style.cursor = '';
+      if (/(?:^|-)resize$/.test(document.body.style.cursor)) document.body.style.cursor = '';
+      if (/(?:^|-)resize$/.test(document.documentElement.style.cursor)) document.documentElement.style.cursor = '';
     };
   }, []);
 
@@ -219,7 +220,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
-  const isSelected = selectedClipIds.has(clip.id);
+  const isClipSelected = selectedClipIds.has(clip.id);
+  const isTrackSelected = selectedTrackIds.has(track.id);
+  const isSelected = isClipSelected && isTrackSelected;
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);
@@ -656,13 +659,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
-  const setResizeCursor = useCallback((active: boolean) => {
-    const cursor = active ? 'col-resize' : '';
+  const setResizeCursor = useCallback((cursor: 'w-resize' | 'e-resize' | null) => {
+    const nextCursor = cursor ?? '';
     if (clipBlockRef.current) {
-      clipBlockRef.current.style.cursor = cursor;
+      clipBlockRef.current.style.cursor = nextCursor;
     }
-    document.body.style.cursor = cursor;
-    document.documentElement.style.cursor = cursor;
+    document.body.style.cursor = nextCursor;
+    document.documentElement.style.cursor = nextCursor;
   }, []);
 
   const syncHoverState = useCallback((clientX: number, clientY: number, altKey: boolean, currentTarget: HTMLElement) => {
@@ -671,13 +674,15 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const relY = clientY - rect.top;
 
     if (relX <= EDGE_HANDLE_PX || relX >= rect.width - EDGE_HANDLE_PX) {
-      setHoveredResizeEdge(relX <= EDGE_HANDLE_PX ? 'left' : 'right');
+      const edge = relX <= EDGE_HANDLE_PX ? 'left' : 'right';
+      const cursor = edge === 'left' ? 'w-resize' : 'e-resize';
+      setHoveredResizeEdge(edge);
       setHoverSeekX(null);
-      setResizeCursor(true);
-      currentTarget.style.cursor = 'col-resize';
+      setResizeCursor(cursor);
+      currentTarget.style.cursor = cursor;
     } else {
       setHoveredResizeEdge(null);
-      setResizeCursor(false);
+      setResizeCursor(null);
       if (relY <= HEADER_RAIL_HEIGHT_PX) {
         setHoverSeekX(null);
         currentTarget.style.cursor = altKey ? 'ew-resize' : 'grab';
@@ -701,17 +706,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     setHoveredResizeEdge(null);
     setHoverSeekX(null);
     el.style.cursor = '';
-    setResizeCursor(false);
+    setResizeCursor(null);
   }, [setResizeCursor]);
 
   const handleResizeHandleEnter = useCallback((edge: 'left' | 'right') => () => {
     setHoveredResizeEdge(edge);
-    setResizeCursor(true);
+    setResizeCursor(edge === 'left' ? 'w-resize' : 'e-resize');
   }, [setResizeCursor]);
 
   const handleResizeHandleLeave = useCallback(() => {
     setHoveredResizeEdge(null);
-    setResizeCursor(false);
+    setResizeCursor(null);
   }, [setResizeCursor]);
 
   const updateFadeFromPointer = useCallback((edge: 'in' | 'out', clientX: number) => {
@@ -869,9 +874,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         />
 
         <div
-          className="absolute top-0 bottom-0 left-0 w-[16px] cursor-col-resize z-10 group/resize-left"
+          className="absolute top-0 bottom-0 left-0 w-[16px] cursor-w-resize z-10 group/resize-left"
           data-testid="resize-handle-left"
-          style={{ cursor: 'col-resize' }}
+          style={{ cursor: 'w-resize' }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
         >
@@ -887,9 +892,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           />
         </div>
         <div
-          className="absolute top-0 bottom-0 right-0 w-[16px] cursor-col-resize z-10 group/resize-right"
+          className="absolute top-0 bottom-0 right-0 w-[16px] cursor-e-resize z-10 group/resize-right"
           data-testid="resize-handle-right"
-          style={{ cursor: 'col-resize' }}
+          style={{ cursor: 'e-resize' }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
         >

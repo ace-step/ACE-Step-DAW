@@ -128,10 +128,10 @@ describe('ClipBlock hover and active feedback', () => {
 
     fireEvent.mouseEnter(leftHandle);
 
-    expect(leftHandle.style.cursor).toBe('col-resize');
-    expect(clipEl.style.cursor).toBe('col-resize');
-    expect(document.body.style.cursor).toBe('col-resize');
-    expect(document.documentElement.style.cursor).toBe('col-resize');
+    expect(leftHandle.style.cursor).toBe('w-resize');
+    expect(clipEl.style.cursor).toBe('w-resize');
+    expect(document.body.style.cursor).toBe('w-resize');
+    expect(document.documentElement.style.cursor).toBe('w-resize');
     expect(leftIndicator.style.backgroundColor).toContain('255, 255, 255');
     expect(leftHoverZone.style.background).toContain('linear-gradient');
 
@@ -163,9 +163,35 @@ describe('ClipBlock hover and active feedback', () => {
 
     fireEvent.mouseEnter(clipEl, { clientX: 103, clientY: 24 });
 
-    expect(clipEl.style.cursor).toBe('col-resize');
-    expect(document.body.style.cursor).toBe('col-resize');
-    expect(document.documentElement.style.cursor).toBe('col-resize');
+    expect(clipEl.style.cursor).toBe('w-resize');
+    expect(document.body.style.cursor).toBe('w-resize');
+    expect(document.documentElement.style.cursor).toBe('w-resize');
+  });
+
+  it('uses a right-edge resize cursor when hovering the clip end', () => {
+    const clip = makeClip();
+    const track = makeTrack();
+
+    render(<ClipBlock clip={clip} track={track} />);
+
+    const clipEl = screen.getByTestId(`clip-${clip.id}`) as HTMLElement;
+    vi.spyOn(clipEl, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 20,
+      width: 160,
+      height: 40,
+      top: 20,
+      right: 260,
+      bottom: 60,
+      left: 100,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseEnter(clipEl, { clientX: 257, clientY: 24 });
+
+    expect(clipEl.style.cursor).toBe('e-resize');
+    expect(document.body.style.cursor).toBe('e-resize');
+    expect(document.documentElement.style.cursor).toBe('e-resize');
   });
 
   it('does not interfere with selection ring when clip is selected', () => {
@@ -174,6 +200,7 @@ describe('ClipBlock hover and active feedback', () => {
 
     // Select the clip
     useUIStore.getState().selectClip(clip.id, false);
+    useUIStore.getState().selectTrack(track.id, false);
 
     render(<ClipBlock clip={clip} track={track} />);
 
@@ -184,6 +211,22 @@ describe('ClipBlock hover and active feedback', () => {
     // And hover/active classes should still be present
     expect(clipEl.className).toMatch(/hover:/);
     expect(clipEl.className).toMatch(/active:/);
+  });
+
+  it('removes the visual selected state when another track becomes selected', () => {
+    const clip = makeClip();
+    const track = makeTrack();
+
+    useUIStore.getState().selectClip(clip.id, false);
+    useUIStore.getState().selectTrack('track-2', false);
+
+    render(<ClipBlock clip={clip} track={track} />);
+
+    const clipEl = screen.getByTestId(`clip-${clip.id}`);
+    const bodySurface = screen.getByTestId('clip-body-surface') as HTMLElement;
+
+    expect(clipEl.className).not.toContain('ring-2');
+    expect(bodySurface.style.background).not.toContain('253, 251, 246');
   });
 
   it('exposes a dedicated header rail move handle with grab affordance', () => {

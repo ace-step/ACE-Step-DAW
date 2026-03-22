@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
@@ -97,10 +98,10 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 rounded-xl border border-[#434343] bg-[#1c1c1c] px-1 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+      className="flex items-center gap-1 px-0.5 py-0.5"
       data-testid="toolbar-project-settings"
     >
-      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <input
           type="text"
           inputMode="numeric"
@@ -118,20 +119,20 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project BPM"
           title="Project BPM"
-          className="h-6 w-[3.35rem] rounded-md border border-[#383838] bg-[#262626] px-2 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className="h-6 w-[3.35rem] rounded-md border border-daw-border bg-daw-surface-2 px-2 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
         />
       </div>
 
-      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <select
           value={project?.timeSignature ?? 4}
           onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
           disabled={disabled}
           aria-label="Project time signature"
           title="Project time signature"
-          className="h-6 w-[3.5rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className="h-6 w-[3.5rem] rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
         >
           {TIME_SIGNATURES.map((timeSignature) => (
             <option key={timeSignature} value={timeSignature}>
@@ -141,16 +142,16 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         </select>
       </div>
 
-      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center gap-0.5 rounded-md bg-black/10 px-1 py-0.5">
+      <div className="flex items-center gap-0.5 rounded-md px-0.5 py-0.5">
         <select
           value={keyScale.root}
           onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
           disabled={disabled}
           aria-label="Project key root"
           title="Project key root"
-          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className="h-6 w-11 rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
         >
           {KEY_ROOTS.map((root) => (
             <option key={root} value={root}>
@@ -164,7 +165,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project scale mode"
           title="Project scale mode"
-          className="h-6 w-[3.7rem] rounded-md border border-[#383838] bg-[#262626] px-1.5 text-[11px] text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className="h-6 w-[3.7rem] rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
         >
           {SCALE_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -174,9 +175,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         </select>
       </div>
 
-      <div className="h-4 w-px bg-white/6" aria-hidden="true" />
+      <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center rounded-md bg-black/10 px-1 py-0.5">
+      <div className="flex items-center rounded-md px-0.5 py-0.5">
         <input
           type="number"
           value={measuresInput}
@@ -192,7 +193,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project measures"
           title="Project measures"
-          className="h-6 w-11 rounded-md border border-[#383838] bg-[#262626] px-1.5 text-center text-[11px] font-mono text-zinc-100 focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          className="h-6 w-11 rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
         />
       </div>
     </div>
@@ -274,7 +275,7 @@ function ControlBarButton({
 }
 
 function ToolbarSeparator() {
-  return <div className="w-px h-5 bg-[#444]/50" data-testid="toolbar-separator" />;
+  return <div className="w-px h-5 bg-white/8" data-testid="toolbar-separator" />;
 }
 
 function AceStudioLink() {
@@ -299,30 +300,56 @@ function AceStudioLink() {
 function FileMenu({ disabled }: { disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const setShowExportDialog = useUIStore((s) => s.setShowExportDialog);
   const showUndoHistoryPanel = useUIStore((s) => s.showUndoHistoryPanel);
   const setShowUndoHistoryPanel = useUIStore((s) => s.setShowUndoHistoryPanel);
   const setShowShareDialog = useCollaborationStore((s) => s.setShowShareDialog);
   const { openFilePicker } = useAudioImport();
 
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 6,
+      left: rect.left,
+    });
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
+    function closeMenu() {
+      setOpen(false);
+    }
+
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const clickedTrigger = triggerRef.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+      if (!clickedTrigger && !clickedMenu) {
         setOpen(false);
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
   }, [open]);
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative">
       <button
+        ref={triggerRef}
         onClick={() => setOpen(!open)}
         disabled={disabled}
         data-testid="file-menu-trigger"
-        className="flex items-center gap-1 px-2 py-1 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 rounded transition-colors disabled:opacity-30"
+        className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white disabled:opacity-30"
         title="File actions"
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -333,40 +360,46 @@ function FileMenu({ disabled }: { disabled: boolean }) {
           <path d="M1 2.5L4 5.5L7 2.5" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-48 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl z-50 py-1" data-testid="file-menu-dropdown">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[100] w-48 rounded-lg border border-daw-border bg-daw-surface-2 py-1 shadow-2xl"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+          data-testid="file-menu-dropdown"
+        >
           <button
             onClick={() => { setShowExportDialog(true); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           >
             Export Audio
           </button>
           <button
             onClick={() => { useProjectStore.getState().exportProjectMidi(); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           >
             Export MIDI
           </button>
           <button
             onClick={() => { openFilePicker(); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           >
             Import Audio/MIDI
           </button>
-          <div className="w-full h-px bg-[#444]/50 my-1" />
+          <div className="my-1 h-px w-full bg-daw-border/80" />
           <button
             onClick={() => { setShowUndoHistoryPanel(!showUndoHistoryPanel); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           >
             Undo History
           </button>
           <button
             onClick={() => { setShowShareDialog(true); setOpen(false); }}
-            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:text-white hover:bg-daw-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           >
             Share Project
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -413,11 +446,10 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex items-center h-11 px-2 gap-1 bg-gradient-to-b from-[#3a3a3a] to-[#2d2d2d] border-b border-[#1a1a1a] shrink-0 select-none overflow-x-auto"
-      style={{ scrollbarWidth: 'none' }}
+      className="flex h-11 min-w-0 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none"
     >
       {/* Left: Panel toggle buttons */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}
@@ -435,7 +467,7 @@ export function Toolbar() {
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5 rounded-lg border border-[#4b4b4b] bg-[#242424] p-0.5 shrink-0">
+      <div className="flex items-center gap-0.5 rounded-lg border border-white/8 bg-black/10 p-0.5 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -461,7 +493,7 @@ export function Toolbar() {
       <ProjectSettingsStrip disabled={!project} />
 
       {/* Project actions + File menu */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <Button variant="ghost" size="sm" onClick={() => setShowProjectListDialog(true)} title="Projects">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="inline -mt-px mr-1">
             <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
@@ -478,7 +510,7 @@ export function Toolbar() {
 
       {/* Center: Transport controls — prominent pill container */}
       <div
-        className="flex items-center gap-0.5 bg-[#353535] rounded-full px-2 py-0.5 shrink-0"
+        className="flex items-center gap-0.5 rounded-full border border-white/8 bg-black/10 px-1.5 py-0.5 shrink-0"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
@@ -495,7 +527,7 @@ export function Toolbar() {
           className={`w-10 h-9 flex items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 active:scale-95 ${
             isPlaying
               ? 'bg-daw-accent text-white shadow-md'
-              : 'text-zinc-300 hover:text-white hover:bg-daw-surface-2'
+              : 'text-white hover:bg-daw-hover-subtle hover:text-white'
           }`}
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
@@ -541,7 +573,7 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
@@ -586,7 +618,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Right: Panel toggles */}
-      <div className="flex items-center gap-0.5 bg-[#2a2a2a]/60 rounded-lg px-1.5 py-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-0.5 rounded-lg px-0.5 py-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showMixer}
           onClick={() => setShowMixer(!showMixer)}
@@ -623,7 +655,7 @@ export function Toolbar() {
       <div className="flex items-center gap-2">
         <button
           onClick={() => openCommandPalette()}
-          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-surface-2 hover:text-white"
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-daw-hover-subtle hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"

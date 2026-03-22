@@ -5,6 +5,7 @@ import { getBeatDuration, getBarDuration } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { useMetaKeyDown } from '../../hooks/useMetaKeyDown';
+import { DEFAULT_MEASURES } from '../../constants/defaults';
 
 /** Grid line hierarchy — coarser levels always visible, finer levels appear as you zoom in. */
 type GridStrength = 'bar' | 'beat' | 'eighth' | 'sub';
@@ -51,9 +52,19 @@ export function GridOverlay() {
     if (!project) return [];
 
     const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const effectiveMeasures = project.measures ?? DEFAULT_MEASURES;
     const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
     const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;
+
+    // Compute the time boundary for the configured measures
+    let measureBoundary: number;
+    if (hasTempoMap || hasTsMap) {
+      const totalBeats = getBeatAtBar(effectiveMeasures + 1, timeSignatureMap, timeSignature);
+      measureBoundary = beatToTime(totalBeats, tempoMap, bpm);
+    } else {
+      measureBoundary = effectiveMeasures * getBarDuration(bpm, timeSignature);
+    }
 
     if (!hasTempoMap && !hasTsMap) {
       // Fast path: constant tempo, constant time signature
@@ -65,11 +76,12 @@ export function GridOverlay() {
       const finest = Math.min(...divisions);
       const stepDuration = beatDuration * finest;
 
-      const result: { x: number; strength: GridStrength }[] = [];
-      for (let t = 0; t <= visualDuration; t += stepDuration) {
+      const result: { x: number; strength: GridStrength; outOfRange: boolean }[] = [];
+      for (let t = 0; t < visualDuration; t += stepDuration) {
         result.push({
           x: t * pixelsPerSecond,
           strength: classifyStrength(t, barDuration, beatDuration, eighthDuration),
+          outOfRange: t > measureBoundary - 0.001,
         });
       }
       return result;
@@ -79,14 +91,15 @@ export function GridOverlay() {
     const beatPx = pixelsPerSecond * (60 / bpm);
     const divisions = getVisibleDivisions(beatPx);
     const finest = Math.min(...divisions);
-    const result: { x: number; strength: GridStrength }[] = [];
+    const result: { x: number; strength: GridStrength; outOfRange: boolean }[] = [];
 
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
       const barTime = beatToTime(barBeat, tempoMap, bpm);
       if (barTime > visualDuration) break;
 
-      result.push({ x: barTime * pixelsPerSecond, strength: 'bar' });
+      const barOutOfRange = bar > effectiveMeasures;
+      result.push({ x: barTime * pixelsPerSecond, strength: 'bar', outOfRange: barOutOfRange });
 
       const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
       const beatLength = getTimeSignatureBeatLength(ts.denominator);
@@ -103,7 +116,7 @@ export function GridOverlay() {
         const eighthDuration = beatDuration * 0.5;
         const relTime = subBeat * beatDuration;
         const strength = classifyStrength(relTime, barDuration, beatDuration, eighthDuration);
-        result.push({ x: time * pixelsPerSecond, strength });
+        result.push({ x: time * pixelsPerSecond, strength, outOfRange: barOutOfRange });
       }
     }
     return result;
@@ -129,8 +142,10 @@ export function GridOverlay() {
             key={i}
             className="absolute top-0 bottom-0"
             data-testid={`grid-line-${line.strength}`}
+            {...(line.outOfRange ? { 'data-out-of-range': 'true' } : {})}
             style={{
               left: line.x,
+              opacity: line.outOfRange ? 0.3 : undefined,
               ...(isMetaDown
                 ? { borderLeft: `1px dashed ${color}` }
                 : { width: 1, backgroundColor: color }),

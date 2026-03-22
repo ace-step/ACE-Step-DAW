@@ -9,7 +9,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { DEFAULT_MEASURES } from '../../constants/defaults';
-import { KEY_SCALES, TIME_SIGNATURES } from '../../constants/tracks';
+import { KEY_SCALES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { Button } from '../ui/Button';
 
@@ -62,12 +62,14 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
   const updateProject = useProjectStore((s) => s.updateProject);
   const [bpmInput, setBpmInput] = useState('120');
   const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
+  const [tsNumeratorInput, setTsNumeratorInput] = useState('4');
 
   useEffect(() => {
     if (!project) return;
     setBpmInput(String(project.bpm));
     setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
-  }, [project?.bpm, project?.measures, project]);
+    setTsNumeratorInput(String(project.timeSignature ?? 4));
+  }, [project?.bpm, project?.measures, project?.timeSignature, project]);
 
   const keyScale = splitKeyScale(project?.keyScale);
 
@@ -88,6 +90,17 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     setMeasuresInput(String(nextMeasures));
     if (project && nextMeasures !== project.measures) {
       updateProject({ measures: nextMeasures });
+    }
+  };
+
+  const commitTimeSignature = () => {
+    const parsed = Number.parseInt(tsNumeratorInput, 10);
+    const nextTs = Number.isNaN(parsed)
+      ? (project?.timeSignature ?? 4)
+      : Math.min(12, Math.max(1, parsed));
+    setTsNumeratorInput(String(nextTs));
+    if (project && nextTs !== project.timeSignature) {
+      updateProject({ timeSignature: nextTs });
     }
   };
 
@@ -125,21 +138,32 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
       <div className="h-4 w-px bg-white/8" aria-hidden="true" />
 
-      <div className="flex items-center rounded-md px-0.5 py-0.5">
-        <select
-          value={project?.timeSignature ?? 4}
-          onChange={(event) => updateProject({ timeSignature: Number(event.target.value) })}
+      <div className="flex items-center gap-0.5 rounded-md px-0.5 py-0.5">
+        <input
+          type="number"
+          value={tsNumeratorInput}
+          onChange={(event) => setTsNumeratorInput(event.target.value)}
+          onBlur={commitTimeSignature}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            }
+          }}
+          min={1}
+          max={12}
           disabled={disabled}
-          aria-label="Project time signature"
-          title="Project time signature"
-          className="h-6 w-[3.5rem] rounded-md border border-daw-border bg-daw-surface-2 px-1.5 text-[11px] text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+          aria-label="Time signature numerator"
+          title="Time signature numerator"
+          className="h-6 w-8 rounded-md border border-daw-border bg-daw-surface-2 px-1 text-center text-[11px] font-mono text-white focus:border-cyan-400/70 focus:outline-none disabled:opacity-50"
+        />
+        <span className="text-[11px] text-zinc-400">/</span>
+        <span
+          aria-label="Time signature denominator"
+          title="Time signature denominator"
+          className="h-6 w-8 flex items-center justify-center rounded-md border border-daw-border bg-daw-surface-2 text-center text-[11px] font-mono text-zinc-400"
         >
-          {TIME_SIGNATURES.map((timeSignature) => (
-            <option key={timeSignature} value={timeSignature}>
-              {timeSignature} / 4
-            </option>
-          ))}
-        </select>
+          4
+        </span>
       </div>
 
       <div className="h-4 w-px bg-white/8" aria-hidden="true" />

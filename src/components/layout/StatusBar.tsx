@@ -24,11 +24,6 @@ export function StatusBar() {
   const zoomOut = useUIStore((s) => s.zoomOut);
   const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const setShowKeyboardShortcutsDialog = useUIStore((s) => s.setShowKeyboardShortcutsDialog);
-  const showMixer = useUIStore((s) => s.showMixer);
-  const setShowMixer = useUIStore((s) => s.setShowMixer);
-  const showAIAssistant = useUIStore((s) => s.showAIAssistant);
-  const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
-  const project = useProjectStore((s) => s.project);
   const activeJobs = [...jobs]
     .filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing')
     .sort((a, b) => (a.lastUpdatedAt ?? 0) - (b.lastUpdatedAt ?? 0));
@@ -98,50 +93,6 @@ export function StatusBar() {
           <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
           <div className="flex items-center gap-1.5 text-daw-text-muted">
-            <button
-              type="button"
-              onClick={() => setShowMixer(!showMixer)}
-              disabled={!project}
-              className={`flex h-[18px] w-[18px] items-center justify-center rounded border transition-colors ${
-                showMixer
-                  ? 'border-white/12 bg-white/[0.06] text-zinc-100'
-                  : 'border-transparent bg-transparent text-daw-text-muted hover:border-white/8 hover:bg-daw-hover-subtle hover:text-zinc-200'
-              } disabled:opacity-30`}
-              title="Mixer (X)"
-              data-testid="status-mixer-toggle"
-              data-onboarding-target="mixer-button"
-              aria-label="Mixer"
-            >
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-                <line x1="3" y1="2" x2="3" y2="12" />
-                <line x1="7" y1="2" x2="7" y2="12" />
-                <line x1="11" y1="2" x2="11" y2="12" />
-                <circle cx="3" cy="8" r="1.5" fill="currentColor" />
-                <circle cx="7" cy="5" r="1.5" fill="currentColor" />
-                <circle cx="11" cy="9" r="1.5" fill="currentColor" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={toggleAIAssistant}
-              className={`flex h-[18px] w-[18px] items-center justify-center rounded border transition-colors ${
-                showAIAssistant
-                  ? 'border-white/12 bg-white/[0.06] text-zinc-100'
-                  : 'border-transparent bg-transparent text-daw-text-muted hover:border-white/8 hover:bg-daw-hover-subtle hover:text-zinc-200'
-              }`}
-              title="AI Assistant (Cmd+/)"
-              data-testid="status-ai-assistant-toggle"
-              data-onboarding-target="assistant-button"
-              aria-label="AI Assistant"
-            >
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
-                <path d="M7 1v3M7 10v3M1 7h3M10 7h3" />
-                <path d="M3.5 3.5l2 2M8.5 8.5l2 2M8.5 3.5l2 2M3.5 8.5l-2 2" />
-              </svg>
-            </button>
-
-            <div className="w-px h-3.5 bg-white/8" />
-
             <button
               type="button"
               onClick={() => setShowKeyboardShortcutsDialog(true)}

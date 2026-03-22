@@ -44,6 +44,10 @@ export function GenerationSidePanel() {
   const generationPanelView = useUIStore((s) => s.generationPanelView);
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
   const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
+  const showMixer = useUIStore((s) => s.showMixer);
+  const setShowMixer = useUIStore((s) => s.setShowMixer);
+  const showAIAssistant = useUIStore((s) => s.showAIAssistant);
+  const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
   const setGenerationPanelView = useUIStore((s) => s.setGenerationPanelView);
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
@@ -281,6 +285,59 @@ export function GenerationSidePanel() {
               <path d="M9 3.1a3.55 3.55 0 0 1 2.12 6.4c-.61.46-1.02 1.12-1.16 1.82H8.04c-.14-.7-.55-1.36-1.16-1.82A3.55 3.55 0 0 1 9 3.1Z" />
               <path d="M7.35 12.5h3.3M7.75 14.15h2.5" />
               <path d="M9.3 6 8.35 7.9h1.05L8.7 9.55" />
+            </svg>
+          </button>
+
+          {/* Separator */}
+          <div className="w-px h-6 bg-white/10" />
+
+          {/* Mixer toggle */}
+          <button
+            type="button"
+            onClick={() => setShowMixer(!showMixer)}
+            className={`group relative flex h-10 w-10 items-center justify-center rounded-[14px] border transition-all duration-200 ${
+              showMixer
+                ? 'border-cyan-300/35 bg-[#243145] text-cyan-50 shadow-[0_10px_22px_rgba(58,88,192,0.2)]'
+                : 'border-white/8 bg-white/[0.04] text-zinc-300 hover:border-[#5a5a5a] hover:bg-[#232323]'
+            }`}
+            aria-label={showMixer ? 'Hide Mixer' : 'Show Mixer'}
+            title={showMixer ? 'Hide Mixer (X)' : 'Show Mixer (X)'}
+            data-testid="dock-mixer-toggle"
+            data-onboarding-target="mixer-button"
+          >
+            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[#111]/96 px-2 py-0.5 text-[10px] text-zinc-200 opacity-0 shadow-lg transition-all duration-150 group-hover:-translate-y-0.5 group-hover:opacity-100">
+              Mixer
+            </span>
+            <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+              <line x1="4.5" y1="3" x2="4.5" y2="15" />
+              <line x1="9" y1="3" x2="9" y2="15" />
+              <line x1="13.5" y1="3" x2="13.5" y2="15" />
+              <circle cx="4.5" cy="10" r="1.8" fill="currentColor" />
+              <circle cx="9" cy="6.5" r="1.8" fill="currentColor" />
+              <circle cx="13.5" cy="11.5" r="1.8" fill="currentColor" />
+            </svg>
+          </button>
+
+          {/* AI Assistant toggle */}
+          <button
+            type="button"
+            onClick={toggleAIAssistant}
+            className={`group relative flex h-10 w-10 items-center justify-center rounded-[14px] border transition-all duration-200 ${
+              showAIAssistant
+                ? 'border-cyan-300/35 bg-[#243145] text-cyan-50 shadow-[0_10px_22px_rgba(58,88,192,0.24)]'
+                : 'border-white/8 bg-white/[0.04] text-zinc-300 hover:border-[#5a5a5a] hover:bg-[#232323]'
+            }`}
+            aria-label={showAIAssistant ? 'Hide AI Assistant' : 'Show AI Assistant'}
+            title={showAIAssistant ? 'Hide AI Assistant (Cmd+/)' : 'Show AI Assistant (Cmd+/)'}
+            data-testid="dock-ai-assistant-toggle"
+            data-onboarding-target="assistant-button"
+          >
+            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-[#111]/96 px-2 py-0.5 text-[10px] text-zinc-200 opacity-0 shadow-lg transition-all duration-150 group-hover:-translate-y-0.5 group-hover:opacity-100">
+              AI Assistant
+            </span>
+            <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
+              <path d="M9 2v4M9 12v4M2 9h4M12 9h4" />
+              <path d="M4.75 4.75l2.5 2.5M10.75 10.75l2.5 2.5M10.75 4.75l2.5 2.5M4.75 10.75l-2.5 2.5" />
             </svg>
           </button>
         </div>

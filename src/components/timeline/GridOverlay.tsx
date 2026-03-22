@@ -6,18 +6,39 @@ import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLe
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { useMetaKeyDown } from '../../hooks/useMetaKeyDown';
 
-/**
- * Adaptive grid: resolution auto-adjusts based on zoom level.
- * Zoomed out → bars only. Zoomed in → 16th notes.
- */
-function getGridDivision(pixelsPerSecond: number, bpm: number): { division: number; label: string } {
-  const beatPx = pixelsPerSecond * (60 / bpm); // pixels per beat
+/** Grid line hierarchy — coarser levels always visible, finer levels appear as you zoom in. */
+type GridStrength = 'bar' | 'beat' | 'eighth' | 'sub';
 
-  if (beatPx >= 80) return { division: 0.25, label: '16th' };  // 16th notes
-  if (beatPx >= 40) return { division: 0.5,  label: '8th' };   // 8th notes
-  if (beatPx >= 20) return { division: 1,    label: 'beat' };  // quarter notes
-  if (beatPx >= 8)  return { division: 2,    label: '2-beat' }; // half notes
-  return { division: 4, label: 'bar' };                         // bars only
+/**
+ * Progressive grid: returns all subdivision levels that should be visible at the current zoom.
+ * Each level defines the beat fraction it represents.
+ *
+ * beatPx thresholds (pixels per beat):
+ *   always → bars + beats (quarter notes)
+ *   ≥ 80   → + 1/8 note lines
+ *   ≥ 160  → + 1/16 note lines
+ *   ≥ 320  → + 1/32 note lines
+ *   ≥ 640  → + 1/64 note lines
+ */
+function getVisibleDivisions(beatPx: number): number[] {
+  // Always show beats (1.0 = quarter note)
+  const divs = [1];
+  if (beatPx >= 80)  divs.push(0.5);    // 8th notes
+  if (beatPx >= 160) divs.push(0.25);   // 16th notes
+  if (beatPx >= 320) divs.push(0.125);  // 32nd notes
+  if (beatPx >= 640) divs.push(0.0625); // 64th notes
+  return divs;
+}
+
+function classifyStrength(t: number, barDuration: number, beatDuration: number, eighthDuration: number): GridStrength {
+  const eps = 0.001;
+  const isBar = Math.abs(t % barDuration) < eps || Math.abs((t % barDuration) - barDuration) < eps;
+  if (isBar) return 'bar';
+  const isBeat = Math.abs(t % beatDuration) < eps || Math.abs((t % beatDuration) - beatDuration) < eps;
+  if (isBeat) return 'beat';
+  const isEighth = Math.abs(t % eighthDuration) < eps || Math.abs((t % eighthDuration) - eighthDuration) < eps;
+  if (isEighth) return 'eighth';
+  return 'sub';
 }
 
 export function GridOverlay() {
@@ -38,23 +59,27 @@ export function GridOverlay() {
       // Fast path: constant tempo, constant time signature
       const beatDuration = getBeatDuration(bpm);
       const barDuration = getBarDuration(bpm, timeSignature);
-      const { division } = getGridDivision(pixelsPerSecond, bpm);
-      const stepDuration = beatDuration * division;
+      const eighthDuration = beatDuration * 0.5;
+      const beatPx = pixelsPerSecond * (60 / bpm);
+      const divisions = getVisibleDivisions(beatPx);
+      const finest = Math.min(...divisions);
+      const stepDuration = beatDuration * finest;
 
-      const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
+      const result: { x: number; strength: GridStrength }[] = [];
       for (let t = 0; t <= visualDuration; t += stepDuration) {
-        const isBar = Math.abs(t % barDuration) < 0.001 || Math.abs((t % barDuration) - barDuration) < 0.001;
-        const isBeat = Math.abs(t % beatDuration) < 0.001 || Math.abs((t % beatDuration) - beatDuration) < 0.001;
         result.push({
           x: t * pixelsPerSecond,
-          strength: isBar ? 'bar' : isBeat ? 'beat' : 'sub',
+          strength: classifyStrength(t, barDuration, beatDuration, eighthDuration),
         });
       }
       return result;
     }
 
     // Tempo-map/time-sig-aware path: iterate by bars so mixed meters align cleanly.
-    const result: { x: number; strength: 'bar' | 'beat' | 'sub' }[] = [];
+    const beatPx = pixelsPerSecond * (60 / bpm);
+    const divisions = getVisibleDivisions(beatPx);
+    const finest = Math.min(...divisions);
+    const result: { x: number; strength: GridStrength }[] = [];
 
     for (let bar = 1; bar <= 999; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
@@ -65,10 +90,20 @@ export function GridOverlay() {
 
       const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
       const beatLength = getTimeSignatureBeatLength(ts.denominator);
-      for (let beat = 1; beat < ts.numerator; beat++) {
-        const beatTime = beatToTime(barBeat + beat * beatLength, tempoMap, bpm);
-        if (beatTime > visualDuration) break;
-        result.push({ x: beatTime * pixelsPerSecond, strength: 'beat' });
+      const beatsInBar = ts.numerator;
+      const barDurationBeats = beatsInBar * beatLength;
+
+      // Iterate through all subdivisions within this bar
+      for (let subBeat = finest; subBeat < barDurationBeats; subBeat += finest) {
+        const time = beatToTime(barBeat + subBeat, tempoMap, bpm);
+        if (time > visualDuration) break;
+
+        const beatDuration = getBeatDuration(bpm);
+        const barDuration = barDurationBeats * beatDuration;
+        const eighthDuration = beatDuration * 0.5;
+        const relTime = subBeat * beatDuration;
+        const strength = classifyStrength(relTime, barDuration, beatDuration, eighthDuration);
+        result.push({ x: time * pixelsPerSecond, strength });
       }
     }
     return result;
@@ -78,31 +113,31 @@ export function GridOverlay() {
 
   const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
 
-  const colors = {
+  const colors: Record<GridStrength, string> = {
     bar: 'var(--color-daw-grid-bar)',
     beat: 'var(--color-daw-grid-beat)',
+    eighth: 'var(--color-daw-grid-eighth)',
+    sub: 'var(--color-daw-grid-sub)',
   };
 
   return (
     <div className="absolute inset-0 pointer-events-none" style={{ width: totalWidth, minHeight: '100vh' }}>
-      {lines
-        .filter((line) => line.strength !== 'sub')
-        .map((line, i) => {
-          const color = line.strength === 'bar' ? colors.bar : colors.beat;
-          return (
-            <div
-              key={i}
-              className="absolute top-0 bottom-0"
-              data-testid={`grid-line-${line.strength}`}
-              style={{
-                left: line.x,
-                ...(isMetaDown
-                  ? { borderLeft: `1px dashed ${color}` }
-                  : { width: 1, backgroundColor: color }),
-              }}
-            />
-          );
-        })}
+      {lines.map((line, i) => {
+        const color = colors[line.strength];
+        return (
+          <div
+            key={i}
+            className="absolute top-0 bottom-0"
+            data-testid={`grid-line-${line.strength}`}
+            style={{
+              left: line.x,
+              ...(isMetaDown
+                ? { borderLeft: `1px dashed ${color}` }
+                : { width: 1, backgroundColor: color }),
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

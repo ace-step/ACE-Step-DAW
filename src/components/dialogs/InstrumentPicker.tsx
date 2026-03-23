@@ -36,6 +36,12 @@ export function InstrumentPicker() {
   }
 
   const handleTypeSelect = (type: TrackType) => {
+    // Strudel tracks don't need an instrument picker — create directly
+    if (type === 'strudel') {
+      addTrack('custom', 'strudel');
+      close();
+      return;
+    }
     setSelectedType(type);
     setStep('instrument');
   };
@@ -50,7 +56,7 @@ export function InstrumentPicker() {
     close();
   };
 
-  const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'drumMachine', 'pianoRoll'];
+  const typeOrder: TrackType[] = ['stems', 'sample', 'sequencer', 'drumMachine', 'pianoRoll', 'strudel'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>

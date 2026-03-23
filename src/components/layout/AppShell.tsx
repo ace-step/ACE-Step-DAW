@@ -28,6 +28,7 @@ import { SequencerEditor } from '../sequencer/SequencerEditor';
 import { DrumMachineEditor } from '../sequencer/DrumMachineEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { PianoRoll } from '../pianoroll/PianoRoll';
+import { StrudelEditor } from '../strudel/StrudelEditor';
 import { EffectChain } from '../mixer/EffectChain';
 import { SessionView } from '../session/SessionView';
 import { ModelLibraryPanel } from '../models/ModelLibraryPanel';
@@ -116,6 +117,7 @@ function EditorShell() {
       {project && <SequencerEditor />}
       {project && <DrumMachineEditor />}
       {project && <PianoRoll />}
+      {project && <StrudelEditor />}
       {project && <EffectChain />}
       {project && <MixerPanel />}
       {project && <GenerationPanel />}

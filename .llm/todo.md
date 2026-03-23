@@ -28,3 +28,12 @@
 ## Priority 3: Refactoring
 
 (populated by @refactorer agent)
+
+## Design Debt (from /plan-design-review)
+
+- [ ] Add first-use tooltip/hint in StrudelEditor for Strudel syntax onboarding (depends on Phase 1 StrudelEditor component)
+
+## Engineering Debt (from /plan-eng-review)
+
+- [ ] Add lazy loading error boundary component for StrudelEditor (and future lazy-loaded features) — prevents white screen on chunk load failure, shows "Failed to load. Click to retry." (depends on React.lazy introduction in Phase 1)
+- [ ] Add Strudel engine structured console logging (eval count/timing, errors, preset usage) — enables debugging and adoption tracking. Use console.debug for metrics, console.warn for errors. (P2, depends on Phase 1 StrudelEngine)

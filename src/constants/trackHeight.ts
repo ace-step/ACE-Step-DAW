@@ -16,6 +16,7 @@ const AUTO_DEFAULTS: Record<TrackType, number> = {
   sequencer: 80,
   pianoRoll: 88,
   drumMachine: 80,
+  strudel: 80,
 };
 
 /** Resolve a preset to a pixel height, considering track type for 'auto'. */

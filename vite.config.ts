@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { resolve } from 'path';
 
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8001';
 
@@ -8,6 +9,13 @@ const serverPort = Number(process.env.VITE_PORT) || 5174;
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      // Stub out @kabelsalat/web — Strudel's optional modular synth engine
+      // has a broken export in v0.4.1. We don't use it; we use queryArc only.
+      '@kabelsalat/web': resolve(__dirname, 'src/stubs/kabelsalat-web.ts'),
+    },
+  },
   server: {
     host: '127.0.0.1',
     port: serverPort,

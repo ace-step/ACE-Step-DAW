@@ -110,6 +110,7 @@ export interface UIState {
   /** Track whose sequencer editor is currently open (bottom panel). */
   openSequencerTrackId: string | null;
   openDrumMachineTrackId: string | null;
+  openStrudelEditorTrackId: string | null;
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
   selectedPianoRollNoteIds: string[];
@@ -130,7 +131,7 @@ export interface UIState {
   showSmartControls: boolean;
   showLibrary: boolean;
   /** Which bottom editor is visible: null = none, 'smart' = smart controls, 'editor' = region editor */
-  activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | null;
+  activeBottomPanel: 'smart' | 'editor' | 'pianoRoll' | 'effects' | 'drumMachine' | 'strudel' | null;
 
   // Tempo lane
   showTempoLane: boolean;
@@ -267,6 +268,7 @@ export interface UIState {
   setExpandedTrackId: (id: string | null) => void;
   setOpenSequencerTrackId: (id: string | null) => void;
   setOpenDrumMachineTrackId: (id: string | null) => void;
+  setOpenStrudelEditor: (trackId: string | null) => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
@@ -493,6 +495,7 @@ export const useUIStore = create<UIState>()(
   expandedTrackId: null,
   openSequencerTrackId: null,
   openDrumMachineTrackId: null,
+  openStrudelEditorTrackId: null,
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
   selectedPianoRollNoteIds: [],
@@ -790,6 +793,16 @@ export const useUIStore = create<UIState>()(
     activeBottomPanel: id ? 'drumMachine' : null,
     historyFocusScope: id ? 'track' : 'arrangement',
     historyFocusTrackId: id,
+    historyFocusClipId: null,
+  })),
+  setOpenStrudelEditor: (trackId) => set((state) => ({
+    keyboardContext: trackId
+      ? { scope: 'strudel' as const, trackId }
+      : { scope: 'timeline' as const, trackId: state.keyboardContext.trackId },
+    openStrudelEditorTrackId: trackId,
+    activeBottomPanel: trackId ? 'strudel' : null,
+    historyFocusScope: trackId ? 'track' : 'arrangement',
+    historyFocusTrackId: trackId,
     historyFocusClipId: null,
   })),
   setOpenPianoRoll: (trackId, clipId = null) => set((state) => ({

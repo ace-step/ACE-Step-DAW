@@ -371,7 +371,7 @@ function MetronomePulseIcon() {
             key={index}
             data-testid="metronome-pulse-dot"
             data-step-index={index}
-            className={`absolute block h-[8.5px] w-[8.5px] rounded-full transition-colors duration-100 ${
+            className={`absolute block h-[9.5px] w-[9.5px] rounded-full transition-colors duration-100 ${
               isFilled ? 'bg-white' : 'bg-white/30'
             }`}
             style={{
@@ -680,7 +680,7 @@ export function Toolbar() {
       >
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
-          <svg width="21" height="19" viewBox="0 0 14 12" fill="currentColor">
+          <svg width="22" height="20" viewBox="0 0 14 12" fill="currentColor">
             <rect x="0" y="1" width="2" height="10" rx="0.5" />
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
@@ -696,18 +696,18 @@ export function Toolbar() {
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
-            <svg width="20" height="22" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="21" height="23" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="22" height="24" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="23" height="25" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
         </button>
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
-          <div className={`h-[18px] w-[18px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
+          <div className={`h-[20px] w-[20px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
         </ControlBarButton>
         <button
           onClick={toggleMetronome}
@@ -727,7 +727,7 @@ export function Toolbar() {
           title="Loop (C)"
           disableHoverHighlight
         >
-          <svg width="21" height="21" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
@@ -740,7 +740,7 @@ export function Toolbar() {
           title="Auto Scroll"
           disableHoverHighlight
         >
-          <svg width="21" height="21" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 7h7.5" />
             <path d="M7 4l3.5 3L7 10" />
             <path d="M12 2v10" />

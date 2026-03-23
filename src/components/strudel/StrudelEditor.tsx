@@ -38,55 +38,43 @@ interface DocEntry {
   examples?: string[];
   params?: Array<{ name: string; type?: { names: string[] }; description?: string }>;
   memberof?: string;
+  synonyms?: string[];
 }
 
 let cachedDocs: DocEntry[] | null = null;
 async function loadStrudelDocs(): Promise<DocEntry[]> {
   if (cachedDocs) return cachedDocs;
   try {
-    // The JSDoc data is embedded in @strudel/codemirror's dist as a const (not exported).
-    // Access it by importing the raw module text and parsing from the embedded JSON.
-    // Alternatively, use the autocomplete's completion source to enumerate functions.
-    const mod = await import('@strudel/codemirror') as any;
+    // The JSDoc data is embedded as `const Fn = JSON.parse(...)` inside the
+    // @strudel/codemirror dist file. It's not exported, so we fetch the file
+    // as text and extract the JSON.
+    const res = await fetch('/node_modules/@strudel/codemirror/dist/index.mjs');
+    const text = await res.text();
 
-    // Try several access paths
-    const docs = mod.jsdoc?.docs ?? mod.docs ?? mod.default?.jsdoc?.docs ?? [];
-    if (Array.isArray(docs) && docs.length > 0) {
-      cachedDocs = docs.filter((d: any) => d.name && !d.name.startsWith('_'));
-      return cachedDocs;
-    }
+    // Find the JSON array between backticks: JSON.parse(`[...]`)
+    const marker = 'JSON.parse(`';
+    const start = text.indexOf(marker);
+    if (start === -1) throw new Error('JSDoc data not found in module');
+    const jsonStart = start + marker.length;
+    const jsonEnd = text.indexOf('`)', jsonStart);
+    const jsonStr = text.slice(jsonStart, jsonEnd);
 
-    // Fallback: build docs from the registered Pattern methods
-    const core = await import('@strudel/core') as any;
-    if (core.Pattern?.prototype) {
-      const methods = Object.getOwnPropertyNames(core.Pattern.prototype)
-        .filter((n) => !n.startsWith('_') && n !== 'constructor' && n !== 'query');
-      cachedDocs = methods.map((name) => ({
-        name,
-        description: `Pattern method: .${name}()`,
-        memberof: 'Pattern',
-      }));
-
-      // Also add global functions from globalThis that strudel registered
-      const globals = ['s', 'sound', 'note', 'n', 'stack', 'cat', 'sequence', 'polymeter',
-        'polyrhythm', 'silence', 'samples', 'sine', 'saw', 'tri', 'square', 'rand',
-        'irand', 'perlin', 'run', 'ply', 'press', 'rev', 'fast', 'slow', 'early', 'late',
-        'jux', 'chunk', 'chop', 'striate', 'loopAt', 'hurry', 'every', 'when',
-        'sometimes', 'often', 'rarely', 'almostNever', 'almostAlways', 'never', 'always',
-        'degrade', 'degradeBy', 'sometimesBy', 'struct', 'mask', 'euclid', 'euclidLegato',
-        'choose', 'chooseCycles', 'randcat', 'wchoose', 'wchooseCycles',
-        'gain', 'pan', 'speed', 'begin', 'end', 'vowel', 'cut', 'orbit',
-        'delay', 'delaytime', 'delayfeedback', 'room', 'size', 'shape',
-        'lpf', 'hpf', 'bpf', 'resonance', 'attack', 'decay', 'sustain', 'release',
-        'bank', 'crush', 'coarse', 'djf', 'leslie', 'tremolo', 'phaser',
-      ];
-      for (const name of globals) {
-        cachedDocs.push({ name, description: `Strudel function` });
-      }
-
-      return cachedDocs;
-    }
-  } catch { /* */ }
+    const rawDocs = JSON.parse(jsonStr) as any[];
+    cachedDocs = rawDocs
+      .filter((d) => d.name && d.description && !d.tags?.some((t: any) => t.title === 'noautocomplete'))
+      .map((d) => ({
+        name: d.name,
+        description: d.description?.replace(/<[^>]+>/g, '') ?? '',
+        params: d.params,
+        examples: d.examples,
+        memberof: d.memberof,
+        synonyms: d.synonyms,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return cachedDocs;
+  } catch (e) {
+    console.warn('[StrudelEditor] Failed to load API docs:', e);
+  }
   cachedDocs = [];
   return cachedDocs;
 }
@@ -97,6 +85,95 @@ const SOUND_BANKS = [
   { name: 'tr808', sounds: 'bd, sd, hh, oh, cp, cb, lt, mt, ht, lc, mc, hc, cl, ma, cy, rs' },
   { name: 'cr78', sounds: 'bd, sd, hh, oh, cp, cb, ma, gu, ta, co, cl' },
 ];
+
+/* ── Reference Panel ───────────────────────────────── */
+
+function ReferencePanel() {
+  const [docs, setDocs] = useState<DocEntry[]>([]);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<DocEntry | null>(null);
+
+  useEffect(() => { loadStrudelDocs().then(setDocs); }, []);
+
+  const filtered = docs.filter((d) =>
+    !search || d.name?.toLowerCase().includes(search.toLowerCase())
+      || d.description?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-2 border-b border-zinc-800 shrink-0">
+        <h3 className="text-zinc-300 text-[12px] font-semibold mb-1.5">API Reference</h3>
+        <input
+          type="text" placeholder="Search..." value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 placeholder-zinc-500 outline-none focus:border-daw-accent"
+        />
+      </div>
+      <div className="flex flex-1 min-h-0">
+        {/* Left: function list */}
+        <div className="w-[120px] shrink-0 overflow-auto border-r border-zinc-800">
+          {docs.length === 0 ? (
+            <div className="text-zinc-600 text-[10px] p-2">Loading...</div>
+          ) : filtered.map((d) => (
+            <button
+              key={d.name}
+              onClick={() => setSelected(d)}
+              className={`w-full text-left px-2 py-0.5 text-[10px] truncate transition-colors ${
+                selected?.name === d.name ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+              }`}
+            >
+              {d.name}
+            </button>
+          ))}
+        </div>
+        {/* Right: detail */}
+        <div className="flex-1 overflow-auto p-3 text-[11px]">
+          {selected ? (
+            <>
+              <h2 className="text-white text-[14px] font-bold font-mono">{selected.name}</h2>
+              {selected.synonyms && selected.synonyms.length > 0 && (
+                <p className="text-zinc-500 text-[10px] mt-1">
+                  Synonyms: {selected.synonyms.map((s, i) => (
+                    <span key={s}>{i > 0 && ', '}<code className="text-zinc-300">{s}</code></span>
+                  ))}
+                </p>
+              )}
+              {selected.description && (
+                <p className="text-zinc-300 mt-2 leading-relaxed">{selected.description}</p>
+              )}
+              {selected.params && selected.params.length > 0 && (
+                <div className="mt-2">
+                  <h4 className="text-zinc-500 text-[10px] uppercase">Parameters</h4>
+                  {selected.params.map((p: any) => (
+                    <div key={p.name} className="mt-0.5">
+                      <code className="text-orange-400 text-[10px]">{p.name}</code>
+                      {p.type?.names && <span className="text-zinc-500 text-[10px]"> : {p.type.names.join(' | ')}</span>}
+                      {p.description && <span className="text-zinc-400 text-[10px] ml-1">{p.description.replace(/<[^>]+>/g, '')}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selected.examples && selected.examples.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-zinc-500 text-[10px] uppercase mb-1">Examples</h4>
+                  {selected.examples.map((ex, i) => (
+                    <pre key={i} className="bg-zinc-900 rounded px-2 py-1.5 text-[10px] text-zinc-300 font-mono overflow-x-auto mt-1">{ex}</pre>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-zinc-500">
+              <p className="text-[12px]">Select a function from the list.</p>
+              <p className="text-[10px] mt-2 text-zinc-600">{docs.length} functions available</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Component ─────────────────────────────────────── */
 
@@ -425,7 +502,7 @@ export function StrudelEditor() {
 
         {/* Sidebar */}
         {activeTab && (
-          <div className={`${activeTab === 'reference' ? 'w-[400px]' : 'w-[240px]'} shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-auto text-[12px]`}>
+          <div className={`${activeTab === 'reference' ? 'w-[420px]' : 'w-[240px]'} shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-hidden text-[12px]`}>
             {activeTab === 'sounds' && (
               <div className="p-3 space-y-3">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">Sound Banks</h3>
@@ -437,13 +514,7 @@ export function StrudelEditor() {
                 ))}
               </div>
             )}
-            {activeTab === 'reference' && (
-              <iframe
-                src="https://strudel.cc/learn/reference/"
-                className="w-full h-full border-0"
-                title="Strudel API Reference"
-              />
-            )}
+            {activeTab === 'reference' && <ReferencePanel />}
             {activeTab === 'console' && (
               <div className="p-2 font-mono text-[10px]">
                 {consoleMessages.length === 0 ? (

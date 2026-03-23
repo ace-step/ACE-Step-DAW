@@ -24,7 +24,7 @@ export function StrudelEditor() {
   const [bounceBars, setBounceBars] = useState(4);
   const [showBarsMenu, setShowBarsMenu] = useState(false);
   const [bounceCode, setBounceCode] = useState(DEFAULT_CODE);
-  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [showCodeInput, setShowCodeInput] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Resize

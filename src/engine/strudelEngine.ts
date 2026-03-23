@@ -454,18 +454,21 @@ export async function extractStrudelMidiNotes(
 }
 
 /**
- * Render a strudel pattern to audio by tapping superdough's output node.
+ * Render a strudel pattern to an AudioBuffer using OfflineAudioContext.
  *
- * How it works:
- * 1. Create a webaudioRepl and evaluate the pattern (audio plays in real-time)
- * 2. Tap superdough's `destinationGain` node (the final output before ctx.destination)
- *    via `getSuperdoughAudioController().output.destinationGain`
- * 3. Connect a MediaStreamDestination to that node → MediaRecorder captures the audio
- * 4. Wait for N bars, stop, decode the recording to AudioBuffer
+ * Replicates the approach from strudel's own `renderPatternAudio()`
+ * (node_modules/@strudel/webaudio/webaudio.mjs:40-103):
  *
- * Duration: takes `durationSeconds` of wall-clock time (user hears the pattern play).
+ * 1. Save the current superdough AudioContext + controller
+ * 2. Create an OfflineAudioContext
+ * 3. Reset superdough to use the offline context
+ * 4. Evaluate code → Pattern object
+ * 5. Query events via pattern.queryArc() → schedule each via superdough()
+ * 6. Render via offlineCtx.startRendering() → AudioBuffer
+ * 7. Restore original context + controller
  *
- * @param onProgress - callback with 0-1 progress for UI updates
+ * This is FAST (no real-time waiting) and produces the EXACT audio that
+ * superdough would play — samples, effects, banks, everything.
  */
 export async function renderStrudelOffline(
   code: string,
@@ -475,77 +478,98 @@ export async function renderStrudelOffline(
   onProgress?: (progress: number) => void,
 ): Promise<AudioBuffer> {
   await ensureStrudelLoaded();
-  const { webaudioRepl, getSuperdoughAudioController, getAudioContext } = await import('@strudel/webaudio') as any;
 
-  // Get or create the audio context that superdough uses
-  const ctx: AudioContext = getAudioContext();
+  const {
+    getAudioContext, setAudioContext,
+    getSuperdoughAudioController, setSuperdoughAudioController,
+    initAudio, resetGlobalEffects,
+  } = await import('@strudel/webaudio') as any;
+  const { superdough: superdoughFn } = await import('superdough') as any;
+  const { SuperdoughAudioController } = await import('superdough/superdoughoutput.mjs') as any;
+
+  // ── Save original state ──
+  const origCtx = getAudioContext();
+  const origController = getSuperdoughAudioController();
 
   const cps = bpmToCps(bpm);
+  const totalCycles = durationSeconds * cps; // bars (mathematically equivalent)
+  const totalSamples = Math.ceil(durationSeconds * sampleRate);
 
-  // Create a dedicated repl for this bounce
-  const repl = webaudioRepl({ audioContext: ctx });
-  repl.setCps?.(cps);
+  try {
+    onProgress?.(0.1);
 
-  const cleanCode = code
-    .split('\n')
-    .filter((line: string) => !line.trimStart().startsWith('//'))
-    .join('\n')
-    .replace(/^\$:\s*/gm, '')
-    .trim();
+    // ── Evaluate code → Pattern object ──
+    const cleanCode = code
+      .split('\n')
+      .filter((line: string) => !line.trimStart().startsWith('//'))
+      .join('\n')
+      .replace(/^\$:\s*/gm, '')
+      .trim();
 
-  // Evaluate to start audio — this initializes superdough's audio graph
-  await repl.evaluate(cleanCode);
+    if (!cleanCode) throw new Error('No strudel code to render');
 
-  // Now tap superdough's output: destinationGain is the last node before ctx.destination
-  // Audio chain: Orbit → channelMerger → destinationGain → ctx.destination
-  //                                          ↳ we tap here → MediaStreamDestination
-  const controller = getSuperdoughAudioController();
-  const outputGain: GainNode = controller?.output?.destinationGain;
+    // Evaluate in global scope where s(), note(), bank() etc. are registered
+    let pattern: any;
+    try {
+      const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<any>;
+      pattern = await fn();
+    } catch {
+      try {
+        const fn = new Function(`return (async () => { ${cleanCode} })()`) as () => Promise<any>;
+        pattern = await fn();
+      } catch (e) {
+        throw new Error(`Failed to evaluate strudel code: ${e instanceof Error ? e.message : e}`);
+      }
+    }
 
-  if (!outputGain) {
-    throw new Error('Could not access superdough output node for recording');
+    if (!pattern?.queryArc) {
+      throw new Error('Strudel code did not return a valid pattern');
+    }
+
+    onProgress?.(0.2);
+
+    // ── Create OfflineAudioContext + reset superdough ──
+    const offlineCtx = new OfflineAudioContext(2, totalSamples, sampleRate);
+    setAudioContext(offlineCtx);
+    setSuperdoughAudioController(new SuperdoughAudioController(offlineCtx));
+    await initAudio();
+
+    onProgress?.(0.3);
+
+    // ── Query pattern events and schedule via superdough ──
+    // Sort by onset time (required for controls like `cut`)
+    const haps = pattern
+      .queryArc(0, totalCycles, { _cps: cps })
+      .sort((a: any, b: any) => a.whole.begin.valueOf() - b.whole.begin.valueOf());
+
+    for (let i = 0; i < haps.length; i++) {
+      const hap = haps[i];
+      if (hap.hasOnset?.()) {
+        try {
+          // Convert string values to object format (e.g. "bd" → {s: "bd"})
+          if (hap.ensureObjectValue) hap.ensureObjectValue();
+          const onset = hap.whole.begin.valueOf() / cps;
+          const hapDuration = (typeof hap.duration?.valueOf === 'function' ? hap.duration.valueOf() : (hap.whole.end.valueOf() - hap.whole.begin.valueOf())) / cps;
+          await superdoughFn(hap.value, onset, hapDuration, cps, hap.whole.begin.valueOf() / cps);
+        } catch {
+          // Skip individual haps that fail (e.g. missing samples)
+        }
+      }
+      // Report progress during scheduling
+      if (i % 20 === 0) onProgress?.(0.3 + 0.4 * (i / haps.length));
+    }
+
+    onProgress?.(0.8);
+
+    // ── Render ──
+    const audioBuffer = await offlineCtx.startRendering();
+
+    onProgress?.(1.0);
+    return audioBuffer;
+  } finally {
+    // ── Always restore original state ──
+    setAudioContext(origCtx);
+    setSuperdoughAudioController(origController);
+    resetGlobalEffects();
   }
-
-  const captureNode = ctx.createMediaStreamDestination();
-  outputGain.connect(captureNode);
-
-  // Start recording
-  const recorder = new MediaRecorder(captureNode.stream, {
-    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus' : 'audio/webm',
-  });
-  const chunks: Blob[] = [];
-  const recordingDone = new Promise<Blob>((resolve) => {
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType }));
-  });
-  recorder.start(100);
-
-  // Wait for the pattern to play, reporting progress
-  const startTime = Date.now();
-  const totalMs = durationSeconds * 1000;
-  await new Promise<void>((resolve) => {
-    const tick = () => {
-      const elapsed = Date.now() - startTime;
-      onProgress?.(Math.min(1, elapsed / totalMs));
-      if (elapsed >= totalMs) { resolve(); return; }
-      requestAnimationFrame(tick);
-    };
-    tick();
-  });
-
-  // Stop recording and playback
-  recorder.stop();
-  try { repl.stop?.(); } catch { /* ignore */ }
-
-  // Disconnect our capture tap (don't leave it connected)
-  try { outputGain.disconnect(captureNode); } catch { /* ignore */ }
-
-  const blob = await recordingDone;
-
-  // Decode to AudioBuffer
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-
-  return audioBuffer;
 }

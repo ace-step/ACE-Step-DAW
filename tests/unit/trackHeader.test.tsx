@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TrackHeader } from '../../src/components/tracks/TrackHeader';
+import { useProjectStore } from '../../src/store/projectStore';
 import type { Track } from '../../src/types/project';
 
 vi.mock('../../src/services/aceStepApi', () => ({
@@ -30,6 +31,8 @@ vi.mock('../../src/hooks/useRecording', () => ({
 vi.mock('../../src/hooks/useAudioEngine', () => ({
   getAudioEngine: () => ({
     getTrackLevel: () => 0,
+    getTrackMeter: () => ({ level: 0, clipped: false }),
+    resetTrackClip: vi.fn(),
   }),
 }));
 
@@ -45,6 +48,8 @@ function makeTrack(overrides: Partial<Track> = {}): Track {
     muted: false,
     soloed: false,
     clips: [],
+    laneHeight: 64,
+    frozen: false,
     ...overrides,
   };
 }
@@ -66,48 +71,41 @@ function renderHeader(trackOverrides: Partial<Track> = {}) {
 }
 
 describe('TrackHeader — icon bar cleanup (#267)', () => {
-  describe('icon differentiation', () => {
-    it('renders Solo button with headphone icon (arc path)', () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+  });
+
+  describe('icon-only dot buttons (Phase C)', () => {
+    it('renders Mute, Solo, Record arm as small dot buttons', () => {
       renderHeader();
+      const muteBtn = screen.getByTitle('Mute (M)');
       const soloBtn = screen.getByTitle('Solo (S)');
-      expect(soloBtn).toBeInTheDocument();
-      // Headphone icon has the arc "a4 4 0 018 0" in its SVG path
-      const svg = soloBtn.querySelector('svg');
-      expect(svg).toBeTruthy();
-      const paths = svg!.querySelectorAll('path');
-      const hasHeadphoneArc = Array.from(paths).some((p) =>
-        p.getAttribute('d')?.includes('a4 4 0 018 0'),
-      );
-      expect(hasHeadphoneArc).toBe(true);
+      const armBtn = screen.getByTitle('Record arm');
+
+      for (const btn of [muteBtn, soloBtn, armBtn]) {
+        expect(btn.classList.contains('w-4')).toBe(true);
+        expect(btn.classList.contains('h-4')).toBe(true);
+        expect(btn.classList.contains('rounded-full')).toBe(true);
+        // No SVG icons inside dot buttons
+        expect(btn.querySelector('svg')).toBeNull();
+      }
     });
 
-    it('renders Input Monitoring button with microphone icon (rect element)', () => {
-      renderHeader();
-      const monitorBtn = screen.getByTitle(/Input monitoring/);
-      expect(monitorBtn).toBeInTheDocument();
-      const svg = monitorBtn.querySelector('svg');
-      expect(svg).toBeTruthy();
-      // Microphone icon uses a <rect> for the mic body, not a headphone arc
-      const rects = svg!.querySelectorAll('rect');
-      expect(rects.length).toBeGreaterThan(0);
-      // Should NOT contain headphone-style arc path
-      const paths = svg!.querySelectorAll('path');
-      const hasHeadphoneArc = Array.from(paths).some((p) =>
-        p.getAttribute('d')?.includes('a4 4 0 018 0'),
-      );
-      expect(hasHeadphoneArc).toBe(false);
+    it('mute dot turns amber when active', () => {
+      renderHeader({ muted: true });
+      const muteBtn = screen.getByTitle('Mute (M)');
+      expect(muteBtn.className).toContain('bg-amber-500');
     });
 
-    it('Solo and Input Monitoring use visually distinct SVG shapes', () => {
-      renderHeader();
-      const soloSvg = screen.getByTitle('Solo (S)').querySelector('svg')!;
-      const monitorSvg = screen.getByTitle(/Input monitoring/).querySelector('svg')!;
-      // They must not be identical
-      expect(soloSvg.innerHTML).not.toBe(monitorSvg.innerHTML);
+    it('solo dot turns emerald when active', () => {
+      renderHeader({ soloed: true });
+      const soloBtn = screen.getByTitle('Solo (S)');
+      expect(soloBtn.className).toContain('bg-emerald-500');
     });
   });
 
-  describe('progressive disclosure', () => {
+  describe('progressive disclosure (Phase C)', () => {
     it('primary buttons (Mute, Solo, Record arm) are always visible', () => {
       renderHeader();
       const muteBtn = screen.getByTitle('Mute (M)');
@@ -119,71 +117,42 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       expect(armBtn.closest('[data-primary-actions]')).toBe(primaryRail);
     });
 
-    it('secondary buttons (Monitor, Freeze, Automation) are in a hover-reveal container when inactive', () => {
+    it('secondary actions (Monitor, Freeze, FX Bypass) are NOT rendered in header', () => {
       renderHeader({ inputMonitoring: 'off', frozen: false });
-      const monitorBtn = screen.getByTitle(/Input monitoring/);
-      const freezeBtn = screen.getByTitle(/Freeze Track/);
-      const autoBtn = screen.getByTitle(/automation/i);
-      // All three should share a common parent with opacity-0 class
-      const container = monitorBtn.parentElement!;
-      expect(container.classList.contains('opacity-0')).toBe(true);
-      expect(container.classList.contains('group-hover:opacity-100')).toBe(true);
-      expect(container.classList.contains('pointer-events-none')).toBe(true);
-      expect(freezeBtn.parentElement).toBe(container);
-      expect(autoBtn.parentElement).toBe(container);
-    });
-
-    it('secondary buttons become visible when input monitoring is active', () => {
-      renderHeader({ inputMonitoring: 'on' });
-      const monitorBtn = screen.getByTitle(/Input monitoring/);
-      const container = monitorBtn.parentElement!;
-      expect(container.classList.contains('opacity-100')).toBe(true);
-      expect(container.classList.contains('opacity-0')).toBe(false);
-      expect(container.classList.contains('pointer-events-none')).toBe(false);
-    });
-
-    it('secondary buttons become visible when track is frozen', () => {
-      renderHeader({ frozen: true });
-      const freezeBtn = screen.getByTitle(/Unfreeze Track/);
-      const container = freezeBtn.parentElement!;
-      expect(container.classList.contains('opacity-100')).toBe(true);
-      expect(container.classList.contains('opacity-0')).toBe(false);
+      // Secondary actions are moved to context menu only
+      expect(document.querySelector('[data-secondary-actions]')).toBeNull();
+      expect(screen.queryByTitle(/Input monitoring/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Freeze Track/)).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/Bypass all track effects/)).not.toBeInTheDocument();
     });
   });
 
   describe('layout clarity', () => {
-    it('uses a larger pill for the always-visible primary controls', () => {
+    it('primary actions container uses simple flex without bordered styling', () => {
       renderHeader();
       const muteBtn = screen.getByTitle('Mute (M)');
-      const soloBtn = screen.getByTitle('Solo (S)');
-      const armBtn = screen.getByTitle('Record arm');
-
-      for (const btn of [muteBtn, soloBtn, armBtn]) {
-        expect(btn.classList.contains('w-6')).toBe(true);
-        expect(btn.classList.contains('h-6')).toBe(true);
-      }
+      const container = muteBtn.closest('[data-primary-actions]')!;
+      expect(container).not.toBeNull();
+      expect(container.className).not.toContain('border-[#494949]');
+      expect(container.className).not.toContain('rounded-lg');
     });
   });
 
   describe('button tooltips', () => {
-    it('all icon buttons have descriptive titles', () => {
+    it('all primary icon buttons have descriptive titles', () => {
       renderHeader();
       expect(screen.getByTitle('Mute (M)')).toBeInTheDocument();
       expect(screen.getByTitle('Solo (S)')).toBeInTheDocument();
       expect(screen.getByTitle('Record arm')).toBeInTheDocument();
-      expect(screen.getByTitle(/Input monitoring/)).toBeInTheDocument();
-      expect(screen.getByTitle(/Freeze Track/)).toBeInTheDocument();
-      expect(screen.getByTitle(/Bypass all track effects \(P\)/)).toBeInTheDocument();
-      expect(screen.getByTitle(/automation/i)).toBeInTheDocument();
     });
   });
 
-  describe('FX bypass toggle', () => {
-    it('shows the active FX bypass state on the track header', () => {
-      renderHeader({ effectsBypassed: true });
-      const bypassButton = screen.getByTitle(/Bypass all track effects \(P\).*active/i);
-      expect(bypassButton).toHaveClass('bg-orange-600/90');
-      expect(bypassButton.parentElement).toHaveClass('opacity-100');
+  describe('volume slider', () => {
+    it('renders a volume slider with aria-label', () => {
+      renderHeader();
+      const slider = screen.getByLabelText('Drums volume');
+      expect(slider).toBeInTheDocument();
+      expect(slider.getAttribute('type')).toBe('range');
     });
   });
 
@@ -191,23 +160,6 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
     it('track display name text is visible in the DOM', () => {
       renderHeader({ displayName: 'My Cool Track' });
       expect(screen.getByText('My Cool Track')).toBeInTheDocument();
-    });
-
-    it('hidden secondary actions collapse layout space (max-w-0 overflow-hidden)', () => {
-      renderHeader({ inputMonitoring: 'off', frozen: false });
-      const monitorBtn = screen.getByTitle(/Input monitoring/);
-      const container = monitorBtn.parentElement!;
-      // When secondary actions are hidden, they must not consume layout width
-      expect(container.classList.contains('max-w-0')).toBe(true);
-      expect(container.classList.contains('overflow-hidden')).toBe(true);
-    });
-
-    it('visible secondary actions have layout space restored', () => {
-      renderHeader({ inputMonitoring: 'on' });
-      const monitorBtn = screen.getByTitle(/Input monitoring/);
-      const container = monitorBtn.parentElement!;
-      expect(container.classList.contains('max-w-0')).toBe(false);
-      expect(container.classList.contains('overflow-hidden')).toBe(false);
     });
 
     it('name column has a minimum width to prevent complete collapse', () => {

@@ -59,18 +59,51 @@ describe('TrackHeader layout improvements (#546)', () => {
     useProjectStore.getState().createProject();
   });
 
-  describe('M/S/Arm button minimum sizes', () => {
-    it('primary buttons have min-w-[20px] and min-h-[20px] classes', () => {
+  describe('M/S/Arm icon-only dot buttons', () => {
+    it('M/S/Arm buttons are small colored dots (w-4 h-4 rounded-full)', () => {
       render(<TrackHeader track={makeTrack()} {...defaultProps} />);
 
-      const muteBtn = screen.getByTitle('Mute (M)');
-      const soloBtn = screen.getByTitle('Solo (S)');
-      const armBtn = screen.getByTitle('Record arm');
+      const muteBtn = screen.getByLabelText('Mute Vocals');
+      const soloBtn = screen.getByLabelText('Solo Vocals');
+      const armBtn = screen.getByLabelText('Record arm Vocals');
 
       for (const btn of [muteBtn, soloBtn, armBtn]) {
-        expect(btn.classList.contains('min-w-[20px]')).toBe(true);
-        expect(btn.classList.contains('min-h-[20px]')).toBe(true);
+        expect(btn.classList.contains('w-4')).toBe(true);
+        expect(btn.classList.contains('h-4')).toBe(true);
+        expect(btn.classList.contains('rounded-full')).toBe(true);
       }
+    });
+
+    it('mute dot is amber when active', () => {
+      render(<TrackHeader track={makeTrack({ muted: true })} {...defaultProps} />);
+      const muteBtn = screen.getByLabelText('Mute Vocals');
+      expect(muteBtn.className).toContain('bg-amber-500');
+    });
+
+    it('solo dot is emerald when active', () => {
+      render(<TrackHeader track={makeTrack({ soloed: true })} {...defaultProps} />);
+      const soloBtn = screen.getByLabelText('Solo Vocals');
+      expect(soloBtn.className).toContain('bg-emerald-500');
+    });
+
+    it('M/S/Arm buttons have no SVG icons (icon-less dots)', () => {
+      render(<TrackHeader track={makeTrack()} {...defaultProps} />);
+      const muteBtn = screen.getByLabelText('Mute Vocals');
+      const soloBtn = screen.getByLabelText('Solo Vocals');
+      const armBtn = screen.getByLabelText('Record arm Vocals');
+
+      for (const btn of [muteBtn, soloBtn, armBtn]) {
+        expect(btn.querySelector('svg')).toBeNull();
+      }
+    });
+
+    it('primary actions container has no bordered styling', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      const container = screen.getByTestId('track-header-row1').querySelector('[data-primary-actions]');
+      expect(container).not.toBeNull();
+      // Should NOT have the old bordered container classes
+      expect(container!.className).not.toContain('border-[#494949]');
+      expect(container!.className).not.toContain('rounded-lg');
     });
   });
 
@@ -175,6 +208,46 @@ describe('TrackHeader layout improvements (#546)', () => {
 
       const header = screen.getByRole('button', { name: /Track: Vocals/i });
       expect(header.classList.contains('group')).toBe(true);
+    });
+  });
+
+  describe('Phase C: secondary actions removed from visible header', () => {
+    it('does NOT render secondary actions container in the header', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+
+      // The data-secondary-actions element should not exist anywhere
+      const secondaryActions = document.querySelector('[data-secondary-actions]');
+      expect(secondaryActions).toBeNull();
+    });
+
+    it('does NOT render monitor button in the header', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      expect(screen.queryByLabelText(/Input monitoring/)).not.toBeInTheDocument();
+    });
+
+    it('does NOT render freeze button in the header', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      expect(screen.queryByLabelText(/Freeze/)).not.toBeInTheDocument();
+    });
+
+    it('does NOT render effects bypass button in the header', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      expect(screen.queryByLabelText(/FX bypass/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Phase C: volume slider in header', () => {
+    it('renders a volume slider with correct aria-label in two-row layout', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
+      const slider = screen.getByLabelText('Vocals volume');
+      expect(slider).toBeInTheDocument();
+      expect(slider.getAttribute('type')).toBe('range');
+    });
+
+    it('renders a volume slider in single-row compact layout', () => {
+      render(<TrackHeader track={makeTrack({ laneHeight: 48 })} {...defaultProps} />);
+      const slider = screen.getByLabelText('Vocals volume');
+      expect(slider).toBeInTheDocument();
     });
   });
 });

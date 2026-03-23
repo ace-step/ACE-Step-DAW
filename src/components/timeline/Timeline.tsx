@@ -651,6 +651,7 @@ export function Timeline() {
       if (target.closest?.('.fixed')) return;
       if (target.closest?.('[data-sequencer-grid]')) return;
       if (target.closest?.('[data-timeline-scrubber="true"]')) return;
+      if (target.closest?.('[data-testid="arrangement-markers"]')) return;
 
       const isCtx = e.altKey;
       const isSel = !isCtx;
@@ -956,7 +957,7 @@ export function Timeline() {
             style={{ gridColumn: '2', gridRow: '1', width: totalWidth }}
           >
             <TimeRuler />
-            <ArrangementMarkers />
+            {showsArrangementMarkers && <ArrangementMarkers />}
             {showTempoLane && (
               <>
                 <TempoLane />

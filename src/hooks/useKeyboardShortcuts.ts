@@ -427,12 +427,34 @@ export function useKeyboardShortcuts() {
             return;
           }
         } else {
-          // Plain Delete: delete selected clips
+          // Plain Delete: delete selected clips or clips in select window
           if (ui.selectedClipIds.size > 0) {
             event.preventDefault();
             const ids = [...ui.selectedClipIds];
             ui.deselectAll();
             ids.forEach((id) => project.removeClip(id));
+            return;
+          }
+          // Delete clips within the select window (drag-select region)
+          if (ui.selectWindow && project.project) {
+            event.preventDefault();
+            const sw = ui.selectWindow;
+            const trackIdSet = new Set(sw.trackIds);
+            const clipIds: string[] = [];
+            for (const t of project.project.tracks) {
+              if (!trackIdSet.has(t.id)) continue;
+              for (const c of t.clips) {
+                const clipEnd = c.startTime + c.duration;
+                // Clip overlaps the window if it starts before window end AND ends after window start
+                if (c.startTime < sw.endTime && clipEnd > sw.startTime) {
+                  clipIds.push(c.id);
+                }
+              }
+            }
+            if (clipIds.length > 0) {
+              ui.setSelectWindow(null);
+              clipIds.forEach((id) => project.removeClip(id));
+            }
             return;
           }
         }

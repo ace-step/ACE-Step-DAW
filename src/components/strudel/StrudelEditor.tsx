@@ -394,6 +394,34 @@ export function StrudelEditor() {
           )}
         </button>
 
+        {/* Freeze to MIDI / Drums */}
+        {strudelTrack && (
+          <>
+            <button
+              onClick={async () => {
+                const track = await useProjectStore.getState().freezeStrudelToMidi(strudelTrack.id, bounceBars);
+                setConsoleMessages((prev) => [...prev.slice(-50), track ? '🎹 frozen to MIDI' : '⚠ no melodic content']);
+              }}
+              disabled={!project || isLoading}
+              className="px-1.5 py-0.5 rounded text-[10px] text-emerald-400/70 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors"
+              title={`Freeze ${bounceBars} bars to MIDI piano roll track`}
+            >
+              MIDI
+            </button>
+            <button
+              onClick={async () => {
+                const track = await useProjectStore.getState().freezeStrudelToDrumMachine(strudelTrack.id, bounceBars);
+                setConsoleMessages((prev) => [...prev.slice(-50), track ? '🥁 frozen to drums' : '⚠ no percussion content']);
+              }}
+              disabled={!project || isLoading}
+              className="px-1.5 py-0.5 rounded text-[10px] text-amber-400/70 hover:bg-amber-500/10 hover:text-amber-400 transition-colors"
+              title={`Freeze ${bounceBars} bars to drum machine track`}
+            >
+              Drums
+            </button>
+          </>
+        )}
+
         {/* Close */}
         <button onClick={() => { if (editorRef.current) { try { editorRef.current.stop(); } catch {} } setIsPlaying(false); toggleStrudelPanel(); }}
           className="flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-200" title="Close">

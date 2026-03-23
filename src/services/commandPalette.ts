@@ -853,6 +853,110 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     }
   }
 
+  // ─── Strudel commands ──────────────────────────────────
+
+  // Toggle Strudel panel
+  commands.push(
+    createTrackCommand(
+      'strudel:toggle-panel',
+      'Toggle Strudel Panel',
+      'Strudel',
+      'action',
+      ['strudel', 'repl', 'live', 'code', 'panel'],
+      ['open strudel', 'close strudel', 'toggle strudel panel'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        useUIStore.getState().toggleStrudelPanel();
+      },
+      ['U'],
+      'Toggle the Strudel live-coding panel',
+    ),
+  );
+
+  // Scaffold arrangement
+  const scaffoldGenres = ['house', 'techno', 'hiphop', 'ambient', 'jazz', 'rock'];
+  for (const genre of scaffoldGenres) {
+    const label = genre.charAt(0).toUpperCase() + genre.slice(1);
+    commands.push(
+      createTrackCommand(
+        `strudel:scaffold:${genre}`,
+        `Scaffold ${label} Arrangement`,
+        'Strudel',
+        'action',
+        ['strudel', 'scaffold', 'arrangement', 'genre', genre, 'drums', 'bass', 'chords', 'melody'],
+        [`create ${genre} arrangement`, `${genre} strudel tracks`, `scaffold ${genre}`],
+        async () => {
+          const { useProjectStore } = await import('../store/projectStore');
+          await useProjectStore.getState().scaffoldStrudelArrangement(genre);
+        },
+        undefined,
+        `Create 4 coordinated ${label} Strudel tracks`,
+      ),
+    );
+  }
+
+  // Per-strudel-track commands
+  if (context.project) {
+    const strudelTracks = context.project.tracks.filter((t) => t.trackType === 'strudel');
+    for (const track of strudelTracks) {
+      const trackName = track.displayName || 'Strudel';
+
+      // Freeze to MIDI
+      commands.push(
+        createTrackCommand(
+          `strudel:${track.id}:freeze-to-midi`,
+          `Freeze "${trackName}" to MIDI`,
+          'Strudel',
+          'action',
+          ['strudel', 'freeze', 'midi', 'piano', 'roll', 'convert', trackName.toLowerCase()],
+          [`freeze ${trackName} to midi`, `convert ${trackName} to piano roll`],
+          async () => {
+            const { useProjectStore } = await import('../store/projectStore');
+            await useProjectStore.getState().freezeStrudelToMidi(track.id);
+          },
+          undefined,
+          `Convert pattern to piano roll MIDI track`,
+        ),
+      );
+
+      // Freeze to Drum Machine
+      commands.push(
+        createTrackCommand(
+          `strudel:${track.id}:freeze-to-drums`,
+          `Freeze "${trackName}" to Drum Machine`,
+          'Strudel',
+          'action',
+          ['strudel', 'freeze', 'drum', 'machine', 'sequencer', 'convert', trackName.toLowerCase()],
+          [`freeze ${trackName} to drums`, `convert ${trackName} to sequencer`],
+          async () => {
+            const { useProjectStore } = await import('../store/projectStore');
+            await useProjectStore.getState().freezeStrudelToDrumMachine(track.id);
+          },
+          undefined,
+          `Convert percussion pattern to sequencer track`,
+        ),
+      );
+
+      // Capture version
+      commands.push(
+        createTrackCommand(
+          `strudel:${track.id}:capture-version`,
+          `Capture "${trackName}" Version`,
+          'Strudel',
+          'action',
+          ['strudel', 'version', 'snapshot', 'capture', 'save', trackName.toLowerCase()],
+          [`snapshot ${trackName}`, `save ${trackName} version`],
+          async () => {
+            const { useProjectStore } = await import('../store/projectStore');
+            useProjectStore.getState().captureStrudelVersion(track.id);
+          },
+          undefined,
+          `Capture current pattern code as a version snapshot`,
+        ),
+      );
+    }
+  }
+
   return commands;
 }
 

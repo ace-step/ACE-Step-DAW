@@ -596,6 +596,15 @@ export function TrackHeader({
           )}
         </div>
         <ContextMenuItem label="Bounce in Place..." onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }} />
+        {track.trackType === 'strudel' && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem label="Freeze to MIDI" onClick={() => { setCtxMenu(null); void useProjectStore.getState().freezeStrudelToMidi(track.id); }} />
+            <ContextMenuItem label="Freeze to Drum Machine" onClick={() => { setCtxMenu(null); void useProjectStore.getState().freezeStrudelToDrumMachine(track.id); }} />
+            <ContextMenuItem label="Capture Version Snapshot" onClick={() => { setCtxMenu(null); useProjectStore.getState().captureStrudelVersion(track.id); }} />
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem label="Duplicate Track" onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }} />
         {/* Move to Group submenu — only for non-group tracks */}
         {!track.isGroup && (() => {

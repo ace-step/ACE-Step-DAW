@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '../../src/types/project';
 import { useProjectStore } from '../../src/store/projectStore';
+import { MAX_PROJECT_TRACKS } from '../../src/constants/defaults';
 import { createDefaultMasteringState } from '../../src/utils/mastering';
 
 vi.mock('../../src/services/projectStorage', () => ({
@@ -69,8 +70,8 @@ function makeProject(): Project {
     bpm: 120,
     keyScale: 'C major',
     timeSignature: 4,
-    totalDuration: 128,
-    measures: 64,
+    totalDuration: 256,
+    measures: 128,
     tracks: [],
     trackPresets: [],
     generationDefaults: {
@@ -144,6 +145,18 @@ describe('projectStore', () => {
       project = useProjectStore.getState().project;
       expect(project?.tracks).toHaveLength(1);
       expect(project?.tracks[0].id).toBe(bassTrack.id);
+    });
+
+    it('caps the project at 128 tracks', () => {
+      for (let index = 0; index < MAX_PROJECT_TRACKS; index += 1) {
+        useProjectStore.getState().addTrack('drums');
+      }
+
+      const overflowTrack = useProjectStore.getState().addTrack('bass');
+
+      expect(overflowTrack).toBeUndefined();
+      expect(useProjectStore.getState().project?.tracks).toHaveLength(MAX_PROJECT_TRACKS);
+      expect(mockToastError).toHaveBeenCalledWith(`Track limit reached (${MAX_PROJECT_TRACKS} max)`);
     });
 
     it('toggles track-wide FX bypass without removing effects', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
+import { DEFAULT_MEASURES, MAX_PROJECT_TRACKS } from '../../constants/defaults';
 
 // Mock projectStorage to prevent IndexedDB calls during testing
 vi.mock('../../services/projectStorage', () => ({
@@ -21,6 +22,7 @@ describe('projectStore', () => {
       expect(project!.bpm).toBe(120);
       expect(project!.keyScale).toBe('C major');
       expect(project!.timeSignature).toBe(4);
+      expect(project!.measures).toBe(DEFAULT_MEASURES);
       expect(project!.tracks).toEqual([]);
     });
 
@@ -150,6 +152,17 @@ describe('projectStore', () => {
       const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
       expect(track.trackType).toBe('pianoRoll');
       expect(track.synthPreset).toBe('organ');
+    });
+
+    it('stops adding tracks after the 128-track limit', () => {
+      for (let index = 0; index < MAX_PROJECT_TRACKS; index += 1) {
+        useProjectStore.getState().addTrack('drums');
+      }
+
+      const overflowTrack = useProjectStore.getState().addTrack('bass');
+
+      expect(overflowTrack).toBeUndefined();
+      expect(useProjectStore.getState().project!.tracks).toHaveLength(MAX_PROJECT_TRACKS);
     });
 
     it('stores sampler metadata on a piano roll track', () => {

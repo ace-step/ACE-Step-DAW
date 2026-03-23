@@ -71,6 +71,7 @@ import {
   DEFAULT_KEY_SCALE,
   DEFAULT_TIME_SIGNATURE,
   DEFAULT_MEASURES,
+  MAX_PROJECT_TRACKS,
   DEFAULT_PROJECT_NAME,
   DEFAULT_GENERATION,
 } from '../constants/defaults';
@@ -254,7 +255,7 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE); // 64 bars @ 120 BPM 4/4 = 128s
+const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, DEFAULT_TIME_SIGNATURE); // 128 bars @ 120 BPM 4/4 = 256s
 const TIMELINE_PADDING = 10; // seconds beyond last clip
 
 // ── Undo/Redo history ───────────────────────────────────────────────────────
@@ -1001,6 +1002,7 @@ function ensureSessionSlotsForTrack(session: SessionState, trackId: string): Ses
 }
 
 function ensureProjectSession(project: Project): Project {
+  const measures = DEFAULT_MEASURES;
   let session = project.session ?? createDefaultSessionState();
 
   session = {
@@ -1038,6 +1040,16 @@ function ensureProjectSession(project: Project): Project {
 
   return {
     ...project,
+    measures,
+    totalDuration: computeTotalDuration(
+      project.tracks,
+      measures,
+      project.bpm,
+      project.timeSignature,
+      project.timeSignatureDenominator,
+      project.tempoMap,
+      project.timeSignatureMap,
+    ),
     playbackLatency: ensurePlaybackLatencySettings(project.playbackLatency),
     session,
   };
@@ -1836,7 +1848,12 @@ export const useProjectStore = create<ProjectState>()(
     if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'arrangement', label: 'Update project settings' });
-    const merged = { ...state.project, ...updates, updatedAt: Date.now() };
+    const merged = {
+      ...state.project,
+      ...updates,
+      measures: DEFAULT_MEASURES,
+      updatedAt: Date.now(),
+    };
     // Recompute totalDuration when project timing settings change.
     if ('measures' in updates || 'bpm' in updates || 'timeSignature' in updates || 'timeSignatureDenominator' in updates) {
       merged.totalDuration = computeTotalDuration(
@@ -2317,6 +2334,10 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (_isViewerMode()) return undefined as unknown as Track;
     if (!state.project) throw new Error('No project');
+    if (state.project.tracks.length >= MAX_PROJECT_TRACKS) {
+      toastError(`Track limit reached (${MAX_PROJECT_TRACKS} max)`);
+      return undefined as unknown as Track;
+    }
     _pushHistory(state.project, { scope: 'arrangement', label: 'Add track' });
 
     // Handle case where trackName is actually a TrackType (e.g. addTrack('strudel'))
@@ -6263,8 +6284,14 @@ export const useProjectStore = create<ProjectState>()(
     let nextOrder = existingOrders.length > 0 ? Math.max(...existingOrders) + 1 : 1;
     const existingNames = latest.project.tracks.map((track) => track.displayName);
     const appendedTracks: Track[] = [];
+    const remainingTrackSlots = Math.max(0, MAX_PROJECT_TRACKS - latest.project.tracks.length);
 
-    for (const stem of preparedStems) {
+    if (remainingTrackSlots === 0) {
+      toastError(`Track limit reached (${MAX_PROJECT_TRACKS} max)`);
+      return [];
+    }
+
+    for (const stem of preparedStems.slice(0, remainingTrackSlots)) {
       let displayName = stem.displayName;
       let suffix = 2;
       while (existingNames.includes(displayName)) {
@@ -6330,6 +6357,10 @@ export const useProjectStore = create<ProjectState>()(
         assets: [...(latest.project.assets ?? []), ...newAssets],
       },
     });
+
+    if (preparedStems.length > remainingTrackSlots) {
+      toastError(`Only ${remainingTrackSlots} stem track${remainingTrackSlots === 1 ? '' : 's'} could be added (limit ${MAX_PROJECT_TRACKS})`);
+    }
 
     return appendedTracks;
   },
@@ -6429,7 +6460,7 @@ export const useProjectStore = create<ProjectState>()(
       keyScale: state.project.keyScale,
       timeSignature: state.project.timeSignature,
       timeSignatureDenominator: state.project.timeSignatureDenominator ?? 4,
-      measures: state.project.measures ?? DEFAULT_MEASURES,
+      measures: DEFAULT_MEASURES,
       tracks: templateTracks,
       generationDefaults: structuredClone(state.project.generationDefaults),
     };
@@ -6441,9 +6472,9 @@ export const useProjectStore = create<ProjectState>()(
     const bpm = template.bpm;
     const timeSig = template.timeSignature;
     const timeSigDenominator = template.timeSignatureDenominator ?? 4;
-    const measures = template.measures;
+    const measures = DEFAULT_MEASURES;
 
-    const tracks: Track[] = template.tracks.map((tt, idx) => ({
+    const tracks: Track[] = template.tracks.slice(0, MAX_PROJECT_TRACKS).map((tt, idx) => ({
       id: uuidv4(),
       trackName: tt.trackName,
       trackType: tt.trackType,
@@ -6481,7 +6512,11 @@ export const useProjectStore = create<ProjectState>()(
       mastering: createDefaultMasteringState(),
     };
 
-    set({ project });
+    set({ project: ensureProjectSession(project) });
+
+    if (template.tracks.length > MAX_PROJECT_TRACKS) {
+      toastError(`Template was limited to ${MAX_PROJECT_TRACKS} tracks`);
+    }
   },
 
   exportMidiClip: (clipId: string) => {

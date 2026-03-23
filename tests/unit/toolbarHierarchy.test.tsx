@@ -175,7 +175,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');
     expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
-    expect(screen.getByLabelText('Project measures')).toHaveValue('64');
+    expect(screen.queryByLabelText('Project measures')).not.toBeInTheDocument();
   });
 
   it('keeps timeline zoom stable when BPM changes from the toolbar', () => {

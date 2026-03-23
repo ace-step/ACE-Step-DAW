@@ -22,7 +22,7 @@ describe('project templates', () => {
       expect(template.bpm).toBe(140);
       expect(template.keyScale).toBe('D minor');
       expect(template.timeSignature).toBe(3);
-      expect(template.measures).toBe(64);
+      expect(template.measures).toBe(128);
       expect(template.id).toBeTruthy();
       expect(template.createdAt).toBeGreaterThan(0);
     });
@@ -101,7 +101,7 @@ describe('project templates', () => {
       expect(project.bpm).toBe(140);
       expect(project.keyScale).toBe('D minor');
       expect(project.timeSignature).toBe(3);
-      expect(project.measures).toBe(64);
+      expect(project.measures).toBe(128);
       expect(project.name).toBe('Session Template');
     });
 

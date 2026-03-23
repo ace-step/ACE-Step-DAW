@@ -7,7 +7,6 @@ import { useCollaborationStore } from '../../store/collaborationStore';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
-import { DEFAULT_MEASURES } from '../../constants/defaults';
 import { KEY_SCALES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { clampTimelinePixelsPerSecond } from '../../utils/timelineZoom';
@@ -59,7 +58,6 @@ function splitKeyScale(keyScale?: string) {
 }
 
 const numericDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[18px] leading-none tracking-[0.01em] text-white focus:text-white focus:outline-none disabled:opacity-50';
-const textDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[17px] leading-none tracking-[0.01em] text-white focus:text-white focus:outline-none disabled:opacity-50';
 const selectClass = 'h-8 appearance-none bg-transparent px-0 font-mono text-[17px] leading-none tracking-[0.01em] text-white focus:text-white focus:outline-none disabled:opacity-50';
 const boxedReadoutClass = 'flex h-8 items-center rounded-[13px] border border-white/10 bg-white/[0.05] px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.08]';
 const flatReadoutClass = 'relative flex h-8 items-center rounded-md px-1.5 transition-colors hover:bg-white/6';
@@ -90,17 +88,15 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
   const zoomTimelineToProject = useUIStore((s) => s.zoomTimelineToProject);
   const [bpmInput, setBpmInput] = useState('120');
-  const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
   const [tsNumeratorInput, setTsNumeratorInput] = useState('4');
   const [tsDenominatorInput, setTsDenominatorInput] = useState('4');
 
   useEffect(() => {
     if (!project) return;
     setBpmInput(String(project.bpm));
-    setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
     setTsNumeratorInput(String(project.timeSignature ?? 4));
     setTsDenominatorInput(String(project.timeSignatureDenominator ?? 4));
-  }, [project?.bpm, project?.measures, project?.timeSignature, project?.timeSignatureDenominator, project]);
+  }, [project?.bpm, project?.timeSignature, project?.timeSignatureDenominator, project]);
 
   const keyScale = splitKeyScale(project?.keyScale);
 
@@ -113,18 +109,6 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
         setPixelsPerSecond(clampTimelinePixelsPerSecond((pixelsPerSecond * nextBpm) / project.bpm));
       }
       updateProject({ bpm: nextBpm });
-    }
-  };
-
-  const commitMeasures = () => {
-    const parsed = Number.parseInt(measuresInput, 10);
-    const nextMeasures = Number.isNaN(parsed)
-      ? (project?.measures ?? DEFAULT_MEASURES)
-      : Math.min(512, Math.max(1, parsed));
-    setMeasuresInput(String(nextMeasures));
-    if (project && nextMeasures !== project.measures) {
-      updateProject({ measures: nextMeasures });
-      zoomTimelineToProject();
     }
   };
 
@@ -255,24 +239,6 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           </select>
           <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-zinc-300" />
         </div>
-      </div>
-
-      <ToolbarSeparator />
-
-      <div className={flatReadoutClass}>
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={measuresInput}
-          onChange={(event) => setMeasuresInput(event.target.value)}
-          onBlur={commitMeasures}
-          onKeyDown={blurOnEnter}
-          disabled={disabled}
-          aria-label="Project measures"
-          title="Project measures"
-          className={`${textDisplayInputClass} w-[2.1rem]`}
-        />
       </div>
     </div>
   );

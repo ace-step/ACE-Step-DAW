@@ -23,6 +23,13 @@ export class TrackNode {
   private readonly analyserData: Uint8Array<ArrayBuffer>;
   private readonly analyserFloatData: Float32Array<ArrayBuffer>;
   private readonly analyserTimeDomainData: Float32Array<ArrayBuffer>;
+  private readonly splitter: ChannelSplitterNode;
+  private readonly analyserLeft: AnalyserNode;
+  private readonly analyserRight: AnalyserNode;
+  private readonly analyserLeftData: Uint8Array<ArrayBuffer>;
+  private readonly analyserRightData: Uint8Array<ArrayBuffer>;
+  private readonly analyserLeftTimeDomain: Float32Array<ArrayBuffer>;
+  private readonly analyserRightTimeDomain: Float32Array<ArrayBuffer>;
 
   private _volume = 0.8;
   private _muted = false;
@@ -54,6 +61,19 @@ export class TrackNode {
     this.analyserData = new Uint8Array(this.analyserNode.frequencyBinCount);
     this.analyserFloatData = new Float32Array(this.analyserNode.frequencyBinCount);
     this.analyserTimeDomainData = new Float32Array(this.analyserNode.fftSize);
+
+    // Stereo channel splitting for L/R metering
+    this.splitter = ctx.createChannelSplitter(2);
+    this.analyserLeft = ctx.createAnalyser();
+    this.analyserLeft.fftSize = 2048;
+    this.analyserLeft.smoothingTimeConstant = 0.75;
+    this.analyserRight = ctx.createAnalyser();
+    this.analyserRight.fftSize = 2048;
+    this.analyserRight.smoothingTimeConstant = 0.75;
+    this.analyserLeftData = new Uint8Array(this.analyserLeft.frequencyBinCount);
+    this.analyserRightData = new Uint8Array(this.analyserRight.frequencyBinCount);
+    this.analyserLeftTimeDomain = new Float32Array(this.analyserLeft.fftSize);
+    this.analyserRightTimeDomain = new Float32Array(this.analyserRight.fftSize);
 
     // Configure EQ defaults
     this.eqLow.type = 'lowshelf';
@@ -102,6 +122,11 @@ export class TrackNode {
     this.compressor.connect(this.volumeGain);
     this.volumeGain.connect(this.analyserNode);
     this.analyserNode.connect(destination);
+
+    // Stereo metering: volumeGain → splitter → analyserLeft (ch0) / analyserRight (ch1)
+    this.volumeGain.connect(this.splitter);
+    this.splitter.connect(this.analyserLeft, 0);
+    this.splitter.connect(this.analyserRight, 1);
 
     this.volumeGain.gain.value = this._volume;
 
@@ -181,7 +206,7 @@ export class TrackNode {
     return this.getMeter().level;
   }
 
-  getMeter(): { level: number; clipped: boolean } {
+  getMeter(): { level: number; leftLevel: number; rightLevel: number; clipped: boolean } {
     this.analyserNode.getByteFrequencyData(this.analyserData);
     this.analyserNode.getFloatTimeDomainData(this.analyserTimeDomainData);
 
@@ -198,12 +223,46 @@ export class TrackNode {
       if (abs > samplePeak) samplePeak = abs;
     }
 
-    const level = Math.max(spectralPeak / 255, samplePeak);
     if (samplePeak >= TrackNode.CLIP_THRESHOLD) {
       this._clipped = true;
     }
 
-    return { level: Math.max(0, Math.min(1, level)), clipped: this._clipped };
+    // Per-channel metering
+    const leftLevel = this._getChannelLevel(this.analyserLeft, this.analyserLeftData, this.analyserLeftTimeDomain);
+    const rightLevel = this._getChannelLevel(this.analyserRight, this.analyserRightData, this.analyserRightTimeDomain);
+
+    // Backward compat: level = max of L/R
+    const level = Math.max(leftLevel, rightLevel);
+
+    return { level: Math.max(0, Math.min(1, level)), leftLevel, rightLevel, clipped: this._clipped };
+  }
+
+  private _getChannelLevel(
+    analyser: AnalyserNode,
+    freqData: Uint8Array<ArrayBuffer>,
+    timeDomainData: Float32Array<ArrayBuffer>,
+  ): number {
+    analyser.getByteFrequencyData(freqData);
+    analyser.getFloatTimeDomainData(timeDomainData);
+
+    let spectralPeak = 0;
+    for (let i = 0; i < freqData.length; i++) {
+      if (freqData[i] > spectralPeak) {
+        spectralPeak = freqData[i];
+      }
+    }
+
+    let samplePeak = 0;
+    for (let i = 0; i < timeDomainData.length; i++) {
+      const abs = Math.abs(timeDomainData[i]);
+      if (abs > samplePeak) samplePeak = abs;
+    }
+
+    if (samplePeak >= TrackNode.CLIP_THRESHOLD) {
+      this._clipped = true;
+    }
+
+    return Math.max(0, Math.min(1, Math.max(spectralPeak / 255, samplePeak)));
   }
 
   resetClip() {
@@ -317,5 +376,8 @@ export class TrackNode {
     this.compressor.disconnect();
     this.volumeGain.disconnect();
     this.analyserNode.disconnect();
+    this.splitter.disconnect();
+    this.analyserLeft.disconnect();
+    this.analyserRight.disconnect();
   }
 }

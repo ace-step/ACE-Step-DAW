@@ -542,8 +542,8 @@ export class AudioEngine {
     return this.getTrackMeter(trackId).level;
   }
 
-  getTrackMeter(trackId: string): { level: number; clipped: boolean } {
-    return this.trackNodes.get(trackId)?.getMeter() ?? { level: 0, clipped: false };
+  getTrackMeter(trackId: string): { level: number; leftLevel: number; rightLevel: number; clipped: boolean } {
+    return this.trackNodes.get(trackId)?.getMeter() ?? { level: 0, leftLevel: 0, rightLevel: 0, clipped: false };
   }
 
   resetTrackClip(trackId: string) {

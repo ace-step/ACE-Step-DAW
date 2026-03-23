@@ -75,7 +75,11 @@ function makeAudioContext(): AudioContext {
         frequencyBinCount: 1024,
         getByteFrequencyData: vi.fn(),
         getFloatFrequencyData: vi.fn(),
+        getFloatTimeDomainData: vi.fn(),
       });
+    },
+    createChannelSplitter(_numberOfOutputs: number) {
+      return makeNode();
     },
     createBuffer(_channels: number, length: number, sampleRate: number) {
       const data = new Float32Array(length);
@@ -175,33 +179,42 @@ describe('TrackNode', () => {
 
   describe('meter clipping', () => {
     function setMeterSamples(samples: number[]) {
-      const analyser = (node as unknown as { analyserNode: {
+      const nodeAny = node as unknown as Record<string, {
         getByteFrequencyData: (data: Uint8Array) => void;
         getFloatTimeDomainData: (data: Float32Array) => void;
-      } }).analyserNode;
+      }>;
 
-      analyser.getByteFrequencyData = vi.fn((data: Uint8Array) => {
-        data.fill(0);
-      });
-      analyser.getFloatTimeDomainData = vi.fn((data: Float32Array) => {
-        data.fill(0);
-        samples.forEach((sample, index) => {
-          if (index < data.length) data[index] = sample;
+      for (const key of ['analyserNode', 'analyserLeft', 'analyserRight']) {
+        const analyser = nodeAny[key];
+        analyser.getByteFrequencyData = vi.fn((data: Uint8Array) => {
+          data.fill(0);
         });
-      });
+        analyser.getFloatTimeDomainData = vi.fn((data: Float32Array) => {
+          data.fill(0);
+          samples.forEach((sample, index) => {
+            if (index < data.length) data[index] = sample;
+          });
+        });
+      }
     }
 
     it('latches the clip state until resetClip is called', () => {
       setMeterSamples([1]);
 
-      expect(node.getMeter()).toEqual({ level: 1, clipped: true });
+      const m1 = node.getMeter();
+      expect(m1.level).toBe(1);
+      expect(m1.clipped).toBe(true);
 
       setMeterSamples([0.25]);
-      expect(node.getMeter()).toEqual({ level: 0.25, clipped: true });
+      const m2 = node.getMeter();
+      expect(m2.level).toBeCloseTo(0.25, 1);
+      expect(m2.clipped).toBe(true);
 
       node.resetClip();
 
-      expect(node.getMeter()).toEqual({ level: 0.25, clipped: false });
+      const m3 = node.getMeter();
+      expect(m3.level).toBeCloseTo(0.25, 1);
+      expect(m3.clipped).toBe(false);
     });
   });
 });

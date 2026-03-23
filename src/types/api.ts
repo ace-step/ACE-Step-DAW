@@ -44,10 +44,15 @@ export interface RepaintTaskParams {
 
 export type StemCount = 2 | 4 | 6;
 
+/** Preferred separation engine — backend selects best model per stem count if 'auto' */
+export type StemSeparationEngine = 'auto' | 'bs-roformer' | 'demucs-v4' | 'htdemucs-6s';
+
 export interface StemSeparationTaskParams {
   task_type: 'stem_separation';
   stem_count: StemCount;
   audio_format: 'wav';
+  /** Separation engine preference. 'auto' routes 4-stem to BS-RoFormer, 6-stem to Demucs v4. */
+  engine?: StemSeparationEngine;
 }
 
 export interface LegoTaskParams {
@@ -125,6 +130,224 @@ export interface TaskResultItem {
   progress?: number;
   stage?: string;
 }
+
+// ---------------------------------------------------------------------------
+// AI Mixing — GRAFX differentiable audio processing (#738)
+// ---------------------------------------------------------------------------
+
+/** Mixing mode: optimize from scratch, match a reference style, or use text guidance */
+export type AiMixMode = 'auto' | 'reference' | 'text';
+
+export interface AiMixTaskParams {
+  task_type: 'ai_mix';
+  mode: AiMixMode;
+  /** For 'reference' mode: server-side path to reference audio */
+  reference_audio_path?: string;
+  /** For 'text' mode: natural language mixing instruction */
+  text_prompt?: string;
+  /** Target loudness in LUFS (default: -14) */
+  target_lufs?: number;
+  /** Model to use (default: 'grafx') */
+  model?: string;
+}
+
+/** Parameter-level mixing result — maps to DAW effect chain */
+export interface AiMixResult {
+  /** Per-track mix parameters keyed by track name */
+  tracks: Record<string, TrackMixParams>;
+  /** Master bus parameters */
+  master: MasterMixParams;
+}
+
+export interface TrackMixParams {
+  gain_db: number;
+  pan: number;                 // -1.0 (L) to 1.0 (R)
+  eq?: EqBand[];
+  compressor?: CompressorParams;
+  reverb_send?: number;        // 0.0–1.0
+  delay_send?: number;         // 0.0–1.0
+  mute?: boolean;
+  solo?: boolean;
+}
+
+export interface EqBand {
+  frequency_hz: number;
+  gain_db: number;
+  q: number;
+  type: 'lowshelf' | 'highshelf' | 'peaking' | 'lowpass' | 'highpass';
+}
+
+export interface CompressorParams {
+  threshold_db: number;
+  ratio: number;
+  attack_ms: number;
+  release_ms: number;
+  knee_db?: number;
+  makeup_gain_db?: number;
+}
+
+export interface MasterMixParams {
+  eq?: EqBand[];
+  compressor?: CompressorParams;
+  limiter_ceiling_db?: number;
+  target_lufs?: number;
+}
+
+// ---------------------------------------------------------------------------
+// MIDI AI Generation — Anticipatory Music Transformer / Moonbeam (#739)
+// ---------------------------------------------------------------------------
+
+/** MIDI generation mode */
+export type MidiGenerationMode = 'infill' | 'continue' | 'arrange' | 'variation';
+
+export interface MidiGenerationTaskParams {
+  task_type: 'midi_generate';
+  mode: MidiGenerationMode;
+  /** Base64-encoded MIDI context (existing notes in the clip/region) */
+  context_midi: string;
+  /** Selection range in beats — model generates within this range for 'infill' */
+  selection_start?: number;
+  selection_end?: number;
+  /** Indices of notes in context_midi that are locked (excluded from regeneration) */
+  locked_note_indices?: number[];
+  /** How many bars to generate for 'continue' mode */
+  continuation_bars?: number;
+  /** Target track/instrument for 'arrange' mode (e.g. 'bass', 'drums') */
+  target_instrument?: string;
+  /** Musical constraints */
+  key?: string;                // e.g. 'C major', 'A minor'
+  time_signature?: string;     // e.g. '4/4', '3/4'
+  bpm?: number;
+  /** Style/genre hint for conditioned models */
+  style?: string;
+  /** Temperature for sampling (0.0–2.0, default 1.0) */
+  temperature?: number;
+  /** Number of variations to generate */
+  num_results?: number;
+  /** Model to use */
+  model?: string;              // 'anticipatory-music-transformer' | 'moonbeam' | 'midi-gpt' | 'notagen'
+  seed?: number;
+}
+
+/** Single MIDI generation result */
+export interface MidiGenerationResultItem {
+  /** Base64-encoded generated MIDI data */
+  midi_data: string;
+  /** Confidence / quality score (0.0–1.0) if available */
+  score?: number;
+  /** Model that produced this result */
+  model: string;
+  /** Inferred musical attributes */
+  inferred_attributes?: {
+    key?: string;
+    bpm?: number;
+    time_signature?: string;
+    genre?: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Chord AI — ChordSeqAI / musicautobot / AccoMontage2 (#740)
+// ---------------------------------------------------------------------------
+
+/** Chord generation/harmonization mode */
+export type ChordMode = 'suggest' | 'harmonize' | 'continue' | 'from_text';
+
+/** A single chord event in the DAW timeline */
+export interface ChordEvent {
+  /** Root note: 'C', 'C#', 'D', ... 'B' */
+  root: string;
+  /** Chord quality: 'maj', 'min', '7', 'maj7', 'min7', 'dim', 'aug', 'sus2', 'sus4', etc. */
+  quality: string;
+  /** Optional bass note for slash chords (e.g. 'E' for C/E) */
+  bass?: string;
+  /** Start position in beats */
+  start_beat: number;
+  /** Duration in beats */
+  duration_beats: number;
+}
+
+export interface ChordGenerationTaskParams {
+  task_type: 'chord_generate';
+  mode: ChordMode;
+  /** Existing chord progression for 'suggest' and 'continue' modes */
+  existing_chords?: ChordEvent[];
+  /** Base64-encoded melody MIDI for 'harmonize' mode */
+  melody_midi?: string;
+  /** Natural language description for 'from_text' mode */
+  text_prompt?: string;
+  /** Musical context */
+  key?: string;
+  time_signature?: string;
+  bpm?: number;
+  /** Genre/style conditioning (e.g. 'jazz', 'pop', 'classical') */
+  genre?: string;
+  /** Number of suggestions to return */
+  num_suggestions?: number;
+  /** Model preference */
+  model?: string;              // 'chord-seq-ai' | 'musicautobot' | 'accomontage2' | 'remi'
+}
+
+export interface ChordGenerationResult {
+  /** Primary chord result */
+  chords: ChordEvent[];
+  /** Confidence score (0.0–1.0) */
+  confidence: number;
+  /** Alternative suggestions ranked by score */
+  alternatives?: ChordEvent[][];
+  /** If mode was 'harmonize' with AccoMontage2, optional accompaniment MIDI */
+  accompaniment_midi?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Extended model inventory — unified multi-model support (#741)
+// ---------------------------------------------------------------------------
+
+/** Capability categories for the model inventory */
+export type ModelCapability =
+  | 'music_generation'      // ACE-Step lego/cover/repaint
+  | 'stem_separation'       // BS-RoFormer, Demucs
+  | 'ai_mixing'             // GRAFX, FxNorm-Automix
+  | 'midi_generation'       // Anticipatory Music Transformer, Moonbeam, NotaGen
+  | 'chord_generation'      // ChordSeqAI, musicautobot
+  | 'lm_reasoning';         // LLM for lyrics/annotation
+
+/** Extended model entry with capability metadata */
+export interface ExtendedModelEntry extends ModelEntry {
+  /** Human-readable display name */
+  display_name?: string;
+  /** Model capabilities */
+  capabilities?: ModelCapability[];
+  /** Approximate VRAM requirement in GB */
+  vram_gb?: number;
+  /** Whether this model can run client-side (ONNX/WebGPU) */
+  client_side?: boolean;
+  /** SPDX license identifier */
+  license?: string;
+  /** Link to model card or paper */
+  info_url?: string;
+}
+
+/** Extended inventory response grouping models by capability */
+export interface ExtendedModelsListResponse extends ModelsListResponse {
+  /** All models with extended metadata */
+  all_models?: ExtendedModelEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Unified task type union
+// ---------------------------------------------------------------------------
+
+export type AiTaskParams =
+  | LegoTaskParams
+  | CoverTaskParams
+  | RepaintTaskParams
+  | StemSeparationTaskParams
+  | AiMixTaskParams
+  | MidiGenerationTaskParams
+  | ChordGenerationTaskParams;
+
+export type AiTaskType = AiTaskParams['task_type'];
 
 export interface HealthResponse {
   status: string;

@@ -256,6 +256,7 @@ export function Timeline() {
   const zoomTargetRef = useRef(pixelsPerSecond);
   const zoomAnchorRef = useRef<{ time: number; viewportX: number } | null>(null);
   const zoomFrameTimeRef = useRef<number | null>(null);
+  const handledTimelineZoomRequestIdRef = useRef<number | null>(null);
   const { importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
   const isTrackListCollapsed = trackListDisplayMode === 'collapsed';
 
@@ -448,10 +449,12 @@ export function Timeline() {
 
   useEffect(() => {
     if (!project || !timelineZoomRequest || !scrollRef.current) return;
+    if (handledTimelineZoomRequestIdRef.current === timelineZoomRequest.id) return;
 
     const container = scrollRef.current;
     const nextViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
     const projectRange = { startTime: 0, endTime: project.totalDuration };
+    handledTimelineZoomRequestIdRef.current = timelineZoomRequest.id;
 
     let targetRange = projectRange;
     let usedFallback = false;

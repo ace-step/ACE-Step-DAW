@@ -370,6 +370,7 @@ function ControlBarButton({
   disabled,
   dataTarget,
   className,
+  disableHoverHighlight = false,
   children,
 }: {
   active?: boolean;
@@ -378,6 +379,7 @@ function ControlBarButton({
   disabled?: boolean;
   dataTarget?: string;
   className?: string;
+  disableHoverHighlight?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -391,7 +393,7 @@ function ControlBarButton({
       title={title}
       aria-label={title.replace(/\s*\(.+?\)$/, '')}
       data-onboarding-target={dataTarget}
-      className={`h-9 w-9 rounded-lg text-white hover:bg-white/8 hover:text-white ${className ?? ''}`}
+      className={`h-9 w-9 rounded-lg text-white ${disableHoverHighlight ? '' : 'hover:bg-white/8 hover:text-white'} ${className ?? ''}`}
     >
       {children}
     </Button>
@@ -710,7 +712,12 @@ export function Toolbar() {
             <path d="M2 11h7a3 3 0 0 0 0-6" />
           </svg>
         </ControlBarButton>
-        <ControlBarButton active={autoScrollEnabled} onClick={toggleAutoScroll} title="Auto Scroll">
+        <ControlBarButton
+          active={autoScrollEnabled}
+          onClick={toggleAutoScroll}
+          title="Auto Scroll"
+          disableHoverHighlight
+        >
           <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 7h7.5" />
             <path d="M7 4l3.5 3L7 10" />

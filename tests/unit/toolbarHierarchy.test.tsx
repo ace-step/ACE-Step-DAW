@@ -199,6 +199,12 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.queryByTitle('Capture MIDI (F)')).not.toBeInTheDocument();
   });
 
+  it('does not add a hover highlight to the auto-scroll button', () => {
+    render(<Toolbar />);
+
+    expect(screen.getByTitle('Auto Scroll').className).not.toContain('hover:bg-white/8');
+  });
+
   it('renders metronome pulse dots based on the time signature denominator', () => {
     useProjectStore.setState((state) => ({
       project: state.project

@@ -156,8 +156,9 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(playButton.className).toContain('h-10');
     expect(playButton.className).toContain('w-11');
     expect(playButton.className).not.toContain('bg-white/8');
-    expect(tempoReadout.className).not.toContain('bg-white/[0.05]');
-    expect(timeSignatureReadout.className).toContain('gap-[0.3rem]');
+    expect(tempoReadout.className).not.toContain('border');
+    expect(tempoReadout.className).not.toContain('rounded');
+    expect(timeSignatureReadout.className).toContain('gap-[0.18rem]');
   });
 
   it('removes the top toolbar Generate button in favor of the side dock entry', () => {

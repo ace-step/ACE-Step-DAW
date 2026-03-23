@@ -48,14 +48,12 @@ describe('ArrangementMarkers', () => {
     fireEvent.doubleClick(el, { clientX: 250 });
 
     const markers = useProjectStore.getState().project!.markers!;
-    // Creates 2 markers: start (snapped) + end (start + 4 bars)
-    expect(markers.length).toBeGreaterThanOrEqual(1);
-    // At 120 BPM, 4/4 → bar = 4 beats × 0.5s = 2s. 2.5s snaps to 2s
-    expect(markers[0].time).toBe(2);
-    // End marker at 2 + 4*2 = 10s
-    if (markers.length > 1) {
-      expect(markers[1].time).toBe(10);
-    }
+    // Creates 2 markers: start (snapped to beat) + end (start + 4 bars)
+    expect(markers).toHaveLength(2);
+    // At 120 BPM, beat = 0.5s. 2.5s (250px / 100pps) snaps to 2.5s (exact beat)
+    expect(markers[0].time).toBe(2.5);
+    // End marker at 2.5 + 4 bars * 2s/bar = 10.5s
+    expect(markers[1].time).toBe(10.5);
   });
 
   it('adds a marker at exact position when Alt is held', () => {

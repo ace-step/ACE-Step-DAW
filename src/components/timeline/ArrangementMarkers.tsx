@@ -8,8 +8,6 @@ import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { snapToGrid } from '../../utils/time';
 import { SectionSelector, getSectionColor } from './SectionSelector';
 
-/** Total interactive width of the resize handle at section borders */
-const RESIZE_HANDLE_TOTAL_PX = 24;
 const DRAG_THRESHOLD_PX = 4;
 
 type MarkerDragMode = 'move' | 'resize-right';
@@ -21,6 +19,11 @@ interface DragInfo {
   originalTime: number;
   nextMarkerId: string | null;
   nextMarkerOriginalTime: number;
+}
+
+/** Snap to single beat (division=1) for finer granularity */
+function snapToBeat(time: number, bpm: number, tempoMap?: unknown[]): number {
+  return snapToGrid(time, bpm, 1, tempoMap as never);
 }
 
 export function ArrangementMarkers() {
@@ -49,19 +52,16 @@ export function ArrangementMarkers() {
   // Use refs for drag state to avoid closure staleness issues
   const dragRef = useRef<DragInfo | null>(null);
   const hasDraggedRef = useRef(false);
-  const dragModeRef = useRef<MarkerDragMode>('move');
 
   const bpm = project?.bpm ?? 120;
   const timeSignature = project?.timeSignature ?? 4;
   const tempoMap = project?.tempoMap;
 
-  // Keep refs in sync for use in listeners
+  // Keep refs in sync for use in native event listeners
   const ppsRef = useRef(pixelsPerSecond);
   ppsRef.current = pixelsPerSecond;
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
-  const tsRef = useRef(timeSignature);
-  tsRef.current = timeSignature;
   const tempoMapRef = useRef(tempoMap);
   tempoMapRef.current = tempoMap;
   const updateMarkerRef = useRef(updateMarker);
@@ -74,35 +74,30 @@ export function ArrangementMarkers() {
     [seek],
   );
 
+  // --- Double-click: create a fixed-length section (start + end markers) ---
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!project) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const rawTime = Math.max(0, x / pixelsPerSecond);
-      const time = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
+      const startTime = e.altKey ? rawTime : snapToBeat(rawTime, bpm, tempoMap as never);
 
-      // Create a section with default length of 4 bars
+      // Default section = 4 bars
       const barDuration = (60 / bpm) * timeSignature;
-      const defaultLength = barDuration * 4;
-      const endTime = Math.min(time + defaultLength, totalDuration);
+      const endTime = Math.min(startTime + barDuration * 4, totalDuration);
 
-      addMarker(time, 'New Section');
+      // Only create if there's room for at least 1 bar
+      if (endTime - startTime < barDuration) return;
 
-      // Add an end marker if there's room and no existing marker nearby
-      const existingMarkers = useProjectStore.getState().project?.markers ?? [];
-      const hasMarkerNearEnd = existingMarkers.some(
-        (m) => Math.abs(m.time - endTime) < barDuration * 0.5,
-      );
-      if (endTime > time + barDuration && !hasMarkerNearEnd) {
-        addMarker(endTime, 'New Section');
-      }
+      addMarker(startTime, 'New Section');
+      addMarker(endTime, 'New Section');
 
-      // Open selector for the new marker on next render
+      // Open selector for the start marker on next render
       setTimeout(() => {
         const newMarkers = useProjectStore.getState().project?.markers;
         if (!newMarkers) return;
-        const newMarker = newMarkers.find((m) => m.time === time && m.name === 'New Section');
+        const newMarker = newMarkers.find((m) => m.time === startTime);
         if (newMarker) {
           setEditingId(newMarker.id);
           const el = document.querySelector(`[data-marker-id="${newMarker.id}"]`);
@@ -139,7 +134,7 @@ export function ArrangementMarkers() {
     [updateMarker],
   );
 
-  // --- Unified drag start (called from body and resize handle) ---
+  // --- Unified drag start ---
   const startDrag = useCallback(
     (e: React.MouseEvent, info: DragInfo) => {
       if (e.button !== 0) return;
@@ -147,13 +142,12 @@ export function ArrangementMarkers() {
       e.stopPropagation();
       dragRef.current = info;
       hasDraggedRef.current = false;
-      dragModeRef.current = info.mode;
       setIsDragging(true);
     },
     [],
   );
 
-  // --- Global drag listeners (attached once, read from refs) ---
+  // --- Global drag listeners ---
   useEffect(() => {
     if (!isDragging) return;
 
@@ -167,20 +161,19 @@ export function ArrangementMarkers() {
 
       const pps = ppsRef.current;
       const b = bpmRef.current;
-      const ts = tsRef.current;
       const tm = tempoMapRef.current;
       const deltaTime = deltaX / pps;
 
       if (drag.mode === 'move') {
         const rawTime = Math.max(0, drag.originalTime + deltaTime);
-        const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, b, ts, tm);
-        setGhostLeft(snappedTime * pps);
+        const snapped = e.altKey ? rawTime : snapToBeat(rawTime, b, tm as never);
+        setGhostLeft(snapped * pps);
       } else {
         const rawTime = Math.max(0, drag.nextMarkerOriginalTime + deltaTime);
-        const minTime = drag.originalTime + (60 / b);
-        const clampedTime = Math.max(minTime, rawTime);
-        const snappedTime = e.altKey ? clampedTime : snapToGrid(clampedTime, b, ts, tm);
-        setGhostLeft(snappedTime * pps);
+        const minTime = drag.originalTime + (60 / b); // at least 1 beat
+        const clamped = Math.max(minTime, rawTime);
+        const snapped = e.altKey ? clamped : snapToBeat(clamped, b, tm as never);
+        setGhostLeft(snapped * pps);
       }
     };
 
@@ -195,21 +188,20 @@ export function ArrangementMarkers() {
       if (hasDraggedRef.current) {
         const pps = ppsRef.current;
         const b = bpmRef.current;
-        const ts = tsRef.current;
         const tm = tempoMapRef.current;
         const deltaX = e.clientX - drag.startX;
         const deltaTime = deltaX / pps;
 
         if (drag.mode === 'move') {
           const rawTime = Math.max(0, drag.originalTime + deltaTime);
-          const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, b, ts, tm);
-          updateMarkerRef.current(drag.markerId, { time: snappedTime });
+          const snapped = e.altKey ? rawTime : snapToBeat(rawTime, b, tm as never);
+          updateMarkerRef.current(drag.markerId, { time: snapped });
         } else if (drag.nextMarkerId) {
           const rawTime = Math.max(0, drag.nextMarkerOriginalTime + deltaTime);
           const minTime = drag.originalTime + (60 / b);
-          const clampedTime = Math.max(minTime, rawTime);
-          const snappedTime = e.altKey ? clampedTime : snapToGrid(clampedTime, b, ts, tm);
-          updateMarkerRef.current(drag.nextMarkerId, { time: snappedTime });
+          const clamped = Math.max(minTime, rawTime);
+          const snapped = e.altKey ? clamped : snapToBeat(clamped, b, tm as never);
+          updateMarkerRef.current(drag.nextMarkerId, { time: snapped });
         }
       }
 
@@ -259,13 +251,51 @@ export function ArrangementMarkers() {
         </div>
       )}
       {/* Ghost preview during drag */}
-      {isDragging && hasDraggedRef.current && ghostLeft !== null && (
+      {ghostLeft !== null && (
         <div
           className="absolute top-0 h-full pointer-events-none"
-          style={{ left: ghostLeft, width: 2, backgroundColor: '#fff', opacity: 0.6 }}
+          style={{ left: ghostLeft, width: 2, backgroundColor: '#fff', opacity: 0.7 }}
           data-testid="arrangement-marker-ghost"
         />
       )}
+
+      {/* Render resize handles as a SEPARATE layer above all sections
+          so they are never covered by adjacent section divs */}
+      {sections.map(({ marker, startTime, endTime }, sectionIndex) => {
+        const isLastSection = sectionIndex === sections.length - 1;
+        if (isLastSection) return null;
+
+        const nextSection = sections[sectionIndex + 1];
+        const nextMarkerId = nextSection?.marker.id ?? null;
+        const nextMarkerTime = nextSection?.marker.time ?? totalDuration;
+        const borderX = endTime * pixelsPerSecond;
+
+        return (
+          <div
+            key={`resize-${marker.id}`}
+            className="absolute top-0 h-full"
+            style={{
+              left: borderX - 12,
+              width: 24,
+              cursor: 'col-resize',
+              zIndex: 30,
+            }}
+            data-testid={`marker-resize-handle-${marker.id}`}
+            onMouseDown={(e) =>
+              startDrag(e, {
+                markerId: marker.id,
+                mode: 'resize-right',
+                startX: e.clientX,
+                originalTime: marker.time,
+                nextMarkerId,
+                nextMarkerOriginalTime: nextMarkerTime,
+              })
+            }
+          />
+        );
+      })}
+
+      {/* Section blocks */}
       {sections.map(({ marker, startTime, endTime }, sectionIndex) => {
         const left = startTime * pixelsPerSecond;
         const widthPx = (endTime - startTime) * pixelsPerSecond;
@@ -276,12 +306,11 @@ export function ArrangementMarkers() {
         const nextSection = sections[sectionIndex + 1];
         const nextMarkerId = nextSection?.marker.id ?? null;
         const nextMarkerTime = nextSection?.marker.time ?? totalDuration;
-        const isLastSection = sectionIndex === sections.length - 1;
 
         return (
           <div
             key={marker.id}
-            className="absolute top-0 h-full flex items-center group"
+            className="absolute top-0 h-full flex items-center"
             style={{
               left,
               width: Math.max(widthPx, 2),
@@ -289,6 +318,7 @@ export function ArrangementMarkers() {
               borderLeft: `2px solid ${color}`,
               opacity: sectionIsDragging ? 0.5 : 1,
               cursor: 'grab',
+              zIndex: 10,
             }}
             data-marker-id={marker.id}
             onClick={() => {
@@ -310,28 +340,6 @@ export function ArrangementMarkers() {
               })
             }
           >
-            {/* Right-edge resize handle — wide interactive zone centered on the border */}
-            {!isLastSection && (
-              <div
-                className="absolute top-0 h-full z-20"
-                style={{
-                  right: -(RESIZE_HANDLE_TOTAL_PX / 2),
-                  width: RESIZE_HANDLE_TOTAL_PX,
-                  cursor: 'col-resize',
-                }}
-                data-testid={`marker-resize-handle-${marker.id}`}
-                onMouseDown={(e) =>
-                  startDrag(e, {
-                    markerId: marker.id,
-                    mode: 'resize-right',
-                    startX: e.clientX,
-                    originalTime: marker.time,
-                    nextMarkerId,
-                    nextMarkerOriginalTime: nextMarkerTime,
-                  })
-                }
-              />
-            )}
             {isEditing && editingRect ? (
               <SectionSelector
                 defaultValue={marker.name}

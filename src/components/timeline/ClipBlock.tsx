@@ -92,7 +92,6 @@ function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresen
 export function ClipBlock({ clip, track }: ClipBlockProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
-  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const selectClip = useUIStore((s) => s.selectClip);
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -222,8 +221,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isClipSelected = selectedClipIds.has(clip.id);
-  const isTrackSelected = selectedTrackIds.has(track.id);
-  const isSelected = isClipSelected && isTrackSelected;
+  const isSelected = isClipSelected;
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
   const fadeOutWidth = Math.min(width, fadeOutDuration * pixelsPerSecond);

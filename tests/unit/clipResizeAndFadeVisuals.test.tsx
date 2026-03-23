@@ -95,15 +95,16 @@ describe('Clip resize handle width and fade visuals', () => {
     expect(bodySurface.style.background).toContain('253, 251, 246');
   });
 
-  it('uses the non-selected clip surface when its track is no longer selected', () => {
+  it('keeps the selected clip surface regardless of track selection', () => {
     useUIStore.setState({ selectedTrackIds: new Set(['other-track']) });
 
     const { container } = renderClip();
     const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
     const clipEl = container.querySelector('[data-testid="clip-clip-1"]') as HTMLElement;
 
-    expect(bodySurface.style.background).not.toContain('253, 251, 246');
-    expect(clipEl.className).not.toContain('ring-2');
+    // Clip selection is independent of track selection
+    expect(bodySurface.style.background).toContain('253, 251, 246');
+    expect(clipEl.className).toContain('ring-2');
   });
 
   it('does not render fade controls or overlays for zero-fade clips', () => {

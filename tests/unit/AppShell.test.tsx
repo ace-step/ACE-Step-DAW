@@ -26,6 +26,7 @@ vi.mock('../../src/components/dialogs/KeyboardShortcutsDialog', () => ({ Keyboar
 vi.mock('../../src/components/dialogs/ShortcutEditorDialog', () => ({ ShortcutEditorDialog: () => <div>ShortcutEditorDialog</div> }));
 vi.mock('../../src/components/dialogs/CommandPalette', () => ({ CommandPalette: () => <div>CommandPalette</div> }));
 vi.mock('../../src/components/dialogs/BounceInPlaceDialog', () => ({ BounceInPlaceDialog: () => <div>BounceInPlaceDialog</div> }));
+vi.mock('../../src/components/dialogs/DeleteTracksConfirmDialog', () => ({ DeleteTracksConfirmDialog: () => <div>DeleteTracksConfirmDialog</div> }));
 vi.mock('../../src/components/dialogs/ShareDialog', () => ({ ShareDialog: () => <div>ShareDialog</div> }));
 vi.mock('../../src/components/dialogs/AIAssistantPanel', () => ({ AIAssistantPanel: () => <div>AIAssistantPanel</div> }));
 vi.mock('../../src/components/mixer/MixerPanel', () => ({ MixerPanel: () => <div>MixerPanel</div> }));

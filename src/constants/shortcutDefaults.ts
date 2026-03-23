@@ -14,7 +14,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',         defaultCombo: { code: 'KeyO', shift: true }, contexts: ['global'] },
   { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',                defaultCombo: { code: 'KeyF' }, contexts: ['global'] },
 
-  { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },
+  { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Backspace' }, contexts: ['timeline'] },
   { id: 'clips.duplicate',       category: 'clips',     label: 'Duplicate Clip',              defaultCombo: { code: 'KeyD', mod: true }, contexts: ['timeline'] },
   { id: 'clips.split',           category: 'clips',     label: 'Split Clip at Playhead',      defaultCombo: { code: 'KeyS' }, contexts: ['timeline'] },
   { id: 'clips.selectAll',       category: 'clips',     label: 'Select All Clips',            defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },
@@ -27,7 +27,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'tracks.bypassEffects',  category: 'tracks',    label: 'Toggle Focused Track FX Bypass', defaultCombo: { code: 'KeyP' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.createGroup',    category: 'tracks',    label: 'Create Group Track',          defaultCombo: { code: 'KeyG', mod: true, shift: true }, contexts: ['timeline', 'mixer'] },
   { id: 'tracks.toggleCollapse', category: 'tracks',    label: 'Toggle Group Collapse',       defaultCombo: { code: 'KeyG', shift: true }, contexts: ['timeline'] },
-  { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },
+  { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Backspace', mod: true }, contexts: ['timeline'] },
   { id: 'tracks.selectAll',      category: 'tracks',    label: 'Select All Tracks',           defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },
 
   { id: 'navigation.previousTrack', category: 'navigation', label: 'Focus Previous Track',   defaultCombo: { code: 'ArrowUp' }, contexts: ['timeline', 'mixer'] },

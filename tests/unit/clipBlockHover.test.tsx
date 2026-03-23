@@ -213,7 +213,7 @@ describe('ClipBlock hover and active feedback', () => {
     expect(clipEl.className).toMatch(/active:/);
   });
 
-  it('removes the visual selected state when another track becomes selected', () => {
+  it('keeps the visual selected state when another track becomes selected', () => {
     const clip = makeClip();
     const track = makeTrack();
 
@@ -225,8 +225,9 @@ describe('ClipBlock hover and active feedback', () => {
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const bodySurface = screen.getByTestId('clip-body-surface') as HTMLElement;
 
-    expect(clipEl.className).not.toContain('ring-2');
-    expect(bodySurface.style.background).not.toContain('253, 251, 246');
+    // Clip selection is independent of track selection
+    expect(clipEl.className).toContain('ring-2');
+    expect(bodySurface.style.background).toContain('253, 251, 246');
   });
 
   it('exposes a dedicated header rail move handle with grab affordance', () => {

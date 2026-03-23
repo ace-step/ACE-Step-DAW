@@ -20,6 +20,7 @@ import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
 import { ShortcutEditorDialog } from '../dialogs/ShortcutEditorDialog';
 import { CommandPalette } from '../dialogs/CommandPalette';
 import { BounceInPlaceDialog } from '../dialogs/BounceInPlaceDialog';
+import { DeleteTracksConfirmDialog } from '../dialogs/DeleteTracksConfirmDialog';
 import { ShareDialog } from '../dialogs/ShareDialog';
 import { AIAssistantPanel } from '../dialogs/AIAssistantPanel';
 import { MixerPanel } from '../mixer/MixerPanel';
@@ -135,6 +136,7 @@ function EditorShell() {
       <SettingsDialog />
       <ProjectListDialog />
       <BounceInPlaceDialog />
+      <DeleteTracksConfirmDialog />
       <KeyboardShortcutsDialog />
       {!hasBlockingDialog && <CommandPalette />}
       <ShortcutEditorDialog />

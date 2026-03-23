@@ -17,14 +17,11 @@ if (typeof document !== 'undefined' && !document.getElementById('strudel-autocom
   style.id = 'strudel-autocomplete-css';
   style.textContent = `
     .cm-tooltip-autocomplete .cm-completionInfo {
-      max-width: 320px !important;
-      max-height: 200px !important;
-      overflow: auto !important;
-      font-size: 12px !important;
-      padding: 6px 8px !important;
+      display: none !important;
     }
     .cm-tooltip-autocomplete {
-      max-height: 250px !important;
+      max-height: 200px !important;
+      font-size: 13px !important;
     }
   `;
   document.head.appendChild(style);
@@ -119,8 +116,6 @@ export function StrudelEditor() {
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null);
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
 
-  const [refDocs, setRefDocs] = useState<DocEntry[]>([]);
-  const [refSearch, setRefSearch] = useState('');
   const [editorSettings, setEditorSettings] = useState({
     fontSize: 18,
     isLineNumbersDisplayed: true,
@@ -136,12 +131,6 @@ export function StrudelEditor() {
   // Scroll console to bottom
   useEffect(() => { consoleEndRef.current?.scrollIntoView(); }, [consoleMessages]);
 
-  // Load API docs when reference tab is opened
-  useEffect(() => {
-    if (activeTab === 'reference' && refDocs.length === 0) {
-      loadStrudelDocs().then(setRefDocs);
-    }
-  }, [activeTab, refDocs.length]);
 
   // Initialize StrudelMirror
   useEffect(() => {
@@ -449,38 +438,11 @@ export function StrudelEditor() {
               </div>
             )}
             {activeTab === 'reference' && (
-              <div className="flex flex-col h-full">
-                <div className="p-2 shrink-0">
-                  <input
-                    type="text" placeholder="Search API..."
-                    value={refSearch} onChange={(e) => setRefSearch(e.target.value)}
-                    className="w-full px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 placeholder-zinc-500 outline-none focus:border-daw-accent"
-                  />
-                </div>
-                <div className="flex-1 overflow-auto px-2 pb-2">
-                  {refDocs.length === 0 ? (
-                    <div className="text-zinc-600 text-[11px] p-2">Loading API docs...</div>
-                  ) : (
-                    refDocs
-                      .filter((d) => !refSearch || d.name.toLowerCase().includes(refSearch.toLowerCase()) || d.description?.toLowerCase().includes(refSearch.toLowerCase()))
-                      .slice(0, 100)
-                      .map((d) => (
-                        <div key={d.name} className="py-1.5 border-b border-zinc-800/50">
-                          <div className="text-orange-400 font-mono text-[11px]">
-                            {d.memberof ? `.${d.name}` : d.name}
-                            {d.params?.length ? `(${d.params.map((p) => p.name).join(', ')})` : ''}
-                          </div>
-                          {d.description && (
-                            <div className="text-zinc-500 text-[10px] mt-0.5" dangerouslySetInnerHTML={{ __html: d.description }} />
-                          )}
-                          {d.examples?.[0] && (
-                            <code className="text-[9px] text-zinc-600 mt-0.5 block font-mono truncate">{d.examples[0]}</code>
-                          )}
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
+              <iframe
+                src="https://strudel.cc/learn/reference/"
+                className="w-full h-full border-0"
+                title="Strudel API Reference"
+              />
             )}
             {activeTab === 'console' && (
               <div className="p-2 font-mono text-[10px]">

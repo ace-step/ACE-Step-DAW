@@ -57,8 +57,11 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
-const inputClass = 'h-8 bg-transparent px-1 text-center text-[13px] font-mono tracking-[0.08em] text-white focus:text-white focus:outline-none disabled:opacity-50';
-const selectClass = 'h-8 appearance-none bg-transparent px-1 text-[13px] tracking-[0.08em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const numericDisplayInputClass = 'h-9 bg-transparent px-0 text-center font-mono text-[18px] leading-none tracking-[0.02em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const textDisplayInputClass = 'h-9 bg-transparent px-0 text-center font-mono text-[17px] leading-none tracking-[0.02em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-9 appearance-none bg-transparent px-0 text-[17px] leading-none tracking-[0.02em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const boxedReadoutClass = 'flex h-9 items-center rounded-[14px] border border-white/10 bg-white/[0.05] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.08]';
+const flatReadoutClass = 'relative flex h-9 items-center rounded-md px-2 transition-colors hover:bg-white/6';
 
 const VALID_DENOMINATORS = [2, 4, 8, 16];
 
@@ -152,10 +155,10 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 px-1"
+      className="flex items-center gap-1.5 px-1"
       data-testid="toolbar-project-settings"
     >
-      <div className="flex h-8 items-center rounded-md px-1 hover:bg-white/6">
+      <div className={boxedReadoutClass}>
         <input
           type="text"
           inputMode="numeric"
@@ -169,13 +172,13 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project BPM"
           title="Project BPM"
-          className={`${inputClass} w-[3.6rem]`}
+          className={`${numericDisplayInputClass} w-[4.2rem]`}
         />
       </div>
 
       <ToolbarSeparator />
 
-      <div className="flex h-8 items-center gap-1 rounded-md px-1 hover:bg-white/6">
+      <div className={`${boxedReadoutClass} gap-2`}>
         <input
           type="text"
           inputMode="numeric"
@@ -189,9 +192,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Time signature numerator"
           title="Time signature numerator"
-          className={`${inputClass} w-6`}
+          className={`${numericDisplayInputClass} w-[1.6rem]`}
         />
-        <span className="text-[13px] text-zinc-500">/</span>
+        <span className="text-[18px] leading-none text-zinc-500">/</span>
         <input
           type="text"
           inputMode="numeric"
@@ -205,21 +208,21 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Time signature denominator"
           title="Time signature denominator"
-          className={`${inputClass} w-6`}
+          className={`${numericDisplayInputClass} w-[1.6rem]`}
         />
       </div>
 
       <ToolbarSeparator />
 
       <div className="flex items-center gap-1">
-        <div className="relative flex h-8 items-center rounded-md px-1 pr-5 hover:bg-white/6">
+        <div className={`${flatReadoutClass} pr-6`}>
           <select
             value={keyScale.root}
             onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
             disabled={disabled}
             aria-label="Project key root"
             title="Project key root"
-            className={`${selectClass} w-7`}
+            className={`${selectClass} w-[1.55rem]`}
           >
             {KEY_ROOTS.map((root) => (
               <option key={root} value={root}>
@@ -227,16 +230,16 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-zinc-300" />
+          <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-300" />
         </div>
-        <div className="relative flex h-8 items-center rounded-md px-1 pr-5 hover:bg-white/6">
+        <div className={`${flatReadoutClass} pr-6`}>
           <select
             value={keyScale.mode}
             onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
             disabled={disabled}
             aria-label="Project scale mode"
             title="Project scale mode"
-            className={`${selectClass} w-[3.15rem]`}
+            className={`${selectClass} w-[3.6rem]`}
           >
             {SCALE_MODES.map((mode) => (
               <option key={mode} value={mode}>
@@ -244,13 +247,13 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-zinc-300" />
+          <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-300" />
         </div>
       </div>
 
       <ToolbarSeparator />
 
-      <div className="flex h-8 items-center rounded-md px-1 hover:bg-white/6">
+      <div className={flatReadoutClass}>
         <input
           type="number"
           value={measuresInput}
@@ -262,7 +265,7 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Project measures"
           title="Project measures"
-          className={`${inputClass} w-[2.8rem]`}
+          className={`${textDisplayInputClass} w-[2.6rem]`}
         />
       </div>
     </div>
@@ -289,9 +292,9 @@ function LCDDisplay() {
   const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
-    <div className="flex min-w-[210px] shrink-0 items-center justify-center gap-3.5 px-3 py-1 font-mono tabular-nums">
-      <span className={`text-[14px] tracking-[0.14em] ${barsBeatsColor}`}>{displayBarsBeats}</span>
-      <span className="text-[12px] text-zinc-500">{formatTime(currentTime)}</span>
+    <div className="flex min-w-[255px] shrink-0 items-end justify-center gap-4 px-3 py-1 font-mono tabular-nums">
+      <span className={`text-[20px] leading-none tracking-[0.14em] ${barsBeatsColor}`}>{displayBarsBeats}</span>
+      <span className="pb-[2px] text-[14px] leading-none text-zinc-500">{formatTime(currentTime)}</span>
       {countInActive && (
         <span className="text-[11px] text-red-400 animate-pulse">REC</span>
       )}

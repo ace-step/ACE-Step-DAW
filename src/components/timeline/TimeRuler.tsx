@@ -95,7 +95,17 @@ export function TimeRuler() {
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!rulerDragRef.current) return;
+    const drag = rulerDragRef.current;
     rulerDragRef.current = null;
+
+    // If it was a click (not drag) inside an existing loop region, clear the loop
+    if (!drag.isDragging) {
+      const { loopEnabled: isLooped, loopStart: ls, loopEnd: le } = useTransportStore.getState();
+      if (isLooped && drag.startTime >= ls && drag.startTime <= le) {
+        useTransportStore.setState({ loopEnabled: false });
+      }
+    }
+
     const container = e.currentTarget;
     if ('releasePointerCapture' in container && container.hasPointerCapture(e.pointerId)) {
       container.releasePointerCapture(e.pointerId);

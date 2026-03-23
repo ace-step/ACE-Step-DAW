@@ -144,4 +144,50 @@ describe('TimeRuler silent seek + drag-to-loop', () => {
     // loopStart should be less than loopEnd regardless of drag direction
     expect(state.loopStart).toBeLessThan(state.loopEnd);
   });
+
+  it('clicking inside an existing loop region clears the loop', () => {
+    // Pre-set a loop region
+    useTransportStore.setState({
+      loopEnabled: true,
+      loopStart: 2, // at 50px/s → x=100
+      loopEnd: 8,   // at 50px/s → x=400
+    });
+
+    render(<TimeRuler />);
+    const ruler = screen.getByTestId('timeline-scrub-ruler');
+
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, top: 0, bottom: 30, width: 1000, height: 30, x: 0, y: 0, toJSON: () => {},
+    });
+
+    // Click inside the loop region (x=250 → time=5s, within [2,8])
+    fireEvent.pointerDown(ruler, { clientX: 250, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(ruler, { clientX: 250, pointerId: 1 });
+
+    // Loop should be disabled
+    expect(useTransportStore.getState().loopEnabled).toBe(false);
+  });
+
+  it('clicking outside an existing loop region does NOT clear the loop', () => {
+    // Pre-set a loop region
+    useTransportStore.setState({
+      loopEnabled: true,
+      loopStart: 4, // at 50px/s → x=200
+      loopEnd: 8,   // at 50px/s → x=400
+    });
+
+    render(<TimeRuler />);
+    const ruler = screen.getByTestId('timeline-scrub-ruler');
+
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, top: 0, bottom: 30, width: 1000, height: 30, x: 0, y: 0, toJSON: () => {},
+    });
+
+    // Click outside the loop region (x=50 → time=1s, outside [4,8])
+    fireEvent.pointerDown(ruler, { clientX: 50, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(ruler, { clientX: 50, pointerId: 1 });
+
+    // Loop should still be enabled
+    expect(useTransportStore.getState().loopEnabled).toBe(true);
+  });
 });

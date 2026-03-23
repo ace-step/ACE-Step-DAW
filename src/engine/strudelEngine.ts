@@ -389,23 +389,27 @@ export async function extractStrudelMidiNotes(
 
   if (!cleanCode) return { notes: [], instruments: [] };
 
-  // Evaluate pattern (no audio) via mini-notation
-  const { mini } = await import('@strudel/mini');
+  // Evaluate Strudel JS code to get a Pattern object.
+  // ensureStrudelLoaded() registers note(), s(), sound(), bank(), etc. on globalThis.
+  // We use new Function() (not eval) because eval inside an ES module resolves to
+  // module scope where globalThis DSL functions aren't visible. new Function()
+  // always evaluates in global scope.
   let pattern: any;
   try {
-    // Try evaluating as full Strudel JS (supports s(), note(), etc.)
-    const core = await import('@strudel/core') as any;
-    // Use repl evaluate to get the pattern object
-    const entry = trackRepls.values().next().value;
-    if (entry?.repl) {
-      pattern = await entry.repl.evaluate(cleanCode, false); // false = don't start audio
-    } else {
-      // Fallback: parse as mini-notation
-      pattern = mini(cleanCode);
-    }
+    const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<any>;
+    pattern = await fn();
   } catch {
-    // Last resort: try mini-notation directly
-    try { pattern = mini(cleanCode); } catch { return { notes: [], instruments: [] }; }
+    // Fallback: try without return wrapper (multi-line code)
+    try {
+      const fn = new Function(`return (async () => { ${cleanCode} })()`) as () => Promise<any>;
+      pattern = await fn();
+    } catch {
+      // Last resort: try mini-notation
+      try {
+        const { mini } = await import('@strudel/mini');
+        pattern = mini(cleanCode);
+      } catch { return { notes: [], instruments: [] }; }
+    }
   }
 
   if (!pattern?.queryArc) return { notes: [], instruments: [] };
@@ -483,9 +487,10 @@ export async function renderStrudelOffline(
 
   const audioBuffer = await renderMidiTrackOffline(
     midiNotes,
-    durationSeconds,
+    0,               // clipStartTime — start at beginning
     bpm,
-    'lead', // SynthPreset for rendering
+    'lead',          // SynthPreset
+    durationSeconds, // totalDuration
     sampleRate,
   );
 

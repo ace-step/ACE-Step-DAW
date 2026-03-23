@@ -63,13 +63,18 @@ export function StrudelEditor() {
         // Init audio engine (worklets)
         webaudioMod.initAudioOnFirstClick?.();
 
-        // Load samples (prebake from @strudel/repl uses SAME superdough instance now)
-        try {
-          const { prebake } = await import('@strudel/repl');
-          await prebake();
-        } catch {
-          // Fallback
-          await webaudioMod.samples?.('github:tidalcycles/dirt-samples').catch(() => {});
+        // Load drum samples via @strudel/webaudio's samples() — MUST use this
+        // module (not @strudel/repl's prebake) to ensure samples register in the
+        // SAME superdough singleton as the synth sounds and audio output.
+        if (webaudioMod.samples) {
+          const ds = 'https://raw.githubusercontent.com/felixroos/dough-samples/main';
+          await Promise.allSettled([
+            webaudioMod.samples('github:tidalcycles/dirt-samples'),
+            webaudioMod.samples(`${ds}/tidal-drum-machines.json`),
+            webaudioMod.samples(`${ds}/piano.json`),
+            webaudioMod.samples(`${ds}/vcsl.json`),
+            import('@strudel/soundfonts').then((m: any) => m.registerSoundfonts?.()).catch(() => {}),
+          ]);
         }
 
         if (!mounted || !containerRef.current) return;

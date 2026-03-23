@@ -97,18 +97,15 @@ async function ensureStrudelLoaded(): Promise<void> {
       );
     }
 
-    // Load ALL default samples using strudel's own prebake function.
-    // This loads dirt-samples, drum machines (tr909, tr808, etc.), soundfonts, and more —
-    // exactly the same set that strudel.cc loads.
-    try {
-      const { prebake } = await import('@strudel/repl');
-      await prebake();
-    } catch {
-      // Fallback: load basic samples manually if prebake fails
-      if (webaudioMod.samples) {
-        await webaudioMod.samples('github:tidalcycles/dirt-samples').catch(() => {});
-      }
-      console.warn('[StrudelEngine] prebake failed, loaded basic samples only');
+    // Load drum samples via @strudel/webaudio (same superdough singleton).
+    // Do NOT use @strudel/repl's prebake — Vite bundles it as a separate module
+    // with its own superdough instance, so samples register in the wrong place.
+    if (webaudioMod.samples) {
+      const ds = 'https://raw.githubusercontent.com/felixroos/dough-samples/main';
+      await Promise.allSettled([
+        webaudioMod.samples('github:tidalcycles/dirt-samples'),
+        webaudioMod.samples(`${ds}/tidal-drum-machines.json`),
+      ]);
     }
 
     scopeRegistered = true;

@@ -8,9 +8,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
-// Build-time embed of @strudel/codemirror source (contains JSDoc JSON data)
-import strudelCodemirrorRaw from '@strudel/codemirror/dist/index.mjs?raw';
-
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 // Inject CSS to constrain the autocomplete info panel
@@ -33,48 +30,6 @@ if (typeof document !== 'undefined' && !document.getElementById('strudel-autocom
 
 type SidebarTab = 'sounds' | 'reference' | 'console' | 'settings';
 
-/** API docs loaded from @strudel/codemirror's embedded JSDoc data */
-interface DocEntry {
-  name: string;
-  description?: string;
-  examples?: string[];
-  params?: Array<{ name: string; type?: { names: string[] }; description?: string }>;
-  memberof?: string;
-  synonyms?: string[];
-}
-
-let cachedDocs: DocEntry[] | null = null;
-async function loadStrudelDocs(): Promise<DocEntry[]> {
-  if (cachedDocs) return cachedDocs;
-  try {
-    // JSDoc data is embedded as `const Fn = JSON.parse(...)` in the dist file.
-    // We imported it as a raw string via Vite's ?raw suffix (build-time embed).
-    const marker = 'JSON.parse(`';
-    const start = strudelCodemirrorRaw.indexOf(marker);
-    if (start === -1) throw new Error('JSDoc data not found in module source');
-    const jsonStart = start + marker.length;
-    const jsonEnd = strudelCodemirrorRaw.indexOf('`)', jsonStart);
-    const jsonStr = strudelCodemirrorRaw.slice(jsonStart, jsonEnd);
-
-    const rawDocs = JSON.parse(jsonStr) as any[];
-    cachedDocs = rawDocs
-      .filter((d) => d.name && d.description && !d.tags?.some((t: any) => t.title === 'noautocomplete'))
-      .map((d) => ({
-        name: d.name,
-        description: d.description?.replace(/<[^>]+>/g, '') ?? '',
-        params: d.params,
-        examples: d.examples,
-        memberof: d.memberof,
-        synonyms: d.synonyms,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    return cachedDocs;
-  } catch (e) {
-    console.warn('[StrudelEditor] Failed to load API docs:', e);
-  }
-  cachedDocs = [];
-  return cachedDocs;
-}
 
 const SOUND_BANKS = [
   { name: 'Default (dirt-samples)', sounds: 'bd, sd, hh, oh, cp, sn, lt, mt, ht, rim, cb, cy, cr' },
@@ -82,95 +37,6 @@ const SOUND_BANKS = [
   { name: 'tr808', sounds: 'bd, sd, hh, oh, cp, cb, lt, mt, ht, lc, mc, hc, cl, ma, cy, rs' },
   { name: 'cr78', sounds: 'bd, sd, hh, oh, cp, cb, ma, gu, ta, co, cl' },
 ];
-
-/* ── Reference Panel ───────────────────────────────── */
-
-function ReferencePanel() {
-  const [docs, setDocs] = useState<DocEntry[]>([]);
-  const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<DocEntry | null>(null);
-
-  useEffect(() => { loadStrudelDocs().then(setDocs); }, []);
-
-  const filtered = docs.filter((d) =>
-    !search || d.name?.toLowerCase().includes(search.toLowerCase())
-      || d.description?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="p-2 border-b border-zinc-800 shrink-0">
-        <h3 className="text-zinc-300 text-[12px] font-semibold mb-1.5">API Reference</h3>
-        <input
-          type="text" placeholder="Search..." value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 placeholder-zinc-500 outline-none focus:border-daw-accent"
-        />
-      </div>
-      <div className="flex flex-1 min-h-0">
-        {/* Left: function list */}
-        <div className="w-[120px] shrink-0 overflow-auto border-r border-zinc-800">
-          {docs.length === 0 ? (
-            <div className="text-zinc-600 text-[10px] p-2">Loading...</div>
-          ) : filtered.map((d) => (
-            <button
-              key={d.name}
-              onClick={() => setSelected(d)}
-              className={`w-full text-left px-2 py-0.5 text-[10px] truncate transition-colors ${
-                selected?.name === d.name ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-              }`}
-            >
-              {d.name}
-            </button>
-          ))}
-        </div>
-        {/* Right: detail */}
-        <div className="flex-1 overflow-auto p-3 text-[11px]">
-          {selected ? (
-            <>
-              <h2 className="text-white text-[14px] font-bold font-mono">{selected.name}</h2>
-              {selected.synonyms && selected.synonyms.length > 0 && (
-                <p className="text-zinc-500 text-[10px] mt-1">
-                  Synonyms: {selected.synonyms.map((s, i) => (
-                    <span key={s}>{i > 0 && ', '}<code className="text-zinc-300">{s}</code></span>
-                  ))}
-                </p>
-              )}
-              {selected.description && (
-                <p className="text-zinc-300 mt-2 leading-relaxed">{selected.description}</p>
-              )}
-              {selected.params && selected.params.length > 0 && (
-                <div className="mt-2">
-                  <h4 className="text-zinc-500 text-[10px] uppercase">Parameters</h4>
-                  {selected.params.map((p: any) => (
-                    <div key={p.name} className="mt-0.5">
-                      <code className="text-orange-400 text-[10px]">{p.name}</code>
-                      {p.type?.names && <span className="text-zinc-500 text-[10px]"> : {p.type.names.join(' | ')}</span>}
-                      {p.description && <span className="text-zinc-400 text-[10px] ml-1">{p.description.replace(/<[^>]+>/g, '')}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selected.examples && selected.examples.length > 0 && (
-                <div className="mt-3">
-                  <h4 className="text-zinc-500 text-[10px] uppercase mb-1">Examples</h4>
-                  {selected.examples.map((ex, i) => (
-                    <pre key={i} className="bg-zinc-900 rounded px-2 py-1.5 text-[10px] text-zinc-300 font-mono overflow-x-auto mt-1">{ex}</pre>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-zinc-500">
-              <p className="text-[12px]">Select a function from the list.</p>
-              <p className="text-[10px] mt-2 text-zinc-600">{docs.length} functions available</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ── Component ─────────────────────────────────────── */
 
@@ -499,7 +365,7 @@ export function StrudelEditor() {
 
         {/* Sidebar */}
         {activeTab && (
-          <div className={`${activeTab === 'reference' ? 'w-[420px]' : 'w-[240px]'} shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-hidden text-[12px]`}>
+          <div className={`w-[240px] shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-hidden text-[12px]`}>
             {activeTab === 'sounds' && (
               <div className="p-3 space-y-3">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">Sound Banks</h3>
@@ -511,7 +377,37 @@ export function StrudelEditor() {
                 ))}
               </div>
             )}
-            {activeTab === 'reference' && <ReferencePanel />}
+            {activeTab === 'reference' && (
+              <div className="p-3 space-y-2 text-[11px]">
+                <h3 className="text-zinc-300 font-semibold text-[12px]">Strudel Reference</h3>
+                <p className="text-zinc-500 text-[10px]">Open the official documentation:</p>
+                <a href="https://strudel.cc/learn/reference/" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-zinc-800 text-daw-accent hover:bg-zinc-700 transition-colors">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M10 1H7M10 1V4M10 1L5.5 5.5M5 1H2.5C1.95 1 1.5 1.45 1.5 2V9.5C1.5 10.05 1.95 10.5 2.5 10.5H10C10.55 10.5 11 10.05 11 9.5V7" /></svg>
+                  API Reference
+                </a>
+                <a href="https://strudel.cc/workshop/getting-started/" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-zinc-800 text-daw-accent hover:bg-zinc-700 transition-colors">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M10 1H7M10 1V4M10 1L5.5 5.5M5 1H2.5C1.95 1 1.5 1.45 1.5 2V9.5C1.5 10.05 1.95 10.5 2.5 10.5H10C10.55 10.5 11 10.05 11 9.5V7" /></svg>
+                  Getting Started Tutorial
+                </a>
+                <a href="https://strudel.cc/learn/samples/" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-zinc-800 text-daw-accent hover:bg-zinc-700 transition-colors">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M10 1H7M10 1V4M10 1L5.5 5.5M5 1H2.5C1.95 1 1.5 1.45 1.5 2V9.5C1.5 10.05 1.95 10.5 2.5 10.5H10C10.55 10.5 11 10.05 11 9.5V7" /></svg>
+                  Samples &amp; Sound Banks
+                </a>
+                <a href="https://strudel.cc/learn/effects/" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-zinc-800 text-daw-accent hover:bg-zinc-700 transition-colors">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M10 1H7M10 1V4M10 1L5.5 5.5M5 1H2.5C1.95 1 1.5 1.45 1.5 2V9.5C1.5 10.05 1.95 10.5 2.5 10.5H10C10.55 10.5 11 10.05 11 9.5V7" /></svg>
+                  Effects Reference
+                </a>
+                <a href="https://strudel.cc/learn/mini-notation/" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-zinc-800 text-daw-accent hover:bg-zinc-700 transition-colors">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M10 1H7M10 1V4M10 1L5.5 5.5M5 1H2.5C1.95 1 1.5 1.45 1.5 2V9.5C1.5 10.05 1.95 10.5 2.5 10.5H10C10.55 10.5 11 10.05 11 9.5V7" /></svg>
+                  Mini-Notation Guide
+                </a>
+              </div>
+            )}
             {activeTab === 'console' && (
               <div className="p-2 font-mono text-[10px]">
                 {consoleMessages.length === 0 ? (

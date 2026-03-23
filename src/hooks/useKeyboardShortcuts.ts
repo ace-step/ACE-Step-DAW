@@ -412,19 +412,23 @@ export function useKeyboardShortcuts() {
       if (matches('navigation.previousTrack')) { event.preventDefault(); focusTrack(-1); return; }
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
 
-      // Context-aware Delete / Backspace: tracks take priority over clips
-      const isDeleteKey = matches('clips.delete') || (event.code === 'Backspace' && !mod && !event.shiftKey && !event.altKey);
-      if (isDeleteKey) {
+      // Cmd+Delete / Cmd+Backspace: delete selected tracks (with confirmation if multi-clip)
+      const isTrackDeleteKey = matches('tracks.delete') || (event.code === 'Backspace' && mod && !event.shiftKey && !event.altKey);
+      if (isTrackDeleteKey && ui.selectedTrackIds.size > 0) {
         event.preventDefault();
-        if (ui.selectedTrackIds.size > 0) {
-          const trackIds = [...ui.selectedTrackIds];
-          ui.deselectAllTracks();
-          project.removeTracks(trackIds);
-        } else if (ui.selectedClipIds.size > 0) {
-          const ids = [...ui.selectedClipIds];
-          ui.deselectAll();
-          ids.forEach((id) => project.removeClip(id));
-        }
+        const trackIds = [...ui.selectedTrackIds];
+        ui.deselectAllTracks();
+        ui.requestDeleteTracks(trackIds);
+        return;
+      }
+
+      // Delete / Backspace (no modifier): delete selected clips only
+      const isClipDeleteKey = matches('clips.delete') || (event.code === 'Backspace' && !mod && !event.shiftKey && !event.altKey);
+      if (isClipDeleteKey && ui.selectedClipIds.size > 0) {
+        event.preventDefault();
+        const ids = [...ui.selectedClipIds];
+        ui.deselectAll();
+        ids.forEach((id) => project.removeClip(id));
         return;
       }
 

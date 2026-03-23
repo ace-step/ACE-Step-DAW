@@ -67,6 +67,7 @@ export function TrackHeader({
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
   const openBounceInPlaceDialog = useUIStore((s) => s.openBounceInPlaceDialog);
+  const requestDeleteTracks = useUIStore((s) => s.requestDeleteTracks);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const selectTrack = useUIStore((s) => s.selectTrack);
@@ -906,8 +907,9 @@ export function TrackHeader({
         <ContextMenuSeparator />
         <ContextMenuItem
           label={track.isGroup ? 'Delete Group (keeps children)' : 'Delete Track'}
-          onClick={() => { setCtxMenu(null); track.isGroup ? removeGroupTrack(track.id) : removeTrack(track.id); }}
+          onClick={() => { setCtxMenu(null); track.isGroup ? removeGroupTrack(track.id) : requestDeleteTracks([track.id]); }}
           danger
+          shortcut="⌘⌫"
         />
       </ContextMenuWrapper>
     )}

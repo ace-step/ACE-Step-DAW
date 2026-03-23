@@ -70,6 +70,8 @@ export interface UIState {
   showSettingsDialog: boolean;
   showProjectListDialog: boolean;
   bounceInPlaceTrackId: string | null;
+  /** Track IDs pending deletion — non-null means the confirmation dialog is open. */
+  pendingDeleteTrackIds: string[] | null;
   /** Remembers the active multi-track generation mode inside the unified Generate panel. */
   batchGenerateMode: 'silence' | 'context' | null;
   /** Optional time range pre-filled into the multi-track view when opened from a lane drag-select or context menu. */
@@ -233,6 +235,9 @@ export interface UIState {
   setShowProjectListDialog: (v: boolean) => void;
   openBounceInPlaceDialog: (trackId: string) => void;
   closeBounceInPlaceDialog: () => void;
+  requestDeleteTracks: (trackIds: string[]) => void;
+  confirmDeleteTracks: () => void;
+  cancelDeleteTracks: () => void;
   setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
   setBatchGenerateInitialRange: (v: { startTime: number; duration: number } | null) => void;
   setShowKeyboardShortcutsDialog: (v: boolean) => void;
@@ -468,6 +473,7 @@ export const useUIStore = create<UIState>()(
   showSettingsDialog: false,
   showProjectListDialog: false,
   bounceInPlaceTrackId: null,
+  pendingDeleteTrackIds: null,
   batchGenerateMode: null,
   batchGenerateInitialRange: null,
   showKeyboardShortcutsDialog: false,
@@ -651,6 +657,29 @@ export const useUIStore = create<UIState>()(
   setShowProjectListDialog: (v) => set({ showProjectListDialog: v }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),
+  requestDeleteTracks: (trackIds) => {
+    const project = useProjectStore.getState().project;
+    if (!project) return;
+    // Check if any track has 2+ clips — if so, show confirmation dialog
+    const needsConfirmation = trackIds.some((tid) => {
+      const track = project.tracks.find((t) => t.id === tid);
+      return track && track.clips.length >= 2;
+    });
+    if (needsConfirmation) {
+      set({ pendingDeleteTrackIds: trackIds });
+    } else {
+      // Delete immediately
+      useProjectStore.getState().removeTracks(trackIds);
+    }
+  },
+  confirmDeleteTracks: () => {
+    const { pendingDeleteTrackIds } = get();
+    if (pendingDeleteTrackIds) {
+      useProjectStore.getState().removeTracks(pendingDeleteTrackIds);
+      set({ pendingDeleteTrackIds: null });
+    }
+  },
+  cancelDeleteTracks: () => set({ pendingDeleteTrackIds: null }),
   setBatchGenerateMode: (mode) => set(mode === null
     ? { batchGenerateMode: null, batchGenerateInitialRange: null }
     : {

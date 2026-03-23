@@ -19,6 +19,7 @@ export function StrudelEditor() {
   const [editorHeight, setEditorHeight] = useState(450);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [bouncing, setBouncing] = useState(false);
+  const [bounceProgress, setBounceProgress] = useState(0);
   const [bounceBars, setBounceBars] = useState(4);
   const [showBarsMenu, setShowBarsMenu] = useState(false);
 
@@ -42,23 +43,23 @@ export function StrudelEditor() {
   const handleBounce = useCallback(async (bars: number) => {
     if (!project || bouncing) return;
     setBouncing(true);
+    setBounceProgress(0);
     setShowBarsMenu(false);
     try {
-      // Get strudel code from store (last evaluated code, or the default)
       const store = useProjectStore.getState();
-      // Find any strudel track, or use a temporary one
+      // Find or create a strudel track to get the code
       let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
       if (!strudelTrack) {
-        // Create a temporary strudel track for bouncing
         strudelTrack = store.addTrack('strudel');
       }
       if (strudelTrack) {
-        await store.freezeStrudelToAudio(strudelTrack.id, bars);
+        await store.freezeStrudelToAudio(strudelTrack.id, bars, (p: number) => setBounceProgress(p));
       }
     } catch (err: any) {
       console.error('Strudel bounce failed:', err);
     } finally {
       setBouncing(false);
+      setBounceProgress(0);
     }
   }, [project, bouncing]);
 
@@ -128,7 +129,7 @@ export function StrudelEditor() {
                 <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
                 <path d="M12 2a10 10 0 0110 10" strokeLinecap="round" />
               </svg>
-              Rendering...
+              Recording {Math.round(bounceProgress * 100)}%
             </>
           ) : (
             <>

@@ -710,7 +710,7 @@ export interface ProjectState {
   /** Evaluate pattern and return analysis info. Returns null if track not found or evaluation fails. */
   getStrudelPatternInfo: (trackId: string) => Promise<import('../engine/strudelEngine').StrudelPatternInfo | null>;
   /** Freeze/bounce strudel track audio to a new stems track with an audio clip. */
-  freezeStrudelToAudio: (trackId: string, bars: number) => Promise<Track>;
+  freezeStrudelToAudio: (trackId: string, bars: number, onProgress?: (progress: number) => void) => Promise<Track>;
 
   // Drum machine actions
   initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
@@ -4997,7 +4997,7 @@ export const useProjectStore = create<ProjectState>()(
     }
   },
 
-  freezeStrudelToAudio: async (trackId, bars) => {
+  freezeStrudelToAudio: async (trackId, bars, onProgress) => {
     const state = get();
     if (!state.project) throw new Error('No project');
     const track = state.project.tracks.find((t) => t.id === trackId);
@@ -5014,7 +5014,7 @@ export const useProjectStore = create<ProjectState>()(
 
     // Render strudel pattern to audio via OfflineAudioContext
     const { renderStrudelOffline } = await import('../engine/strudelEngine');
-    const audioBuffer = await renderStrudelOffline(track.strudelCode, durationSeconds, bpm, sampleRate);
+    const audioBuffer = await renderStrudelOffline(track.strudelCode, durationSeconds, bpm, sampleRate, onProgress);
 
     // Convert to WAV and store
     const { audioBufferToWavBlob } = await import('../utils/wav');

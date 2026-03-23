@@ -452,47 +452,100 @@ export async function extractStrudelMidiNotes(
 }
 
 /**
- * Render strudel MIDI notes to audio via Tone.js OfflineAudioContext.
- * Fast: uses offline rendering (not real-time), completes in ~100ms.
+ * Render a strudel pattern to audio by real-time capture of superdough output.
+ *
+ * Why real-time: superdough (Strudel's audio engine) uses setTimeout-based
+ * scheduling that only works in a live AudioContext. OfflineAudioContext and
+ * MIDI extraction both lose the actual sound (samples, effects, banks).
+ * This captures the REAL audio — exactly what the user hears.
+ *
+ * Duration: takes `durationSeconds` of wall-clock time (e.g. 8s for 4 bars at 120 BPM).
+ * The caller should show a progress indicator.
+ *
+ * @param onProgress - callback with 0-1 progress for UI updates
  */
 export async function renderStrudelOffline(
   code: string,
   durationSeconds: number,
   bpm: number,
   sampleRate: number = 48_000,
+  onProgress?: (progress: number) => void,
 ): Promise<AudioBuffer> {
-  const Tone = await import('tone');
-  const beatsPerBar = 4;
+  await ensureStrudelLoaded();
+  const { webaudioRepl } = await import('@strudel/webaudio');
 
-  // Extract MIDI events from the pattern (instant)
-  const bars = Math.ceil(durationSeconds * bpm / 60 / beatsPerBar);
-  const { notes } = await extractStrudelMidiNotes(code, bars, bpm, beatsPerBar);
+  // Create a DEDICATED AudioContext — isolated from the main DAW context.
+  // Monkey-patch destination BEFORE creating the repl so superdough connects
+  // to our interceptor from the start.
+  const ctx = new AudioContext({ sampleRate });
 
-  if (notes.length === 0) {
-    // Return silence if no notes extracted
-    const ctx = new OfflineAudioContext(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
-    return ctx.startRendering();
-  }
+  // Create capture infrastructure BEFORE superdough initializes
+  const captureNode = ctx.createMediaStreamDestination();
+  const splitter = ctx.createGain(); // splits audio to both speakers + capture
+  splitter.connect(ctx.destination);  // speakers (so user hears the bounce)
+  splitter.connect(captureNode);      // capture stream
 
-  // Render via Tone.js OfflineAudioContext (fast, no real-time waiting)
-  const { renderMidiTrackOffline } = await import('./offlineRender');
+  // Monkey-patch: make superdough connect to our splitter instead of ctx.destination
+  const realDest = ctx.destination;
+  Object.defineProperty(ctx, 'destination', {
+    get: () => splitter as unknown as AudioDestinationNode,
+    configurable: true,
+  });
 
-  const midiNotes = notes.map((n, i) => ({
-    id: `strudel-${i}`,
-    pitch: n.pitch,
-    startBeat: n.startBeat,
-    durationBeats: n.durationBeats,
-    velocity: n.velocity,
-  }));
+  const cps = bpmToCps(bpm);
+  const repl = webaudioRepl({ audioContext: ctx });
+  repl.setCps?.(cps);
 
-  const audioBuffer = await renderMidiTrackOffline(
-    midiNotes,
-    0,               // clipStartTime — start at beginning
-    bpm,
-    'lead',          // SynthPreset
-    durationSeconds, // totalDuration
-    sampleRate,
-  );
+  const cleanCode = code
+    .split('\n')
+    .filter((line: string) => !line.trimStart().startsWith('//'))
+    .join('\n')
+    .replace(/^\$:\s*/gm, '')
+    .trim();
+
+  // Start recording BEFORE evaluating so we capture from the very first event
+  const recorder = new MediaRecorder(captureNode.stream, {
+    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm',
+  });
+  const chunks: Blob[] = [];
+  const recordingDone = new Promise<Blob>((resolve) => {
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType }));
+  });
+  recorder.start(100); // collect data every 100ms for progress
+
+  // Evaluate and play the pattern
+  await repl.evaluate(cleanCode);
+
+  // Wait for the pattern to play, reporting progress
+  const startTime = Date.now();
+  const totalMs = durationSeconds * 1000;
+  await new Promise<void>((resolve) => {
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      onProgress?.(Math.min(1, elapsed / totalMs));
+      if (elapsed >= totalMs) { resolve(); return; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+  // Stop recording and playback
+  recorder.stop();
+  try { repl.stop?.(); } catch { /* ignore */ }
+
+  const blob = await recordingDone;
+
+  // Restore real destination and decode
+  Object.defineProperty(ctx, 'destination', {
+    get: () => realDest,
+    configurable: true,
+  });
+
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  await ctx.close();
 
   return audioBuffer;
 }

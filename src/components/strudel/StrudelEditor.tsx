@@ -15,6 +15,32 @@ const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 type SidebarTab = 'sounds' | 'reference' | 'console' | 'settings';
 
+/** API docs loaded from @strudel/codemirror's embedded JSDoc data */
+interface DocEntry {
+  name: string;
+  description?: string;
+  examples?: string[];
+  params?: Array<{ name: string; type?: { names: string[] }; description?: string }>;
+  memberof?: string;
+}
+
+let cachedDocs: DocEntry[] | null = null;
+async function loadStrudelDocs(): Promise<DocEntry[]> {
+  if (cachedDocs) return cachedDocs;
+  try {
+    // The codemirror package exports jsdoc data used by autocomplete
+    const mod = await import('@strudel/codemirror') as any;
+    // Try accessing the docs array — it's used internally by the autocomplete system
+    const docs = mod.jsdoc?.docs ?? mod.docs ?? [];
+    if (Array.isArray(docs) && docs.length > 0) {
+      cachedDocs = docs.filter((d: any) => d.name && !d.name.startsWith('_'));
+      return cachedDocs;
+    }
+  } catch { /* */ }
+  cachedDocs = [];
+  return cachedDocs;
+}
+
 const SOUND_BANKS = [
   { name: 'Default (dirt-samples)', sounds: 'bd, sd, hh, oh, cp, sn, lt, mt, ht, rim, cb, cy, cr' },
   { name: 'tr909', sounds: 'bd, sd, hh, oh, cp, lt, mt, ht, cy, rc, rs' },
@@ -40,12 +66,29 @@ export function StrudelEditor() {
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null);
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
 
+  const [refDocs, setRefDocs] = useState<DocEntry[]>([]);
+  const [refSearch, setRefSearch] = useState('');
+  const [editorSettings, setEditorSettings] = useState({
+    fontSize: 18,
+    isLineNumbersDisplayed: true,
+    isLineWrappingEnabled: false,
+    isBracketClosingEnabled: true,
+    isFlashEnabled: true,
+  });
+
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll console to bottom
   useEffect(() => { consoleEndRef.current?.scrollIntoView(); }, [consoleMessages]);
+
+  // Load API docs when reference tab is opened
+  useEffect(() => {
+    if (activeTab === 'reference' && refDocs.length === 0) {
+      loadStrudelDocs().then(setRefDocs);
+    }
+  }, [activeTab, refDocs.length]);
 
   // Initialize StrudelMirror
   useEffect(() => {
@@ -125,6 +168,13 @@ export function StrudelEditor() {
             }
           },
         });
+
+        // Enable autocompletion on the instance (not via settings store)
+        if (editor.setAutocompletionEnabled) {
+          editor.setAutocompletionEnabled(true);
+        } else if (editor.reconfigureExtension) {
+          editor.reconfigureExtension('isAutoCompletionEnabled', true);
+        }
 
         editorRef.current = editor;
         setIsLoading(false);
@@ -346,11 +396,38 @@ export function StrudelEditor() {
               </div>
             )}
             {activeTab === 'reference' && (
-              <iframe
-                src="https://strudel.cc/learn/reference/"
-                className="w-full h-full border-0"
-                title="Strudel API Reference"
-              />
+              <div className="flex flex-col h-full">
+                <div className="p-2 shrink-0">
+                  <input
+                    type="text" placeholder="Search API..."
+                    value={refSearch} onChange={(e) => setRefSearch(e.target.value)}
+                    className="w-full px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 placeholder-zinc-500 outline-none focus:border-daw-accent"
+                  />
+                </div>
+                <div className="flex-1 overflow-auto px-2 pb-2">
+                  {refDocs.length === 0 ? (
+                    <div className="text-zinc-600 text-[11px] p-2">Loading API docs...</div>
+                  ) : (
+                    refDocs
+                      .filter((d) => !refSearch || d.name.toLowerCase().includes(refSearch.toLowerCase()) || d.description?.toLowerCase().includes(refSearch.toLowerCase()))
+                      .slice(0, 100)
+                      .map((d) => (
+                        <div key={d.name} className="py-1.5 border-b border-zinc-800/50">
+                          <div className="text-orange-400 font-mono text-[11px]">
+                            {d.memberof ? `.${d.name}` : d.name}
+                            {d.params?.length ? `(${d.params.map((p) => p.name).join(', ')})` : ''}
+                          </div>
+                          {d.description && (
+                            <div className="text-zinc-500 text-[10px] mt-0.5" dangerouslySetInnerHTML={{ __html: d.description }} />
+                          )}
+                          {d.examples?.[0] && (
+                            <code className="text-[9px] text-zinc-600 mt-0.5 block font-mono truncate">{d.examples[0]}</code>
+                          )}
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
             )}
             {activeTab === 'console' && (
               <div className="p-2 font-mono text-[10px]">
@@ -365,15 +442,54 @@ export function StrudelEditor() {
             {activeTab === 'settings' && (
               <div className="p-3 space-y-3 text-[11px]">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">Editor</h3>
-                <div className="text-zinc-400">
-                  <p>Cmd+Enter — evaluate/update</p>
-                  <p>Cmd+. — stop</p>
-                  <p>Autocompletion enabled</p>
+                {([
+                  ['Font size', 'fontSize', 'number'] as const,
+                  ['Line numbers', 'isLineNumbersDisplayed', 'bool'] as const,
+                  ['Line wrapping', 'isLineWrappingEnabled', 'bool'] as const,
+                  ['Bracket closing', 'isBracketClosingEnabled', 'bool'] as const,
+                  ['Flash on eval', 'isFlashEnabled', 'bool'] as const,
+                ] as const).map(([label, key, type]) => (
+                  <label key={key} className="flex items-center justify-between text-zinc-300">
+                    <span>{label}</span>
+                    {type === 'bool' ? (
+                      <input type="checkbox" checked={editorSettings[key] as boolean} className="accent-daw-accent"
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setEditorSettings((s) => ({ ...s, [key]: val }));
+                          editorRef.current?.reconfigureExtension?.(key, val);
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button className="w-5 h-5 flex items-center justify-center rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 text-[10px]"
+                          onClick={() => {
+                            const val = Math.max(10, (editorSettings[key] as number) - 1);
+                            setEditorSettings((s) => ({ ...s, [key]: val }));
+                            editorRef.current?.updateSettings?.({ [key]: val });
+                          }}>-</button>
+                        <span className="w-5 text-center text-zinc-200">{editorSettings[key]}</span>
+                        <button className="w-5 h-5 flex items-center justify-center rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 text-[10px]"
+                          onClick={() => {
+                            const val = Math.min(30, (editorSettings[key] as number) + 1);
+                            setEditorSettings((s) => ({ ...s, [key]: val }));
+                            editorRef.current?.updateSettings?.({ [key]: val });
+                          }}>+</button>
+                      </div>
+                    )}
+                  </label>
+                ))}
+
+                <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider mt-3">Shortcuts</h3>
+                <div className="text-zinc-500 space-y-0.5 text-[10px]">
+                  <p><kbd className="text-zinc-300">Cmd+Enter</kbd> evaluate/update</p>
+                  <p><kbd className="text-zinc-300">Cmd+.</kbd> stop</p>
+                  <p><kbd className="text-zinc-300">Ctrl+/</kbd> toggle comment</p>
                 </div>
+
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider mt-3">Links</h3>
-                <a href="https://strudel.cc/workshop/getting-started" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block">Tutorial</a>
-                <a href="https://strudel.cc/learn/samples/" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block">All Samples</a>
-                <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block">strudel.cc</a>
+                <a href="https://strudel.cc/workshop/getting-started" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block text-[10px]">Tutorial</a>
+                <a href="https://strudel.cc/learn/samples/" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block text-[10px]">All Samples</a>
+                <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="text-daw-accent hover:underline block text-[10px]">strudel.cc</a>
               </div>
             )}
           </div>

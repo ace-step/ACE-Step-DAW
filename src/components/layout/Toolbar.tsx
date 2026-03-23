@@ -40,6 +40,18 @@ const SCALE_MODE_LABELS: Record<string, string> = {
   minor: 'Min',
 };
 
+function getMetronomePulseCount(timeSignatureDenominator?: number) {
+  const denominator = Math.max(1, Math.floor(timeSignatureDenominator ?? 4));
+
+  for (let candidate = 6; candidate >= 2; candidate -= 1) {
+    if (denominator % candidate === 0) {
+      return candidate;
+    }
+  }
+
+  return 2;
+}
+
 const METRONOME_PULSE_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
   2: [
     { left: 26, top: 50 },
@@ -325,7 +337,7 @@ function MetronomePulseIcon() {
   const currentTime = useTransportStore((s) => s.currentTime);
   const isPlaying = useTransportStore((s) => s.isPlaying);
 
-  const pulseCount = Math.max(2, Math.min(6, project?.timeSignatureDenominator ?? 4));
+  const pulseCount = getMetronomePulseCount(project?.timeSignatureDenominator);
   const pulsePositions = METRONOME_PULSE_POSITIONS[pulseCount];
 
   let activeIndex = 0;

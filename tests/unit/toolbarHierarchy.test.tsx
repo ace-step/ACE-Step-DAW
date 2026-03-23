@@ -237,7 +237,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(6);
   });
 
-  it('clamps metronome pulse dots to between two and six dots', () => {
+  it('chooses the largest supported metronome pulse count that evenly divides the denominator', () => {
     useProjectStore.setState((state) => ({
       project: state.project
         ? { ...state.project, timeSignatureDenominator: 1 }
@@ -249,6 +249,14 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     useProjectStore.setState((state) => ({
       project: state.project
         ? { ...state.project, timeSignatureDenominator: 8 }
+        : state.project,
+    }));
+    rerender(<Toolbar />);
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(4);
+
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignatureDenominator: 6 }
         : state.project,
     }));
     rerender(<Toolbar />);

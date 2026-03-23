@@ -709,6 +709,8 @@ export interface ProjectState {
   getStrudelCode: (trackId: string) => string | undefined;
   /** Evaluate pattern and return analysis info. Returns null if track not found or evaluation fails. */
   getStrudelPatternInfo: (trackId: string) => Promise<import('../engine/strudelEngine').StrudelPatternInfo | null>;
+  /** Freeze/bounce strudel track audio to a new stems track with an audio clip. */
+  freezeStrudelToAudio: (trackId: string, bars: number, onProgress?: (progress: number) => void) => Promise<Track>;
 
   // Drum machine actions
   initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
@@ -4993,6 +4995,72 @@ export const useProjectStore = create<ProjectState>()(
     } catch {
       return null;
     }
+  },
+
+  freezeStrudelToAudio: async (trackId, bars, onProgress) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track || track.trackType !== 'strudel') throw new Error('Not a strudel track');
+    if (!track.strudelCode?.trim()) throw new Error('No strudel code');
+    if (!bars || bars < 1) throw new Error('Bars must be >= 1');
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Freeze strudel to audio' });
+
+    const bpm = state.project.bpm ?? 120;
+    const beatsPerBar = typeof state.project.timeSignature === 'number' ? state.project.timeSignature : 4;
+    const durationSeconds = (bars * beatsPerBar * 60) / bpm;
+    const sampleRate = 48_000;
+
+    // Render strudel pattern to audio via OfflineAudioContext
+    const { renderStrudelOffline } = await import('../engine/strudelEngine');
+    const audioBuffer = await renderStrudelOffline(track.strudelCode, durationSeconds, bpm, sampleRate, onProgress);
+
+    // Convert to WAV and store
+    const { audioBufferToWavBlob } = await import('../utils/wav');
+    const wavBlob = audioBufferToWavBlob(audioBuffer);
+    const clipId = uuidv4();
+    const { saveAudioBlob } = await import('../services/audioFileManager');
+    const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
+
+    // Compute waveform peaks for visual display
+    const { computeWaveformPeaks } = await import('../utils/waveformPeaks');
+    const { CLIP_WAVEFORM_PEAK_COUNT } = await import('../utils/clipAudio');
+    const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+
+    // Create a new stems track with the rendered audio clip
+    const newTrack = createTrackFromTemplate(
+      get().project!.tracks,
+      'custom',
+      'stems',
+    );
+    newTrack.displayName = `${track.displayName} (bounced)`;
+    newTrack.color = track.color;
+    newTrack.clips = [{
+      id: clipId,
+      trackId: newTrack.id,
+      startTime: 0,
+      duration: durationSeconds,
+      prompt: '',
+      lyrics: '',
+      generationStatus: 'ready' as const,
+      generationJobId: null,
+      cumulativeMixKey: null,
+      isolatedAudioKey: audioKey,
+      waveformPeaks,
+      source: 'uploaded' as const,
+      audioDuration: durationSeconds,
+    }];
+
+    const newTracks = [...get().project!.tracks, newTrack];
+    const nextProject = ensureProjectSession({
+      ...get().project!,
+      updatedAt: Date.now(),
+      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.tempoMap, get().project!.timeSignatureMap),
+      tracks: newTracks,
+    });
+    set({ project: nextProject });
+    return newTrack;
   },
 
   addMidiNote: (clipId, note) => {

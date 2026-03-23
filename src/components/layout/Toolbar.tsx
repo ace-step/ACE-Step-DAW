@@ -104,26 +104,7 @@ function splitKeyScale(keyScale?: string) {
 const numericDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[22px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
 const selectClass = 'h-8 appearance-none bg-transparent px-0 font-mono text-[19px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
 const boxedReadoutClass = 'flex h-8 items-center bg-transparent px-0';
-const flatReadoutClass = 'relative flex h-8 items-center px-0.5';
-
-function ChevronDown({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M3.5 5.25L7 8.75L10.5 5.25" />
-    </svg>
-  );
-}
+const flatReadoutClass = 'flex h-8 items-center px-0';
 
 function ProjectTimingStrip({ disabled }: { disabled: boolean }) {
   const project = useProjectStore((s) => s.project);
@@ -245,17 +226,17 @@ function HarmonySettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 px-0"
+      className="flex items-center gap-1.5 px-0"
       data-testid="toolbar-project-harmony"
     >
-      <div className={`${flatReadoutClass} pr-4`} title="Project key root note">
+      <div className={flatReadoutClass} title="Project key root note">
         <select
           value={keyScale.root}
           onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
           disabled={disabled}
           aria-label="Project key root"
           title="Project key root"
-          className={`${selectClass} w-[1.2rem]`}
+          className={`${selectClass} w-[1rem]`}
         >
           {KEY_ROOTS.map((root) => (
             <option key={root} value={root}>
@@ -263,16 +244,15 @@ function HarmonySettingsStrip({ disabled }: { disabled: boolean }) {
             </option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-zinc-300" />
       </div>
-      <div className={`${flatReadoutClass} pr-4`} title="Project scale mode selector">
+      <div className={flatReadoutClass} title="Project scale mode selector">
         <select
           value={keyScale.mode}
           onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
           disabled={disabled}
           aria-label="Project scale mode"
           title="Project scale mode"
-          className={`${selectClass} w-[2.8rem]`}
+          className={`${selectClass} w-[2.5rem]`}
         >
           {SCALE_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -280,7 +260,6 @@ function HarmonySettingsStrip({ disabled }: { disabled: boolean }) {
             </option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-zinc-300" />
       </div>
     </div>
   );

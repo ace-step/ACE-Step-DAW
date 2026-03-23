@@ -9,6 +9,13 @@ import { synthEngine } from '../engine/SynthEngine';
 import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
+import {
+  stopAllStrudelTracks,
+  startStrudelTrack,
+  stopStrudelTrack,
+  setAllStrudelBpm,
+  hasStrudelRepl,
+} from '../engine/strudelEngine';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
 import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
@@ -478,6 +485,18 @@ export function useTransport() {
       }
     }
 
+    // Sync strudel tracks: set BPM and start any tracks that have been evaluated
+    setAllStrudelBpm(fallbackBpm);
+    for (const track of proj.tracks) {
+      if (track.trackType === 'strudel' && hasStrudelRepl(track.id)) {
+        if (track.muted || (anySoloed && !track.soloed)) {
+          stopStrudelTrack(track.id);
+        } else {
+          void startStrudelTrack(track.id);
+        }
+      }
+    }
+
     // Start automation playback
     const allLanes = project?.automationLanes ?? [];
     if (allLanes.length > 0) {
@@ -552,6 +571,7 @@ export function useTransport() {
     synthEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
+    stopAllStrudelTracks();
     useTransportStore.getState().stop();
   }, [finalizeSessionArrangementRecording, isRecording, stopRecording]);
 

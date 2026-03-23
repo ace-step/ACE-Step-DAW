@@ -18,6 +18,18 @@ declare module '@strudel/core' {
 
 declare module '@strudel/webaudio' {
   export function webaudioRepl(options?: Record<string, unknown>): any;
+  export function samples(sampleMap: string | Record<string, unknown>, baseUrl?: string, options?: Record<string, unknown>): Promise<void>;
+}
+
+declare module 'superdough' {
+  export function registerSynthSounds(): void;
+  export function initAudio(options?: Record<string, unknown>): Promise<void>;
+  export function registerSound(key: string, onTrigger: any, data?: any): void;
+  export function getAudioContext(): AudioContext;
+}
+
+declare module '@strudel/repl' {
+  // Side-effect import: registers <strudel-editor> Web Component
 }
 
 declare module '@kabelsalat/web' {

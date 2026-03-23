@@ -40,7 +40,7 @@ describe('Strudel track type', () => {
     expect(track.trackType).toBe('strudel');
     expect(track.displayName).toBe('Strudel');
     expect(track.color).toBe('#e67e22');
-    expect(track.strudelCode).toContain('bd sd');
+    expect(track.strudelCode).toContain('note(');
     expect(track.strudelCycleLength).toBe(1);
     expect(track.volume).toBe(0.8);
     expect(track.muted).toBe(false);
@@ -79,7 +79,7 @@ describe('Strudel track type', () => {
     const track = store.addTrack('custom', 'strudel');
 
     const code = useProjectStore.getState().getStrudelCode(track.id);
-    expect(code).toContain('bd sd bd sd');
+    expect(code).toContain('note(');
   });
 
   it('T12: undo reverts strudel code change', () => {
@@ -90,7 +90,7 @@ describe('Strudel track type', () => {
     expect(useProjectStore.getState().project!.tracks[0].strudelCode).toBe('s("hh*8")');
 
     useProjectStore.getState().undo();
-    expect(useProjectStore.getState().project!.tracks[0].strudelCode).toContain('bd sd');
+    expect(useProjectStore.getState().project!.tracks[0].strudelCode).toContain('note(');
   });
 
   it('does not add strudel fields to non-strudel tracks', () => {

@@ -73,7 +73,7 @@ export function TrackHeader({
   const selectTracks = useUIStore((s) => s.selectTracks);
   const isTrackSelected = useUIStore((s) => s.selectedTrackIds.has(track.id));
   const { armedTrackIds, toggleArmTrack } = useRecording();
-  const info = TRACK_CATALOG[track.trackName];
+  const info = TRACK_CATALOG[track.trackName] ?? TRACK_CATALOG.custom;
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);

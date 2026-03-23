@@ -65,7 +65,7 @@ import {
   ensureMasteringState,
   estimateMasteredLufs,
 } from '../utils/mastering';
-import { TRACK_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
+import { TRACK_CATALOG, TRACK_TYPE_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
 import {
   DEFAULT_BPM,
   DEFAULT_KEY_SCALE,
@@ -586,7 +586,7 @@ export interface ProjectState {
   flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
   bounceInPlace: (trackId: string, options?: Partial<BounceInPlaceOptions>) => Promise<Clip | undefined>;
 
-  addTrack: (trackName: TrackName, trackType?: TrackType, options?: { order?: number }) => Track;
+  addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number }) => Track;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -1535,7 +1535,7 @@ function createTrackFromTemplate(
   }
 
   if (track.trackType === 'strudel') {
-    track.strudelCode = track.strudelCode ?? '// Strudel Pattern — press Ctrl+Enter to play\n// Docs: https://strudel.cc/workshop/getting-started\nbd sd bd sd';
+    track.strudelCode = track.strudelCode ?? '// Strudel Pattern — press Cmd+Enter (Mac) or Ctrl+Enter to play\n// Docs: https://strudel.cc/workshop/getting-started\nnote("[c3 [e3 g3]]*2").sound("sawtooth").lpf(800)';
     track.strudelCycleLength = track.strudelCycleLength ?? 1;
     track.color = '#e67e22'; // Strudel orange
     if (!overrideDisplayName) {
@@ -1627,8 +1627,11 @@ function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
 }
 
 function ensureTrackDefaults(track: Track): Track {
+  // Fix persisted tracks where trackName was incorrectly set to a TrackType value (e.g. 'strudel')
+  const fixedTrackName: TrackName = (track.trackName in TRACK_CATALOG) ? track.trackName : 'custom';
   const normalizedTrack: Track = {
     ...track,
+    trackName: fixedTrackName,
     synthPreset: track.synthPreset ?? getDefaultTrackSynthPreset(track.trackName),
     effects: track.effects ?? [],
     effectsBypassed: track.effectsBypassed ?? false,
@@ -2309,10 +2312,13 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) throw new Error('No project');
     _pushHistory(state.project, { scope: 'arrangement', label: 'Add track' });
 
-    const resolvedType: TrackType = trackType ?? (trackName === 'custom' ? 'sample' : 'stems');
+    // Handle case where trackName is actually a TrackType (e.g. addTrack('strudel'))
+    const isTrackType = trackName in TRACK_TYPE_CATALOG && !(trackName in TRACK_CATALOG);
+    const resolvedName: TrackName = isTrackType ? 'custom' : trackName as TrackName;
+    const resolvedType: TrackType = trackType ?? (isTrackType ? (trackName as TrackType) : (trackName === 'custom' ? 'sample' : 'stems'));
     const track = createTrackFromTemplate(
       state.project.tracks,
-      trackName,
+      resolvedName,
       resolvedType,
       options?.order !== undefined ? { order: options.order } : undefined,
     );

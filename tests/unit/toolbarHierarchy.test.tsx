@@ -126,7 +126,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(separators.length).toBeGreaterThan(0);
     separators.forEach((sep) => {
       expect(sep.className).toMatch(/w-px/);
-      expect(sep.className).toMatch(/h-7/);
+      expect(sep.className).toMatch(/h-6/);
     });
   });
 
@@ -150,12 +150,12 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const playButton = screen.getByTitle('Play (Space)');
 
     expect(toolbar.className).toContain('bg-[#1f2226]');
-    expect(toolbar.className).toContain('h-14');
-    expect(arrangementButton.className).toContain('h-9');
-    expect(arrangementButton.className).toContain('w-9');
+    expect(toolbar.className).toContain('h-12');
+    expect(arrangementButton.className).toContain('h-8');
+    expect(arrangementButton.className).toContain('w-8');
     expect(arrangementButton.className).toContain('text-white');
-    expect(playButton.className).toContain('h-10');
-    expect(playButton.className).toContain('w-12');
+    expect(playButton.className).toContain('h-9');
+    expect(playButton.className).toContain('w-11');
     expect(playButton.className).toContain('bg-white/8');
   });
 

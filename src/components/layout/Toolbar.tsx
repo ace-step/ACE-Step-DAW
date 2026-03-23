@@ -57,8 +57,8 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
-const inputClass = 'h-8 rounded-lg bg-transparent px-2 text-center text-[12px] font-mono text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
-const selectClass = 'h-8 rounded-lg bg-transparent px-2 text-[12px] text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
+const inputClass = 'h-7 rounded-lg bg-transparent px-2 text-center text-[12px] font-mono text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-7 rounded-lg bg-transparent px-2 text-[12px] text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
 
 const VALID_DENOMINATORS = [2, 4, 8, 16];
 
@@ -260,8 +260,8 @@ function LCDDisplay() {
   const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
-    <div className="flex min-w-[220px] shrink-0 items-center justify-center gap-4 px-4 py-1 font-mono tabular-nums">
-      <span className={`text-[15px] tracking-[0.16em] ${barsBeatsColor}`}>{displayBarsBeats}</span>
+    <div className="flex min-w-[210px] shrink-0 items-center justify-center gap-3.5 px-3 py-1 font-mono tabular-nums">
+      <span className={`text-[14px] tracking-[0.14em] ${barsBeatsColor}`}>{displayBarsBeats}</span>
       <span className="text-[12px] text-zinc-500">{formatTime(currentTime)}</span>
       {countInActive && (
         <span className="text-[11px] text-red-400 animate-pulse">REC</span>
@@ -310,7 +310,7 @@ function ControlBarButton({
       title={title}
       aria-label={title.replace(/\s*\(.+?\)$/, '')}
       data-onboarding-target={dataTarget}
-      className={`h-9 w-9 rounded-lg text-white hover:bg-white/8 hover:text-white ${className ?? ''}`}
+      className={`h-8 w-8 rounded-lg text-white hover:bg-white/8 hover:text-white ${className ?? ''}`}
     >
       {children}
     </Button>
@@ -318,7 +318,7 @@ function ControlBarButton({
 }
 
 function ToolbarSeparator() {
-  return <div className="h-7 w-px bg-white/10" data-testid="toolbar-separator" />;
+  return <div className="h-6 w-px bg-white/10" data-testid="toolbar-separator" />;
 }
 
 function AceStudioLink() {
@@ -329,10 +329,10 @@ function AceStudioLink() {
       rel="noreferrer"
       title="Visit ACE Studio"
       data-testid="toolbar-acestudio-link"
-      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-zinc-100 transition-colors hover:bg-white/8 hover:text-white"
+      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] text-zinc-100 transition-colors hover:bg-white/8 hover:text-white"
     >
-      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-6 w-6 rounded-full object-cover" />
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <img src="/acestudio_icon.png" alt="ACE Studio" className="h-5 w-5 rounded-full object-cover" />
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 3.5L9 7L4 10.5" />
         <path d="M9.5 3.5L12 7L9.5 10.5" />
       </svg>
@@ -395,10 +395,10 @@ function ProjectMenu({ disabled }: { disabled: boolean }) {
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         data-testid="project-menu-trigger"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
         title="Project menu"
       >
-        <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
           <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
         </svg>
       </button>
@@ -499,7 +499,7 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-14 shrink-0 select-none items-center gap-1.5 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-3"
+      className="flex h-12 shrink-0 select-none items-center gap-1 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5"
       data-testid="main-toolbar"
       style={{ scrollbarWidth: 'none' }}
     >
@@ -515,7 +515,7 @@ export function Toolbar() {
           onClick={() => setMainView('arrangement')}
           title="Arrangement View (Tab)"
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
             <path d="M2 4h10M2 7h10M2 10h10" />
           </svg>
         </ControlBarButton>
@@ -524,7 +524,7 @@ export function Toolbar() {
           onClick={() => setMainView('session')}
           title="Session View (Tab)"
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
             <path d="M4 2v10M7 2v10M10 2v10" />
           </svg>
         </ControlBarButton>
@@ -540,7 +540,7 @@ export function Toolbar() {
           title="Arrangement Markers (A)"
           disabled={!project}
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <rect x="1" y="5" width="4" height="5" rx="0.5" />
             <rect x="5" y="5" width="5" height="5" rx="0.5" />
             <rect x="10" y="5" width="3" height="5" rx="0.5" />
@@ -555,7 +555,7 @@ export function Toolbar() {
           title="Smart Controls (B)"
           disabled={!project}
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <circle cx="4" cy="7" r="2.5" />
             <circle cx="10" cy="7" r="2.5" />
             <line x1="4" y1="4.5" x2="4" y2="2" />
@@ -573,13 +573,13 @@ export function Toolbar() {
 
       {/* Center: Transport controls */}
       <div
-        className="flex items-center gap-1 shrink-0"
+        className="flex items-center gap-0.5 shrink-0"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
-          <svg width="16" height="14" viewBox="0 0 14 12" fill="currentColor">
+          <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
             <rect x="0" y="1" width="2" height="10" rx="0.5" />
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
@@ -587,7 +587,7 @@ export function Toolbar() {
         {/* Play/Pause */}
         <button
           onClick={() => void (isPlaying ? pause() : play())}
-          className={`flex h-10 w-12 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
+          className={`flex h-9 w-11 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
             isPlaying
               ? 'bg-daw-accent text-white'
               : 'bg-white/8 text-white hover:bg-white/12 hover:text-white'
@@ -595,18 +595,18 @@ export function Toolbar() {
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
-            <svg width="16" height="18" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="14" height="16" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="18" height="20" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="16" height="18" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
         </button>
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
-          <div className={`h-4 w-4 rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
+          <div className={`h-3.5 w-3.5 rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
         </ControlBarButton>
         <ControlBarButton
           onClick={() => {
@@ -621,7 +621,7 @@ export function Toolbar() {
           title="Capture MIDI (F)"
           disabled={!project}
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="7" cy="7" r="5" />
             <polyline points="5,6 7,9 9,5" />
           </svg>
@@ -638,7 +638,7 @@ export function Toolbar() {
       {/* Cycle + Metronome */}
       <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
@@ -646,7 +646,7 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton active={loopRecordingEnabled} onClick={toggleLoopRecording} title="Overdub / Loop Recording (Shift+L)">
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
@@ -655,7 +655,7 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton active={metronomeEnabled} onClick={toggleMetronome} title="Metronome (K)">
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 13L7 1l3 12" />
             <path d="M3 13h8" />
             <path d="M7 5l4-2" />
@@ -669,12 +669,12 @@ export function Toolbar() {
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => openCommandPalette()}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"
         >
-          <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
             <circle cx="6" cy="6" r="3.75" />
             <path d="M8.8 8.8L12 12" strokeLinecap="round" />
           </svg>

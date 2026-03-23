@@ -4,7 +4,7 @@
  * Everything runs in one module graph: editor, transpiler, webaudio, samples.
  * Flow: edit code → play → hear audio → update code live → Send to export
  */
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
@@ -55,6 +55,17 @@ export function StrudelEditor() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null);
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
+  const [showVersionMenu, setShowVersionMenu] = useState(false);
+
+  const captureStrudelVersion = useProjectStore((s) => s.captureStrudelVersion);
+  const restoreStrudelVersion = useProjectStore((s) => s.restoreStrudelVersion);
+
+  // Find the current strudel track and its versions
+  const strudelTrack = useMemo(
+    () => project?.tracks.find((t) => t.trackType === 'strudel') ?? null,
+    [project],
+  );
+  const versions = strudelTrack?.strudelVersions ?? [];
 
   const [editorSettings, setEditorSettings] = useState({
     fontSize: 18,
@@ -306,6 +317,47 @@ export function StrudelEditor() {
 
         <div className="w-px h-4 bg-zinc-700 mx-1" />
 
+        {/* Version controls */}
+        {strudelTrack && (
+          <>
+            <button
+              onClick={() => { captureStrudelVersion(strudelTrack.id); setConsoleMessages((prev) => [...prev.slice(-50), '📸 version captured']); }}
+              className="px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200 transition-colors"
+              title="Capture current code as a version snapshot"
+            >
+              snapshot
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowVersionMenu(!showVersionMenu)}
+                disabled={versions.length === 0}
+                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                  versions.length === 0 ? 'text-zinc-600 cursor-default' : 'text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
+                }`}
+                title={versions.length === 0 ? 'No versions captured yet' : `${versions.length} version(s)`}
+              >
+                v{versions.length}
+                <svg width="6" height="6" viewBox="0 0 8 8" fill="currentColor" className="opacity-40"><path d="M1 3l3 3 3-3" /></svg>
+              </button>
+              {showVersionMenu && versions.length > 0 && (
+                <div className="absolute bottom-full right-0 mb-1 bg-zinc-800 border border-zinc-600 rounded shadow-lg py-0.5 min-w-[180px] max-h-[200px] overflow-y-auto z-20">
+                  {versions.map((v, idx) => (
+                    <button
+                      key={v.id}
+                      onClick={() => { restoreStrudelVersion(strudelTrack.id, idx); setShowVersionMenu(false); setConsoleMessages((prev) => [...prev.slice(-50), `↩ restored v${idx + 1}`]); }}
+                      className="w-full text-left px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-700 hover:text-white flex items-center justify-between"
+                    >
+                      <span>{v.label || `v${idx + 1}`}</span>
+                      <span className="text-[9px] text-zinc-600">{new Date(v.timestamp).toLocaleTimeString()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="w-px h-4 bg-zinc-700 mx-1" />
+          </>
+        )}
+
         {/* Bars */}
         <div className="relative">
           <button
@@ -476,6 +528,7 @@ export function StrudelEditor() {
       </div>
 
       {showBarsMenu && <div className="fixed inset-0 z-[1]" onClick={() => setShowBarsMenu(false)} />}
+      {showVersionMenu && <div className="fixed inset-0 z-[1]" onClick={() => setShowVersionMenu(false)} />}
     </div>
   );
 }

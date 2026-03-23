@@ -13,6 +13,14 @@ export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
 export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
 
+/** A snapshot of Strudel code captured during evaluation. */
+export interface StrudelCodeVersion {
+  id: string;
+  code: string;
+  timestamp: number;
+  label?: string;
+}
+
 /** Configuration for the sampler instrument on a pianoRoll track. */
 export interface SamplerConfig {
   /** IndexedDB audio key for the loaded sample. */
@@ -523,6 +531,8 @@ export interface Track {
   strudelCode?: string;
   /** Strudel cycle length in bars (default 1 = 1 bar = 1 cycle). */
   strudelCycleLength?: number;
+  /** Strudel pattern version history. */
+  strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
 }

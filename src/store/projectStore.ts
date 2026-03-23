@@ -718,6 +718,10 @@ export interface ProjectState {
   freezeStrudelToDrumMachine: (trackId: string, bars?: number, stepsPerBar?: number) => Promise<Track | null>;
   /** Scaffold 4 coordinated strudel tracks from a genre template. */
   scaffoldStrudelArrangement: (genre: string) => string[] | Promise<string[]>;
+  /** Capture current strudel code as a named version snapshot. */
+  captureStrudelVersion: (trackId: string, label?: string) => void;
+  /** Restore strudel code from a previously captured version. */
+  restoreStrudelVersion: (trackId: string, versionIndex: number) => void;
 
   // Drum machine actions
   initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
@@ -5259,6 +5263,52 @@ export const useProjectStore = create<ProjectState>()(
     });
     set({ project: nextProject });
     return trackIds;
+  },
+
+  captureStrudelVersion: (trackId, label) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track || track.trackType !== 'strudel' || !track.strudelCode) return;
+
+    const version = {
+      id: uuidv4(),
+      code: track.strudelCode,
+      timestamp: Date.now(),
+      label,
+    };
+
+    const versions = [...(track.strudelVersions ?? []), version];
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, strudelVersions: versions } : t,
+        ),
+      },
+    });
+  },
+
+  restoreStrudelVersion: (trackId, versionIndex) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track || track.trackType !== 'strudel') return;
+    const version = track.strudelVersions?.[versionIndex];
+    if (!version) return;
+
+    _pushHistory(state.project, { scope: 'track', label: 'Restore strudel version' });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, strudelCode: version.code } : t,
+        ),
+      },
+    });
   },
 
   addMidiNote: (clipId, note) => {

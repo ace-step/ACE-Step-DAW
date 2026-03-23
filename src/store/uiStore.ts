@@ -1181,3 +1181,21 @@ function buildCommandPaletteContext(state: UIState) {
     },
   };
 }
+
+/** Compute total height of visible bottom panels (editors + mixer). */
+export function getBottomPanelHeight(state: UIState): number {
+  let height = 0;
+  switch (state.activeBottomPanel) {
+    case 'smart': height = 140; break;
+    case 'editor': height = state.sequencerEditorHeight; break;
+    case 'pianoRoll': height = state.pianoRollHeight; break;
+    case 'effects': height = state.effectChainHeight; break;
+    case 'drumMachine': height = state.drumMachineEditorHeight; break;
+    case 'strudel': height = 300; break;
+    default: break;
+  }
+  if (state.showMixer) {
+    height += state.mixerHeight;
+  }
+  return height;
+}

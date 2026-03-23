@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
-import { useUIStore } from '../../store/uiStore';
+import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { generateCoverClip } from '../../services/generationPipeline';
 import { modelSupportsTaskType } from '../../services/aceStepApi';
 import { Z } from '../../utils/zIndex';
+
+const ENHANCER_BASE_BOTTOM = 60;
 
 type ConsistencyLevel = 'low' | 'medium' | 'high';
 const CONSISTENCY_VALUES: Record<ConsistencyLevel, number> = {
@@ -34,6 +36,8 @@ export function MusicEnhancerPanel() {
   const setSelectWindow = useUIStore((s) => s.setSelectWindow);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
   const project = useProjectStore((s) => s.project);
+  const bottomPanelHeight = useUIStore(getBottomPanelHeight);
+  const dynamicBottom = ENHANCER_BASE_BOTTOM + bottomPanelHeight;
 
   const [caption, setCaption] = useState('');
   const [lyrics, setLyrics] = useState('');
@@ -150,8 +154,8 @@ export function MusicEnhancerPanel() {
     return (
       <div
         data-testid="music-enhancer-panel"
-        className="fixed bottom-[60px] left-1/2 -translate-x-1/2 w-[780px] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center"
-        style={{ zIndex: Z.panel }}
+        className="fixed left-1/2 -translate-x-1/2 w-[780px] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
+        style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
       >
         <div className="flex items-center justify-between mb-6">
           <span className="text-sm font-semibold text-white">Music Enhancer</span>
@@ -184,8 +188,8 @@ export function MusicEnhancerPanel() {
   return (
     <div
       data-testid="music-enhancer-panel"
-      className="fixed bottom-[60px] left-1/2 -translate-x-1/2 w-[780px] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden"
-      style={{ zIndex: Z.panel }}
+      className="fixed left-1/2 -translate-x-1/2 w-[780px] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
+      style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
     >
       {/* Left Sidebar -- Session History */}
       <div data-testid="enhancer-history" className="w-[150px] min-w-[150px] border-r border-[#3a3a3a] flex flex-col bg-[#1a1a1e]">

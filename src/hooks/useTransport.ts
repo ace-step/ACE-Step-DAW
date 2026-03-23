@@ -296,12 +296,19 @@ export function useTransport() {
 
     engine.updateSoloState();
 
-    const startFrom = fromTime ?? useTransportStore.getState().playStartTime;
+    let startFrom = fromTime ?? useTransportStore.getState().playStartTime;
 
-    // Loop end = last clip's endpoint (or full timeline if no clips)
-    const { loopEnabled } = useTransportStore.getState();
+    // When loop is enabled, use loop boundaries for playback range
+    const { loopEnabled, loopStart, loopEnd } = useTransportStore.getState();
     let effectiveEnd = mainView === 'session' ? getSessionPlaybackEnd(proj, startFrom) : proj.totalDuration;
-    if (mainView !== 'session' && loopEnabled && clipBuffers.length > 0) {
+    if (mainView !== 'session' && loopEnabled && loopEnd > loopStart) {
+      effectiveEnd = loopEnd;
+      // If playhead is outside the loop region, start from loopStart
+      if (startFrom < loopStart || startFrom >= loopEnd) {
+        startFrom = loopStart;
+        useTransportStore.getState().seek(loopStart);
+      }
+    } else if (mainView !== 'session' && loopEnabled && clipBuffers.length > 0) {
       const lastClipEnd = clipBuffers.reduce(
         (max, cb) => Math.max(max, cb.startTime + cb.clipDuration), 0,
       );

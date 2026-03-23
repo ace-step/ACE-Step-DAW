@@ -52,6 +52,7 @@ export function GenerationSidePanel() {
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const selectClip = useUIStore((s) => s.selectClip);
+  const showSmartControls = useUIStore((s) => s.showSmartControls);
   const project = useProjectStore((s) => s.project);
 
   const generationForm = useGenerationStore((s) => s.generationForm);
@@ -233,8 +234,8 @@ export function GenerationSidePanel() {
   return (
     <>
       <div
-        className="fixed bottom-[68px] left-1/2 z-[120] -translate-x-1/2"
-        style={{ zIndex: Z.panel + 1 }}
+        className="fixed left-1/2 -translate-x-1/2"
+        style={{ zIndex: Z.toast, bottom: showSmartControls ? 208 : 68 }}
         data-testid="generation-dock"
       >
         <div className="flex items-center gap-2">
@@ -478,6 +479,21 @@ export function GenerationSidePanel() {
               </option>
             ))}
           </select>
+          {stemsTracks.length === 0 && (
+            <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-950/20 px-2.5 py-2 text-[11px] text-amber-200/80">
+              <p>Full Song generation needs a stems track to output audio into.</p>
+              <button
+                type="button"
+                className="mt-1.5 rounded bg-indigo-600 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-indigo-500"
+                onClick={() => {
+                  const newTrack = useProjectStore.getState().addTrack('custom', 'stems');
+                  setGenerationTargetTrack(newTrack.id);
+                }}
+              >
+                + Add stems track
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2">

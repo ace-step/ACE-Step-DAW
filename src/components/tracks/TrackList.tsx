@@ -179,7 +179,7 @@ export function TrackList() {
         .map((track) => track.order),
     );
   }, [project]);
-  const showsArrangementMarkers = (project.markers?.length ?? 0) > 0;
+  const showsArrangementMarkers = true;
 
   return (
     <div

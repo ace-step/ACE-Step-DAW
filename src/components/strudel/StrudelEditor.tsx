@@ -22,39 +22,6 @@ const SOUND_BANKS = [
   { name: 'cr78', sounds: 'bd, sd, hh, oh, cp, cb, ma, gu, ta, co, cl' },
 ];
 
-const REFERENCE = [
-  { cat: 'Sound', fns: [
-    { name: 's("bd cp")', desc: 'Play samples' },
-    { name: 'note("c3 e3")', desc: 'Play notes' },
-    { name: '.bank("tr909")', desc: 'Drum bank' },
-    { name: '.sound("sawtooth")', desc: 'Synth: sine, triangle, sawtooth, square' },
-  ]},
-  { cat: 'Pattern', fns: [
-    { name: '.fast(2)', desc: 'Speed up' },
-    { name: '.slow(2)', desc: 'Slow down' },
-    { name: '.rev()', desc: 'Reverse' },
-    { name: '"[a b]*2"', desc: 'Group & repeat' },
-    { name: '"<a b c>"', desc: 'Alternate each cycle' },
-    { name: '"a(3,8)"', desc: 'Euclidean rhythm' },
-    { name: '"~"', desc: 'Rest / silence' },
-  ]},
-  { cat: 'Effects', fns: [
-    { name: '.lpf(800)', desc: 'Low-pass filter' },
-    { name: '.hpf(200)', desc: 'High-pass filter' },
-    { name: '.delay(0.5)', desc: 'Delay wet' },
-    { name: '.room(0.5)', desc: 'Reverb' },
-    { name: '.gain(0.8)', desc: 'Volume 0-1' },
-    { name: '.pan(0.5)', desc: 'Stereo pan' },
-    { name: '.dec(.4)', desc: 'Decay time' },
-  ]},
-  { cat: 'Structure', fns: [
-    { name: 'stack(a, b)', desc: 'Layer patterns' },
-    { name: 'cat(a, b)', desc: 'Sequence patterns' },
-    { name: '.every(4, fn)', desc: 'Apply every N cycles' },
-    { name: '.sometimes(fn)', desc: 'Apply randomly 50%' },
-  ]},
-];
-
 /* ── Component ─────────────────────────────────────── */
 
 export function StrudelEditor() {
@@ -108,6 +75,11 @@ export function StrudelEditor() {
         }
 
         webaudioMod.initAudioOnFirstClick?.();
+
+        // Enable autocompletion (disabled by default in StrudelMirror)
+        if (codemirrorMod.codemirrorSettings?.setKey) {
+          codemirrorMod.codemirrorSettings.setKey('isAutoCompletionEnabled', true);
+        }
 
         // Load samples via @strudel/webaudio (same superdough singleton)
         if (webaudioMod.samples) {
@@ -361,7 +333,7 @@ export function StrudelEditor() {
 
         {/* Sidebar */}
         {activeTab && (
-          <div className="w-[240px] shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-auto text-[12px]">
+          <div className={`${activeTab === 'reference' ? 'w-[400px]' : 'w-[240px]'} shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-auto text-[12px]`}>
             {activeTab === 'sounds' && (
               <div className="p-3 space-y-3">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">Sound Banks</h3>
@@ -374,19 +346,11 @@ export function StrudelEditor() {
               </div>
             )}
             {activeTab === 'reference' && (
-              <div className="p-3 space-y-3">
-                {REFERENCE.map((cat) => (
-                  <div key={cat.cat}>
-                    <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">{cat.cat}</h3>
-                    {cat.fns.map((f) => (
-                      <div key={f.name} className="flex gap-1.5 py-0.5">
-                        <code className="text-orange-400 font-mono text-[10px] shrink-0">{f.name}</code>
-                        <span className="text-zinc-500 text-[10px]">{f.desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              <iframe
+                src="https://strudel.cc/learn/reference/"
+                className="w-full h-full border-0"
+                title="Strudel API Reference"
+              />
             )}
             {activeTab === 'console' && (
               <div className="p-2 font-mono text-[10px]">

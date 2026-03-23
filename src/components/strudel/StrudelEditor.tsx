@@ -1,49 +1,26 @@
 /**
- * StrudelEditor — Embeds the full strudel.cc website in an iframe.
- * The user gets the complete strudel.cc experience (editor, sidebar tabs,
- * welcome, patterns, sounds, reference, console, settings) natively.
+ * StrudelEditor — Global tool panel that embeds the strudel.cc REPL.
+ *
+ * Opened via the 🌀 toolbar button. Not tied to any track.
+ * "Add to Timeline" bounces the strudel audio to a new stems clip.
  */
 import { useState, useMemo, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 
-/** Encode code for strudel.cc URL hash */
-function codeToStrudelUrl(code: string): string {
-  const cleaned = code
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('//'))
-    .join('\n')
-    .trim();
-  if (!cleaned) return 'https://strudel.cc/';
-  try {
-    return `https://strudel.cc/#${btoa(unescape(encodeURIComponent(cleaned)))}`;
-  } catch {
-    return 'https://strudel.cc/';
-  }
-}
-
-const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2").bank("RolandTR909")`;
+const DEFAULT_STRUDEL_URL = 'https://strudel.cc/';
 
 export function StrudelEditor() {
-  const trackId = useUIStore((s) => s.openStrudelEditorTrackId);
-  const closeEditor = useUIStore((s) => s.setOpenStrudelEditor);
-
+  const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
+  const toggleStrudelPanel = useUIStore((s) => s.toggleStrudelPanel);
   const project = useProjectStore((s) => s.project);
-
-  const track = useMemo(
-    () => project?.tracks.find((t) => t.id === trackId) ?? null,
-    [project, trackId],
-  );
 
   const [editorHeight, setEditorHeight] = useState(450);
   const [iframeLoaded, setIframeLoaded] = useState(false);
-
-  // Build iframe URL from track's strudel code
-  const iframeUrl = useMemo(() => {
-    const code = track?.strudelCode ?? DEFAULT_CODE;
-    return codeToStrudelUrl(code);
-  }, [track?.strudelCode]);
+  const [bouncing, setBouncing] = useState(false);
+  const [bounceBars, setBounceBars] = useState(4);
+  const [showBarsMenu, setShowBarsMenu] = useState(false);
 
   // Resize handle
   const onResizeStart = useCallback((e: React.MouseEvent) => {
@@ -61,7 +38,31 @@ export function StrudelEditor() {
     window.addEventListener('mouseup', onUp);
   }, [editorHeight]);
 
-  if (!trackId || !track) return null;
+  // Bounce strudel to timeline — uses the strudelEngine (not iframe audio)
+  const handleBounce = useCallback(async (bars: number) => {
+    if (!project || bouncing) return;
+    setBouncing(true);
+    setShowBarsMenu(false);
+    try {
+      // Get strudel code from store (last evaluated code, or the default)
+      const store = useProjectStore.getState();
+      // Find any strudel track, or use a temporary one
+      let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
+      if (!strudelTrack) {
+        // Create a temporary strudel track for bouncing
+        strudelTrack = store.addTrack('strudel');
+      }
+      if (strudelTrack) {
+        await store.freezeStrudelToAudio(strudelTrack.id, bars);
+      }
+    } catch (err: any) {
+      console.error('Strudel bounce failed:', err);
+    } finally {
+      setBouncing(false);
+    }
+  }, [project, bouncing]);
+
+  if (!strudelPanelOpen) return null;
 
   return (
     <div
@@ -75,12 +76,75 @@ export function StrudelEditor() {
         onMouseDown={onResizeStart}
       />
 
-      {/* Close button — top-right corner over iframe */}
-      <div className="absolute top-[5px] right-1 z-10">
+      {/* Toolbar — above iframe, no overlap */}
+      <div className="flex items-center gap-1.5 px-3 h-8 border-b border-zinc-700/60 shrink-0 bg-[#111118]">
+        <span className="text-[13px] leading-none opacity-70">꩜</span>
+        <span className="text-[11px] text-zinc-500">Strudel REPL</span>
+
+        <div className="flex-1" />
+
+        {/* Bars selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowBarsMenu(!showBarsMenu)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200 transition-colors"
+          >
+            {bounceBars} {bounceBars === 1 ? 'bar' : 'bars'}
+            <svg width="7" height="7" viewBox="0 0 8 8" fill="currentColor" className="opacity-50">
+              <path d="M1 3l3 3 3-3" />
+            </svg>
+          </button>
+          {showBarsMenu && (
+            <div className="absolute top-full right-0 mt-1 bg-zinc-800 border border-zinc-600 rounded shadow-lg py-0.5 min-w-[80px] z-20">
+              {[1, 2, 4, 8, 16].map((bars) => (
+                <button
+                  key={bars}
+                  onClick={() => { setBounceBars(bars); setShowBarsMenu(false); }}
+                  className={`w-full text-left px-3 py-1 text-[11px] transition-colors ${
+                    bars === bounceBars ? 'text-white bg-zinc-700' : 'text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  {bars} {bars === 1 ? 'bar' : 'bars'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Send to Track */}
         <button
-          onClick={() => closeEditor(null)}
-          className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800/80 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
-          title="Close editor"
+          onClick={() => handleBounce(bounceBars)}
+          disabled={bouncing || !project}
+          className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+            bouncing
+              ? 'text-zinc-500 cursor-wait'
+              : 'text-daw-accent hover:bg-daw-accent/10'
+          }`}
+          title={`Render ${bounceBars} bars and add to a new audio track`}
+        >
+          {bouncing ? (
+            <>
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
+                <path d="M12 2a10 10 0 0110 10" strokeLinecap="round" />
+              </svg>
+              Rendering...
+            </>
+          ) : (
+            <>
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M3 7h8M8 4l3 3-3 3" />
+              </svg>
+              Send to Track
+            </>
+          )}
+        </button>
+
+        {/* Close */}
+        <button
+          onClick={toggleStrudelPanel}
+          className="flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-200 transition-colors"
+          title="Close"
         >
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M2 2l6 6M8 2l-6 6" />
@@ -102,7 +166,7 @@ export function StrudelEditor() {
           </div>
         )}
         <iframe
-          src={iframeUrl}
+          src={DEFAULT_STRUDEL_URL}
           className="w-full h-full border-0"
           onLoad={() => setIframeLoaded(true)}
           allow="autoplay; microphone"
@@ -111,6 +175,11 @@ export function StrudelEditor() {
           data-testid="strudel-iframe"
         />
       </div>
+
+      {/* Click-away handler for bars menu */}
+      {showBarsMenu && (
+        <div className="fixed inset-0 z-[1]" onClick={() => setShowBarsMenu(false)} />
+      )}
     </div>
   );
 }

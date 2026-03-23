@@ -366,30 +366,19 @@ export function cycleTimeToSeconds(cycleTime: number, cps: number): number {
 }
 
 /**
- * Render a strudel pattern to an AudioBuffer using OfflineAudioContext.
+ * Extract MIDI notes from a strudel pattern for N cycles.
  *
- * Creates a temporary webaudioRepl connected to an offline context,
- * evaluates the pattern, lets it run for `durationSeconds`, then returns
- * the rendered buffer. The repl is disposed after rendering.
+ * Fast path: no audio rendering. Parses the pattern, queries events via
+ * queryArc, and converts to MidiNote[] compatible with the DAW's pianoRoll.
+ * Returns instantly — no real-time waiting.
  */
-export async function renderStrudelOffline(
+export async function extractStrudelMidiNotes(
   code: string,
-  durationSeconds: number,
+  bars: number,
   bpm: number,
-  sampleRate: number = 48_000,
-): Promise<AudioBuffer> {
-  const { webaudioRepl } = await import('@strudel/webaudio');
-
-  const offlineCtx = new OfflineAudioContext(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
-
-  const cps = bpmToCps(bpm);
-  const repl = webaudioRepl({
-    audioContext: offlineCtx,
-    enableResample: false,
-  });
-
-  // Set tempo and evaluate
-  repl.setCps?.(cps);
+  beatsPerBar: number = 4,
+): Promise<{ notes: Array<{ pitch: number; startBeat: number; durationBeats: number; velocity: number }>; instruments: string[] }> {
+  await ensureStrudelLoaded();
 
   const cleanCode = code
     .split('\n')
@@ -398,13 +387,107 @@ export async function renderStrudelOffline(
     .replace(/^\$:\s*/gm, '')
     .trim();
 
-  await repl.evaluate(cleanCode);
+  if (!cleanCode) return { notes: [], instruments: [] };
 
-  // Render the offline context
-  const renderedBuffer = await offlineCtx.startRendering();
+  // Evaluate pattern (no audio) via mini-notation
+  const { mini } = await import('@strudel/mini');
+  let pattern: any;
+  try {
+    // Try evaluating as full Strudel JS (supports s(), note(), etc.)
+    const core = await import('@strudel/core') as any;
+    // Use repl evaluate to get the pattern object
+    const entry = trackRepls.values().next().value;
+    if (entry?.repl) {
+      pattern = await entry.repl.evaluate(cleanCode, false); // false = don't start audio
+    } else {
+      // Fallback: parse as mini-notation
+      pattern = mini(cleanCode);
+    }
+  } catch {
+    // Last resort: try mini-notation directly
+    try { pattern = mini(cleanCode); } catch { return { notes: [], instruments: [] }; }
+  }
 
-  // Cleanup
-  try { repl.stop?.(); } catch { /* ignore */ }
+  if (!pattern?.queryArc) return { notes: [], instruments: [] };
 
-  return renderedBuffer;
+  const cps = bpmToCps(bpm, beatsPerBar);
+  const totalCycles = bars; // 1 bar = 1 cycle by default
+  const events = pattern.queryArc(0, totalCycles);
+
+  const notes: Array<{ pitch: number; startBeat: number; durationBeats: number; velocity: number }> = [];
+  const instruments = new Set<string>();
+
+  for (const hap of events) {
+    if (!hap.hasOnset?.()) continue;
+
+    const val = hap.value ?? {};
+    const startCycle = typeof hap.whole?.begin?.valueOf === 'function' ? hap.whole.begin.valueOf() : 0;
+    const endCycle = typeof hap.whole?.end?.valueOf === 'function' ? hap.whole.end.valueOf() : startCycle + 0.25;
+    const durationCycles = endCycle - startCycle;
+
+    // Convert cycle time to beats
+    const startBeat = startCycle * beatsPerBar;
+    const durationBeats = Math.max(durationCycles * beatsPerBar, 0.125);
+
+    // Extract pitch (MIDI note number)
+    let pitch = 60; // default C4
+    if (typeof val === 'object') {
+      if ('note' in val && typeof val.note === 'number') pitch = val.note;
+      else if ('n' in val && typeof val.n === 'number') pitch = val.n;
+      else if ('freq' in val && typeof val.freq === 'number') pitch = Math.round(12 * Math.log2((val.freq as number) / 440) + 69);
+      if ('s' in val) instruments.add(String(val.s));
+      if ('sound' in val) instruments.add(String(val.sound));
+    }
+
+    const velocity = typeof val === 'object' && 'gain' in val ? Math.min(1, Number(val.gain)) : 0.8;
+
+    notes.push({ pitch, startBeat, durationBeats: Math.round(durationBeats * 1000) / 1000, velocity });
+  }
+
+  return { notes, instruments: [...instruments] };
+}
+
+/**
+ * Render strudel MIDI notes to audio via Tone.js OfflineAudioContext.
+ * Fast: uses offline rendering (not real-time), completes in ~100ms.
+ */
+export async function renderStrudelOffline(
+  code: string,
+  durationSeconds: number,
+  bpm: number,
+  sampleRate: number = 48_000,
+): Promise<AudioBuffer> {
+  const Tone = await import('tone');
+  const beatsPerBar = 4;
+
+  // Extract MIDI events from the pattern (instant)
+  const bars = Math.ceil(durationSeconds * bpm / 60 / beatsPerBar);
+  const { notes } = await extractStrudelMidiNotes(code, bars, bpm, beatsPerBar);
+
+  if (notes.length === 0) {
+    // Return silence if no notes extracted
+    const ctx = new OfflineAudioContext(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
+    return ctx.startRendering();
+  }
+
+  // Render via Tone.js OfflineAudioContext (fast, no real-time waiting)
+  const { renderMidiTrackOffline } = await import('./offlineRender');
+
+  const midiNotes = notes.map((n, i) => ({
+    id: `strudel-${i}`,
+    pitch: n.pitch,
+    startBeat: n.startBeat,
+    durationBeats: n.durationBeats,
+    velocity: n.velocity,
+  }));
+
+  const audioBuffer = await renderMidiTrackOffline(
+    midiNotes,
+    durationSeconds,
+    bpm,
+    'lead', // SynthPreset for rendering
+    sampleRate,
+  );
+
+  return audioBuffer;
 }

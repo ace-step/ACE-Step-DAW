@@ -111,6 +111,8 @@ export interface UIState {
   openSequencerTrackId: string | null;
   openDrumMachineTrackId: string | null;
   openStrudelEditorTrackId: string | null;
+  /** Whether the global Strudel REPL panel is open (not tied to a track). */
+  strudelPanelOpen: boolean;
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
   selectedPianoRollNoteIds: string[];
@@ -269,6 +271,7 @@ export interface UIState {
   setOpenSequencerTrackId: (id: string | null) => void;
   setOpenDrumMachineTrackId: (id: string | null) => void;
   setOpenStrudelEditor: (trackId: string | null) => void;
+  toggleStrudelPanel: () => void;
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
@@ -496,6 +499,7 @@ export const useUIStore = create<UIState>()(
   openSequencerTrackId: null,
   openDrumMachineTrackId: null,
   openStrudelEditorTrackId: null,
+  strudelPanelOpen: false,
   openPianoRollTrackId: null,
   openPianoRollClipId: null,
   selectedPianoRollNoteIds: [],
@@ -804,6 +808,13 @@ export const useUIStore = create<UIState>()(
     historyFocusScope: trackId ? 'track' : 'arrangement',
     historyFocusTrackId: trackId,
     historyFocusClipId: null,
+  })),
+  toggleStrudelPanel: () => set((state) => ({
+    strudelPanelOpen: !state.strudelPanelOpen,
+    activeBottomPanel: !state.strudelPanelOpen ? 'strudel' : null,
+    keyboardContext: !state.strudelPanelOpen
+      ? { scope: 'strudel' as const, trackId: null }
+      : { scope: 'timeline' as const, trackId: state.keyboardContext.trackId },
   })),
   setOpenPianoRoll: (trackId, clipId = null) => set((state) => ({
     keyboardContext: trackId ? { scope: 'pianoRoll', trackId } : state.keyboardContext,

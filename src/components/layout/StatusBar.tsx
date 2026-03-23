@@ -8,7 +8,8 @@ import { TIMELINE_ZOOM_LEVELS } from '../../utils/timelineZoom';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
-const DEFAULT_COPYRIGHT_NOTICE = 'Copyright (c) 2026 ACE Studio';
+const CURRENT_YEAR = new Date().getFullYear();
+const DEFAULT_COPYRIGHT_NOTICE = `Copyright (c) ${CURRENT_YEAR} ACE Studio`;
 
 let lastKnownBackendConnection = false;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ArrangementMarkers } from '../ArrangementMarkers';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -20,7 +20,7 @@ describe('ArrangementMarkers', () => {
     render(<ArrangementMarkers />);
     expect(screen.getByTestId('arrangement-markers')).toBeInTheDocument();
     expect(screen.getByTestId('arrangement-markers-empty')).toBeInTheDocument();
-    expect(screen.getByText('Double-click to add section markers')).toBeInTheDocument();
+    expect(screen.getByText('Drag to create section')).toBeInTheDocument();
   });
 
   it('hides empty-state hint once a marker is added', () => {
@@ -37,36 +37,10 @@ describe('ArrangementMarkers', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('adds a marker on double-click snapped to bar boundary', () => {
+  it('has crosshair cursor on container for drag-to-create', () => {
     render(<ArrangementMarkers />);
     const el = screen.getByTestId('arrangement-markers');
-
-    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 1000, bottom: 20, width: 1000, height: 20, x: 0, y: 0, toJSON: () => {},
-    });
-
-    fireEvent.doubleClick(el, { clientX: 250 });
-
-    const markers = useProjectStore.getState().project!.markers!;
-    // Creates 1 marker snapped to beat; user resizes via right-edge drag
-    expect(markers).toHaveLength(1);
-    // At 120 BPM, beat = 0.5s. 2.5s (250px / 100pps) snaps to 2.5s (exact beat)
-    expect(markers[0].time).toBe(2.5);
-  });
-
-  it('adds a marker at exact position when Alt is held', () => {
-    render(<ArrangementMarkers />);
-    const el = screen.getByTestId('arrangement-markers');
-
-    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 1000, bottom: 20, width: 1000, height: 20, x: 0, y: 0, toJSON: () => {},
-    });
-
-    fireEvent.doubleClick(el, { clientX: 250, altKey: true });
-
-    const markers = useProjectStore.getState().project!.markers!;
-    expect(markers.length).toBeGreaterThanOrEqual(1);
-    expect(markers[0].time).toBe(2.5);
+    expect(el.style.cursor).toBe('crosshair');
   });
 
   it('renders marker sections with correct data attributes', () => {
@@ -87,6 +61,16 @@ describe('ArrangementMarkers', () => {
     render(<ArrangementMarkers />);
 
     expect(screen.getByTestId(`marker-resize-handle-${markerId}`)).toBeInTheDocument();
+  });
+
+  it('sections have grab cursor for drag-to-move', () => {
+    const store = useProjectStore.getState();
+    store.addMarker(0, 'Intro');
+    render(<ArrangementMarkers />);
+
+    const markerId = useProjectStore.getState().project!.markers![0].id;
+    const el = screen.getByTestId('arrangement-markers').querySelector(`[data-marker-id="${markerId}"]`) as HTMLElement;
+    expect(el.style.cursor).toBe('grab');
   });
 });
 

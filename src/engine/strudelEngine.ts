@@ -208,6 +208,51 @@ async function evaluateMiniNotation(code: string): Promise<any> {
 }
 
 /**
+ * Evaluate full Strudel JS code (s(), note(), bank(), etc.) and return the
+ * pattern object — **without** starting audio playback.
+ *
+ * This loads the full Strudel scope (s, note, bank, stack, …) onto globalThis,
+ * then evaluates the code as an async expression. Use this for pattern analysis
+ * and conversion (freeze-to-MIDI, freeze-to-drums) where you need the real
+ * pattern from `s("bd sd")` rather than mini-notation parsing.
+ */
+export async function evaluateStrudelPatternPure(code: string): Promise<any> {
+  await ensureStrudelLoaded();
+
+  const cleaned = code
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (trimmed.startsWith('$:')) return line.replace(/\$:\s*/, '');
+      return line;
+    })
+    .join('\n')
+    .trim();
+
+  if (!cleaned) return null;
+
+  // After ensureStrudelLoaded, s/note/bank/stack/etc. are on globalThis.
+  // Evaluate the code as a JS expression to get the Pattern object.
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const AsyncFunction = Object.getPrototypeOf(async function () {/* */}).constructor;
+  try {
+    // Try as expression first (common case: `s("bd sd").bank("tr909")`)
+    const fn = new AsyncFunction(`return (${cleaned})`);
+    return await fn();
+  } catch {
+    // Fall back to statement evaluation (multi-line code with let/const)
+    try {
+      const fn = new AsyncFunction(cleaned);
+      return await fn();
+    } catch {
+      // Last resort: try mini-notation
+      return evaluateMiniNotation(cleaned);
+    }
+  }
+}
+
+/**
  * Stop a strudel track's audio playback.
  */
 export function stopStrudelTrack(trackId: string): void {

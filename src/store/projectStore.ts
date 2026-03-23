@@ -5123,8 +5123,8 @@ export const useProjectStore = create<ProjectState>()(
     const beatsPerBar = typeof state.project.timeSignature === 'number' ? state.project.timeSignature : 4;
 
     // Evaluate pattern (pure, no audio)
-    const { evaluateStrudelCode, queryPatternEvents } = await import('../engine/strudelEngine');
-    const pattern = await evaluateStrudelCode(track.strudelCode);
+    const { evaluateStrudelPatternPure, queryPatternEvents } = await import('../engine/strudelEngine');
+    const pattern = await evaluateStrudelPatternPure(track.strudelCode);
     if (!pattern) return null;
 
     const events = queryPatternEvents(pattern, 0, bars);
@@ -5189,8 +5189,8 @@ export const useProjectStore = create<ProjectState>()(
     const beatsPerBar = typeof state.project.timeSignature === 'number' ? state.project.timeSignature : 4;
 
     // Evaluate pattern (pure, no audio)
-    const { evaluateStrudelCode, queryPatternEvents } = await import('../engine/strudelEngine');
-    const pattern = await evaluateStrudelCode(track.strudelCode);
+    const { evaluateStrudelPatternPure, queryPatternEvents } = await import('../engine/strudelEngine');
+    const pattern = await evaluateStrudelPatternPure(track.strudelCode);
     if (!pattern) return null;
 
     const events = queryPatternEvents(pattern, 0, bars);

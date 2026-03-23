@@ -716,6 +716,8 @@ export interface ProjectState {
   freezeStrudelToMidi: (trackId: string, bars?: number) => Promise<Track | null>;
   /** Convert strudel percussion pattern to a new sequencer track. */
   freezeStrudelToDrumMachine: (trackId: string, bars?: number, stepsPerBar?: number) => Promise<Track | null>;
+  /** Scaffold 4 coordinated strudel tracks from a genre template. */
+  scaffoldStrudelArrangement: (genre: string) => string[] | Promise<string[]>;
 
   // Drum machine actions
   initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
@@ -5215,6 +5217,48 @@ export const useProjectStore = create<ProjectState>()(
     });
     set({ project: nextProject });
     return newTrack;
+  },
+
+  scaffoldStrudelArrangement: async (genre) => {
+    const state = get();
+    if (!state.project) return [];
+
+    const { getArrangementTemplate } = await import('../services/strudelArrangement');
+    const template = getArrangementTemplate(genre);
+
+    _pushHistory(state.project, { scope: 'arrangement', label: `Scaffold strudel arrangement (${template.genre})` });
+
+    const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const genreLabel = capitalize(template.genre);
+
+    const roles: { role: string; code: string }[] = [
+      { role: 'Drums', code: template.drums },
+      { role: 'Bass', code: template.bass },
+      { role: 'Chords', code: template.chords },
+      { role: 'Melody', code: template.melody },
+    ];
+
+    const trackIds: string[] = [];
+    let currentTracks = [...get().project!.tracks];
+
+    for (const { role, code } of roles) {
+      const newTrack = createTrackFromTemplate(currentTracks, 'custom', 'strudel', {
+        displayName: `${genreLabel} ${role}`,
+        strudelCode: code,
+      });
+      currentTracks = [...currentTracks, newTrack];
+      trackIds.push(newTrack.id);
+    }
+
+    const bpm = state.project.bpm ?? 120;
+    const nextProject = ensureProjectSession({
+      ...get().project!,
+      updatedAt: Date.now(),
+      totalDuration: computeTotalDuration(currentTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.tempoMap, get().project!.timeSignatureMap),
+      tracks: currentTracks,
+    });
+    set({ project: nextProject });
+    return trackIds;
   },
 
   addMidiNote: (clipId, note) => {

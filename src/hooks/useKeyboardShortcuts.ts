@@ -413,7 +413,7 @@ export function useKeyboardShortcuts() {
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
 
       // Cmd+Delete / Cmd+Backspace: delete selected tracks (with confirmation if multi-clip)
-      const isTrackDeleteKey = matches('tracks.delete') || (event.code === 'Backspace' && mod && !event.shiftKey && !event.altKey);
+      const isTrackDeleteKey = matches('tracks.delete') || ((event.code === 'Backspace' || event.code === 'Delete') && mod && !event.shiftKey && !event.altKey);
       if (isTrackDeleteKey && ui.selectedTrackIds.size > 0) {
         event.preventDefault();
         const trackIds = [...ui.selectedTrackIds];

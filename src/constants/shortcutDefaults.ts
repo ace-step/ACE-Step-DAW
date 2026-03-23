@@ -27,7 +27,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'tracks.bypassEffects',  category: 'tracks',    label: 'Toggle Focused Track FX Bypass', defaultCombo: { code: 'KeyP' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.createGroup',    category: 'tracks',    label: 'Create Group Track',          defaultCombo: { code: 'KeyG', mod: true, shift: true }, contexts: ['timeline', 'mixer'] },
   { id: 'tracks.toggleCollapse', category: 'tracks',    label: 'Toggle Group Collapse',       defaultCombo: { code: 'KeyG', shift: true }, contexts: ['timeline'] },
-  { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Delete', mod: true }, contexts: ['timeline'] },
+  { id: 'tracks.delete',         category: 'tracks',    label: 'Delete Selected Tracks',      defaultCombo: { code: 'Backspace', mod: true }, contexts: ['timeline'] },
   { id: 'tracks.selectAll',      category: 'tracks',    label: 'Select All Tracks',           defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },
 
   { id: 'navigation.previousTrack', category: 'navigation', label: 'Focus Previous Track',   defaultCombo: { code: 'ArrowUp' }, contexts: ['timeline', 'mixer'] },

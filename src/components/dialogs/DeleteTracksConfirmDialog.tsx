@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 
@@ -5,10 +6,11 @@ export function DeleteTracksConfirmDialog() {
   const pendingIds = useUIStore((s) => s.pendingDeleteTrackIds);
   const confirm = useUIStore((s) => s.confirmDeleteTracks);
   const cancel = useUIStore((s) => s.cancelDeleteTracks);
-  const tracks = useProjectStore((s) =>
-    pendingIds
-      ? s.project?.tracks.filter((t) => pendingIds.includes(t.id)) ?? []
-      : [],
+  const allTracks = useProjectStore((s) => s.project?.tracks);
+
+  const tracks = useMemo(
+    () => (pendingIds && allTracks ? allTracks.filter((t) => pendingIds.includes(t.id)) : []),
+    [pendingIds, allTracks],
   );
 
   if (!pendingIds || pendingIds.length === 0) return null;

@@ -44,7 +44,7 @@ describe('StereoMeter', () => {
     cbs.forEach((cb) => cb(performance.now()));
   }
 
-  it('renders two vertical level bars (left and right)', () => {
+  it('renders two horizontal level bars (left and right)', () => {
     render(<StereoMeter trackId="track-1" />);
     expect(screen.getByTestId('meter-left')).toBeInTheDocument();
     expect(screen.getByTestId('meter-right')).toBeInTheDocument();
@@ -56,25 +56,18 @@ describe('StereoMeter', () => {
     expect(screen.getByLabelText(/right channel/i)).toBeInTheDocument();
   });
 
-  it('reflects left and right levels as bar fill heights', () => {
+  it('reflects left and right levels as bar fill widths', () => {
     render(<StereoMeter trackId="track-1" />);
-    // -30 dB maps to ((-30) + 60) / 60 = 0.5 => 50%
-    // linear value for -30dB = 10^(-30/20) ≈ 0.0316
-    // But the meter receives dB values from the engine already? No — engine returns linear levels.
-    // The component converts: height = Math.max(0, Math.min(1, (level_in_dB + 60) / 60))
-    // For leftLevel=0.5 (linear), dB = 20*log10(0.5) ≈ -6.02, height = (-6.02+60)/60 ≈ 0.8997
     act(() => tickFrame(0.5, 0.25));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    // Left: 0.5 linear => -6.02 dB => (53.98)/60 ≈ 89.97%
-    // Right: 0.25 linear => -12.04 dB => (47.96)/60 ≈ 79.93%
-    expect(leftBar.style.height).not.toBe('0%');
-    expect(rightBar.style.height).not.toBe('0%');
-    // Left should be taller than right
-    const leftHeight = parseFloat(leftBar.style.height);
-    const rightHeight = parseFloat(rightBar.style.height);
-    expect(leftHeight).toBeGreaterThan(rightHeight);
+    expect(leftBar.style.width).not.toBe('0%');
+    expect(rightBar.style.width).not.toBe('0%');
+    // Left should be wider than right
+    const leftWidth = parseFloat(leftBar.style.width);
+    const rightWidth = parseFloat(rightBar.style.width);
+    expect(leftWidth).toBeGreaterThan(rightWidth);
   });
 
   it('shows clip indicator when clipped', () => {
@@ -98,14 +91,14 @@ describe('StereoMeter', () => {
     expect(screen.getByTestId('clip-indicator').className).not.toMatch(/bg-red/);
   });
 
-  it('bars show zero height when level is silent (-60dB or below)', () => {
+  it('bars show zero width when level is silent (-60dB or below)', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0, 0));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    expect(leftBar.style.height).toBe('0%');
-    expect(rightBar.style.height).toBe('0%');
+    expect(leftBar.style.width).toBe('0%');
+    expect(rightBar.style.width).toBe('0%');
   });
 
   it('cleans up animation frame on unmount', () => {

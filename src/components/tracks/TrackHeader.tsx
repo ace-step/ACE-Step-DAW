@@ -445,8 +445,8 @@ export function TrackHeader({
             </div>
           </div>
 
-          {/* Row 2: volume slider + stereo level meter */}
-          <div data-testid="track-header-row2" className="flex items-center gap-1.5 w-full">
+          {/* Row 2: volume slider */}
+          <div data-testid="track-header-row2" className="flex items-center gap-1 w-full">
             <input
               type="range"
               min={0}
@@ -458,9 +458,10 @@ export function TrackHeader({
               aria-label={`${track.displayName} volume`}
               title={`Volume: ${Math.round(track.volume * 100)}%`}
             />
-            <div className="h-[20px] w-[10px] flex-shrink-0">
-              <TrackHeaderMeter trackId={track.id} />
-            </div>
+          </div>
+          {/* Row 3: stereo level meter (horizontal, full width) */}
+          <div data-testid="track-header-meter" className="w-full">
+            <TrackHeaderMeter trackId={track.id} />
           </div>
         </div>
       ) : (

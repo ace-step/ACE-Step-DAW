@@ -40,38 +40,46 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
   };
 
   return (
-    <div className="flex flex-col items-center h-full gap-[1px]">
-      {/* Clip indicator dot at top */}
-      <div
-        data-testid="clip-indicator"
-        className={`w-[6px] h-[6px] rounded-full flex-shrink-0 cursor-pointer transition-colors ${
-          clipping
-            ? 'bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]'
-            : 'bg-zinc-700'
-        }`}
-        title={clipping ? 'Clipping detected — click to reset' : 'Clip indicator'}
-        onClick={resetClip}
-      />
-      {/* Stereo bars */}
-      <div className="flex gap-px flex-1 w-full justify-center items-end">
+    <div className="flex flex-col gap-[2px] w-full">
+      {/* Left channel — horizontal bar */}
+      <div className="flex items-center gap-1 w-full">
+        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            data-testid="meter-left"
+            aria-label={`Left channel level for ${trackId}`}
+            className="h-full rounded-full transition-[width] duration-75"
+            style={{
+              width: `${leftFill * 100}%`,
+              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+            }}
+          />
+        </div>
+        {/* Clip indicator */}
         <div
-          data-testid="meter-left"
-          aria-label={`Left channel level for ${trackId}`}
-          className="w-[3px] rounded-sm"
-          style={{
-            height: `${leftFill * 100}%`,
-            background: 'linear-gradient(to top, #22c55e, #facc15 70%, #ef4444 95%)',
-          }}
+          data-testid="clip-indicator"
+          className={`w-[5px] h-[5px] rounded-full flex-shrink-0 cursor-pointer transition-colors ${
+            clipping
+              ? 'bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]'
+              : 'bg-zinc-700'
+          }`}
+          title={clipping ? 'Clipping detected — click to reset' : 'Clip indicator'}
+          onClick={resetClip}
         />
-        <div
-          data-testid="meter-right"
-          aria-label={`Right channel level for ${trackId}`}
-          className="w-[3px] rounded-sm"
-          style={{
-            height: `${rightFill * 100}%`,
-            background: 'linear-gradient(to top, #22c55e, #facc15 70%, #ef4444 95%)',
-          }}
-        />
+      </div>
+      {/* Right channel — horizontal bar */}
+      <div className="flex items-center gap-1 w-full">
+        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            data-testid="meter-right"
+            aria-label={`Right channel level for ${trackId}`}
+            className="h-full rounded-full transition-[width] duration-75"
+            style={{
+              width: `${rightFill * 100}%`,
+              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+            }}
+          />
+        </div>
+        <div className="w-[5px] h-[5px] flex-shrink-0" />
       </div>
     </div>
   );

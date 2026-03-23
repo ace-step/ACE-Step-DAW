@@ -151,8 +151,8 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
     expect(toolbar.className).toContain('bg-[#1f2226]');
     expect(toolbar.className).toContain('h-12');
-    expect(arrangementButton.className).toContain('h-8');
-    expect(arrangementButton.className).toContain('w-8');
+    expect(arrangementButton.className).toContain('h-9');
+    expect(arrangementButton.className).toContain('w-9');
     expect(arrangementButton.className).toContain('text-white');
     expect(playButton.className).toContain('h-9');
     expect(playButton.className).toContain('w-11');

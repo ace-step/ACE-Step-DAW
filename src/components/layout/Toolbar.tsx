@@ -57,10 +57,29 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
-const inputClass = 'h-7 rounded-lg bg-transparent px-2 text-center text-[12px] font-mono text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
-const selectClass = 'h-7 rounded-lg bg-transparent px-2 text-[12px] text-zinc-100 hover:bg-white/8 focus:bg-white/8 focus:text-white focus:outline-none disabled:opacity-50';
+const inputClass = 'h-8 bg-transparent px-1 text-center text-[13px] font-mono tracking-[0.08em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-8 appearance-none bg-transparent px-1 text-[13px] tracking-[0.08em] text-white focus:text-white focus:outline-none disabled:opacity-50';
 
 const VALID_DENOMINATORS = [2, 4, 8, 16];
+
+function ChevronDown({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M3.5 5.25L7 8.75L10.5 5.25" />
+    </svg>
+  );
+}
 
 function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
   const project = useProjectStore((s) => s.project);
@@ -133,28 +152,30 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-1 px-1.5"
+      className="flex items-center gap-1 px-1"
       data-testid="toolbar-project-settings"
     >
-      <input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={bpmInput}
-        onChange={(event) => setBpmInput(event.target.value)}
-        onBlur={commitBpm}
-        onKeyDown={blurOnEnter}
-        min={40}
-        max={300}
-        disabled={disabled}
-        aria-label="Project BPM"
-        title="Project BPM"
-        className={`${inputClass} w-[4.35rem]`}
-      />
+      <div className="flex h-8 items-center rounded-md px-1 hover:bg-white/6">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={bpmInput}
+          onChange={(event) => setBpmInput(event.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={blurOnEnter}
+          min={40}
+          max={300}
+          disabled={disabled}
+          aria-label="Project BPM"
+          title="Project BPM"
+          className={`${inputClass} w-[3.6rem]`}
+        />
+      </div>
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5">
+      <div className="flex h-8 items-center gap-1 rounded-md px-1 hover:bg-white/6">
         <input
           type="text"
           inputMode="numeric"
@@ -168,9 +189,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Time signature numerator"
           title="Time signature numerator"
-          className={`${inputClass} w-8`}
+          className={`${inputClass} w-6`}
         />
-        <span className="text-[11px] text-zinc-500">/</span>
+        <span className="text-[13px] text-zinc-500">/</span>
         <input
           type="text"
           inputMode="numeric"
@@ -184,58 +205,66 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Time signature denominator"
           title="Time signature denominator"
-          className={`${inputClass} w-8`}
+          className={`${inputClass} w-6`}
         />
       </div>
 
       <ToolbarSeparator />
 
-      <div className="flex items-center gap-0.5">
-        <select
-          value={keyScale.root}
-          onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
-          disabled={disabled}
-          aria-label="Project key root"
-          title="Project key root"
-          className={`${selectClass} w-12`}
-        >
-          {KEY_ROOTS.map((root) => (
-            <option key={root} value={root}>
-              {KEY_ROOT_LABELS[root] ?? root}
-            </option>
-          ))}
-        </select>
-        <select
-          value={keyScale.mode}
-          onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
-          disabled={disabled}
-          aria-label="Project scale mode"
-          title="Project scale mode"
-          className={`${selectClass} w-[4.2rem]`}
-        >
-          {SCALE_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {SCALE_MODE_LABELS[mode] ?? `${mode[0].toUpperCase()}${mode.slice(1)}`}
-            </option>
-          ))}
-        </select>
+      <div className="flex items-center gap-1">
+        <div className="relative flex h-8 items-center rounded-md px-1 pr-5 hover:bg-white/6">
+          <select
+            value={keyScale.root}
+            onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
+            disabled={disabled}
+            aria-label="Project key root"
+            title="Project key root"
+            className={`${selectClass} w-7`}
+          >
+            {KEY_ROOTS.map((root) => (
+              <option key={root} value={root}>
+                {KEY_ROOT_LABELS[root] ?? root}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-zinc-300" />
+        </div>
+        <div className="relative flex h-8 items-center rounded-md px-1 pr-5 hover:bg-white/6">
+          <select
+            value={keyScale.mode}
+            onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
+            disabled={disabled}
+            aria-label="Project scale mode"
+            title="Project scale mode"
+            className={`${selectClass} w-[3.15rem]`}
+          >
+            {SCALE_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {SCALE_MODE_LABELS[mode] ?? `${mode[0].toUpperCase()}${mode.slice(1)}`}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-zinc-300" />
+        </div>
       </div>
 
       <ToolbarSeparator />
 
-      <input
-        type="number"
-        value={measuresInput}
-        onChange={(event) => setMeasuresInput(event.target.value)}
-        onBlur={commitMeasures}
-        onKeyDown={blurOnEnter}
-        min={4}
-        max={512}
-        disabled={disabled}
-        aria-label="Project measures"
-        title="Project measures"
-        className={`${inputClass} w-[3.2rem]`}
-      />
+      <div className="flex h-8 items-center rounded-md px-1 hover:bg-white/6">
+        <input
+          type="number"
+          value={measuresInput}
+          onChange={(event) => setMeasuresInput(event.target.value)}
+          onBlur={commitMeasures}
+          onKeyDown={blurOnEnter}
+          min={4}
+          max={512}
+          disabled={disabled}
+          aria-label="Project measures"
+          title="Project measures"
+          className={`${inputClass} w-[2.8rem]`}
+        />
+      </div>
     </div>
   );
 }
@@ -310,7 +339,7 @@ function ControlBarButton({
       title={title}
       aria-label={title.replace(/\s*\(.+?\)$/, '')}
       data-onboarding-target={dataTarget}
-      className={`h-8 w-8 rounded-lg text-white hover:bg-white/8 hover:text-white ${className ?? ''}`}
+      className={`h-9 w-9 rounded-lg text-white hover:bg-white/8 hover:text-white ${className ?? ''}`}
     >
       {children}
     </Button>
@@ -395,10 +424,10 @@ function ProjectMenu({ disabled }: { disabled: boolean }) {
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         data-testid="project-menu-trigger"
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
         title="Project menu"
       >
-        <svg width="18" height="18" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
+        <svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
           <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
         </svg>
       </button>
@@ -515,7 +544,7 @@ export function Toolbar() {
           onClick={() => setMainView('arrangement')}
           title="Arrangement View (Tab)"
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M2 4h10M2 7h10M2 10h10" />
           </svg>
         </ControlBarButton>
@@ -524,7 +553,7 @@ export function Toolbar() {
           onClick={() => setMainView('session')}
           title="Session View (Tab)"
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M4 2v10M7 2v10M10 2v10" />
           </svg>
         </ControlBarButton>
@@ -540,7 +569,7 @@ export function Toolbar() {
           title="Arrangement Markers (A)"
           disabled={!project}
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="1" y="5" width="4" height="5" rx="0.5" />
             <rect x="5" y="5" width="5" height="5" rx="0.5" />
             <rect x="10" y="5" width="3" height="5" rx="0.5" />
@@ -555,7 +584,7 @@ export function Toolbar() {
           title="Smart Controls (B)"
           disabled={!project}
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="4" cy="7" r="2.5" />
             <circle cx="10" cy="7" r="2.5" />
             <line x1="4" y1="4.5" x2="4" y2="2" />
@@ -579,7 +608,7 @@ export function Toolbar() {
       >
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
-          <svg width="15" height="13" viewBox="0 0 14 12" fill="currentColor">
+          <svg width="17" height="15" viewBox="0 0 14 12" fill="currentColor">
             <rect x="0" y="1" width="2" height="10" rx="0.5" />
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
@@ -595,12 +624,12 @@ export function Toolbar() {
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? (
-            <svg width="15" height="17" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="16" height="18" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="17" height="19" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="18" height="20" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
@@ -621,7 +650,7 @@ export function Toolbar() {
           title="Capture MIDI (F)"
           disabled={!project}
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="7" cy="7" r="5" />
             <polyline points="5,6 7,9 9,5" />
           </svg>
@@ -638,7 +667,7 @@ export function Toolbar() {
       {/* Cycle + Metronome */}
       <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
         <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
@@ -646,7 +675,7 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton active={loopRecordingEnabled} onClick={toggleLoopRecording} title="Overdub / Loop Recording (Shift+L)">
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 1l2 2-2 2" />
             <path d="M4 13l-2-2 2-2" />
             <path d="M12 3H5a3 3 0 0 0 0 6" />
@@ -655,7 +684,7 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
         <ControlBarButton active={metronomeEnabled} onClick={toggleMetronome} title="Metronome (K)">
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 13L7 1l3 12" />
             <path d="M3 13h8" />
             <path d="M7 5l4-2" />
@@ -669,12 +698,12 @@ export function Toolbar() {
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => openCommandPalette()}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"
         >
-          <svg width="17" height="17" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="6" cy="6" r="3.75" />
             <path d="M8.8 8.8L12 12" strokeLinecap="round" />
           </svg>

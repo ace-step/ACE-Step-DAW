@@ -364,3 +364,47 @@ export function bpmToCps(bpm: number, beatsPerCycle: number = 4): number {
 export function cycleTimeToSeconds(cycleTime: number, cps: number): number {
   return cycleTime / cps;
 }
+
+/**
+ * Render a strudel pattern to an AudioBuffer using OfflineAudioContext.
+ *
+ * Creates a temporary webaudioRepl connected to an offline context,
+ * evaluates the pattern, lets it run for `durationSeconds`, then returns
+ * the rendered buffer. The repl is disposed after rendering.
+ */
+export async function renderStrudelOffline(
+  code: string,
+  durationSeconds: number,
+  bpm: number,
+  sampleRate: number = 48_000,
+): Promise<AudioBuffer> {
+  const { webaudioRepl } = await import('@strudel/webaudio');
+
+  const offlineCtx = new OfflineAudioContext(2, Math.ceil(durationSeconds * sampleRate), sampleRate);
+
+  const cps = bpmToCps(bpm);
+  const repl = webaudioRepl({
+    audioContext: offlineCtx,
+    enableResample: false,
+  });
+
+  // Set tempo and evaluate
+  repl.setCps?.(cps);
+
+  const cleanCode = code
+    .split('\n')
+    .filter((line: string) => !line.trimStart().startsWith('//'))
+    .join('\n')
+    .replace(/^\$:\s*/gm, '')
+    .trim();
+
+  await repl.evaluate(cleanCode);
+
+  // Render the offline context
+  const renderedBuffer = await offlineCtx.startRendering();
+
+  // Cleanup
+  try { repl.stop?.(); } catch { /* ignore */ }
+
+  return renderedBuffer;
+}

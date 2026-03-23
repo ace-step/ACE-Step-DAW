@@ -159,11 +159,13 @@ describe('TrackHeader layout improvements (#546)', () => {
   });
 
   describe('level meter minimum width', () => {
-    it('level meter container has min-w-[6px] class', () => {
+    it('stereo meter renders left and right channel bars', () => {
       render(<TrackHeader track={makeTrack()} {...defaultProps} />);
 
-      const meter = screen.getByLabelText(/level meter/i);
-      expect(meter.classList.contains('min-w-[6px]')).toBe(true);
+      const leftMeter = screen.getByTestId('meter-left');
+      const rightMeter = screen.getByTestId('meter-right');
+      expect(leftMeter).toBeInTheDocument();
+      expect(rightMeter).toBeInTheDocument();
     });
   });
 

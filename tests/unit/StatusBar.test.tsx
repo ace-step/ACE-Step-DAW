@@ -88,10 +88,11 @@ describe('StatusBar', () => {
   });
 
   describe('branding', () => {
-    it('does not render "ACE Studio" text link', () => {
+    it('renders a copyright notice instead of the old marketing link', () => {
       healthCheckMock.mockResolvedValue(false);
       render(<StatusBar />);
-      expect(screen.queryByText('ACE Studio')).not.toBeInTheDocument();
+      expect(screen.getByTestId('status-copyright-notice')).toHaveTextContent('Copyright (c) 2026 ACE Studio');
+      expect(screen.getByText(/ACE Studio/)).toBeInTheDocument();
     });
   });
 

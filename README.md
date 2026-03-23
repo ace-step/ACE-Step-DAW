@@ -162,7 +162,23 @@ Agent-friendly: Every feature accessible via `window.__store.getState().actionNa
 
 ## License
 
-MIT
+ACE-Step DAW is licensed under **GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`).
+
+Why this repository is no longer MIT-only:
+
+- The current DAW bundles and executes multiple `@strudel/*` packages.
+- Those Strudel packages are published as `AGPL-3.0-or-later`.
+- Because the Strudel feature is integrated as part of the shipped app runtime, the safest compliance path is to distribute ACE-Step DAW under AGPL-compatible terms as a whole.
+
+If you need an MIT-only distribution, do not ship the current bundled Strudel integration as-is. Use a clean-room replacement, remove the Strudel feature from the shipped app, or obtain an alternative license from the Strudel copyright holders.
+
+For hosted deployments, make the corresponding source code available to network users. The in-app status bar includes a visible source/license notice, and you can override its links with:
+
+- `VITE_SOURCE_CODE_URL`
+- `VITE_LICENSE_URL`
+- `VITE_COPYRIGHT_NOTICE`
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled Strudel attribution details.
 
 ## ACE Studio
 

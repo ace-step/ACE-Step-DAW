@@ -58,5 +58,5 @@
     "vitepress": "^1.6.4",
     "vitest": "^4.1.0"
   },
-  "license": "MIT"
+  "license": "AGPL-3.0-or-later"
 }

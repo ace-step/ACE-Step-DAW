@@ -317,6 +317,29 @@ function createDemoProject(id: string): Project {
         { id: 'clap', name: 'Clap', color: '#22c55e', active: [12] },
       ]),
     });
+    drums.clips = [
+      createMidiClip(drums.id, 0, 8, 'neon beat pattern', [
+        // Kick on 1, 2 (beats 0, 4, 8, 12)
+        { pitch: 36, startBeat: 0, durationBeats: 0.5, velocity: 0.92 },
+        { pitch: 36, startBeat: 4, durationBeats: 0.5, velocity: 0.88 },
+        { pitch: 36, startBeat: 8, durationBeats: 0.5, velocity: 0.92 },
+        { pitch: 36, startBeat: 12, durationBeats: 0.5, velocity: 0.88 },
+        // Snare on 2, 4 (beats 4, 12)
+        { pitch: 38, startBeat: 4, durationBeats: 0.5, velocity: 0.85 },
+        { pitch: 38, startBeat: 12, durationBeats: 0.5, velocity: 0.85 },
+        // Closed HH on every 8th (0,2,4,...14)
+        { pitch: 42, startBeat: 0, durationBeats: 0.25, velocity: 0.7 },
+        { pitch: 42, startBeat: 2, durationBeats: 0.25, velocity: 0.65 },
+        { pitch: 42, startBeat: 4, durationBeats: 0.25, velocity: 0.7 },
+        { pitch: 42, startBeat: 6, durationBeats: 0.25, velocity: 0.65 },
+        { pitch: 42, startBeat: 8, durationBeats: 0.25, velocity: 0.7 },
+        { pitch: 42, startBeat: 10, durationBeats: 0.25, velocity: 0.65 },
+        { pitch: 42, startBeat: 12, durationBeats: 0.25, velocity: 0.7 },
+        { pitch: 42, startBeat: 14, durationBeats: 0.25, velocity: 0.65 },
+        // Clap accent (beat 12)
+        { pitch: 39, startBeat: 12, durationBeats: 0.5, velocity: 0.78 },
+      ]),
+    ];
     const bass = createTrack(1, {
       trackName: 'bass',
       trackType: 'pianoRoll',

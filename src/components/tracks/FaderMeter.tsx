@@ -16,6 +16,34 @@ function levelToFill(linear: number): number {
 }
 
 /**
+ * Horizontal fader handle SVG — mimics a real mixer fader cap.
+ * Metallic look with grip lines, rendered as pure vector.
+ */
+function FaderCap() {
+  return (
+    <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-md">
+      {/* Body — rounded rect with metallic gradient */}
+      <defs>
+        <linearGradient id="faderCapGrad" x1="0" y1="0" x2="12" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#b0b0b8" />
+          <stop offset="20%" stopColor="#e0e0e4" />
+          <stop offset="50%" stopColor="#f5f5f7" />
+          <stop offset="80%" stopColor="#e0e0e4" />
+          <stop offset="100%" stopColor="#a8a8b0" />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="0.5" width="10" height="17" rx="2" fill="url(#faderCapGrad)" stroke="#78787e" strokeWidth="0.5" />
+      {/* Center grip lines */}
+      <line x1="4" y1="6" x2="4" y2="12" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
+      <line x1="6" y1="5" x2="6" y2="13" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
+      <line x1="8" y1="6" x2="8" y2="12" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
+      {/* Center notch line — white highlight */}
+      <line x1="6" y1="1.5" x2="6" y2="3.5" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" opacity="0.9" />
+    </svg>
+  );
+}
+
+/**
  * Combined volume fader + stereo level meter.
  * The fader handle sits on top of two horizontal meter bars.
  */
@@ -82,7 +110,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
     <div
       ref={containerRef}
       className="relative w-full cursor-ew-resize select-none"
-      style={{ height: '14px' }}
+      style={{ height: '18px' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -95,61 +123,48 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
       aria-valuenow={Math.round(volume * 100)}
       data-testid="fader-meter"
     >
-      {/* Meter background track */}
-      <div className="absolute inset-0 flex flex-col justify-center gap-[1px]">
+      {/* Meter bars — background for the fader */}
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col gap-[1px]">
         {/* Left channel */}
-        <div className="h-[5px] rounded-full bg-zinc-800/60 overflow-hidden">
+        <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
           <div
             data-testid="meter-left"
             aria-label={`Left channel level for ${trackId}`}
-            className="h-full rounded-full"
+            className="h-full rounded-[2px]"
             style={{
               width: `${leftFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #a3e635 40%, #facc15 70%, #ef4444 95%)',
-              opacity: 0.7,
+              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              opacity: 0.75,
             }}
           />
         </div>
         {/* Right channel */}
-        <div className="h-[5px] rounded-full bg-zinc-800/60 overflow-hidden">
+        <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
           <div
             data-testid="meter-right"
             aria-label={`Right channel level for ${trackId}`}
-            className="h-full rounded-full"
+            className="h-full rounded-[2px]"
             style={{
               width: `${rightFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #a3e635 40%, #facc15 70%, #ef4444 95%)',
-              opacity: 0.7,
+              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              opacity: 0.75,
             }}
           />
         </div>
       </div>
 
-      {/* Fader handle — sits on top of the meter */}
+      {/* Fader cap — SVG mixer knob riding on the meter */}
       <div
-        className="absolute top-0 h-full pointer-events-none"
+        className="absolute top-0 pointer-events-none"
         style={{ left: `${faderPct}%`, transform: 'translateX(-50%)' }}
       >
-        {/* Handle knob */}
-        <div
-          className="relative h-full flex items-center"
-        >
-          {/* Vertical line */}
-          <div className="w-[2px] h-full bg-white/80 rounded-full shadow-[0_0_4px_rgba(255,255,255,0.3)]" />
-          {/* Triangular grip notch */}
-          <div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[8px] h-[8px] rounded-sm bg-zinc-200 shadow-md border border-zinc-400/50"
-            style={{
-              background: 'linear-gradient(180deg, #e4e4e7 0%, #a1a1aa 100%)',
-            }}
-          />
-        </div>
+        <FaderCap />
       </div>
 
-      {/* Clip indicator (top-right corner) */}
+      {/* Clip indicator — only visible when clipping */}
       <div
         data-testid="clip-indicator"
-        className={`absolute -top-[1px] -right-[1px] w-[5px] h-[5px] rounded-full cursor-pointer transition-colors ${
+        className={`absolute top-0 -right-[2px] w-[5px] h-[5px] rounded-full cursor-pointer transition-colors ${
           clipping
             ? 'bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]'
             : 'bg-transparent'

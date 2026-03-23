@@ -281,7 +281,7 @@ export function TimeRuler() {
           style={{ left: x }}
         >
           {/* Vertical tick line — bar: full height from top; beat: short tick from bottom */}
-          <div className={`absolute w-px z-10 ${isBar ? 'top-0 h-full bg-[color:var(--color-daw-grid-bar)]' : 'bottom-0 h-[10px] bg-[color:var(--color-daw-grid-beat)]'}`} />
+          <div className={`absolute w-px z-10 ${isBar ? 'top-0 h-full bg-[color:var(--color-daw-grid-bar)]' : 'bottom-0 h-[6px] bg-[color:var(--color-daw-grid-beat)]'}`} />
           {/* Label beside tick */}
           <span
             className={`absolute bottom-px left-[4px] font-medium leading-none whitespace-nowrap z-0 ${isBar ? 'text-[10px] text-zinc-400/80' : 'text-[9px] text-zinc-500/60'}`}

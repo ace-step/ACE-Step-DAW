@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import { TRACK_CATALOG } from '../../constants/tracks';
 import { TrackEditModal } from './TrackEditModal';
 import { TrackHeaderMeter } from './TrackHeaderMeter';
+import { FaderMeter } from './FaderMeter';
 import { useRecording } from '../../hooks/useRecording';
 import { freezeTrackToAudio, flattenTrackToAudio } from '../../services/freezeTrack';
 import {
@@ -445,23 +446,14 @@ export function TrackHeader({
             </div>
           </div>
 
-          {/* Row 2: volume slider */}
-          <div data-testid="track-header-row2" className="flex items-center gap-1 w-full">
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={track.volume}
-              onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}
-              className="flex-1 h-1 accent-zinc-400 opacity-70 hover:opacity-100 min-w-[40px]"
-              aria-label={`${track.displayName} volume`}
-              title={`Volume: ${Math.round(track.volume * 100)}%`}
+          {/* Row 2: combined fader + stereo meter */}
+          <div data-testid="track-header-row2" className="w-full">
+            <FaderMeter
+              trackId={track.id}
+              volume={track.volume}
+              onVolumeChange={(v) => updateTrack(track.id, { volume: v })}
+              trackName={track.displayName}
             />
-          </div>
-          {/* Row 3: stereo level meter (horizontal, full width) */}
-          <div data-testid="track-header-meter" className="w-full">
-            <TrackHeaderMeter trackId={track.id} />
           </div>
         </div>
       ) : (
@@ -516,18 +508,14 @@ export function TrackHeader({
               title="Solo (S)"
               aria-label={`Solo ${track.displayName}`}
             >S</button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={track.volume}
-              onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}
-              className="flex-1 h-1 accent-zinc-400 opacity-70 hover:opacity-100 min-w-[40px]"
-              aria-label={`${track.displayName} volume`}
-              title={`Volume: ${Math.round(track.volume * 100)}%`}
-            />
-            <TrackHeaderMeter trackId={track.id} />
+            <div className="flex-1 min-w-[40px]">
+              <FaderMeter
+                trackId={track.id}
+                volume={track.volume}
+                onVolumeChange={(v) => updateTrack(track.id, { volume: v })}
+                trackName={track.displayName}
+              />
+            </div>
           </div>
         </>
       )}

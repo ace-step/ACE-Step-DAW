@@ -149,12 +149,12 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
     });
   });
 
-  describe('volume slider', () => {
-    it('renders a volume slider with aria-label', () => {
+  describe('volume fader', () => {
+    it('renders a fader-meter with aria-label and slider role', () => {
       renderHeader();
-      const slider = screen.getByLabelText('Drums volume');
-      expect(slider).toBeInTheDocument();
-      expect(slider.getAttribute('type')).toBe('range');
+      const fader = screen.getByLabelText('Drums volume');
+      expect(fader).toBeInTheDocument();
+      expect(fader.getAttribute('role')).toBe('slider');
     });
   });
 

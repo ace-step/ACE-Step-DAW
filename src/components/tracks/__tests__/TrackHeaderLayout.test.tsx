@@ -170,14 +170,13 @@ describe('TrackHeader layout improvements (#546)', () => {
       expect(row1.querySelector('[data-primary-actions]')).not.toBeNull();
     });
 
-    it('row2 contains volume slider and level meter', () => {
+    it('row2 contains combined fader-meter', () => {
       render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
 
       const row2 = screen.getByTestId('track-header-row2');
-      // Volume slider should be in row2
-      expect(row2.querySelector('input[type="range"]')).not.toBeNull();
-      // Level meter should be in row2
-      expect(row2.querySelector('[aria-label]')).not.toBeNull();
+      // Combined fader-meter should be in row2
+      expect(row2.querySelector('[data-testid="fader-meter"]')).not.toBeNull();
+      expect(row2.querySelector('[role="slider"]')).not.toBeNull();
     });
   });
 
@@ -237,18 +236,18 @@ describe('TrackHeader layout improvements (#546)', () => {
     });
   });
 
-  describe('Phase C: volume slider in header', () => {
-    it('renders a volume slider with correct aria-label in two-row layout', () => {
+  describe('Phase C: fader-meter in header', () => {
+    it('renders a fader-meter with correct aria-label in two-row layout', () => {
       render(<TrackHeader track={makeTrack({ laneHeight: 80 })} {...defaultProps} />);
-      const slider = screen.getByLabelText('Vocals volume');
-      expect(slider).toBeInTheDocument();
-      expect(slider.getAttribute('type')).toBe('range');
+      const fader = screen.getByLabelText('Vocals volume');
+      expect(fader).toBeInTheDocument();
+      expect(fader.getAttribute('role')).toBe('slider');
     });
 
-    it('renders a volume slider in single-row compact layout', () => {
+    it('renders a fader-meter in single-row compact layout', () => {
       render(<TrackHeader track={makeTrack({ laneHeight: 48 })} {...defaultProps} />);
-      const slider = screen.getByLabelText('Vocals volume');
-      expect(slider).toBeInTheDocument();
+      const fader = screen.getByLabelText('Vocals volume');
+      expect(fader).toBeInTheDocument();
     });
   });
 });

@@ -491,18 +491,25 @@ export async function renderStrudelOffline(
   const { superdough: superdoughFn } = await import('superdough') as any;
   const { SuperdoughAudioController } = await import('superdough/superdoughoutput.mjs') as any;
 
-  // ── Save original state ──
+  // ── Ensure live context has worklets + samples loaded first ──
+  // AudioWorklets must be loaded on a live AudioContext before we can use them.
+  // OfflineAudioContext worklet loading is unreliable in some browsers.
+  const liveCtx = getAudioContext() ?? new AudioContext({ sampleRate });
+  setAudioContext(liveCtx);
+  await initAudio();  // loads worklets + audio engine on LIVE context
+
+  // ── Save original state (after init, so controller exists) ──
   const origCtx = getAudioContext();
   const origController = getSuperdoughAudioController();
 
   const cps = bpmToCps(bpm);
-  const totalCycles = durationSeconds * cps; // bars (mathematically equivalent)
+  const totalCycles = durationSeconds * cps;
   const totalSamples = Math.ceil(durationSeconds * sampleRate);
 
   try {
     onProgress?.(0.1);
 
-    // ── Evaluate code → Pattern object ──
+    // ── Evaluate code → Pattern object (on live context, before switching) ──
     const cleanCode = code
       .split('\n')
       .filter((line: string) => !line.trimStart().startsWith('//'))
@@ -512,7 +519,6 @@ export async function renderStrudelOffline(
 
     if (!cleanCode) throw new Error('No strudel code to render');
 
-    // Evaluate in global scope where s(), note(), bank() etc. are registered
     let pattern: any;
     try {
       const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<any>;
@@ -532,11 +538,12 @@ export async function renderStrudelOffline(
 
     onProgress?.(0.2);
 
-    // ── Create OfflineAudioContext + reset superdough ──
+    // ── Switch to OfflineAudioContext for rendering ──
     const offlineCtx = new OfflineAudioContext(2, totalSamples, sampleRate);
     setAudioContext(offlineCtx);
     setSuperdoughAudioController(new SuperdoughAudioController(offlineCtx));
-    await initAudio();
+    // Don't call initAudio on offline ctx — worklets are already loaded on live ctx
+    // and superdough's audio nodes will be created fresh by superdoughFn() calls
 
     onProgress?.(0.3);
 

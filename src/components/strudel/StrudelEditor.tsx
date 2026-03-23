@@ -11,6 +11,25 @@ import { Z } from '../../utils/zIndex';
 
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
+// Inject CSS to constrain the autocomplete info panel
+if (typeof document !== 'undefined' && !document.getElementById('strudel-autocomplete-css')) {
+  const style = document.createElement('style');
+  style.id = 'strudel-autocomplete-css';
+  style.textContent = `
+    .cm-tooltip-autocomplete .cm-completionInfo {
+      max-width: 320px !important;
+      max-height: 200px !important;
+      overflow: auto !important;
+      font-size: 12px !important;
+      padding: 6px 8px !important;
+    }
+    .cm-tooltip-autocomplete {
+      max-height: 250px !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 /* ── Sidebar data ──────────────────────────────────── */
 
 type SidebarTab = 'sounds' | 'reference' | 'console' | 'settings';
@@ -28,12 +47,46 @@ let cachedDocs: DocEntry[] | null = null;
 async function loadStrudelDocs(): Promise<DocEntry[]> {
   if (cachedDocs) return cachedDocs;
   try {
-    // The codemirror package exports jsdoc data used by autocomplete
+    // The JSDoc data is embedded in @strudel/codemirror's dist as a const (not exported).
+    // Access it by importing the raw module text and parsing from the embedded JSON.
+    // Alternatively, use the autocomplete's completion source to enumerate functions.
     const mod = await import('@strudel/codemirror') as any;
-    // Try accessing the docs array — it's used internally by the autocomplete system
-    const docs = mod.jsdoc?.docs ?? mod.docs ?? [];
+
+    // Try several access paths
+    const docs = mod.jsdoc?.docs ?? mod.docs ?? mod.default?.jsdoc?.docs ?? [];
     if (Array.isArray(docs) && docs.length > 0) {
       cachedDocs = docs.filter((d: any) => d.name && !d.name.startsWith('_'));
+      return cachedDocs;
+    }
+
+    // Fallback: build docs from the registered Pattern methods
+    const core = await import('@strudel/core') as any;
+    if (core.Pattern?.prototype) {
+      const methods = Object.getOwnPropertyNames(core.Pattern.prototype)
+        .filter((n) => !n.startsWith('_') && n !== 'constructor' && n !== 'query');
+      cachedDocs = methods.map((name) => ({
+        name,
+        description: `Pattern method: .${name}()`,
+        memberof: 'Pattern',
+      }));
+
+      // Also add global functions from globalThis that strudel registered
+      const globals = ['s', 'sound', 'note', 'n', 'stack', 'cat', 'sequence', 'polymeter',
+        'polyrhythm', 'silence', 'samples', 'sine', 'saw', 'tri', 'square', 'rand',
+        'irand', 'perlin', 'run', 'ply', 'press', 'rev', 'fast', 'slow', 'early', 'late',
+        'jux', 'chunk', 'chop', 'striate', 'loopAt', 'hurry', 'every', 'when',
+        'sometimes', 'often', 'rarely', 'almostNever', 'almostAlways', 'never', 'always',
+        'degrade', 'degradeBy', 'sometimesBy', 'struct', 'mask', 'euclid', 'euclidLegato',
+        'choose', 'chooseCycles', 'randcat', 'wchoose', 'wchooseCycles',
+        'gain', 'pan', 'speed', 'begin', 'end', 'vowel', 'cut', 'orbit',
+        'delay', 'delaytime', 'delayfeedback', 'room', 'size', 'shape',
+        'lpf', 'hpf', 'bpf', 'resonance', 'attack', 'decay', 'sustain', 'release',
+        'bank', 'crush', 'coarse', 'djf', 'leslie', 'tremolo', 'phaser',
+      ];
+      for (const name of globals) {
+        cachedDocs.push({ name, description: `Strudel function` });
+      }
+
       return cachedDocs;
     }
   } catch { /* */ }

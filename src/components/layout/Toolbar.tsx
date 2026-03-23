@@ -472,6 +472,8 @@ export function Toolbar() {
   const showArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
   const toggleArrangementMarkers = useUIStore((s) => s.toggleArrangementMarkers);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
+  const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
+  const toggleStrudelPanel = useUIStore((s) => s.toggleStrudelPanel);
   const { toggleRecord } = useRecording();
 
   const { isPlaying, play, pause, stop } = useTransport();
@@ -559,6 +561,16 @@ export function Toolbar() {
           </svg>
         </ControlBarButton>
       </div>
+
+      {/* Strudel REPL toggle — ꩜ spiral */}
+      <ControlBarButton
+        active={strudelPanelOpen}
+        onClick={toggleStrudelPanel}
+        title="Strudel REPL — Live-code music patterns"
+        disabled={!project}
+      >
+        <span className="text-[15px] leading-none" style={{ fontFamily: 'system-ui' }}>꩜</span>
+      </ControlBarButton>
 
       <div className="flex-1" />
 

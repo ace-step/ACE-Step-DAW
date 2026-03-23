@@ -85,4 +85,12 @@ describe('StatusBar controls', () => {
 
     expect(screen.getByTestId('status-model-name')).toHaveTextContent('acestep-v15-base-lego');
   });
+
+  it('shows the AGPL source and license notice links', () => {
+    render(<StatusBar />);
+
+    expect(screen.getByTestId('status-legal-notice')).toHaveTextContent('No warranty');
+    expect(screen.getByTestId('status-source-link')).toHaveAttribute('href', 'https://github.com/ace-step/ACE-Step-DAW');
+    expect(screen.getByTestId('status-license-link')).toHaveAttribute('href', 'https://github.com/ace-step/ACE-Step-DAW/blob/main/LICENSE');
+  });
 });

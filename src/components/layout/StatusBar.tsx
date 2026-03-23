@@ -7,6 +7,9 @@ import { useUIStore } from '../../store/uiStore';
 import { TIMELINE_ZOOM_LEVELS } from '../../utils/timelineZoom';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
+const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
+const CURRENT_YEAR = new Date().getFullYear();
+const DEFAULT_COPYRIGHT_NOTICE = `Copyright (c) ${CURRENT_YEAR} ACE Studio`;
 
 let lastKnownBackendConnection = false;
 
@@ -58,6 +61,10 @@ export function StatusBar() {
   const jobLabel = jobCount === 1 ? '1 job' : `${jobCount} jobs`;
   const hasActiveJobs = activeJobs.length > 0;
   const resolvedModelName = projectModel.trim() || activeModelId?.trim() || 'No model';
+  const sourceCodeUrl = import.meta.env.VITE_SOURCE_CODE_URL?.trim() || DEFAULT_SOURCE_CODE_URL;
+  const normalizedSourceCodeUrl = sourceCodeUrl.replace(/\/$/, '');
+  const licenseUrl = import.meta.env.VITE_LICENSE_URL?.trim() || `${normalizedSourceCodeUrl}/blob/main/LICENSE`;
+  const copyrightNotice = import.meta.env.VITE_COPYRIGHT_NOTICE?.trim() || DEFAULT_COPYRIGHT_NOTICE;
   const zoomIndex = TIMELINE_ZOOM_LEVELS.reduce((nearestIndex, level, index) => {
     const nearestDistance = Math.abs(TIMELINE_ZOOM_LEVELS[nearestIndex] - pixelsPerSecond);
     const currentDistance = Math.abs(level - pixelsPerSecond);
@@ -92,6 +99,35 @@ export function StatusBar() {
           </div>
           <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
+          <div className="flex items-center gap-1.5 text-[9px] text-daw-text-muted/85" data-testid="status-legal-notice">
+            <span className="truncate" data-testid="status-copyright-notice">{copyrightNotice}</span>
+            <span aria-hidden="true">•</span>
+            <span data-testid="status-no-warranty">No warranty</span>
+            <span aria-hidden="true">•</span>
+            <span className="hidden md:inline">Share and modify under AGPL-3.0-or-later</span>
+            <a
+              href={sourceCodeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded px-1 py-0.5 text-daw-accent transition-colors hover:bg-daw-hover-subtle hover:text-white"
+              data-testid="status-source-link"
+              aria-label="View corresponding source code"
+              title="View corresponding source code"
+            >
+              Source
+            </a>
+            <a
+              href={licenseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded px-1 py-0.5 text-daw-accent transition-colors hover:bg-daw-hover-subtle hover:text-white"
+              data-testid="status-license-link"
+              aria-label="View AGPL license"
+              title="View AGPL license"
+            >
+              License
+            </a>
+          </div>
           <div className="flex items-center gap-1.5 text-daw-text-muted">
             <button
               type="button"

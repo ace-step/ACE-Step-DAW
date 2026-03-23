@@ -5,6 +5,7 @@ import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
 
 const healthCheckMock = vi.fn();
+const CURRENT_YEAR = new Date().getFullYear();
 
 vi.mock('../../src/services/aceStepApi', () => ({
   healthCheck: () => healthCheckMock(),
@@ -88,10 +89,11 @@ describe('StatusBar', () => {
   });
 
   describe('branding', () => {
-    it('does not render "ACE Studio" text link', () => {
+    it('renders a copyright notice instead of the old marketing link', () => {
       healthCheckMock.mockResolvedValue(false);
       render(<StatusBar />);
-      expect(screen.queryByText('ACE Studio')).not.toBeInTheDocument();
+      expect(screen.getByTestId('status-copyright-notice')).toHaveTextContent(`Copyright (c) ${CURRENT_YEAR} ACE Studio`);
+      expect(screen.queryByRole('link', { name: /ACE Studio/ })).not.toBeInTheDocument();
     });
   });
 

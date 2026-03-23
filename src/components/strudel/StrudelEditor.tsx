@@ -8,6 +8,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
+// Build-time embed of @strudel/codemirror source (contains JSDoc JSON data)
+import strudelCodemirrorRaw from '@strudel/codemirror/dist/index.mjs?raw';
 
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
@@ -45,19 +47,14 @@ let cachedDocs: DocEntry[] | null = null;
 async function loadStrudelDocs(): Promise<DocEntry[]> {
   if (cachedDocs) return cachedDocs;
   try {
-    // The JSDoc data is embedded as `const Fn = JSON.parse(...)` inside the
-    // @strudel/codemirror dist file. It's not exported, so we fetch the file
-    // as text and extract the JSON.
-    const res = await fetch('/node_modules/@strudel/codemirror/dist/index.mjs');
-    const text = await res.text();
-
-    // Find the JSON array between backticks: JSON.parse(`[...]`)
+    // JSDoc data is embedded as `const Fn = JSON.parse(...)` in the dist file.
+    // We imported it as a raw string via Vite's ?raw suffix (build-time embed).
     const marker = 'JSON.parse(`';
-    const start = text.indexOf(marker);
-    if (start === -1) throw new Error('JSDoc data not found in module');
+    const start = strudelCodemirrorRaw.indexOf(marker);
+    if (start === -1) throw new Error('JSDoc data not found in module source');
     const jsonStart = start + marker.length;
-    const jsonEnd = text.indexOf('`)', jsonStart);
-    const jsonStr = text.slice(jsonStart, jsonEnd);
+    const jsonEnd = strudelCodemirrorRaw.indexOf('`)', jsonStart);
+    const jsonStr = strudelCodemirrorRaw.slice(jsonStart, jsonEnd);
 
     const rawDocs = JSON.parse(jsonStr) as any[];
     cachedDocs = rawDocs

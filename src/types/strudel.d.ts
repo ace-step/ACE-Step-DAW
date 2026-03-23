@@ -1,3 +1,9 @@
+/** Vite ?raw imports — any file imported with ?raw suffix returns a string */
+declare module '*?raw' {
+  const content: string;
+  export default content;
+}
+
 /** Type declarations for @strudel packages (untyped ESM modules). */
 declare module '@strudel/mini' {
   export function mini(code: string): any;

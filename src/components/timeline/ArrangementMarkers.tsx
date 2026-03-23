@@ -172,7 +172,7 @@ export function ArrangementMarkers() {
     >
       {sections.length === 0 && (
         <div
-          className="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 pointer-events-none"
+          className="absolute inset-0 flex items-center justify-center text-[11px] text-white/50 pointer-events-none"
           data-testid="arrangement-markers-empty"
         >
           Double-click to add section markers

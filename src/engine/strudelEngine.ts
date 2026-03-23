@@ -483,6 +483,7 @@ export async function renderStrudelOffline(
   await ensureStrudelLoaded();
 
   const { webaudioRepl, getAudioContext, getSuperdoughAudioController } = await import('@strudel/webaudio') as any;
+  const { transpiler } = await import('@strudel/transpiler') as any;
 
   const cleanCode = code
     .split('\n')
@@ -493,13 +494,14 @@ export async function renderStrudelOffline(
 
   if (!cleanCode) throw new Error('No strudel code to render');
 
-  // Create a properly initialized repl — this handles AudioContext, worklets,
-  // sample loading, and all superdough initialization correctly.
-  const repl = webaudioRepl();
+  // Create repl WITH transpiler — this is critical!
+  // Without transpiler, mini-notation strings like "[bd hh]*2" are not parsed
+  // and get treated as literal sound/note names → "not a note" errors.
+  const repl = webaudioRepl({ transpiler });
   const cps = bpmToCps(bpm);
   repl.setCps?.(cps);
 
-  // Start real-time playback
+  // Start real-time playback (transpiler converts mini-notation → proper Pattern)
   await repl.evaluate(cleanCode);
   onProgress?.(0.1);
 

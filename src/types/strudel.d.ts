@@ -48,6 +48,10 @@ declare module 'superdough/superdoughoutput.mjs' {
   }
 }
 
+declare module '@strudel/transpiler' {
+  export function transpiler(code: string, options?: Record<string, unknown>): { output: string };
+}
+
 declare module '@strudel/repl' {
   /** Load all default samples (dirt-samples, drum machines, soundfonts, etc.) */
   export function prebake(): Promise<void>;

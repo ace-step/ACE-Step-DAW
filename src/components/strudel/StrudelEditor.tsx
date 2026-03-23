@@ -10,7 +10,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 
 const DEFAULT_STRUDEL_URL = 'https://strudel.cc/';
-const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2").bank("RolandTR909")`;
+const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 export function StrudelEditor() {
   const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);

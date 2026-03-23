@@ -6,29 +6,24 @@ import { computeSections } from '../../utils/arrangementSections';
 import { ARRANGEMENT_MARKERS_HEIGHT } from './timelineLayout';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { snapToGrid } from '../../utils/time';
+import { SectionSelector, getSectionColor } from './SectionSelector';
 
-/** Preset colors for common arrangement sections. */
-const SECTION_COLORS: Record<string, string> = {
-  intro: '#6366f1',   // indigo
-  verse: '#22c55e',   // green
-  chorus: '#f59e0b',  // amber
-  bridge: '#8b5cf6',  // violet
-  outro: '#ef4444',   // red
-  hook: '#ec4899',    // pink
-  'pre-chorus': '#14b8a6', // teal
-  solo: '#f97316',    // orange
-  breakdown: '#64748b', // slate
-};
+const EDGE_HANDLE_PX = 12;
+const DRAG_THRESHOLD_PX = 4;
 
-function getSectionColor(name: string, fallback: string): string {
-  const key = name.toLowerCase().trim();
-  return SECTION_COLORS[key] ?? fallback;
-}
+type MarkerDragMode = 'move' | 'resize-right';
 
 interface DragState {
   markerId: string;
+  mode: MarkerDragMode;
   startX: number;
   originalTime: number;
+  /** For resize-right: ID of the next marker whose time we move */
+  nextMarkerId: string | null;
+  /** For resize-right: original time of the next marker */
+  nextMarkerOriginalTime: number;
+  /** Has the mouse moved beyond the drag threshold? */
+  hasDragged: boolean;
 }
 
 export function ArrangementMarkers() {
@@ -49,7 +44,7 @@ export function ArrangementMarkers() {
   );
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [editingRect, setEditingRect] = useState<DOMRect | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [ghostLeft, setGhostLeft] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,9 +66,20 @@ export function ArrangementMarkers() {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const rawTime = Math.max(0, x / pixelsPerSecond);
-      // Snap to bar by default; hold Alt for free placement
       const time = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
       addMarker(time, 'New Section');
+      // Open selector for the new marker on next render
+      setTimeout(() => {
+        const newMarkers = useProjectStore.getState().project?.markers;
+        if (!newMarkers) return;
+        const newMarker = newMarkers.find((m) => m.time === time && m.name === 'New Section');
+        if (newMarker) {
+          setEditingId(newMarker.id);
+          // Get the anchor rect for the selector from the rendered element
+          const el = document.querySelector(`[data-marker-id="${newMarker.id}"]`);
+          if (el) setEditingRect(el.getBoundingClientRect());
+        }
+      }, 0);
     },
     [project, pixelsPerSecond, addMarker, bpm, timeSignature, tempoMap],
   );
@@ -86,9 +92,9 @@ export function ArrangementMarkers() {
     [removeMarker],
   );
 
-  const startEditing = useCallback((id: string) => {
+  const startEditing = useCallback((id: string, target: HTMLElement) => {
     setEditingId(id);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setEditingRect(target.getBoundingClientRect());
   }, []);
 
   const commitEdit = useCallback(
@@ -99,23 +105,47 @@ export function ArrangementMarkers() {
         updateMarker(id, color ? { name: trimmed, color } : { name: trimmed });
       }
       setEditingId(null);
+      setEditingRect(null);
     },
     [updateMarker],
   );
 
-  // --- Drag to reposition ---
+  // --- Drag: move (body) and resize-right (right edge) ---
   const handleMarkerMouseDown = useCallback(
-    (e: React.MouseEvent, markerId: string, markerTime: number) => {
-      // Only initiate drag on left-click, on the left edge (border area, first 8px)
+    (
+      e: React.MouseEvent,
+      markerId: string,
+      markerTime: number,
+      sectionWidth: number,
+      nextMarkerId: string | null,
+      nextMarkerTime: number,
+    ) => {
       if (e.button !== 0) return;
       const target = e.currentTarget as HTMLElement;
       const rect = target.getBoundingClientRect();
-      const offsetX = e.clientX - rect.left;
-      // Only start drag within the 8px left-edge handle zone
-      if (offsetX > 8) return;
+      const relX = e.clientX - rect.left;
+
+      let mode: MarkerDragMode;
+      if (relX >= sectionWidth - EDGE_HANDLE_PX && sectionWidth > EDGE_HANDLE_PX * 2) {
+        mode = 'resize-right';
+      } else {
+        mode = 'move';
+      }
+
+      // resize-right on last section (no next marker) is a no-op
+      if (mode === 'resize-right' && !nextMarkerId) return;
+
       e.preventDefault();
       e.stopPropagation();
-      setDragState({ markerId, startX: e.clientX, originalTime: markerTime });
+      setDragState({
+        markerId,
+        mode,
+        startX: e.clientX,
+        originalTime: markerTime,
+        nextMarkerId,
+        nextMarkerOriginalTime: nextMarkerTime,
+        hasDragged: false,
+      });
     },
     [],
   );
@@ -125,18 +155,53 @@ export function ArrangementMarkers() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = e.clientX - dragState.startX;
+
+      // Check drag threshold
+      if (!dragState.hasDragged && Math.abs(deltaX) < DRAG_THRESHOLD_PX) return;
+      if (!dragState.hasDragged) {
+        setDragState((s) => (s ? { ...s, hasDragged: true } : null));
+      }
+
       const deltaTime = deltaX / pixelsPerSecond;
-      const rawTime = Math.max(0, dragState.originalTime + deltaTime);
-      const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
-      setGhostLeft(snappedTime * pixelsPerSecond);
+
+      if (dragState.mode === 'move') {
+        const rawTime = Math.max(0, dragState.originalTime + deltaTime);
+        const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
+        setGhostLeft(snappedTime * pixelsPerSecond);
+      } else {
+        // resize-right: move the next marker
+        const rawTime = Math.max(0, dragState.nextMarkerOriginalTime + deltaTime);
+        // Clamp: next marker cannot go before current marker + minimum
+        const minTime = dragState.originalTime + (60 / bpm); // at least 1 beat
+        const clampedTime = Math.max(minTime, rawTime);
+        const snappedTime = e.altKey ? clampedTime : snapToGrid(clampedTime, bpm, timeSignature, tempoMap);
+        setGhostLeft(snappedTime * pixelsPerSecond);
+      }
     };
 
     const handleMouseUp = (e: MouseEvent) => {
+      if (!dragState.hasDragged) {
+        // It was just a click, not a drag
+        setDragState(null);
+        setGhostLeft(null);
+        return;
+      }
+
       const deltaX = e.clientX - dragState.startX;
       const deltaTime = deltaX / pixelsPerSecond;
-      const rawTime = Math.max(0, dragState.originalTime + deltaTime);
-      const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
-      updateMarker(dragState.markerId, { time: snappedTime });
+
+      if (dragState.mode === 'move') {
+        const rawTime = Math.max(0, dragState.originalTime + deltaTime);
+        const snappedTime = e.altKey ? rawTime : snapToGrid(rawTime, bpm, timeSignature, tempoMap);
+        updateMarker(dragState.markerId, { time: snappedTime });
+      } else if (dragState.nextMarkerId) {
+        const rawTime = Math.max(0, dragState.nextMarkerOriginalTime + deltaTime);
+        const minTime = dragState.originalTime + (60 / bpm);
+        const clampedTime = Math.max(minTime, rawTime);
+        const snappedTime = e.altKey ? clampedTime : snapToGrid(clampedTime, bpm, timeSignature, tempoMap);
+        updateMarker(dragState.nextMarkerId, { time: snappedTime });
+      }
+
       setDragState(null);
       setGhostLeft(null);
     };
@@ -179,66 +244,82 @@ export function ArrangementMarkers() {
         </div>
       )}
       {/* Ghost preview during drag */}
-      {dragState && ghostLeft !== null && (
+      {dragState?.hasDragged && ghostLeft !== null && (
         <div
-          className="absolute top-0 h-full w-[2px] opacity-60 pointer-events-none"
-          style={{ left: ghostLeft, backgroundColor: '#fff' }}
+          className="absolute top-0 h-full pointer-events-none"
+          style={
+            dragState.mode === 'resize-right'
+              ? { left: ghostLeft, width: 2, backgroundColor: '#fff', opacity: 0.6 }
+              : { left: ghostLeft, width: 2, backgroundColor: '#fff', opacity: 0.6 }
+          }
           data-testid="arrangement-marker-ghost"
         />
       )}
-      {sections.map(({ marker, startTime, endTime }) => {
+      {sections.map(({ marker, startTime, endTime }, sectionIndex) => {
         const left = startTime * pixelsPerSecond;
-        const width = (endTime - startTime) * pixelsPerSecond;
+        const widthPx = (endTime - startTime) * pixelsPerSecond;
         const color = getSectionColor(marker.name, marker.color);
         const isEditing = editingId === marker.id;
-        const isDragging = dragState?.markerId === marker.id;
+        const isDragging = dragState?.markerId === marker.id && dragState.hasDragged;
+
+        // Find next marker for resize-right
+        const nextSection = sections[sectionIndex + 1];
+        const nextMarkerId = nextSection?.marker.id ?? null;
+        const nextMarkerTime = nextSection?.marker.time ?? totalDuration;
+
+        // Determine cursor based on position (via CSS for right edge)
+        const isLastSection = sectionIndex === sections.length - 1;
 
         return (
           <div
             key={marker.id}
-            className="absolute top-0 h-full flex items-center overflow-hidden"
+            className="absolute top-0 h-full flex items-center overflow-hidden group"
             style={{
               left,
-              width: Math.max(width, 2),
+              width: Math.max(widthPx, 2),
               backgroundColor: `${color}33`,
               borderLeft: `2px solid ${color}`,
               opacity: isDragging ? 0.5 : 1,
-              cursor: 'pointer',
+              cursor: 'grab',
             }}
             data-marker-id={marker.id}
-            onClick={() => !isDragging && handleClick(startTime)}
+            onClick={() => {
+              if (!dragState?.hasDragged) handleClick(startTime);
+            }}
             onContextMenu={(e) => handleRightClick(e, marker.id)}
             onDoubleClick={(e) => {
               e.stopPropagation();
-              startEditing(marker.id);
+              startEditing(marker.id, e.currentTarget as HTMLElement);
             }}
-            onMouseDown={(e) => handleMarkerMouseDown(e, marker.id, marker.time)}
+            onMouseDown={(e) =>
+              handleMarkerMouseDown(e, marker.id, marker.time, widthPx, nextMarkerId, nextMarkerTime)
+            }
           >
-            {/* Left-edge drag handle */}
-            <div
-              className="absolute left-0 top-0 h-full w-[6px] z-10"
-              style={{ cursor: 'col-resize' }}
-              data-testid={`marker-drag-handle-${marker.id}`}
-            />
-            {isEditing ? (
-              <input
-                ref={inputRef}
-                className="bg-transparent text-white text-[10px] font-semibold px-1 w-full outline-none border-b border-white/40"
+            {/* Right-edge resize handle */}
+            {!isLastSection && (
+              <div
+                className="absolute right-0 top-0 h-full z-10"
+                style={{ width: EDGE_HANDLE_PX, cursor: 'col-resize' }}
+                data-testid={`marker-resize-handle-${marker.id}`}
+              />
+            )}
+            {isEditing && editingRect ? (
+              <SectionSelector
                 defaultValue={marker.name}
-                onBlur={(e) => commitEdit(marker.id, e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit(marker.id, (e.target as HTMLInputElement).value);
-                  if (e.key === 'Escape') setEditingId(null);
+                anchorRect={editingRect}
+                onCommit={(name) => commitEdit(marker.id, name)}
+                onCancel={() => {
+                  setEditingId(null);
+                  setEditingRect(null);
                 }}
               />
-            ) : (
-              <span
-                className="text-[10px] font-semibold px-1.5 truncate"
-                style={{ color }}
-              >
-                {marker.name}
-              </span>
-            )}
+            ) : null}
+            <span
+              className="text-[10px] font-semibold px-1.5 truncate pointer-events-none"
+              style={{ color }}
+            >
+              {marker.name}
+            </span>
           </div>
         );
       })}

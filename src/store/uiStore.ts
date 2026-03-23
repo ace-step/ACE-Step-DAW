@@ -134,6 +134,9 @@ export interface UIState {
   // Tempo lane
   showTempoLane: boolean;
 
+  // Arrangement markers
+  showArrangementMarkers: boolean;
+
   // Playhead focus — true when timeline area is focused (after click-to-seek)
   timelineFocused: boolean;
 
@@ -286,6 +289,9 @@ export interface UIState {
 
   // Tempo lane
   toggleTempoLane: () => void;
+
+  // Arrangement markers
+  toggleArrangementMarkers: () => void;
 
   // Playhead focus
   setTimelineFocused: (focused: boolean) => void;
@@ -500,6 +506,7 @@ export const useUIStore = create<UIState>()(
   activeBottomPanel: null,
 
   showTempoLane: false,
+  showArrangementMarkers: true,
   timelineFocused: false,
 
   autoScrollEnabled: true,
@@ -838,6 +845,7 @@ export const useUIStore = create<UIState>()(
   setActiveBottomPanel: (v) => set({ activeBottomPanel: v }),
 
   toggleTempoLane: () => set((s) => ({ showTempoLane: !s.showTempoLane })),
+  toggleArrangementMarkers: () => set((s) => ({ showArrangementMarkers: !s.showArrangementMarkers })),
   setTimelineFocused: (focused) => set({ timelineFocused: focused }),
 
   setAutoScrollEnabled: (enabled) => set({ autoScrollEnabled: enabled }),

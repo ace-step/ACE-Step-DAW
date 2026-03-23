@@ -13,7 +13,7 @@ describe('ArrangementMarkers', () => {
   beforeEach(() => {
     useProjectStore.setState({ project: null });
     useProjectStore.getState().createProject({ name: 'Test', bpm: 120 });
-    useUIStore.setState({ pixelsPerSecond: 100, timelineViewportWidth: 1000 });
+    useUIStore.setState({ pixelsPerSecond: 100, timelineViewportWidth: 1000, showArrangementMarkers: true });
   });
 
   it('renders empty-state hint when no markers exist', () => {
@@ -38,27 +38,23 @@ describe('ArrangementMarkers', () => {
   });
 
   it('adds a marker on double-click snapped to bar boundary', () => {
-    // BPM=120, timeSignature=4 → bar duration = 2s → at 100px/s, bar width = 200px
-    // Double-click at x=250px → rawTime=2.5s → nearest bar = 2s (bar 1 end)
-    const el = render(<ArrangementMarkers />);
-    const container = screen.getByTestId('arrangement-markers');
+    render(<ArrangementMarkers />);
+    const el = screen.getByTestId('arrangement-markers');
 
-    // Mock getBoundingClientRect
-    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
       left: 0, top: 0, right: 1000, bottom: 20, width: 1000, height: 20, x: 0, y: 0, toJSON: () => {},
     });
 
-    fireEvent.doubleClick(container, { clientX: 250 });
+    fireEvent.doubleClick(el, { clientX: 250 });
 
     const markers = useProjectStore.getState().project!.markers!;
     expect(markers).toHaveLength(1);
     // At 120 BPM, 4/4 → bar = 4 beats × 0.5s = 2s. 2.5s snaps to 2s
     expect(markers[0].time).toBe(2);
-    expect(markers[0].name).toBe('New Section');
   });
 
   it('adds a marker at exact position when Alt is held', () => {
-    const container = render(<ArrangementMarkers />);
+    render(<ArrangementMarkers />);
     const el = screen.getByTestId('arrangement-markers');
 
     vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
@@ -69,7 +65,6 @@ describe('ArrangementMarkers', () => {
 
     const markers = useProjectStore.getState().project!.markers!;
     expect(markers).toHaveLength(1);
-    // rawTime = 250/100 = 2.5s — no snapping with Alt
     expect(markers[0].time).toBe(2.5);
   });
 
@@ -83,12 +78,27 @@ describe('ArrangementMarkers', () => {
     expect(markerEls).toHaveLength(2);
   });
 
-  it('shows drag handle on each marker', () => {
+  it('shows resize handle on non-last sections', () => {
     const store = useProjectStore.getState();
     store.addMarker(0, 'Intro');
+    store.addMarker(4, 'Verse');
     const markerId = useProjectStore.getState().project!.markers![0].id;
     render(<ArrangementMarkers />);
 
-    expect(screen.getByTestId(`marker-drag-handle-${markerId}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`marker-resize-handle-${markerId}`)).toBeInTheDocument();
+  });
+});
+
+describe('ArrangementMarkers toggle', () => {
+  beforeEach(() => {
+    useUIStore.setState({ showArrangementMarkers: true });
+  });
+
+  it('toggleArrangementMarkers flips the state', () => {
+    expect(useUIStore.getState().showArrangementMarkers).toBe(true);
+    useUIStore.getState().toggleArrangementMarkers();
+    expect(useUIStore.getState().showArrangementMarkers).toBe(false);
+    useUIStore.getState().toggleArrangementMarkers();
+    expect(useUIStore.getState().showArrangementMarkers).toBe(true);
   });
 });

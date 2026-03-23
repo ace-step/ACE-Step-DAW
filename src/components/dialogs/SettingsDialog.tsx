@@ -7,9 +7,63 @@ import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
+import { THEME_LIST } from '../../themes';
+import type { ThemeId } from '../../themes';
 
 function modelSupportsThinking(modelName: string): boolean {
   return modelName.includes('turbo') || modelName.includes('sft');
+}
+
+function ThemeSelector() {
+  const currentTheme = useUIStore((s) => s.theme);
+  const setTheme = useUIStore((s) => s.setTheme);
+
+  return (
+    <div className="flex gap-2">
+      {THEME_LIST.map((theme) => {
+        const isActive = currentTheme === theme.id;
+        return (
+          <button
+            key={theme.id}
+            onClick={() => setTheme(theme.id as ThemeId)}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded transition-colors ${
+              isActive
+                ? 'ring-1 ring-daw-accent bg-daw-hover'
+                : 'hover:bg-daw-hover-subtle'
+            }`}
+            title={theme.description}
+          >
+            <div
+              className="w-14 h-9 rounded border border-daw-border overflow-hidden flex flex-col"
+              style={{ backgroundColor: theme.tokens['daw-bg'] }}
+            >
+              <div className="flex-1 flex items-end p-1 gap-0.5">
+                <div
+                  className="w-2 h-3 rounded-sm"
+                  style={{ backgroundColor: theme.tokens['daw-surface-2'] }}
+                />
+                <div
+                  className="w-2 h-4 rounded-sm"
+                  style={{ backgroundColor: theme.tokens['daw-accent'] }}
+                />
+                <div
+                  className="w-2 h-2 rounded-sm"
+                  style={{ backgroundColor: theme.tokens['daw-surface-2'] }}
+                />
+              </div>
+              <div
+                className="h-1"
+                style={{ backgroundColor: theme.tokens['daw-accent'] }}
+              />
+            </div>
+            <span className="text-[9px] text-zinc-400 whitespace-nowrap">
+              {theme.name}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function SettingsDialog() {
@@ -245,6 +299,10 @@ export function SettingsDialog() {
         </div>
 
         <div className="p-4 space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <h3 className="text-xs font-medium text-zinc-300">Appearance</h3>
+          <ThemeSelector />
+
+          <div className="border-t border-daw-border my-3" />
           <h3 className="text-xs font-medium text-zinc-300">Backend Connection</h3>
           <div>
             <label className="block text-xs text-zinc-400 mb-1">Backend URL</label>

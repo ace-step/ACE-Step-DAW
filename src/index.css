@@ -28,11 +28,16 @@
   --color-daw-region-midi: #5cb85c;
   --color-daw-region-drummer: #d4a843;
   --color-daw-region-sample: #9b59b6;
+  --color-daw-scrollbar: #4a4a4a;
+  --color-daw-scrollbar-hover: #5a5a5a;
+  --color-daw-slider-thumb: #4A5FFF;
+  --color-daw-slider-thumb-hover: #5B6FFF;
+  --color-daw-focus-ring: rgba(74, 95, 255, 0.5);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #4a4a4a transparent;
+  scrollbar-color: var(--color-daw-scrollbar) transparent;
 }
 
 body {
@@ -47,7 +52,7 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: #4a4a4a;
+  background: var(--color-daw-scrollbar);
   border-radius: 2px;
   outline: none;
 }
@@ -58,13 +63,13 @@ input[type="range"]::-webkit-slider-thumb {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #4A5FFF;
+  background: var(--color-daw-slider-thumb);
   cursor: pointer;
   border: 1px solid rgba(255,255,255,0.15);
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  background: #5B6FFF;
+  background: var(--color-daw-slider-thumb-hover);
 }
 
 /* #548 — Focus-visible indicators for keyboard accessibility */
@@ -72,7 +77,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(74, 95, 255, 0.5);
+  outline: 2px solid var(--color-daw-focus-ring);
   outline-offset: 1px;
 }
 
@@ -85,11 +90,11 @@ select:focus-visible,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4a4a4a;
+  background: var(--color-daw-scrollbar);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5a;
+  background: var(--color-daw-scrollbar-hover);
 }
 
 .gb-lcd {
@@ -130,4 +135,262 @@ select:focus-visible,
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME STRUCTURAL OVERRIDES
+   Each DAW theme changes: border-radius, shadows, borders,
+   toolbar density, playhead style, track header feel, scrollbars.
+   Applied via data-theme attribute on <html>.
+   ═══════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════
+   ABLETON LIVE — Brutalist flat
+   Zero radius. Zero shadows. Thin borders. Everything same plane.
+   Compact, no-nonsense. The signature Ableton "grid" feel.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Shape: all corners sharp */
+[data-theme="ableton"] button,
+[data-theme="ableton"] input,
+[data-theme="ableton"] select,
+[data-theme="ableton"] textarea,
+[data-theme="ableton"] [class*="rounded"] {
+  border-radius: 0 !important;
+}
+[data-theme="ableton"] [class*="rounded-full"] {
+  border-radius: 9999px !important;
+}
+/* Depth: completely flat — no shadows anywhere */
+[data-theme="ableton"] [class*="shadow"] {
+  box-shadow: none !important;
+}
+/* Slider thumb: square, not round */
+[data-theme="ableton"] input[type="range"]::-webkit-slider-thumb {
+  border-radius: 2px;
+  width: 8px;
+  height: 12px;
+}
+/* Playhead: thin white line, no blink, Ableton uses a simple static line */
+[data-theme="ableton"] .playhead-triangle-blink polygon {
+  animation: none !important;
+  fill: #e6e6e6 !important;
+  stroke: #e6e6e6 !important;
+}
+/* Toolbar separators: even thinner and more subtle */
+[data-theme="ableton"] .bg-white\/8 {
+  opacity: 0.04;
+}
+/* Borders: thinner, more subtle */
+[data-theme="ableton"] .border-b,
+[data-theme="ableton"] .border-t,
+[data-theme="ableton"] .border-r,
+[data-theme="ableton"] .border-l {
+  border-width: 1px;
+}
+/* Track color strip: narrower (Ableton clips are flat rectangles) */
+[data-theme="ableton"] .rounded-r-sm {
+  border-radius: 0 !important;
+}
+/* Scrollbar: thinner, more minimal */
+[data-theme="ableton"] ::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+[data-theme="ableton"] ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+}
+/* Focus ring: sharp, not rounded */
+[data-theme="ableton"] button:focus-visible,
+[data-theme="ableton"] input:focus-visible,
+[data-theme="ableton"] select:focus-visible,
+[data-theme="ableton"] [tabindex]:focus-visible {
+  outline-offset: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   LOGIC PRO — Apple refined
+   Generous radius (Apple HIG). Subtle depth via warm shadows.
+   Polished borders with 1px inset glow. Premium feel.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Shape: slightly MORE rounded than default (Apple generosity) */
+[data-theme="logic-pro"] [class*="rounded-md"] {
+  border-radius: 8px !important;
+}
+[data-theme="logic-pro"] [class*="rounded-lg"] {
+  border-radius: 10px !important;
+}
+[data-theme="logic-pro"] [class*="rounded-xl"],
+[data-theme="logic-pro"] [class*="rounded-2xl"] {
+  border-radius: 12px !important;
+}
+[data-theme="logic-pro"] button,
+[data-theme="logic-pro"] input,
+[data-theme="logic-pro"] select,
+[data-theme="logic-pro"] textarea {
+  border-radius: 6px !important;
+}
+[data-theme="logic-pro"] [class*="rounded-full"] {
+  border-radius: 9999px !important;
+}
+[data-theme="logic-pro"] [class*="rounded-sm"] {
+  border-radius: 4px !important;
+}
+/* Depth: Apple-refined shadows with subtle 1px border glow */
+[data-theme="logic-pro"] [class*="shadow-2xl"] {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+}
+[data-theme="logic-pro"] [class*="shadow-xl"] {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+[data-theme="logic-pro"] [class*="shadow-lg"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+/* Slider thumb: perfectly round, Apple style */
+[data-theme="logic-pro"] input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+/* Playhead: purple (Apple purple), smooth */
+[data-theme="logic-pro"] .playhead-triangle-blink polygon {
+  animation: none !important;
+  fill: #bf5af2 !important;
+  stroke: #bf5af2 !important;
+}
+/* Scrollbar: round, Apple style */
+[data-theme="logic-pro"] ::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+}
+/* Track color strip: slightly rounded */
+[data-theme="logic-pro"] .rounded-r-sm {
+  border-radius: 0 3px 3px 0 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   FL STUDIO — Dense technical
+   Minimal radius (1-2px). Shadows minimal. High contrast borders.
+   Tighter spacing feel. "Hacker" aesthetic.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Shape: very small radius, not zero (FL has slight rounding) */
+[data-theme="fl-studio"] button,
+[data-theme="fl-studio"] input,
+[data-theme="fl-studio"] select,
+[data-theme="fl-studio"] textarea {
+  border-radius: 2px !important;
+}
+[data-theme="fl-studio"] [class*="rounded-lg"],
+[data-theme="fl-studio"] [class*="rounded-xl"],
+[data-theme="fl-studio"] [class*="rounded-2xl"] {
+  border-radius: 3px !important;
+}
+[data-theme="fl-studio"] [class*="rounded-md"] {
+  border-radius: 2px !important;
+}
+[data-theme="fl-studio"] [class*="rounded-sm"] {
+  border-radius: 1px !important;
+}
+[data-theme="fl-studio"] [class*="rounded-full"] {
+  border-radius: 9999px !important;
+}
+/* Depth: very dark shadows (FL has deep blacks) */
+[data-theme="fl-studio"] [class*="shadow-2xl"],
+[data-theme="fl-studio"] [class*="shadow-xl"] {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7) !important;
+}
+[data-theme="fl-studio"] [class*="shadow-lg"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+/* Slider thumb: small, square-ish */
+[data-theme="fl-studio"] input[type="range"]::-webkit-slider-thumb {
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+}
+/* Playhead: orange line (FL signature), no blink */
+[data-theme="fl-studio"] .playhead-triangle-blink polygon {
+  animation: none !important;
+  fill: #ff6e00 !important;
+  stroke: #ff6e00 !important;
+}
+/* Borders: slightly thicker, higher contrast */
+[data-theme="fl-studio"] .border-b,
+[data-theme="fl-studio"] .border-t {
+  border-width: 1px;
+}
+/* Scrollbar: thin, technical */
+[data-theme="fl-studio"] ::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+[data-theme="fl-studio"] ::-webkit-scrollbar-thumb {
+  border-radius: 1px;
+}
+/* Track color strip: sharp */
+[data-theme="fl-studio"] .rounded-r-sm {
+  border-radius: 0 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   PRO TOOLS — Conservative professional
+   Small radius (2-3px). Warm subtle shadows. Traditional look.
+   Studio console feel — broadcast-grade, warm tones.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Shape: small, traditional radius */
+[data-theme="pro-tools"] button,
+[data-theme="pro-tools"] input,
+[data-theme="pro-tools"] select,
+[data-theme="pro-tools"] textarea {
+  border-radius: 3px !important;
+}
+[data-theme="pro-tools"] [class*="rounded-lg"],
+[data-theme="pro-tools"] [class*="rounded-xl"],
+[data-theme="pro-tools"] [class*="rounded-2xl"] {
+  border-radius: 4px !important;
+}
+[data-theme="pro-tools"] [class*="rounded-md"] {
+  border-radius: 3px !important;
+}
+[data-theme="pro-tools"] [class*="rounded-sm"] {
+  border-radius: 2px !important;
+}
+[data-theme="pro-tools"] [class*="rounded-full"] {
+  border-radius: 9999px !important;
+}
+/* Depth: warm-tinted shadows */
+[data-theme="pro-tools"] [class*="shadow-2xl"] {
+  box-shadow: 0 8px 24px rgba(20, 18, 10, 0.5) !important;
+}
+[data-theme="pro-tools"] [class*="shadow-xl"],
+[data-theme="pro-tools"] [class*="shadow-lg"] {
+  box-shadow: 0 4px 12px rgba(20, 18, 10, 0.4) !important;
+}
+/* Slider thumb: traditional round knob */
+[data-theme="pro-tools"] input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+/* Playhead: blue (broadcast standard), no blink */
+[data-theme="pro-tools"] .playhead-triangle-blink polygon {
+  animation: none !important;
+  fill: #4a7fbf !important;
+  stroke: #4a7fbf !important;
+}
+/* Track color strip: small radius */
+[data-theme="pro-tools"] .rounded-r-sm {
+  border-radius: 0 2px 2px 0 !important;
+}
+/* Scrollbar: traditional */
+[data-theme="pro-tools"] ::-webkit-scrollbar-thumb {
+  border-radius: 2px;
 }

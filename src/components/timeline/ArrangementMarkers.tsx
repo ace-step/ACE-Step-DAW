@@ -279,7 +279,8 @@ export function ArrangementMarkers() {
       const beatDuration = 60 / b;
       if (t2 - t1 >= beatDuration * 0.5) {
         addMarkerRef.current(t1, 'New Section');
-        addMarkerRef.current(t2, 'New Section');
+        // End marker is just a boundary — no visible section name
+        addMarkerRef.current(t2, '');
 
         // Open selector for the start marker
         setTimeout(() => {
@@ -396,8 +397,10 @@ export function ArrangementMarkers() {
         );
       })}
 
-      {/* Section blocks */}
+      {/* Section blocks — skip boundary-only markers (empty name) */}
       {sections.map(({ marker, startTime, endTime }, sectionIndex) => {
+        if (!marker.name) return null;
+
         const left = startTime * pixelsPerSecond;
         const widthPx = (endTime - startTime) * pixelsPerSecond;
         const color = getSectionColor(marker.name, marker.color);

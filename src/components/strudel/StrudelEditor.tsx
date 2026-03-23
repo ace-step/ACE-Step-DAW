@@ -1,35 +1,39 @@
 /**
- * StrudelEditor — Global tool panel that embeds the strudel.cc REPL.
+ * StrudelEditor — Global tool panel: strudel.cc iframe + code input for bounce.
  *
- * Opened via the 🌀 toolbar button. Not tied to any track.
- * "Add to Timeline" bounces the strudel audio to a new stems clip.
+ * The iframe is read-only (cross-origin, can't extract code from it).
+ * For "Send to Track", user pastes their code into the bounce input area.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 
 const DEFAULT_STRUDEL_URL = 'https://strudel.cc/';
+const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2").bank("RolandTR909")`;
 
 export function StrudelEditor() {
   const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
   const toggleStrudelPanel = useUIStore((s) => s.toggleStrudelPanel);
   const project = useProjectStore((s) => s.project);
 
-  const [editorHeight, setEditorHeight] = useState(450);
+  const [editorHeight, setEditorHeight] = useState(500);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [bouncing, setBouncing] = useState(false);
   const [bounceProgress, setBounceProgress] = useState(0);
   const [bounceBars, setBounceBars] = useState(4);
   const [showBarsMenu, setShowBarsMenu] = useState(false);
+  const [bounceCode, setBounceCode] = useState(DEFAULT_CODE);
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resize handle
+  // Resize
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
     const startH = editorHeight;
     const onMove = (ev: MouseEvent) => {
-      setEditorHeight(Math.max(250, Math.min(800, startH + startY - ev.clientY)));
+      setEditorHeight(Math.max(300, Math.min(800, startH + startY - ev.clientY)));
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
@@ -39,21 +43,22 @@ export function StrudelEditor() {
     window.addEventListener('mouseup', onUp);
   }, [editorHeight]);
 
-  // Bounce strudel to timeline — uses the strudelEngine (not iframe audio)
-  const handleBounce = useCallback(async (bars: number) => {
-    if (!project || bouncing) return;
+  // Bounce: render the code from the textarea (NOT from the iframe)
+  const handleBounce = useCallback(async () => {
+    if (!project || bouncing || !bounceCode.trim()) return;
     setBouncing(true);
     setBounceProgress(0);
-    setShowBarsMenu(false);
     try {
       const store = useProjectStore.getState();
-      // Find or create a strudel track to get the code
+      // Ensure a strudel track exists to store the code
       let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
       if (!strudelTrack) {
         strudelTrack = store.addTrack('strudel');
       }
+      // Update the track's code to match what user wants to bounce
       if (strudelTrack) {
-        await store.freezeStrudelToAudio(strudelTrack.id, bars, (p: number) => setBounceProgress(p));
+        store.updateStrudelCode(strudelTrack.id, bounceCode);
+        await store.freezeStrudelToAudio(strudelTrack.id, bounceBars, (p: number) => setBounceProgress(p));
       }
     } catch (err: any) {
       console.error('Strudel bounce failed:', err);
@@ -61,7 +66,7 @@ export function StrudelEditor() {
       setBouncing(false);
       setBounceProgress(0);
     }
-  }, [project, bouncing]);
+  }, [project, bouncing, bounceCode, bounceBars]);
 
   if (!strudelPanelOpen) return null;
 
@@ -77,12 +82,26 @@ export function StrudelEditor() {
         onMouseDown={onResizeStart}
       />
 
-      {/* Toolbar — above iframe, no overlap */}
+      {/* Toolbar */}
       <div className="flex items-center gap-1.5 px-3 h-8 border-b border-zinc-700/60 shrink-0 bg-[#111118]">
         <span className="text-[13px] leading-none opacity-70">꩜</span>
-        <span className="text-[11px] text-zinc-500">Strudel REPL</span>
+        <span className="text-[11px] text-zinc-500">Strudel</span>
 
         <div className="flex-1" />
+
+        {/* Toggle code input */}
+        <button
+          onClick={() => { setShowCodeInput(!showCodeInput); if (!showCodeInput) setTimeout(() => textareaRef.current?.focus(), 50); }}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors ${
+            showCodeInput ? 'text-white bg-zinc-700' : 'text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
+          }`}
+          title="Toggle code input for bounce"
+        >
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+            <path d="M4 4L1 7l3 3M10 4l3 3-3 3M8 2l-2 10" />
+          </svg>
+          code
+        </button>
 
         {/* Bars selector */}
         <div className="relative">
@@ -114,14 +133,16 @@ export function StrudelEditor() {
 
         {/* Send to Track */}
         <button
-          onClick={() => handleBounce(bounceBars)}
-          disabled={bouncing || !project}
+          onClick={handleBounce}
+          disabled={bouncing || !project || !bounceCode.trim()}
           className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
             bouncing
               ? 'text-zinc-500 cursor-wait'
-              : 'text-daw-accent hover:bg-daw-accent/10'
+              : !bounceCode.trim()
+                ? 'text-zinc-600 cursor-not-allowed'
+                : 'text-daw-accent hover:bg-daw-accent/10'
           }`}
-          title={`Render ${bounceBars} bars and add to a new audio track`}
+          title={bounceCode.trim() ? `Record ${bounceBars} bars of the code below and add to timeline` : 'Paste strudel code first'}
         >
           {bouncing ? (
             <>
@@ -153,6 +174,27 @@ export function StrudelEditor() {
         </button>
       </div>
 
+      {/* Code input for bounce — collapsible */}
+      {showCodeInput && (
+        <div className="shrink-0 border-b border-zinc-700/40 bg-[#0d0d14]">
+          <div className="px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 shrink-0">Paste your strudel code here to bounce:</span>
+            <div className="flex-1" />
+            <span className="text-[10px] text-zinc-600">{bounceCode.split('\n').length} lines</span>
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={bounceCode}
+            onChange={(e) => setBounceCode(e.target.value)}
+            className="w-full px-3 pb-2 bg-transparent text-[13px] text-zinc-200 font-mono resize-none outline-none"
+            style={{ minHeight: 60, maxHeight: 120 }}
+            rows={Math.min(6, Math.max(2, bounceCode.split('\n').length))}
+            spellCheck={false}
+            placeholder='s("[bd sd]*2").bank("RolandTR808")'
+          />
+        </div>
+      )}
+
       {/* iframe — full strudel.cc */}
       <div className="flex-1 min-h-0 relative">
         {!iframeLoaded && (
@@ -177,7 +219,7 @@ export function StrudelEditor() {
         />
       </div>
 
-      {/* Click-away handler for bars menu */}
+      {/* Click-away for bars menu */}
       {showBarsMenu && (
         <div className="fixed inset-0 z-[1]" onClick={() => setShowBarsMenu(false)} />
       )}

@@ -99,9 +99,11 @@ async function ensureStrudelLoaded(): Promise<void> {
 
     // Load default drum/instrument samples from Strudel's CDN
     // This enables bank("RolandTR909"), bank("RolandTR808"), etc.
+    // MUST be awaited — bounce needs samples loaded before evaluating patterns
     if (webaudioMod.samples) {
-      webaudioMod.samples('github:tidalcycles/dirt-samples').catch(() => {
-        // Non-blocking — samples load on demand, patterns work with synths meanwhile
+      await webaudioMod.samples('github:tidalcycles/dirt-samples').catch(() => {
+        // Sample loading failed — synth patterns still work, but s("bd") etc. won't
+        console.warn('[StrudelEngine] Failed to load default samples from CDN');
       });
     }
 

@@ -469,8 +469,6 @@ export function Toolbar() {
   const setMainView = useUIStore((s) => s.setMainView);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
-  const showArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
-  const toggleArrangementMarkers = useUIStore((s) => s.toggleArrangementMarkers);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const { toggleRecord } = useRecording();
 
@@ -530,21 +528,6 @@ export function Toolbar() {
 
       {/* Smart Controls toggle */}
       <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
-        <ControlBarButton
-          active={showArrangementMarkers}
-          onClick={toggleArrangementMarkers}
-          title="Arrangement Markers (A)"
-          disabled={!project}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <rect x="1" y="5" width="4" height="5" rx="0.5" />
-            <rect x="5" y="5" width="5" height="5" rx="0.5" />
-            <rect x="10" y="5" width="3" height="5" rx="0.5" />
-            <line x1="3" y1="5" x2="3" y2="3" />
-            <line x1="7.5" y1="5" x2="7.5" y2="3" />
-            <line x1="11.5" y1="5" x2="11.5" y2="3" />
-          </svg>
-        </ControlBarButton>
         <ControlBarButton
           active={showSmartControls}
           onClick={() => setShowSmartControls(!showSmartControls)}

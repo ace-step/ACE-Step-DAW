@@ -10,6 +10,7 @@ import type { AIChatContext } from '../utils/aiAssistantContext';
 import { buildAssistantContext } from '../utils/aiAssistantContext';
 import { getAssistantSuggestions, streamAssistantResponse } from '../services/aiAssistantService';
 import type { ShortcutContext } from '../types/shortcuts';
+import type { ThemeId } from '../themes/themeTokens';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
   TRACK_LIST_COLLAPSED_WIDTH,
@@ -197,6 +198,9 @@ export interface UIState {
   aiAssistantError: string | null;
   workspaceComplexity: 'simple' | 'standard' | 'advanced';
 
+  // Theme
+  theme: ThemeId;
+
   // Inline AI regeneration & suggestions
   regionRegenerateTarget: { startTime: number; endTime: number; trackIds: string[] } | null;
   inlineSuggestions: InlineSuggestion[];
@@ -362,6 +366,9 @@ export interface UIState {
   updateAIChatMessage: (id: string, updater: (message: AIChatMessage) => AIChatMessage) => void;
   refreshAIAssistantSuggestions: () => void;
   askAIAssistant: (question: string, options?: { delayMs?: number }) => Promise<void>;
+
+  // Theme
+  setTheme: (theme: ThemeId) => void;
 
   // Inline AI regeneration & suggestions
   setRegionRegenerateTarget: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
@@ -552,6 +559,8 @@ export const useUIStore = create<UIState>()(
   aiAssistantError: null,
   workspaceComplexity: 'standard',
 
+  theme: 'ace-studio',
+
   regionRegenerateTarget: null,
   inlineSuggestions: [],
   suggestionFrequency: 'subtle',
@@ -638,6 +647,7 @@ export const useUIStore = create<UIState>()(
   setShowInstrumentPicker: (v) => set({ showInstrumentPicker: v }),
   setShowExportDialog: (v) => set({ showExportDialog: v }),
   setShowSettingsDialog: (v) => set({ showSettingsDialog: v }),
+  setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set({ showProjectListDialog: v }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),
@@ -1056,6 +1066,8 @@ export const useUIStore = create<UIState>()(
         suggestionFrequency: state.suggestionFrequency,
         // Command palette
         recentCommandIds: state.recentCommandIds,
+        // Theme
+        theme: state.theme,
       }),
     },
   ),

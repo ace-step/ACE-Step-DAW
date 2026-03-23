@@ -92,32 +92,31 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(playButton.className).not.toMatch(/shadow/);
   });
 
-  it('consolidates file actions into a File dropdown menu', () => {
+  it('consolidates project and file actions into a unified Project menu', () => {
     render(<Toolbar />);
-    // There should be a file menu trigger (icon-only)
-    const fileButton = screen.getByTestId('file-menu-trigger');
-    expect(fileButton).toBeInTheDocument();
+    // There should be a project menu trigger (icon-only)
+    const menuButton = screen.getByTestId('project-menu-trigger');
+    expect(menuButton).toBeInTheDocument();
 
-    // Individual file action buttons should NOT be visible by default
-    expect(screen.queryByText('Export')).not.toBeInTheDocument();
-    expect(screen.queryByText('MIDI')).not.toBeInTheDocument();
-    expect(screen.queryByText('Import')).not.toBeInTheDocument();
-    expect(screen.queryByText('History')).not.toBeInTheDocument();
-    expect(screen.queryByText('Share')).not.toBeInTheDocument();
+    // Individual action buttons should NOT be visible by default
+    expect(screen.queryByText('Export Audio')).not.toBeInTheDocument();
+    expect(screen.queryByText('New Project')).not.toBeInTheDocument();
   });
 
-  it('shows file actions when File dropdown is clicked', () => {
+  it('shows all project and file actions when Project menu is clicked', () => {
     render(<Toolbar />);
-    const fileButton = screen.getByTestId('file-menu-trigger');
-    fireEvent.click(fileButton);
+    const menuButton = screen.getByTestId('project-menu-trigger');
+    fireEvent.click(menuButton);
 
-    // File menu items should now be visible
+    // Project menu items should now be visible
+    expect(screen.getByText('Projects')).toBeInTheDocument();
+    expect(screen.getByText('New Project')).toBeInTheDocument();
     expect(screen.getByText('Export Audio')).toBeInTheDocument();
     expect(screen.getByText('Export MIDI')).toBeInTheDocument();
     expect(screen.getByText('Import Audio/MIDI')).toBeInTheDocument();
     expect(screen.getByText('Undo History')).toBeInTheDocument();
     expect(screen.getByText('Share Project')).toBeInTheDocument();
-    expect(screen.getByTestId('file-menu-dropdown').className).toContain('fixed');
+    expect(screen.getByTestId('project-menu-dropdown').className).toContain('fixed');
   });
 
   it('uses softer separators (thinner, more subtle)', () => {
@@ -135,7 +134,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const { container } = render(<Toolbar />);
     // Look for group containers with background styling
     const groups = container.querySelectorAll('[data-testid="toolbar-group"]');
-    expect(groups.length).toBeGreaterThanOrEqual(3); // At least: panel toggles, project actions, right panels
+    expect(groups.length).toBeGreaterThanOrEqual(2); // At least: smart controls, cycle+metronome
   });
 
   it('makes the toolbar horizontally scrollable for small viewports', () => {
@@ -156,7 +155,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const projectStrip = screen.getByTestId('toolbar-project-settings');
     expect(projectStrip).toBeInTheDocument();
     expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
-    expect(screen.getByLabelText('Project time signature')).toHaveValue('4');
+    expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');
     expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
     expect(screen.getByLabelText('Project measures')).toHaveValue(64);
@@ -186,9 +185,9 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
   it('provides tooltip titles on all right-side icon buttons', () => {
     render(<Toolbar />);
-    // Mixer, Loop Browser, AI Assistant should have titles directly visible
-    expect(screen.getByTitle('Mixer (X)')).toBeInTheDocument();
-    expect(screen.getByTitle('AI Assistant (Cmd+/)')).toBeInTheDocument();
+    // Mixer and AI Assistant moved to StatusBar; ACE Studio link remains
+    expect(screen.queryByTitle('Mixer (X)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('AI Assistant (Cmd+/)')).not.toBeInTheDocument();
     expect(screen.getByTitle('Visit ACE Studio')).toBeInTheDocument();
   });
 

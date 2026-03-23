@@ -661,6 +661,8 @@ export interface Project {
   bpm: number;
   keyScale: string;
   timeSignature: number;
+  /** Time signature denominator (bottom number), default 4. */
+  timeSignatureDenominator?: number;
   totalDuration: number;
   /** User-configured bar/measure count; timeline is at least this many bars long. */
   measures?: number;

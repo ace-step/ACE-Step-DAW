@@ -53,15 +53,9 @@ describe('GenerationSidePanel settings entrypoints', () => {
     });
   });
 
-  it('opens settings from the header gear inside the unified generate panel', () => {
+  it('no longer has an inline settings gear (settings moved to dock)', () => {
     render(<GenerationSidePanel />);
-
-    fireEvent.click(screen.getByTestId('generation-panel-settings-trigger'));
-
-    expect(screen.getByTestId('generation-settings-section')).toBeInTheDocument();
-    expect(screen.getByText('Model & Backend')).toBeInTheDocument();
-    expect(screen.getByText('Generation Defaults')).toBeInTheDocument();
-    expect(screen.queryByText('Song Defaults')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('generation-panel-settings-trigger')).not.toBeInTheDocument();
   });
 
   it('reopens the panel from the dock launcher after collapsing', () => {

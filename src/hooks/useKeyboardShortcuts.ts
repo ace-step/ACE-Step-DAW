@@ -412,24 +412,30 @@ export function useKeyboardShortcuts() {
       if (matches('navigation.previousTrack')) { event.preventDefault(); focusTrack(-1); return; }
       if (matches('navigation.nextTrack')) { event.preventDefault(); focusTrack(1); return; }
 
-      // Cmd+Delete / Cmd+Backspace: delete selected tracks (with confirmation if multi-clip)
-      const isTrackDeleteKey = matches('tracks.delete') || ((event.code === 'Backspace' || event.code === 'Delete') && mod && !event.shiftKey && !event.altKey);
-      if (isTrackDeleteKey && ui.selectedTrackIds.size > 0) {
-        event.preventDefault();
-        const trackIds = [...ui.selectedTrackIds];
-        ui.deselectAllTracks();
-        ui.requestDeleteTracks(trackIds);
-        return;
-      }
-
-      // Delete / Backspace (no modifier): delete selected clips only
-      const isClipDeleteKey = matches('clips.delete') || (event.code === 'Backspace' && !mod && !event.shiftKey && !event.altKey);
-      if (isClipDeleteKey && ui.selectedClipIds.size > 0) {
-        event.preventDefault();
-        const ids = [...ui.selectedClipIds];
-        ui.deselectAll();
-        ids.forEach((id) => project.removeClip(id));
-        return;
+      // Delete / Backspace: context-aware deletion
+      // - Plain Delete/Backspace → delete selected clips (priority) or do nothing
+      // - Cmd+Delete/Cmd+Backspace → delete selected tracks (with confirmation if multi-clip)
+      const isDeleteOrBackspace = event.code === 'Backspace' || event.code === 'Delete';
+      if (isDeleteOrBackspace && !event.shiftKey && !event.altKey) {
+        if (mod) {
+          // Cmd+Delete: delete selected tracks
+          if (ui.selectedTrackIds.size > 0) {
+            event.preventDefault();
+            const trackIds = [...ui.selectedTrackIds];
+            ui.deselectAllTracks();
+            ui.requestDeleteTracks(trackIds);
+            return;
+          }
+        } else {
+          // Plain Delete: delete selected clips
+          if (ui.selectedClipIds.size > 0) {
+            event.preventDefault();
+            const ids = [...ui.selectedClipIds];
+            ui.deselectAll();
+            ids.forEach((id) => project.removeClip(id));
+            return;
+          }
+        }
       }
 
       if (matches('clips.edit')) {

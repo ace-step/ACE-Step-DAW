@@ -14,7 +14,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',         defaultCombo: { code: 'KeyO', shift: true }, contexts: ['global'] },
   { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',                defaultCombo: { code: 'KeyF' }, contexts: ['global'] },
 
-  { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Delete' }, contexts: ['timeline'] },
+  { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Backspace' }, contexts: ['timeline'] },
   { id: 'clips.duplicate',       category: 'clips',     label: 'Duplicate Clip',              defaultCombo: { code: 'KeyD', mod: true }, contexts: ['timeline'] },
   { id: 'clips.split',           category: 'clips',     label: 'Split Clip at Playhead',      defaultCombo: { code: 'KeyS' }, contexts: ['timeline'] },
   { id: 'clips.selectAll',       category: 'clips',     label: 'Select All Clips',            defaultCombo: { code: 'KeyA', mod: true }, contexts: ['timeline'] },

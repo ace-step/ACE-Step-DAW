@@ -49,7 +49,8 @@ declare module 'superdough/superdoughoutput.mjs' {
 }
 
 declare module '@strudel/repl' {
-  // Side-effect import: registers <strudel-editor> Web Component
+  /** Load all default samples (dirt-samples, drum machines, soundfonts, etc.) */
+  export function prebake(): Promise<void>;
 }
 
 declare module '@kabelsalat/web' {

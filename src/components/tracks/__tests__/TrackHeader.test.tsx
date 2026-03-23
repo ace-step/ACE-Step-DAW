@@ -74,27 +74,29 @@ describe('TrackHeader icon bar', () => {
     expect(screen.queryByTitle(/Bypass all track effects/)).not.toBeInTheDocument();
   });
 
-  it('shows primary buttons (Mute, Solo, Record Arm) as icon-only dots', () => {
+  it('shows primary buttons (Mute, Solo, FX) as labeled circular buttons', () => {
     render(<TrackHeader track={makeTrack()} {...defaultProps} />);
 
     const muteBtn = screen.getByTitle('Mute (M)');
     const soloBtn = screen.getByTitle('Solo (S)');
-    const armBtn = screen.getByTitle('Record arm');
+    const fxBtn = screen.getByTitle('Effects chain (FX)');
 
     expect(muteBtn).toBeVisible();
     expect(soloBtn).toBeVisible();
-    expect(armBtn).toBeVisible();
+    expect(fxBtn).toBeVisible();
 
     // All in data-primary-actions container
     const primaryRail = muteBtn.closest('[data-primary-actions]');
     expect(primaryRail).not.toBeNull();
 
-    // Dot buttons have no SVGs
-    for (const btn of [muteBtn, soloBtn, armBtn]) {
+    // Circular buttons with text labels, no SVGs
+    for (const btn of [muteBtn, soloBtn, fxBtn]) {
       expect(btn.querySelector('svg')).toBeNull();
-      expect(btn.classList.contains('w-4')).toBe(true);
       expect(btn.classList.contains('rounded-full')).toBe(true);
     }
+    expect(muteBtn.textContent).toBe('M');
+    expect(soloBtn.textContent).toBe('S');
+    expect(fxBtn.textContent).toBe('FX');
   });
 
   it('primary actions container has simple flex layout without borders', () => {
@@ -109,6 +111,6 @@ describe('TrackHeader icon bar', () => {
     render(<TrackHeader track={makeTrack()} {...defaultProps} />);
     expect(screen.getByTitle('Mute (M)')).toBeInTheDocument();
     expect(screen.getByTitle('Solo (S)')).toBeInTheDocument();
-    expect(screen.getByTitle('Record arm')).toBeInTheDocument();
+    expect(screen.getByTitle('Effects chain (FX)')).toBeInTheDocument();
   });
 });

@@ -77,19 +77,21 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
   });
 
   describe('icon-only dot buttons (Phase C)', () => {
-    it('renders Mute, Solo, Record arm as small dot buttons', () => {
+    it('renders Mute, Solo, FX as labeled circular buttons', () => {
       renderHeader();
       const muteBtn = screen.getByTitle('Mute (M)');
       const soloBtn = screen.getByTitle('Solo (S)');
-      const armBtn = screen.getByTitle('Record arm');
+      const fxBtn = screen.getByTitle('Effects chain (FX)');
 
-      for (const btn of [muteBtn, soloBtn, armBtn]) {
-        expect(btn.classList.contains('w-4')).toBe(true);
-        expect(btn.classList.contains('h-4')).toBe(true);
+      for (const btn of [muteBtn, soloBtn, fxBtn]) {
         expect(btn.classList.contains('rounded-full')).toBe(true);
-        // No SVG icons inside dot buttons
+        // No SVG icons inside buttons
         expect(btn.querySelector('svg')).toBeNull();
       }
+      // Buttons have text labels
+      expect(muteBtn.textContent).toBe('M');
+      expect(soloBtn.textContent).toBe('S');
+      expect(fxBtn.textContent).toBe('FX');
     });
 
     it('mute dot turns amber when active', () => {
@@ -106,15 +108,15 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
   });
 
   describe('progressive disclosure (Phase C)', () => {
-    it('primary buttons (Mute, Solo, Record arm) are always visible', () => {
+    it('primary buttons (Mute, Solo, FX) are always visible', () => {
       renderHeader();
       const muteBtn = screen.getByTitle('Mute (M)');
       const soloBtn = screen.getByTitle('Solo (S)');
-      const armBtn = screen.getByTitle('Record arm');
+      const fxBtn = screen.getByTitle('Effects chain (FX)');
       const primaryRail = muteBtn.closest('[data-primary-actions]');
       expect(primaryRail).not.toBeNull();
       expect(soloBtn.closest('[data-primary-actions]')).toBe(primaryRail);
-      expect(armBtn.closest('[data-primary-actions]')).toBe(primaryRail);
+      expect(fxBtn.closest('[data-primary-actions]')).toBe(primaryRail);
     });
 
     it('secondary actions (Monitor, Freeze, FX Bypass) are NOT rendered in header', () => {
@@ -143,7 +145,7 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       renderHeader();
       expect(screen.getByTitle('Mute (M)')).toBeInTheDocument();
       expect(screen.getByTitle('Solo (S)')).toBeInTheDocument();
-      expect(screen.getByTitle('Record arm')).toBeInTheDocument();
+      expect(screen.getByTitle('Effects chain (FX)')).toBeInTheDocument();
     });
   });
 

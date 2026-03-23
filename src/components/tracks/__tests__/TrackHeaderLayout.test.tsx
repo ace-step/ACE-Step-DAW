@@ -59,40 +59,41 @@ describe('TrackHeader layout improvements (#546)', () => {
     useProjectStore.getState().createProject();
   });
 
-  describe('M/S/Arm icon-only dot buttons', () => {
-    it('M/S/Arm buttons are small colored dots (w-4 h-4 rounded-full)', () => {
+  describe('M/S/FX labeled circular buttons', () => {
+    it('M/S/FX buttons are circular with text labels', () => {
       render(<TrackHeader track={makeTrack()} {...defaultProps} />);
 
       const muteBtn = screen.getByLabelText('Mute Vocals');
       const soloBtn = screen.getByLabelText('Solo Vocals');
-      const armBtn = screen.getByLabelText('Record arm Vocals');
+      const fxBtn = screen.getByLabelText('Effects for Vocals');
 
-      for (const btn of [muteBtn, soloBtn, armBtn]) {
-        expect(btn.classList.contains('w-4')).toBe(true);
-        expect(btn.classList.contains('h-4')).toBe(true);
+      for (const btn of [muteBtn, soloBtn, fxBtn]) {
         expect(btn.classList.contains('rounded-full')).toBe(true);
       }
+      expect(muteBtn.textContent).toBe('M');
+      expect(soloBtn.textContent).toBe('S');
+      expect(fxBtn.textContent).toBe('FX');
     });
 
-    it('mute dot is amber when active', () => {
+    it('mute button is amber when active', () => {
       render(<TrackHeader track={makeTrack({ muted: true })} {...defaultProps} />);
       const muteBtn = screen.getByLabelText('Mute Vocals');
       expect(muteBtn.className).toContain('bg-amber-500');
     });
 
-    it('solo dot is emerald when active', () => {
+    it('solo button is emerald when active', () => {
       render(<TrackHeader track={makeTrack({ soloed: true })} {...defaultProps} />);
       const soloBtn = screen.getByLabelText('Solo Vocals');
       expect(soloBtn.className).toContain('bg-emerald-500');
     });
 
-    it('M/S/Arm buttons have no SVG icons (icon-less dots)', () => {
+    it('M/S/FX buttons have no SVG icons', () => {
       render(<TrackHeader track={makeTrack()} {...defaultProps} />);
       const muteBtn = screen.getByLabelText('Mute Vocals');
       const soloBtn = screen.getByLabelText('Solo Vocals');
-      const armBtn = screen.getByLabelText('Record arm Vocals');
+      const fxBtn = screen.getByLabelText('Effects for Vocals');
 
-      for (const btn of [muteBtn, soloBtn, armBtn]) {
+      for (const btn of [muteBtn, soloBtn, fxBtn]) {
         expect(btn.querySelector('svg')).toBeNull();
       }
     });

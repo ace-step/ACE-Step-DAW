@@ -5,8 +5,8 @@
       "name": "dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 5175,
-      "env": { "VITE_PORT": "5175" }
+      "port": 5176,
+      "env": { "VITE_PORT": "5176" }
     }
   ]
 }

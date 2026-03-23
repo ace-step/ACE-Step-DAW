@@ -412,39 +412,41 @@ export function TrackHeader({
             >
               <button
                 onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-                className={`w-4 h-4 rounded-full transition-colors ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
                   track.muted
-                    ? 'bg-amber-500'
-                    : 'bg-zinc-700 hover:bg-zinc-600'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                 }`}
                 title="Mute (M)"
                 aria-label={`Mute ${track.displayName}`}
-              />
+              >M</button>
               <button
                 onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-                className={`w-4 h-4 rounded-full transition-colors ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
                   track.soloed
-                    ? 'bg-emerald-500'
-                    : 'bg-zinc-700 hover:bg-zinc-600'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                 }`}
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
-              />
-              <button
-                onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
-                className={`w-4 h-4 rounded-full transition-colors ${
-                  isArmed
-                    ? 'bg-red-500'
-                    : 'bg-zinc-700 hover:bg-zinc-600'
-                }`}
-                title="Record arm"
-                aria-label={`Record arm ${track.displayName}`}
-              />
+              >S</button>
+              {!track.isGroup && (
+                <button
+                  onClick={() => setOpenEffectChainTrackId(track.id)}
+                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                    effectsBypassed
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                  }`}
+                  title="Effects chain (FX)"
+                  aria-label={`Effects for ${track.displayName}`}
+                >FX</button>
+              )}
             </div>
           </div>
 
-          {/* Row 2: volume slider + level meter */}
-          <div data-testid="track-header-row2" className="flex items-center gap-1 w-full">
+          {/* Row 2: volume slider + stereo level meter */}
+          <div data-testid="track-header-row2" className="flex items-center gap-1.5 w-full">
             <input
               type="range"
               min={0}
@@ -456,7 +458,9 @@ export function TrackHeader({
               aria-label={`${track.displayName} volume`}
               title={`Volume: ${Math.round(track.volume * 100)}%`}
             />
-            <TrackHeaderMeter trackId={track.id} />
+            <div className="h-[20px] w-[10px] flex-shrink-0">
+              <TrackHeaderMeter trackId={track.id} />
+            </div>
           </div>
         </div>
       ) : (
@@ -489,38 +493,28 @@ export function TrackHeader({
             )}
           </div>
 
-          {/* Compact M/S/Arm dots + volume slider + meter */}
+          {/* Compact M/S/FX buttons + volume slider + meter */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-              className={`w-4 h-4 rounded-full transition-colors ${
+              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
                 track.muted
-                  ? 'bg-amber-500'
-                  : 'bg-zinc-700 hover:bg-zinc-600'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
               }`}
               title="Mute (M)"
               aria-label={`Mute ${track.displayName}`}
-            />
+            >M</button>
             <button
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-              className={`w-4 h-4 rounded-full transition-colors ${
+              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
                 track.soloed
-                  ? 'bg-emerald-500'
-                  : 'bg-zinc-700 hover:bg-zinc-600'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
               }`}
               title="Solo (S)"
               aria-label={`Solo ${track.displayName}`}
-            />
-            <button
-              onClick={(e) => toggleArmTrack(track.id, !(e.metaKey || e.ctrlKey))}
-              className={`w-4 h-4 rounded-full transition-colors ${
-                isArmed
-                  ? 'bg-red-500'
-                  : 'bg-zinc-700 hover:bg-zinc-600'
-              }`}
-              title="Record arm"
-              aria-label={`Record arm ${track.displayName}`}
-            />
+            >S</button>
             <input
               type="range"
               min={0}

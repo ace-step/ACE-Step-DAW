@@ -704,6 +704,12 @@ export interface ProjectState {
   fillSequencerRow: (trackId: string, rowId: string, every: number) => void;
   batchSetSequencerSteps: (trackId: string, ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[]) => void;
 
+  // Strudel actions
+  updateStrudelCode: (trackId: string, code: string) => void;
+  getStrudelCode: (trackId: string) => string | undefined;
+  /** Evaluate pattern and return analysis info. Returns null if track not found or evaluation fails. */
+  getStrudelPatternInfo: (trackId: string) => Promise<import('../engine/strudelEngine').StrudelPatternInfo | null>;
+
   // Drum machine actions
   initDrumMachine: (trackId: string, kit?: DrumKitName) => void;
   setDrumPadSample: (trackId: string, padIndex: number, sampleKey: string) => void;
@@ -1526,6 +1532,16 @@ function createTrackFromTemplate(
 
   if (track.trackType === 'drumMachine') {
     track.drumMachine = createDefaultDrumMachineConfig(track.drumKit ?? '808');
+  }
+
+  if (track.trackType === 'strudel') {
+    track.strudelCode = track.strudelCode ?? '// Strudel Pattern — press Ctrl+Enter to play\n// Docs: https://strudel.cc/workshop/getting-started\nbd sd bd sd';
+    track.strudelCycleLength = track.strudelCycleLength ?? 1;
+    track.color = '#e67e22'; // Strudel orange
+    if (!overrideDisplayName) {
+      const strudelCount = existingTracks.filter((t) => t.trackType === 'strudel').length;
+      track.displayName = strudelCount === 0 ? 'Strudel' : `Strudel ${strudelCount + 1}`;
+    }
   }
 
   Object.assign(track, syncSamplerState(track, {}));
@@ -4934,6 +4950,43 @@ export const useProjectStore = create<ProjectState>()(
         }),
       },
     });
+  },
+
+  // ── Strudel actions ──
+  updateStrudelCode: (trackId, code) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update strudel code', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, strudelCode: code } : t,
+        ),
+      },
+    });
+  },
+
+  getStrudelCode: (trackId) => {
+    const state = get();
+    if (!state.project) return undefined;
+    return state.project.tracks.find((t) => t.id === trackId)?.strudelCode;
+  },
+
+  getStrudelPatternInfo: async (trackId) => {
+    const state = get();
+    if (!state.project) return null;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.strudelCode) return null;
+    try {
+      const { evaluateStrudelCode, getPatternInfo } = await import('../engine/strudelEngine');
+      const pattern = await evaluateStrudelCode(track.strudelCode);
+      return getPatternInfo(pattern, track.strudelCycleLength ?? 1);
+    } catch {
+      return null;
+    }
   },
 
   addMidiNote: (clipId, note) => {

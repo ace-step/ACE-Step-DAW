@@ -4,7 +4,7 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine';
+export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
@@ -519,6 +519,10 @@ export interface Track {
   frozenAudioKey?: string;
   /** Whether take lanes are visible for comping on this track. */
   showTakeLanes?: boolean;
+  /** Strudel pattern code (only for strudel tracks). */
+  strudelCode?: string;
+  /** Strudel cycle length in bars (default 1 = 1 bar = 1 cycle). */
+  strudelCycleLength?: number;
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
 }

@@ -41,6 +41,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const selectTrack = useUIStore((s) => s.selectTrack);
   const setOpenSequencerTrackId = useUIStore((s) => s.setOpenSequencerTrackId);
   const setOpenDrumMachineTrackId = useUIStore((s) => s.setOpenDrumMachineTrackId);
+  const setOpenStrudelEditor = useUIStore((s) => s.setOpenStrudelEditor);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const selectClip = useUIStore((s) => s.selectClip);
   const project = useProjectStore((s) => s.project);
@@ -127,6 +128,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const isSequencer = trackType === 'sequencer';
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
+  const isStrudel = trackType === 'strudel';
   const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
   const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature) * 4;
 
@@ -154,7 +156,12 @@ export function TrackLane({ track }: TrackLaneProps) {
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
 
-    // For sequencer tracks, double-click opens the editor
+    // For pattern-based tracks, double-click opens the editor
+    if (isStrudel) {
+      e.stopPropagation();
+      setOpenStrudelEditor(track.id);
+      return;
+    }
     if (isDrumMachine) {
       e.stopPropagation();
       setOpenDrumMachineTrackId(track.id);
@@ -201,7 +208,7 @@ export function TrackLane({ track }: TrackLaneProps) {
       source: 'uploaded',
     });
     selectClip(clip.id);
-  }, [isDrumMachine, isSequencer, isPianoRoll, pixelsPerSecond, project.bpm, project.tempoMap, hitsClip, track.id, addClip, defaultClipDuration, setOpenDrumMachineTrackId, setOpenSequencerTrackId, selectClip, setOpenPianoRoll]);
+  }, [isDrumMachine, isSequencer, isPianoRoll, isStrudel, pixelsPerSecond, project.bpm, project.tempoMap, hitsClip, track.id, addClip, defaultClipDuration, setOpenDrumMachineTrackId, setOpenSequencerTrackId, setOpenStrudelEditor, selectClip, setOpenPianoRoll]);
 
   const clearSel = useCallback(() => {
     setAddLayerTarget(null);
@@ -282,7 +289,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   }, [placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
 
   const hasClips = track.clips.length > 0;
-  const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll;
+  const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;
   const automationLanes = (project?.automationLanes ?? []).filter((l) => l.trackId === track.id);
 
   return (
@@ -346,6 +353,18 @@ export function TrackLane({ track }: TrackLaneProps) {
               <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-[#444] border-dashed">
                 <span className="text-emerald-400 text-sm">SEQ</span>
                 <span className="text-xs text-zinc-400">Double-click to open sequencer editor</span>
+              </div>
+            </div>
+          )}
+
+          {isStrudel && (
+            <div
+              className="absolute inset-0 flex items-center justify-center cursor-pointer"
+              onClick={() => setOpenStrudelEditor(track.id)}
+            >
+              <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-[#e67e22]/30 border-dashed">
+                <span className="text-[#e67e22] text-sm">STR</span>
+                <span className="text-xs text-zinc-400">Double-click to open pattern editor</span>
               </div>
             </div>
           )}

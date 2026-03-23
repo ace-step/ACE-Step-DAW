@@ -426,7 +426,7 @@ export function Timeline() {
         .map((track) => track.order),
     );
   }, [project]);
-  const showsArrangementMarkers = (project?.markers?.length ?? 0) > 0;
+  const showsArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
 
   const totalWidth = project
     ? getTimelineContentWidth(project.totalDuration, pixelsPerSecond, viewportWidth)

@@ -50,6 +50,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.loopBrowser',    category: 'panels',    label: 'Toggle Loop Browser',         defaultCombo: { code: 'KeyO' }, contexts: ['global'] },
   { id: 'panels.trackList',      category: 'panels',    label: 'Toggle Track List Rail',      defaultCombo: { code: 'KeyW' }, contexts: ['timeline'] },
   { id: 'panels.tempoLane',      category: 'panels',    label: 'Toggle Tempo Lane',           defaultCombo: { code: 'KeyT' }, contexts: ['global'] },
+  { id: 'panels.arrangementMarkers', category: 'panels', label: 'Toggle Arrangement Markers', defaultCombo: { code: 'KeyA' }, contexts: ['global'] },
   { id: 'panels.generation',     category: 'panels',    label: 'Toggle AI Generation Panel',  defaultCombo: { code: 'KeyG' }, contexts: ['global'] },
   { id: 'panels.generationHistory', category: 'panels', label: 'Toggle Generation History Panel', defaultCombo: { code: 'KeyH' }, contexts: ['global'] },
   { id: 'panels.modelLibrary',   category: 'panels',    label: 'Toggle Model Library',        defaultCombo: { code: 'KeyM', shift: true }, contexts: ['global'] },

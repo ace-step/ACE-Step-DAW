@@ -145,12 +145,20 @@ export function StrudelEditor() {
     }
   }, [isPlaying]);
 
-  // Send to Track — record from destinationGain (same superdough instance!)
+  // Send to Track — first evaluate current code, then record
   const handleBounce = useCallback(async () => {
     if (!project || bouncing) return;
     setBouncing(true);
     setBounceProgress(0);
     try {
+      // First: evaluate current code (this both plays it AND syncs to store via onUpdateState)
+      if (editorRef.current) {
+        editorRef.current.evaluate();
+        setIsPlaying(true);
+        // Give the evaluate a moment to trigger onUpdateState
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
       const store = useProjectStore.getState();
       let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
       if (!strudelTrack) {

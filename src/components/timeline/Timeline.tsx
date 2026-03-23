@@ -957,7 +957,7 @@ export function Timeline() {
             style={{ gridColumn: '2', gridRow: '1', width: totalWidth }}
           >
             <TimeRuler />
-            <ArrangementMarkers />
+            {showsArrangementMarkers && <ArrangementMarkers />}
             {showTempoLane && (
               <>
                 <TempoLane />

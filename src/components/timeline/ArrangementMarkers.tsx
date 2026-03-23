@@ -74,30 +74,22 @@ export function ArrangementMarkers() {
     [seek],
   );
 
-  // --- Double-click: create a fixed-length section (start + end markers) ---
+  // --- Double-click: create a single marker (user resizes via right-edge drag) ---
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!project) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const rawTime = Math.max(0, x / pixelsPerSecond);
-      const startTime = e.altKey ? rawTime : snapToBeat(rawTime, bpm, tempoMap as never);
+      const time = e.altKey ? rawTime : snapToBeat(rawTime, bpm, tempoMap as never);
 
-      // Default section = 4 bars
-      const barDuration = (60 / bpm) * timeSignature;
-      const endTime = Math.min(startTime + barDuration * 4, totalDuration);
+      addMarker(time, 'New Section');
 
-      // Only create if there's room for at least 1 bar
-      if (endTime - startTime < barDuration) return;
-
-      addMarker(startTime, 'New Section');
-      addMarker(endTime, 'New Section');
-
-      // Open selector for the start marker on next render
+      // Open selector for the new marker on next render
       setTimeout(() => {
         const newMarkers = useProjectStore.getState().project?.markers;
         if (!newMarkers) return;
-        const newMarker = newMarkers.find((m) => m.time === startTime);
+        const newMarker = newMarkers.find((m) => m.time === time && m.name === 'New Section');
         if (newMarker) {
           setEditingId(newMarker.id);
           const el = document.querySelector(`[data-marker-id="${newMarker.id}"]`);
@@ -105,7 +97,7 @@ export function ArrangementMarkers() {
         }
       }, 0);
     },
-    [project, pixelsPerSecond, addMarker, bpm, timeSignature, tempoMap, totalDuration],
+    [project, pixelsPerSecond, addMarker, bpm, tempoMap],
   );
 
   const handleRightClick = useCallback(

@@ -176,7 +176,7 @@ function ProjectTimingStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-0 px-0"
+      className="flex items-center gap-1.5 px-0"
       data-testid="toolbar-project-timing"
     >
       <div className={boxedReadoutClass} title="Project tempo (beats per minute)">
@@ -196,8 +196,6 @@ function ProjectTimingStrip({ disabled }: { disabled: boolean }) {
           className={`${numericDisplayInputClass} w-[3.7rem]`}
         />
       </div>
-
-      <ToolbarSeparator />
 
       <div className={`${boxedReadoutClass} gap-[0.3rem] px-1.5`} title="Project time signature">
         <input
@@ -231,7 +229,6 @@ function ProjectTimingStrip({ disabled }: { disabled: boolean }) {
         />
       </div>
 
-      <ToolbarSeparator />
     </div>
   );
 }
@@ -248,7 +245,7 @@ function HarmonySettingsStrip({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex items-center gap-0 px-0"
+      className="flex items-center gap-1 px-0"
       data-testid="toolbar-project-harmony"
     >
       <div className={`${flatReadoutClass} pr-4`} title="Project key root note">
@@ -430,10 +427,6 @@ function ControlBarButton({
   );
 }
 
-function ToolbarSeparator() {
-  return <div className="h-6 w-px bg-white/10" data-testid="toolbar-separator" />;
-}
-
 function AceStudioLink() {
   return (
     <a
@@ -612,17 +605,15 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-12 shrink-0 select-none items-center gap-1 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5"
+      className="flex h-12 shrink-0 select-none items-center gap-1.5 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5"
       data-testid="main-toolbar"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* Project menu (unified: Projects, New, File actions) */}
       <ProjectMenu disabled={!project} />
 
-      <ToolbarSeparator />
-
       {/* Arrangement / Session view toggle */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         <ControlBarButton
           active={mainView === 'arrangement'}
           onClick={() => setMainView('arrangement')}
@@ -643,10 +634,8 @@ export function Toolbar() {
         </ControlBarButton>
       </div>
 
-      <ToolbarSeparator />
-
       {/* Smart Controls toggle */}
-      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-1 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showArrangementMarkers}
           onClick={toggleArrangementMarkers}
@@ -682,12 +671,10 @@ export function Toolbar() {
       {/* Project timing settings */}
       <ProjectTimingStrip disabled={!project} />
 
-      <ToolbarSeparator />
-
       {/* Center: Transport controls */}
       <div className="shrink-0" data-testid="toolbar-group">
       <div
-        className="flex items-center gap-0.5"
+        className="flex items-center gap-1"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
@@ -762,16 +749,12 @@ export function Toolbar() {
       </div>
       </div>
 
-      <ToolbarSeparator />
-
       {/* LCD Display */}
       <LCDDisplay />
 
       <div className="flex-1" />
 
       <HarmonySettingsStrip disabled={!project} />
-
-      <ToolbarSeparator />
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">

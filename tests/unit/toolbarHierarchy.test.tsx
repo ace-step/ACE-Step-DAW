@@ -119,15 +119,12 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByTestId('project-menu-dropdown').className).toContain('fixed');
   });
 
-  it('uses softer separators (thinner, more subtle)', () => {
+  it('removes vertical separators and relies on spacing instead', () => {
     const { container } = render(<Toolbar />);
-    // Separators should use the new subtle style
     const separators = container.querySelectorAll('[data-testid="toolbar-separator"]');
-    expect(separators.length).toBeGreaterThan(0);
-    separators.forEach((sep) => {
-      expect(sep.className).toMatch(/w-px/);
-      expect(sep.className).toMatch(/h-6/);
-    });
+    expect(separators.length).toBe(0);
+    expect(screen.getByTestId('main-toolbar').className).toContain('gap-1.5');
+    expect(screen.getByTestId('transport-bar').className).toContain('gap-1');
   });
 
   it('wraps button groups in background containers', () => {

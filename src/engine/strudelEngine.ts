@@ -452,15 +452,16 @@ export async function extractStrudelMidiNotes(
 }
 
 /**
- * Render a strudel pattern to audio by real-time capture of superdough output.
+ * Render a strudel pattern to audio by tapping superdough's output node.
  *
- * Why real-time: superdough (Strudel's audio engine) uses setTimeout-based
- * scheduling that only works in a live AudioContext. OfflineAudioContext and
- * MIDI extraction both lose the actual sound (samples, effects, banks).
- * This captures the REAL audio — exactly what the user hears.
+ * How it works:
+ * 1. Create a webaudioRepl and evaluate the pattern (audio plays in real-time)
+ * 2. Tap superdough's `destinationGain` node (the final output before ctx.destination)
+ *    via `getSuperdoughAudioController().output.destinationGain`
+ * 3. Connect a MediaStreamDestination to that node → MediaRecorder captures the audio
+ * 4. Wait for N bars, stop, decode the recording to AudioBuffer
  *
- * Duration: takes `durationSeconds` of wall-clock time (e.g. 8s for 4 bars at 120 BPM).
- * The caller should show a progress indicator.
+ * Duration: takes `durationSeconds` of wall-clock time (user hears the pattern play).
  *
  * @param onProgress - callback with 0-1 progress for UI updates
  */
@@ -472,27 +473,14 @@ export async function renderStrudelOffline(
   onProgress?: (progress: number) => void,
 ): Promise<AudioBuffer> {
   await ensureStrudelLoaded();
-  const { webaudioRepl } = await import('@strudel/webaudio');
+  const { webaudioRepl, getSuperdoughAudioController, getAudioContext } = await import('@strudel/webaudio') as any;
 
-  // Create a DEDICATED AudioContext — isolated from the main DAW context.
-  // Monkey-patch destination BEFORE creating the repl so superdough connects
-  // to our interceptor from the start.
-  const ctx = new AudioContext({ sampleRate });
-
-  // Create capture infrastructure BEFORE superdough initializes
-  const captureNode = ctx.createMediaStreamDestination();
-  const splitter = ctx.createGain(); // splits audio to both speakers + capture
-  splitter.connect(ctx.destination);  // speakers (so user hears the bounce)
-  splitter.connect(captureNode);      // capture stream
-
-  // Monkey-patch: make superdough connect to our splitter instead of ctx.destination
-  const realDest = ctx.destination;
-  Object.defineProperty(ctx, 'destination', {
-    get: () => splitter as unknown as AudioDestinationNode,
-    configurable: true,
-  });
+  // Get or create the audio context that superdough uses
+  const ctx: AudioContext = getAudioContext();
 
   const cps = bpmToCps(bpm);
+
+  // Create a dedicated repl for this bounce
   const repl = webaudioRepl({ audioContext: ctx });
   repl.setCps?.(cps);
 
@@ -503,7 +491,23 @@ export async function renderStrudelOffline(
     .replace(/^\$:\s*/gm, '')
     .trim();
 
-  // Start recording BEFORE evaluating so we capture from the very first event
+  // Evaluate to start audio — this initializes superdough's audio graph
+  await repl.evaluate(cleanCode);
+
+  // Now tap superdough's output: destinationGain is the last node before ctx.destination
+  // Audio chain: Orbit → channelMerger → destinationGain → ctx.destination
+  //                                          ↳ we tap here → MediaStreamDestination
+  const controller = getSuperdoughAudioController();
+  const outputGain: GainNode = controller?.output?.destinationGain;
+
+  if (!outputGain) {
+    throw new Error('Could not access superdough output node for recording');
+  }
+
+  const captureNode = ctx.createMediaStreamDestination();
+  outputGain.connect(captureNode);
+
+  // Start recording
   const recorder = new MediaRecorder(captureNode.stream, {
     mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus' : 'audio/webm',
@@ -513,10 +517,7 @@ export async function renderStrudelOffline(
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType }));
   });
-  recorder.start(100); // collect data every 100ms for progress
-
-  // Evaluate and play the pattern
-  await repl.evaluate(cleanCode);
+  recorder.start(100);
 
   // Wait for the pattern to play, reporting progress
   const startTime = Date.now();
@@ -535,17 +536,14 @@ export async function renderStrudelOffline(
   recorder.stop();
   try { repl.stop?.(); } catch { /* ignore */ }
 
+  // Disconnect our capture tap (don't leave it connected)
+  try { outputGain.disconnect(captureNode); } catch { /* ignore */ }
+
   const blob = await recordingDone;
 
-  // Restore real destination and decode
-  Object.defineProperty(ctx, 'destination', {
-    get: () => realDest,
-    configurable: true,
-  });
-
+  // Decode to AudioBuffer
   const arrayBuffer = await blob.arrayBuffer();
   const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-  await ctx.close();
 
   return audioBuffer;
 }

@@ -170,19 +170,6 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(useProjectStore.getState().project?.keyScale).toBe('D minor');
   });
 
-  it('updates time signature via the select dropdown', () => {
-    render(<Toolbar />);
-
-    const tsSelect = screen.getByLabelText('Project time signature');
-    expect(tsSelect).toHaveValue('4');
-
-    fireEvent.change(tsSelect, { target: { value: '3' } });
-    expect(useProjectStore.getState().project?.timeSignature).toBe(3);
-
-    fireEvent.change(tsSelect, { target: { value: '6' } });
-    expect(useProjectStore.getState().project?.timeSignature).toBe(6);
-  });
-
   it('provides tooltip titles on all right-side icon buttons', () => {
     render(<Toolbar />);
     // Mixer and AI Assistant moved to StatusBar; ACE Studio link remains

@@ -97,12 +97,15 @@ async function ensureStrudelLoaded(): Promise<void> {
       );
     }
 
-    // Load default drum/instrument samples from Strudel's CDN
-    // This enables bank("RolandTR909"), bank("RolandTR808"), etc.
+    // Load drum samples via @strudel/webaudio (same superdough singleton).
+    // Do NOT use @strudel/repl's prebake — Vite bundles it as a separate module
+    // with its own superdough instance, so samples register in the wrong place.
     if (webaudioMod.samples) {
-      webaudioMod.samples('github:tidalcycles/dirt-samples').catch(() => {
-        // Non-blocking — samples load on demand, patterns work with synths meanwhile
-      });
+      const ds = 'https://raw.githubusercontent.com/felixroos/dough-samples/main';
+      await Promise.allSettled([
+        webaudioMod.samples('github:tidalcycles/dirt-samples'),
+        webaudioMod.samples(`${ds}/tidal-drum-machines.json`),
+      ]);
     }
 
     scopeRegistered = true;
@@ -363,4 +366,199 @@ export function bpmToCps(bpm: number, beatsPerCycle: number = 4): number {
 /** Convert Strudel cycle time to seconds. */
 export function cycleTimeToSeconds(cycleTime: number, cps: number): number {
   return cycleTime / cps;
+}
+
+/**
+ * Extract MIDI notes from a strudel pattern for N cycles.
+ *
+ * Fast path: no audio rendering. Parses the pattern, queries events via
+ * queryArc, and converts to MidiNote[] compatible with the DAW's pianoRoll.
+ * Returns instantly — no real-time waiting.
+ */
+export async function extractStrudelMidiNotes(
+  code: string,
+  bars: number,
+  bpm: number,
+  beatsPerBar: number = 4,
+): Promise<{ notes: Array<{ pitch: number; startBeat: number; durationBeats: number; velocity: number }>; instruments: string[] }> {
+  await ensureStrudelLoaded();
+
+  const cleanCode = code
+    .split('\n')
+    .filter((line: string) => !line.trimStart().startsWith('//'))
+    .join('\n')
+    .replace(/^\$:\s*/gm, '')
+    .trim();
+
+  if (!cleanCode) return { notes: [], instruments: [] };
+
+  // Evaluate Strudel JS code to get a Pattern object.
+  // ensureStrudelLoaded() registers note(), s(), sound(), bank(), etc. on globalThis.
+  // We use new Function() (not eval) because eval inside an ES module resolves to
+  // module scope where globalThis DSL functions aren't visible. new Function()
+  // always evaluates in global scope.
+  let pattern: any;
+  try {
+    const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<any>;
+    pattern = await fn();
+  } catch {
+    // Fallback: try without return wrapper (multi-line code)
+    try {
+      const fn = new Function(`return (async () => { ${cleanCode} })()`) as () => Promise<any>;
+      pattern = await fn();
+    } catch {
+      // Last resort: try mini-notation
+      try {
+        const { mini } = await import('@strudel/mini');
+        pattern = mini(cleanCode);
+      } catch { return { notes: [], instruments: [] }; }
+    }
+  }
+
+  if (!pattern?.queryArc) return { notes: [], instruments: [] };
+
+  const cps = bpmToCps(bpm, beatsPerBar);
+  const totalCycles = bars; // 1 bar = 1 cycle by default
+  const events = pattern.queryArc(0, totalCycles);
+
+  const notes: Array<{ pitch: number; startBeat: number; durationBeats: number; velocity: number }> = [];
+  const instruments = new Set<string>();
+
+  for (const hap of events) {
+    if (!hap.hasOnset?.()) continue;
+
+    const val = hap.value ?? {};
+    const startCycle = typeof hap.whole?.begin?.valueOf === 'function' ? hap.whole.begin.valueOf() : 0;
+    const endCycle = typeof hap.whole?.end?.valueOf === 'function' ? hap.whole.end.valueOf() : startCycle + 0.25;
+    const durationCycles = endCycle - startCycle;
+
+    // Convert cycle time to beats
+    const startBeat = startCycle * beatsPerBar;
+    const durationBeats = Math.max(durationCycles * beatsPerBar, 0.125);
+
+    // Extract pitch (MIDI note number)
+    let pitch = 60; // default C4
+    if (typeof val === 'object') {
+      if ('note' in val && typeof val.note === 'number') pitch = val.note;
+      else if ('n' in val && typeof val.n === 'number') pitch = val.n;
+      else if ('freq' in val && typeof val.freq === 'number') pitch = Math.round(12 * Math.log2((val.freq as number) / 440) + 69);
+      if ('s' in val) instruments.add(String(val.s));
+      if ('sound' in val) instruments.add(String(val.sound));
+    }
+
+    const velocity = typeof val === 'object' && 'gain' in val ? Math.min(1, Number(val.gain)) : 0.8;
+
+    notes.push({ pitch, startBeat, durationBeats: Math.round(durationBeats * 1000) / 1000, velocity });
+  }
+
+  return { notes, instruments: [...instruments] };
+}
+
+/**
+ * Render a strudel pattern to an AudioBuffer via real-time playback + recording.
+ *
+ * Why not OfflineAudioContext: superdough lazy-fetches samples via network.
+ * OfflineAudioContext.startRendering() completes before fetches finish → silence.
+ *
+ * Approach:
+ * 1. Create a webaudioRepl (properly initializes superdough + samples + worklets)
+ * 2. Evaluate the code → real-time audio playback begins
+ * 3. Record from superdough's destinationGain via MediaRecorder
+ * 4. Wait for durationSeconds (user hears the pattern play)
+ * 5. Stop, decode recording → AudioBuffer
+ *
+ * Trade-off: takes real-time (4 bars at 120 BPM = 8 seconds) but captures
+ * the EXACT audio superdough produces — samples, effects, banks, everything.
+ */
+export async function renderStrudelOffline(
+  code: string,
+  durationSeconds: number,
+  bpm: number,
+  _sampleRate: number = 48_000,
+  onProgress?: (progress: number) => void,
+): Promise<AudioBuffer> {
+  await ensureStrudelLoaded();
+
+  const { webaudioRepl, getAudioContext, getSuperdoughAudioController } = await import('@strudel/webaudio') as any;
+  const { transpiler } = await import('@strudel/transpiler') as any;
+
+  const cleanCode = code
+    .split('\n')
+    .filter((line: string) => !line.trimStart().startsWith('//'))
+    .join('\n')
+    .replace(/^\$:\s*/gm, '')
+    .trim();
+
+  if (!cleanCode) throw new Error('No strudel code to render');
+
+  // Create repl WITH transpiler — this is critical!
+  // Without transpiler, mini-notation strings like "[bd hh]*2" are not parsed
+  // and get treated as literal sound/note names → "not a note" errors.
+  const repl = webaudioRepl({ transpiler });
+  const cps = bpmToCps(bpm);
+  repl.setCps?.(cps);
+
+  // Start real-time playback (transpiler converts mini-notation → proper Pattern)
+  await repl.evaluate(cleanCode);
+  onProgress?.(0.1);
+
+  // Give superdough a moment to initialize its audio graph + fetch first samples
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Tap superdough's final output node for recording
+  const ctx: AudioContext = getAudioContext();
+  const controller = getSuperdoughAudioController();
+  const outputGain: GainNode | null = controller?.output?.destinationGain ?? null;
+
+  if (!outputGain) {
+    repl.stop?.();
+    throw new Error('Could not access superdough output for recording');
+  }
+
+  const captureNode = ctx.createMediaStreamDestination();
+  outputGain.connect(captureNode);
+
+  // Record via MediaRecorder
+  const recorder = new MediaRecorder(captureNode.stream, {
+    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus' : 'audio/webm',
+  });
+  const chunks: Blob[] = [];
+  const recordingDone = new Promise<Blob>((resolve) => {
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType }));
+  });
+  recorder.start(200); // collect chunks every 200ms
+
+  // Wait for the pattern to play, reporting progress
+  const startTime = Date.now();
+  const totalMs = durationSeconds * 1000;
+  await new Promise<void>((resolve) => {
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      onProgress?.(0.1 + 0.8 * Math.min(1, elapsed / totalMs));
+      if (elapsed >= totalMs) { resolve(); return; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+  // Stop recording and playback
+  recorder.stop();
+  try { repl.stop?.(); } catch { /* ignore */ }
+  try { outputGain.disconnect(captureNode); } catch { /* ignore */ }
+
+  onProgress?.(0.95);
+
+  const blob = await recordingDone;
+  if (blob.size < 100) {
+    throw new Error('Recording produced no audio data');
+  }
+
+  // Decode to AudioBuffer
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+  onProgress?.(1.0);
+  return audioBuffer;
 }

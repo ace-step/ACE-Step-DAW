@@ -52,6 +52,7 @@ export function GenerationSidePanel() {
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const selectClip = useUIStore((s) => s.selectClip);
+  const showSmartControls = useUIStore((s) => s.showSmartControls);
   const project = useProjectStore((s) => s.project);
 
   const generationForm = useGenerationStore((s) => s.generationForm);
@@ -233,8 +234,8 @@ export function GenerationSidePanel() {
   return (
     <>
       <div
-        className="fixed bottom-[68px] left-1/2 z-[120] -translate-x-1/2"
-        style={{ zIndex: Z.panel + 1 }}
+        className="fixed left-1/2 -translate-x-1/2"
+        style={{ zIndex: Z.toast, bottom: showSmartControls ? 208 : 68 }}
         data-testid="generation-dock"
       >
         <div className="flex items-center gap-2">

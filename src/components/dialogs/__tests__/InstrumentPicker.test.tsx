@@ -44,6 +44,14 @@ describe('InstrumentPicker', () => {
     expect(screen.getByText('Drum Machine')).toBeInTheDocument();
   });
 
+  it('does not show Strudel in the track type picker', () => {
+    render(<InstrumentPicker />);
+
+    // Strudel was removed from the Add Track picker in Phase 2.
+    // Users access Strudel via the dedicated dock panel toggle instead.
+    expect(screen.queryByText('Strudel')).not.toBeInTheDocument();
+  });
+
   it('shows drum machine instrument step when Drum Machine type is selected', () => {
     render(<InstrumentPicker />);
 

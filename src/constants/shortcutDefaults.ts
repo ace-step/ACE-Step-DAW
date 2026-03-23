@@ -54,6 +54,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.generation',     category: 'panels',    label: 'Toggle AI Generation Panel',  defaultCombo: { code: 'KeyG' }, contexts: ['global'] },
   { id: 'panels.generationHistory', category: 'panels', label: 'Toggle Generation History Panel', defaultCombo: { code: 'KeyH' }, contexts: ['global'] },
   { id: 'panels.modelLibrary',   category: 'panels',    label: 'Toggle Model Library',        defaultCombo: { code: 'KeyM', shift: true }, contexts: ['global'] },
+  { id: 'panels.strudel',        category: 'panels',    label: 'Toggle Strudel',              defaultCombo: { code: 'KeyU' }, contexts: ['global'] },
   { id: 'panels.aiAssistant',    category: 'panels',    label: 'Toggle AI Assistant',         defaultCombo: { code: 'Slash', mod: true }, contexts: ['global'] },
   { id: 'view.autoScroll',        category: 'view',      label: 'Toggle Auto-Scroll',          defaultCombo: { code: 'KeyF', shift: true }, contexts: ['global'] },
 

@@ -363,6 +363,7 @@ export function useKeyboardShortcuts() {
       if (matches('panels.mixer')) { event.preventDefault(); ui.setShowMixer(!ui.showMixer); return; }
       if (matches('panels.smartControls')) { event.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
       if (matches('panels.library')) { event.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }
+      if (matches('panels.strudel')) { event.preventDefault(); ui.toggleStrudelPanel(); return; }
       if (matches('panels.loopBrowser')) { event.preventDefault(); ui.toggleLoopBrowser(); return; }
       if (matches('panels.trackList')) { event.preventDefault(); ui.toggleTrackListDisplayMode(); return; }
       if (matches('panels.tempoLane')) { event.preventDefault(); ui.toggleTempoLane(); return; }

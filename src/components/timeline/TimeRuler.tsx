@@ -7,6 +7,7 @@ import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLe
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { DEFAULT_MEASURES } from '../../constants/defaults';
+import { CURSOR_BRACKET_LEFT, CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
 
 const LOOP_MIN_DURATION = 0.01;
 const LOOP_HANDLE_WIDTH = 10;
@@ -270,8 +271,8 @@ export function TimeRuler() {
           }}
         >
           <div
-            className="absolute inset-y-0 left-0 cursor-col-resize bg-amber-300/20 hover:bg-amber-300/35"
-            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(-50%)' }}
+            className="absolute inset-y-0 left-0 bg-amber-300/20 hover:bg-amber-300/35"
+            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(-50%)', cursor: CURSOR_BRACKET_LEFT }}
             role="slider"
             aria-label="Adjust loop start"
             aria-valuemin={0}
@@ -284,8 +285,8 @@ export function TimeRuler() {
             onPointerCancel={endLoopDrag}
           />
           <div
-            className="absolute inset-y-0 right-0 cursor-col-resize bg-amber-300/20 hover:bg-amber-300/35"
-            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(50%)' }}
+            className="absolute inset-y-0 right-0 bg-amber-300/20 hover:bg-amber-300/35"
+            style={{ width: LOOP_HANDLE_WIDTH, transform: 'translateX(50%)', cursor: CURSOR_BRACKET_RIGHT }}
             role="slider"
             aria-label="Adjust loop end"
             aria-valuemin={loopStart}
@@ -394,8 +395,8 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   const svgH = 12;
   return (
     <div
-      className="absolute bottom-[-1px] z-30 h-full w-5 cursor-col-resize"
-      style={{ left: x, transform: 'translateX(-50%)' }}
+      className="absolute bottom-[-1px] z-30 h-full w-5"
+      style={{ left: x, transform: 'translateX(-50%)', cursor: CURSOR_BRACKET_RIGHT }}
       onPointerDown={handlePointerDown}
       data-testid="timeline-playhead-loop-handle"
     >

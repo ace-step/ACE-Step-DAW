@@ -7,6 +7,7 @@ import { ARRANGEMENT_MARKERS_HEIGHT } from './timelineLayout';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { snapToGrid } from '../../utils/time';
 import { SectionSelector, getSectionColor } from './SectionSelector';
+import { CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -383,7 +384,7 @@ export function ArrangementMarkers() {
             style={{
               left: borderX - 12,
               width: 24,
-              cursor: 'col-resize',
+              cursor: CURSOR_BRACKET_RIGHT,
               zIndex: 30,
             }}
             data-testid={`marker-resize-handle-${marker.id}`}

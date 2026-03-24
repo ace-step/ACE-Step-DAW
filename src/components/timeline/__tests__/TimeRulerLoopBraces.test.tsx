@@ -105,18 +105,18 @@ describe('TimeRuler loop region braces', () => {
     expect(handle.getAttribute('aria-label')).toBe('Move loop region');
   });
 
-  it('start handle has col-resize cursor styling', () => {
+  it('start handle has custom bracket cursor styling', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
-    const handle = screen.getByTestId('timeline-loop-start-handle');
-    expect(handle.className).toContain('cursor-col-resize');
+    const handle = screen.getByTestId('timeline-loop-start-handle') as HTMLElement;
+    expect(handle.style.cursor).toContain('data:image/svg+xml');
   });
 
-  it('end handle has col-resize cursor styling', () => {
+  it('end handle has custom bracket cursor styling', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
-    const handle = screen.getByTestId('timeline-loop-end-handle');
-    expect(handle.className).toContain('cursor-col-resize');
+    const handle = screen.getByTestId('timeline-loop-end-handle') as HTMLElement;
+    expect(handle.style.cursor).toContain('data:image/svg+xml');
   });
 
   it('move handle has grab cursor styling', () => {

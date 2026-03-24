@@ -129,7 +129,7 @@ describe('ClipBlock hover and active feedback', () => {
 
     // Custom bracket cursor should be set (SVG data URL with [ character, fallback to e-resize)
     expect(clipEl.style.cursor).toContain('data:image/svg+xml');
-    expect(clipEl.style.cursor).toContain('e-resize');
+    expect(clipEl.style.cursor).toContain('col-resize');
     expect(document.body.style.cursor).toContain('data:image/svg+xml');
 
     fireEvent.mouseLeave(leftHandle);

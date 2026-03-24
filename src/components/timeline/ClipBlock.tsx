@@ -37,13 +37,7 @@ const MIN_CLIP_DURATION = 0.5;
 const CLIP_DRAG_EPSILON = 0.0001;
 const HEADER_RAIL_HEIGHT_PX = 20;
 
-/* Custom bracket cursors — replace the system default <> resize arrows with [ and ] */
-const makeBracketCursor = (char: '[' | ']') => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 20"><text x="8" y="15" text-anchor="middle" font-family="monospace" font-size="16" font-weight="900" fill="black" stroke="white" stroke-width="1">${char}</text></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 8 10, e-resize`;
-};
-const CURSOR_BRACKET_LEFT = makeBracketCursor('[');
-const CURSOR_BRACKET_RIGHT = makeBracketCursor(']');
+import { CURSOR_BRACKET_LEFT, CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
 
 const waveformUpgradeInFlight = new Set<string>();
 

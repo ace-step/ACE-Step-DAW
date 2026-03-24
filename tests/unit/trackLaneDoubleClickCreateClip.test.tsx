@@ -42,22 +42,26 @@ vi.mock('../../src/components/timeline/CrossfadeOverlay', () => ({
   CrossfadeOverlay: () => null,
 }));
 
+function ensureScrollContainer() {
+  let container = document.getElementById('arrangement-timeline-scroll');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'arrangement-timeline-scroll';
+    Object.defineProperty(container, 'scrollLeft', { configurable: true, value: 0 });
+    Object.defineProperty(container, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0, top: 0, width: 1000, height: 500,
+        right: 1000, bottom: 500, x: 0, y: 0, toJSON: () => ({}),
+      }),
+    });
+    document.body.appendChild(container);
+  }
+}
+
 function doubleClickLane(trackId: string, clientX: number) {
+  ensureScrollContainer();
   const lane = screen.getByTestId(`track-lane-${trackId}`);
-  Object.defineProperty(lane, 'getBoundingClientRect', {
-    configurable: true,
-    value: () => ({
-      left: 0,
-      top: 0,
-      width: 1000,
-      height: 64,
-      right: 1000,
-      bottom: 64,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }),
-  });
   fireEvent.doubleClick(lane, { clientX });
 }
 
@@ -68,6 +72,8 @@ describe('TrackLane double-click clip creation', () => {
     useUIStore.setState(useUIStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Track Lane Double Click Test', bpm: 120, timeSignature: 4 });
     useUIStore.getState().setPixelsPerSecond(100);
+    // Set trackListWidth to 0 so clientXToLaneX(clientX) == clientX in tests
+    useUIStore.setState({ trackListWidth: 0 });
   });
 
   it('creates and selects an empty audio clip on stems tracks and supports undo', () => {

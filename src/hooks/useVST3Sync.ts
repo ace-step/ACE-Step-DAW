@@ -29,7 +29,7 @@ export function useVST3Sync(): void {
       for (const id of currentIds) {
         if (!prevIds.has(id) && state.connectionStatus === 'connected') {
           const instance = state.instances[id];
-          void client.createInstance(instance.pluginUid, instance.instanceId);
+          void client.createInstance(instance.pluginId, instance.instanceId);
         }
       }
 
@@ -56,7 +56,7 @@ export function useVST3Sync(): void {
           // Re-instantiate all offline plugins
           for (const instance of Object.values(state.instances)) {
             if (!instance.online) {
-              void client.createInstance(instance.pluginUid, instance.instanceId);
+              void client.createInstance(instance.pluginId, instance.instanceId);
             }
           }
         }

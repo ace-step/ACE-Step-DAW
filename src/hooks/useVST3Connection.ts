@@ -55,7 +55,7 @@ export function useVST3Connection() {
       store.setConnectionError(msg);
     };
 
-    const onScanComplete = (plugins: import('../types/vst3').VST3PluginDescriptor[]) => {
+    const onScanComplete = (plugins: import('../types/vst3').VST3PluginInfo[]) => {
       store.setScannedPlugins(plugins);
     };
 

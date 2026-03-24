@@ -1,5 +1,5 @@
 /** VST3 companion app connection status */
-export type VST3ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
+export type VST3ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 /** Metadata for a scanned VST3 plugin */
 export interface VST3PluginInfo {
@@ -12,6 +12,18 @@ export interface VST3PluginInfo {
   category: 'instrument' | 'effect';
 }
 
+/**
+ * Alias kept for backwards compatibility with W9 stub code.
+ * Prefer VST3PluginInfo for new code.
+ */
+export type VST3PluginDescriptor = VST3PluginInfo;
+
+/**
+ * Alias kept for backwards compatibility with W9 stub code.
+ * Prefer VST3Parameter for new code.
+ */
+export type VST3ParamDescriptor = VST3Parameter;
+
 /** A loaded VST3 plugin instance on a track */
 export interface VST3ActiveInstance {
   instanceId: string;
@@ -20,6 +32,8 @@ export interface VST3ActiveInstance {
   vendor: string;
   trackId: string;
   enabled: boolean;
+  /** Whether the instance is currently reachable via the bridge. */
+  online: boolean;
   parameters: VST3Parameter[];
   presets: string[];
   activePreset: string | null;

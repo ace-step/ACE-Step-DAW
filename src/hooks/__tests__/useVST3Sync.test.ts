@@ -21,8 +21,7 @@ describe('useVST3Sync', () => {
       connectionStatus: 'connected',
       connectionError: null,
       companionVersion: '1.0.0',
-      scannedPlugins: [],
-      lastScanTime: null,
+      plugins: [],
       instances: {},
     });
   });
@@ -44,15 +43,19 @@ describe('useVST3Sync', () => {
 
     renderHook(() => useVST3Sync());
 
-    // Add a VST3 instance to the store
+    // Add a VST3 instance to the store via _upsertInstance
     await act(async () => {
-      useVST3Store.getState().addInstance({
+      useVST3Store.getState()._upsertInstance({
         instanceId: 'inst-1',
-        pluginUid: 'com.test.Plugin',
+        pluginId: 'com.test.Plugin',
+        pluginName: 'Test Plugin',
+        vendor: 'Test',
         trackId: 'track-1',
-        bypassed: false,
-        params: {},
+        enabled: true,
         online: false,
+        parameters: [],
+        presets: [],
+        activePreset: null,
       });
     });
 
@@ -67,11 +70,15 @@ describe('useVST3Sync', () => {
       instances: {
         'inst-1': {
           instanceId: 'inst-1',
-          pluginUid: 'com.test.Plugin',
+          pluginId: 'com.test.Plugin',
+          pluginName: 'Test Plugin',
+          vendor: 'Test',
           trackId: 'track-1',
-          bypassed: false,
-          params: {},
+          enabled: true,
           online: true,
+          parameters: [],
+          presets: [],
+          activePreset: null,
         },
       },
     });
@@ -92,11 +99,15 @@ describe('useVST3Sync', () => {
       instances: {
         'inst-1': {
           instanceId: 'inst-1',
-          pluginUid: 'com.test.Plugin',
+          pluginId: 'com.test.Plugin',
+          pluginName: 'Test Plugin',
+          vendor: 'Test',
           trackId: 'track-1',
-          bypassed: false,
-          params: {},
+          enabled: true,
           online: true,
+          parameters: [],
+          presets: [],
+          activePreset: null,
         },
       },
     });
@@ -118,11 +129,15 @@ describe('useVST3Sync', () => {
       instances: {
         'inst-1': {
           instanceId: 'inst-1',
-          pluginUid: 'com.test.Plugin',
+          pluginId: 'com.test.Plugin',
+          pluginName: 'Test Plugin',
+          vendor: 'Test',
           trackId: 'track-1',
-          bypassed: false,
-          params: {},
+          enabled: true,
           online: false,
+          parameters: [],
+          presets: [],
+          activePreset: null,
         },
       },
     });

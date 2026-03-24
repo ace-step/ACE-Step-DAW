@@ -188,7 +188,11 @@ describe('VST3PluginScanner', () => {
     });
 
     it('matches by vendor (case-insensitive)', () => {
-      expect(scanner.search('pro audio')).toEqual([plugins[1]]);
+      // "pro audio" matches both "EQ Master" (vendor: "Pro Audio") and "Delay Pro" (name contains "Pro", vendor: "Acme Audio" contains "Audio")
+      const results = scanner.search('pro audio');
+      expect(results).toHaveLength(2);
+      expect(results[0].uid).toBe('2');
+      expect(results[1].uid).toBe('3');
     });
 
     it('matches by subcategory (case-insensitive)', () => {

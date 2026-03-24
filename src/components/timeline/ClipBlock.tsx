@@ -955,15 +955,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             data-testid="resize-indicator-left"
           >
             <span
-              className="rounded-sm"
               style={{
                 color: '#000',
-                backgroundColor: '#fff',
-                fontSize: 11,
-                fontWeight: 800,
+                fontSize: 12,
+                fontWeight: 900,
                 fontFamily: 'monospace',
                 lineHeight: 1,
-                padding: '1px 2px',
+                WebkitTextStroke: '1px #fff',
               }}
             >[</span>
           </div>
@@ -981,15 +979,13 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             data-testid="resize-indicator-right"
           >
             <span
-              className="rounded-sm"
               style={{
                 color: '#000',
-                backgroundColor: '#fff',
-                fontSize: 11,
-                fontWeight: 800,
+                fontSize: 12,
+                fontWeight: 900,
                 fontFamily: 'monospace',
                 lineHeight: 1,
-                padding: '1px 2px',
+                WebkitTextStroke: '1px #fff',
               }}
             >]</span>
           </div>
@@ -1130,8 +1126,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {totalVersions >= 1 && (
           <div
-            className="absolute top-0 flex items-center gap-0.5 z-20"
-            style={{ right: EDGE_HANDLE_PX + 2 }}
+            className="absolute top-0 flex items-center gap-0.5 z-20 transition-opacity duration-100"
+            style={{ right: EDGE_HANDLE_PX + 2, opacity: hoveredResizeEdge === 'right' ? 0 : 1 }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >

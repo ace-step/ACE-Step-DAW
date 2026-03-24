@@ -4,9 +4,7 @@ import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
-import { CoverModal } from '../generation/CoverModal';
-import { MusicEnhancerPanel } from '../generation/MusicEnhancerPanel';
-import { RepaintModal } from '../generation/RepaintModal';
+import { EnhancePanel } from '../generation/EnhancePanel';
 import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
 import { AudioAnalysisPanel } from '../generation/AudioAnalysisPanel';
 import { StemSeparationModal } from '../generation/StemSeparationModal';
@@ -93,7 +91,7 @@ function EditorShell() {
 
   return (
     <div
-      className="flex flex-col h-screen bg-daw-bg text-zinc-300"
+      className="flex flex-col h-screen min-w-[900px] bg-daw-bg text-zinc-300"
       role="application"
       aria-label="ACE-Step DAW"
       tabIndex={-1}
@@ -140,9 +138,7 @@ function EditorShell() {
       <KeyboardShortcutsDialog />
       {!hasBlockingDialog && <CommandPalette />}
       <ShortcutEditorDialog />
-      <CoverModal />
-      <MusicEnhancerPanel />
-      <RepaintModal />
+      <EnhancePanel />
       <Vocal2BGMModal />
       <AudioAnalysisPanel />
       <StemSeparationModal />

@@ -8,6 +8,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
+import type { StrudelFromMidiOptions } from '../../types/project';
+import { registerStrudelEditorPlaybackStop } from '../../engine/strudelEditorPlayback';
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 // Inject CSS to constrain the autocomplete info panel
@@ -28,7 +30,7 @@ if (typeof document !== 'undefined' && !document.getElementById('strudel-autocom
 
 /* ── Sidebar data ──────────────────────────────────── */
 
-type SidebarTab = 'sounds' | 'reference' | 'console' | 'settings';
+type SidebarTab = 'import' | 'sounds' | 'reference' | 'console' | 'settings';
 
 
 const SOUND_BANKS = [
@@ -42,8 +44,17 @@ const SOUND_BANKS = [
 
 export function StrudelEditor() {
   const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
-  const toggleStrudelPanel = useUIStore((s) => s.toggleStrudelPanel);
+  const openStrudelEditorTrackId = useUIStore((s) => s.openStrudelEditorTrackId);
+  const openPianoRollTrackId = useUIStore((s) => s.openPianoRollTrackId);
+  const openPianoRollClipId = useUIStore((s) => s.openPianoRollClipId);
+  const setOpenStrudelEditor = useUIStore((s) => s.setOpenStrudelEditor);
   const project = useProjectStore((s) => s.project);
+  const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
+  const convertMidiTrackToStrudel = useProjectStore((s) => s.convertMidiTrackToStrudel);
+  const convertMidiFileToStrudel = useProjectStore((s) => s.convertMidiFileToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
+  const captureStrudelVersion = useProjectStore((s) => s.captureStrudelVersion);
+  const restoreStrudelVersion = useProjectStore((s) => s.restoreStrudelVersion);
 
   const [editorHeight, setEditorHeight] = useState(380);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,16 +67,17 @@ export function StrudelEditor() {
   const [activeTab, setActiveTab] = useState<SidebarTab | null>(null);
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
   const [showVersionMenu, setShowVersionMenu] = useState(false);
-
-  const captureStrudelVersion = useProjectStore((s) => s.captureStrudelVersion);
-  const restoreStrudelVersion = useProjectStore((s) => s.restoreStrudelVersion);
-
-  // Find the current strudel track and its versions
-  const strudelTrack = useMemo(
-    () => project?.tracks.find((t) => t.trackType === 'strudel') ?? null,
-    [project],
-  );
-  const versions = strudelTrack?.strudelVersions ?? [];
+  const [importOptions, setImportOptions] = useState<Pick<
+    StrudelFromMidiOptions,
+    'notationType' | 'timingStyle' | 'quantize' | 'measuresPerLine' | 'soundMapping' | 'targetTrackMode'
+  >>({
+    notationType: 'absolute',
+    timingStyle: 'subdivision',
+    quantize: true,
+    measuresPerLine: 2,
+    soundMapping: 'auto',
+    targetTrackMode: 'currentOrNew',
+  });
 
   const [editorSettings, setEditorSettings] = useState({
     fontSize: 18,
@@ -78,6 +90,36 @@ export function StrudelEditor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stopEditorPlayback = useCallback(() => {
+    if (editorRef.current) {
+      try {
+        editorRef.current.stop();
+      } catch {
+        // Ignore stop failures from stale editor instances.
+      }
+    }
+    setIsPlaying(false);
+  }, []);
+
+  const activeStrudelTrack = useMemo(() => {
+    if (!project) return null;
+    return (
+      (openStrudelEditorTrackId
+        ? project.tracks.find((track) => track.id === openStrudelEditorTrackId && track.trackType === 'strudel')
+        : null)
+      ?? project.tracks.find((track) => track.trackType === 'strudel')
+      ?? null
+    );
+  }, [openStrudelEditorTrackId, project]);
+  const versions = activeStrudelTrack?.strudelVersions ?? [];
+
+  useEffect(() => {
+    if (!strudelPanelOpen || !project || activeStrudelTrack) return;
+    const track = useProjectStore.getState().addTrack('custom', 'strudel');
+    setOpenStrudelEditor(track.id);
+  }, [activeStrudelTrack, project, setOpenStrudelEditor, strudelPanelOpen]);
 
   // Scroll console to bottom
   useEffect(() => { consoleEndRef.current?.scrollIntoView(); }, [consoleMessages]);
@@ -133,7 +175,11 @@ export function StrudelEditor() {
         containerRef.current.innerHTML = '';
 
         const store = useProjectStore.getState();
-        let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
+        let strudelTrack = activeStrudelTrack;
+        if (!strudelTrack) {
+          strudelTrack = store.addTrack('custom', 'strudel');
+          setOpenStrudelEditor(strudelTrack.id);
+        }
         const initialCode = strudelTrack?.strudelCode?.replace(/^\/\/.*\n?/gm, '').trim() || DEFAULT_CODE;
 
         const editor = new codemirrorMod.StrudelMirror({
@@ -147,8 +193,15 @@ export function StrudelEditor() {
           onUpdateState: (state: any) => {
             if (state.activeCode) {
               const st = useProjectStore.getState();
-              let track = st.project?.tracks.find((t) => t.trackType === 'strudel');
-              if (!track) track = st.addTrack('strudel');
+              let track = activeStrudelTrack
+                ?? (openStrudelEditorTrackId
+                  ? st.project?.tracks.find((candidate) => candidate.id === openStrudelEditorTrackId && candidate.trackType === 'strudel')
+                  : undefined)
+                ?? st.project?.tracks.find((candidate) => candidate.trackType === 'strudel');
+              if (!track) {
+                track = st.addTrack('custom', 'strudel');
+                setOpenStrudelEditor(track.id);
+              }
               if (track) st.updateStrudelCode(track.id, state.activeCode);
               setConsoleMessages((prev) => [...prev.slice(-50), `▶ evaluated`]);
             }
@@ -181,24 +234,33 @@ export function StrudelEditor() {
 
     return () => {
       mounted = false;
-      if (editorRef.current) { try { editorRef.current.stop(); } catch { /* */ } editorRef.current = null; }
+      stopEditorPlayback();
+      editorRef.current = null;
       if (containerRef.current) containerRef.current.innerHTML = '';
-      setIsPlaying(false);
     };
-  }, [strudelPanelOpen]);
+  }, [activeStrudelTrack, openStrudelEditorTrackId, setOpenStrudelEditor, stopEditorPlayback, strudelPanelOpen]);
+
+  useEffect(() => {
+    if (!strudelPanelOpen) {
+      registerStrudelEditorPlaybackStop(null);
+      return;
+    }
+
+    registerStrudelEditorPlaybackStop(stopEditorPlayback);
+    return () => registerStrudelEditorPlaybackStop(null);
+  }, [stopEditorPlayback, strudelPanelOpen]);
 
   // Play / Stop
   const togglePlay = useCallback(() => {
     if (!editorRef.current) return;
     if (isPlaying) {
-      editorRef.current.stop();
-      setIsPlaying(false);
+      stopEditorPlayback();
       setConsoleMessages((prev) => [...prev.slice(-50), '⏹ stopped']);
     } else {
       editorRef.current.evaluate();
       setIsPlaying(true);
     }
-  }, [isPlaying]);
+  }, [isPlaying, stopEditorPlayback]);
 
   // Update (re-evaluate while playing)
   const handleUpdate = useCallback(() => {
@@ -220,8 +282,11 @@ export function StrudelEditor() {
         await new Promise((r) => setTimeout(r, 300));
       }
       const store = useProjectStore.getState();
-      let strudelTrack = store.project?.tracks.find((t) => t.trackType === 'strudel');
-      if (!strudelTrack) strudelTrack = store.addTrack('strudel');
+      let strudelTrack = activeStrudelTrack;
+      if (!strudelTrack) {
+        strudelTrack = store.addTrack('custom', 'strudel');
+        setOpenStrudelEditor(strudelTrack.id);
+      }
       if (strudelTrack) {
         await store.freezeStrudelToAudio(strudelTrack.id, bounceBars, (p: number) => setBounceProgress(p));
         setConsoleMessages((prev) => [...prev.slice(-50), `✓ sent ${bounceBars} bars to track`]);
@@ -234,7 +299,67 @@ export function StrudelEditor() {
       setBouncing(false);
       setBounceProgress(0);
     }
-  }, [project, bouncing, bounceBars]);
+  }, [activeStrudelTrack, bounceBars, bouncing, project]);
+
+  const buildImportOptions = useCallback((): Partial<StrudelFromMidiOptions> => ({
+    ...importOptions,
+    keyScale: project?.keyScale ?? null,
+  }), [importOptions, project?.keyScale]);
+
+  const applyConversion = useCallback(async (label: string, run: () => Promise<Awaited<ReturnType<typeof convertMidiTrackToStrudel>>>) => {
+    try {
+      setError(null);
+      const result = await run();
+      if (!result) {
+        setConsoleMessages((prev) => [...prev.slice(-50), `! ${label.toLowerCase()} unavailable`]);
+        return;
+      }
+
+      const applied = await applyStrudelCodeToTrack(
+        result.code,
+        activeStrudelTrack?.id ?? openStrudelEditorTrackId,
+        { label, targetTrackMode: importOptions.targetTrackMode },
+      );
+
+      if (!applied) {
+        setConsoleMessages((prev) => [...prev.slice(-50), `! failed to apply ${label.toLowerCase()}`]);
+        return;
+      }
+
+      setConsoleMessages((prev) => [
+        ...prev.slice(-50),
+        `✓ ${label.toLowerCase()} applied (${result.sourceSummary.noteCount} notes)`,
+        ...result.warnings.map((warning) => `! ${warning}`),
+      ].slice(-50));
+      setActiveTab('console');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `${label} failed`;
+      setError(message);
+      setConsoleMessages((prev) => [...prev.slice(-50), `! ${message}`]);
+    }
+  }, [activeStrudelTrack?.id, applyStrudelCodeToTrack, buildImportOptions, importOptions.targetTrackMode, openStrudelEditorTrackId]);
+
+  const handleConvertCurrentClip = useCallback(async () => {
+    if (!openPianoRollClipId) return;
+    await applyConversion('Convert MIDI Clip', () => convertMidiClipToStrudel(openPianoRollClipId, buildImportOptions()));
+  }, [applyConversion, buildImportOptions, convertMidiClipToStrudel, openPianoRollClipId]);
+
+  const handleConvertCurrentTrack = useCallback(async () => {
+    if (!openPianoRollTrackId) return;
+    await applyConversion('Convert MIDI Track', () => convertMidiTrackToStrudel(openPianoRollTrackId, buildImportOptions()));
+  }, [applyConversion, buildImportOptions, convertMidiTrackToStrudel, openPianoRollTrackId]);
+
+  const handleImportMidiFile = useCallback(async (file: File) => {
+    await applyConversion('Import MIDI File', () => convertMidiFileToStrudel(file, buildImportOptions()));
+  }, [applyConversion, buildImportOptions, convertMidiFileToStrudel]);
+
+  const handleFileInputChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await handleImportMidiFile(file);
+    }
+    event.target.value = '';
+  }, [handleImportMidiFile]);
 
   // Resize
   const onResizeStart = useCallback((e: React.MouseEvent) => {
@@ -296,6 +421,9 @@ export function StrudelEditor() {
           ꩜
         </span>
         <span className="text-[11px] text-zinc-600">Strudel</span>
+        {activeStrudelTrack && (
+          <span className="text-[10px] text-zinc-500 truncate max-w-[180px]">{activeStrudelTrack.displayName}</span>
+        )}
 
         <div className="flex-1" />
 
@@ -303,7 +431,7 @@ export function StrudelEditor() {
         {error && <span className="text-[10px] text-red-400 truncate max-w-[150px]" title={error}>{error}</span>}
 
         {/* Sidebar tabs */}
-        {(['sounds', 'reference', 'console', 'settings'] as SidebarTab[]).map((tab) => (
+        {(['import', 'sounds', 'reference', 'console', 'settings'] as SidebarTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(activeTab === tab ? null : tab)}
@@ -318,10 +446,13 @@ export function StrudelEditor() {
         <div className="w-px h-4 bg-zinc-700 mx-1" />
 
         {/* Version controls */}
-        {strudelTrack && (
+        {activeStrudelTrack && (
           <>
             <button
-              onClick={() => { captureStrudelVersion(strudelTrack.id); setConsoleMessages((prev) => [...prev.slice(-50), '📸 version captured']); }}
+              onClick={() => {
+                captureStrudelVersion(activeStrudelTrack.id);
+                setConsoleMessages((prev) => [...prev.slice(-50), '📸 version captured']);
+              }}
               className="px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200 transition-colors"
               title="Capture current code as a version snapshot"
             >
@@ -341,14 +472,18 @@ export function StrudelEditor() {
               </button>
               {showVersionMenu && versions.length > 0 && (
                 <div className="absolute bottom-full right-0 mb-1 bg-zinc-800 border border-zinc-600 rounded shadow-lg py-0.5 min-w-[180px] max-h-[200px] overflow-y-auto z-20">
-                  {versions.map((v, idx) => (
+                  {versions.map((version, index) => (
                     <button
-                      key={v.id}
-                      onClick={() => { restoreStrudelVersion(strudelTrack.id, idx); setShowVersionMenu(false); setConsoleMessages((prev) => [...prev.slice(-50), `↩ restored v${idx + 1}`]); }}
+                      key={version.id}
+                      onClick={() => {
+                        restoreStrudelVersion(activeStrudelTrack.id, index);
+                        setShowVersionMenu(false);
+                        setConsoleMessages((prev) => [...prev.slice(-50), `↩ restored v${index + 1}`]);
+                      }}
                       className="w-full text-left px-2 py-1 text-[11px] text-zinc-400 hover:bg-zinc-700 hover:text-white flex items-center justify-between"
                     >
-                      <span>{v.label || `v${idx + 1}`}</span>
-                      <span className="text-[9px] text-zinc-600">{new Date(v.timestamp).toLocaleTimeString()}</span>
+                      <span>{version.label || `v${index + 1}`}</span>
+                      <span className="text-[9px] text-zinc-600">{new Date(version.timestamp).toLocaleTimeString()}</span>
                     </button>
                   ))}
                 </div>
@@ -395,11 +530,11 @@ export function StrudelEditor() {
         </button>
 
         {/* Freeze to MIDI / Drums */}
-        {strudelTrack && (
+        {activeStrudelTrack && (
           <>
             <button
               onClick={async () => {
-                const track = await useProjectStore.getState().freezeStrudelToMidi(strudelTrack.id, bounceBars);
+                const track = await useProjectStore.getState().freezeStrudelToMidi(activeStrudelTrack.id, bounceBars);
                 setConsoleMessages((prev) => [...prev.slice(-50), track ? '🎹 frozen to MIDI' : '⚠ no melodic content']);
               }}
               disabled={!project || isLoading}
@@ -410,7 +545,7 @@ export function StrudelEditor() {
             </button>
             <button
               onClick={async () => {
-                const track = await useProjectStore.getState().freezeStrudelToDrumMachine(strudelTrack.id, bounceBars);
+                const track = await useProjectStore.getState().freezeStrudelToDrumMachine(activeStrudelTrack.id, bounceBars);
                 setConsoleMessages((prev) => [...prev.slice(-50), track ? '🥁 frozen to drums' : '⚠ no percussion content']);
               }}
               disabled={!project || isLoading}
@@ -423,7 +558,7 @@ export function StrudelEditor() {
         )}
 
         {/* Close */}
-        <button onClick={() => { if (editorRef.current) { try { editorRef.current.stop(); } catch {} } setIsPlaying(false); toggleStrudelPanel(); }}
+        <button onClick={() => { stopEditorPlayback(); setOpenStrudelEditor(null); }}
           className="flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-200" title="Close">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2l6 6M8 2l-6 6" /></svg>
         </button>
@@ -446,6 +581,101 @@ export function StrudelEditor() {
         {/* Sidebar */}
         {activeTab && (
           <div className={`w-[240px] shrink-0 border-l border-zinc-700/60 bg-[#111118] overflow-hidden text-[12px]`}>
+            {activeTab === 'import' && (
+              <div className="p-3 space-y-3 text-[11px]">
+                <div>
+                  <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">MIDI to Strudel</h3>
+                  <p className="mt-1 text-[10px] text-zinc-500">Convert MIDI sources into editable Strudel code on the current Strudel track.</p>
+                </div>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Notation</span>
+                  <select
+                    value={importOptions.notationType}
+                    onChange={(e) => setImportOptions((current) => ({ ...current, notationType: e.target.value as StrudelFromMidiOptions['notationType'] }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200"
+                  >
+                    <option value="absolute">Absolute</option>
+                    <option value="relative">Relative</option>
+                  </select>
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Timing</span>
+                  <select
+                    value={importOptions.timingStyle}
+                    onChange={(e) => setImportOptions((current) => ({ ...current, timingStyle: e.target.value as StrudelFromMidiOptions['timingStyle'] }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200"
+                  >
+                    <option value="subdivision">Subdivision</option>
+                    <option value="absoluteDuration">Absolute duration</option>
+                  </select>
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Sound</span>
+                  <select
+                    value={importOptions.soundMapping}
+                    onChange={(e) => setImportOptions((current) => ({ ...current, soundMapping: e.target.value as StrudelFromMidiOptions['soundMapping'] }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="piano">Piano</option>
+                    <option value="sawtooth">Sawtooth</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
+                  </select>
+                </label>
+
+                <label className="flex items-center justify-between text-zinc-300">
+                  <span>Quantize to grid</span>
+                  <input
+                    type="checkbox"
+                    checked={importOptions.quantize}
+                    onChange={(e) => setImportOptions((current) => ({ ...current, quantize: e.target.checked }))}
+                    className="accent-daw-accent"
+                  />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Destination</span>
+                  <select
+                    value={importOptions.targetTrackMode}
+                    onChange={(e) => setImportOptions((current) => ({ ...current, targetTrackMode: e.target.value as StrudelFromMidiOptions['targetTrackMode'] }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-zinc-200"
+                  >
+                    <option value="currentOrNew">Current or new Strudel track</option>
+                    <option value="alwaysNew">Always create new Strudel track</option>
+                  </select>
+                </label>
+
+                <div className="space-y-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={!openPianoRollClipId}
+                    onClick={() => void handleConvertCurrentClip()}
+                    className="w-full rounded bg-violet-600/20 px-2 py-1.5 text-left text-[11px] text-violet-200 transition-colors hover:bg-violet-600/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Convert Current MIDI Clip
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!openPianoRollTrackId}
+                    onClick={() => void handleConvertCurrentTrack()}
+                    className="w-full rounded bg-cyan-600/15 px-2 py-1.5 text-left text-[11px] text-cyan-100 transition-colors hover:bg-cyan-600/25 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Convert Current MIDI Track
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full rounded bg-amber-600/15 px-2 py-1.5 text-left text-[11px] text-amber-100 transition-colors hover:bg-amber-600/25"
+                  >
+                    Import .mid File
+                  </button>
+                </div>
+              </div>
+            )}
             {activeTab === 'sounds' && (
               <div className="p-3 space-y-3">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider">Sound Banks</h3>
@@ -557,6 +787,13 @@ export function StrudelEditor() {
 
       {showBarsMenu && <div className="fixed inset-0 z-[1]" onClick={() => setShowBarsMenu(false)} />}
       {showVersionMenu && <div className="fixed inset-0 z-[1]" onClick={() => setShowVersionMenu(false)} />}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".mid,.midi"
+        className="hidden"
+        onChange={(event) => { void handleFileInputChange(event); }}
+      />
     </div>
   );
 }

@@ -113,7 +113,7 @@ export interface UIState {
   openSequencerTrackId: string | null;
   openDrumMachineTrackId: string | null;
   openStrudelEditorTrackId: string | null;
-  /** Whether the global Strudel REPL panel is open (not tied to a track). */
+  /** Whether the Strudel REPL panel is open. */
   strudelPanelOpen: boolean;
   openPianoRollTrackId: string | null;
   openPianoRollClipId: string | null;
@@ -156,13 +156,14 @@ export interface UIState {
   loopBrowserSearch: string;
   previewingLoopId: string | null;
 
-  // Music Enhancer floating panel
-  musicEnhancerOpen: boolean;
-
-  // Cover / Repaint modals
-  coverClipId: string | null;
-  repaintClipId: string | null;
-  repaintRange: { start: number; end: number } | null;
+  // Unified Enhance Panel (replaces musicEnhancerOpen, coverClipId, repaintClipId, repaintRange)
+  enhancerOpen: boolean;
+  enhancerTarget: {
+    clipId: string;
+    trackId: string;
+    range: { start: number; end: number } | null;
+    mode: 'cover' | 'repaint';
+  } | null;
 
   // Vocal2BGM / Audio Analysis
   vocal2bgmClipId: string | null;
@@ -321,12 +322,10 @@ export interface UIState {
   setLoopBrowserSearch: (v: string) => void;
   setPreviewingLoopId: (id: string | null) => void;
 
-  // Music Enhancer floating panel
-  setMusicEnhancerOpen: (open: boolean) => void;
-
-  // Cover / Repaint modals
-  setCoverModal: (clipId: string | null) => void;
-  setRepaintModal: (clipId: string | null, range?: { start: number; end: number } | null) => void;
+  // Unified Enhance Panel
+  openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
+  openEnhancerFromSelection: () => void;
+  closeEnhancer: () => void;
 
   // Vocal2BGM / Audio Analysis
   setVocal2BGMModal: (clipId: string | null) => void;
@@ -537,11 +536,8 @@ export const useUIStore = create<UIState>()(
   loopBrowserSearch: '',
   previewingLoopId: null,
 
-  musicEnhancerOpen: false,
-
-  coverClipId: null,
-  repaintClipId: null,
-  repaintRange: null,
+  enhancerOpen: false,
+  enhancerTarget: null,
 
   vocal2bgmClipId: null,
   analysisClipId: null,
@@ -833,6 +829,7 @@ export const useUIStore = create<UIState>()(
       ? { scope: 'strudel' as const, trackId }
       : { scope: 'timeline' as const, trackId: state.keyboardContext.trackId },
     openStrudelEditorTrackId: trackId,
+    strudelPanelOpen: Boolean(trackId),
     activeBottomPanel: trackId ? 'strudel' : null,
     historyFocusScope: trackId ? 'track' : 'arrangement',
     historyFocusTrackId: trackId,
@@ -842,7 +839,7 @@ export const useUIStore = create<UIState>()(
     strudelPanelOpen: !state.strudelPanelOpen,
     activeBottomPanel: !state.strudelPanelOpen ? 'strudel' : null,
     keyboardContext: !state.strudelPanelOpen
-      ? { scope: 'strudel' as const, trackId: null }
+      ? { scope: 'strudel' as const, trackId: state.openStrudelEditorTrackId }
       : { scope: 'timeline' as const, trackId: state.keyboardContext.trackId },
   })),
   setOpenPianoRoll: (trackId, clipId = null) => set((state) => ({
@@ -920,10 +917,44 @@ export const useUIStore = create<UIState>()(
   setLoopBrowserSearch: (v) => set({ loopBrowserSearch: v }),
   setPreviewingLoopId: (id) => set({ previewingLoopId: id }),
 
-  setMusicEnhancerOpen: (open) => set({ musicEnhancerOpen: open }),
-
-  setCoverModal: (clipId) => set({ coverClipId: clipId }),
-  setRepaintModal: (clipId, range = null) => set({ repaintClipId: clipId, repaintRange: range }),
+  openEnhancer: (clipId, trackId, range = null) => {
+    const clip = useProjectStore.getState().getClipById(clipId);
+    if (!clip) return;
+    const clipStart = clip.startTime;
+    const clipEnd = clip.startTime + clip.duration;
+    // Auto-infer mode: if range exists and doesn't cover full clip → repaint
+    let mode: 'cover' | 'repaint' = 'cover';
+    if (range) {
+      const coversFullClip = range.start <= clipStart + 0.01 && range.end >= clipEnd - 0.01;
+      if (!coversFullClip) mode = 'repaint';
+    }
+    set({ enhancerOpen: true, enhancerTarget: { clipId, trackId, range, mode } });
+  },
+  openEnhancerFromSelection: () => {
+    const { selectWindow } = get();
+    if (!selectWindow) {
+      // Open with no clip — panel will show guidance
+      set({ enhancerOpen: true, enhancerTarget: null });
+      return;
+    }
+    const project = useProjectStore.getState().project;
+    if (!project) return;
+    // Find first overlapping clip
+    for (const track of project.tracks) {
+      if (!selectWindow.trackIds.includes(track.id)) continue;
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (clip.startTime < selectWindow.endTime && clipEnd > selectWindow.startTime) {
+          const range = { start: selectWindow.startTime, end: selectWindow.endTime };
+          get().openEnhancer(clip.id, track.id, range);
+          return;
+        }
+      }
+    }
+    // No clip found in selection — open with guidance
+    set({ enhancerOpen: true, enhancerTarget: null });
+  },
+  closeEnhancer: () => set({ enhancerOpen: false, enhancerTarget: null }),
 
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
@@ -1189,6 +1220,7 @@ function buildCommandPaletteContext(state: UIState) {
       removeClip: projectStore.removeClip,
       setEditingClip: state.setEditingClip,
       deselectAll: state.deselectAll,
+      openEnhancer: state.openEnhancer,
     },
   };
 }

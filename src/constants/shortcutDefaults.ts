@@ -21,6 +21,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'clips.edit',            category: 'clips',     label: 'Edit Selected Clip',          defaultCombo: { code: 'KeyE' }, contexts: ['timeline'] },
   { id: 'clips.generate',        category: 'clips',     label: 'Generate Selected Clip',      defaultCombo: { code: 'Enter', mod: true }, contexts: ['timeline'] },
   { id: 'clips.toggleMute',      category: 'clips',     label: 'Toggle Clip Mute',            defaultCombo: { code: 'Digit0' }, contexts: ['timeline'] },
+  { id: 'clips.enhance',         category: 'clips',     label: 'Enhance Selected Clip',       defaultCombo: { code: 'KeyE', shift: true }, contexts: ['timeline'] },
 
   { id: 'tracks.mute',           category: 'tracks',    label: 'Toggle Focused Track Mute',   defaultCombo: { code: 'KeyM' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.solo',           category: 'tracks',    label: 'Toggle Focused Track Solo',   defaultCombo: { code: 'KeyS', shift: true }, contexts: ['timeline', 'mixer', 'pianoRoll'] },

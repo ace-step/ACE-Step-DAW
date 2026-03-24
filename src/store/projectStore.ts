@@ -52,6 +52,8 @@ import type {
   SessionScene,
   SessionState,
   PlaybackLatencySettings,
+  StrudelFromMidiOptions,
+  StrudelFromMidiResult,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
@@ -712,12 +714,20 @@ export interface ProjectState {
   getStrudelPatternInfo: (trackId: string) => Promise<import('../engine/strudelEngine').StrudelPatternInfo | null>;
   /** Freeze/bounce strudel track audio to a new stems track with an audio clip. */
   freezeStrudelToAudio: (trackId: string, bars: number, onProgress?: (progress: number) => void) => Promise<Track>;
-  /** Convert strudel pattern to a new piano roll track with MIDI notes. */
+  /** Freeze strudel code into a piano roll track by evaluating the pattern without audio. */
   freezeStrudelToMidi: (trackId: string, bars?: number) => Promise<Track | null>;
-  /** Convert strudel percussion pattern to a new sequencer track. */
+  /** Freeze strudel percussion into a sequencer track and visible timeline clip. */
   freezeStrudelToDrumMachine: (trackId: string, bars?: number, stepsPerBar?: number) => Promise<Track | null>;
   /** Scaffold 4 coordinated strudel tracks from a genre template. */
-  scaffoldStrudelArrangement: (genre: string) => string[] | Promise<string[]>;
+  scaffoldStrudelArrangement: (genre: string) => Promise<string[]>;
+  /** Convert a MIDI clip to Strudel code without mutating the source clip. */
+  convertMidiClipToStrudel: (clipId: string, options?: Partial<StrudelFromMidiOptions>) => Promise<StrudelFromMidiResult | null>;
+  /** Convert all MIDI clips on a track to Strudel code without mutating the source track. */
+  convertMidiTrackToStrudel: (trackId: string, options?: Partial<StrudelFromMidiOptions>) => Promise<StrudelFromMidiResult | null>;
+  /** Convert an uploaded .mid file to Strudel code without creating MIDI tracks. */
+  convertMidiFileToStrudel: (file: File, options?: Partial<StrudelFromMidiOptions>) => Promise<StrudelFromMidiResult | null>;
+  /** Write Strudel code into a target Strudel track, creating one if needed. */
+  applyStrudelCodeToTrack: (code: string, targetTrackId?: string | null, options?: { label?: string; targetTrackMode?: StrudelFromMidiOptions['targetTrackMode'] }) => Promise<{ trackId: string } | null>;
   /** Capture current strudel code as a named version snapshot. */
   captureStrudelVersion: (trackId: string, label?: string) => void;
   /** Restore strudel code from a previously captured version. */
@@ -5112,8 +5122,9 @@ export const useProjectStore = create<ProjectState>()(
 
   freezeStrudelToMidi: async (trackId, bars = 4) => {
     const state = get();
+    if (_isViewerMode()) return null;
     if (!state.project) return null;
-    const track = state.project.tracks.find((t) => t.id === trackId);
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track || track.trackType !== 'strudel') return null;
     if (!track.strudelCode?.trim()) return null;
 
@@ -5121,21 +5132,15 @@ export const useProjectStore = create<ProjectState>()(
 
     const bpm = state.project.bpm ?? 120;
     const beatsPerBar = typeof state.project.timeSignature === 'number' ? state.project.timeSignature : 4;
-
-    // Evaluate pattern (pure, no audio)
     const { evaluateStrudelPatternPure, queryPatternEvents } = await import('../engine/strudelEngine');
     const pattern = await evaluateStrudelPatternPure(track.strudelCode);
     if (!pattern) return null;
 
     const events = queryPatternEvents(pattern, 0, bars);
-
-    // Convert to MIDI notes
     const { strudelEventsToMidiNotes } = await import('../services/strudelConversion');
     const midiNotes = strudelEventsToMidiNotes(events, beatsPerBar);
-
     if (midiNotes.length === 0) return null;
 
-    // Create a new pianoRoll track
     const newTrack = createTrackFromTemplate(
       get().project!.tracks,
       'keyboard',
@@ -5144,7 +5149,6 @@ export const useProjectStore = create<ProjectState>()(
     newTrack.displayName = `${track.displayName} (MIDI)`;
     newTrack.color = track.color;
 
-    // Create clip with MIDI data
     const durationSeconds = (bars * beatsPerBar * 60) / bpm;
     const clipId = uuidv4();
     newTrack.clips = [{
@@ -5170,7 +5174,15 @@ export const useProjectStore = create<ProjectState>()(
     const nextProject = ensureProjectSession({
       ...get().project!,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(
+        newTracks,
+        get().project!.measures,
+        bpm,
+        get().project!.timeSignature,
+        get().project!.timeSignatureDenominator,
+        get().project!.tempoMap,
+        get().project!.timeSignatureMap,
+      ),
       tracks: newTracks,
     });
     set({ project: nextProject });
@@ -5179,29 +5191,24 @@ export const useProjectStore = create<ProjectState>()(
 
   freezeStrudelToDrumMachine: async (trackId, bars = 1, stepsPerBar = 16) => {
     const state = get();
+    if (_isViewerMode()) return null;
     if (!state.project) return null;
-    const track = state.project.tracks.find((t) => t.id === trackId);
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
     if (!track || track.trackType !== 'strudel') return null;
     if (!track.strudelCode?.trim()) return null;
 
     _pushHistory(state.project, { scope: 'arrangement', label: 'Freeze strudel to drum machine' });
 
     const beatsPerBar = typeof state.project.timeSignature === 'number' ? state.project.timeSignature : 4;
-
-    // Evaluate pattern (pure, no audio)
     const { evaluateStrudelPatternPure, queryPatternEvents } = await import('../engine/strudelEngine');
     const pattern = await evaluateStrudelPatternPure(track.strudelCode);
     if (!pattern) return null;
 
     const events = queryPatternEvents(pattern, 0, bars);
-
-    // Convert to sequencer pattern
     const { strudelEventsToDrumPattern, sequencerPatternToMidiData } = await import('../services/strudelConversion');
     const sequencerPattern = strudelEventsToDrumPattern(events, bars, stepsPerBar);
-
     if (sequencerPattern.rows.length === 0) return null;
 
-    // Create a new sequencer track
     const newTrack = createTrackFromTemplate(
       get().project!.tracks,
       'percussion',
@@ -5212,9 +5219,6 @@ export const useProjectStore = create<ProjectState>()(
     newTrack.color = track.color;
 
     const bpm = state.project.bpm ?? 120;
-
-    // Create a clip with midiData so the pattern is visible in the timeline.
-    // Repeat the pattern to fill the project's measure count (sequencer loops during playback).
     const singleBarMidi = sequencerPatternToMidiData(sequencerPattern, beatsPerBar);
     if (singleBarMidi.notes.length > 0) {
       const patternBeats = bars * beatsPerBar;
@@ -5250,11 +5254,20 @@ export const useProjectStore = create<ProjectState>()(
         midiData: { notes: allNotes, grid: singleBarMidi.grid },
       }];
     }
+
     const newTracks = [...get().project!.tracks, newTrack];
     const nextProject = ensureProjectSession({
       ...get().project!,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(
+        newTracks,
+        get().project!.measures,
+        bpm,
+        get().project!.timeSignature,
+        get().project!.timeSignatureDenominator,
+        get().project!.tempoMap,
+        get().project!.timeSignatureMap,
+      ),
       tracks: newTracks,
     });
     set({ project: nextProject });
@@ -5263,6 +5276,7 @@ export const useProjectStore = create<ProjectState>()(
 
   scaffoldStrudelArrangement: async (genre) => {
     const state = get();
+    if (_isViewerMode()) return [];
     if (!state.project) return [];
 
     const { getArrangementTemplate } = await import('../services/strudelArrangement');
@@ -5270,10 +5284,10 @@ export const useProjectStore = create<ProjectState>()(
 
     _pushHistory(state.project, { scope: 'arrangement', label: `Scaffold strudel arrangement (${template.genre})` });
 
-    const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
     const genreLabel = capitalize(template.genre);
 
-    const roles: { role: string; code: string }[] = [
+    const roles: Array<{ role: string; code: string }> = [
       { role: 'Drums', code: template.drums },
       { role: 'Bass', code: template.bass },
       { role: 'Chords', code: template.chords },
@@ -5281,7 +5295,7 @@ export const useProjectStore = create<ProjectState>()(
     ];
 
     const trackIds: string[] = [];
-    let currentTracks = [...get().project!.tracks];
+    let currentTracks = [...state.project.tracks];
 
     for (const { role, code } of roles) {
       const newTrack = createTrackFromTemplate(currentTracks, 'custom', 'strudel', {
@@ -5294,57 +5308,200 @@ export const useProjectStore = create<ProjectState>()(
 
     const bpm = state.project.bpm ?? 120;
     const nextProject = ensureProjectSession({
-      ...get().project!,
+      ...state.project,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(currentTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(
+        currentTracks,
+        state.project.measures,
+        bpm,
+        state.project.timeSignature,
+        state.project.timeSignatureDenominator,
+        state.project.tempoMap,
+        state.project.timeSignatureMap,
+      ),
       tracks: currentTracks,
     });
     set({ project: nextProject });
     return trackIds;
   },
 
-  captureStrudelVersion: (trackId, label) => {
+  convertMidiClipToStrudel: async (clipId, partialOptions) => {
     const state = get();
-    if (!state.project) return;
-    const track = state.project.tracks.find((t) => t.id === trackId);
-    if (!track || track.trackType !== 'strudel' || !track.strudelCode) return;
+    if (!state.project) return null;
+    const track = state.project.tracks.find((candidate) => candidate.clips.some((clip) => clip.id === clipId));
+    const clip = track?.clips.find((candidate) => candidate.id === clipId);
+    if (!track || !clip?.midiData) return null;
 
-    const version = {
-      id: uuidv4(),
-      code: track.strudelCode,
-      timestamp: Date.now(),
-      label,
+    const {
+      convertMidiClipToStrudelCode,
+      createDefaultStrudelFromMidiOptions,
+    } = await import('../services/strudelConversion');
+
+    const options = {
+      ...createDefaultStrudelFromMidiOptions(state.project),
+      ...partialOptions,
     };
+    return convertMidiClipToStrudelCode(clip, track, state.project, options);
+  },
 
-    const versions = [...(track.strudelVersions ?? []), version];
+  convertMidiTrackToStrudel: async (trackId, partialOptions) => {
+    const state = get();
+    if (!state.project) return null;
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track) return null;
+
+    const {
+      convertMidiTrackToStrudelCode,
+      createDefaultStrudelFromMidiOptions,
+    } = await import('../services/strudelConversion');
+
+    const options = {
+      ...createDefaultStrudelFromMidiOptions(state.project),
+      ...partialOptions,
+    };
+    return convertMidiTrackToStrudelCode(track, state.project, options);
+  },
+
+  convertMidiFileToStrudel: async (file, partialOptions) => {
+    const state = get();
+    if (!state.project) return null;
+
+    try {
+      const parsed = parseMidiFile(await file.arrayBuffer());
+      const {
+        convertParsedMidiFileToStrudelCode,
+        createDefaultStrudelFromMidiOptions,
+      } = await import('../services/strudelConversion');
+
+      const options = {
+        ...createDefaultStrudelFromMidiOptions(state.project),
+        ...partialOptions,
+      };
+      return convertParsedMidiFileToStrudelCode(parsed, file.name.replace(/\.(mid|midi)$/i, ''), options);
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  },
+
+  applyStrudelCodeToTrack: async (code, targetTrackId, options) => {
+    const state = get();
+    if (_isViewerMode()) return null;
+    if (!state.project) return null;
+
+    const targetMode = options?.targetTrackMode ?? 'currentOrNew';
+    let nextTracks = [...state.project.tracks];
+    let targetTrack = targetTrackId
+      ? nextTracks.find((track) => track.id === targetTrackId && track.trackType === 'strudel')
+      : undefined;
+
+    if (!targetTrack && targetMode === 'currentOrNew') {
+      targetTrack = nextTracks.find((track) => track.trackType === 'strudel');
+    }
+
+    if (!targetTrack || targetMode === 'alwaysNew') {
+      targetTrack = createTrackFromTemplate(nextTracks, 'custom', 'strudel');
+      nextTracks = [...nextTracks, targetTrack];
+    }
+
+    _pushHistory(state.project, {
+      scope: 'track',
+      label: options?.label ?? 'Apply Strudel code',
+      trackId: targetTrack.id,
+    });
+
+    nextTracks = nextTracks.map((track) => {
+      if (track.id !== targetTrack!.id) return track;
+
+      const previousCode = track.strudelCode?.trim();
+      const nextVersions = previousCode && previousCode !== code.trim()
+        ? [
+            ...(track.strudelVersions ?? []),
+            {
+              id: uuidv4(),
+              code: track.strudelCode ?? '',
+              timestamp: Date.now(),
+              label: options?.label ? `${options.label} (previous)` : 'Auto snapshot',
+            },
+          ]
+        : (track.strudelVersions ?? []);
+
+      return {
+        ...track,
+        strudelCode: code,
+        strudelVersions: nextVersions.length > 0 ? nextVersions : track.strudelVersions,
+      };
+    });
+
     set({
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, strudelVersions: versions } : t,
-        ),
+        tracks: nextTracks,
+      },
+    });
+
+    const appliedTrackId = targetTrack.id;
+    queueMicrotask(() => {
+      void import('./uiStore').then(({ useUIStore }) => {
+        useUIStore.getState().setOpenStrudelEditor(appliedTrackId);
+      }).catch(() => {
+        // Ignore UI sync failures during non-UI action usage.
+      });
+    });
+
+    return { trackId: appliedTrackId };
+  },
+
+  captureStrudelVersion: (trackId, label) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId);
+    if (!track || track.trackType !== 'strudel' || !track.strudelCode) return;
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((candidate) => (
+          candidate.id === trackId
+            ? {
+                ...candidate,
+                strudelVersions: [
+                  ...(candidate.strudelVersions ?? []),
+                  {
+                    id: uuidv4(),
+                    code: candidate.strudelCode ?? '',
+                    timestamp: Date.now(),
+                    label,
+                  },
+                ],
+              }
+            : candidate
+        )),
       },
     });
   },
 
   restoreStrudelVersion: (trackId, versionIndex) => {
     const state = get();
+    if (_isViewerMode()) return;
     if (!state.project) return;
-    const track = state.project.tracks.find((t) => t.id === trackId);
-    if (!track || track.trackType !== 'strudel') return;
-    const version = track.strudelVersions?.[versionIndex];
-    if (!version) return;
+    const track = state.project.tracks.find((candidate) => candidate.id === trackId && candidate.trackType === 'strudel');
+    const version = track?.strudelVersions?.[versionIndex];
+    if (!track || !version) return;
 
-    _pushHistory(state.project, { scope: 'track', label: 'Restore strudel version' });
-
+    _pushHistory(state.project, { scope: 'track', label: 'Restore strudel version', trackId });
     set({
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, strudelCode: version.code } : t,
-        ),
+        tracks: state.project.tracks.map((candidate) => (
+          candidate.id === trackId
+            ? { ...candidate, strudelCode: version.code }
+            : candidate
+        )),
       },
     });
   },

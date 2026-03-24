@@ -81,6 +81,7 @@ export interface CommandPaletteContext {
     removeClip: (clipId: string) => void;
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
+    openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
   };
 }
 
@@ -698,6 +699,26 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
         'Selected clip action',
       ),
     );
+
+    // Find the clip and its track for enhance command
+    const selectedClip = context.project?.tracks
+      .flatMap((t) => t.clips.map((c) => ({ clip: c, trackId: t.id })))
+      .find((item) => item.clip.id === selectedClipId);
+    if (selectedClip && selectedClip.clip.generationStatus === 'ready') {
+      commands.push(
+        createTrackCommand(
+          'clip:enhance-selected',
+          'Enhance Selected Clip',
+          'Clips',
+          'action',
+          ['clip', 'enhance', 'selected', 'cover', 'repaint', 'ai'],
+          ['enhance clip', 'enhance selected', 'open enhancer'],
+          () => context.actions.openEnhancer(selectedClipId, selectedClip.trackId),
+          ['Shift', 'E'],
+          'Selected clip action',
+        ),
+      );
+    }
   }
 
   if (context.selectedClipIds.length > 0) {

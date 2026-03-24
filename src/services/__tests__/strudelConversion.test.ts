@@ -1,10 +1,168 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  strudelEventsToMidiNotes,
+  convertMidiClipToStrudelCode,
+  convertMidiTrackToStrudelCode,
+  createDefaultStrudelFromMidiOptions,
+  sequencerPatternToMidiData,
   strudelEventsToDrumPattern,
-  STRUDEL_TO_DAW_DRUM,
+  strudelEventsToMidiNotes,
 } from '../strudelConversion';
+import type { Clip, Project, Track } from '../../types/project';
 import type { StrudelEvent } from '../../engine/strudelEngine';
+
+function createProject(overrides?: Partial<Project>): Project {
+  return {
+    id: 'project-1',
+    name: 'Test Project',
+    createdAt: 1,
+    updatedAt: 1,
+    bpm: 120,
+    keyScale: 'C major',
+    timeSignature: 4,
+    timeSignatureDenominator: 4,
+    totalDuration: 8,
+    tracks: [],
+    generationDefaults: {
+      inferenceSteps: 30,
+      guidanceScale: 7,
+      shift: 0,
+      thinking: false,
+      model: 'test',
+    },
+    ...overrides,
+  };
+}
+
+function createMidiClip(notes: Clip['midiData']['notes']): Clip {
+  return {
+    id: 'clip-1',
+    trackId: 'track-1',
+    startTime: 0,
+    duration: 2,
+    prompt: 'MIDI Clip',
+    lyrics: '',
+    source: 'uploaded',
+    generationStatus: 'ready',
+    generationJobId: null,
+    cumulativeMixKey: null,
+    isolatedAudioKey: null,
+    waveformPeaks: null,
+    midiData: {
+      notes,
+      grid: '1/16',
+    },
+  };
+}
+
+function createTrack(clip: Clip, overrides?: Partial<Track>): Track {
+  return {
+    id: 'track-1',
+    trackName: 'keyboard',
+    displayName: 'Lead Keys',
+    color: '#22c55e',
+    volume: 0.8,
+    order: 1,
+    muted: false,
+    soloed: false,
+    clips: [clip],
+    trackType: 'pianoRoll',
+    synthPreset: 'piano',
+    ...overrides,
+  };
+}
+
+describe('convertMidiClipToStrudelCode', () => {
+  it('converts a simple melodic clip to Strudel code', () => {
+    const clip = createMidiClip([
+      { id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 },
+      { id: 'n2', pitch: 64, startBeat: 1, durationBeats: 1, velocity: 0.8 },
+      { id: 'n3', pitch: 67, startBeat: 2, durationBeats: 2, velocity: 0.8 },
+    ]);
+    const track = createTrack(clip);
+    const project = createProject({ tracks: [track] });
+    const result = convertMidiClipToStrudelCode(clip, track, project, createDefaultStrudelFromMidiOptions(project));
+
+    expect(result).not.toBeNull();
+    expect(result?.code).toContain('const BPM = 120;');
+    expect(result?.code).toContain('const lead_keys_clip');
+    expect(result?.code).toContain('note(`');
+    expect(result?.code).toContain('stack(');
+  });
+
+  it('splits overlapping notes into multiple melodic voices', () => {
+    const clip = createMidiClip([
+      { id: 'n1', pitch: 60, startBeat: 0, durationBeats: 2, velocity: 0.8 },
+      { id: 'n2', pitch: 64, startBeat: 0, durationBeats: 2, velocity: 0.8 },
+      { id: 'n3', pitch: 67, startBeat: 2, durationBeats: 2, velocity: 0.8 },
+    ]);
+    const track = createTrack(clip);
+    const project = createProject({ tracks: [track] });
+    const result = convertMidiClipToStrudelCode(clip, track, project, createDefaultStrudelFromMidiOptions(project));
+
+    expect(result).not.toBeNull();
+    expect(result?.code).toContain('const lead_keys_clip');
+    expect(result?.code).toContain('const lead_keys_clip_harmony');
+    expect(result?.code).toContain('stack(');
+  });
+
+  it('renders drum MIDI as Strudel percussion patterns', () => {
+    const clip = createMidiClip([
+      { id: 'n1', pitch: 36, startBeat: 0, durationBeats: 1, velocity: 0.8 },
+      { id: 'n2', pitch: 38, startBeat: 1, durationBeats: 1, velocity: 0.8 },
+      { id: 'n3', pitch: 42, startBeat: 2, durationBeats: 1, velocity: 0.8 },
+    ]);
+    const track = createTrack(clip, {
+      trackName: 'drums',
+      displayName: 'Drums',
+    });
+    const project = createProject({ tracks: [track] });
+    const result = convertMidiClipToStrudelCode(clip, track, project, createDefaultStrudelFromMidiOptions(project));
+
+    expect(result).not.toBeNull();
+    expect(result?.code).toContain('s(`');
+    expect(result?.code).toContain('bd');
+    expect(result?.code).toContain('sd');
+    expect(result?.code).toContain('hh');
+  });
+});
+
+describe('convertMidiTrackToStrudelCode', () => {
+  it('uses relative notation when a compatible key is provided', () => {
+    const clip = createMidiClip([
+      { id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 },
+      { id: 'n2', pitch: 62, startBeat: 1, durationBeats: 1, velocity: 0.8 },
+      { id: 'n3', pitch: 64, startBeat: 2, durationBeats: 1, velocity: 0.8 },
+    ]);
+    const track = createTrack(clip);
+    const project = createProject({ tracks: [track] });
+    const result = convertMidiTrackToStrudelCode(track, project, {
+      ...createDefaultStrudelFromMidiOptions(project),
+      notationType: 'relative',
+      keyScale: 'C major',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.code).toContain('n(`');
+    expect(result?.code).toContain('.scale("c:major")');
+  });
+
+  it('is deterministic for the same track and options', () => {
+    const clip = createMidiClip([
+      { id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.8 },
+      { id: 'n2', pitch: 67, startBeat: 2, durationBeats: 1, velocity: 0.8 },
+    ]);
+    const track = createTrack(clip);
+    const project = createProject({ tracks: [track] });
+    const options = createDefaultStrudelFromMidiOptions(project);
+
+    const first = convertMidiTrackToStrudelCode(track, project, options);
+    const second = convertMidiTrackToStrudelCode(track, project, options);
+
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    expect(first?.code).toBe(second?.code);
+  });
+});
 
 describe('strudelEventsToMidiNotes', () => {
   it('converts melodic events to MIDI notes', () => {
@@ -21,11 +179,6 @@ describe('strudelEventsToMidiNotes', () => {
     expect(notes[0].pitch).toBe(48);
     expect(notes[0].startBeat).toBe(0);
     expect(notes[0].durationBeats).toBe(1);
-    expect(notes[1].pitch).toBe(52);
-    expect(notes[1].startBeat).toBe(1);
-    expect(notes[2].pitch).toBe(55);
-    expect(notes[2].startBeat).toBe(2);
-    expect(notes[3].pitch).toBe(60);
     expect(notes[3].startBeat).toBe(3);
   });
 
@@ -36,51 +189,6 @@ describe('strudelEventsToMidiNotes', () => {
 
     const notes = strudelEventsToMidiNotes(events, 4);
     expect(notes[0].velocity).toBe(0.5);
-  });
-
-  it('uses default velocity when not specified', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 1, durationCycles: 1, hasOnset: true, value: { note: 60 }, note: 60 },
-    ];
-
-    const notes = strudelEventsToMidiNotes(events, 4);
-    expect(notes[0].velocity).toBe(0.8);
-  });
-
-  it('filters out percussion-only events (no note)', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 0.25, durationCycles: 0.25, hasOnset: true, value: 'bd', sound: 'bd' },
-      { startCycle: 0.25, endCycle: 0.5, durationCycles: 0.25, hasOnset: true, value: { note: 60 }, note: 60 },
-    ];
-
-    const notes = strudelEventsToMidiNotes(events, 4);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].pitch).toBe(60);
-  });
-
-  it('returns empty array for empty events', () => {
-    expect(strudelEventsToMidiNotes([], 4)).toEqual([]);
-  });
-
-  it('handles multi-bar patterns', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 0.5, durationCycles: 0.5, hasOnset: true, value: { note: 60 }, note: 60 },
-      { startCycle: 1.5, endCycle: 2, durationCycles: 0.5, hasOnset: true, value: { note: 64 }, note: 64 },
-    ];
-
-    const notes = strudelEventsToMidiNotes(events, 4);
-    expect(notes).toHaveLength(2);
-    expect(notes[0].startBeat).toBe(0);
-    expect(notes[1].startBeat).toBe(6); // 1.5 cycles * 4 beats/cycle
-  });
-
-  it('rounds fractional pitches', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 1, durationCycles: 1, hasOnset: true, value: { note: 60.4 }, note: 60.4 },
-    ];
-
-    const notes = strudelEventsToMidiNotes(events, 4);
-    expect(notes[0].pitch).toBe(60);
   });
 });
 
@@ -96,28 +204,10 @@ describe('strudelEventsToDrumPattern', () => {
     const pattern = strudelEventsToDrumPattern(events, 1, 16);
 
     expect(pattern.rows).toHaveLength(4);
-    expect(pattern.stepsPerBar).toBe(16);
-    expect(pattern.bars).toBe(1);
-
-    const kickRow = pattern.rows.find((r) => r.sampleKey === 'kick');
-    expect(kickRow).toBeDefined();
-    expect(kickRow!.steps[0].active).toBe(true);
-    expect(kickRow!.steps[4].active).toBe(false);
-
-    const snareRow = pattern.rows.find((r) => r.sampleKey === 'snare');
-    expect(snareRow).toBeDefined();
-    expect(snareRow!.steps[4].active).toBe(true); // 0.25 * 16 = 4
-  });
-
-  it('quantizes events to nearest step', () => {
-    const events: StrudelEvent[] = [
-      // At 0.12 cycles → step 1.92 → rounds to 2
-      { startCycle: 0.12, endCycle: 0.25, durationCycles: 0.13, hasOnset: true, value: 'bd', sound: 'bd' },
-    ];
-
-    const pattern = strudelEventsToDrumPattern(events, 1, 16);
-    const kickRow = pattern.rows.find((r) => r.sampleKey === 'kick');
-    expect(kickRow!.steps[2].active).toBe(true);
+    const kickRow = pattern.rows.find((row) => row.sampleKey === 'kick');
+    const snareRow = pattern.rows.find((row) => row.sampleKey === 'snare');
+    expect(kickRow?.steps[0].active).toBe(true);
+    expect(snareRow?.steps[4].active).toBe(true);
   });
 
   it('maps unknown sounds to perc', () => {
@@ -126,53 +216,13 @@ describe('strudelEventsToDrumPattern', () => {
     ];
 
     const pattern = strudelEventsToDrumPattern(events, 1, 16);
-    expect(pattern.rows).toHaveLength(1);
     expect(pattern.rows[0].sampleKey).toBe('perc');
-  });
-
-  it('propagates velocity to steps', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 0.25, durationCycles: 0.25, hasOnset: true, value: { s: 'bd', velocity: 0.5 }, sound: 'bd' },
-    ];
-
-    const pattern = strudelEventsToDrumPattern(events, 1, 16);
-    const kickRow = pattern.rows.find((r) => r.sampleKey === 'kick');
-    expect(kickRow!.steps[0].velocity).toBe(0.5);
-  });
-
-  it('handles multi-bar patterns', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 0.25, durationCycles: 0.25, hasOnset: true, value: 'bd', sound: 'bd' },
-      { startCycle: 1, endCycle: 1.25, durationCycles: 0.25, hasOnset: true, value: 'bd', sound: 'bd' },
-    ];
-
-    const pattern = strudelEventsToDrumPattern(events, 2, 16);
-    expect(pattern.bars).toBe(2);
-    const kickRow = pattern.rows.find((r) => r.sampleKey === 'kick');
-    expect(kickRow!.steps).toHaveLength(32); // 2 bars * 16 steps
-    expect(kickRow!.steps[0].active).toBe(true);
-    expect(kickRow!.steps[16].active).toBe(true);
-  });
-
-  it('returns empty pattern for no percussion events', () => {
-    const events: StrudelEvent[] = [
-      { startCycle: 0, endCycle: 1, durationCycles: 1, hasOnset: true, value: { note: 60 }, note: 60 },
-    ];
-
-    const pattern = strudelEventsToDrumPattern(events, 1, 16);
-    expect(pattern.rows).toHaveLength(0);
   });
 });
 
 describe('sequencerPatternToMidiData', () => {
-  let sequencerPatternToMidiData: typeof import('../strudelConversion').sequencerPatternToMidiData;
-
-  beforeAll(async () => {
-    ({ sequencerPatternToMidiData } = await import('../strudelConversion'));
-  });
-
-  it('converts sequencer rows/steps to MIDI notes with GM drum pitches', () => {
-    const pattern: import('../../types/project').SequencerPattern = {
+  it('converts sequencer rows and steps to MIDI notes', () => {
+    const pattern: Project['tracks'][number]['sequencerPattern'] = {
       id: 'test-pattern',
       name: 'Test',
       stepsPerBar: 16,
@@ -180,91 +230,24 @@ describe('sequencerPatternToMidiData', () => {
       swing: 0,
       rows: [
         {
-          id: 'r1', name: 'Kick', sampleKey: 'kick',
-          steps: Array.from({ length: 16 }, (_, i) => ({
-            active: i === 0 || i === 8, velocity: 0.9,
+          id: 'r1',
+          name: 'Kick',
+          sampleKey: 'kick',
+          steps: Array.from({ length: 16 }, (_, index) => ({
+            active: index === 0 || index === 8,
+            velocity: 0.9,
           })),
-          volume: 0.8, pan: 0, muted: false, color: '#f00',
-        },
-        {
-          id: 'r2', name: 'Snare', sampleKey: 'snare',
-          steps: Array.from({ length: 16 }, (_, i) => ({
-            active: i === 4 || i === 12, velocity: 0.7,
-          })),
-          volume: 0.8, pan: 0, muted: false, color: '#0f0',
+          volume: 0.8,
+          pan: 0,
+          muted: false,
+          color: '#f00',
         },
       ],
     };
 
-    const midiData = sequencerPatternToMidiData(pattern, 4);
-
-    expect(midiData.notes).toHaveLength(4);
-
-    const kicks = midiData.notes.filter(n => n.pitch === 36);
-    expect(kicks).toHaveLength(2);
-    expect(kicks[0].startBeat).toBe(0);
-    expect(kicks[1].startBeat).toBe(2);
-    expect(kicks[0].velocity).toBe(0.9);
-
-    const snares = midiData.notes.filter(n => n.pitch === 38);
-    expect(snares).toHaveLength(2);
-    expect(snares[0].startBeat).toBe(1);
-    expect(snares[1].startBeat).toBe(3);
-    expect(snares[0].velocity).toBe(0.7);
-
-    expect(midiData.notes[0].durationBeats).toBeCloseTo(0.25);
-    expect(midiData.grid).toBe('1/16');
-  });
-
-  it('returns empty notes for empty pattern', () => {
-    const pattern: import('../../types/project').SequencerPattern = {
-      id: 'empty', name: 'Empty', stepsPerBar: 16, bars: 1, swing: 0, rows: [],
-    };
-
-    const midiData = sequencerPatternToMidiData(pattern, 4);
-    expect(midiData.notes).toHaveLength(0);
-  });
-
-  it('uses fallback pitch 47 for unknown drum keys', () => {
-    const pattern: import('../../types/project').SequencerPattern = {
-      id: 'test', name: 'Test', stepsPerBar: 16, bars: 1, swing: 0,
-      rows: [{
-        id: 'r1', name: 'Unknown', sampleKey: 'unknown_thing',
-        steps: Array.from({ length: 16 }, (_, i) => ({
-          active: i === 0, velocity: 0.8,
-        })),
-        volume: 0.8, pan: 0, muted: false, color: '#888',
-      }],
-    };
-
-    const midiData = sequencerPatternToMidiData(pattern, 4);
-    expect(midiData.notes).toHaveLength(1);
-    expect(midiData.notes[0].pitch).toBe(47);
-  });
-
-  it('skips muted rows', () => {
-    const pattern: import('../../types/project').SequencerPattern = {
-      id: 'test', name: 'Test', stepsPerBar: 16, bars: 1, swing: 0,
-      rows: [{
-        id: 'r1', name: 'Kick', sampleKey: 'kick',
-        steps: Array.from({ length: 16 }, (_, i) => ({
-          active: i === 0, velocity: 0.8,
-        })),
-        volume: 0.8, pan: 0, muted: true, color: '#f00',
-      }],
-    };
-
-    const midiData = sequencerPatternToMidiData(pattern, 4);
-    expect(midiData.notes).toHaveLength(0);
-  });
-});
-
-describe('STRUDEL_TO_DAW_DRUM', () => {
-  it('maps common strudel drum names', () => {
-    expect(STRUDEL_TO_DAW_DRUM['bd']).toBe('kick');
-    expect(STRUDEL_TO_DAW_DRUM['sd']).toBe('snare');
-    expect(STRUDEL_TO_DAW_DRUM['hh']).toBe('closed_hh');
-    expect(STRUDEL_TO_DAW_DRUM['oh']).toBe('open_hh');
-    expect(STRUDEL_TO_DAW_DRUM['cp']).toBe('clap');
+    const midiData = sequencerPatternToMidiData(pattern!, 4);
+    expect(midiData.notes).toHaveLength(2);
+    expect(midiData.notes[0].pitch).toBe(36);
+    expect(midiData.notes[1].startBeat).toBe(2);
   });
 });

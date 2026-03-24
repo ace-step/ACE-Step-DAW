@@ -27,7 +27,7 @@ export function CanvasContextMenu({ x, y, onClose }: CanvasContextMenuProps) {
   }, [onClose]);
 
   const handleMusicEnhancer = useCallback(() => {
-    useUIStore.getState().setMusicEnhancerOpen(true);
+    useUIStore.getState().openEnhancerFromSelection();
     onClose();
   }, [onClose]);
 

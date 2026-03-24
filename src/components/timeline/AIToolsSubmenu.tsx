@@ -8,8 +8,6 @@ import {
 
 export interface ClipAIContext {
   onRegenerate?: () => void;
-  onCreateCover?: () => void;
-  onRepaint?: () => void;
   onSeparateStems?: () => void;
   onGenerateAccompaniment?: () => void;
   onAnalyze?: () => void;
@@ -182,12 +180,6 @@ export function AIToolsSubmenu({
                       onClick={clipContext.onRegenerate}
                       disabled={!clipContext.hasPrompt}
                     />
-                  )}
-                  {clipContext.onCreateCover && (
-                    <ContextMenuItem label="Create Cover..." onClick={clipContext.onCreateCover} color="#fcd34d" />
-                  )}
-                  {clipContext.onRepaint && (
-                    <ContextMenuItem label="Repaint Selection..." onClick={clipContext.onRepaint} color="#fda4af" />
                   )}
                   {clipContext.onSeparateStems && (
                     <ContextMenuItem label="Separate Stems..." onClick={clipContext.onSeparateStems} color="#7dd3fc" />

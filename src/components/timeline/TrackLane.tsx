@@ -13,6 +13,9 @@ import { CanvasContextMenu } from './CanvasContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
+import { processTrackLaneFileDrop } from './trackLaneFileDrop';
+import { getDragPayload, clearDragPayload } from '../../utils/dragPayload';
+import { clientXToLaneX } from '../../utils/timelineCoords';
 import {
   ARRANGEMENT_EMPTY_LANE_BG,
   ARRANGEMENT_ROW_BORDER_CLASS,
@@ -48,6 +51,8 @@ export function TrackLane({ track }: TrackLaneProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const addClip = useProjectStore((s) => s.addClip);
   const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
+  const convertMidiFileToStrudel = useProjectStore((s) => s.convertMidiFileToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
 
   const [ctxMenu, setCtxMenu] = useState<{
@@ -68,6 +73,8 @@ export function TrackLane({ track }: TrackLaneProps) {
     importAssetToTrack,
   } = useAudioImport();
   const [fileDragOver, setFileDragOver] = useState(false);
+  const [dropGhost, setDropGhost] = useState<{ left: number; width: number; name: string } | null>(null);
+  const dragCounterRef = useRef(0);
 
   const resizeRef = useRef<{ startY: number; startRowHeight: number; startLaneHeight: number } | null>(null);
   const laneHeight = track.laneHeight ?? 80;
@@ -143,8 +150,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const laneX = e.clientX - rect.left;
+    const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
     const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
     const remaining = project.totalDuration - startTime;
@@ -174,9 +180,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     }
     if (isPianoRoll) {
       e.stopPropagation();
-      const rect = e.currentTarget.getBoundingClientRect();
-      const laneX = e.clientX - rect.left;
-      const rawTime = laneX / pixelsPerSecond;
+      const rawTime = clientXToLaneX(e.clientX) / pixelsPerSecond;
       const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
       const clip = addClip(track.id, {
         startTime,
@@ -194,9 +198,7 @@ export function TrackLane({ track }: TrackLaneProps) {
 
     // For stems/sample/audio tracks, double-click on empty space creates a new empty clip
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const laneX = e.clientX - rect.left;
-    const clickTime = laneX / pixelsPerSecond;
+    const clickTime = clientXToLaneX(e.clientX) / pixelsPerSecond;
     if (hitsClip(clickTime)) return;
     const startTime = Math.max(0, snapToGrid(clickTime, project.bpm, 1, project.tempoMap));
     const clip = addClip(track.id, {
@@ -214,6 +216,20 @@ export function TrackLane({ track }: TrackLaneProps) {
     setAddLayerTarget(null);
   }, []);
 
+  const handleFileDragEnter = useCallback((e: React.DragEvent) => {
+    const types = e.dataTransfer.types;
+    if (
+      types.includes('Files')
+      || types.includes('application/x-loop-id')
+      || types.includes('application/x-asset-id')
+      || types.includes('application/x-generation-history-id')
+    ) {
+      e.preventDefault();
+      dragCounterRef.current++;
+      setFileDragOver(true);
+    }
+  }, []);
+
   const handleFileDragOver = useCallback((e: React.DragEvent) => {
     const types = e.dataTransfer.types;
     if (
@@ -225,22 +241,42 @@ export function TrackLane({ track }: TrackLaneProps) {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
-      setFileDragOver(true);
+
+      // Compute ghost preview position
+      const payload = getDragPayload();
+      if (payload && project) {
+        const laneX = clientXToLaneX(e.clientX);
+        const rawTime = laneX / pixelsPerSecond;
+        const snappedTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+        const ghostDuration = payload.duration ?? defaultClipDuration;
+        setDropGhost({
+          left: snappedTime * pixelsPerSecond,
+          width: ghostDuration * pixelsPerSecond,
+          name: payload.name ?? 'Audio',
+        });
+      }
     }
-  }, []);
+  }, [project, pixelsPerSecond, defaultClipDuration]);
 
   const handleFileDragLeave = useCallback(() => {
-    setFileDragOver(false);
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setFileDragOver(false);
+      setDropGhost(null);
+    }
   }, []);
 
   const handleFileDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounterRef.current = 0;
     setFileDragOver(false);
+    setDropGhost(null);
+    clearDragPayload();
     if (!project) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const laneX = e.clientX - rect.left;
+    const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
     const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
 
@@ -274,19 +310,22 @@ export function TrackLane({ track }: TrackLaneProps) {
     const files = e.dataTransfer.files;
     if (!files.length) return;
     for (const file of Array.from(files)) {
-      if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
-        if (track.trackType === 'pianoRoll') {
-          await importAudioFileAsSampler(file, track.id);
-        } else if (wantsQuickSampler) {
-          await importAudioFileAsNewQuickSampler(file);
-        } else {
-          await importAudioToTrack(file, track.id, startTime);
-        }
-      } else if (/\.(mid|midi)$/i.test(file.name)) {
-        await importMidiFile(file, startTime);
-      }
+      await processTrackLaneFileDrop({
+        file,
+        trackType: track.trackType,
+        trackId: track.id,
+        startTime,
+        wantsQuickSampler,
+        importAudioFileAsSampler,
+        importAudioFileAsNewQuickSampler,
+        importAudioToTrack,
+        importMidiFile,
+        convertMidiFileToStrudel,
+        applyStrudelCodeToTrack,
+        setOpenStrudelEditor,
+      });
     }
-  }, [placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
+  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
 
   const hasClips = track.clips.length > 0;
   const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;
@@ -308,6 +347,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         }}
         onContextMenu={handleContextMenu}
         onDoubleClick={handleDoubleClick}
+        onDragEnter={handleFileDragEnter}
         onDragOver={handleFileDragOver}
         onDragLeave={handleFileDragLeave}
         onDrop={handleFileDrop}
@@ -333,9 +373,18 @@ export function TrackLane({ track }: TrackLaneProps) {
           />
         )}
 
-        {fileDragOver && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 border border-dashed border-blue-400/60 rounded-sm">
-            <span className="text-[10px] text-blue-300 bg-blue-950/80 px-2 py-0.5 rounded">Drop audio or MIDI here {track.trackType !== 'pianoRoll' ? '(Alt = Quick Sampler)' : ''}</span>
+        {/* Drop ghost preview — shows where the clip will land */}
+        {dropGhost && (
+          <div
+            className="absolute top-1 bottom-1 rounded-md pointer-events-none z-30 flex items-center overflow-hidden"
+            style={{
+              left: dropGhost.left,
+              width: Math.max(dropGhost.width, 4),
+              backgroundColor: track.color ? `${track.color}4D` : 'rgba(94, 89, 255, 0.30)',
+              border: `1px dashed ${track.color ?? 'rgba(94, 89, 255, 0.7)'}`,
+            }}
+          >
+            <span className="text-[10px] text-white/70 px-2 truncate">{dropGhost.name}</span>
           </div>
         )}
 

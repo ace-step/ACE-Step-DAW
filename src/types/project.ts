@@ -12,13 +12,46 @@ export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
 /** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
 export type StretchMode = 'repitch' | 'slice';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
+export type StrudelMidiNotationType = 'absolute' | 'relative';
+export type StrudelMidiTimingStyle = 'subdivision' | 'absoluteDuration';
+export type StrudelSoundMapping = 'auto' | 'piano' | 'sawtooth' | 'triangle' | 'square';
+export type StrudelTargetTrackMode = 'currentOrNew' | 'alwaysNew';
 
-/** A snapshot of Strudel code captured during evaluation. */
+/** A snapshot of Strudel code captured during editing or evaluation. */
 export interface StrudelCodeVersion {
   id: string;
   code: string;
   timestamp: number;
   label?: string;
+}
+
+export interface StrudelFromMidiOptions {
+  notationType: StrudelMidiNotationType;
+  timingStyle: StrudelMidiTimingStyle;
+  quantize: boolean;
+  measuresPerLine: number;
+  keyScale?: string | null;
+  soundMapping: StrudelSoundMapping;
+  targetTrackMode: StrudelTargetTrackMode;
+}
+
+export interface StrudelFromMidiSourceSummary {
+  sourceKind: 'clip' | 'track' | 'file';
+  label: string;
+  trackCount: number;
+  noteCount: number;
+  drumTrackCount: number;
+}
+
+export interface StrudelFromMidiResult {
+  code: string;
+  warnings: string[];
+  sourceSummary: StrudelFromMidiSourceSummary;
+  bpm: number;
+  timeSignature: {
+    numerator: number;
+    denominator: number;
+  };
 }
 
 /** Configuration for the sampler instrument on a pianoRoll track. */
@@ -531,7 +564,7 @@ export interface Track {
   strudelCode?: string;
   /** Strudel cycle length in bars (default 1 = 1 bar = 1 cycle). */
   strudelCycleLength?: number;
-  /** Strudel pattern version history. */
+  /** Captured Strudel snapshots for quick rollback. */
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];

@@ -97,7 +97,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const contextWindow = useUIStore((s) => s.contextWindow);
   const selectWindow = useUIStore((s) => s.selectWindow);
-  const setRepaintModal = useUIStore((s) => s.setRepaintModal);
+  const openEnhancer = useUIStore((s) => s.openEnhancer);
   const setVocal2BGMModal = useUIStore((s) => s.setVocal2BGMModal);
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
   const setStemSeparationModal = useUIStore((s) => s.setStemSeparationModal);
@@ -123,6 +123,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
+  const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const sliceClipToRange = useProjectStore((s) => s.sliceClipToRange);
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
@@ -1212,21 +1214,21 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         const isVocalTrack = track.trackName === 'vocals' || track.trackName === 'backing_vocals';
         const hasWarpMarkers = !!(clip.warpMarkers && clip.warpMarkers.length > 0);
 
+        const handleEnhance = (!isMidiClip && isReady) ? () => {
+          closeCtxMenu();
+          let range: { start: number; end: number } | null = null;
+          if (selectWindow) {
+            const rs = Math.max(selectWindow.startTime, clip.startTime);
+            const re = Math.min(selectWindow.endTime, clip.startTime + clip.duration);
+            if (re > rs) range = { start: rs, end: re };
+          }
+          openEnhancer(clip.id, track.id, range);
+        } : undefined;
+
         const clipAIContext = (!isMidiClip && isReady) ? {
           onRegenerate: () => { closeCtxMenu(); regenerateClip(clip.id); },
           hasPrompt: !!clip.prompt,
           isReady,
-          onCreateCover: () => { closeCtxMenu(); useUIStore.getState().setMusicEnhancerOpen(true); },
-          onRepaint: () => {
-            closeCtxMenu();
-            let range: { start: number; end: number } | null = null;
-            if (selectWindow) {
-              const rs = Math.max(selectWindow.startTime, clip.startTime);
-              const re = Math.min(selectWindow.endTime, clip.startTime + clip.duration);
-              if (re > rs) range = { start: rs, end: re };
-            }
-            setRepaintModal(clip.id, range);
-          },
           ...(hasAudio ? { onSeparateStems: () => { closeCtxMenu(); setStemSeparationModal(clip.id); } } : {}),
           ...(isVocalTrack ? { onGenerateAccompaniment: () => { closeCtxMenu(); setVocal2BGMModal(clip.id); } } : {}),
           onAnalyze: () => { closeCtxMenu(); setAnalysisPanel(clip.id); },
@@ -1247,11 +1249,20 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             x={ctxMenu.x}
             y={ctxMenu.y}
             onClose={closeCtxMenu}
+            onEnhance={handleEnhance}
             onInspireMe={() => { closeCtxMenu(); useUIStore.getState().setShowGenerationPanel(true); }}
             onAddLayer={() => { closeCtxMenu(); useUIStore.getState().setAddLayerOpen(true); }}
-            onMusicEnhancer={() => { closeCtxMenu(); useUIStore.getState().setMusicEnhancerOpen(true); }}
+            onMusicEnhancer={() => { closeCtxMenu(); openEnhancer(clip.id, track.id); }}
             clipAIContext={clipAIContext}
             onOpenMidi={isMidiClip ? () => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); } : undefined}
+            onConvertToStrudel={isMidiClip ? () => {
+              closeCtxMenu();
+              void (async () => {
+                const result = await convertMidiClipToStrudel(clip.id);
+                if (!result) return;
+                await applyStrudelCodeToTrack(result.code, null, { label: 'Convert MIDI Clip' });
+              })();
+            } : undefined}
             onExportMidi={isMidiClip ? () => { closeCtxMenu(); exportMidiClip(clip.id); } : undefined}
             onEdit={() => { closeCtxMenu(); setEditModalOpen(true); }}
             onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}

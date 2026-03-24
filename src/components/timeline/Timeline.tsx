@@ -8,13 +8,15 @@ import { TimeRuler } from './TimeRuler';
 import { TrackLane } from './TrackLane';
 import { Playhead } from './Playhead';
 import { GridOverlay } from './GridOverlay';
-import { snapToGrid } from '../../utils/time';
+import { getBarDuration, snapToGrid } from '../../utils/time';
 import { MultiTrackGenerateModal } from '../generation/MultiTrackGenerateModal';
 import { RegionRegenerateModal } from '../generation/RegionRegenerateModal';
 import { RegionContextMenu } from './RegionContextMenu';
 import { CanvasContextMenu } from './CanvasContextMenu';
 import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { getDragPayload, clearDragPayload } from '../../utils/dragPayload';
+import { clientXToLaneX } from '../../utils/timelineCoords';
 import { Minimap } from './Minimap';
 import { TempoLane } from './TempoLane';
 import { TimeSignatureLane } from './TimeSignatureLane';
@@ -244,12 +246,10 @@ export function Timeline() {
   const [canvasCtxMenu, setCanvasCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [ctxDrag, setCtxDrag] = useState<DragRect | null>(null);
   const [selDrag, setSelDrag] = useState<DragRect | null>(null);
-  const [fileDragOver, setFileDragOver] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [dragOverEmptySlotIndex, setDragOverEmptySlotIndex] = useState<number | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after'>('before');
-  const dragCounterRef = useRef(0);
   const draggedTrackIdRef = useRef<string | null>(null);
   const trackListResizeRef = useRef<{ startX: number; startW: number } | null>(null);
   const zoomAnimationFrameRef = useRef<number | null>(null);
@@ -268,27 +268,8 @@ export function Timeline() {
     }
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    const types = e.dataTransfer.types;
-    if (types.includes('Files') || types.includes('application/x-loop-id') || types.includes('application/x-asset-id')) {
-      e.preventDefault();
-      dragCounterRef.current++;
-      setFileDragOver(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    dragCounterRef.current--;
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0;
-      setFileDragOver(false);
-    }
-  }, []);
-
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    dragCounterRef.current = 0;
-    setFileDragOver(false);
 
     // Handle preset loop drop -> create new sample track
     const loopId = e.dataTransfer.getData('application/x-loop-id');
@@ -317,21 +298,6 @@ export function Timeline() {
       }
     }
   }, [addTrack, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
-
-  // Safety net: if a child (e.g. TrackLane) stops propagation on drop,
-  // the Timeline's own handleDrop never fires. Listen globally to clear the overlay.
-  useEffect(() => {
-    const clearOverlay = () => {
-      dragCounterRef.current = 0;
-      setFileDragOver(false);
-    };
-    window.addEventListener('drop', clearOverlay);
-    window.addEventListener('dragend', clearOverlay);
-    return () => {
-      window.removeEventListener('drop', clearOverlay);
-      window.removeEventListener('dragend', clearOverlay);
-    };
-  }, []);
 
   const handleTrackHeaderDragStart = useCallback((trackId: string) => {
     draggedTrackIdRef.current = trackId;
@@ -904,8 +870,6 @@ export function Timeline() {
         onBlur={() => setTimelineFocused(false)}
         onMouseDown={() => setKeyboardContext('timeline')}
         onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onContextMenu={(e) => {
           // Only show canvas context menu on empty area
@@ -923,14 +887,6 @@ export function Timeline() {
         }}
         style={{ cursor: 'default' }}
       >
-        {fileDragOver && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-900/30 border-2 border-dashed border-blue-400/60 pointer-events-none">
-            <div className="bg-blue-950/80 border border-blue-500/50 rounded-lg px-6 py-4 text-center">
-              <p className="text-sm font-medium text-blue-200">Drop audio or MIDI files here</p>
-              <p className="text-[10px] text-blue-400 mt-1">WAV, MP3, OGG, FLAC, AAC, MID</p>
-            </div>
-          </div>
-        )}
         <div
           className="relative grid"
           style={{
@@ -1227,8 +1183,96 @@ function ArrangementEmptyTrackHeaderRow({
 
 function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const project = useProjectStore((s) => s.project);
+  const addTrack = useProjectStore((s) => s.addTrack);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
+  const { importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler } = useAudioImport();
+
+  const [dropGhost, setDropGhost] = useState<{ left: number; width: number; name: string } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const defaultClipDuration = project
+    ? getBarDuration(project.bpm, project.timeSignature, project.timeSignatureDenominator ?? 4) * 4
+    : 8;
+
+  const onDragEnter = useCallback((e: React.DragEvent) => {
+    const types = e.dataTransfer.types;
+    if (types.includes('Files') || types.includes('application/x-loop-id') || types.includes('application/x-asset-id')) {
+      e.preventDefault();
+      dragCounterRef.current++;
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    const types = e.dataTransfer.types;
+    if (types.includes('Files') || types.includes('application/x-loop-id') || types.includes('application/x-asset-id')) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+
+      const payload = getDragPayload();
+      if (payload && project) {
+        const laneX = clientXToLaneX(e.clientX);
+        const rawTime = laneX / pixelsPerSecond;
+        const snappedTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+        const ghostDuration = payload.duration ?? defaultClipDuration;
+        setDropGhost({
+          left: snappedTime * pixelsPerSecond,
+          width: ghostDuration * pixelsPerSecond,
+          name: payload.name ?? 'Audio',
+        });
+      }
+    }
+  }, [project, pixelsPerSecond, defaultClipDuration]);
+
+  const onDragLeave = useCallback(() => {
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      setDropGhost(null);
+    }
+  }, []);
+
+  const onDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    setDropGhost(null);
+    clearDragPayload();
+    if (!project) return;
+
+    const laneX = clientXToLaneX(e.clientX);
+    const rawTime = laneX / pixelsPerSecond;
+    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+
+    const loopId = e.dataTransfer.getData('application/x-loop-id');
+    if (loopId) {
+      const newTrack = addTrack('custom', 'sample');
+      await importLoopToTrack(loopId, newTrack.id, startTime);
+      return;
+    }
+
+    const assetId = e.dataTransfer.getData('application/x-asset-id');
+    if (assetId) {
+      await importAssetAsQuickSampler(assetId);
+      return;
+    }
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      for (const file of Array.from(files)) {
+        if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
+          await importAudioFileAsNewQuickSampler(file);
+        }
+      }
+    }
+  }, [project, pixelsPerSecond, addTrack, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler]);
 
   return (
     <div
@@ -1238,11 +1282,29 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
       style={{
         height: PLACEHOLDER_ROW_HEIGHT,
         borderBottom: '1px solid var(--color-daw-arrangement-separator)',
+        backgroundColor: isDragOver ? 'rgba(94, 89, 255, 0.08)' : undefined,
       }}
       data-testid={`empty-row-${slotIndex}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {isSelected && (
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+      )}
+      {dropGhost && (
+        <div
+          className="absolute top-1 bottom-1 rounded-md pointer-events-none z-30 flex items-center overflow-hidden"
+          style={{
+            left: dropGhost.left,
+            width: Math.max(dropGhost.width, 4),
+            backgroundColor: 'rgba(94, 89, 255, 0.30)',
+            border: '1px dashed rgba(94, 89, 255, 0.7)',
+          }}
+        >
+          <span className="text-[10px] text-white/70 px-2 truncate">{dropGhost.name}</span>
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import {
   setAllStrudelBpm,
   hasStrudelRepl,
 } from '../engine/strudelEngine';
+import { stopStrudelEditorPlayback } from '../engine/strudelEditorPlayback';
 import { useRecording } from './useRecording';
 import { beatToTime } from '../utils/tempoMap';
 import { getPlaybackLatencyCompensationSeconds } from '../utils/playbackLatency';
@@ -143,6 +144,8 @@ export function useTransport() {
 
   const play = useCallback(async (fromTime?: number) => {
     const engine = getAudioEngine();
+    stopStrudelEditorPlayback();
+    stopAllStrudelTracks();
     await engine.resume();
     await synthEngine.ensureStarted();
     await samplerEngine.ensureStarted();
@@ -561,6 +564,8 @@ export function useTransport() {
     const engine = getAudioEngine();
     const time = engine.getCurrentTime();
     finalizeSessionArrangementRecording(time);
+    stopStrudelEditorPlayback();
+    stopAllStrudelTracks();
     engine.stop();
     synthEngine.releaseAll();
     samplerEngine.stopAll();
@@ -577,6 +582,7 @@ export function useTransport() {
     const engine = getAudioEngine();
     const time = engine.playing ? engine.getCurrentTime() : useTransportStore.getState().currentTime;
     finalizeSessionArrangementRecording(time);
+    stopStrudelEditorPlayback();
     engine.stop();
     synthEngine.releaseAll();
     samplerEngine.stopAll();
@@ -587,6 +593,8 @@ export function useTransport() {
 
   const seek = useCallback((time: number) => {
     const engine = getAudioEngine();
+    stopStrudelEditorPlayback();
+    stopAllStrudelTracks();
     if (engine.playing) {
       engine.stop();
       synthEngine.releaseAll();
@@ -605,6 +613,8 @@ export function useTransport() {
     if (!scrubProject) return;
 
     await engine.resume();
+    stopStrudelEditorPlayback();
+    stopAllStrudelTracks();
     const resumePlayback = transport.isPlaying || engine.playing;
     if (resumePlayback) {
       engine.stop();

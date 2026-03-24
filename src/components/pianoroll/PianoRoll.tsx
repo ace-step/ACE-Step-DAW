@@ -34,6 +34,9 @@ export function PianoRoll() {
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
   const clearTrackSampler = useProjectStore((s) => s.clearTrackSampler);
   const updateSamplerConfig = useProjectStore((s) => s.updateSamplerConfig);
+  const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
+  const convertMidiTrackToStrudel = useProjectStore((s) => s.convertMidiTrackToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const {
     importAudioFileAsSampler,
     importAssetAsQuickSampler,
@@ -343,6 +346,38 @@ export function PianoRoll() {
             title="Generate MIDI pattern from genre/scale constraints"
           >
             Generate Pattern
+          </button>
+        )}
+
+        {clip && (
+          <button
+            className="px-2 py-1 rounded text-[10px] bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-colors"
+            onClick={() => {
+              void (async () => {
+                const result = await convertMidiClipToStrudel(clip.id);
+                if (!result) return;
+                await applyStrudelCodeToTrack(result.code, null, { label: 'Convert MIDI Clip' });
+              })();
+            }}
+            title="Convert the current MIDI clip into Strudel code"
+          >
+            To Strudel
+          </button>
+        )}
+
+        {!clip && (
+          <button
+            className="px-2 py-1 rounded text-[10px] bg-amber-500/15 text-amber-100 hover:bg-amber-500/25 transition-colors"
+            onClick={() => {
+              void (async () => {
+                const result = await convertMidiTrackToStrudel(track.id);
+                if (!result) return;
+                await applyStrudelCodeToTrack(result.code, null, { label: 'Convert MIDI Track' });
+              })();
+            }}
+            title="Convert this track's MIDI clips into Strudel code"
+          >
+            Track to Strudel
           </button>
         )}
 

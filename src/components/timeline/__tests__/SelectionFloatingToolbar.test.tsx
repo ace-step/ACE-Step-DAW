@@ -53,7 +53,7 @@ describe('SelectionFloatingToolbar', () => {
     render(
       <SelectionFloatingToolbar selLeft={200} selWidth={400} selBottom={100} />,
     );
-    expect(screen.getByRole('button', { name: /music enhancer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enhance/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add layer/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /midi/i })).toBeInTheDocument();
   });

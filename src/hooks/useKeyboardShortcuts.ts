@@ -461,6 +461,32 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      if (matches('clips.enhance')) {
+        const selected = [...ui.selectedClipIds];
+        if (selected.length === 1) {
+          event.preventDefault();
+          const clipId = selected[0];
+          const projectData = project.project;
+          if (projectData) {
+            const clipTrack = projectData.tracks.find((t) => t.clips.some((c) => c.id === clipId));
+            if (clipTrack) {
+              const clip = clipTrack.clips.find((c) => c.id === clipId);
+              if (clip && clip.generationStatus === 'ready') {
+                const sw = ui.selectWindow;
+                let range: { start: number; end: number } | null = null;
+                if (sw) {
+                  const rs = Math.max(sw.startTime, clip.startTime);
+                  const re = Math.min(sw.endTime, clip.startTime + clip.duration);
+                  if (re > rs) range = { start: rs, end: re };
+                }
+                ui.openEnhancer(clipId, clipTrack.id, range);
+              }
+            }
+          }
+        }
+        return;
+      }
+
       if (matches('clips.edit')) {
         const selected = [...ui.selectedClipIds];
         if (selected.length === 1) {

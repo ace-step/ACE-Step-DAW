@@ -1836,6 +1836,21 @@ export const useProjectStore = create<ProjectState>()(
 
   endDrag: () => {
     _endDrag();
+    // Recompute totalDuration and updatedAt once after drag ends
+    const state = get();
+    if (state.project) {
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(
+            state.project.tracks, state.project.measures, state.project.bpm,
+            state.project.timeSignature, state.project.timeSignatureDenominator,
+            state.project.tempoMap, state.project.timeSignatureMap
+          ),
+        },
+      });
+    }
   },
 
   createProject: (params) => {
@@ -2986,14 +3001,12 @@ export const useProjectStore = create<ProjectState>()(
         c.id === clipId ? { ...c, ...updates } : c,
       ),
     }));
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
-        tracks: newTracks,
-      },
-    });
+    const updated = { ...state.project, tracks: newTracks };
+    if (!_isDragging) {
+      updated.updatedAt = Date.now();
+      updated.totalDuration = computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap);
+    }
+    set({ project: updated });
   },
 
   updateClipColor: (clipId, color) => {
@@ -3970,14 +3983,12 @@ export const useProjectStore = create<ProjectState>()(
           : c,
       ),
     }));
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
-        tracks: newTracks,
-      },
-    });
+    const updated = { ...state.project, tracks: newTracks };
+    if (!_isDragging) {
+      updated.updatedAt = Date.now();
+      updated.totalDuration = computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap);
+    }
+    set({ project: updated });
   },
 
   createSessionScene: (name) => {

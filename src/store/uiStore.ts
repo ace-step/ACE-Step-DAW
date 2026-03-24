@@ -216,6 +216,9 @@ export interface UIState {
   inlineSuggestions: InlineSuggestion[];
   suggestionFrequency: 'off' | 'subtle' | 'active';
 
+  // Playhead DOM cache — avoids per-frame layout queries in SelectedTrackCursor
+  trackLaneRects: Map<string, { top: number; height: number }>;
+
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
@@ -397,6 +400,10 @@ export interface UIState {
   clearInlineSuggestions: () => void;
   setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
   applyWorkspaceComplexity: (tier: 'simple' | 'standard' | 'advanced') => void;
+
+  // Playhead DOM cache
+  setTrackLaneRect: (trackId: string, rect: { top: number; height: number }) => void;
+  removeTrackLaneRect: (trackId: string) => void;
 }
 
 const MIN_VIRTUAL_KEYBOARD_OCTAVE = 1;
@@ -586,6 +593,8 @@ export const useUIStore = create<UIState>()(
   regionRegenerateTarget: null,
   inlineSuggestions: [],
   suggestionFrequency: 'subtle',
+
+  trackLaneRects: new Map(),
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
   toggleMainView: () => set((s) => {
@@ -1160,6 +1169,21 @@ export const useUIStore = create<UIState>()(
   clearInlineSuggestions: () => set({ inlineSuggestions: [] }),
   setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
   applyWorkspaceComplexity: (tier) => set(getComplexityDefaults(tier)),
+
+  setTrackLaneRect: (trackId, rect) =>
+    set((s) => {
+      const prev = s.trackLaneRects.get(trackId);
+      if (prev && prev.top === rect.top && prev.height === rect.height) return s;
+      const next = new Map(s.trackLaneRects);
+      next.set(trackId, rect);
+      return { trackLaneRects: next };
+    }),
+  removeTrackLaneRect: (trackId) =>
+    set((s) => {
+      const next = new Map(s.trackLaneRects);
+      next.delete(trackId);
+      return { trackLaneRects: next };
+    }),
 }),
     {
       name: 'ace-step-daw-ui',

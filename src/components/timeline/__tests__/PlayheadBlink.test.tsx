@@ -44,4 +44,38 @@ describe('Playhead blink animation', () => {
     const { container } = render(<Playhead />);
     expect(container.firstElementChild).toBeNull();
   });
+
+  it('renders anchor cursor using trackLaneRects cache instead of DOM queries', () => {
+    const rects = new Map([['track-a', { top: 50, height: 80 }]]);
+    useTransportStore.setState({ isPlaying: false, currentTime: 0, playStartTime: 2 });
+    useUIStore.setState({
+      pixelsPerSecond: 100,
+      timelineFocused: true,
+      selectedTrackIds: new Set(['track-a']),
+      trackLaneRects: rects,
+    });
+    const { container } = render(<Playhead />);
+    // First child is transport line, second is the anchor cursor
+    const children = Array.from(container.children);
+    const cursor = children.find(
+      (el) => (el as HTMLElement).style.top === '50px' && (el as HTMLElement).style.height === '80px',
+    ) as HTMLElement | undefined;
+    expect(cursor).toBeTruthy();
+    expect(cursor!.style.left).toBe('200px'); // playStartTime=2 * pps=100
+  });
+
+  it('does not render anchor cursor when trackLaneRects has no entry for the track', () => {
+    useTransportStore.setState({ isPlaying: false, currentTime: 0, playStartTime: 2 });
+    useUIStore.setState({
+      pixelsPerSecond: 100,
+      timelineFocused: true,
+      selectedTrackIds: new Set(['track-missing']),
+      trackLaneRects: new Map(),
+    });
+    const { container } = render(<Playhead />);
+    // Transport line is shown (currentTime=0 vs playStartTime=2), but no cursor for missing track
+    const children = Array.from(container.children);
+    // Should only have the transport line
+    expect(children.length).toBe(1);
+  });
 });

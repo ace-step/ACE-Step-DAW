@@ -229,4 +229,38 @@ describe('uiStore', () => {
       expect(entry?.searchText).toContain('volume');
     });
   });
+
+  describe('trackLaneRects cache', () => {
+    it('starts with an empty Map', () => {
+      expect(useUIStore.getState().trackLaneRects).toBeInstanceOf(Map);
+      expect(useUIStore.getState().trackLaneRects.size).toBe(0);
+    });
+
+    it('setTrackLaneRect adds an entry', () => {
+      useUIStore.getState().setTrackLaneRect('track-1', { top: 100, height: 80 });
+      const rect = useUIStore.getState().trackLaneRects.get('track-1');
+      expect(rect).toEqual({ top: 100, height: 80 });
+    });
+
+    it('setTrackLaneRect updates an existing entry', () => {
+      useUIStore.getState().setTrackLaneRect('track-1', { top: 100, height: 80 });
+      useUIStore.getState().setTrackLaneRect('track-1', { top: 120, height: 90 });
+      const rect = useUIStore.getState().trackLaneRects.get('track-1');
+      expect(rect).toEqual({ top: 120, height: 90 });
+    });
+
+    it('removeTrackLaneRect removes an entry', () => {
+      useUIStore.getState().setTrackLaneRect('track-1', { top: 100, height: 80 });
+      useUIStore.getState().removeTrackLaneRect('track-1');
+      expect(useUIStore.getState().trackLaneRects.has('track-1')).toBe(false);
+    });
+
+    it('does not affect other entries when setting or removing', () => {
+      useUIStore.getState().setTrackLaneRect('track-1', { top: 100, height: 80 });
+      useUIStore.getState().setTrackLaneRect('track-2', { top: 200, height: 60 });
+      useUIStore.getState().removeTrackLaneRect('track-1');
+      expect(useUIStore.getState().trackLaneRects.has('track-1')).toBe(false);
+      expect(useUIStore.getState().trackLaneRects.get('track-2')).toEqual({ top: 200, height: 60 });
+    });
+  });
 });

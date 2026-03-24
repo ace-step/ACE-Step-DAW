@@ -18,18 +18,55 @@ export function registerStrudelEditorAudioContext(ctx: AudioContext | null): voi
 }
 
 /**
+ * Get the registered Strudel editor AudioContext.
+ */
+export function getStrudelEditorAudioContext(): AudioContext | null {
+  return editorAudioContext;
+}
+
+/**
+ * Resume all Strudel-related AudioContexts that may have been suspended by stop.
+ * Call this before evaluate/play to ensure audio can flow again.
+ */
+export async function resumeStrudelAudio(): Promise<void> {
+  if (editorAudioContext?.state === 'suspended') {
+    await editorAudioContext.resume();
+  }
+  // Also resume superdough's internal context if different
+  try {
+    const sd = await import('superdough');
+    const superdoughCtx = sd.getAudioContext?.();
+    if (superdoughCtx && superdoughCtx !== editorAudioContext && superdoughCtx.state === 'suspended') {
+      await superdoughCtx.resume();
+    }
+  } catch {
+    // superdough not available
+  }
+}
+
+/**
  * Stop any active Strudel editor playback.
- * Falls back to suspending the AudioContext if the handler was cleared
- * (e.g. editor component already unmounted).
+ *
+ * Calls the stop handler if registered, then suspends the AudioContext to
+ * silence superdough audio nodes. Also dynamically imports superdough to
+ * suspend its internal AudioContext (which may differ from the registered one).
+ *
+ * The AudioContext is NOT resumed here — it will be resumed on next play.
  */
 export function stopStrudelEditorPlayback(): void {
   if (stopHandler) {
     stopHandler();
-  } else if (editorAudioContext && editorAudioContext.state === 'running') {
-    // Nuclear fallback: suspend the AudioContext to kill all audio nodes.
-    // Resume it immediately so future playback works.
-    editorAudioContext.suspend().then(() => {
-      editorAudioContext?.resume();
-    });
   }
+  // Suspend the registered Strudel AudioContext
+  if (editorAudioContext && editorAudioContext.state === 'running') {
+    editorAudioContext.suspend();
+  }
+  // Also suspend superdough's internal AudioContext — it may be a different
+  // instance than the one registered if timing/init order differed.
+  import('superdough').then((sd) => {
+    const superdoughCtx = sd.getAudioContext?.();
+    if (superdoughCtx && superdoughCtx !== editorAudioContext && superdoughCtx.state === 'running') {
+      superdoughCtx.suspend();
+    }
+  }).catch(() => {});
 }

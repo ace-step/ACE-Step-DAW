@@ -9,7 +9,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 import type { StrudelFromMidiOptions } from '../../types/project';
-import { registerStrudelEditorPlaybackStop, registerStrudelEditorAudioContext } from '../../engine/strudelEditorPlayback';
+import { registerStrudelEditorPlaybackStop, registerStrudelEditorAudioContext, resumeStrudelAudio } from '../../engine/strudelEditorPlayback';
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 // Inject CSS to constrain the autocomplete info panel
@@ -175,7 +175,13 @@ export function StrudelEditor() {
         containerRef.current.innerHTML = '';
 
         const store = useProjectStore.getState();
-        let strudelTrack = activeStrudelTrack;
+        // Read the track from the store snapshot — NOT from the reactive
+        // `activeStrudelTrack` memo. Using the memo as a dependency would
+        // cause this entire init effect to re-run (and destroy+recreate
+        // the editor) every time the track's code changes via evaluate().
+        let strudelTrack = openStrudelEditorTrackId
+          ? store.project?.tracks.find((t) => t.id === openStrudelEditorTrackId && t.trackType === 'strudel')
+          : store.project?.tracks.find((t) => t.trackType === 'strudel');
         if (!strudelTrack) {
           strudelTrack = store.addTrack('custom', 'strudel');
           setOpenStrudelEditor(strudelTrack.id);
@@ -244,7 +250,9 @@ export function StrudelEditor() {
       editorRef.current = null;
       if (containerRef.current) containerRef.current.innerHTML = '';
     };
-  }, [activeStrudelTrack, openStrudelEditorTrackId, setOpenStrudelEditor, stopEditorPlayback, strudelPanelOpen]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- activeStrudelTrack intentionally excluded:
+  // the effect reads the track from the store snapshot to avoid re-init on every code change.
+  }, [openStrudelEditorTrackId, setOpenStrudelEditor, stopEditorPlayback, strudelPanelOpen]);
 
   useEffect(() => {
     if (!strudelPanelOpen) {
@@ -263,6 +271,8 @@ export function StrudelEditor() {
       stopEditorPlayback();
       setConsoleMessages((prev) => [...prev.slice(-50), '⏹ stopped']);
     } else {
+      // Resume AudioContexts in background — evaluate() triggers audio init anyway
+      resumeStrudelAudio();
       editorRef.current.evaluate();
       setIsPlaying(true);
     }
@@ -271,6 +281,7 @@ export function StrudelEditor() {
   // Update (re-evaluate while playing)
   const handleUpdate = useCallback(() => {
     if (!editorRef.current) return;
+    resumeStrudelAudio();
     editorRef.current.evaluate();
     if (!isPlaying) setIsPlaying(true);
   }, [isPlaying]);
@@ -283,6 +294,7 @@ export function StrudelEditor() {
     try {
       // Evaluate first to sync code to store
       if (editorRef.current) {
+        resumeStrudelAudio();
         editorRef.current.evaluate();
         setIsPlaying(true);
         await new Promise((r) => setTimeout(r, 300));

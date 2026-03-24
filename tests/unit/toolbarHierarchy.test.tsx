@@ -243,10 +243,10 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByTitle('Loop (C)').className).not.toContain('hover:bg-white/8');
   });
 
-  it('renders metronome pulse dots based on the time signature denominator', () => {
+  it('renders metronome pulse dots based on the time signature numerator', () => {
     useProjectStore.setState((state) => ({
       project: state.project
-        ? { ...state.project, timeSignatureDenominator: 6 }
+        ? { ...state.project, timeSignature: 6, timeSignatureDenominator: 8 }
         : state.project,
     }));
     render(<Toolbar />);
@@ -254,10 +254,10 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(6);
   });
 
-  it('chooses the largest supported metronome pulse count that evenly divides the denominator', () => {
+  it('clamps metronome pulse dots to the supported 2-6 range using the numerator', () => {
     useProjectStore.setState((state) => ({
       project: state.project
-        ? { ...state.project, timeSignatureDenominator: 1 }
+        ? { ...state.project, timeSignature: 1, timeSignatureDenominator: 8 }
         : state.project,
     }));
     const { rerender } = render(<Toolbar />);
@@ -265,15 +265,15 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
 
     useProjectStore.setState((state) => ({
       project: state.project
-        ? { ...state.project, timeSignatureDenominator: 8 }
+        ? { ...state.project, timeSignature: 3, timeSignatureDenominator: 8 }
         : state.project,
     }));
     rerender(<Toolbar />);
-    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(4);
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(3);
 
     useProjectStore.setState((state) => ({
       project: state.project
-        ? { ...state.project, timeSignatureDenominator: 6 }
+        ? { ...state.project, timeSignature: 8, timeSignatureDenominator: 4 }
         : state.project,
     }));
     rerender(<Toolbar />);
@@ -283,7 +283,7 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
   it('lays out four metronome dots in clockwise order', () => {
     useProjectStore.setState((state) => ({
       project: state.project
-        ? { ...state.project, timeSignatureDenominator: 4 }
+        ? { ...state.project, timeSignature: 4, timeSignatureDenominator: 8 }
         : state.project,
     }));
     render(<Toolbar />);

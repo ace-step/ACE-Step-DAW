@@ -371,6 +371,22 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     let secondaryMoved = false;
     let pendingGhost: DragGhostInfo | null = null;
     let ghostRafId = 0;
+    let pendingStoreUpdate: (() => void) | null = null;
+    let storeRafId = 0;
+    const scheduleStoreUpdate = (fn: () => void) => {
+      pendingStoreUpdate = fn;
+      if (!storeRafId) {
+        storeRafId = requestAnimationFrame(() => {
+          if (pendingStoreUpdate) pendingStoreUpdate();
+          pendingStoreUpdate = null;
+          storeRafId = 0;
+        });
+      }
+    };
+    const flushStoreUpdate = () => {
+      if (storeRafId) { cancelAnimationFrame(storeRafId); storeRafId = 0; }
+      if (pendingStoreUpdate) { pendingStoreUpdate(); pendingStoreUpdate = null; }
+    };
 
     // Cache lane rects at drag start to avoid repeated DOM queries during drag
     const laneElements = document.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
@@ -491,65 +507,65 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
         const newDuration = origDuration + (origStart - newStart);
         if (ev.shiftKey) {
-          updateClip(clip.id, {
+          scheduleStoreUpdate(() => updateClip(clip.id, {
             startTime: newStart,
             duration: newDuration,
             contentOffset: undefined,
             timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
             stretchMode: 'repitch',
-          });
+          }));
           return;
         }
 
         if (newStart < origStart) {
           const extension = origStart - newStart;
-          updateClip(clip.id, {
+          scheduleStoreUpdate(() => updateClip(clip.id, {
             startTime: newStart,
             duration: newDuration,
             contentOffset: origContentOffset + extension,
             timeStretchRate: undefined,
             stretchMode: undefined,
-          });
+          }));
           return;
         }
 
         const trimAmount = newStart - origStart;
         const silenceTrim = Math.min(origContentOffset, trimAmount);
         const audioTrim = trimAmount - silenceTrim;
-        updateClip(clip.id, {
+        scheduleStoreUpdate(() => updateClip(clip.id, {
           startTime: newStart,
           duration: newDuration,
           contentOffset: Math.max(0, origContentOffset - silenceTrim) || undefined,
           audioOffset: Math.min(origAudioDuration, origAudioOffset + audioTrim),
           timeStretchRate: undefined,
           stretchMode: undefined,
-        });
+        }));
       } else if (mode === 'slip') {
         document.body.style.cursor = 'ew-resize';
         const maxOffset = Math.max(0, origAudioDuration - origDuration);
         if (maxOffset > 0) {
           const newOffset = Math.max(0, Math.min(origAudioOffset + deltaSec, maxOffset));
-          updateClip(clip.id, { audioOffset: newOffset });
+          scheduleStoreUpdate(() => updateClip(clip.id, { audioOffset: newOffset }));
         }
       } else {
         let newDuration = ev.altKey ? origDuration + deltaSec : snapToGrid(origDuration + deltaSec, bpm, 1);
         newDuration = Math.max(MIN_CLIP_DURATION, newDuration);
         newDuration = Math.min(newDuration, totalDuration - origStart);
         if (ev.shiftKey) {
-          updateClip(clip.id, {
+          scheduleStoreUpdate(() => updateClip(clip.id, {
             duration: newDuration,
             contentOffset: undefined,
             timeStretchRate: Math.max(CLIP_DRAG_EPSILON, origSourceSpan / newDuration),
             stretchMode: 'repitch',
-          });
+          }));
           return;
         }
-        updateClip(clip.id, {
+        scheduleStoreUpdate(() => updateClip(clip.id, {
           duration: newDuration,
           contentOffset: Math.min(origContentOffset, newDuration) || undefined,
           timeStretchRate: undefined,
           stretchMode: undefined,
-        });
+        }));
       }
     };
 
@@ -559,6 +575,9 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(ghostRafId);
+      // Cancel any pending batched store update (escape reverts, so discard it)
+      if (storeRafId) { cancelAnimationFrame(storeRafId); storeRafId = 0; }
+      pendingStoreUpdate = null;
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       // Cancel scissor mode
       if (scissorRef.current) {
@@ -605,6 +624,8 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(ghostRafId);
+      // Flush any pending batched store update so the final position is committed
+      flushStoreUpdate();
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
       // Execute scissor split

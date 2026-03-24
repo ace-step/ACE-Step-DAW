@@ -25,6 +25,7 @@ import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
 import { FADE_HANDLE_KEYBOARD_STEP, getClipFadeBounds } from '../../utils/clipFade';
+import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX } from '../arrangement/trackSlotLayout';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -253,14 +254,16 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const clipBlockRef = useRef<HTMLDivElement>(null);
 
   const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
-    const lanes = document.querySelectorAll<HTMLElement>('[data-track-id]');
+    const lanes = document.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
     let best: { trackId: string; rect: DOMRect; dist: number } | null = null;
     for (const lane of lanes) {
+      const trackId = lane.dataset.trackId!;
+      if (trackId.startsWith(ARRANGEMENT_EMPTY_TRACK_ID_PREFIX)) continue;
       const r = lane.getBoundingClientRect();
       const centerY = r.top + r.height / 2;
       const dist = Math.abs(clientY - centerY);
       if (!best || dist < best.dist) {
-        best = { trackId: lane.dataset.trackId!, rect: r, dist };
+        best = { trackId, rect: r, dist };
       }
     }
     return best ? { trackId: best.trackId, rect: best.rect } : null;
@@ -664,7 +667,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             duplicateClipToTrack(clip.id, closest.trackId, dropStart);
           }
         } else if (closest && closest.trackId !== track.id && !isMultiSelected) {
-          moveClipToTrack(clip.id, closest.trackId);
+          moveClipToTrack(clip.id, closest.trackId, dropStart);
         }
       }
     };

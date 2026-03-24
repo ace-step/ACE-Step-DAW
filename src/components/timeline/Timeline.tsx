@@ -1253,7 +1253,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
 
     const loopId = e.dataTransfer.getData('application/x-loop-id');
     if (loopId) {
-      const newTrack = addTrack('custom', 'sample');
+      const newTrack = addTrack('custom', 'sample', { order: slotIndex + 1 });
       await importLoopToTrack(loopId, newTrack.id, startTime);
       return;
     }

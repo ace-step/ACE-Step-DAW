@@ -3839,6 +3839,8 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     const srcTrack = state.project.tracks.find((t) => t.clips.some((c) => c.id === clipId));
     if (!srcTrack) return;
+    const targetTrackExists = state.project.tracks.some((t) => t.id === targetTrackId);
+    if (!targetTrackExists) return;
     if (srcTrack.id === targetTrackId && startTime === undefined) return;
     const clip = srcTrack.clips.find((c) => c.id === clipId);
     if (!clip) return;

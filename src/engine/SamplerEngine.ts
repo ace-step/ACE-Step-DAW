@@ -6,7 +6,7 @@ import { getAudioEngine } from '../hooks/useAudioEngine';
 interface SamplerVoice {
   gain: Tone.Gain;
   pitch: number;
-  releaseTimeoutId: number | null;
+  releaseTimeoutId: ReturnType<typeof setTimeout> | null;
   source: Tone.ToneBufferSource;
 }
 

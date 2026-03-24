@@ -1,15 +1,19 @@
 /**
  * VST3BridgeClient — WebSocket client for the VST3 companion app.
  *
- * Stub implementation. The real client will manage a WebSocket connection
- * to the local companion app that hosts VST3 plugins.
+ * Connects to the local companion via WebSocket, handles the protocol
+ * handshake, plugin scanning, and forwards events to listeners.
  */
 import type { VST3ConnectionStatus, VST3PluginInfo, VST3Parameter } from '../types/vst3';
+
+const DEFAULT_URL = 'ws://127.0.0.1:9851';
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
 
 type EventMap = {
   statusChange: (status: VST3ConnectionStatus) => void;
   error: (error: string) => void;
   scanComplete: (plugins: VST3PluginInfo[]) => void;
+  scanProgress: (found: number, current: string) => void;
   instanceCreated: (instanceId: string, params: VST3Parameter[]) => void;
   instanceDestroyed: (instanceId: string) => void;
   paramChanged: (instanceId: string, paramId: number, value: number) => void;
@@ -21,6 +25,11 @@ export class VST3BridgeClient {
   private _status: VST3ConnectionStatus = 'disconnected';
   private _version: string | null = null;
   private listeners = new Map<EventName, Set<EventMap[EventName]>>();
+  private ws: WebSocket | null = null;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private shouldReconnect = false;
+  private url = DEFAULT_URL;
 
   get status(): VST3ConnectionStatus {
     return this._status;
@@ -35,44 +44,180 @@ export class VST3BridgeClient {
   }
 
   /** Connect to the companion app. */
-  async connect(_url?: string): Promise<void> {
-    this._status = 'connecting';
-    this.emit('statusChange', 'connecting');
-    // Real implementation would open a WebSocket here.
-    // For now, this is a stub that will be wired up later.
+  async connect(url?: string): Promise<void> {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return; // already connected or connecting
+    }
+
+    this.url = url || DEFAULT_URL;
+    this.shouldReconnect = true;
+    this.reconnectAttempt = 0;
+    this._openWebSocket();
   }
 
   /** Disconnect from the companion app. */
   disconnect(): void {
-    this._status = 'disconnected';
+    this.shouldReconnect = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this._setStatus('disconnected');
     this._version = null;
-    this.emit('statusChange', 'disconnected');
   }
 
   /** Request a plugin scan from the companion app. */
   async scanPlugins(): Promise<void> {
-    // Stub — sends scan request over WebSocket
+    this._send({ type: 'scan_plugins' });
   }
 
   /** Create a plugin instance in the companion app. */
   async createInstance(pluginUid: string, instanceId: string): Promise<void> {
-    // Stub — sends create request
-    void pluginUid;
-    void instanceId;
+    this._send({
+      type: 'instantiate',
+      req_id: instanceId,
+      plugin_uid: pluginUid,
+      instance_id: instanceId,
+    });
   }
 
   /** Destroy a plugin instance in the companion app. */
   async destroyInstance(instanceId: string): Promise<void> {
-    // Stub — sends destroy request
-    void instanceId;
+    this._send({ type: 'destroy', instance_id: instanceId });
   }
 
   /** Set a parameter value on a plugin instance. */
   async setParam(instanceId: string, paramId: number, value: number): Promise<void> {
-    // Stub — sends param change
-    void instanceId;
-    void paramId;
-    void value;
+    this._send({
+      type: 'set_param',
+      instance_id: instanceId,
+      param_id: paramId,
+      value,
+    });
+  }
+
+  // ─── Private: WebSocket ────────────────────────────────────────────────
+
+  private _openWebSocket(): void {
+    this._setStatus('connecting');
+
+    try {
+      this.ws = new WebSocket(this.url);
+    } catch {
+      this._handleConnectionFailure('Failed to create WebSocket');
+      return;
+    }
+
+    this.ws.onopen = () => {
+      this.reconnectAttempt = 0;
+      // Send hello handshake
+      this._send({
+        type: 'hello',
+        version: '1.0',
+        sample_rate: 48000,
+        block_size: 128,
+      });
+    };
+
+    this.ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        this._handleMessage(event.data);
+      }
+      // Binary frames (audio) handled separately in future
+    };
+
+    this.ws.onclose = () => {
+      this.ws = null;
+      if (this._status === 'connected') {
+        this._setStatus('disconnected');
+        this._version = null;
+      }
+      if (this.shouldReconnect) {
+        this._scheduleReconnect();
+      }
+    };
+
+    this.ws.onerror = () => {
+      // onerror is always followed by onclose, so just mark the failure
+      if (this._status === 'connecting') {
+        this._handleConnectionFailure('Connection refused');
+      }
+    };
+  }
+
+  private _handleMessage(raw: string): void {
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    switch (msg.type) {
+      case 'hello_ack':
+        this._version = (msg.version as string) || '0.0.0';
+        this._setStatus('connected');
+        break;
+
+      case 'scan_progress':
+        this.emit('scanProgress', msg.found as number, msg.current as string);
+        break;
+
+      case 'scan_complete': {
+        const plugins = (msg.plugins as VST3PluginInfo[]) || [];
+        this.emit('scanComplete', plugins);
+        break;
+      }
+
+      case 'instantiated':
+        this.emit('instanceCreated', msg.instance_id as string, (msg.parameters as VST3Parameter[]) || []);
+        break;
+
+      case 'param_changed':
+        this.emit('paramChanged', msg.instance_id as string, msg.param_id as number, msg.value as number);
+        break;
+
+      case 'error':
+        this.emit('error', (msg.message as string) || 'Unknown error');
+        break;
+    }
+  }
+
+  private _handleConnectionFailure(reason: string): void {
+    if (this.shouldReconnect) {
+      this._scheduleReconnect();
+    } else {
+      this._setStatus('disconnected');
+      this.emit('error', reason);
+    }
+  }
+
+  private _scheduleReconnect(): void {
+    const delay = RECONNECT_DELAYS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS.length - 1)];
+    this.reconnectAttempt++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.shouldReconnect) {
+        this._openWebSocket();
+      }
+    }, delay);
+  }
+
+  private _send(msg: object): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  private _setStatus(newStatus: VST3ConnectionStatus): void {
+    if (this._status !== newStatus) {
+      this._status = newStatus;
+      this.emit('statusChange', newStatus);
+    }
   }
 
   // ─── Event Emitter ──────────────────────────────────────────────────────

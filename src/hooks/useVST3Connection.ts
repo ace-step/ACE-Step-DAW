@@ -45,6 +45,8 @@ export function useVST3Connection() {
       if (newStatus === 'connected') {
         store.setCompanionVersion(client.companionVersion);
         store.setConnectionError(null);
+        // Auto-scan on connect
+        client.scanPlugins();
       } else if (newStatus === 'disconnected') {
         store.setCompanionVersion(null);
         store.markAllInstancesOffline();
@@ -59,14 +61,21 @@ export function useVST3Connection() {
       store.setScannedPlugins(plugins);
     };
 
+    const onScanProgress = (found: number, current: string) => {
+      store._setScanning(true);
+      store._setScanProgress({ scanned: found, total: 0, currentPlugin: current });
+    };
+
     client.on('statusChange', onStatusChange);
     client.on('error', onError);
     client.on('scanComplete', onScanComplete);
+    client.on('scanProgress', onScanProgress);
 
     return () => {
       client.off('statusChange', onStatusChange);
       client.off('error', onError);
       client.off('scanComplete', onScanComplete);
+      client.off('scanProgress', onScanProgress);
     };
   }, []);
 
@@ -74,17 +83,37 @@ export function useVST3Connection() {
   useEffect(() => {
     const shouldAutoConnect = localStorage.getItem(AUTO_CONNECT_KEY) === 'true';
     if (shouldAutoConnect) {
-      void clientRef.current.connect();
+      clientRef.current.connect();
     }
   }, []);
 
   const connect = useCallback(() => {
-    void clientRef.current.connect();
+    localStorage.setItem(AUTO_CONNECT_KEY, 'true');
+    clientRef.current.connect();
   }, []);
 
   const disconnect = useCallback(() => {
+    localStorage.removeItem(AUTO_CONNECT_KEY);
     clientRef.current.disconnect();
   }, []);
+
+  const scanPlugins = useCallback(() => {
+    clientRef.current.scanPlugins();
+  }, []);
+
+  // Expose connect/disconnect via store so CompanionStatus can call them
+  useEffect(() => {
+    const store = useVST3Store.getState();
+    // Override the store's stub connect/disconnect with real bridge calls
+    useVST3Store.setState({
+      connect,
+      disconnect,
+      scanPlugins: () => {
+        store._setScanning(true);
+        clientRef.current.scanPlugins();
+      },
+    });
+  }, [connect, disconnect]);
 
   return {
     status,
@@ -92,6 +121,7 @@ export function useVST3Connection() {
     companionVersion,
     connect,
     disconnect,
+    scanPlugins,
     isConnected: status === 'connected',
   };
 }

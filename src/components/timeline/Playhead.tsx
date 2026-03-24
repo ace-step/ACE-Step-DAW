@@ -52,23 +52,16 @@ export function Playhead() {
 
 /** Cursor line positioned over a single selected track row */
 function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number; blink?: boolean }) {
-  // Find the track lane element in the timeline (not the left panel header)
-  const laneEl = document.querySelector(`[data-timeline-lane][data-track-id="${trackId}"]`) as HTMLElement | null;
-  if (!laneEl) return null;
-
-  // laneEl.offsetTop is relative to its offsetParent (trackAreaRef).
-  // We need the total offset relative to the positioned ancestor that
-  // the Playhead is also positioned against (the outer `relative` div).
-  const parentEl = laneEl.offsetParent as HTMLElement | null;
-  const parentOffset = parentEl ? parentEl.offsetTop : 0;
+  const laneRect = useUIStore((s) => s.trackLaneRects.get(trackId));
+  if (!laneRect) return null;
 
   return (
     <div
       className="absolute w-px z-20 pointer-events-none"
       style={{
         left: x,
-        top: laneEl.offsetTop + parentOffset,
-        height: laneEl.offsetHeight,
+        top: laneRect.top,
+        height: laneRect.height,
         animation: blink ? 'playhead-blink-line 1.2s ease-in-out infinite' : undefined,
         backgroundColor: blink ? undefined : '#ffffff',
         boxShadow: '0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.15)',

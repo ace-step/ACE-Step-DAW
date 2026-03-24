@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -81,6 +81,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   const [dropGhost, setDropGhost] = useState<{ left: number; width: number; name: string } | null>(null);
   const dragCounterRef = useRef(0);
 
+  const laneRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ startY: number; startRowHeight: number; startLaneHeight: number } | null>(null);
   const laneHeight = track.laneHeight ?? 80;
   const rowHeight = getArrangementRowHeight(track);
@@ -339,9 +340,32 @@ function TrackLaneInner({ track }: TrackLaneProps) {
     [automationLanesRaw, track.id],
   );
 
+  // Report lane geometry to uiStore so SelectedTrackCursor can read it
+  // without triggering per-frame DOM queries during playback.
+  useLayoutEffect(() => {
+    const el = laneRef.current;
+    if (!el) return;
+    const update = () => {
+      const parentEl = el.offsetParent as HTMLElement | null;
+      const parentOffset = parentEl ? parentEl.offsetTop : 0;
+      useUIStore.getState().setTrackLaneRect(track.id, {
+        top: el.offsetTop + parentOffset,
+        height: el.offsetHeight,
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      useUIStore.getState().removeTrackLaneRect(track.id);
+    };
+  }, [track.id]);
+
   return (
     <>
       <div
+        ref={laneRef}
         data-track-id={track.id}
         data-timeline-lane
         data-testid={`track-lane-${track.id}`}

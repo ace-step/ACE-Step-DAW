@@ -40,6 +40,7 @@ export class TrackNode {
   private _effectsInput: AudioNode | null = null;
   private _effectsOutput: AudioNode | null = null;
   private _clipped = false;
+  private latencyCompNode: DelayNode | null = null;
 
   private static readonly CLIP_THRESHOLD = 0.995;
 
@@ -353,6 +354,43 @@ export class TrackNode {
   }
 
   // -----------------------------------------------------------------------
+  // Latency Compensation (PDC)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Set latency compensation delay in samples.
+   * 0 (or negative) = bypass/remove delay.
+   * Inserts a DelayNode between compressor and volumeGain.
+   */
+  setLatencyCompensation(samples: number, sampleRate: number): void {
+    if (samples <= 0) {
+      // Bypass: remove delay node if present
+      if (this.latencyCompNode) {
+        this.compressor.disconnect(this.latencyCompNode);
+        this.latencyCompNode.disconnect(this.volumeGain);
+        this.compressor.connect(this.volumeGain);
+        this.latencyCompNode = null;
+      }
+      return;
+    }
+
+    const delaySec = samples / sampleRate;
+
+    if (this.latencyCompNode) {
+      // Update existing delay value
+      this.latencyCompNode.delayTime.value = delaySec;
+    } else {
+      // Create and insert delay node between compressor and volumeGain
+      this.latencyCompNode = this.ctx.createDelay(1.0); // max 1 second
+      this.latencyCompNode.delayTime.value = delaySec;
+
+      this.compressor.disconnect(this.volumeGain);
+      this.compressor.connect(this.latencyCompNode);
+      this.latencyCompNode.connect(this.volumeGain);
+    }
+  }
+
+  // -----------------------------------------------------------------------
 
   /**
    * Re-route the final output (analyserNode) to a new destination node.
@@ -374,6 +412,10 @@ export class TrackNode {
     this.wetGain.disconnect();
     this.sumGain.disconnect();
     this.compressor.disconnect();
+    if (this.latencyCompNode) {
+      this.latencyCompNode.disconnect();
+      this.latencyCompNode = null;
+    }
     this.volumeGain.disconnect();
     this.analyserNode.disconnect();
     this.splitter.disconnect();

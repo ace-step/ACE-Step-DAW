@@ -1,212 +1,100 @@
+/**
+ * vst3Store — Zustand store for VST3 companion app state.
+ *
+ * Tracks connection status, scanned plugins, and active instances.
+ */
 import { create } from 'zustand';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export type VST3ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-
-/** Metadata for a scanned VST3 plugin. */
-export interface VST3PluginInfo {
-  uid: string;
-  name: string;
-  vendor: string;
-  category: 'instrument' | 'effect';
-  subcategory: string;
-  inputChannels: number;
-  outputChannels: number;
-  hasEditor: boolean;
-  supportsMultiOutput: boolean;
-  outputBusses: { name: string; channels: number }[];
-}
-
-/** A running VST3 plugin instance bound to a track. */
-export interface VST3ActiveInstance {
-  instanceId: string;
-  pluginUid: string;
-  trackId: string;
-  latencySamples: number;
-  editorOpen: boolean;
-}
+import type { VST3ConnectionStatus, VST3PluginDescriptor, VST3PluginInstance } from '../types/vst3';
 
 export interface VST3StoreState {
-  // Connection
+  /** Connection status to the companion app. */
   connectionStatus: VST3ConnectionStatus;
+  /** Last connection error message. */
   connectionError: string | null;
+  /** Companion app version string. */
   companionVersion: string | null;
-  capabilities: string[];
+  /** Available plugins from the last scan. */
+  scannedPlugins: VST3PluginDescriptor[];
+  /** Timestamp of the last successful scan. */
+  lastScanTime: number | null;
+  /** Active plugin instances keyed by instanceId. */
+  instances: Record<string, VST3PluginInstance>;
 
-  // Scanning
-  isScanning: boolean;
-  scanProgress: { found: number; current: string } | null;
-  scannedPlugins: VST3PluginInfo[];
-  lastScanTimestamp: number | null;
+  // ─── Actions ────────────────────────────────────────────────────────────
 
-  // Active instances
-  activeInstances: Map<string, VST3ActiveInstance>;
-
-  // Actions — connection
-  setConnectionStatus: (status: VST3ConnectionStatus, error?: string | null) => void;
-  setCompanionInfo: (version: string, capabilities: string[]) => void;
-
-  // Actions — scanning
-  startScan: () => void;
-  updateScanProgress: (found: number, current: string) => void;
-  completeScan: (plugins: VST3PluginInfo[]) => void;
-
-  // Actions — instances
-  addInstance: (instance: VST3ActiveInstance) => void;
+  setConnectionStatus: (status: VST3ConnectionStatus) => void;
+  setConnectionError: (error: string | null) => void;
+  setCompanionVersion: (version: string | null) => void;
+  setScannedPlugins: (plugins: VST3PluginDescriptor[]) => void;
+  addInstance: (instance: VST3PluginInstance) => void;
   removeInstance: (instanceId: string) => void;
-  updateInstanceLatency: (instanceId: string, samples: number) => void;
-  setEditorOpen: (instanceId: string, open: boolean) => void;
-
-  // Derived queries
-  getPluginsByCategory: (category: 'instrument' | 'effect') => VST3PluginInfo[];
-  searchPlugins: (query: string) => VST3PluginInfo[];
-  getInstancesForTrack: (trackId: string) => VST3ActiveInstance[];
-
-  // Reset
-  reset: () => void;
+  updateInstanceParam: (instanceId: string, paramId: number, value: number) => void;
+  setInstanceOnline: (instanceId: string, online: boolean) => void;
+  markAllInstancesOffline: () => void;
 }
 
-// ─── localStorage cache helpers ──────────────────────────────────────────────
+export const useVST3Store = create<VST3StoreState>((set) => ({
+  connectionStatus: 'disconnected',
+  connectionError: null,
+  companionVersion: null,
+  scannedPlugins: [],
+  lastScanTime: null,
+  instances: {},
 
-const CACHE_KEY = 'vst3-scanned-plugins';
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setConnectionError: (error) => set({ connectionError: error }),
+  setCompanionVersion: (version) => set({ companionVersion: version }),
 
-interface CachedScanData {
-  plugins: VST3PluginInfo[];
-  timestamp: number;
-}
+  setScannedPlugins: (plugins) =>
+    set({ scannedPlugins: plugins, lastScanTime: Date.now() }),
 
-/** Load cached scan results from localStorage (best-effort). */
-function loadCachedPlugins(): { plugins: VST3PluginInfo[]; timestamp: number | null } {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return { plugins: [], timestamp: null };
-    const data: CachedScanData = JSON.parse(raw);
-    if (Array.isArray(data.plugins) && typeof data.timestamp === 'number') {
-      return { plugins: data.plugins, timestamp: data.timestamp };
-    }
-  } catch {
-    // Corrupt or missing — ignore
-  }
-  return { plugins: [], timestamp: null };
-}
-
-/** Persist scan results to localStorage. */
-function saveCachedPlugins(plugins: VST3PluginInfo[], timestamp: number): void {
-  try {
-    const data: CachedScanData = { plugins, timestamp };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  } catch {
-    // Storage full or unavailable — ignore
-  }
-}
-
-// ─── Initial state ───────────────────────────────────────────────────────────
-
-function getInitialState() {
-  const cached = loadCachedPlugins();
-  return {
-    connectionStatus: 'disconnected' as VST3ConnectionStatus,
-    connectionError: null as string | null,
-    companionVersion: null as string | null,
-    capabilities: [] as string[],
-    isScanning: false,
-    scanProgress: null as { found: number; current: string } | null,
-    scannedPlugins: cached.plugins,
-    lastScanTimestamp: cached.timestamp,
-    activeInstances: new Map<string, VST3ActiveInstance>(),
-  };
-}
-
-// ─── Store ───────────────────────────────────────────────────────────────────
-
-export const useVST3Store = create<VST3StoreState>((set, get) => ({
-  ...getInitialState(),
-
-  // Connection
-  setConnectionStatus: (status, error) =>
-    set({
-      connectionStatus: status,
-      connectionError: status === 'error' ? (error ?? null) : null,
-    }),
-
-  setCompanionInfo: (version, capabilities) =>
-    set({ companionVersion: version, capabilities }),
-
-  // Scanning
-  startScan: () =>
-    set({ isScanning: true, scanProgress: null }),
-
-  updateScanProgress: (found, current) =>
-    set({ scanProgress: { found, current } }),
-
-  completeScan: (plugins) => {
-    const timestamp = Date.now();
-    saveCachedPlugins(plugins, timestamp);
-    set({
-      isScanning: false,
-      scanProgress: null,
-      scannedPlugins: plugins,
-      lastScanTimestamp: timestamp,
-    });
-  },
-
-  // Instances
   addInstance: (instance) =>
-    set((state) => {
-      const next = new Map(state.activeInstances);
-      next.set(instance.instanceId, instance);
-      return { activeInstances: next };
-    }),
+    set((s) => ({ instances: { ...s.instances, [instance.instanceId]: instance } })),
 
   removeInstance: (instanceId) =>
-    set((state) => {
-      if (!state.activeInstances.has(instanceId)) return state;
-      const next = new Map(state.activeInstances);
-      next.delete(instanceId);
-      return { activeInstances: next };
+    set((s) => {
+      const { [instanceId]: _, ...rest } = s.instances;
+      void _;
+      return { instances: rest };
     }),
 
-  updateInstanceLatency: (instanceId, samples) =>
-    set((state) => {
-      const existing = state.activeInstances.get(instanceId);
-      if (!existing) return state;
-      const next = new Map(state.activeInstances);
-      next.set(instanceId, { ...existing, latencySamples: samples });
-      return { activeInstances: next };
+  updateInstanceParam: (instanceId, paramId, value) =>
+    set((s) => {
+      const inst = s.instances[instanceId];
+      if (!inst) return s;
+      return {
+        instances: {
+          ...s.instances,
+          [instanceId]: {
+            ...inst,
+            params: { ...inst.params, [paramId]: value },
+          },
+        },
+      };
     }),
 
-  setEditorOpen: (instanceId, open) =>
-    set((state) => {
-      const existing = state.activeInstances.get(instanceId);
-      if (!existing) return state;
-      const next = new Map(state.activeInstances);
-      next.set(instanceId, { ...existing, editorOpen: open });
-      return { activeInstances: next };
+  setInstanceOnline: (instanceId, online) =>
+    set((s) => {
+      const inst = s.instances[instanceId];
+      if (!inst) return s;
+      return {
+        instances: {
+          ...s.instances,
+          [instanceId]: { ...inst, online },
+        },
+      };
     }),
 
-  // Derived queries
-  getPluginsByCategory: (category) =>
-    get().scannedPlugins.filter((p) => p.category === category),
-
-  searchPlugins: (query) => {
-    const q = query.toLowerCase();
-    return get().scannedPlugins.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.vendor.toLowerCase().includes(q) ||
-        p.subcategory.toLowerCase().includes(q),
-    );
-  },
-
-  getInstancesForTrack: (trackId) =>
-    [...get().activeInstances.values()].filter((i) => i.trackId === trackId),
-
-  // Reset
-  reset: () => set(getInitialState()),
+  markAllInstancesOffline: () =>
+    set((s) => {
+      const entries = Object.entries(s.instances);
+      if (entries.length === 0) return s;
+      // Skip if all are already offline
+      if (entries.every(([, inst]) => !inst.online)) return s;
+      const updated: Record<string, VST3PluginInstance> = {};
+      for (const [id, inst] of entries) {
+        updated[id] = inst.online ? { ...inst, online: false } : inst;
+      }
+      return { instances: updated };
+    }),
 }));
-
-// Expose globally for agent/testing access
-if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).__vst3Store = useVST3Store;
-}

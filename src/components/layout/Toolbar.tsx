@@ -666,7 +666,9 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Project timing settings */}
-      <ProjectTimingStrip disabled={!project} />
+      <div className="hidden md:flex shrink-0">
+        <ProjectTimingStrip disabled={!project} />
+      </div>
 
       {/* Center: Transport controls */}
       <div className="shrink-0" data-testid="toolbar-group">
@@ -752,7 +754,9 @@ export function Toolbar() {
 
       <div className="flex-1" />
 
-      <HarmonySettingsStrip disabled={!project} />
+      <div className="hidden lg:flex shrink-0">
+        <HarmonySettingsStrip disabled={!project} />
+      </div>
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">

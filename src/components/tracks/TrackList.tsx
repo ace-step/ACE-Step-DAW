@@ -185,7 +185,7 @@ export function TrackList() {
     <div
       id="arrangement-track-list"
       className="flex flex-col bg-[#2a2a2a] border-r border-[#1a1a1a] relative shrink-0"
-      style={{ width: trackListWidth }}
+      style={{ width: trackListWidth, minWidth: isCollapsed ? undefined : 120 }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
           setDragOverId(null);

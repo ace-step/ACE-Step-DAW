@@ -97,7 +97,7 @@ export function StatusBar() {
           >
             <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
           </div>
-          <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
+          <span className="hidden lg:inline truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
           <div className="hidden items-center gap-1.5 text-[9px] text-daw-text-muted/80 md:flex" data-testid="status-legal-notice">
             <span className="whitespace-nowrap text-daw-text-muted/90" data-testid="status-copyright-notice">{copyrightNotice}</span>
@@ -131,7 +131,7 @@ export function StatusBar() {
               AGPL
             </a>
           </div>
-          <div className="flex items-center gap-1.5 text-daw-text-muted">
+          <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted">
             <button
               type="button"
               onClick={() => setShowKeyboardShortcutsDialog(true)}

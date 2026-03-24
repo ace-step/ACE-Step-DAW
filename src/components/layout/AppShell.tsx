@@ -93,7 +93,7 @@ function EditorShell() {
 
   return (
     <div
-      className="flex flex-col h-screen bg-daw-bg text-zinc-300"
+      className="flex flex-col h-screen min-w-[900px] bg-daw-bg text-zinc-300"
       role="application"
       aria-label="ACE-Step DAW"
       tabIndex={-1}

@@ -242,12 +242,16 @@ export function StrudelEditor() {
 
   useEffect(() => {
     if (!strudelPanelOpen) {
+      stopEditorPlayback();
       registerStrudelEditorPlaybackStop(null);
       return;
     }
 
     registerStrudelEditorPlaybackStop(stopEditorPlayback);
-    return () => registerStrudelEditorPlaybackStop(null);
+    return () => {
+      stopEditorPlayback();
+      registerStrudelEditorPlaybackStop(null);
+    };
   }, [stopEditorPlayback, strudelPanelOpen]);
 
   // Play / Stop

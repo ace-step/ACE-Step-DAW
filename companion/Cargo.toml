@@ -2,12 +2,21 @@
 name = "ace-step-companion"
 version = "0.1.0"
 edition = "2021"
-description = "Native companion app for ACE-Step DAW — VST3 plugin hosting and GUI management"
+description = "ACE-Step DAW companion app — hosts VST3 plugins and communicates with the browser DAW over WebSocket"
 
 [dependencies]
-# Future dependencies for real implementation:
-# objc2 = "0.5"          # For AppKit/Cocoa bindings
-# objc2-app-kit = "0.2"  # For NSWindow, NSView
-# tokio = { version = "1", features = ["full"] }
-# serde = { version = "1", features = ["derive"] }
-# serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+walkdir = "2"
+crossbeam = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

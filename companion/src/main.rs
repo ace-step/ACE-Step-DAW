@@ -1,22 +1,45 @@
+mod audio_thread;
+mod error;
 mod gui_manager;
+mod plugin_host;
+mod plugin_scanner;
+mod preset_manager;
+mod protocol;
+mod sidechain_router;
+mod ws_server;
 
-fn main() {
-    println!("ACE-Step Companion — VST3 plugin host (stub)");
+use std::net::SocketAddr;
 
-    let mut mgr = gui_manager::GuiManager::new();
+use clap::Parser;
+use tracing_subscriber::EnvFilter;
 
-    // Demo: open and close an editor window (stub)
-    match mgr.open_editor("demo-plugin-1", 800, 600) {
-        Ok((w, h)) => println!("Opened editor: {w}x{h}"),
-        Err(e) => eprintln!("Failed to open editor: {e}"),
-    }
+/// ACE-Step Companion — local VST3 plugin host for the ACE-Step DAW.
+#[derive(Parser, Debug)]
+#[command(name = "ace-step-companion", version = "0.1.0")]
+struct Cli {
+    /// WebSocket server port.
+    #[arg(long, default_value_t = 9851)]
+    port: u16,
 
-    mgr.process_events();
+    /// Enable verbose (debug-level) logging.
+    #[arg(long)]
+    verbose: bool,
+}
 
-    if mgr.is_editor_open("demo-plugin-1") {
-        println!("Editor is open");
-    }
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
 
-    mgr.close_all();
-    println!("All editors closed");
+    // Initialise tracing.
+    let filter = if cli.verbose {
+        EnvFilter::new("debug")
+    } else {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    };
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    let addr: SocketAddr = ([127, 0, 0, 1], cli.port).into();
+    ws_server::run(addr).await?;
+
+    Ok(())
 }

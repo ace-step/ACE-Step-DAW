@@ -28,3 +28,4 @@ test-results/
 
 # PM agent persistent memory
 .pm/
+/companion/target/

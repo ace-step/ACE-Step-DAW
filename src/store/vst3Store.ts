@@ -1,100 +1,151 @@
-/**
- * vst3Store — Zustand store for VST3 companion app state.
- *
- * Tracks connection status, scanned plugins, and active instances.
- */
 import { create } from 'zustand';
-import type { VST3ConnectionStatus, VST3PluginDescriptor, VST3PluginInstance } from '../types/vst3';
+import type {
+  VST3ConnectionStatus,
+  VST3PluginInfo,
+  VST3ActiveInstance,
+  VST3ScanProgress,
+  VST3Parameter,
+} from '../types/vst3';
 
-export interface VST3StoreState {
-  /** Connection status to the companion app. */
+export interface VST3Store {
+  /* ── Connection ──────────────────────────────────────── */
   connectionStatus: VST3ConnectionStatus;
-  /** Last connection error message. */
-  connectionError: string | null;
-  /** Companion app version string. */
   companionVersion: string | null;
-  /** Available plugins from the last scan. */
-  scannedPlugins: VST3PluginDescriptor[];
-  /** Timestamp of the last successful scan. */
-  lastScanTime: number | null;
-  /** Active plugin instances keyed by instanceId. */
-  instances: Record<string, VST3PluginInstance>;
 
-  // ─── Actions ────────────────────────────────────────────────────────────
+  /* ── Scanned plugin catalogue ───────────────────────── */
+  plugins: VST3PluginInfo[];
+  scanning: boolean;
+  scanProgress: VST3ScanProgress | null;
 
-  setConnectionStatus: (status: VST3ConnectionStatus) => void;
-  setConnectionError: (error: string | null) => void;
-  setCompanionVersion: (version: string | null) => void;
-  setScannedPlugins: (plugins: VST3PluginDescriptor[]) => void;
-  addInstance: (instance: VST3PluginInstance) => void;
+  /* ── Active instances (keyed by instanceId) ─────────── */
+  instances: Record<string, VST3ActiveInstance>;
+
+  /* ── Actions ────────────────────────────────────────── */
+  connect: () => void;
+  disconnect: () => void;
+  scanPlugins: () => void;
+
+  loadPlugin: (pluginId: string, trackId: string) => void;
   removeInstance: (instanceId: string) => void;
-  updateInstanceParam: (instanceId: string, paramId: number, value: number) => void;
-  setInstanceOnline: (instanceId: string, online: boolean) => void;
-  markAllInstancesOffline: () => void;
+  toggleInstance: (instanceId: string) => void;
+  openEditor: (instanceId: string) => void;
+  setParameter: (instanceId: string, paramId: number, value: number) => void;
+  selectPreset: (instanceId: string, preset: string) => void;
+  savePreset: (instanceId: string, name: string) => void;
+
+  /* ── Internal setters (used by bridge callbacks) ────── */
+  _setConnectionStatus: (status: VST3ConnectionStatus) => void;
+  _setCompanionVersion: (version: string) => void;
+  _setPlugins: (plugins: VST3PluginInfo[]) => void;
+  _setScanning: (scanning: boolean) => void;
+  _setScanProgress: (progress: VST3ScanProgress | null) => void;
+  _upsertInstance: (instance: VST3ActiveInstance) => void;
+  _removeInstance: (instanceId: string) => void;
+  _updateParameter: (instanceId: string, paramId: number, value: number) => void;
 }
 
-export const useVST3Store = create<VST3StoreState>((set) => ({
+export const useVST3Store = create<VST3Store>()((set, get) => ({
   connectionStatus: 'disconnected',
-  connectionError: null,
   companionVersion: null,
-  scannedPlugins: [],
-  lastScanTime: null,
+  plugins: [],
+  scanning: false,
+  scanProgress: null,
   instances: {},
 
-  setConnectionStatus: (status) => set({ connectionStatus: status }),
-  setConnectionError: (error) => set({ connectionError: error }),
-  setCompanionVersion: (version) => set({ companionVersion: version }),
+  // ── Connection ──────────────────────────────────────────
+  connect: () => {
+    set({ connectionStatus: 'connecting' });
+    // Bridge implementation will call _setConnectionStatus('connected')
+  },
 
-  setScannedPlugins: (plugins) =>
-    set({ scannedPlugins: plugins, lastScanTime: Date.now() }),
+  disconnect: () => {
+    set({ connectionStatus: 'disconnected', companionVersion: null });
+  },
 
-  addInstance: (instance) =>
-    set((s) => ({ instances: { ...s.instances, [instance.instanceId]: instance } })),
+  // ── Scanning ────────────────────────────────────────────
+  scanPlugins: () => {
+    set({ scanning: true, scanProgress: null });
+    // Bridge implementation will update scan progress and call _setPlugins
+  },
 
-  removeInstance: (instanceId) =>
-    set((s) => {
-      const { [instanceId]: _, ...rest } = s.instances;
-      void _;
-      return { instances: rest };
-    }),
+  // ── Plugin lifecycle ────────────────────────────────────
+  loadPlugin: (_pluginId: string, _trackId: string) => {
+    // Bridge will call _upsertInstance once loaded
+  },
 
-  updateInstanceParam: (instanceId, paramId, value) =>
-    set((s) => {
-      const inst = s.instances[instanceId];
-      if (!inst) return s;
-      return {
-        instances: {
-          ...s.instances,
-          [instanceId]: {
-            ...inst,
-            params: { ...inst.params, [paramId]: value },
-          },
+  removeInstance: (instanceId: string) => {
+    get()._removeInstance(instanceId);
+  },
+
+  toggleInstance: (instanceId: string) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: { ...inst, enabled: !inst.enabled },
+      },
+    });
+  },
+
+  openEditor: (_instanceId: string) => {
+    // Bridge tells companion to show native window
+  },
+
+  setParameter: (instanceId: string, paramId: number, value: number) => {
+    get()._updateParameter(instanceId, paramId, value);
+  },
+
+  selectPreset: (instanceId: string, preset: string) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: { ...inst, activePreset: preset },
+      },
+    });
+  },
+
+  savePreset: (_instanceId: string, _name: string) => {
+    // Bridge implementation
+  },
+
+  // ── Internal setters ────────────────────────────────────
+  _setConnectionStatus: (status) => set({ connectionStatus: status }),
+  _setCompanionVersion: (version) => set({ companionVersion: version }),
+  _setPlugins: (plugins) => set({ plugins }),
+  _setScanning: (scanning) => set({ scanning }),
+  _setScanProgress: (progress) => set({ scanProgress: progress }),
+
+  _upsertInstance: (instance) => {
+    const { instances } = get();
+    set({ instances: { ...instances, [instance.instanceId]: instance } });
+  },
+
+  _removeInstance: (instanceId) => {
+    const { instances } = get();
+    const next = { ...instances };
+    delete next[instanceId];
+    set({ instances: next });
+  },
+
+  _updateParameter: (instanceId, paramId, value) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: {
+          ...inst,
+          parameters: inst.parameters.map((p: VST3Parameter) =>
+            p.id === paramId ? { ...p, value } : p,
+          ),
         },
-      };
-    }),
-
-  setInstanceOnline: (instanceId, online) =>
-    set((s) => {
-      const inst = s.instances[instanceId];
-      if (!inst) return s;
-      return {
-        instances: {
-          ...s.instances,
-          [instanceId]: { ...inst, online },
-        },
-      };
-    }),
-
-  markAllInstancesOffline: () =>
-    set((s) => {
-      const entries = Object.entries(s.instances);
-      if (entries.length === 0) return s;
-      // Skip if all are already offline
-      if (entries.every(([, inst]) => !inst.online)) return s;
-      const updated: Record<string, VST3PluginInstance> = {};
-      for (const [id, inst] of entries) {
-        updated[id] = inst.online ? { ...inst, online: false } : inst;
-      }
-      return { instances: updated };
-    }),
+      },
+    });
+  },
 }));

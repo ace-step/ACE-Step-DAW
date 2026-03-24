@@ -443,8 +443,11 @@ export function useTransport() {
 
         // Skip MIDI scheduling if the track already has bounced audio clips —
         // otherwise the drum triggers overlap with the rendered audio.
-        const hasReadyClips = track.clips.some((c) => c.generationStatus === 'ready');
-        if (hasReadyClips) continue;
+        // Only skip for clips with actual audio data (not midiData-only visualization clips).
+        const hasBouncedAudio = track.clips.some(
+          (c) => c.generationStatus === 'ready' && (c.cumulativeMixKey || c.isolatedAudioKey),
+        );
+        if (hasBouncedAudio) continue;
 
         const { sequencerPattern } = track;
         const stepsPerBeat = sequencerPattern.stepsPerBar / 4;

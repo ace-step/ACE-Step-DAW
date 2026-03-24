@@ -7,7 +7,7 @@
  */
 
 import type { StrudelEvent } from '../engine/strudelEngine';
-import type { MidiNote, SequencerPattern, SequencerRow, SequencerStep } from '../types/project';
+import type { MidiClipData, MidiNote, SequencerPattern, SequencerRow, SequencerStep } from '../types/project';
 
 // ─── Strudel → MIDI ─────────────────────────────────────────
 
@@ -156,4 +156,48 @@ export function strudelEventsToDrumPattern(
     bars,
     swing: 0,
   };
+}
+
+// ─── Sequencer Pattern → MIDI Clip Data ─────────────────────
+
+/** Map DAW drum sample keys to GM drum MIDI pitches. */
+export const DAW_DRUM_TO_MIDI_PITCH: Record<string, number> = {
+  kick: 36, snare: 38, closed_hh: 42, open_hh: 46,
+  clap: 39, rim: 37, high_tom: 50, mid_tom: 47,
+  low_tom: 45, crash: 49, ride: 51, cowbell: 56,
+  shaker: 70, claves: 75, maracas: 70, perc: 47,
+};
+
+/**
+ * Convert a SequencerPattern to MidiClipData for timeline visualization.
+ *
+ * Each active step becomes a MidiNote with GM drum pitch mapping.
+ * Muted rows are skipped.
+ */
+export function sequencerPatternToMidiData(
+  pattern: SequencerPattern,
+  beatsPerBar: number = 4,
+): MidiClipData {
+  const notes: MidiNote[] = [];
+  const beatsPerStep = beatsPerBar / pattern.stepsPerBar;
+
+  for (const row of pattern.rows) {
+    if (row.muted) continue;
+    const pitch = DAW_DRUM_TO_MIDI_PITCH[row.sampleKey] ?? 47;
+
+    for (let i = 0; i < row.steps.length; i++) {
+      const step = row.steps[i];
+      if (!step.active) continue;
+
+      notes.push({
+        id: `seq-midi-${row.sampleKey}-${i}-${Date.now()}`,
+        pitch,
+        startBeat: i * beatsPerStep,
+        durationBeats: beatsPerStep,
+        velocity: step.velocity,
+      });
+    }
+  }
+
+  return { notes, grid: '1/16' };
 }

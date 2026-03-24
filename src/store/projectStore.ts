@@ -5196,7 +5196,7 @@ export const useProjectStore = create<ProjectState>()(
     const events = queryPatternEvents(pattern, 0, bars);
 
     // Convert to sequencer pattern
-    const { strudelEventsToDrumPattern } = await import('../services/strudelConversion');
+    const { strudelEventsToDrumPattern, sequencerPatternToMidiData } = await import('../services/strudelConversion');
     const sequencerPattern = strudelEventsToDrumPattern(events, bars, stepsPerBar);
 
     if (sequencerPattern.rows.length === 0) return null;
@@ -5212,6 +5212,44 @@ export const useProjectStore = create<ProjectState>()(
     newTrack.color = track.color;
 
     const bpm = state.project.bpm ?? 120;
+
+    // Create a clip with midiData so the pattern is visible in the timeline.
+    // Repeat the pattern to fill the project's measure count (sequencer loops during playback).
+    const singleBarMidi = sequencerPatternToMidiData(sequencerPattern, beatsPerBar);
+    if (singleBarMidi.notes.length > 0) {
+      const patternBeats = bars * beatsPerBar;
+      const projectMeasures = state.project.measures ?? 8;
+      const loopCount = Math.max(1, Math.ceil(projectMeasures / bars));
+      const totalBeats = patternBeats * loopCount;
+      const totalDurationSec = (totalBeats * 60) / bpm;
+
+      const allNotes = [];
+      for (let loop = 0; loop < loopCount; loop++) {
+        const offset = loop * patternBeats;
+        for (const note of singleBarMidi.notes) {
+          allNotes.push({
+            ...note,
+            id: `${note.id}-L${loop}`,
+            startBeat: note.startBeat + offset,
+          });
+        }
+      }
+
+      newTrack.clips = [{
+        id: uuidv4(),
+        trackId: newTrack.id,
+        startTime: 0,
+        duration: totalDurationSec,
+        prompt: '',
+        lyrics: '',
+        generationStatus: 'ready' as const,
+        generationJobId: null,
+        cumulativeMixKey: null,
+        isolatedAudioKey: null,
+        waveformPeaks: null,
+        midiData: { notes: allNotes, grid: singleBarMidi.grid },
+      }];
+    }
     const newTracks = [...get().project!.tracks, newTrack];
     const nextProject = ensureProjectSession({
       ...get().project!,

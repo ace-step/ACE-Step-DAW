@@ -164,6 +164,101 @@ describe('strudelEventsToDrumPattern', () => {
   });
 });
 
+describe('sequencerPatternToMidiData', () => {
+  let sequencerPatternToMidiData: typeof import('../strudelConversion').sequencerPatternToMidiData;
+
+  beforeAll(async () => {
+    ({ sequencerPatternToMidiData } = await import('../strudelConversion'));
+  });
+
+  it('converts sequencer rows/steps to MIDI notes with GM drum pitches', () => {
+    const pattern: import('../../types/project').SequencerPattern = {
+      id: 'test-pattern',
+      name: 'Test',
+      stepsPerBar: 16,
+      bars: 1,
+      swing: 0,
+      rows: [
+        {
+          id: 'r1', name: 'Kick', sampleKey: 'kick',
+          steps: Array.from({ length: 16 }, (_, i) => ({
+            active: i === 0 || i === 8, velocity: 0.9,
+          })),
+          volume: 0.8, pan: 0, muted: false, color: '#f00',
+        },
+        {
+          id: 'r2', name: 'Snare', sampleKey: 'snare',
+          steps: Array.from({ length: 16 }, (_, i) => ({
+            active: i === 4 || i === 12, velocity: 0.7,
+          })),
+          volume: 0.8, pan: 0, muted: false, color: '#0f0',
+        },
+      ],
+    };
+
+    const midiData = sequencerPatternToMidiData(pattern, 4);
+
+    expect(midiData.notes).toHaveLength(4);
+
+    const kicks = midiData.notes.filter(n => n.pitch === 36);
+    expect(kicks).toHaveLength(2);
+    expect(kicks[0].startBeat).toBe(0);
+    expect(kicks[1].startBeat).toBe(2);
+    expect(kicks[0].velocity).toBe(0.9);
+
+    const snares = midiData.notes.filter(n => n.pitch === 38);
+    expect(snares).toHaveLength(2);
+    expect(snares[0].startBeat).toBe(1);
+    expect(snares[1].startBeat).toBe(3);
+    expect(snares[0].velocity).toBe(0.7);
+
+    expect(midiData.notes[0].durationBeats).toBeCloseTo(0.25);
+    expect(midiData.grid).toBe('1/16');
+  });
+
+  it('returns empty notes for empty pattern', () => {
+    const pattern: import('../../types/project').SequencerPattern = {
+      id: 'empty', name: 'Empty', stepsPerBar: 16, bars: 1, swing: 0, rows: [],
+    };
+
+    const midiData = sequencerPatternToMidiData(pattern, 4);
+    expect(midiData.notes).toHaveLength(0);
+  });
+
+  it('uses fallback pitch 47 for unknown drum keys', () => {
+    const pattern: import('../../types/project').SequencerPattern = {
+      id: 'test', name: 'Test', stepsPerBar: 16, bars: 1, swing: 0,
+      rows: [{
+        id: 'r1', name: 'Unknown', sampleKey: 'unknown_thing',
+        steps: Array.from({ length: 16 }, (_, i) => ({
+          active: i === 0, velocity: 0.8,
+        })),
+        volume: 0.8, pan: 0, muted: false, color: '#888',
+      }],
+    };
+
+    const midiData = sequencerPatternToMidiData(pattern, 4);
+    expect(midiData.notes).toHaveLength(1);
+    expect(midiData.notes[0].pitch).toBe(47);
+  });
+
+  it('skips muted rows', () => {
+    const pattern: import('../../types/project').SequencerPattern = {
+      id: 'test', name: 'Test', stepsPerBar: 16, bars: 1, swing: 0,
+      rows: [{
+        id: 'r1', name: 'Kick', sampleKey: 'kick',
+        steps: Array.from({ length: 16 }, (_, i) => ({
+          active: i === 0, velocity: 0.8,
+        })),
+        volume: 0.8, pan: 0, muted: true, color: '#f00',
+      }],
+    };
+
+    const midiData = sequencerPatternToMidiData(pattern, 4);
+    expect(midiData.notes).toHaveLength(0);
+  });
+});
+
 describe('STRUDEL_TO_DAW_DRUM', () => {
   it('maps common strudel drum names', () => {
     expect(STRUDEL_TO_DAW_DRUM['bd']).toBe('kick');

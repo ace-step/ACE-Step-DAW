@@ -75,6 +75,12 @@ export interface WAPPlugin {
   readonly description: string;
 
   /**
+   * Processing latency in samples (VST3 plugins).
+   * WAP plugins that don't report latency default to 0.
+   */
+  readonly latencySamples?: number;
+
+  /**
    * Create the audio processing nodes.
    * Called once when the plugin is loaded onto a track.
    * @param ctx - The AudioContext to create nodes in.

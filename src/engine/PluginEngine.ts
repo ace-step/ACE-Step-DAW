@@ -182,6 +182,21 @@ export class PluginEngine {
   }
 
   /**
+   * Get total latency of plugin chain for a track (in samples).
+   * Sums latencySamples from all plugins in the chain.
+   * WAP plugins without latencySamples are assumed to have 0 latency.
+   */
+  getChainLatency(trackId: string): number {
+    const chain = this.chains.get(trackId);
+    if (!chain) return 0;
+    let total = 0;
+    for (const node of chain) {
+      total += node.plugin.latencySamples ?? 0;
+    }
+    return total;
+  }
+
+  /**
    * Dispose the plugin chain for a track.
    */
   disposeChain(trackId: string): void {

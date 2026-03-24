@@ -1,375 +1,297 @@
 /**
- * VST3 Bridge Protocol — WebSocket message types between browser and companion app.
+ * VST3 Bridge Protocol Types
  *
- * Defines every message in the protocol, data models for plugins/parameters/presets,
- * binary audio frame helpers, and type guards for runtime validation.
+ * Defines the wire protocol between the browser DAW and the local
+ * VST3 companion app communicating over WebSocket.
  */
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-/** Default WebSocket port for the VST3 companion app. */
+/** Default WebSocket port for the companion app. */
 export const VST3_BRIDGE_PORT = 9851;
 
-/** Protocol version string used in the handshake. */
+/** Protocol version string sent during handshake. */
 export const VST3_BRIDGE_VERSION = '1.0';
 
-/** Size in bytes of the binary audio frame header. */
+/**
+ * Binary audio frame header size in bytes.
+ * Layout: instanceIdHash(u32) + seq(u32) + channels(u32) + samplesPerChannel(u32)
+ */
 export const AUDIO_HEADER_SIZE = 16;
 
-// ─── Data Models ────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Plugin metadata
+// ---------------------------------------------------------------------------
 
-/** Metadata for a scanned VST3 plugin. */
+/** Information about a discovered VST3 plugin. */
 export interface VST3PluginInfo {
-  /** Unique plugin identifier from the VST3 binary. */
   uid: string;
-  /** Human-readable plugin name. */
   name: string;
-  /** Plugin vendor / manufacturer. */
   vendor: string;
-  /** Top-level category. */
-  category: 'instrument' | 'effect';
-  /** Finer-grained subcategory (e.g. "Reverb", "Synth"). */
-  subcategory: string;
-  /** Number of audio input channels. */
+  version: string;
+  category: string;
   inputChannels: number;
-  /** Number of audio output channels. */
   outputChannels: number;
-  /** Whether the plugin provides a custom GUI editor. */
   hasEditor: boolean;
-  /** Whether the plugin supports multiple output busses. */
-  supportsMultiOutput: boolean;
-  /** Descriptions of available output busses. */
-  outputBusses: { name: string; channels: number }[];
+  parameters: VST3ParamInfo[];
 }
 
-/** Descriptor for a single automatable VST3 parameter. */
+/** Metadata for a single automatable parameter. */
 export interface VST3ParamInfo {
-  /** Parameter ID as reported by the plugin. */
   id: number;
-  /** Human-readable parameter name. */
   name: string;
-  /** Minimum value. */
-  min: number;
-  /** Maximum value. */
-  max: number;
-  /** Default value. */
-  default: number;
-  /** Number of discrete steps (0 = continuous). */
+  units: string;
+  defaultValue: number;
+  minValue: number;
+  maxValue: number;
   stepCount: number;
-  /** Unit label (e.g. "dB", "Hz", "%"). */
-  unitName: string;
 }
 
-/** Descriptor for a factory preset. */
+/** A preset discovered inside a plugin. */
 export interface VST3PresetInfo {
-  /** Preset ID / index. */
-  id: number;
-  /** Human-readable preset name. */
   name: string;
+  category: string;
+  path: string;
 }
 
-/** A single MIDI event sent to a plugin instance. */
+/** A single MIDI event to send to a plugin instance. */
 export interface VST3MidiEvent {
-  /** MIDI event type. */
-  type: 'noteOn' | 'noteOff' | 'cc' | 'pitchBend';
-  /** MIDI note number (noteOn / noteOff). */
-  note?: number;
-  /** Velocity value (noteOn / noteOff). */
-  velocity?: number;
-  /** Control-change number (cc). */
-  cc?: number;
-  /** Generic value (cc value or pitch-bend amount). */
-  value?: number;
+  /** MIDI status byte (e.g. 0x90 = note-on ch0). */
+  status: number;
+  /** First data byte (e.g. note number). */
+  data1: number;
+  /** Second data byte (e.g. velocity). */
+  data2: number;
   /** Sample offset within the current processing block. */
-  sampleOffset: number;
+  sampleOffset?: number;
 }
 
-// ─── Browser → Companion Messages ───────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Browser -> Companion messages
+// ---------------------------------------------------------------------------
 
-/** Handshake initiation from browser. */
 export interface HelloMessage {
   type: 'hello';
+  reqId?: string;
   version: string;
   sampleRate: number;
   blockSize: number;
 }
 
-/** Request a full plugin scan. */
 export interface ScanPluginsMessage {
   type: 'scan_plugins';
+  reqId?: string;
 }
 
-/** Request to instantiate a plugin. */
 export interface InstantiateMessage {
   type: 'instantiate';
-  reqId: string;
+  reqId?: string;
   pluginUid: string;
   instanceId: string;
 }
 
-/** Set a parameter value on a plugin instance. */
 export interface SetParamMessage {
   type: 'set_param';
+  reqId?: string;
   instanceId: string;
   paramId: number;
   value: number;
 }
 
-/** Send MIDI events to a plugin instance. */
 export interface MidiMessage {
   type: 'midi';
+  reqId?: string;
   instanceId: string;
   events: VST3MidiEvent[];
 }
 
-/** Request opening the plugin's native GUI editor. */
 export interface OpenEditorMessage {
   type: 'open_editor';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Request closing the plugin's native GUI editor. */
 export interface CloseEditorMessage {
   type: 'close_editor';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Request the full serialized state of a plugin instance. */
 export interface GetStateMessage {
   type: 'get_state';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Restore serialized state to a plugin instance. */
 export interface SetStateMessage {
   type: 'set_state';
+  reqId?: string;
   instanceId: string;
-  /** Base64-encoded plugin state blob. */
-  data: string;
+  data: string; // base64
 }
 
-/** Load a factory preset by ID. */
 export interface LoadPresetMessage {
   type: 'load_preset';
+  reqId?: string;
   instanceId: string;
-  presetId: number;
+  presetPath: string;
 }
 
-/** Destroy a plugin instance and free resources. */
 export interface DestroyMessage {
   type: 'destroy';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Enable or disable audio processing on a plugin instance. */
 export interface SetProcessingMessage {
   type: 'set_processing';
+  reqId?: string;
   instanceId: string;
   active: boolean;
 }
 
-/** Query the current processing latency of a plugin instance. */
 export interface GetLatencyMessage {
   type: 'get_latency';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Configure sidechain routing for a plugin instance. */
 export interface RouteSidechainMessage {
   type: 'route_sidechain';
+  reqId?: string;
   instanceId: string;
-  sidechainInputBus: number;
   sourceInstanceId: string;
 }
 
-// ─── Companion → Browser Messages ───────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Companion -> Browser messages
+// ---------------------------------------------------------------------------
 
-/** Handshake acknowledgement from companion. */
 export interface HelloAckMessage {
   type: 'hello_ack';
+  reqId?: string;
   version: string;
-  capabilities: string[];
+  companionVersion: string;
 }
 
-/** Progress update during plugin scanning. */
 export interface ScanProgressMessage {
   type: 'scan_progress';
-  found: number;
-  current: string;
+  reqId?: string;
+  current: number;
+  total: number;
+  pluginName: string;
 }
 
-/** Scan complete with full plugin list. */
 export interface ScanCompleteMessage {
   type: 'scan_complete';
+  reqId?: string;
   plugins: VST3PluginInfo[];
 }
 
-/** Plugin instance created successfully. */
 export interface InstantiatedMessage {
   type: 'instantiated';
-  reqId: string;
+  reqId?: string;
   instanceId: string;
-  parameters: VST3ParamInfo[];
-  latencySamples: number;
-  tailSamples: number;
-  presets: VST3PresetInfo[];
+  pluginInfo: VST3PluginInfo;
 }
 
-/** A parameter value was changed (e.g. from the plugin GUI). */
 export interface ParamChangedMessage {
   type: 'param_changed';
+  reqId?: string;
   instanceId: string;
   paramId: number;
   value: number;
 }
 
-/** Plugin editor window opened. */
 export interface EditorOpenedMessage {
   type: 'editor_opened';
+  reqId?: string;
   instanceId: string;
   width: number;
   height: number;
 }
 
-/** Plugin editor window closed. */
 export interface EditorClosedMessage {
   type: 'editor_closed';
+  reqId?: string;
   instanceId: string;
 }
 
-/** Serialized plugin state (base64). */
 export interface StateDataMessage {
   type: 'state_data';
+  reqId?: string;
   instanceId: string;
-  /** Base64-encoded plugin state blob. */
-  data: string;
+  data: string; // base64
 }
 
-/** Latency information for a plugin instance. */
 export interface LatencyInfoMessage {
   type: 'latency_info';
+  reqId?: string;
   instanceId: string;
-  samples: number;
+  latencySamples: number;
 }
 
-/** Error response from the companion. */
 export interface ErrorMessage {
   type: 'error';
   reqId?: string;
-  instanceId?: string;
   code: string;
   message: string;
 }
 
-// ─── Union Type ─────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Union types
+// ---------------------------------------------------------------------------
 
-/** Union of all possible VST3 Bridge protocol messages. */
-export type VST3BridgeMessage =
+/** Any message sent from the browser to the companion. */
+export type BrowserToCompanionMessage =
   | HelloMessage
-  | HelloAckMessage
   | ScanPluginsMessage
-  | ScanProgressMessage
-  | ScanCompleteMessage
   | InstantiateMessage
-  | InstantiatedMessage
   | SetParamMessage
-  | ParamChangedMessage
   | MidiMessage
   | OpenEditorMessage
-  | EditorOpenedMessage
   | CloseEditorMessage
-  | EditorClosedMessage
   | GetStateMessage
-  | StateDataMessage
   | SetStateMessage
   | LoadPresetMessage
   | DestroyMessage
   | SetProcessingMessage
   | GetLatencyMessage
+  | RouteSidechainMessage;
+
+/** Any message sent from the companion to the browser. */
+export type CompanionToBrowserMessage =
+  | HelloAckMessage
+  | ScanProgressMessage
+  | ScanCompleteMessage
+  | InstantiatedMessage
+  | ParamChangedMessage
+  | EditorOpenedMessage
+  | EditorClosedMessage
+  | StateDataMessage
   | LatencyInfoMessage
-  | RouteSidechainMessage
   | ErrorMessage;
 
-// ─── Valid Message Types ────────────────────────────────────────────────────
+/** Any message that can cross the bridge. */
+export type VST3BridgeMessage =
+  | BrowserToCompanionMessage
+  | CompanionToBrowserMessage;
 
-/** Set of all valid message type strings for runtime validation. */
-const VALID_MESSAGE_TYPES = new Set<string>([
-  'hello',
-  'hello_ack',
-  'scan_plugins',
-  'scan_progress',
-  'scan_complete',
-  'instantiate',
-  'instantiated',
-  'set_param',
-  'param_changed',
-  'midi',
-  'open_editor',
-  'editor_opened',
-  'close_editor',
-  'editor_closed',
-  'get_state',
-  'state_data',
-  'set_state',
-  'load_preset',
-  'destroy',
-  'set_processing',
-  'get_latency',
-  'latency_info',
-  'route_sidechain',
-  'error',
-]);
-
-// ─── Type Guard ─────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Binary audio frame helpers
+// ---------------------------------------------------------------------------
 
 /**
- * Runtime type guard that checks whether an unknown value is a valid VST3BridgeMessage.
- * Validates that the value is a non-null object with a recognised `type` field.
- */
-export function isVST3BridgeMessage(msg: unknown): msg is VST3BridgeMessage {
-  if (msg === null || msg === undefined || typeof msg !== 'object') {
-    return false;
-  }
-  const obj = msg as Record<string, unknown>;
-  return typeof obj.type === 'string' && VALID_MESSAGE_TYPES.has(obj.type);
-}
-
-// ─── FNV-1a Hash ────────────────────────────────────────────────────────────
-
-/**
- * Compute a 32-bit FNV-1a hash of a string.
- * Used to convert instance UUID strings into compact uint32 identifiers
- * for the binary audio frame header.
- */
-export function fnv1aHash(str: string): number {
-  let hash = 0x811c9dc5; // FNV offset basis
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    // FNV prime multiply — use Math.imul for correct 32-bit multiply
-    hash = Math.imul(hash, 0x01000193);
-  }
-  // Return as unsigned 32-bit integer
-  return hash >>> 0;
-}
-
-// ─── Binary Audio Frame Helpers ─────────────────────────────────────────────
-
-/**
- * Encode audio samples into a binary frame with a 16-byte header.
+ * Encode audio channel data into a single ArrayBuffer with a fixed header.
  *
- * Header layout (16 bytes, little-endian):
- *   [0..3]   uint32  instanceIdHash  (FNV-1a of the instance UUID)
- *   [4..7]   uint32  sequenceNumber
- *   [8..11]  uint32  numChannels
- *   [12..15] uint32  numSamples (per channel)
- *
- * Body: float32[] interleaved audio (channel-first: all samples of ch0, then ch1, ...).
- *
- * @param instanceIdHash - FNV-1a hash of the instance UUID.
- * @param seq - Monotonically increasing sequence number.
- * @param channels - Number of audio channels.
- * @param samples - Array of Float32Arrays, one per channel.
- * @returns An ArrayBuffer containing the complete frame.
+ * Layout (little-endian):
+ *   [0..3]   u32  instanceIdHash
+ *   [4..7]   u32  seq
+ *   [8..11]  u32  channels
+ *   [12..15] u32  samplesPerChannel
+ *   [16..]   f32[] interleaved sample data (ch0 then ch1 ...)
  */
 export function encodeAudioFrame(
   instanceIdHash: number,
@@ -377,50 +299,65 @@ export function encodeAudioFrame(
   channels: number,
   samples: Float32Array[],
 ): ArrayBuffer {
-  const numSamples = samples.length > 0 ? samples[0].length : 0;
-  const bodyBytes = channels * numSamples * 4; // float32 = 4 bytes
-  const buffer = new ArrayBuffer(AUDIO_HEADER_SIZE + bodyBytes);
-  const view = new DataView(buffer);
+  const samplesPerChannel = samples[0]?.length ?? 0;
+  const bodyBytes = channels * samplesPerChannel * 4;
+  const buf = new ArrayBuffer(AUDIO_HEADER_SIZE + bodyBytes);
+  const view = new DataView(buf);
 
-  // Write header (little-endian)
   view.setUint32(0, instanceIdHash, true);
   view.setUint32(4, seq, true);
   view.setUint32(8, channels, true);
-  view.setUint32(12, numSamples, true);
+  view.setUint32(12, samplesPerChannel, true);
 
-  // Write interleaved body (channel-first layout)
-  const body = new Float32Array(buffer, AUDIO_HEADER_SIZE);
+  const body = new Float32Array(buf, AUDIO_HEADER_SIZE);
   for (let ch = 0; ch < channels; ch++) {
-    body.set(samples[ch], ch * numSamples);
+    body.set(samples[ch], ch * samplesPerChannel);
   }
 
-  return buffer;
+  return buf;
 }
 
 /**
- * Decode a binary audio frame into its header fields and per-channel sample arrays.
+ * Decode a binary audio frame received from the companion.
  *
- * @param buffer - The raw ArrayBuffer received over WebSocket.
- * @returns Parsed header fields and an array of Float32Arrays (one per channel).
+ * Returns the header fields plus an array of per-channel Float32Arrays.
  */
-export function decodeAudioFrame(buffer: ArrayBuffer): {
+export function decodeAudioFrame(buf: ArrayBuffer): {
   instanceIdHash: number;
   seq: number;
   channels: number;
   samples: Float32Array[];
 } {
-  const view = new DataView(buffer);
-
+  const view = new DataView(buf);
   const instanceIdHash = view.getUint32(0, true);
   const seq = view.getUint32(4, true);
   const channels = view.getUint32(8, true);
-  const numSamples = view.getUint32(12, true);
+  const samplesPerChannel = view.getUint32(12, true);
 
-  const body = new Float32Array(buffer, AUDIO_HEADER_SIZE);
-  const samplesOut: Float32Array[] = [];
+  const body = new Float32Array(buf, AUDIO_HEADER_SIZE);
+  const samples: Float32Array[] = [];
   for (let ch = 0; ch < channels; ch++) {
-    samplesOut.push(body.slice(ch * numSamples, (ch + 1) * numSamples));
+    samples.push(body.slice(ch * samplesPerChannel, (ch + 1) * samplesPerChannel));
   }
 
-  return { instanceIdHash, seq, channels, samples: samplesOut };
+  return { instanceIdHash, seq, channels, samples };
+}
+
+// ---------------------------------------------------------------------------
+// FNV-1a hash helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute a 32-bit FNV-1a hash of the given string.
+ *
+ * Used to convert human-readable instance IDs into the compact u32 used
+ * in binary audio frame headers.
+ */
+export function fnv1aHash(str: string): number {
+  let hash = 0x811c9dc5; // FNV offset basis
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV prime
+  }
+  return hash >>> 0; // ensure unsigned 32-bit
 }

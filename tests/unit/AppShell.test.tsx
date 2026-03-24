@@ -65,3 +65,90 @@ describe('AppShell overlay orchestration', () => {
     expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
   });
 });
+
+describe('AppShell dialog lazy loading', () => {
+  beforeEach(() => {
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
+    useProjectStore.getState().createProject({ name: 'Lazy Test' });
+  });
+
+  it('uses React.lazy for dialog components (not static imports)', async () => {
+    // Verify the module uses lazy imports by checking that the module
+    // source code contains lazy() calls for dialog components
+    const appShellModule = await import('../../src/components/layout/AppShell?raw');
+    const source = appShellModule.default as string;
+
+    // NewProjectDialog should remain eager (needed on first load)
+    expect(source).toMatch(/import\s*\{\s*NewProjectDialog\s*\}/);
+
+    // All other dialogs should be lazy-loaded
+    const lazyDialogs = [
+      'ExportDialog',
+      'SettingsDialog',
+      'InstrumentPicker',
+      'ProjectListDialog',
+      'KeyboardShortcutsDialog',
+      'ShortcutEditorDialog',
+      'CommandPalette',
+      'BounceInPlaceDialog',
+      'DeleteTracksConfirmDialog',
+      'ShareDialog',
+      'AIAssistantPanel',
+      'EnhancePanel',
+      'Vocal2BGMModal',
+      'AudioAnalysisPanel',
+      'StemSeparationModal',
+      'AudioToMidiModal',
+    ];
+
+    for (const name of lazyDialogs) {
+      expect(source, `${name} should use lazy()`).toMatch(
+        new RegExp(`const\\s+${name}\\s*=\\s*lazy\\(`)
+      );
+    }
+  });
+
+  it('uses React.lazy for heavy panels', async () => {
+    const appShellModule = await import('../../src/components/layout/AppShell?raw');
+    const source = appShellModule.default as string;
+
+    const lazyPanels = [
+      'PianoRoll',
+      'StrudelEditor',
+      'EffectChain',
+      'MixerPanel',
+      'SequencerEditor',
+      'DrumMachineEditor',
+      'ModelLibraryPanel',
+      'VirtualKeyboard',
+      'SessionView',
+    ];
+
+    for (const name of lazyPanels) {
+      expect(source, `${name} should use lazy()`).toMatch(
+        new RegExp(`const\\s+${name}\\s*=\\s*lazy\\(`)
+      );
+    }
+  });
+
+  it('wraps lazy components in Suspense', async () => {
+    const appShellModule = await import('../../src/components/layout/AppShell?raw');
+    const source = appShellModule.default as string;
+
+    // Should import Suspense and lazy from react
+    expect(source).toMatch(/import\s*\{[^}]*lazy[^}]*\}\s*from\s*['"]react['"]/);
+    expect(source).toMatch(/import\s*\{[^}]*Suspense[^}]*\}\s*from\s*['"]react['"]/);
+
+    // Should have Suspense wrappers
+    expect(source).toContain('<Suspense');
+  });
+
+  it('still renders the app shell structure correctly', () => {
+    render(<AppShell />);
+
+    expect(screen.getByText('Toolbar')).toBeInTheDocument();
+    expect(screen.getByText('StatusBar')).toBeInTheDocument();
+    expect(screen.getByRole('application')).toHaveAttribute('aria-label', 'ACE-Step DAW');
+  });
+});

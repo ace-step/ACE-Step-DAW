@@ -1,38 +1,13 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toolbar } from './Toolbar';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
-import { EnhancePanel } from '../generation/EnhancePanel';
-import { Vocal2BGMModal } from '../generation/Vocal2BGMModal';
-import { AudioAnalysisPanel } from '../generation/AudioAnalysisPanel';
-import { StemSeparationModal } from '../generation/StemSeparationModal';
-import { AudioToMidiModal } from '../generation/AudioToMidiModal';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
-import { InstrumentPicker } from '../dialogs/InstrumentPicker';
-import { ExportDialog } from '../dialogs/ExportDialog';
-import { SettingsDialog } from '../dialogs/SettingsDialog';
-import { ProjectListDialog } from '../dialogs/ProjectListDialog';
-import { KeyboardShortcutsDialog } from '../dialogs/KeyboardShortcutsDialog';
-import { ShortcutEditorDialog } from '../dialogs/ShortcutEditorDialog';
-import { CommandPalette } from '../dialogs/CommandPalette';
-import { BounceInPlaceDialog } from '../dialogs/BounceInPlaceDialog';
-import { DeleteTracksConfirmDialog } from '../dialogs/DeleteTracksConfirmDialog';
-import { ShareDialog } from '../dialogs/ShareDialog';
-import { AIAssistantPanel } from '../dialogs/AIAssistantPanel';
-import { MixerPanel } from '../mixer/MixerPanel';
 import { LoopBrowser } from '../assets/LoopBrowser';
-import { SequencerEditor } from '../sequencer/SequencerEditor';
-import { DrumMachineEditor } from '../sequencer/DrumMachineEditor';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
-import { PianoRoll } from '../pianoroll/PianoRoll';
-import { StrudelEditor } from '../strudel/StrudelEditor';
-import { EffectChain } from '../mixer/EffectChain';
-import { SessionView } from '../session/SessionView';
-import { ModelLibraryPanel } from '../models/ModelLibraryPanel';
 import { SharedProjectPage } from '../sharing/SharedProjectPage';
-import { VirtualKeyboard } from '../midi/VirtualKeyboard';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { StatusBar } from './StatusBar';
@@ -42,6 +17,35 @@ import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useShareLink } from '../../hooks/useShareLink';
+
+// Lazy-loaded dialogs (code-split, loaded on first use)
+const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
+const ExportDialog = lazy(() => import('../dialogs/ExportDialog').then(m => ({ default: m.ExportDialog })));
+const SettingsDialog = lazy(() => import('../dialogs/SettingsDialog').then(m => ({ default: m.SettingsDialog })));
+const ProjectListDialog = lazy(() => import('../dialogs/ProjectListDialog').then(m => ({ default: m.ProjectListDialog })));
+const KeyboardShortcutsDialog = lazy(() => import('../dialogs/KeyboardShortcutsDialog').then(m => ({ default: m.KeyboardShortcutsDialog })));
+const ShortcutEditorDialog = lazy(() => import('../dialogs/ShortcutEditorDialog').then(m => ({ default: m.ShortcutEditorDialog })));
+const CommandPalette = lazy(() => import('../dialogs/CommandPalette').then(m => ({ default: m.CommandPalette })));
+const BounceInPlaceDialog = lazy(() => import('../dialogs/BounceInPlaceDialog').then(m => ({ default: m.BounceInPlaceDialog })));
+const DeleteTracksConfirmDialog = lazy(() => import('../dialogs/DeleteTracksConfirmDialog').then(m => ({ default: m.DeleteTracksConfirmDialog })));
+const ShareDialog = lazy(() => import('../dialogs/ShareDialog').then(m => ({ default: m.ShareDialog })));
+const AIAssistantPanel = lazy(() => import('../dialogs/AIAssistantPanel').then(m => ({ default: m.AIAssistantPanel })));
+const EnhancePanel = lazy(() => import('../generation/EnhancePanel').then(m => ({ default: m.EnhancePanel })));
+const Vocal2BGMModal = lazy(() => import('../generation/Vocal2BGMModal').then(m => ({ default: m.Vocal2BGMModal })));
+const AudioAnalysisPanel = lazy(() => import('../generation/AudioAnalysisPanel').then(m => ({ default: m.AudioAnalysisPanel })));
+const StemSeparationModal = lazy(() => import('../generation/StemSeparationModal').then(m => ({ default: m.StemSeparationModal })));
+const AudioToMidiModal = lazy(() => import('../generation/AudioToMidiModal').then(m => ({ default: m.AudioToMidiModal })));
+
+// Lazy-loaded heavy panels (code-split, loaded on first use)
+const MixerPanel = lazy(() => import('../mixer/MixerPanel').then(m => ({ default: m.MixerPanel })));
+const SequencerEditor = lazy(() => import('../sequencer/SequencerEditor').then(m => ({ default: m.SequencerEditor })));
+const DrumMachineEditor = lazy(() => import('../sequencer/DrumMachineEditor').then(m => ({ default: m.DrumMachineEditor })));
+const PianoRoll = lazy(() => import('../pianoroll/PianoRoll').then(m => ({ default: m.PianoRoll })));
+const StrudelEditor = lazy(() => import('../strudel/StrudelEditor').then(m => ({ default: m.StrudelEditor })));
+const EffectChain = lazy(() => import('../mixer/EffectChain').then(m => ({ default: m.EffectChain })));
+const SessionView = lazy(() => import('../session/SessionView').then(m => ({ default: m.SessionView })));
+const ModelLibraryPanel = lazy(() => import('../models/ModelLibraryPanel').then(m => ({ default: m.ModelLibraryPanel })));
+const VirtualKeyboard = lazy(() => import('../midi/VirtualKeyboard').then(m => ({ default: m.VirtualKeyboard })));
 
 function EditorShell() {
   useAudioEngine();
@@ -106,45 +110,47 @@ function EditorShell() {
           }
         }}
       >
-        {mainView === 'arrangement' ? <Timeline /> : <SessionView />}
+        {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
         {project && <LoopBrowser />}
       </div>
 
       <StatusBar />
 
       {project && <SmartControlsPanel />}
-      {project && <SequencerEditor />}
-      {project && <DrumMachineEditor />}
-      {project && <PianoRoll />}
-      {project && <StrudelEditor />}
-      {project && <EffectChain />}
-      {project && <MixerPanel />}
+      {project && <Suspense fallback={null}><SequencerEditor /></Suspense>}
+      {project && <Suspense fallback={null}><DrumMachineEditor /></Suspense>}
+      {project && <Suspense fallback={null}><PianoRoll /></Suspense>}
+      {project && <Suspense fallback={null}><StrudelEditor /></Suspense>}
+      {project && <Suspense fallback={null}><EffectChain /></Suspense>}
+      {project && <Suspense fallback={null}><MixerPanel /></Suspense>}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
-      {project && <ModelLibraryPanel />}
-      {project && <VirtualKeyboard />}
+      {project && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
+      {project && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
       {project && <AddLayerPanel />}
       <ToastContainer />
       <UndoHistoryPanel />
 
-      {/* Modals */}
+      {/* Modals — lazy-loaded, code-split */}
       <NewProjectDialog />
-      <InstrumentPicker />
-      <ExportDialog />
-      <SettingsDialog />
-      <ProjectListDialog />
-      <BounceInPlaceDialog />
-      <DeleteTracksConfirmDialog />
-      <KeyboardShortcutsDialog />
-      {!hasBlockingDialog && <CommandPalette />}
-      <ShortcutEditorDialog />
-      <EnhancePanel />
-      <Vocal2BGMModal />
-      <AudioAnalysisPanel />
-      <StemSeparationModal />
-      <AudioToMidiModal />
-      <ShareDialog />
-      {!hasBlockingDialog && <AIAssistantPanel />}
+      <Suspense fallback={null}>
+        <InstrumentPicker />
+        <ExportDialog />
+        <SettingsDialog />
+        <ProjectListDialog />
+        <BounceInPlaceDialog />
+        <DeleteTracksConfirmDialog />
+        <KeyboardShortcutsDialog />
+        <ShortcutEditorDialog />
+        <EnhancePanel />
+        <Vocal2BGMModal />
+        <AudioAnalysisPanel />
+        <StemSeparationModal />
+        <AudioToMidiModal />
+        <ShareDialog />
+      </Suspense>
+      {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
+      {!hasBlockingDialog && <Suspense fallback={null}><AIAssistantPanel /></Suspense>}
     </div>
   );
 }

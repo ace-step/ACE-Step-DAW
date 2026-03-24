@@ -13,6 +13,7 @@ import { CanvasContextMenu } from './CanvasContextMenu';
 import { CrossfadeOverlay } from './CrossfadeOverlay';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
+import { processTrackLaneFileDrop } from './trackLaneFileDrop';
 import {
   ARRANGEMENT_EMPTY_LANE_BG,
   ARRANGEMENT_ROW_BORDER_CLASS,
@@ -48,6 +49,8 @@ export function TrackLane({ track }: TrackLaneProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const addClip = useProjectStore((s) => s.addClip);
   const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
+  const convertMidiFileToStrudel = useProjectStore((s) => s.convertMidiFileToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
 
   const [ctxMenu, setCtxMenu] = useState<{
@@ -274,19 +277,22 @@ export function TrackLane({ track }: TrackLaneProps) {
     const files = e.dataTransfer.files;
     if (!files.length) return;
     for (const file of Array.from(files)) {
-      if (file.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|aac|m4a|webm)$/i.test(file.name)) {
-        if (track.trackType === 'pianoRoll') {
-          await importAudioFileAsSampler(file, track.id);
-        } else if (wantsQuickSampler) {
-          await importAudioFileAsNewQuickSampler(file);
-        } else {
-          await importAudioToTrack(file, track.id, startTime);
-        }
-      } else if (/\.(mid|midi)$/i.test(file.name)) {
-        await importMidiFile(file, startTime);
-      }
+      await processTrackLaneFileDrop({
+        file,
+        trackType: track.trackType,
+        trackId: track.id,
+        startTime,
+        wantsQuickSampler,
+        importAudioFileAsSampler,
+        importAudioFileAsNewQuickSampler,
+        importAudioToTrack,
+        importMidiFile,
+        convertMidiFileToStrudel,
+        applyStrudelCodeToTrack,
+        setOpenStrudelEditor,
+      });
     }
-  }, [placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack]);
+  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
 
   const hasClips = track.clips.length > 0;
   const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;

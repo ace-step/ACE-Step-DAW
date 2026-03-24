@@ -208,6 +208,42 @@ async function evaluateMiniNotation(code: string): Promise<any> {
 }
 
 /**
+ * Evaluate full Strudel JS code without starting audio playback.
+ * Useful for analysis and conversion flows that need a Pattern object.
+ */
+export async function evaluateStrudelPatternPure(code: string): Promise<any> {
+  await ensureStrudelLoaded();
+
+  const cleaned = code
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (trimmed.startsWith('$:')) return line.replace(/\$:\s*/, '');
+      return line;
+    })
+    .join('\n')
+    .trim();
+
+  if (!cleaned) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const AsyncFunction = Object.getPrototypeOf(async function () {/* */}).constructor;
+
+  try {
+    const fn = new AsyncFunction(`return (${cleaned})`);
+    return await fn();
+  } catch {
+    try {
+      const fn = new AsyncFunction(cleaned);
+      return await fn();
+    } catch {
+      return evaluateMiniNotation(cleaned);
+    }
+  }
+}
+
+/**
  * Stop a strudel track's audio playback.
  */
 export function stopStrudelTrack(trackId: string): void {

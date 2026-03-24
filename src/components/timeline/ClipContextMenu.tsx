@@ -16,6 +16,7 @@ interface ClipContextMenuProps {
   /* MIDI-specific */
   onOpenMidi?: () => void;
   onExportMidi?: () => void;
+  onConvertToStrudel?: () => void;
 
   /* Editing */
   onEdit: () => void;
@@ -48,6 +49,7 @@ export function ClipContextMenu({
   clipAIContext,
   onOpenMidi,
   onExportMidi,
+  onConvertToStrudel,
   onEdit,
   onDuplicate,
   onSplitAtPlayhead,
@@ -81,6 +83,9 @@ export function ClipContextMenu({
         <>
           <ContextMenuSeparator />
           <ContextMenuItem label="Open Piano Roll" onClick={onOpenMidi} color="#ddd6fe" />
+          {onConvertToStrudel && (
+            <ContextMenuItem label="Convert to Strudel..." onClick={onConvertToStrudel} color="#fcd34d" />
+          )}
           {onExportMidi && (
             <ContextMenuItem label="Export MIDI Clip..." onClick={onExportMidi} color="#a5f3fc" />
           )}

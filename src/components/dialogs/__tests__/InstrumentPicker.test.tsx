@@ -44,6 +44,12 @@ describe('InstrumentPicker', () => {
     expect(screen.getByText('Drum Machine')).toBeInTheDocument();
   });
 
+  it('does not show Strudel in the track type picker', () => {
+    render(<InstrumentPicker />);
+
+    expect(screen.queryByText('Strudel')).not.toBeInTheDocument();
+  });
+
   it('shows drum machine instrument step when Drum Machine type is selected', () => {
     render(<InstrumentPicker />);
 

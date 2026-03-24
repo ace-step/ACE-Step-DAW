@@ -123,6 +123,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const applyAudioQuantize = useProjectStore((s) => s.applyAudioQuantize);
   const clearAudioQuantize = useProjectStore((s) => s.clearAudioQuantize);
   const exportMidiClip = useProjectStore((s) => s.exportMidiClip);
+  const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
+  const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const sliceClipToRange = useProjectStore((s) => s.sliceClipToRange);
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const batchDuplicateClips = useProjectStore((s) => s.batchDuplicateClips);
@@ -1247,6 +1249,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
             onMusicEnhancer={() => { closeCtxMenu(); useUIStore.getState().setMusicEnhancerOpen(true); }}
             clipAIContext={clipAIContext}
             onOpenMidi={isMidiClip ? () => { closeCtxMenu(); setOpenPianoRoll(track.id, clip.id); } : undefined}
+            onConvertToStrudel={isMidiClip ? () => {
+              closeCtxMenu();
+              void (async () => {
+                const result = await convertMidiClipToStrudel(clip.id);
+                if (!result) return;
+                await applyStrudelCodeToTrack(result.code, null, { label: 'Convert MIDI Clip' });
+              })();
+            } : undefined}
             onExportMidi={isMidiClip ? () => { closeCtxMenu(); exportMidiClip(clip.id); } : undefined}
             onEdit={() => { closeCtxMenu(); setEditModalOpen(true); }}
             onDuplicate={() => { closeCtxMenu(); duplicateClip(clip.id); }}

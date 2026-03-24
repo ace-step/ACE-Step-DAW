@@ -1407,6 +1407,15 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
                 opacityClassName="opacity-85"
               />
             </div>
+            {isMidiClip && clip.midiData && (
+              <ClipMidiThumbnail
+                midiData={clip.midiData}
+                width={dragGhost.width}
+                duration={clip.duration}
+                bpm={project?.bpm ?? 120}
+                color={clipPresentation.waveformColor}
+              />
+            )}
             <div
               className="absolute left-1.5 right-1.5 text-[10px] font-medium truncate leading-4 z-10"
               style={{ top: 1, color: clipPresentation.titleColor }}

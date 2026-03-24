@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -92,9 +92,9 @@ function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresen
   };
 }
 
-function ClipBlockInner({ clip, track }: ClipBlockProps) {
+export function ClipBlock({ clip, track }: ClipBlockProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
-  const isClipSelected = useUIStore((s) => s.selectedClipIds.has(clip.id));
+  const selectedClipIds = useUIStore((s) => s.selectedClipIds);
   const selectClip = useUIStore((s) => s.selectClip);
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -107,15 +107,14 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const setAudioToMidiModal = useUIStore((s) => s.setAudioToMidiModal);
 
   const generatingProgress = useGenerationStore((s) => {
-    for (let i = s.jobs.length - 1; i >= 0; i--) {
-      const j = s.jobs[i];
-      if (j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing')) {
-        return j.progressPercent != null
-          ? `${j.stage ?? j.progress} ${Math.round(j.progressPercent)}%`
-          : j.stage ?? j.progress;
-      }
+    const job = [...s.jobs].reverse().find(
+      (j) => j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing'),
+    );
+    if (!job) return null;
+    if (job.progressPercent != null) {
+      return `${job.stage ?? job.progress} ${Math.round(job.progressPercent)}%`;
     }
-    return null;
+    return job.stage ?? job.progress;
   });
   const updateClip = useProjectStore((s) => s.updateClip);
   const setClipFade = useProjectStore((s) => s.setClipFade);
@@ -226,6 +225,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
+  const isClipSelected = selectedClipIds.has(clip.id);
   const isSelected = isClipSelected;
   const { fadeInDuration, fadeOutDuration } = getClipFadeBounds(clip);
   const fadeInWidth = Math.min(width, fadeInDuration * pixelsPerSecond);
@@ -233,7 +233,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const showFadeInHandle = fadeInDuration > 0;
   const showFadeOutHandle = fadeOutDuration > 0;
   const clipColor = clip.color ?? track.color;
-  const clipPresentation = useMemo(() => getClipPresentation(clipColor, isSelected), [clipColor, isSelected]);
+  const clipPresentation = getClipPresentation(clipColor, isSelected);
 
   const dragRef = useRef(false);
 
@@ -259,6 +259,21 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const endDrag = useProjectStore((s) => s.endDrag);
   const undo = useProjectStore((s) => s.undo);
   const clipBlockRef = useRef<HTMLDivElement>(null);
+
+  const findClosestLane = useCallback((clientY: number): { trackId: string; rect: DOMRect } | null => {
+    const lanes = document.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
+    let best: { trackId: string; rect: DOMRect; dist: number } | null = null;
+    for (const lane of lanes) {
+      const trackId = lane.dataset.trackId!;
+      const r = lane.getBoundingClientRect();
+      const centerY = r.top + r.height / 2;
+      const dist = Math.abs(clientY - centerY);
+      if (!best || dist < best.dist) {
+        best = { trackId, rect: r, dist };
+      }
+    }
+    return best ? { trackId: best.trackId, rect: best.rect } : null;
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Skip scissor tool on fade handles
@@ -356,8 +371,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     scissorRef.current = false;
     let isShiftCopy = e.shiftKey;
 
-    const currentSelectedClipIds = useUIStore.getState().selectedClipIds;
-    const isMultiSelected = currentSelectedClipIds.size > 1 && currentSelectedClipIds.has(clip.id);
+    const isMultiSelected = selectedClipIds.size > 1 && selectedClipIds.has(clip.id);
     let lastBatchOffset = 0;
 
     const clipW = clip.duration * pixelsPerSecond;
@@ -367,28 +381,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     const supportsScissor = clip.generationStatus === 'ready' || Boolean(clip.midiData);
     const canStartLongPressScissor = supportsScissor && isSecondaryPress && mode === 'move';
     let secondaryMoved = false;
-    let pendingGhost: DragGhostInfo | null = null;
-    let ghostRafId = 0;
-
-    // Cache lane rects at drag start to avoid repeated DOM queries during drag
-    const laneElements = document.querySelectorAll<HTMLElement>('[data-timeline-lane][data-track-id]');
-    const cachedLaneRects = new Map<string, DOMRect>();
-    laneElements.forEach(el => {
-      const trackId = el.getAttribute('data-track-id');
-      if (trackId) cachedLaneRects.set(trackId, el.getBoundingClientRect());
-    });
-    const findClosestLaneCached = (clientY: number): { trackId: string; rect: DOMRect } | null => {
-      let best: { trackId: string; rect: DOMRect; dist: number } | null = null;
-      for (const [tid, r] of cachedLaneRects) {
-        const centerY = r.top + r.height / 2;
-        const dist = Math.abs(clientY - centerY);
-        if (!best || dist < best.dist) {
-          best = { trackId: tid, rect: r, dist };
-        }
-      }
-      return best ? { trackId: best.trackId, rect: best.rect } : null;
-    };
-    const sourceLane = findClosestLaneCached(startY);
 
     // --- Long-press scissor detection (secondary press only) ---
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -447,7 +439,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         document.body.style.cursor = isShiftCopy ? 'copy' : 'grabbing';
         if (isShiftCopy) {
           if (isMultiSelected && lastBatchOffset !== 0) {
-            batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
+            batchMoveClips([...selectedClipIds], -lastBatchOffset);
             lastBatchOffset = 0;
           } else {
             updateClip(clip.id, { startTime: origStart });
@@ -463,7 +455,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           if (isMultiSelected) {
             const delta = timeOffset - lastBatchOffset;
             if (delta !== 0) {
-              batchMoveClips([...currentSelectedClipIds], delta);
+              batchMoveClips([...selectedClipIds], delta);
               lastBatchOffset = timeOffset;
             }
           } else {
@@ -471,12 +463,12 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           }
         }
 
-        const closest = findClosestLaneCached(ev.clientY);
+        const closest = findClosestLane(ev.clientY);
         if (closest) {
           const ghostLeftVp = ev.clientX - clickOffsetPx;
-          // sourceLane is pre-computed at drag start
+          const sourceLane = findClosestLane(startY);
           const isCrossingTrack = closest.trackId !== track.id;
-          pendingGhost = {
+          setDragGhost({
             x: ghostLeftVp,
             y: closest.rect.top + 4,
             width: clipW,
@@ -489,13 +481,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
               ? { top: sourceLane.rect.top, height: sourceLane.rect.height }
               : null,
             isShiftCopy,
-          };
-          if (!ghostRafId) {
-            ghostRafId = requestAnimationFrame(() => {
-              if (pendingGhost) setDragGhost(pendingGhost);
-              ghostRafId = 0;
-            });
-          }
+          });
         }
       } else if (mode === 'resize-left') {
         let newStart = ev.altKey ? origStart + deltaSec : snapToGrid(origStart + deltaSec, bpm, 1);
@@ -572,7 +558,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
-      cancelAnimationFrame(ghostRafId);
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
       // Cancel scissor mode
       if (scissorRef.current) {
@@ -586,7 +571,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       if (dragRef.current) {
         // Restore original state for multi-select batch moves
         if (isMultiSelected && lastBatchOffset !== 0) {
-          batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
+          batchMoveClips([...selectedClipIds], -lastBatchOffset);
         } else if (mode === 'move') {
           updateClip(clip.id, { startTime: origStart });
         } else if (mode === 'resize-left') {
@@ -618,7 +603,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
-      cancelAnimationFrame(ghostRafId);
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
 
       // Execute scissor split
@@ -668,7 +652,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       }
 
       if (mode === 'move' && dragRef.current) {
-        const closest = findClosestLaneCached(ev.clientY);
+        const closest = findClosestLane(ev.clientY);
         const deltaSec = (ev.clientX - startX) / pixelsPerSecond;
         const isFineMove = ev.metaKey || ev.ctrlKey;
         const dropStart = Math.max(0, isFineMove
@@ -687,14 +671,14 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
         if (ev.shiftKey && closest && resolvedTargetId) {
           if (isMultiSelected && lastBatchOffset !== 0) {
-            batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
+            batchMoveClips([...selectedClipIds], -lastBatchOffset);
             lastBatchOffset = 0;
           } else {
             updateClip(clip.id, { startTime: origStart });
           }
           const timeOffset = dropStart - origStart;
           if (isMultiSelected) {
-            batchDuplicateClips([...currentSelectedClipIds], timeOffset);
+            batchDuplicateClips([...selectedClipIds], timeOffset);
           } else {
             duplicateClipToTrack(clip.id, resolvedTargetId, dropStart);
           }
@@ -707,7 +691,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, track.trackName, track.trackType, moveClipToTrack, duplicateClipToTrack, addTrack, batchDuplicateClips, batchMoveClips, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
+  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, track.trackName, track.trackType, moveClipToTrack, duplicateClipToTrack, addTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -906,7 +890,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const audioDuration = clip.audioDuration ?? clip.duration;
   const audioOffset = clip.audioOffset ?? 0;
   const contentOffset = getClipContentOffset(clip);
-  const selectedActionClipIds = isClipSelected ? [...useUIStore.getState().selectedClipIds] : [clip.id];
+  const selectedActionClipIds = selectedClipIds.has(clip.id) ? [...selectedClipIds] : [clip.id];
   const selectedActionClips = selectedActionClipIds
     .map((clipId) => project?.tracks.flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
     .filter((candidate): candidate is Clip => Boolean(candidate));
@@ -1441,7 +1425,3 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     </>
   );
 }
-
-export const ClipBlock = React.memo(ClipBlockInner, (prev, next) => {
-  return prev.clip === next.clip && prev.track === next.track;
-});

@@ -182,6 +182,12 @@ export interface PluginInstance {
   params: PluginParamValues;
   /** Plugin manifest snapshot for display. */
   manifest: PluginManifest;
+  /** VST3 plugin unique ID — used to re-instantiate the correct plugin on load. */
+  vst3Uid?: string;
+  /** Base64-encoded VST3 IComponent state (opaque binary blob). */
+  vst3State?: string;
+  /** Discriminator flag — true when this instance wraps a native VST3 plugin. */
+  isVST3?: boolean;
 }
 
 // ─── VST3 Plugin Types ──────────────────────────────────────────────────────

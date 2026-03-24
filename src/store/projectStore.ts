@@ -767,6 +767,12 @@ export interface ProjectState {
   togglePlugin: (trackId: string, pluginInstanceId: string) => void;
   loadPlugin: (trackId: string, pluginId: string) => string | undefined;
 
+  // VST3 state persistence
+  /** Update VST3 state for a plugin instance (called before save). */
+  updateVST3State: (trackId: string, instanceId: string, state: string) => void;
+  /** Get all VST3 plugin instances across all tracks (for batch state save). */
+  getAllVST3Instances: () => { trackId: string; instanceId: string; vst3Uid: string }[];
+
   // MIDI effects
   addMidiEffect: (trackId: string, type: MidiEffectType) => string | undefined;
   removeMidiEffect: (trackId: string, effectId: string) => void;
@@ -6006,6 +6012,43 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return id;
+  },
+
+  // ─── VST3 State Persistence ──────────────────────────────────────────────
+
+  updateVST3State: (trackId, instanceId, vst3State) => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                plugins: (track.plugins ?? []).map((p) =>
+                  p.id === instanceId ? { ...p, vst3State } : p,
+                ),
+              }
+            : track,
+        ),
+      },
+    });
+  },
+
+  getAllVST3Instances: () => {
+    const state = get();
+    if (!state.project) return [];
+    const results: { trackId: string; instanceId: string; vst3Uid: string }[] = [];
+    for (const track of state.project.tracks) {
+      for (const plugin of track.plugins ?? []) {
+        if (plugin.isVST3 && plugin.vst3Uid) {
+          results.push({ trackId: track.id, instanceId: plugin.id, vst3Uid: plugin.vst3Uid });
+        }
+      }
+    }
+    return results;
   },
 
   // ─── MIDI Effects ──────────────────────────────────────────────────────────

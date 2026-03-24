@@ -1,4 +1,5 @@
 import { useVST3Store } from '../../store/vst3Store';
+import { _getBridgeClient } from '../../hooks/useVST3Connection';
 
 /**
  * Small toolbar indicator showing VST3 companion connection state.
@@ -7,16 +8,14 @@ import { useVST3Store } from '../../store/vst3Store';
 export function CompanionStatus() {
   const status = useVST3Store((s) => s.connectionStatus);
   const version = useVST3Store((s) => s.companionVersion);
-  const connect = useVST3Store((s) => s.connect);
-  const disconnect = useVST3Store((s) => s.disconnect);
 
   const handleClick = () => {
+    const client = _getBridgeClient();
     if (status === 'connected') {
-      disconnect();
-    } else if (status === 'disconnected') {
-      connect();
+      client.disconnect();
+    } else if (status === 'disconnected' || status === 'error') {
+      client.connect();
     }
-    // do nothing while connecting
   };
 
   const dotClass =
@@ -35,7 +34,7 @@ export function CompanionStatus() {
 
   const tooltipText = version
     ? `VST3 Companion v${version}`
-    : 'VST3 Companion';
+    : 'VST3 Companion — click to connect';
 
   return (
     <button

@@ -94,7 +94,7 @@ describe('ClipBlock hover and active feedback', () => {
     expect(classList).toMatch(/transition/);
   });
 
-  it('renders resize edge handles with bracket-style indicators on header rail only', () => {
+  it('renders resize edge handles with custom bracket cursors on header rail only', () => {
     const clip = makeClip();
     const track = makeTrack();
 
@@ -107,16 +107,9 @@ describe('ClipBlock hover and active feedback', () => {
     expect(leftHandle).toBeInTheDocument();
     expect(rightHandle).toBeInTheDocument();
 
-    // Each handle should contain a bracket-style indicator
-    const leftBracket = leftHandle.querySelector('[data-testid="resize-indicator-left"]');
-    const rightBracket = rightHandle.querySelector('[data-testid="resize-indicator-right"]');
-
-    expect(leftBracket).toBeInTheDocument();
-    expect(rightBracket).toBeInTheDocument();
-
-    // Bracket indicators should display [ and ] text
-    expect(leftBracket!.textContent).toBe('[');
-    expect(rightBracket!.textContent).toBe(']');
+    // Bracket cursors are set via custom SVG cursor (no DOM text overlay)
+    expect(leftHandle.style.cursor).toContain('data:image/svg+xml');
+    expect(rightHandle.style.cursor).toContain('data:image/svg+xml');
 
     // Handles should be constrained to header rail height, not full clip height
     expect(leftHandle.style.height).toBe('20px');

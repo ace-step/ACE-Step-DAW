@@ -959,24 +959,14 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           style={{ cursor: CURSOR_BRACKET_LEFT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
-        >
-          <div
-            className="pointer-events-none"
-            data-testid="resize-indicator-left"
-          >[</div>
-        </div>
+        />
         <div
           className="absolute top-0 right-0 w-[16px] z-10"
           data-testid="resize-handle-right"
           style={{ cursor: CURSOR_BRACKET_RIGHT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
-        >
-          <div
-            className="pointer-events-none"
-            data-testid="resize-indicator-right"
-          >]</div>
-        </div>
+        />
 
         <div
           className="absolute left-0 right-0 bottom-0 overflow-hidden"

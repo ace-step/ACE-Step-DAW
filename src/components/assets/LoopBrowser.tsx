@@ -12,7 +12,12 @@ import {
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { AssetClip } from '../../types/project';
+import { setDragPayload, clearDragPayload } from '../../utils/dragPayload';
 import * as Tone from 'tone';
+
+/** 1x1 transparent GIF used to hide the native drag ghost. */
+const TRANSPARENT_IMG = new Image();
+TRANSPARENT_IMG.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -163,15 +168,26 @@ export function LoopBrowser() {
     }
   }, [isOpen, setPreviewingId]);
 
+  // ── Clear drag payload on dragend ──
+  useEffect(() => {
+    const onDragEnd = () => clearDragPayload();
+    window.addEventListener('dragend', onDragEnd);
+    return () => window.removeEventListener('dragend', onDragEnd);
+  }, []);
+
   // ── Drag handlers ──
   const handlePresetDragStart = useCallback((e: React.DragEvent, def: LoopDefinition) => {
     e.dataTransfer.setData('application/x-loop-id', def.id);
     e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setDragImage(TRANSPARENT_IMG, 0, 0);
+    setDragPayload({ type: 'loop', duration: getLoopDuration(def), name: def.name });
   }, []);
 
   const handleAssetDragStart = useCallback((e: React.DragEvent, asset: AssetClip) => {
     e.dataTransfer.setData('application/x-asset-id', asset.id);
     e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setDragImage(TRANSPARENT_IMG, 0, 0);
+    setDragPayload({ type: 'asset', duration: asset.duration, name: asset.prompt || asset.trackDisplayName });
   }, []);
 
   // ── Asset actions ──

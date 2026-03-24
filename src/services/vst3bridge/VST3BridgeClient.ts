@@ -1,446 +1,52 @@
 /**
- * VST3 Bridge WebSocket Client
+ * VST3 Bridge Client — stub interface.
  *
- * Manages a WebSocket connection to the local VST3 companion app.
- * Provides request/response correlation, auto-reconnect with exponential
- * backoff, binary audio frame transport, and typed convenience methods for
- * all supported plugin operations.
+ * The real implementation (a future work item) manages a WebSocket
+ * connection to the companion desktop app. This file defines the
+ * public API so that VST3PluginAdapter can be developed and tested
+ * against a stable contract.
  */
 
-import {
-  VST3_BRIDGE_PORT,
-  VST3_BRIDGE_VERSION,
-  encodeAudioFrame,
-  decodeAudioFrame,
-  type VST3PluginInfo,
-  type VST3MidiEvent,
-  type InstantiatedMessage,
-  type ScanCompleteMessage,
-  type EditorOpenedMessage,
-  type StateDataMessage,
-  type ErrorMessage,
-} from './VST3BridgeProtocol';
+import type { VST3MidiEvent, AudioFrame } from './VST3BridgeProtocol';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
-
-type MessageHandler = (msg: Record<string, unknown>) => void;
-type AudioFrameHandler = (
-  instanceIdHash: number,
-  seq: number,
-  channels: number,
-  samples: Float32Array[],
-) => void;
-
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (reason: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+/** Events emitted by the bridge client. */
+export interface BridgeEvents {
+  param_changed: (instanceId: string, paramId: number, value: number) => void;
+  audio_frame: (frame: AudioFrame) => void;
+  disconnected: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const DEFAULT_TIMEOUT_MS = 10_000;
-const INITIAL_BACKOFF_MS = 1_000;
-const MAX_BACKOFF_MS = 30_000;
-
-/** Maps companion message types to CustomEvent names dispatched on the client. */
-const EVENT_TYPE_MAP: Record<string, string> = {
-  scan_progress: 'scanprogress',
-  param_changed: 'paramchanged',
-  editor_closed: 'editorclosed',
-};
-
-// ---------------------------------------------------------------------------
-// Client
-// ---------------------------------------------------------------------------
-
 /**
- * WebSocket client for communicating with the VST3 companion app.
+ * Minimal interface that VST3PluginAdapter depends on.
  *
- * Extends EventTarget so consumers can listen for:
- *   - `connectionchange` — fired when {@link connectionState} changes
- *   - `scanprogress`     — forwarded scan_progress messages
- *   - `paramchanged`     — forwarded param_changed messages
- *   - `editorclosed`     — forwarded editor_closed messages
+ * A concrete WebSocket-based implementation will be provided in a
+ * separate work item.
  */
-export class VST3BridgeClient extends EventTarget {
-  private readonly port: number;
-  private ws: WebSocket | null = null;
-  private _state: ConnectionState = 'disconnected';
-  private intentionalDisconnect = false;
+export interface VST3BridgeClient {
+  /** Register a listener for a bridge event. */
+  on<K extends keyof BridgeEvents>(event: K, callback: BridgeEvents[K]): void;
 
-  // Reconnect bookkeeping
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private backoffMs = INITIAL_BACKOFF_MS;
+  /** Remove a previously registered listener. */
+  off<K extends keyof BridgeEvents>(event: K, callback: BridgeEvents[K]): void;
 
-  // Request/response tracking
-  private pendingRequests = new Map<string, PendingRequest>();
-  private reqCounter = 0;
+  /** Send a parameter change to the companion. */
+  setParam(instanceId: string, paramId: number, value: number): void;
 
-  // Message handlers (keyed by message type)
-  private messageHandlers = new Map<string, Set<MessageHandler>>();
+  /** Send MIDI events to the companion. */
+  sendMidi(instanceId: string, events: VST3MidiEvent[]): void;
 
-  // Audio frame handlers
-  private audioFrameHandlers = new Set<AudioFrameHandler>();
+  /** Send an audio frame to the companion for processing. */
+  sendAudioFrame(frame: AudioFrame): void;
 
-  constructor(port?: number) {
-    super();
-    this.port = port ?? VST3_BRIDGE_PORT;
-  }
+  /** Request the companion to open the native plugin editor window. */
+  openEditor(instanceId: string): Promise<{ width: number; height: number }>;
 
-  // -----------------------------------------------------------------------
-  // Public API — connection lifecycle
-  // -----------------------------------------------------------------------
+  /** Request serialised plugin state (preset) from the companion. */
+  getState(instanceId: string): Promise<string>;
 
-  /** Current connection state. */
-  get connectionState(): ConnectionState {
-    return this._state;
-  }
+  /** Send serialised plugin state to the companion to restore. */
+  setState(instanceId: string, data: string): Promise<void>;
 
-  /** Whether the client has completed the handshake and is ready. */
-  get isConnected(): boolean {
-    return this._state === 'connected';
-  }
-
-  /** Open a connection to the companion. Auto-reconnects on failure. */
-  connect(): void {
-    this.intentionalDisconnect = false;
-    this.createSocket();
-  }
-
-  /** Gracefully close the connection and stop reconnecting. */
-  disconnect(): void {
-    this.intentionalDisconnect = true;
-    this.clearReconnectTimer();
-    this.rejectAllPending('Client disconnected');
-    if (this.ws) {
-      this.ws.onclose = null; // prevent reconnect from the close handler
-      this.ws.close();
-      this.ws = null;
-    }
-    this.setConnectionState('disconnected');
-  }
-
-  /** Tear down the client completely. */
-  dispose(): void {
-    this.disconnect();
-    this.messageHandlers.clear();
-    this.audioFrameHandlers.clear();
-  }
-
-  // -----------------------------------------------------------------------
-  // Public API — messaging
-  // -----------------------------------------------------------------------
-
-  /**
-   * Send a JSON message and wait for a correlated response.
-   *
-   * A unique `reqId` is attached automatically. The returned promise
-   * resolves with the first message whose `reqId` matches, or rejects
-   * on timeout / error response.
-   */
-  request<T = Record<string, unknown>>(
-    message: Record<string, unknown>,
-    timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  ): Promise<T> {
-    const reqId = this.nextReqId();
-    const payload = { ...message, reqId };
-
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingRequests.delete(reqId);
-        reject(new Error(`Request ${String(message.type ?? 'unknown')} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
-      this.pendingRequests.set(reqId, {
-        resolve: resolve as (v: unknown) => void,
-        reject,
-        timer,
-      });
-
-      this.rawSend(JSON.stringify(payload));
-    });
-  }
-
-  /** Send a JSON message without waiting for a response. */
-  send(message: Record<string, unknown>): void {
-    this.rawSend(JSON.stringify(message));
-  }
-
-  /** Send a binary audio frame over the WebSocket. */
-  sendAudioFrame(
-    instanceIdHash: number,
-    seq: number,
-    channels: number,
-    samples: Float32Array[],
-  ): void {
-    const buf = encodeAudioFrame(instanceIdHash, seq, channels, samples);
-    this.rawSend(buf);
-  }
-
-  // -----------------------------------------------------------------------
-  // Public API — event subscriptions
-  // -----------------------------------------------------------------------
-
-  /**
-   * Register a handler for incoming JSON messages of a given `type`.
-   *
-   * @returns An unsubscribe function.
-   */
-  on(messageType: string, handler: MessageHandler): () => void {
-    let handlers = this.messageHandlers.get(messageType);
-    if (!handlers) {
-      handlers = new Set();
-      this.messageHandlers.set(messageType, handlers);
-    }
-    handlers.add(handler);
-    return () => {
-      handlers!.delete(handler);
-    };
-  }
-
-  /**
-   * Register a handler for incoming binary audio frames.
-   *
-   * @returns An unsubscribe function.
-   */
-  onAudioFrame(handler: AudioFrameHandler): () => void {
-    this.audioFrameHandlers.add(handler);
-    return () => {
-      this.audioFrameHandlers.delete(handler);
-    };
-  }
-
-  // -----------------------------------------------------------------------
-  // Public API — convenience methods
-  // -----------------------------------------------------------------------
-
-  /** Scan for installed VST3 plugins. */
-  async scanPlugins(): Promise<VST3PluginInfo[]> {
-    const res = await this.request<ScanCompleteMessage>({ type: 'scan_plugins' });
-    return res.plugins;
-  }
-
-  /** Instantiate a plugin. */
-  async instantiate(
-    pluginUid: string,
-    instanceId: string,
-  ): Promise<InstantiatedMessage> {
-    return this.request<InstantiatedMessage>({
-      type: 'instantiate',
-      pluginUid,
-      instanceId,
-    });
-  }
-
-  /** Set a parameter value (fire-and-forget). */
-  setParam(instanceId: string, paramId: number, value: number): void {
-    this.send({ type: 'set_param', instanceId, paramId, value });
-  }
-
-  /** Send MIDI events to a plugin instance (fire-and-forget). */
-  sendMidi(instanceId: string, events: VST3MidiEvent[]): void {
-    this.send({ type: 'midi', instanceId, events });
-  }
-
-  /** Open the plugin's native editor window. */
-  async openEditor(instanceId: string): Promise<{ width: number; height: number }> {
-    const res = await this.request<EditorOpenedMessage>({
-      type: 'open_editor',
-      instanceId,
-    });
-    return { width: res.width, height: res.height };
-  }
-
-  /** Close the plugin's native editor window (fire-and-forget). */
-  closeEditor(instanceId: string): void {
-    this.send({ type: 'close_editor', instanceId });
-  }
-
-  /** Retrieve the plugin's opaque state as a base64-encoded string. */
-  async getState(instanceId: string): Promise<string> {
-    const res = await this.request<StateDataMessage>({
-      type: 'get_state',
-      instanceId,
-    });
-    return res.data;
-  }
-
-  /** Restore plugin state from a base64-encoded string. */
-  async setState(instanceId: string, data: string): Promise<void> {
-    await this.request({ type: 'set_state', instanceId, data });
-  }
-
-  /** Destroy a plugin instance (fire-and-forget). */
-  destroy(instanceId: string): void {
-    this.send({ type: 'destroy', instanceId });
-  }
-
-  // -----------------------------------------------------------------------
-  // Internal — socket management
-  // -----------------------------------------------------------------------
-
-  private createSocket(): void {
-    this.setConnectionState('connecting');
-
-    const ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
-    ws.binaryType = 'arraybuffer';
-
-    ws.onopen = () => {
-      this.ws = ws;
-      this.performHandshake();
-    };
-
-    ws.onmessage = (ev: MessageEvent) => {
-      this.handleMessage(ev.data);
-    };
-
-    ws.onerror = () => {
-      // The close event will fire after this, which triggers reconnect.
-    };
-
-    ws.onclose = () => {
-      this.ws = null;
-      if (!this.intentionalDisconnect) {
-        this.scheduleReconnect();
-      }
-    };
-
-    this.ws = ws;
-  }
-
-  private async performHandshake(): Promise<void> {
-    try {
-      await this.request({
-        type: 'hello',
-        version: VST3_BRIDGE_VERSION,
-        sampleRate: 48000,
-        blockSize: 128,
-      });
-      this.backoffMs = INITIAL_BACKOFF_MS; // reset on success
-      this.setConnectionState('connected');
-    } catch {
-      // Handshake failed — socket will eventually close and trigger reconnect.
-    }
-  }
-
-  private scheduleReconnect(): void {
-    this.setConnectionState('disconnected');
-    this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.intentionalDisconnect) {
-        this.createSocket();
-      }
-    }, this.backoffMs);
-    this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Internal — message handling
-  // -----------------------------------------------------------------------
-
-  private handleMessage(data: unknown): void {
-    if (data instanceof ArrayBuffer) {
-      this.handleBinaryMessage(data);
-      return;
-    }
-
-    if (typeof data !== 'string') return;
-
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(data);
-    } catch {
-      return;
-    }
-
-    const type = msg.type as string | undefined;
-    const reqId = msg.reqId as string | undefined;
-
-    // Resolve/reject pending request if correlated
-    if (reqId && this.pendingRequests.has(reqId)) {
-      const pending = this.pendingRequests.get(reqId)!;
-      this.pendingRequests.delete(reqId);
-      clearTimeout(pending.timer);
-
-      if (type === 'error') {
-        const errMsg = msg as unknown as ErrorMessage;
-        pending.reject(new Error(errMsg.message));
-      } else {
-        pending.resolve(msg);
-      }
-    }
-
-    // Dispatch to type-based handlers
-    if (type) {
-      const handlers = this.messageHandlers.get(type);
-      if (handlers) {
-        for (const handler of handlers) {
-          handler(msg);
-        }
-      }
-    }
-
-    // Dispatch custom events for well-known types
-    this.dispatchCustomEvents(type, msg);
-  }
-
-  private handleBinaryMessage(buf: ArrayBuffer): void {
-    if (this.audioFrameHandlers.size === 0) return;
-
-    const { instanceIdHash, seq, channels, samples } = decodeAudioFrame(buf);
-    for (const handler of this.audioFrameHandlers) {
-      handler(instanceIdHash, seq, channels, samples);
-    }
-  }
-
-  /** Map well-known message types to CustomEvent dispatches. */
-  private dispatchCustomEvents(type: string | undefined, msg: Record<string, unknown>): void {
-    if (type && EVENT_TYPE_MAP[type]) {
-      this.dispatchEvent(new CustomEvent(EVENT_TYPE_MAP[type], { detail: msg }));
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Internal — helpers
-  // -----------------------------------------------------------------------
-
-  private rawSend(data: string | ArrayBuffer): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
-    }
-  }
-
-  private nextReqId(): string {
-    this.reqCounter += 1;
-    return `req_${this.reqCounter}_${Date.now()}`;
-  }
-
-  private setConnectionState(state: ConnectionState): void {
-    if (this._state === state) return;
-    this._state = state;
-    this.dispatchEvent(new CustomEvent('connectionchange', { detail: { state } }));
-  }
-
-  private rejectAllPending(reason: string): void {
-    for (const [, pending] of this.pendingRequests) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error(reason));
-    }
-    this.pendingRequests.clear();
-  }
+  /** Destroy a plugin instance on the companion side. */
+  destroy(instanceId: string): void;
 }

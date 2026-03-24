@@ -37,6 +37,8 @@ const MIN_CLIP_DURATION = 0.5;
 const CLIP_DRAG_EPSILON = 0.0001;
 const HEADER_RAIL_HEIGHT_PX = 20;
 
+import { CURSOR_BRACKET_LEFT, CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
+
 const waveformUpgradeInFlight = new Set<string>();
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
@@ -239,8 +241,12 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const getDragMode = useCallback((e: React.MouseEvent): DragMode => {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = e.clientX - rect.left;
-    if (relX <= EDGE_HANDLE_PX) return 'resize-left';
-    if (relX >= rect.width - EDGE_HANDLE_PX) return 'resize-right';
+    const relY = e.clientY - rect.top;
+    // Resize only triggers in the header rail area
+    if (relY <= HEADER_RAIL_HEIGHT_PX) {
+      if (relX <= EDGE_HANDLE_PX) return 'resize-left';
+      if (relX >= rect.width - EDGE_HANDLE_PX) return 'resize-right';
+    }
     if (e.altKey) return 'slip';
     return 'move';
   }, []);
@@ -720,7 +726,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
   const setResizeCursor = useCallback((cursor: 'w-resize' | 'e-resize' | null) => {
-    const nextCursor = cursor ?? '';
+    const nextCursor = cursor === 'w-resize' ? CURSOR_BRACKET_LEFT
+      : cursor === 'e-resize' ? CURSOR_BRACKET_RIGHT
+      : '';
     if (clipBlockRef.current) {
       clipBlockRef.current.style.cursor = nextCursor;
     }
@@ -733,17 +741,22 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     const relX = clientX - rect.left;
     const relY = clientY - rect.top;
 
-    if (relX <= EDGE_HANDLE_PX || relX >= rect.width - EDGE_HANDLE_PX) {
+    // Resize only triggers in the header rail area
+    const inHeaderRail = relY <= HEADER_RAIL_HEIGHT_PX;
+    const atEdge = relX <= EDGE_HANDLE_PX || relX >= rect.width - EDGE_HANDLE_PX;
+
+    if (inHeaderRail && atEdge) {
       const edge = relX <= EDGE_HANDLE_PX ? 'left' : 'right';
       const cursor = edge === 'left' ? 'w-resize' : 'e-resize';
+      const bracketCursor = edge === 'left' ? CURSOR_BRACKET_LEFT : CURSOR_BRACKET_RIGHT;
       setHoveredResizeEdge(edge);
       setHoverSeekX(null);
       setResizeCursor(cursor);
-      currentTarget.style.cursor = cursor;
+      currentTarget.style.cursor = bracketCursor;
     } else {
       setHoveredResizeEdge(null);
       setResizeCursor(null);
-      if (relY <= HEADER_RAIL_HEIGHT_PX) {
+      if (inHeaderRail) {
         setHoverSeekX(null);
         currentTarget.style.cursor = altKey ? 'ew-resize' : 'grab';
       } else {
@@ -933,47 +946,20 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           }}
         />
 
+        {/* Resize handles — hit targets on header rail only, cursor is the bracket indicator */}
         <div
-          className="absolute top-0 bottom-0 left-0 w-[16px] cursor-w-resize z-10 group/resize-left"
+          className="absolute top-0 left-0 w-[16px] z-10"
           data-testid="resize-handle-left"
-          style={{ cursor: 'w-resize' }}
+          style={{ cursor: CURSOR_BRACKET_LEFT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
-        >
-          <div
-            className="absolute inset-y-0 left-0 w-full transition-colors duration-100 pointer-events-none"
-            style={{ background: hoveredResizeEdge === 'left' ? 'linear-gradient(90deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)' : 'transparent' }}
-            data-testid="resize-hover-zone-left"
-          />
-          <div
-            className="absolute top-0 bottom-0 left-0 w-[2px] transition-colors duration-100 pointer-events-none"
-            style={{ backgroundColor: hoveredResizeEdge === 'left' ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0)' }}
-            data-testid="resize-indicator-left"
-          />
-        </div>
+        />
         <div
-          className="absolute top-0 bottom-0 right-0 w-[16px] cursor-e-resize z-10 group/resize-right"
+          className="absolute top-0 right-0 w-[16px] z-10"
           data-testid="resize-handle-right"
-          style={{ cursor: 'e-resize' }}
+          style={{ cursor: CURSOR_BRACKET_RIGHT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
-        >
-          <div
-            className="absolute inset-y-0 right-0 w-full transition-colors duration-100 pointer-events-none"
-            style={{ background: hoveredResizeEdge === 'right' ? 'linear-gradient(270deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)' : 'transparent' }}
-            data-testid="resize-hover-zone-right"
-          />
-          <div
-            className="absolute top-0 bottom-0 right-0 w-[2px] transition-colors duration-100 pointer-events-none"
-            style={{ backgroundColor: hoveredResizeEdge === 'right' ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0)' }}
-            data-testid="resize-indicator-right"
-          />
-        </div>
-
-        {/* Color strip — overlay instead of borderLeft to avoid shifting waveform content */}
-        <div
-          className="absolute top-0 bottom-0 left-0 w-[3px] rounded-l-md z-[5] pointer-events-none"
-          style={{ backgroundColor: clipColor }}
         />
 
         <div
@@ -1111,7 +1097,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {totalVersions >= 1 && (
           <div
-            className="absolute top-0 right-0.5 flex items-center gap-0.5 z-20"
+            className="absolute top-0 flex items-center gap-0.5 z-20 transition-opacity duration-100"
+            style={{ right: EDGE_HANDLE_PX + 2, opacity: hoveredResizeEdge === 'right' ? 0 : 1 }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >

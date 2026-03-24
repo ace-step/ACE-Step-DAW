@@ -94,28 +94,29 @@ describe('ClipBlock hover and active feedback', () => {
     expect(classList).toMatch(/transition/);
   });
 
-  it('renders resize edge handles with visual indicator elements', () => {
+  it('renders resize edge handles with custom bracket cursors on header rail only', () => {
     const clip = makeClip();
     const track = makeTrack();
 
     render(<ClipBlock clip={clip} track={track} />);
 
-    // There should be resize edge handle elements with visual indicators
+    // Resize handles should exist
     const leftHandle = screen.getByTestId('resize-handle-left');
     const rightHandle = screen.getByTestId('resize-handle-right');
 
     expect(leftHandle).toBeInTheDocument();
     expect(rightHandle).toBeInTheDocument();
 
-    // Each handle should contain a visual line indicator
-    const leftLine = leftHandle.querySelector('[data-testid="resize-indicator-left"]');
-    const rightLine = rightHandle.querySelector('[data-testid="resize-indicator-right"]');
+    // Bracket cursors are set via custom SVG cursor (no DOM text overlay)
+    expect(leftHandle.style.cursor).toContain('data:image/svg+xml');
+    expect(rightHandle.style.cursor).toContain('data:image/svg+xml');
 
-    expect(leftLine).toBeInTheDocument();
-    expect(rightLine).toBeInTheDocument();
+    // Handles should be constrained to header rail height, not full clip height
+    expect(leftHandle.style.height).toBe('20px');
+    expect(rightHandle.style.height).toBe('20px');
   });
 
-  it('forces a resize cursor and visible edge feedback on hover', () => {
+  it('forces a custom bracket cursor on hover', () => {
     const clip = makeClip();
     const track = makeTrack();
 
@@ -123,17 +124,13 @@ describe('ClipBlock hover and active feedback', () => {
 
     const leftHandle = screen.getByTestId('resize-handle-left');
     const clipEl = screen.getByTestId(`clip-${clip.id}`) as HTMLElement;
-    const leftIndicator = screen.getByTestId('resize-indicator-left') as HTMLElement;
-    const leftHoverZone = screen.getByTestId('resize-hover-zone-left') as HTMLElement;
 
     fireEvent.mouseEnter(leftHandle);
 
-    expect(leftHandle.style.cursor).toBe('w-resize');
-    expect(clipEl.style.cursor).toBe('w-resize');
-    expect(document.body.style.cursor).toBe('w-resize');
-    expect(document.documentElement.style.cursor).toBe('w-resize');
-    expect(leftIndicator.style.backgroundColor).toContain('255, 255, 255');
-    expect(leftHoverZone.style.background).toContain('linear-gradient');
+    // Custom bracket cursor should be set (SVG data URL with [ character, fallback to e-resize)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(clipEl.style.cursor).toContain('col-resize');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
 
     fireEvent.mouseLeave(leftHandle);
 
@@ -142,7 +139,7 @@ describe('ClipBlock hover and active feedback', () => {
     expect(document.documentElement.style.cursor).toBe('');
   });
 
-  it('switches to resize cursor immediately when entering the clip at the edge', () => {
+  it('switches to resize cursor when entering the clip at the edge within header rail', () => {
     const clip = makeClip();
     const track = makeTrack();
 
@@ -153,19 +150,48 @@ describe('ClipBlock hover and active feedback', () => {
       x: 100,
       y: 20,
       width: 160,
-      height: 40,
+      height: 48,
       top: 20,
       right: 260,
-      bottom: 60,
+      bottom: 68,
       left: 100,
       toJSON: () => ({}),
     });
 
+    // Within header rail (y=24, relY=4 < 20)
     fireEvent.mouseEnter(clipEl, { clientX: 103, clientY: 24 });
 
-    expect(clipEl.style.cursor).toBe('w-resize');
-    expect(document.body.style.cursor).toBe('w-resize');
-    expect(document.documentElement.style.cursor).toBe('w-resize');
+    // Custom bracket cursor (SVG data URL with fallback)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
+    expect(document.documentElement.style.cursor).toContain('data:image/svg+xml');
+  });
+
+  it('does NOT show resize cursor at clip edge below header rail', () => {
+    const clip = makeClip();
+    const track = makeTrack();
+
+    render(<ClipBlock clip={clip} track={track} />);
+
+    const clipEl = screen.getByTestId(`clip-${clip.id}`) as HTMLElement;
+    vi.spyOn(clipEl, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 20,
+      width: 160,
+      height: 48,
+      top: 20,
+      right: 260,
+      bottom: 68,
+      left: 100,
+      toJSON: () => ({}),
+    });
+
+    // Below header rail (y=45, relY=25 > 20) at left edge (relX=3)
+    fireEvent.mouseMove(clipEl, { clientX: 103, clientY: 45 });
+
+    // Should NOT activate resize cursor in body area
+    expect(clipEl.style.cursor).not.toBe('w-resize');
+    expect(document.body.style.cursor).not.toBe('w-resize');
   });
 
   it('uses a right-edge resize cursor when hovering the clip end', () => {
@@ -189,9 +215,10 @@ describe('ClipBlock hover and active feedback', () => {
 
     fireEvent.mouseEnter(clipEl, { clientX: 257, clientY: 24 });
 
-    expect(clipEl.style.cursor).toBe('e-resize');
-    expect(document.body.style.cursor).toBe('e-resize');
-    expect(document.documentElement.style.cursor).toBe('e-resize');
+    // Custom bracket cursor (SVG data URL with fallback)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
+    expect(document.documentElement.style.cursor).toContain('data:image/svg+xml');
   });
 
   it('does not interfere with selection ring when clip is selected', () => {
@@ -265,10 +292,9 @@ describe('ClipBlock hover and active feedback', () => {
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // Color strip is now a child overlay div (not borderLeft) for waveform alignment
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]') as HTMLElement;
-    expect(stripEl).toBeTruthy();
-    expect(stripEl!.style.backgroundColor).toContain('rgb(34, 197, 94)');
+    // No left-side color strip — both sides should be open
+    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
+    expect(stripEl).toBeNull();
     expect(headerRail.style.background).toContain('34, 197, 94');
   });
 
@@ -280,10 +306,9 @@ describe('ClipBlock hover and active feedback', () => {
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // Color strip is now a child overlay div (not borderLeft) for waveform alignment
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]') as HTMLElement;
-    expect(stripEl).toBeTruthy();
-    expect(stripEl!.style.backgroundColor).toContain('rgb(68, 136, 255)');
+    // No left-side color strip — both sides should be open
+    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
+    expect(stripEl).toBeNull();
     expect(headerRail.style.background).toContain('68, 136, 255');
   });
 });

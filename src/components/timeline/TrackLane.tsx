@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -36,7 +36,7 @@ const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
 const EMPTY_LANE_SURFACE_OVERLAY_OPACITY = 0.55;
 
-export function TrackLane({ track }: TrackLaneProps) {
+function TrackLaneInner({ track }: TrackLaneProps) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const contextWindow = useUIStore((s) => s.contextWindow);
@@ -47,10 +47,15 @@ export function TrackLane({ track }: TrackLaneProps) {
   const setOpenStrudelEditor = useUIStore((s) => s.setOpenStrudelEditor);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const selectClip = useUIStore((s) => s.selectClip);
-  const project = useProjectStore((s) => s.project);
+  const hasProject = useProjectStore((s) => s.project != null);
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
+  const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
+  const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap);
+  const automationLanesRaw = useProjectStore((s) => s.project?.automationLanes);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const addClip = useProjectStore((s) => s.addClip);
-  const ensureMidiClip = useProjectStore((s) => s.ensureMidiClip);
   const convertMidiFileToStrudel = useProjectStore((s) => s.convertMidiFileToStrudel);
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
@@ -129,15 +134,15 @@ export function TrackLane({ track }: TrackLaneProps) {
     window.addEventListener('keydown', onKeyDown);
   }, [rowHeight, track, updateTrack]);
 
-  if (!project) return null;
+  if (!hasProject) return null;
 
   const trackType = track.trackType ?? 'stems';
   const isSequencer = trackType === 'sequencer';
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
   const isStrudel = trackType === 'strudel';
-  const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
-  const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature, project.timeSignatureDenominator ?? 4) * 4;
+  const totalWidth = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
+  const defaultClipDuration = getBarDuration(bpm, timeSignature, timeSignatureDenominator) * 4;
 
   const hitsClip = useCallback((clickTime: number): boolean => {
     const GUARD = 8 / pixelsPerSecond;
@@ -152,12 +157,12 @@ export function TrackLane({ track }: TrackLaneProps) {
     e.stopPropagation();
     const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
-    const remaining = project.totalDuration - startTime;
+    const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
+    const remaining = totalDuration - startTime;
     const duration = Math.max(10, Math.min(30, remaining));
     setCtxMenu({ x: e.clientX, y: e.clientY, startTime, duration });
     setAddLayerTarget(null);
-  }, [pixelsPerSecond, project.bpm, project.tempoMap, project.totalDuration]);
+  }, [pixelsPerSecond, bpm, tempoMap, totalDuration]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -181,7 +186,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     if (isPianoRoll) {
       e.stopPropagation();
       const rawTime = clientXToLaneX(e.clientX) / pixelsPerSecond;
-      const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+      const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
       const clip = addClip(track.id, {
         startTime,
         duration: defaultClipDuration,
@@ -200,7 +205,7 @@ export function TrackLane({ track }: TrackLaneProps) {
     e.stopPropagation();
     const clickTime = clientXToLaneX(e.clientX) / pixelsPerSecond;
     if (hitsClip(clickTime)) return;
-    const startTime = Math.max(0, snapToGrid(clickTime, project.bpm, 1, project.tempoMap));
+    const startTime = Math.max(0, snapToGrid(clickTime, bpm, 1, tempoMap));
     const clip = addClip(track.id, {
       startTime,
       duration: defaultClipDuration,
@@ -210,7 +215,7 @@ export function TrackLane({ track }: TrackLaneProps) {
       source: 'uploaded',
     });
     selectClip(clip.id);
-  }, [isDrumMachine, isSequencer, isPianoRoll, isStrudel, pixelsPerSecond, project.bpm, project.tempoMap, hitsClip, track.id, addClip, defaultClipDuration, setOpenDrumMachineTrackId, setOpenSequencerTrackId, setOpenStrudelEditor, selectClip, setOpenPianoRoll]);
+  }, [isDrumMachine, isSequencer, isPianoRoll, isStrudel, pixelsPerSecond, bpm, tempoMap, hitsClip, track.id, addClip, defaultClipDuration, setOpenDrumMachineTrackId, setOpenSequencerTrackId, setOpenStrudelEditor, selectClip, setOpenPianoRoll]);
 
   const clearSel = useCallback(() => {
     setAddLayerTarget(null);
@@ -244,10 +249,10 @@ export function TrackLane({ track }: TrackLaneProps) {
 
       // Compute ghost preview position
       const payload = getDragPayload();
-      if (payload && project) {
+      if (payload && hasProject) {
         const laneX = clientXToLaneX(e.clientX);
         const rawTime = laneX / pixelsPerSecond;
-        const snappedTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+        const snappedTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
         const ghostDuration = payload.duration ?? defaultClipDuration;
         setDropGhost({
           left: snappedTime * pixelsPerSecond,
@@ -256,7 +261,7 @@ export function TrackLane({ track }: TrackLaneProps) {
         });
       }
     }
-  }, [project, pixelsPerSecond, defaultClipDuration]);
+  }, [hasProject, bpm, tempoMap, pixelsPerSecond, defaultClipDuration]);
 
   const handleFileDragLeave = useCallback(() => {
     dragCounterRef.current--;
@@ -274,11 +279,11 @@ export function TrackLane({ track }: TrackLaneProps) {
     setFileDragOver(false);
     setDropGhost(null);
     clearDragPayload();
-    if (!project) return;
+    if (!hasProject) return;
 
     const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+    const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
 
     const historyId = e.dataTransfer.getData('application/x-generation-history-id');
     if (historyId) {
@@ -325,11 +330,14 @@ export function TrackLane({ track }: TrackLaneProps) {
         setOpenStrudelEditor,
       });
     }
-  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, placeGenerationHistoryOnTrack, project, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
+  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, placeGenerationHistoryOnTrack, hasProject, bpm, tempoMap, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
 
   const hasClips = track.clips.length > 0;
   const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;
-  const automationLanes = (project?.automationLanes ?? []).filter((l) => l.trackId === track.id);
+  const automationLanes = useMemo(
+    () => (automationLanesRaw ?? []).filter((l) => l.trackId === track.id),
+    [automationLanesRaw, track.id],
+  );
 
   return (
     <>
@@ -484,3 +492,5 @@ export function TrackLane({ track }: TrackLaneProps) {
     </>
   );
 }
+
+export const TrackLane = React.memo(TrackLaneInner);

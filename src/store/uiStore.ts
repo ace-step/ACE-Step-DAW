@@ -9,6 +9,7 @@ import { useTransportStore } from './transportStore';
 import type { AIChatContext } from '../utils/aiAssistantContext';
 import { buildAssistantContext } from '../utils/aiAssistantContext';
 import { getAssistantSuggestions, streamAssistantResponse } from '../services/aiAssistantService';
+import { streamLLMResponse } from '../services/llmChatService';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
@@ -1135,7 +1136,22 @@ export const useUIStore = create<UIState>()(
     }));
 
     try {
-      for await (const chunk of streamAssistantResponse(trimmed, context, options?.delayMs)) {
+      // Build conversation history for LLM context (exclude the empty assistant message just added)
+      const history = get().aiChatMessages
+        .filter((m) => m.id !== assistantMessage.id && m.content)
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+      const dawSummary = typeof window.__dawSummary === 'function'
+        ? window.__dawSummary()
+        : context.summary;
+
+      let usedFallback = false;
+
+      for await (const { chunk } of streamLLMResponse(trimmed, dawSummary, history)) {
+        if (chunk === '__FALLBACK__') {
+          usedFallback = true;
+          break;
+        }
         set((state) => ({
           aiChatMessages: state.aiChatMessages.map((message) => (
             message.id === assistantMessage.id
@@ -1143,6 +1159,18 @@ export const useUIStore = create<UIState>()(
               : message
           )),
         }));
+      }
+
+      if (usedFallback) {
+        for await (const chunk of streamAssistantResponse(trimmed, context, options?.delayMs)) {
+          set((state) => ({
+            aiChatMessages: state.aiChatMessages.map((message) => (
+              message.id === assistantMessage.id
+                ? { ...message, content: `${message.content}${chunk}` }
+                : message
+            )),
+          }));
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Assistant response failed.';

@@ -1,5 +1,23 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+
+// Initialize default provider list if not already set
+const PROVIDERS_KEY = 'ace-step-daw-chat-providers';
+try {
+  const stored = localStorage.getItem(PROVIDERS_KEY);
+  const providers = stored ? JSON.parse(stored) : null;
+  if (!providers) {
+    const defaults = [
+      { id: 'anthropic', name: 'Anthropic', apiKey: '', baseUrl: 'https://api.anthropic.com/v1', enabled: false },
+      { id: 'openai', name: 'OpenAI', apiKey: '', baseUrl: 'https://api.openai.com/v1', enabled: false },
+      { id: 'google', name: 'Google AI', apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', enabled: false },
+      { id: 'openrouter', name: 'OpenRouter', apiKey: '', baseUrl: 'https://openrouter.ai/api/v1', enabled: false },
+      { id: 'deepseek', name: 'DeepSeek', apiKey: '', baseUrl: 'https://api.deepseek.com/v1', enabled: false },
+      { id: 'xai', name: 'xAI', apiKey: '', baseUrl: 'https://api.xai.io/v1', enabled: false },
+    ];
+    localStorage.setItem(PROVIDERS_KEY, JSON.stringify(defaults));
+  }
+} catch { /* ignore */ }
 import './index.css';
 import App from './App';
 import { getAudioEngine } from './hooks/useAudioEngine';

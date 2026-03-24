@@ -9,7 +9,7 @@ import { TIMELINE_ZOOM_LEVELS } from '../../utils/timelineZoom';
 const HEALTH_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
 const CURRENT_YEAR = new Date().getFullYear();
-const DEFAULT_COPYRIGHT_NOTICE = `Copyright (c) ${CURRENT_YEAR} ACE Studio`;
+const DEFAULT_COPYRIGHT_NOTICE = `ACE Studio © ${CURRENT_YEAR}`;
 
 let lastKnownBackendConnection = false;
 
@@ -99,17 +99,20 @@ export function StatusBar() {
           </div>
           <span className="truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
           <span className="flex-1" />
-          <div className="flex items-center gap-1.5 text-[9px] text-daw-text-muted/85" data-testid="status-legal-notice">
-            <span className="truncate" data-testid="status-copyright-notice">{copyrightNotice}</span>
-            <span aria-hidden="true">•</span>
-            <span data-testid="status-no-warranty">No warranty</span>
-            <span aria-hidden="true">•</span>
-            <span className="hidden md:inline">Share and modify under AGPL-3.0-or-later</span>
+          <div className="hidden items-center gap-1.5 text-[9px] text-daw-text-muted/80 md:flex" data-testid="status-legal-notice">
+            <span className="whitespace-nowrap text-daw-text-muted/90" data-testid="status-copyright-notice">{copyrightNotice}</span>
+            <span
+              className="inline-flex items-center rounded-full border border-white/8 px-1.5 py-[1px] text-[8px] uppercase tracking-[0.16em] text-daw-text-muted/75"
+              data-testid="status-no-warranty"
+              title="No warranty. Share and modify under AGPL-3.0-or-later."
+            >
+              No warranty
+            </span>
             <a
               href={sourceCodeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded px-1 py-0.5 text-daw-accent transition-colors hover:bg-daw-hover-subtle hover:text-white"
+              className="rounded-full border border-white/8 px-2 py-0.5 text-daw-accent transition-colors hover:border-white/14 hover:bg-daw-hover-subtle hover:text-white"
               data-testid="status-source-link"
               aria-label="View corresponding source code"
               title="View corresponding source code"
@@ -120,12 +123,12 @@ export function StatusBar() {
               href={licenseUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded px-1 py-0.5 text-daw-accent transition-colors hover:bg-daw-hover-subtle hover:text-white"
+              className="rounded-full border border-white/8 px-2 py-0.5 text-daw-accent transition-colors hover:border-white/14 hover:bg-daw-hover-subtle hover:text-white"
               data-testid="status-license-link"
               aria-label="View AGPL license"
-              title="View AGPL license"
+              title="View AGPL-3.0-or-later license"
             >
-              License
+              AGPL
             </a>
           </div>
           <div className="flex items-center gap-1.5 text-daw-text-muted">

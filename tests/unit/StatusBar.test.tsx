@@ -92,7 +92,7 @@ describe('StatusBar', () => {
     it('renders a copyright notice instead of the old marketing link', () => {
       healthCheckMock.mockResolvedValue(false);
       render(<StatusBar />);
-      expect(screen.getByTestId('status-copyright-notice')).toHaveTextContent(`Copyright (c) ${CURRENT_YEAR} ACE Studio`);
+      expect(screen.getByTestId('status-copyright-notice')).toHaveTextContent(`ACE Studio © ${CURRENT_YEAR}`);
       expect(screen.queryByRole('link', { name: /ACE Studio/ })).not.toBeInTheDocument();
     });
   });

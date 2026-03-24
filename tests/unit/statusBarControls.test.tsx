@@ -89,8 +89,10 @@ describe('StatusBar controls', () => {
   it('shows the AGPL source and license notice links', () => {
     render(<StatusBar />);
 
+    expect(screen.getByTestId('status-copyright-notice')).toHaveTextContent(`ACE Studio © ${new Date().getFullYear()}`);
     expect(screen.getByTestId('status-legal-notice')).toHaveTextContent('No warranty');
     expect(screen.getByTestId('status-source-link')).toHaveAttribute('href', 'https://github.com/ace-step/ACE-Step-DAW');
     expect(screen.getByTestId('status-license-link')).toHaveAttribute('href', 'https://github.com/ace-step/ACE-Step-DAW/blob/main/LICENSE');
+    expect(screen.getByTestId('status-license-link')).toHaveTextContent('AGPL');
   });
 });

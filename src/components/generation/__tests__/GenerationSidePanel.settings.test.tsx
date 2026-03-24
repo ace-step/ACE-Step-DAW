@@ -75,4 +75,12 @@ describe('GenerationSidePanel settings entrypoints', () => {
 
     expect(useUIStore.getState().loopBrowserOpen).toBe(true);
   });
+
+  it('centers the dock against the arrangement workspace instead of the full viewport', () => {
+    useUIStore.setState({ mainView: 'arrangement', trackListWidth: 240 });
+
+    render(<GenerationSidePanel />);
+
+    expect(screen.getByTestId('generation-dock').style.left).toBe('calc(50% + 120px)');
+  });
 });

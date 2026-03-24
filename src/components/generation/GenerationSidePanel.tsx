@@ -38,6 +38,7 @@ const VARIATION_STATUS_COLORS: Record<VariationStatus, string> = {
 };
 
 export function GenerationSidePanel() {
+  const mainView = useUIStore((s) => s.mainView);
   const show = useUIStore((s) => s.showGenerationPanel);
   const setShow = useUIStore((s) => s.setShowGenerationPanel);
   const openGenerationPanelView = useUIStore((s) => s.openGenerationPanelView);
@@ -54,6 +55,7 @@ export function GenerationSidePanel() {
   const selectClip = useUIStore((s) => s.selectClip);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const activeBottomPanel = useUIStore((s) => s.activeBottomPanel);
+  const trackListWidth = useUIStore((s) => s.trackListWidth);
   const project = useProjectStore((s) => s.project);
 
   const generationForm = useGenerationStore((s) => s.generationForm);
@@ -230,13 +232,21 @@ export function GenerationSidePanel() {
     return () => window.clearTimeout(timeout);
   }, [show]);
 
+  const workspaceLeftInset = mainView === 'arrangement' && Number.isFinite(trackListWidth)
+    ? trackListWidth
+    : 0;
+  const dockLeft = workspaceLeftInset > 0
+    ? `calc(50% + ${workspaceLeftInset / 2}px)`
+    : '50%';
+
   if (!project) return null;
 
   return (
     <>
       <div
-        className="fixed left-1/2 -translate-x-1/2 transition-all duration-300 ease-in-out"
+        className="fixed -translate-x-1/2 transition-all duration-300 ease-in-out"
         style={{
+          left: dockLeft,
           zIndex: Z.toast,
           bottom: showSmartControls ? 208 : 68,
           opacity: activeBottomPanel ? 0 : 1,

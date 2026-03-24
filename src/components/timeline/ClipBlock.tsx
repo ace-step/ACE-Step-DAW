@@ -1342,7 +1342,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
       {dragGhost && dragGhost.targetTrackId && (
         <>
-          {dragGhost.sourceLaneRect && (
+          {dragGhost.sourceLaneRect && dragGhost.isShiftCopy && (
             <div
               className="fixed pointer-events-none"
               data-layer="drag-ghost-source"
@@ -1354,7 +1354,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
                 height: dragGhost.sourceLaneRect.height - 8,
                 border: `1.5px dashed ${hexToRgba(clipColor, 0.4)}`,
                 borderRadius: 2,
-                backgroundColor: hexToRgba(clipColor, dragGhost.isShiftCopy ? 0.15 : 0.04),
+                backgroundColor: hexToRgba(clipColor, 0.15),
               }}
             />
           )}

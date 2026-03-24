@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   registerStrudelEditorPlaybackStop,
+  registerStrudelEditorAudioContext,
   stopStrudelEditorPlayback,
 } from '../strudelEditorPlayback';
 
@@ -23,5 +24,38 @@ describe('strudelEditorPlayback', () => {
     stopStrudelEditorPlayback();
 
     expect(stop).not.toHaveBeenCalled();
+  });
+
+  it('suspends AudioContext as fallback when handler is null', async () => {
+    registerStrudelEditorPlaybackStop(null);
+
+    const suspendFn = vi.fn(() => Promise.resolve());
+    const resumeFn = vi.fn();
+    const fakeCtx = { state: 'running', suspend: suspendFn, resume: resumeFn } as unknown as AudioContext;
+    registerStrudelEditorAudioContext(fakeCtx);
+
+    stopStrudelEditorPlayback();
+
+    expect(suspendFn).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(resumeFn).toHaveBeenCalledTimes(1));
+
+    registerStrudelEditorAudioContext(null);
+  });
+
+  it('does not suspend AudioContext when handler is registered', () => {
+    const stop = vi.fn();
+    registerStrudelEditorPlaybackStop(stop);
+
+    const suspendFn = vi.fn(() => Promise.resolve());
+    const fakeCtx = { state: 'running', suspend: suspendFn, resume: vi.fn() } as unknown as AudioContext;
+    registerStrudelEditorAudioContext(fakeCtx);
+
+    stopStrudelEditorPlayback();
+
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(suspendFn).not.toHaveBeenCalled();
+
+    registerStrudelEditorPlaybackStop(null);
+    registerStrudelEditorAudioContext(null);
   });
 });

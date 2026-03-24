@@ -589,7 +589,7 @@ export interface ProjectState {
   flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
   bounceInPlace: (trackId: string, options?: Partial<BounceInPlaceOptions>) => Promise<Clip | undefined>;
 
-  addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number }) => Track;
+  addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number; color?: string; displayName?: string }) => Track;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -1537,8 +1537,26 @@ function createTrackFromTemplate(
     ...trackOverrides
   } = overrides ?? {};
 
+  // For 'custom' tracks without an explicit color override, cycle through a
+  // vibrant palette so each new track gets a distinct, non-gray color.
+  const CUSTOM_TRACK_PALETTE = [
+    '#3b82f6', // blue
+    '#f97316', // orange
+    '#22c55e', // green
+    '#a855f7', // purple
+    '#ef4444', // red
+    '#06b6d4', // cyan
+    '#eab308', // yellow
+    '#ec4899', // pink
+    '#14b8a6', // teal
+    '#8b5cf6', // violet
+  ];
+  const autoColor = trackName === 'custom' && !overrides?.color
+    ? CUSTOM_TRACK_PALETTE[existingTracks.length % CUSTOM_TRACK_PALETTE.length]
+    : info.color;
+
   const track: Track = {
-    color: info.color,
+    color: autoColor,
     volume: 0.8,
     laneHeight: trackType === 'sequencer' ? 80 : trackType === 'drumMachine' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
     synthPreset: getDefaultTrackSynthPreset(trackName),
@@ -2387,11 +2405,15 @@ export const useProjectStore = create<ProjectState>()(
     const isTrackType = trackName in TRACK_TYPE_CATALOG && !(trackName in TRACK_CATALOG);
     const resolvedName: TrackName = isTrackType ? 'custom' : trackName as TrackName;
     const resolvedType: TrackType = trackType ?? (isTrackType ? (trackName as TrackType) : (trackName === 'custom' ? 'sample' : 'stems'));
+    const overrides: Partial<Track> = {};
+    if (options?.order !== undefined) overrides.order = options.order;
+    if (options?.color) overrides.color = options.color;
+    if (options?.displayName) overrides.displayName = options.displayName;
     const track = createTrackFromTemplate(
       state.project.tracks,
       resolvedName,
       resolvedType,
-      options?.order !== undefined ? { order: options.order } : undefined,
+      Object.keys(overrides).length > 0 ? overrides : undefined,
     );
 
     const newTracks = [...state.project.tracks, track];

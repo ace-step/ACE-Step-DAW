@@ -1,4 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -143,6 +144,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
+  const [ghostLanding, setGhostLanding] = useState(false);
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const [hoveredResizeEdge, setHoveredResizeEdge] = useState<'left' | 'right' | null>(null);
@@ -445,47 +447,31 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
       if (mode === 'move') {
         document.body.style.cursor = isShiftCopy ? 'copy' : 'grabbing';
-        if (isShiftCopy) {
-          if (isMultiSelected && lastBatchOffset !== 0) {
-            batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
-            lastBatchOffset = 0;
-          } else {
-            updateClip(clip.id, { startTime: origStart });
-          }
-        } else {
-          const isFineMove = ev.metaKey || ev.ctrlKey;
-          let newStart = isFineMove
-            ? Math.round((origStart + deltaSec) * 100) / 100
-            : snapToGrid(origStart + deltaSec, bpm, 1);
-          newStart = Math.max(0, Math.min(newStart, totalDuration - origDuration));
-          const timeOffset = newStart - origStart;
-
-          if (isMultiSelected) {
-            const delta = timeOffset - lastBatchOffset;
-            if (delta !== 0) {
-              batchMoveClips([...currentSelectedClipIds], delta);
-              lastBatchOffset = timeOffset;
-            }
-          } else {
-            updateClip(clip.id, { startTime: newStart });
-          }
-        }
 
         const closest = findClosestLaneCached(ev.clientY);
+
+        // Never move the original clip during drag — the ghost alone shows
+        // the preview position. Store is only committed on mouseup.
+        // Revert any offset that may have been applied in earlier frames.
+        if (lastBatchOffset !== 0 && isMultiSelected) {
+          batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
+          lastBatchOffset = 0;
+        }
+
         if (closest) {
           const ghostLeftVp = ev.clientX - clickOffsetPx;
-          // sourceLane is pre-computed at drag start
-          const isCrossingTrack = closest.trackId !== track.id;
+          const clickOffsetY = clipRect ? startY - clipRect.top : 0;
+          const crossingTrack = closest.trackId !== track.id;
           pendingGhost = {
             x: ghostLeftVp,
-            y: closest.rect.top + 4,
+            y: ev.clientY - clickOffsetY,
             width: clipW,
             height: clipH,
-            targetTrackId: (isCrossingTrack || isShiftCopy) ? closest.trackId : null,
-            targetLaneRect: (isCrossingTrack || isShiftCopy)
+            targetTrackId: closest.trackId,
+            targetLaneRect: (crossingTrack || isShiftCopy)
               ? { top: closest.rect.top, height: closest.rect.height }
               : null,
-            sourceLaneRect: (isCrossingTrack || isShiftCopy) && sourceLane
+            sourceLaneRect: (crossingTrack || isShiftCopy) && sourceLane
               ? { top: sourceLane.rect.top, height: sourceLane.rect.height }
               : null,
             isShiftCopy,
@@ -646,7 +632,16 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         return;
       }
 
-      setDragGhost(null);
+      // Trigger ghost "landing" animation: brighten then fade out
+      if (dragGhost) {
+        setGhostLanding(true);
+        setTimeout(() => {
+          setDragGhost(null);
+          setGhostLanding(false);
+        }, 200);
+      } else {
+        setDragGhost(null);
+      }
       endDrag();
       document.body.style.cursor = '';
 
@@ -675,23 +670,24 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           ? Math.round((origStart + deltaSec) * 100) / 100
           : snapToGrid(origStart + deltaSec, bpm, 1));
 
-        // Resolve target trackId — if dropping on an empty slot, create a new track
+        // Resolve target trackId — if dropping on an empty slot, create a new
+        // track that inherits the source track's color and display name prefix
+        // so the new lane looks cohesive with the clip being moved.
         let resolvedTargetId = closest?.trackId;
         if (resolvedTargetId) {
           const emptySlotIndex = parseArrangementEmptyTrackSlotIndex(resolvedTargetId);
           if (emptySlotIndex !== null) {
-            const newTrack = addTrack(track.trackName, track.trackType, { order: emptySlotIndex + 1 });
+            const newTrack = addTrack(track.trackName, track.trackType, {
+              order: emptySlotIndex + 1,
+              color: track.color,
+              displayName: track.displayName,
+            });
             resolvedTargetId = newTrack.id;
           }
         }
 
         if (ev.shiftKey && closest && resolvedTargetId) {
-          if (isMultiSelected && lastBatchOffset !== 0) {
-            batchMoveClips([...currentSelectedClipIds], -lastBatchOffset);
-            lastBatchOffset = 0;
-          } else {
-            updateClip(clip.id, { startTime: origStart });
-          }
+          // Shift+drag = duplicate
           const timeOffset = dropStart - origStart;
           if (isMultiSelected) {
             batchDuplicateClips([...currentSelectedClipIds], timeOffset);
@@ -699,7 +695,17 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             duplicateClipToTrack(clip.id, resolvedTargetId, dropStart);
           }
         } else if (resolvedTargetId && resolvedTargetId !== track.id && !isMultiSelected) {
+          // Cross-track move
           moveClipToTrack(clip.id, resolvedTargetId, dropStart);
+        } else if (!isMultiSelected) {
+          // Same-track move — commit final position
+          updateClip(clip.id, { startTime: dropStart });
+        } else {
+          // Same-track multi-select move — commit final offset
+          const timeOffset = dropStart - origStart;
+          if (timeOffset !== 0) {
+            batchMoveClips([...currentSelectedClipIds], timeOffset);
+          }
         }
       }
     };
@@ -933,7 +939,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
           ${isSelected ? 'ring-2 ring-offset-1 ring-offset-transparent' : ''}
-          ${dragGhost && dragGhost.targetTrackId && !dragGhost.isShiftCopy ? 'opacity-0' : ''}
+          ${''/* Original clip stays fully visible during drag — ghost shows the preview */}
         `}
         style={{
           left,
@@ -1346,7 +1352,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         />
       )}
 
-      {dragGhost && dragGhost.targetTrackId && (
+      {dragGhost && dragGhost.targetTrackId && createPortal(
         <>
           {dragGhost.sourceLaneRect && dragGhost.isShiftCopy && (
             <div
@@ -1372,14 +1378,12 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
               left: dragGhost.x,
               top: dragGhost.y,
               width: dragGhost.width,
-              height: dragGhost.targetLaneRect
-                ? dragGhost.targetLaneRect.height - 8
-                : dragGhost.height,
+              height: dragGhost.height,
               background: clipPresentation.bodyBackground,
               borderLeft: `2px solid ${clipColor}`,
               boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${clipPresentation.bodyBorderColor}`,
-              transition: 'top 80ms ease-out',
-              willChange: 'transform',
+              opacity: ghostLanding ? 1 : 0.5,
+              transition: ghostLanding ? 'opacity 180ms ease-out' : undefined,
             }}
           >
             <div
@@ -1407,6 +1411,15 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
                 opacityClassName="opacity-85"
               />
             </div>
+            {isMidiClip && clip.midiData && (
+              <ClipMidiThumbnail
+                midiData={clip.midiData}
+                width={dragGhost.width}
+                duration={clip.duration}
+                bpm={project?.bpm ?? 120}
+                color={clipPresentation.waveformColor}
+              />
+            )}
             <div
               className="absolute left-1.5 right-1.5 text-[10px] font-medium truncate leading-4 z-10"
               style={{ top: 1, color: clipPresentation.titleColor }}
@@ -1432,11 +1445,11 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
                 backgroundColor: hexToRgba(clipColor, 0.06),
                 borderTop: `1px solid ${hexToRgba(clipColor, 0.35)}`,
                 borderBottom: `1px solid ${hexToRgba(clipColor, 0.35)}`,
-                transition: 'top 80ms ease-out',
               }}
             />
           )}
-        </>
+        </>,
+        document.body
       )}
     </>
   );

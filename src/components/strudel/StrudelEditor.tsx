@@ -9,7 +9,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 import type { StrudelFromMidiOptions } from '../../types/project';
-import { registerStrudelEditorPlaybackStop } from '../../engine/strudelEditorPlayback';
+import { registerStrudelEditorPlaybackStop, registerStrudelEditorAudioContext } from '../../engine/strudelEditorPlayback';
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 // Inject CSS to constrain the autocomplete info panel
@@ -223,6 +223,12 @@ export function StrudelEditor() {
         }
 
         editorRef.current = editor;
+
+        // Register the AudioContext so transport stop can force-kill audio
+        // even after this component unmounts.
+        const ctx = webaudioMod.getAudioContext?.();
+        if (ctx) registerStrudelEditorAudioContext(ctx);
+
         setIsLoading(false);
         setConsoleMessages(['🌀 Strudel ready']);
       } catch (err) {

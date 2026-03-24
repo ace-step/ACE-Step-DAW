@@ -123,7 +123,7 @@ describe('ClipBlock hover and active feedback', () => {
     expect(rightHandle.style.height).toBe('20px');
   });
 
-  it('forces a resize cursor and visible bracket feedback on hover', () => {
+  it('forces a custom bracket cursor on hover', () => {
     const clip = makeClip();
     const track = makeTrack();
 
@@ -131,16 +131,13 @@ describe('ClipBlock hover and active feedback', () => {
 
     const leftHandle = screen.getByTestId('resize-handle-left');
     const clipEl = screen.getByTestId(`clip-${clip.id}`) as HTMLElement;
-    const leftIndicator = screen.getByTestId('resize-indicator-left') as HTMLElement;
 
     fireEvent.mouseEnter(leftHandle);
 
-    expect(leftHandle.style.cursor).toBe('w-resize');
-    expect(clipEl.style.cursor).toBe('w-resize');
-    expect(document.body.style.cursor).toBe('w-resize');
-    expect(document.documentElement.style.cursor).toBe('w-resize');
-    // Bracket indicator should become visible on hover
-    expect(leftIndicator.style.opacity).toBe('1');
+    // Custom bracket cursor should be set (SVG data URL with [ character, fallback to e-resize)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(clipEl.style.cursor).toContain('e-resize');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
 
     fireEvent.mouseLeave(leftHandle);
 
@@ -171,9 +168,10 @@ describe('ClipBlock hover and active feedback', () => {
     // Within header rail (y=24, relY=4 < 20)
     fireEvent.mouseEnter(clipEl, { clientX: 103, clientY: 24 });
 
-    expect(clipEl.style.cursor).toBe('w-resize');
-    expect(document.body.style.cursor).toBe('w-resize');
-    expect(document.documentElement.style.cursor).toBe('w-resize');
+    // Custom bracket cursor (SVG data URL with fallback)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
+    expect(document.documentElement.style.cursor).toContain('data:image/svg+xml');
   });
 
   it('does NOT show resize cursor at clip edge below header rail', () => {
@@ -224,9 +222,10 @@ describe('ClipBlock hover and active feedback', () => {
 
     fireEvent.mouseEnter(clipEl, { clientX: 257, clientY: 24 });
 
-    expect(clipEl.style.cursor).toBe('e-resize');
-    expect(document.body.style.cursor).toBe('e-resize');
-    expect(document.documentElement.style.cursor).toBe('e-resize');
+    // Custom bracket cursor (SVG data URL with fallback)
+    expect(clipEl.style.cursor).toContain('data:image/svg+xml');
+    expect(document.body.style.cursor).toContain('data:image/svg+xml');
+    expect(document.documentElement.style.cursor).toContain('data:image/svg+xml');
   });
 
   it('does not interfere with selection ring when clip is selected', () => {

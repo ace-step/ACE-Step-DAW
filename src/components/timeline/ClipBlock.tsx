@@ -37,6 +37,14 @@ const MIN_CLIP_DURATION = 0.5;
 const CLIP_DRAG_EPSILON = 0.0001;
 const HEADER_RAIL_HEIGHT_PX = 20;
 
+/* Custom bracket cursors — replace the system default <> resize arrows with [ and ] */
+const makeBracketCursor = (char: '[' | ']') => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 20"><text x="8" y="15" text-anchor="middle" font-family="monospace" font-size="16" font-weight="900" fill="black" stroke="white" stroke-width="1">${char}</text></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 8 10, e-resize`;
+};
+const CURSOR_BRACKET_LEFT = makeBracketCursor('[');
+const CURSOR_BRACKET_RIGHT = makeBracketCursor(']');
+
 const waveformUpgradeInFlight = new Set<string>();
 
 type DragMode = 'move' | 'resize-left' | 'resize-right' | 'slip';
@@ -724,7 +732,9 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
   const setResizeCursor = useCallback((cursor: 'w-resize' | 'e-resize' | null) => {
-    const nextCursor = cursor ?? '';
+    const nextCursor = cursor === 'w-resize' ? CURSOR_BRACKET_LEFT
+      : cursor === 'e-resize' ? CURSOR_BRACKET_RIGHT
+      : '';
     if (clipBlockRef.current) {
       clipBlockRef.current.style.cursor = nextCursor;
     }
@@ -744,10 +754,11 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     if (inHeaderRail && atEdge) {
       const edge = relX <= EDGE_HANDLE_PX ? 'left' : 'right';
       const cursor = edge === 'left' ? 'w-resize' : 'e-resize';
+      const bracketCursor = edge === 'left' ? CURSOR_BRACKET_LEFT : CURSOR_BRACKET_RIGHT;
       setHoveredResizeEdge(edge);
       setHoverSeekX(null);
       setResizeCursor(cursor);
-      currentTarget.style.cursor = cursor;
+      currentTarget.style.cursor = bracketCursor;
     } else {
       setHoveredResizeEdge(null);
       setResizeCursor(null);
@@ -941,54 +952,30 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           }}
         />
 
-        {/* Resize handles — Ableton-style bracket indicators on header rail only */}
+        {/* Resize handles — hit targets on header rail only, cursor is the bracket indicator */}
         <div
-          className="absolute top-0 left-0 w-[16px] cursor-w-resize z-10"
+          className="absolute top-0 left-0 w-[16px] z-10"
           data-testid="resize-handle-left"
-          style={{ cursor: 'w-resize', height: HEADER_RAIL_HEIGHT_PX }}
+          style={{ cursor: CURSOR_BRACKET_LEFT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
         >
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none transition-opacity duration-100"
-            style={{ opacity: hoveredResizeEdge === 'left' ? 1 : 0 }}
+            className="pointer-events-none"
             data-testid="resize-indicator-left"
-          >
-            <span
-              style={{
-                color: '#000',
-                fontSize: 12,
-                fontWeight: 900,
-                fontFamily: 'monospace',
-                lineHeight: 1,
-                WebkitTextStroke: '1px #fff',
-              }}
-            >[</span>
-          </div>
+          >[</div>
         </div>
         <div
-          className="absolute top-0 right-0 w-[16px] cursor-e-resize z-10"
+          className="absolute top-0 right-0 w-[16px] z-10"
           data-testid="resize-handle-right"
-          style={{ cursor: 'e-resize', height: HEADER_RAIL_HEIGHT_PX }}
+          style={{ cursor: CURSOR_BRACKET_RIGHT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
         >
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none transition-opacity duration-100"
-            style={{ opacity: hoveredResizeEdge === 'right' ? 1 : 0 }}
+            className="pointer-events-none"
             data-testid="resize-indicator-right"
-          >
-            <span
-              style={{
-                color: '#000',
-                fontSize: 12,
-                fontWeight: 900,
-                fontFamily: 'monospace',
-                lineHeight: 1,
-                WebkitTextStroke: '1px #fff',
-              }}
-            >]</span>
-          </div>
+          >]</div>
         </div>
 
         <div

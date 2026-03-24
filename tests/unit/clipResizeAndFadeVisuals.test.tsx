@@ -80,8 +80,9 @@ describe('Clip resize handle width and fade visuals', () => {
 
     expect(leftHandle.className).toContain('w-[16px]');
     expect(rightHandle.className).toContain('w-[16px]');
-    expect(leftHandle.className).toContain('cursor-w-resize');
-    expect(rightHandle.className).toContain('cursor-e-resize');
+    // Custom bracket cursors set via inline style (SVG data URL)
+    expect(leftHandle.style.cursor).toContain('data:image/svg+xml');
+    expect(rightHandle.style.cursor).toContain('data:image/svg+xml');
   });
 
   it('renders a dedicated header rail and an ivory selected body surface', () => {

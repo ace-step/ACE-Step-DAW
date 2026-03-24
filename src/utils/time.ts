@@ -5,6 +5,7 @@ import {
   getBarAtBeat,
   getBeatAtBar,
   getTimeSignatureAtBar,
+  getTimeSignatureBarLength,
   getTimeSignatureBeatLength,
 } from './tempoMap';
 
@@ -22,11 +23,12 @@ export function secondsToBarsBeats(
   timeSignature: number,
   tempoMap?: TempoEvent[],
   timeSignatureMap?: TimeSignatureEvent[],
+  timeSignatureDenominator: number = 4,
 ): { bars: number; beats: number; ticks: number } {
   const totalBeats = timeToBeat(seconds, tempoMap, bpm);
-  const bar = getBarAtBeat(totalBeats, timeSignatureMap, timeSignature);
-  const { numerator, denominator } = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
-  const barStartBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
+  const bar = getBarAtBeat(totalBeats, timeSignatureMap, timeSignature, timeSignatureDenominator);
+  const { numerator, denominator } = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator);
+  const barStartBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
   const beatsIntoBar = totalBeats - barStartBeat;
   const beatLength = getTimeSignatureBeatLength(denominator);
   const beatInBar = Math.floor(beatsIntoBar / beatLength);
@@ -46,8 +48,9 @@ export function formatBarsBeats(
   timeSignature: number,
   tempoMap?: TempoEvent[],
   timeSignatureMap?: TimeSignatureEvent[],
+  timeSignatureDenominator: number = 4,
 ): string {
-  const { bars, beats, ticks } = secondsToBarsBeats(seconds, bpm, timeSignature, tempoMap, timeSignatureMap);
+  const { bars, beats, ticks } = secondsToBarsBeats(seconds, bpm, timeSignature, tempoMap, timeSignatureMap, timeSignatureDenominator);
   return `${bars}.${beats}.${ticks.toString().padStart(2, '0')}`;
 }
 
@@ -67,8 +70,8 @@ export function snapToGrid(
   return beatToTime(snappedBeat, tempoMap, bpm);
 }
 
-export function getBarDuration(bpm: number, timeSignature: number): number {
-  return (60 / bpm) * timeSignature;
+export function getBarDuration(bpm: number, timeSignature: number, timeSignatureDenominator: number = 4): number {
+  return (60 / bpm) * getTimeSignatureBarLength(timeSignature, timeSignatureDenominator);
 }
 
 export function getBeatDuration(bpm: number): number {

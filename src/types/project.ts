@@ -630,6 +630,7 @@ export interface ProjectTemplate {
   bpm: number;
   keyScale: string;
   timeSignature: number;
+  timeSignatureDenominator?: number;
   measures: number;
   /** Track layout snapshot (clips stripped, only structure preserved). */
   tracks: ProjectTemplateTrack[];

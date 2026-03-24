@@ -64,6 +64,11 @@ describe('secondsToBarsBeats', () => {
     expect(result.beats).toBe(1);
     expect(result.ticks).toBe(50);
   });
+
+  it('respects denominator when formatting bar beats', () => {
+    const result = secondsToBarsBeats(1, 120, 4, undefined, undefined, 8);
+    expect(result).toEqual({ bars: 2, beats: 1, ticks: 0 });
+  });
 });
 
 describe('formatTime', () => {
@@ -111,6 +116,10 @@ describe('getBarDuration', () => {
 
   it('returns 1.5 seconds for 120 BPM in 3/4', () => {
     expect(getBarDuration(120, 3)).toBe(1.5);
+  });
+
+  it('returns 1 second for 120 BPM in 4/8', () => {
+    expect(getBarDuration(120, 4, 8)).toBe(1);
   });
 });
 

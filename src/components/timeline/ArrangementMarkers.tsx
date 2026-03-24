@@ -88,9 +88,13 @@ export function ArrangementMarkers() {
   );
 
   const handleRightClick = useCallback(
-    (e: React.MouseEvent, markerId: string) => {
+    (e: React.MouseEvent, markerId: string, boundaryMarkerId?: string | null) => {
       e.preventDefault();
+      e.stopPropagation();
       removeMarker(markerId);
+      if (boundaryMarkerId) {
+        removeMarker(boundaryMarkerId);
+      }
     },
     [removeMarker],
   );
@@ -410,6 +414,7 @@ export function ArrangementMarkers() {
         const nextSection = sections[sectionIndex + 1];
         const nextMarkerId = nextSection?.marker.id ?? null;
         const nextMarkerTime = nextSection?.marker.time ?? totalDuration;
+        const boundaryMarkerId = nextSection?.marker.name ? null : (nextSection?.marker.id ?? null);
 
         return (
           <div
@@ -428,7 +433,7 @@ export function ArrangementMarkers() {
             onClick={() => {
               if (!hasDraggedRef.current) handleClick(startTime);
             }}
-            onContextMenu={(e) => handleRightClick(e, marker.id)}
+            onContextMenu={(e) => handleRightClick(e, marker.id, boundaryMarkerId)}
             onDoubleClick={(e) => {
               e.stopPropagation();
               startEditing(marker.id, e.currentTarget as HTMLElement);

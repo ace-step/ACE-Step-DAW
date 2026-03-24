@@ -22,7 +22,7 @@ describe('trackSlotLayout', () => {
     const slots = buildArrangementTrackSlots([
       createTrack('track-1', 'Track 1', 1),
       createTrack('track-2', 'Track 2', 4),
-    ], 2);
+    ], 6);
 
     expect(slots.slice(0, 6)).toEqual([
       { kind: 'track', track: expect.objectContaining({ id: 'track-1', order: 1 }) },
@@ -36,5 +36,13 @@ describe('trackSlotLayout', () => {
 
   it('derives stable virtual ids from absolute slot indices', () => {
     expect(getArrangementEmptyTrackId(3)).toBe('__empty-3');
+  });
+
+  it('fills the arrangement to 128 visible rows by default', () => {
+    const slots = buildArrangementTrackSlots([]);
+
+    expect(slots).toHaveLength(128);
+    expect(slots.at(0)).toEqual({ kind: 'empty', slotIndex: 0 });
+    expect(slots.at(-1)).toEqual({ kind: 'empty', slotIndex: 127 });
   });
 });

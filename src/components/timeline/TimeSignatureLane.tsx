@@ -38,6 +38,7 @@ export function TimeSignatureLane() {
   const bpm = project?.bpm ?? 120;
   const tempoMap = project?.tempoMap;
   const timeSignature = project?.timeSignature ?? 4;
+  const timeSignatureDenominator = project?.timeSignatureDenominator ?? 4;
   const timeSignatureMap = project?.timeSignatureMap ?? [];
   const totalDuration = project?.totalDuration ?? 0;
   const width = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
@@ -47,18 +48,18 @@ export function TimeSignatureLane() {
 
     const starts: { bar: number; x: number }[] = [];
     for (let bar = 1; bar <= 999; bar++) {
-      const beat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
+      const beat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
       const x = beatToTime(beat, tempoMap, bpm) * pixelsPerSecond;
       if (x > width + HOVER_THRESHOLD_PX) break;
       starts.push({ bar, x });
     }
     return starts;
-  }, [bpm, pixelsPerSecond, project, tempoMap, timeSignature, timeSignatureMap, width]);
+  }, [bpm, pixelsPerSecond, project, tempoMap, timeSignature, timeSignatureDenominator, timeSignatureMap, width]);
 
   const markers = useMemo(() => {
     if (!project) return [];
 
-    const firstMarker = getTimeSignatureAtBar(timeSignatureMap, 1, timeSignature, 4);
+    const firstMarker = getTimeSignatureAtBar(timeSignatureMap, 1, timeSignature, timeSignatureDenominator);
     const rest = timeSignatureMap
       .filter((event) => event.bar !== 1)
       .map((event) => ({ ...event, locked: false }));
@@ -72,7 +73,7 @@ export function TimeSignatureLane() {
       },
       ...rest,
     ];
-  }, [project, timeSignature, timeSignatureMap]);
+  }, [project, timeSignature, timeSignatureDenominator, timeSignatureMap]);
 
   const findClosestBar = useCallback((clientX: number) => {
     const lane = laneRef.current;
@@ -108,13 +109,13 @@ export function TimeSignatureLane() {
 
   const handleAddMarker = useCallback((bar: number) => {
     if (!project) return;
-    const current = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+    const current = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator);
     addTimeSignatureEvent({ bar, numerator: current.numerator, denominator: current.denominator });
-  }, [addTimeSignatureEvent, project, timeSignature, timeSignatureMap]);
+  }, [addTimeSignatureEvent, project, timeSignature, timeSignatureDenominator, timeSignatureMap]);
 
   const handleEditMarker = useCallback((bar: number) => {
     if (!project) return;
-    const current = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+    const current = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator);
     const parsed = parseTimeSignatureInput(window.prompt('Edit time signature', `${current.numerator}/${current.denominator}`));
     if (!parsed) return;
 
@@ -124,7 +125,7 @@ export function TimeSignatureLane() {
     }
 
     updateTimeSignatureEvent(bar, parsed);
-  }, [addTimeSignatureEvent, project, timeSignature, timeSignatureMap, updateTimeSignatureEvent]);
+  }, [addTimeSignatureEvent, project, timeSignature, timeSignatureDenominator, timeSignatureMap, updateTimeSignatureEvent]);
 
   const handleMarkerMouseDown = useCallback((bar: number, numerator: number, denominator: number, locked: boolean, event: ReactMouseEvent<HTMLButtonElement>) => {
     if (locked || event.button !== 0) return;

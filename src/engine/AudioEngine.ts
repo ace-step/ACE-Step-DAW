@@ -10,7 +10,7 @@ import type {
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
 import { applyClipFadeAutomation } from '../utils/clipFade';
-import { beatToTime, getBarAtBeat } from '../utils/tempoMap';
+import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { readAudioContextPlaybackLatency } from '../utils/playbackLatency';
@@ -1038,6 +1038,7 @@ export class AudioEngine {
   scheduleMetronome(
     bpm: number,
     timeSignature: number,
+    timeSignatureDenominator: number,
     fromTime: number,
     totalDuration: number,
     tempoMap?: TempoEvent[],
@@ -1045,36 +1046,38 @@ export class AudioEngine {
   ) {
     this.stopMetronome();
     const contextNow = this.ctx.currentTime;
-    const peakBpm = tempoMap?.reduce((m, e) => Math.max(m, e.bpm), bpm) ?? bpm;
-    const maxBeats = Math.ceil((totalDuration / 60) * peakBpm) + 8;
+    for (let bar = 1; bar <= 999; bar++) {
+      const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
+      const barTime = beatToTime(barBeat, tempoMap, bpm);
+      if (barTime > totalDuration) break;
 
-    for (let beat = 0; beat <= maxBeats; beat++) {
-      const beatTime = beatToTime(beat, tempoMap, bpm);
-      if (beatTime > totalDuration) break;
-      if (beatTime < fromTime) continue;
+      const meter = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator);
+      const beatLength = getTimeSignatureBeatLength(meter.denominator);
 
-      const delay = beatTime - fromTime;
-      const bar = getBarAtBeat(beat, timeSignatureMap, timeSignature);
-      const prevBar = beat > 0 ? getBarAtBeat(beat - 1, timeSignatureMap, timeSignature) : 0;
-      const isDownbeat = beat === 0 || bar > prevBar;
+      for (let beatIndex = 0; beatIndex < meter.numerator; beatIndex++) {
+        const beatTime = beatToTime(barBeat + (beatIndex * beatLength), tempoMap, bpm);
+        if (beatTime > totalDuration) break;
+        if (beatTime < fromTime) continue;
 
-      const freq = isDownbeat ? 1200 : 800;
-      const clickDuration = 0.03;
+        const delay = beatTime - fromTime;
+        const freq = beatIndex === 0 ? 1200 : 800;
+        const clickDuration = 0.03;
 
-      const osc = this.ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
 
-      const env = this.ctx.createGain();
-      env.gain.setValueAtTime(1, contextNow + delay);
-      env.gain.exponentialRampToValueAtTime(0.001, contextNow + delay + clickDuration);
+        const env = this.ctx.createGain();
+        env.gain.setValueAtTime(1, contextNow + delay);
+        env.gain.exponentialRampToValueAtTime(0.001, contextNow + delay + clickDuration);
 
-      osc.connect(env);
-      env.connect(this._metronomeGain);
+        osc.connect(env);
+        env.connect(this._metronomeGain);
 
-      osc.start(contextNow + delay);
-      osc.stop(contextNow + delay + clickDuration + 0.01);
-      this._metronomeSources.push(osc);
+        osc.start(contextNow + delay);
+        osc.stop(contextNow + delay + clickDuration + 0.01);
+        this._metronomeSources.push(osc);
+      }
     }
   }
 

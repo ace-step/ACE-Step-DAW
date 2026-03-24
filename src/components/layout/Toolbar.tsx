@@ -7,24 +7,23 @@ import { useCollaborationStore } from '../../store/collaborationStore';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
-import { getMidiCaptureService } from '../../services/midiCaptureService';
-import { DEFAULT_MEASURES } from '../../constants/defaults';
 import { KEY_SCALES } from '../../constants/tracks';
 import { formatTime, formatBarsBeats } from '../../utils/time';
+import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
 
 const KEY_ROOT_LABELS: Record<string, string> = {
   C: 'C',
-  'C#': 'C#/Db',
+  'C#': 'C#',
   D: 'D',
-  'D#': 'D#/Eb',
+  'D#': 'D#',
   E: 'E',
   F: 'F',
-  'F#': 'F#/Gb',
+  'F#': 'F#',
   G: 'G',
-  'G#': 'G#/Ab',
+  'G#': 'G#',
   A: 'A',
-  'A#': 'A#/Bb',
+  'A#': 'A#',
   B: 'B',
 };
 
@@ -39,6 +38,44 @@ const SCALE_MODES = Array.from(
 const SCALE_MODE_LABELS: Record<string, string> = {
   major: 'Maj',
   minor: 'Min',
+};
+
+function getMetronomePulseCount(timeSignatureNumerator?: number) {
+  const numerator = Math.max(1, Math.floor(timeSignatureNumerator ?? 4));
+  return Math.min(6, Math.max(2, numerator));
+}
+
+const METRONOME_PULSE_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
+  2: [
+    { left: 26, top: 50 },
+    { left: 74, top: 50 },
+  ],
+  3: [
+    { left: 50, top: 20 },
+    { left: 77, top: 72 },
+    { left: 23, top: 72 },
+  ],
+  4: [
+    { left: 24, top: 24 },
+    { left: 76, top: 24 },
+    { left: 76, top: 76 },
+    { left: 24, top: 76 },
+  ],
+  5: [
+    { left: 50, top: 16 },
+    { left: 79, top: 35 },
+    { left: 69, top: 78 },
+    { left: 31, top: 78 },
+    { left: 21, top: 35 },
+  ],
+  6: [
+    { left: 50, top: 14 },
+    { left: 78, top: 30 },
+    { left: 78, top: 70 },
+    { left: 50, top: 86 },
+    { left: 22, top: 70 },
+    { left: 22, top: 30 },
+  ],
 };
 
 function splitKeyScale(keyScale?: string) {
@@ -57,28 +94,24 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
-const inputClass = 'h-6 rounded bg-transparent px-1.5 text-center text-[11px] font-mono text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
-const selectClass = 'h-6 rounded bg-transparent px-1.5 text-[11px] text-zinc-300 hover:bg-daw-hover-subtle focus:bg-daw-hover-subtle focus:text-white focus:outline-none disabled:opacity-50';
+const numericDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[22px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-8 appearance-none bg-transparent px-0 font-mono text-[19px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const boxedReadoutClass = 'flex h-8 items-center bg-transparent px-0';
+const flatReadoutClass = 'flex h-8 items-center px-0';
 
-const VALID_DENOMINATORS = [2, 4, 8, 16];
-
-function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
+function ProjectTimingStrip({ disabled }: { disabled: boolean }) {
   const project = useProjectStore((s) => s.project);
   const updateProject = useProjectStore((s) => s.updateProject);
   const [bpmInput, setBpmInput] = useState('120');
-  const [measuresInput, setMeasuresInput] = useState(String(DEFAULT_MEASURES));
   const [tsNumeratorInput, setTsNumeratorInput] = useState('4');
   const [tsDenominatorInput, setTsDenominatorInput] = useState('4');
 
   useEffect(() => {
     if (!project) return;
     setBpmInput(String(project.bpm));
-    setMeasuresInput(String(project.measures ?? DEFAULT_MEASURES));
     setTsNumeratorInput(String(project.timeSignature ?? 4));
     setTsDenominatorInput(String(project.timeSignatureDenominator ?? 4));
-  }, [project?.bpm, project?.measures, project?.timeSignature, project?.timeSignatureDenominator, project]);
-
-  const keyScale = splitKeyScale(project?.keyScale);
+  }, [project?.bpm, project?.timeSignature, project?.timeSignatureDenominator, project]);
 
   const commitBpm = () => {
     const parsed = Number.parseInt(bpmInput, 10);
@@ -89,22 +122,11 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     }
   };
 
-  const commitMeasures = () => {
-    const parsed = Number.parseInt(measuresInput, 10);
-    const nextMeasures = Number.isNaN(parsed)
-      ? (project?.measures ?? DEFAULT_MEASURES)
-      : Math.min(512, Math.max(4, parsed));
-    setMeasuresInput(String(nextMeasures));
-    if (project && nextMeasures !== project.measures) {
-      updateProject({ measures: nextMeasures });
-    }
-  };
-
   const commitTimeSignatureNumerator = () => {
     const parsed = Number.parseInt(tsNumeratorInput, 10);
     const nextTs = Number.isNaN(parsed)
       ? (project?.timeSignature ?? 4)
-      : Math.min(12, Math.max(1, parsed));
+      : Math.max(1, parsed);
     setTsNumeratorInput(String(nextTs));
     if (project && nextTs !== project.timeSignature) {
       updateProject({ timeSignature: nextTs });
@@ -113,12 +135,12 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
 
   const commitTimeSignatureDenominator = () => {
     const parsed = Number.parseInt(tsDenominatorInput, 10);
-    const nextDenom = Number.isNaN(parsed) || !VALID_DENOMINATORS.includes(parsed)
+    const nextDenom = Number.isNaN(parsed) || parsed < 1
       ? (project?.timeSignatureDenominator ?? 4)
       : parsed;
     setTsDenominatorInput(String(nextDenom));
     if (project && nextDenom !== (project.timeSignatureDenominator ?? 4)) {
-      updateProject({ timeSignatureDenominator: nextDenom } as never);
+      updateProject({ timeSignatureDenominator: nextDenom });
     }
   };
 
@@ -126,35 +148,30 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
     if (event.key === 'Enter') event.currentTarget.blur();
   };
 
-  const updateKeyScale = (nextRoot: string, nextMode: string) => {
-    if (!project) return;
-    updateProject({ keyScale: `${nextRoot} ${nextMode}` });
-  };
-
   return (
     <div
-      className="flex items-center gap-0.5 px-0.5"
-      data-testid="toolbar-project-settings"
+      className="flex items-center gap-2 px-0"
+      data-testid="toolbar-project-timing"
     >
-      <input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={bpmInput}
-        onChange={(event) => setBpmInput(event.target.value)}
-        onBlur={commitBpm}
-        onKeyDown={blurOnEnter}
-        min={40}
-        max={300}
-        disabled={disabled}
-        aria-label="Project BPM"
-        title="Project BPM"
-        className={`${inputClass} w-[3.35rem]`}
-      />
+      <div className={boxedReadoutClass} title="Project tempo (beats per minute)">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={bpmInput}
+          onChange={(event) => setBpmInput(event.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={blurOnEnter}
+          min={40}
+          max={300}
+          disabled={disabled}
+          aria-label="Project BPM"
+          title="Project BPM"
+          className={`${numericDisplayInputClass} w-[3.4rem]`}
+        />
+      </div>
 
-      <ToolbarSeparator />
-
-      <div className="flex items-center">
+      <div className={`${boxedReadoutClass} gap-[0.18rem]`} title="Project time signature">
         <input
           type="text"
           inputMode="numeric"
@@ -168,9 +185,9 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           disabled={disabled}
           aria-label="Time signature numerator"
           title="Time signature numerator"
-          className={`${inputClass} w-7`}
+          className={`${numericDisplayInputClass} w-[0.95rem]`}
         />
-        <span className="text-[10px] text-zinc-500">/</span>
+        <span className="text-[20px] leading-none text-zinc-500">/</span>
         <input
           type="text"
           inputMode="numeric"
@@ -179,25 +196,40 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           onChange={(event) => setTsDenominatorInput(event.target.value)}
           onBlur={commitTimeSignatureDenominator}
           onKeyDown={blurOnEnter}
-          min={2}
-          max={16}
           disabled={disabled}
           aria-label="Time signature denominator"
           title="Time signature denominator"
-          className={`${inputClass} w-7`}
+          className={`${numericDisplayInputClass} w-[0.95rem]`}
         />
       </div>
 
-      <ToolbarSeparator />
+    </div>
+  );
+}
 
-      <div className="flex items-center gap-0.5">
+function HarmonySettingsStrip({ disabled }: { disabled: boolean }) {
+  const project = useProjectStore((s) => s.project);
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const keyScale = splitKeyScale(project?.keyScale);
+
+  const updateKeyScale = (nextRoot: string, nextMode: string) => {
+    if (!project) return;
+    updateProject({ keyScale: `${nextRoot} ${nextMode}` });
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1.5 px-0"
+      data-testid="toolbar-project-harmony"
+    >
+      <div className={flatReadoutClass} title="Project key root note">
         <select
           value={keyScale.root}
           onChange={(event) => updateKeyScale(event.target.value, keyScale.mode)}
           disabled={disabled}
           aria-label="Project key root"
           title="Project key root"
-          className={`${selectClass} w-11`}
+          className={`${selectClass} w-[1rem]`}
         >
           {KEY_ROOTS.map((root) => (
             <option key={root} value={root}>
@@ -205,13 +237,15 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
             </option>
           ))}
         </select>
+      </div>
+      <div className={flatReadoutClass} title="Project scale mode selector">
         <select
           value={keyScale.mode}
           onChange={(event) => updateKeyScale(keyScale.root, event.target.value)}
           disabled={disabled}
           aria-label="Project scale mode"
           title="Project scale mode"
-          className={`${selectClass} w-[3.7rem]`}
+          className={`${selectClass} w-[2.5rem]`}
         >
           {SCALE_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -220,22 +254,6 @@ function ProjectSettingsStrip({ disabled }: { disabled: boolean }) {
           ))}
         </select>
       </div>
-
-      <ToolbarSeparator />
-
-      <input
-        type="number"
-        value={measuresInput}
-        onChange={(event) => setMeasuresInput(event.target.value)}
-        onBlur={commitMeasures}
-        onKeyDown={blurOnEnter}
-        min={4}
-        max={512}
-        disabled={disabled}
-        aria-label="Project measures"
-        title="Project measures"
-        className={`${inputClass} w-11`}
-      />
     </div>
   );
 }
@@ -250,7 +268,7 @@ function LCDDisplay() {
   const loopCycleCount = useTransportStore((s) => s.loopCycleCount);
   const project = useProjectStore((s) => s.project);
   const barsBeats = project
-    ? formatBarsBeats(currentTime, project.bpm, project.timeSignature)
+    ? formatBarsBeats(currentTime, project.bpm, project.timeSignature, project.tempoMap, project.timeSignatureMap, project.timeSignatureDenominator ?? 4)
     : '1.1.00';
 
   // During count-in: show negative beat count in cyan (Ableton convention)
@@ -260,9 +278,19 @@ function LCDDisplay() {
   const showLoopCycleBadge = isRecording && loopRecordingEnabled && loopCycleCount > 0;
 
   return (
-    <div className="flex items-center gap-3 px-3 py-1 min-w-[200px] justify-center shrink-0 font-mono tabular-nums">
-      <span className={`text-[13px] tracking-wider ${barsBeatsColor}`}>{displayBarsBeats}</span>
-      <span className="text-[11px] text-zinc-500">{formatTime(currentTime)}</span>
+    <div className="flex min-w-[220px] shrink-0 items-end justify-center gap-2.5 px-2 py-1 font-mono tabular-nums">
+      <span
+        className={`text-[22px] leading-none tracking-[0.09em] ${barsBeatsColor}`}
+        title="Transport position (bars.beats.ticks)"
+      >
+        {displayBarsBeats}
+      </span>
+      <span
+        className="pb-[1px] text-[15px] leading-none tracking-[0.02em] text-zinc-500"
+        title="Transport elapsed time"
+      >
+        {formatTime(currentTime)}
+      </span>
       {countInActive && (
         <span className="text-[11px] text-red-400 animate-pulse">REC</span>
       )}
@@ -282,12 +310,74 @@ function LCDDisplay() {
   );
 }
 
+function MetronomePulseIcon() {
+  const project = useProjectStore((s) => s.project);
+  const currentTime = useTransportStore((s) => s.currentTime);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
+
+  const pulseCount = getMetronomePulseCount(project?.timeSignature);
+  const pulsePositions = METRONOME_PULSE_POSITIONS[pulseCount];
+
+  let activeIndex = 0;
+  if (project) {
+    const totalBeats = timeToBeat(currentTime, project.tempoMap, project.bpm);
+    const fallbackDenominator = project.timeSignatureDenominator ?? 4;
+    const bar = getBarAtBeat(totalBeats, project.timeSignatureMap, project.timeSignature, fallbackDenominator);
+    const barStartBeat = getBeatAtBar(bar, project.timeSignatureMap, project.timeSignature, fallbackDenominator);
+    const nextBarBeat = getBeatAtBar(bar + 1, project.timeSignatureMap, project.timeSignature, fallbackDenominator);
+    const barLength = Math.max(0.0001, nextBarBeat - barStartBeat);
+    const progress = Math.max(0, Math.min(0.9999, (totalBeats - barStartBeat) / barLength));
+    activeIndex = Math.min(pulseCount - 1, Math.floor(progress * pulseCount));
+  }
+
+  return (
+    <div
+      className="relative h-6 w-6"
+      aria-hidden="true"
+      data-testid="metronome-pulse-icon"
+    >
+      {pulsePositions.map((position, index) => {
+        const dotState = !isPlaying
+          ? (index === 0 ? 'current' : 'upcoming')
+          : index === activeIndex
+            ? 'current'
+            : index < activeIndex
+              ? 'passed'
+              : 'upcoming';
+
+        const dotClassName = dotState === 'current'
+          ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.35)]'
+          : dotState === 'passed'
+            ? 'bg-white/55'
+            : 'bg-white/22';
+
+        return (
+          <span
+            key={index}
+            data-testid="metronome-pulse-dot"
+            data-step-index={index}
+            data-state={dotState}
+            className={`absolute block h-[9.5px] w-[9.5px] rounded-full transition-[background-color,box-shadow] duration-100 ${dotClassName}`}
+            style={{
+              left: `${position.left}%`,
+              top: `${position.top}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function ControlBarButton({
   active,
   onClick,
   title,
   disabled,
   dataTarget,
+  className,
+  disableHoverHighlight = false,
   children,
 }: {
   active?: boolean;
@@ -295,8 +385,14 @@ function ControlBarButton({
   title: string;
   disabled?: boolean;
   dataTarget?: string;
+  className?: string;
+  disableHoverHighlight?: boolean;
   children: React.ReactNode;
 }) {
+  const hoverClass = active || disableHoverHighlight
+    ? ''
+    : 'hover:bg-transparent hover:text-white';
+
   return (
     <Button
       size="md"
@@ -308,14 +404,11 @@ function ControlBarButton({
       title={title}
       aria-label={title.replace(/\s*\(.+?\)$/, '')}
       data-onboarding-target={dataTarget}
+      className={`h-10 w-10 rounded-lg p-0 text-white/90 ${hoverClass} ${className ?? ''}`}
     >
       {children}
     </Button>
   );
-}
-
-function ToolbarSeparator() {
-  return <div className="w-px h-5 bg-white/8" data-testid="toolbar-separator" />;
 }
 
 function AceStudioLink() {
@@ -326,10 +419,10 @@ function AceStudioLink() {
       rel="noreferrer"
       title="Visit ACE Studio"
       data-testid="toolbar-acestudio-link"
-      className="flex items-center gap-1 rounded px-1 py-1 text-[11px] text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-zinc-200"
+      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] text-zinc-100 transition-colors hover:bg-white/8 hover:text-white"
     >
       <img src="/acestudio_icon.png" alt="ACE Studio" className="h-5 w-5 rounded-full object-cover" />
-      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 3.5L9 7L4 10.5" />
         <path d="M9.5 3.5L12 7L9.5 10.5" />
       </svg>
@@ -392,10 +485,11 @@ function ProjectMenu({ disabled }: { disabled: boolean }) {
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         data-testid="project-menu-trigger"
-        className="flex items-center justify-center rounded px-1.5 py-1 text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-white"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
         title="Project menu"
+        aria-label="Project menu"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+        <svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45">
           <path d="M1.5 4.5L7 1.5l5.5 3M1.5 7l5.5 3 5.5-3M1.5 9.5l5.5 3 5.5-3" />
         </svg>
       </button>
@@ -471,6 +565,8 @@ export function Toolbar() {
   const setShowSmartControls = useUIStore((s) => s.setShowSmartControls);
   const showArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
   const toggleArrangementMarkers = useUIStore((s) => s.toggleArrangementMarkers);
+  const autoScrollEnabled = useUIStore((s) => s.autoScrollEnabled);
+  const toggleAutoScroll = useUIStore((s) => s.toggleAutoScroll);
   const isViewerMode = useCollaborationStore((s) => s.isViewerMode);
   const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
   const toggleStrudelPanel = useUIStore((s) => s.toggleStrudelPanel);
@@ -480,8 +576,6 @@ export function Toolbar() {
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const isRecording = useTransportStore((s) => s.isRecording);
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
-  const loopRecordingEnabled = useTransportStore((s) => s.loopRecordingEnabled);
-  const toggleLoopRecording = useTransportStore((s) => s.toggleLoopRecording);
   const metronomeEnabled = useTransportStore((s) => s.metronomeEnabled);
   const toggleMetronome = useTransportStore((s) => s.toggleMetronome);
   useEffect(() => {
@@ -498,22 +592,21 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-11 items-center gap-1 border-b border-daw-border-strong bg-daw-surface-3 px-2 shrink-0 select-none overflow-x-auto"
+      className="flex h-12 shrink-0 select-none items-center gap-1.5 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5"
+      data-testid="main-toolbar"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* Project menu (unified: Projects, New, File actions) */}
       <ProjectMenu disabled={!project} />
 
-      <ToolbarSeparator />
-
       {/* Arrangement / Session view toggle */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         <ControlBarButton
           active={mainView === 'arrangement'}
           onClick={() => setMainView('arrangement')}
           title="Arrangement View (Tab)"
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M2 4h10M2 7h10M2 10h10" />
           </svg>
         </ControlBarButton>
@@ -522,23 +615,21 @@ export function Toolbar() {
           onClick={() => setMainView('session')}
           title="Session View (Tab)"
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M4 2v10M7 2v10M10 2v10" />
           </svg>
         </ControlBarButton>
       </div>
 
-      <ToolbarSeparator />
-
       {/* Smart Controls toggle */}
-      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
+      <div className="flex items-center gap-1 shrink-0" data-testid="toolbar-group">
         <ControlBarButton
           active={showArrangementMarkers}
           onClick={toggleArrangementMarkers}
           title="Arrangement Markers (A)"
           disabled={!project}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="1" y="5" width="4" height="5" rx="0.5" />
             <rect x="5" y="5" width="5" height="5" rx="0.5" />
             <rect x="10" y="5" width="3" height="5" rx="0.5" />
@@ -553,7 +644,7 @@ export function Toolbar() {
           title="Smart Controls (B)"
           disabled={!project}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="4" cy="7" r="2.5" />
             <circle cx="10" cy="7" r="2.5" />
             <line x1="4" y1="4.5" x2="4" y2="2" />
@@ -574,20 +665,19 @@ export function Toolbar() {
 
       <div className="flex-1" />
 
-      {/* Project settings (BPM, time sig, key, measures) */}
-      <ProjectSettingsStrip disabled={!project} />
-
-      <ToolbarSeparator />
+      {/* Project timing settings */}
+      <ProjectTimingStrip disabled={!project} />
 
       {/* Center: Transport controls */}
+      <div className="shrink-0" data-testid="toolbar-group">
       <div
-        className="flex items-center gap-0.5 shrink-0"
+        className="flex items-center gap-1"
         data-testid="transport-bar"
         data-onboarding-target="transport"
       >
         {/* Rewind */}
         <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
-          <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor">
+          <svg width="22" height="20" viewBox="0 0 14 12" fill="currentColor">
             <rect x="0" y="1" width="2" height="10" rx="0.5" />
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
@@ -595,94 +685,85 @@ export function Toolbar() {
         {/* Play/Pause */}
         <button
           onClick={() => void (isPlaying ? pause() : play())}
-          className={`w-8 h-7 flex items-center justify-center rounded transition-[color,background-color,transform] duration-150 active:scale-95 ${
+          className={`flex h-10 w-11 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
             isPlaying
               ? 'bg-daw-accent text-white'
-              : 'text-zinc-400 hover:bg-daw-hover-subtle hover:text-white'
+              : 'bg-transparent text-white/90 hover:bg-transparent hover:text-white'
           }`}
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
-            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="21" height="23" viewBox="0 0 12 14" fill="currentColor">
               <rect width="4" height="14" rx="1" />
               <rect x="8" width="4" height="14" rx="1" />
             </svg>
           ) : (
-            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
+            <svg width="23" height="25" viewBox="0 0 12 14" fill="currentColor">
               <path d="M0 0L12 7L0 14V0Z" />
             </svg>
           )}
         </button>
         <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
-          <div className={`w-3.5 h-3.5 rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-60'}`} />
+          <div className={`h-[20px] w-[20px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
+        </ControlBarButton>
+        <button
+          onClick={toggleMetronome}
+          title="Metronome (K)"
+          aria-label="Metronome"
+          className={`flex h-10 w-10 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
+            metronomeEnabled
+              ? 'bg-[#8276f6] text-white'
+              : 'bg-transparent text-white/90 hover:bg-transparent hover:text-white'
+          }`}
+        >
+          <MetronomePulseIcon />
+        </button>
+        <ControlBarButton
+          active={loopEnabled}
+          onClick={toggleLoop}
+          title="Loop (C)"
+          disableHoverHighlight
+        >
+          <svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 1l2 2-2 2" />
+            <path d="M4 13l-2-2 2-2" />
+            <path d="M12 3H5a3 3 0 0 0 0 6" />
+            <path d="M2 11h7a3 3 0 0 0 0-6" />
+          </svg>
         </ControlBarButton>
         <ControlBarButton
-          onClick={() => {
-            const armedTrackIds = useTransportStore.getState().armedTrackIds;
-            const targetTrackId = armedTrackIds[0];
-            if (targetTrackId) {
-              const captureService = getMidiCaptureService();
-              const currentTime = useTransportStore.getState().currentTime;
-              useProjectStore.getState().captureMidi(targetTrackId, currentTime, captureService);
-            }
-          }}
-          title="Capture MIDI (F)"
-          disabled={!project}
+          active={autoScrollEnabled}
+          onClick={toggleAutoScroll}
+          title="Auto Scroll"
+          disableHoverHighlight
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="7" cy="7" r="5" />
-            <polyline points="5,6 7,9 9,5" />
+          <svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 7h7.5" />
+            <path d="M7 4l3.5 3L7 10" />
+            <path d="M12 2v10" />
           </svg>
         </ControlBarButton>
       </div>
-
-      <ToolbarSeparator />
+      </div>
 
       {/* LCD Display */}
       <LCDDisplay />
 
-      <ToolbarSeparator />
-
-      {/* Cycle + Metronome */}
-      <div className="flex items-center gap-0.5 shrink-0" data-testid="toolbar-group">
-        <ControlBarButton active={loopEnabled} onClick={toggleLoop} title="Cycle (C)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 1l2 2-2 2" />
-            <path d="M4 13l-2-2 2-2" />
-            <path d="M12 3H5a3 3 0 0 0 0 6" />
-            <path d="M2 11h7a3 3 0 0 0 0-6" />
-          </svg>
-        </ControlBarButton>
-        <ControlBarButton active={loopRecordingEnabled} onClick={toggleLoopRecording} title="Overdub / Loop Recording (Shift+L)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 1l2 2-2 2" />
-            <path d="M4 13l-2-2 2-2" />
-            <path d="M12 3H5a3 3 0 0 0 0 6" />
-            <path d="M2 11h7a3 3 0 0 0 0-6" />
-            <circle cx="7" cy="7" r="2" fill="currentColor" stroke="none" />
-          </svg>
-        </ControlBarButton>
-        <ControlBarButton active={metronomeEnabled} onClick={toggleMetronome} title="Metronome (K)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 13L7 1l3 12" />
-            <path d="M3 13h8" />
-            <path d="M7 5l4-2" />
-          </svg>
-        </ControlBarButton>
-      </div>
-
       <div className="flex-1" />
+
+      <HarmonySettingsStrip disabled={!project} />
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => openCommandPalette()}
-          className="flex items-center gap-1 rounded px-1.5 py-1 text-zinc-400 transition-colors hover:bg-daw-hover-subtle hover:text-white"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-white transition-colors hover:bg-white/8 hover:text-white"
           title="Command Palette (Cmd/Ctrl+K)"
           aria-label="Open command palette"
           data-onboarding-target="command-palette-button"
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+          <svg width="19" height="19" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="6" cy="6" r="3.75" />
             <path d="M8.8 8.8L12 12" strokeLinecap="round" />
           </svg>

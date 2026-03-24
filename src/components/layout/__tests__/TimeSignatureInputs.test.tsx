@@ -92,10 +92,10 @@ describe('Time signature number inputs', () => {
     render(<Toolbar />);
 
     const denominator = screen.getByLabelText('Time signature denominator');
-    fireEvent.change(denominator, { target: { value: '8' } });
+    fireEvent.change(denominator, { target: { value: '7' } });
     fireEvent.blur(denominator);
 
     const state = useProjectStore.getState();
-    expect(state.project?.timeSignatureDenominator).toBe(8);
+    expect(state.project?.timeSignatureDenominator).toBe(7);
   });
 });

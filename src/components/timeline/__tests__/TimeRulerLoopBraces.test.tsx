@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useTransportStore } from '../../../store/transportStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useProjectStore } from '../../../store/projectStore';
@@ -124,6 +124,20 @@ describe('TimeRuler loop region braces', () => {
     render(<TimeRuler />);
     const handle = screen.getByTestId('timeline-loop-move-handle');
     expect(handle.className).toContain('cursor-grab');
+  });
+
+  it('lets the playhead triangle drag-create a loop region without scrubbing', () => {
+    useTransportStore.setState({ playStartTime: 2, currentTime: 2, loopEnabled: false, loopStart: 0, loopEnd: 0 });
+    render(<TimeRuler />);
+
+    const handle = screen.getByTestId('timeline-playhead-loop-handle');
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 200 });
+    fireEvent.pointerUp(window, { clientX: 200 });
+
+    const state = useTransportStore.getState();
+    expect(state.loopEnabled).toBe(true);
+    expect(state.loopEnd).toBeGreaterThan(state.loopStart);
   });
 
   describe('store-level loop region interactions', () => {

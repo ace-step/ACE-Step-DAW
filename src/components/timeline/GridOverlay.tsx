@@ -51,7 +51,14 @@ export function GridOverlay() {
   const lines = useMemo(() => {
     if (!project) return [];
 
-    const { tempoMap, timeSignatureMap, bpm, timeSignature, totalDuration } = project;
+    const {
+      tempoMap,
+      timeSignatureMap,
+      bpm,
+      timeSignature,
+      timeSignatureDenominator = 4,
+      totalDuration,
+    } = project;
     const effectiveMeasures = project.measures ?? DEFAULT_MEASURES;
     const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
@@ -60,63 +67,64 @@ export function GridOverlay() {
     // Compute the time boundary for the configured measures
     let measureBoundary: number;
     if (hasTempoMap || hasTsMap) {
-      const totalBeats = getBeatAtBar(effectiveMeasures + 1, timeSignatureMap, timeSignature);
+      const totalBeats = getBeatAtBar(effectiveMeasures + 1, timeSignatureMap, timeSignature, timeSignatureDenominator);
       measureBoundary = beatToTime(totalBeats, tempoMap, bpm);
     } else {
-      measureBoundary = effectiveMeasures * getBarDuration(bpm, timeSignature);
+      measureBoundary = effectiveMeasures * getBarDuration(bpm, timeSignature, timeSignatureDenominator);
     }
+    const visibleDuration = Math.min(visualDuration, measureBoundary);
 
     if (!hasTempoMap && !hasTsMap) {
       // Fast path: constant tempo, constant time signature
-      const beatDuration = getBeatDuration(bpm);
-      const barDuration = getBarDuration(bpm, timeSignature);
+      const beatDuration = getBeatDuration(bpm) * getTimeSignatureBeatLength(timeSignatureDenominator);
+      const barDuration = getBarDuration(bpm, timeSignature, timeSignatureDenominator);
       const eighthDuration = beatDuration * 0.5;
-      const beatPx = pixelsPerSecond * (60 / bpm);
+      const beatPx = pixelsPerSecond * beatDuration;
       const divisions = getVisibleDivisions(beatPx);
       const finest = Math.min(...divisions);
       const stepDuration = beatDuration * finest;
 
       const result: { x: number; strength: GridStrength; outOfRange: boolean }[] = [];
-      for (let t = 0; t < visualDuration; t += stepDuration) {
+      for (let t = 0; t < visibleDuration; t += stepDuration) {
         result.push({
           x: t * pixelsPerSecond,
           strength: classifyStrength(t, barDuration, beatDuration, eighthDuration),
-          outOfRange: t > measureBoundary - 0.001,
+          outOfRange: false,
         });
       }
       return result;
     }
 
     // Tempo-map/time-sig-aware path: iterate by bars so mixed meters align cleanly.
-    const beatPx = pixelsPerSecond * (60 / bpm);
+    const beatPx = pixelsPerSecond * getBeatDuration(bpm) * getTimeSignatureBeatLength(timeSignatureDenominator);
     const divisions = getVisibleDivisions(beatPx);
     const finest = Math.min(...divisions);
     const result: { x: number; strength: GridStrength; outOfRange: boolean }[] = [];
 
-    for (let bar = 1; bar <= 999; bar++) {
-      const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature);
+    for (let bar = 1; bar <= effectiveMeasures; bar++) {
+      const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
       const barTime = beatToTime(barBeat, tempoMap, bpm);
-      if (barTime > visualDuration) break;
+      if (barTime > visibleDuration) break;
 
-      const barOutOfRange = bar > effectiveMeasures;
-      result.push({ x: barTime * pixelsPerSecond, strength: 'bar', outOfRange: barOutOfRange });
+      result.push({ x: barTime * pixelsPerSecond, strength: 'bar', outOfRange: false });
 
-      const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, 4);
+      const ts = getTimeSignatureAtBar(timeSignatureMap, bar, timeSignature, timeSignatureDenominator);
       const beatLength = getTimeSignatureBeatLength(ts.denominator);
       const beatsInBar = ts.numerator;
       const barDurationBeats = beatsInBar * beatLength;
+      const unitDuration = getBeatDuration(bpm) * beatLength;
+      const barDuration = beatsInBar * unitDuration;
+      const eighthDuration = unitDuration * 0.5;
+      const stepBeats = beatLength * finest;
 
       // Iterate through all subdivisions within this bar
-      for (let subBeat = finest; subBeat < barDurationBeats; subBeat += finest) {
+      for (let subBeat = stepBeats; subBeat < barDurationBeats; subBeat += stepBeats) {
         const time = beatToTime(barBeat + subBeat, tempoMap, bpm);
-        if (time > visualDuration) break;
+        if (time > visibleDuration) break;
 
-        const beatDuration = getBeatDuration(bpm);
-        const barDuration = barDurationBeats * beatDuration;
-        const eighthDuration = beatDuration * 0.5;
-        const relTime = subBeat * beatDuration;
-        const strength = classifyStrength(relTime, barDuration, beatDuration, eighthDuration);
-        result.push({ x: time * pixelsPerSecond, strength, outOfRange: barOutOfRange });
+        const relTime = (subBeat / beatLength) * unitDuration;
+        const strength = classifyStrength(relTime, barDuration, unitDuration, eighthDuration);
+        result.push({ x: time * pixelsPerSecond, strength, outOfRange: false });
       }
     }
     return result;

@@ -133,6 +133,12 @@ describe('tempoMap utilities', () => {
       expect(getBeatAtBar(3, [], 4)).toBe(8);
     });
 
+    it('uses fallback denominator for constant signatures without a map', () => {
+      expect(getBeatAtBar(2, [], 4, 8)).toBe(2);
+      expect(getBarAtBeat(1.99, [], 4, 8)).toBe(1);
+      expect(getBarAtBeat(2, [], 4, 8)).toBe(2);
+    });
+
     it('handles time signature changes', () => {
       const map: TimeSignatureEvent[] = [
         { bar: 1, numerator: 4, denominator: 4 },

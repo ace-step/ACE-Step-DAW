@@ -176,15 +176,16 @@ export function getBarAtBeat(
   beat: number,
   tsMap: TimeSignatureEvent[] | undefined,
   fallbackNumerator: number,
+  fallbackDenominator: number = 4,
 ): number {
   if (!tsMap || tsMap.length === 0) {
-    return Math.floor(beat / fallbackNumerator) + 1;
+    return Math.floor(beat / getTimeSignatureBarLength(fallbackNumerator, fallbackDenominator)) + 1;
   }
 
   let currentBeat = 0;
   let currentBar = 1;
   let currentNum = fallbackNumerator;
-  let currentDen = 4;
+  let currentDen = fallbackDenominator;
 
   for (const ev of tsMap) {
     const barsToEvent = ev.bar - currentBar;
@@ -213,15 +214,16 @@ export function getBeatAtBar(
   bar: number,
   tsMap: TimeSignatureEvent[] | undefined,
   fallbackNumerator: number,
+  fallbackDenominator: number = 4,
 ): number {
   if (!tsMap || tsMap.length === 0) {
-    return (bar - 1) * fallbackNumerator;
+    return (bar - 1) * getTimeSignatureBarLength(fallbackNumerator, fallbackDenominator);
   }
 
   let currentBeat = 0;
   let currentBar = 1;
   let currentNum = fallbackNumerator;
-  let currentDen = 4;
+  let currentDen = fallbackDenominator;
 
   for (const ev of tsMap) {
     if (ev.bar > bar) break;

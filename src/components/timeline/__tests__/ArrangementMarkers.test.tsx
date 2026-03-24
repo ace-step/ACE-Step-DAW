@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ArrangementMarkers } from '../ArrangementMarkers';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -71,6 +71,18 @@ describe('ArrangementMarkers', () => {
     const markerId = useProjectStore.getState().project!.markers![0].id;
     const el = screen.getByTestId('arrangement-markers').querySelector(`[data-marker-id="${markerId}"]`) as HTMLElement;
     expect(el.style.cursor).toBe('grab');
+  });
+
+  it('removes a created section together with its empty boundary marker', () => {
+    const store = useProjectStore.getState();
+    store.addMarker(0, 'Intro');
+    store.addMarker(4, '');
+    render(<ArrangementMarkers />);
+
+    const section = screen.getByTestId('arrangement-markers').querySelector('[data-marker-id]') as HTMLElement;
+    fireEvent.contextMenu(section);
+
+    expect(useProjectStore.getState().project?.markers).toHaveLength(0);
   });
 });
 

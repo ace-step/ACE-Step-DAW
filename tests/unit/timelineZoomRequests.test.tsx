@@ -240,4 +240,32 @@ describe('Timeline zoom requests', () => {
     });
     expect(timeline.scrollLeft).toBe(0);
   });
+
+  it('consumes a project fit request once so manual zoom still works afterward', async () => {
+    const track = useProjectStore.getState().addTrack('lead');
+    useProjectStore.getState().addClip(track.id, {
+      startTime: 80,
+      duration: 16,
+      prompt: 'zoom-target',
+      lyrics: '',
+      source: 'generated',
+    });
+    setupTimelineViewport();
+
+    act(() => {
+      useUIStore.getState().zoomTimelineToProject();
+    });
+
+    await vi.waitFor(() => {
+      expect(useUIStore.getState().pixelsPerSecond).toBe(10);
+    });
+
+    act(() => {
+      useUIStore.getState().zoomIn();
+    });
+
+    await vi.waitFor(() => {
+      expect(useUIStore.getState().pixelsPerSecond).toBe(20);
+    });
+  });
 });

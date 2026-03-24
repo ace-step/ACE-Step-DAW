@@ -119,15 +119,12 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.getByTestId('project-menu-dropdown').className).toContain('fixed');
   });
 
-  it('uses softer separators (thinner, more subtle)', () => {
+  it('removes vertical separators and relies on spacing instead', () => {
     const { container } = render(<Toolbar />);
-    // Separators should use the new subtle style
     const separators = container.querySelectorAll('[data-testid="toolbar-separator"]');
-    expect(separators.length).toBeGreaterThan(0);
-    separators.forEach((sep) => {
-      expect(sep.className).toMatch(/w-px/);
-      expect(sep.className).toMatch(/h-5/);
-    });
+    expect(separators.length).toBe(0);
+    expect(screen.getByTestId('main-toolbar').className).toContain('gap-1.5');
+    expect(screen.getByTestId('transport-bar').className).toContain('gap-1');
   });
 
   it('wraps button groups in background containers', () => {
@@ -142,6 +139,32 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(container.firstChild).toHaveClass('overflow-x-auto');
   });
 
+  it('uses the refreshed toolbar surface and denser control sizing', () => {
+    render(<Toolbar />);
+
+    const toolbar = screen.getByTestId('main-toolbar');
+    const arrangementButton = screen.getByLabelText('Arrangement View');
+    const playButton = screen.getByTitle('Play (Space)');
+    const tempoReadout = screen.getByTitle('Project tempo (beats per minute)');
+    const timeSignatureReadout = screen.getByTitle('Project time signature');
+    const transportPosition = screen.getByTitle('Transport position (bars.beats.ticks)');
+    const transportTime = screen.getByTitle('Transport elapsed time');
+
+    expect(toolbar.className).toContain('bg-[#1f2226]');
+    expect(toolbar.className).toContain('h-12');
+    expect(arrangementButton.className).toContain('h-10');
+    expect(arrangementButton.className).toContain('w-10');
+    expect(arrangementButton.className).toContain('text-white/90');
+    expect(playButton.className).toContain('h-10');
+    expect(playButton.className).toContain('w-11');
+    expect(playButton.className).not.toContain('bg-white/8');
+    expect(tempoReadout.className).not.toContain('border');
+    expect(tempoReadout.className).not.toContain('rounded');
+    expect(timeSignatureReadout.className).toContain('gap-[0.18rem]');
+    expect(transportPosition.className).toContain('text-[22px]');
+    expect(transportTime.className).toContain('text-[15px]');
+  });
+
   it('removes the top toolbar Generate button in favor of the side dock entry', () => {
     render(<Toolbar />);
 
@@ -152,13 +175,140 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
   it('moves project defaults into a dedicated top-toolbar strip', () => {
     render(<Toolbar />);
 
-    const projectStrip = screen.getByTestId('toolbar-project-settings');
-    expect(projectStrip).toBeInTheDocument();
+    const timingStrip = screen.getByTestId('toolbar-project-timing');
+    const harmonyStrip = screen.getByTestId('toolbar-project-harmony');
+    const transportBar = screen.getByTestId('transport-bar');
+    expect(timingStrip).toBeInTheDocument();
+    expect(harmonyStrip).toBeInTheDocument();
+    expect(timingStrip.compareDocumentPosition(transportBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(transportBar.compareDocumentPosition(harmonyStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
     expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');
     expect(screen.getByLabelText('Project scale mode')).toHaveValue('major');
-    expect(screen.getByLabelText('Project measures')).toHaveValue(64);
+    expect(screen.queryByLabelText('Project measures')).not.toBeInTheDocument();
+  });
+
+  it('keeps timeline zoom stable when BPM changes from the toolbar', () => {
+    useUIStore.setState({ pixelsPerSecond: 100 });
+    useTransportStore.setState({ currentTime: 12.5, playStartTime: 12.5 });
+    render(<Toolbar />);
+
+    const bpmInput = screen.getByLabelText('Project BPM');
+    fireEvent.change(bpmInput, { target: { value: '60' } });
+    fireEvent.blur(bpmInput);
+
+    expect(useProjectStore.getState().project?.bpm).toBe(60);
+    expect(useUIStore.getState().pixelsPerSecond).toBe(100);
+    expect(useTransportStore.getState().currentTime).toBe(12.5);
+    expect(useTransportStore.getState().playStartTime).toBe(12.5);
+  });
+
+  it('keeps timeline zoom requests and playhead state unchanged when time signature changes', () => {
+    useUIStore.setState({ pixelsPerSecond: 120, timelineZoomRequest: null });
+    useTransportStore.setState({ currentTime: 9.75, playStartTime: 9.75 });
+    render(<Toolbar />);
+
+    fireEvent.change(screen.getByLabelText('Time signature numerator'), { target: { value: '3' } });
+    fireEvent.blur(screen.getByLabelText('Time signature numerator'));
+    fireEvent.change(screen.getByLabelText('Time signature denominator'), { target: { value: '8' } });
+    fireEvent.blur(screen.getByLabelText('Time signature denominator'));
+
+    expect(useProjectStore.getState().project?.timeSignature).toBe(3);
+    expect(useProjectStore.getState().project?.timeSignatureDenominator).toBe(8);
+    expect(useUIStore.getState().pixelsPerSecond).toBe(120);
+    expect(useUIStore.getState().timelineZoomRequest).toBeNull();
+    expect(useTransportStore.getState().currentTime).toBe(9.75);
+    expect(useTransportStore.getState().playStartTime).toBe(9.75);
+  });
+
+  it('keeps only loop and auto-scroll controls to the right of metronome', () => {
+    render(<Toolbar />);
+
+    expect(screen.getByTitle('Loop (C)')).toBeInTheDocument();
+    expect(screen.getByTitle('Auto Scroll')).toBeInTheDocument();
+    expect(screen.queryByTitle('Overdub / Loop Recording (Shift+L)')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Capture MIDI (F)')).not.toBeInTheDocument();
+  });
+
+  it('does not add a hover highlight to the auto-scroll button', () => {
+    render(<Toolbar />);
+
+    expect(screen.getByTitle('Auto Scroll').className).not.toContain('hover:bg-white/8');
+  });
+
+  it('does not add a hover highlight to the loop button', () => {
+    render(<Toolbar />);
+
+    expect(screen.getByTitle('Loop (C)').className).not.toContain('hover:bg-white/8');
+  });
+
+  it('renders metronome pulse dots based on the time signature numerator', () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 6, timeSignatureDenominator: 8 }
+        : state.project,
+    }));
+    render(<Toolbar />);
+
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(6);
+  });
+
+  it('clamps metronome pulse dots to the supported 2-6 range using the numerator', () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 1, timeSignatureDenominator: 8 }
+        : state.project,
+    }));
+    const { rerender } = render(<Toolbar />);
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(2);
+
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 3, timeSignatureDenominator: 8 }
+        : state.project,
+    }));
+    rerender(<Toolbar />);
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(3);
+
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 8, timeSignatureDenominator: 4 }
+        : state.project,
+    }));
+    rerender(<Toolbar />);
+    expect(screen.getAllByTestId('metronome-pulse-dot')).toHaveLength(6);
+  });
+
+  it('lays out four metronome dots in clockwise order', () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 4, timeSignatureDenominator: 8 }
+        : state.project,
+    }));
+    render(<Toolbar />);
+
+    const dots = screen.getAllByTestId('metronome-pulse-dot');
+    expect(dots[0]).toHaveStyle({ left: '24%', top: '24%' });
+    expect(dots[1]).toHaveStyle({ left: '76%', top: '24%' });
+    expect(dots[2]).toHaveStyle({ left: '76%', top: '76%' });
+    expect(dots[3]).toHaveStyle({ left: '24%', top: '76%' });
+  });
+
+  it('emphasizes the current metronome pulse more than passed pulses', () => {
+    useProjectStore.setState((state) => ({
+      project: state.project
+        ? { ...state.project, timeSignature: 4, timeSignatureDenominator: 4 }
+        : state.project,
+    }));
+    useTransportStore.setState({ isPlaying: true, currentTime: 0.75 });
+    render(<Toolbar />);
+
+    const dots = screen.getAllByTestId('metronome-pulse-dot');
+    expect(dots[0]).toHaveAttribute('data-state', 'passed');
+    expect(dots[1]).toHaveAttribute('data-state', 'current');
+    expect(dots[2]).toHaveAttribute('data-state', 'upcoming');
+    expect(dots[1].className).toContain('shadow-');
   });
 
   it('updates project key settings from the top-toolbar strip', () => {
@@ -176,6 +326,17 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     expect(screen.queryByTitle('Mixer (X)')).not.toBeInTheDocument();
     expect(screen.queryByTitle('AI Assistant (Cmd+/)')).not.toBeInTheDocument();
     expect(screen.getByTitle('Visit ACE Studio')).toBeInTheDocument();
+  });
+
+  it('provides tooltip titles for toolbar readouts and project settings', () => {
+    render(<Toolbar />);
+
+    expect(screen.getByTitle('Project tempo (beats per minute)')).toBeInTheDocument();
+    expect(screen.getByTitle('Project time signature')).toBeInTheDocument();
+    expect(screen.getByTitle('Project key root note')).toBeInTheDocument();
+    expect(screen.getByTitle('Project scale mode selector')).toBeInTheDocument();
+    expect(screen.getByTitle('Transport position (bars.beats.ticks)')).toBeInTheDocument();
+    expect(screen.getByTitle('Transport elapsed time')).toBeInTheDocument();
   });
 
   it('keeps settings and shortcuts out of the top toolbar', () => {

@@ -1,7 +1,8 @@
 import type { Track } from '../../types/project';
+import { MAX_PROJECT_TRACKS } from '../../constants/defaults';
 
 export const ARRANGEMENT_EMPTY_TRACK_ID_PREFIX = '__empty-';
-export const DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT = 20;
+export const DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT = MAX_PROJECT_TRACKS;
 
 export type ArrangementTrackSlot =
   | { kind: 'track'; track: Track }
@@ -55,7 +56,10 @@ export function buildArrangementTrackSlots(
     nextSlotNumber = Math.max(nextSlotNumber, targetSlotNumber) + 1;
   }
 
-  for (let i = 0; i < placeholderCount; i += 1) {
+  const minimumVisibleRowCount = Math.max(0, placeholderCount);
+  const totalVisibleRowCount = Math.max(minimumVisibleRowCount, nextSlotNumber - 1);
+
+  while (nextSlotNumber <= totalVisibleRowCount) {
     slots.push({ kind: 'empty', slotIndex: nextSlotNumber - 1 });
     nextSlotNumber += 1;
   }

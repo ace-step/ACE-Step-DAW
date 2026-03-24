@@ -130,7 +130,7 @@ export function TrackLane({ track }: TrackLaneProps) {
   const isPianoRoll = trackType === 'pianoRoll';
   const isStrudel = trackType === 'strudel';
   const totalWidth = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
-  const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature) * 4;
+  const defaultClipDuration = getBarDuration(project.bpm, project.timeSignature, project.timeSignatureDenominator ?? 4) * 4;
 
   const hitsClip = useCallback((clickTime: number): boolean => {
     const GUARD = 8 / pixelsPerSecond;

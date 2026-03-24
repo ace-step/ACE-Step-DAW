@@ -320,7 +320,7 @@ export function useTransport() {
     const { metronomeEnabled } = useTransportStore.getState();
     if (metronomeEnabled) {
       engine.scheduleMetronome(
-        proj.bpm, proj.timeSignature, startFrom, effectiveEnd,
+        proj.bpm, proj.timeSignature, proj.timeSignatureDenominator ?? 4, startFrom, effectiveEnd,
         proj.tempoMap, proj.timeSignatureMap,
       );
     }

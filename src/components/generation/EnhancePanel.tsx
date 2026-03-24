@@ -7,6 +7,9 @@ import { generateRepaintClip } from '../../services/generationPipeline';
 import { modelSupportsTaskType } from '../../services/aceStepApi';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
 import { Z } from '../../utils/zIndex';
+import { WaveformPreview } from './WaveformPreview';
+import { useEnhancePlayback } from '../../hooks/useEnhancePlayback';
+import { computeWaveformPeaks } from '../../utils/waveformPeaks';
 import type { RepaintMode } from '../../types/api';
 
 const ENHANCER_BASE_BOTTOM = 60;
@@ -22,6 +25,12 @@ function fmt(s: number) {
   return `${s.toFixed(2)}s`;
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 interface SessionEntry {
   id: string;
   label: string;
@@ -31,10 +40,15 @@ interface SessionEntry {
 interface ResultEntry {
   id: string;
   clipId: string;
+  audioKey: string;
   title: string;
   duration: string;
+  durationSec: number;
+  peaks: number[];
   timestamp: number;
 }
+
+type ABSide = 'A' | 'B';
 
 export function EnhancePanel() {
   const enhancerOpen = useUIStore((s) => s.enhancerOpen);
@@ -74,6 +88,19 @@ export function EnhancePanel() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const sessionCounterRef = useRef(0);
 
+  // A/B comparison
+  const [abSide, setAbSide] = useState<ABSide>('A');
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
+
+  // Mini player selected index
+  const [miniPlayerIdx, setMiniPlayerIdx] = useState(0);
+
+  // Playback
+  const playback = useEnhancePlayback();
+
+  // Source audio key
+  const sourceAudioKey = clip?.isolatedAudioKey || clip?.cumulativeMixKey || '';
+
   // Initialize form when enhancerTarget changes
   useEffect(() => {
     if (enhancerTarget && clip) {
@@ -107,8 +134,18 @@ export function EnhancePanel() {
       }]);
       setActiveSessionId(sessionId);
       setResults([]);
+      setAbSide('A');
+      setSelectedResultId(null);
+      setMiniPlayerIdx(0);
     }
   }, [enhancerTarget?.clipId]);
+
+  // Stop playback when panel closes
+  useEffect(() => {
+    if (!enhancerOpen) {
+      playback.stopPlayback();
+    }
+  }, [enhancerOpen, playback.stopPlayback]);
 
   // Escape to close
   useEffect(() => {
@@ -139,6 +176,8 @@ export function EnhancePanel() {
     setRepaintMode('balanced');
     setRepaintStrength(0.5);
     setResults([]);
+    setSelectedResultId(null);
+    setMiniPlayerIdx(0);
   }, [clip]);
 
   const handleRangeChange = useCallback((s: number, e: number) => {
@@ -154,8 +193,11 @@ export function EnhancePanel() {
     setResults((prev) => [...prev, {
       id: resultId,
       clipId: enhancerTarget.clipId,
+      audioKey: '',
       title: caption || 'Untitled enhancement',
       duration: '--:--',
+      durationSec: 0,
+      peaks: [],
       timestamp: Date.now(),
     }]);
     await generateCoverClip({
@@ -165,6 +207,8 @@ export function EnhancePanel() {
       coverStrength,
       createNew,
     });
+    // After generation, try to load the result audio to get peaks/duration
+    await finalizeResult(resultId, enhancerTarget.clipId);
   }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating]);
 
   // Repaint generation
@@ -174,8 +218,11 @@ export function EnhancePanel() {
     setResults((prev) => [...prev, {
       id: resultId,
       clipId: enhancerTarget.clipId,
+      audioKey: '',
       title: prompt || 'Untitled repaint',
       duration: '--:--',
+      durationSec: 0,
+      peaks: [],
       timestamp: Date.now(),
     }]);
     await generateRepaintClip({
@@ -187,9 +234,95 @@ export function EnhancePanel() {
       repaintMode,
       repaintStrength,
     });
+    await finalizeResult(resultId, enhancerTarget.clipId);
   }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating]);
 
+  // After generation, load the new clip's audio to compute peaks and duration
+  const finalizeResult = useCallback(async (resultId: string, originalClipId: string) => {
+    // The generation pipeline creates a new clip or updates the existing one
+    // Re-read the clip from the store to get the new audio key
+    const updatedClip = useProjectStore.getState().getClipById(originalClipId);
+    const audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
+    if (!audioKey) return;
+
+    try {
+      const buffer = await playback.loadBuffer(audioKey);
+      if (!buffer) return;
+      const peaks = computeWaveformPeaks(buffer, 60);
+      const dur = buffer.duration;
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId
+          ? { ...r, audioKey, peaks, duration: formatDuration(dur), durationSec: dur }
+          : r,
+      ));
+      // Auto-select first result
+      setSelectedResultId((prev) => prev ?? resultId);
+      setMiniPlayerIdx((prev) => {
+        if (prev === 0) return Math.max(0, results.length); // point to new entry
+        return prev;
+      });
+    } catch {
+      // Audio decode failed — leave duration as --:--
+    }
+  }, [playback, results.length]);
+
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
+
+  // Source play handler
+  const handleSourcePlay = useCallback(() => {
+    if (!sourceAudioKey) return;
+    playback.togglePlay('source', sourceAudioKey);
+  }, [sourceAudioKey, playback]);
+
+  const handleSourceSeek = useCallback((progress: number) => {
+    if (!sourceAudioKey) return;
+    playback.seek('source', sourceAudioKey, progress);
+  }, [sourceAudioKey, playback]);
+
+  // Result play handler
+  const handleResultPlay = useCallback((resultId: string, audioKey: string) => {
+    if (!audioKey) return;
+    setSelectedResultId(resultId);
+    playback.togglePlay(resultId, audioKey);
+  }, [playback]);
+
+  // A/B toggle
+  const handleABToggle = useCallback(() => {
+    const nextSide: ABSide = abSide === 'A' ? 'B' : 'A';
+    setAbSide(nextSide);
+    const selectedResult = results.find((r) => r.id === selectedResultId);
+
+    if (nextSide === 'A' && sourceAudioKey) {
+      playback.play('source', sourceAudioKey, playback.progress);
+    } else if (nextSide === 'B' && selectedResult?.audioKey) {
+      playback.play(selectedResult.id, selectedResult.audioKey, playback.progress);
+    }
+  }, [abSide, results, selectedResultId, sourceAudioKey, playback]);
+
+  // Mini player controls
+  const miniResult = results[miniPlayerIdx] ?? null;
+
+  const handleMiniPrev = useCallback(() => {
+    setMiniPlayerIdx((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleMiniNext = useCallback(() => {
+    setMiniPlayerIdx((prev) => Math.min(results.length - 1, prev + 1));
+  }, [results.length]);
+
+  const handleMiniPlay = useCallback(() => {
+    if (!miniResult?.audioKey) return;
+    setSelectedResultId(miniResult.id);
+    playback.togglePlay(miniResult.id, miniResult.audioKey);
+  }, [miniResult, playback]);
+
+  const handleMiniSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!miniResult?.audioKey) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const progress = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    setSelectedResultId(miniResult.id);
+    playback.seek(miniResult.id, miniResult.audioKey, progress);
+  }, [miniResult, playback]);
 
   if (!enhancerOpen) return null;
 
@@ -240,11 +373,22 @@ export function EnhancePanel() {
   const totalDur = project?.totalDuration ?? clipEnd;
 
   // Accent colors per mode
-  const accent = mode === 'cover' ? 'teal' : 'rose';
+  const accentColor = mode === 'cover' ? '#14b8a6' : '#f43f5e';
   const accentBg = mode === 'cover' ? 'bg-teal-600' : 'bg-rose-600';
   const accentBgHover = mode === 'cover' ? 'hover:bg-teal-500' : 'hover:bg-rose-500';
-  const accentBadgeBg = mode === 'cover' ? 'bg-teal-700/60' : 'bg-rose-700/60';
-  const accentBadgeText = mode === 'cover' ? 'text-teal-200' : 'text-rose-200';
+
+  // Source waveform peaks
+  const sourcePeaks = clip?.waveformPeaks ?? [];
+  const sourceIsPlaying = playback.playingId === 'source';
+  const sourceProgress = sourceIsPlaying ? playback.progress : 0;
+
+  // A/B: determine which side has a valid result
+  const selectedResult = results.find((r) => r.id === selectedResultId);
+  const canAB = hasAudio && !!selectedResult?.audioKey;
+
+  // Mini player progress
+  const miniIsPlaying = miniResult ? playback.playingId === miniResult.id : false;
+  const miniProgress = miniIsPlaying ? playback.progress : 0;
 
   return (
     <div
@@ -325,16 +469,37 @@ export function EnhancePanel() {
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
           {/* Source audio preview */}
           <div className="bg-[#161618] rounded-lg px-3 py-3 border border-[#333]">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1.5">Source</p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wide">
+                Source
+                {canAB && (
+                  <span className={`ml-1.5 ${abSide === 'A' ? 'text-teal-400 font-bold' : 'text-zinc-600'}`}>A</span>
+                )}
+              </p>
+              {clip && (
+                <span className="text-[9px] text-zinc-600 font-mono">
+                  {formatDuration(clip.duration)}
+                </span>
+              )}
+            </div>
             {clip && track ? (
               <>
                 <div className="flex items-center gap-2">
                   <button
                     data-testid="source-play-btn"
-                    className="w-7 h-7 flex items-center justify-center rounded-full bg-[#2a2a2e] text-zinc-400 hover:text-zinc-200 transition-colors"
-                    aria-label="Play source"
+                    onClick={handleSourcePlay}
+                    className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${
+                      sourceIsPlaying
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-[#2a2a2e] text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    aria-label={sourceIsPlaying ? 'Stop source' : 'Play source'}
                   >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                    {sourceIsPlaying ? (
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                    )}
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-medium text-zinc-200 truncate">
@@ -343,17 +508,16 @@ export function EnhancePanel() {
                     <p className="text-[10px] text-zinc-500 truncate">{clip.prompt || '(no prompt)'}</p>
                   </div>
                 </div>
-                {/* Waveform placeholder */}
-                <div className="mt-2 h-10 bg-[#1e1e22] rounded flex items-center justify-center">
-                  <div className="flex items-end gap-px h-6">
-                    {Array.from({ length: 40 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-1 rounded-sm ${mode === 'cover' ? 'bg-teal-600/40' : 'bg-rose-600/40'}`}
-                        style={{ height: `${Math.max(2, Math.sin(i * 0.3) * 16 + Math.random() * 8)}px` }}
-                      />
-                    ))}
-                  </div>
+                {/* Real waveform */}
+                <div className="mt-2">
+                  <WaveformPreview
+                    peaks={sourcePeaks}
+                    color={accentColor}
+                    height={40}
+                    playbackProgress={sourceProgress}
+                    onSeek={hasAudio ? handleSourceSeek : undefined}
+                    data-testid="source-waveform"
+                  />
                 </div>
               </>
             ) : (
@@ -370,6 +534,27 @@ export function EnhancePanel() {
               </p>
             )}
           </div>
+
+          {/* A/B Comparison Toggle */}
+          {canAB && (
+            <div className="flex items-center justify-center" data-testid="ab-toggle-section">
+              <button
+                data-testid="ab-toggle-btn"
+                onClick={handleABToggle}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
+                  abSide === 'A'
+                    ? 'border-teal-500/50 bg-teal-900/30 text-teal-300'
+                    : 'border-violet-500/50 bg-violet-900/30 text-violet-300'
+                }`}
+              >
+                <span className={abSide === 'A' ? 'text-teal-300' : 'text-zinc-500'}>A</span>
+                <svg className="w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M7 16l5-5-5-5M17 8l-5 5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={abSide === 'B' ? 'text-violet-300' : 'text-zinc-500'}>B</span>
+              </button>
+            </div>
+          )}
 
           {/* === COVER MODE CONTROLS === */}
           {mode === 'cover' && (
@@ -629,55 +814,128 @@ export function EnhancePanel() {
               </p>
             </div>
           ) : (
-            results.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-[#222226] transition-colors group"
-              >
-                <button
-                  className="w-6 h-6 flex items-center justify-center rounded-full bg-[#2a2a2e] text-zinc-400 hover:text-zinc-200 transition-colors flex-shrink-0"
-                  aria-label="Play result"
+            results.map((r, idx) => {
+              const isPlaying = playback.playingId === r.id;
+              const isSelected = r.id === selectedResultId;
+              return (
+                <div
+                  key={r.id}
+                  data-testid={`result-item-${idx}`}
+                  onClick={() => { setSelectedResultId(r.id); setMiniPlayerIdx(idx); }}
+                  className={`rounded-md transition-colors group cursor-pointer ${
+                    isSelected ? 'bg-[#2a2a30] ring-1 ring-zinc-600' : 'hover:bg-[#222226]'
+                  }`}
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-zinc-300 truncate">{r.title}</p>
-                  <p className="text-[10px] text-zinc-600">{r.duration}</p>
+                  <div className="flex items-center gap-2 px-2 py-2">
+                    <button
+                      data-testid={`result-play-btn-${idx}`}
+                      onClick={(e) => { e.stopPropagation(); handleResultPlay(r.id, r.audioKey); }}
+                      className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${
+                        isPlaying
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-[#2a2a2e] text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      aria-label={isPlaying ? 'Stop result' : 'Play result'}
+                    >
+                      {isPlaying ? (
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+                      ) : (
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-zinc-300 truncate">
+                        {r.title}
+                        {canAB && isSelected && (
+                          <span className={`ml-1 ${abSide === 'B' ? 'text-violet-400 font-bold' : 'text-zinc-600'}`}>B</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">{r.duration}</p>
+                    </div>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-opacity"
+                      aria-label="More options"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="5" r="1.5" />
+                        <circle cx="12" cy="12" r="1.5" />
+                        <circle cx="12" cy="19" r="1.5" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Result waveform */}
+                  {r.peaks.length > 0 && (
+                    <div className="px-2 pb-2">
+                      <WaveformPreview
+                        peaks={r.peaks}
+                        color="#8b5cf6"
+                        height={24}
+                        playbackProgress={isPlaying ? playback.progress : 0}
+                        data-testid={`result-waveform-${idx}`}
+                      />
+                    </div>
+                  )}
                 </div>
-                <button
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-opacity"
-                  aria-label="More options"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="5" r="1.5" />
-                    <circle cx="12" cy="12" r="1.5" />
-                    <circle cx="12" cy="19" r="1.5" />
-                  </svg>
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
         {/* Mini player */}
         {results.length > 0 && (
-          <div className="border-t border-[#3a3a3a] px-3 py-2.5">
+          <div className="border-t border-[#3a3a3a] px-3 py-2.5" data-testid="mini-player">
             <div className="flex items-center gap-2">
-              <button className="text-zinc-500 hover:text-zinc-300 transition-colors" aria-label="Previous">
+              <button
+                data-testid="mini-prev-btn"
+                onClick={handleMiniPrev}
+                disabled={miniPlayerIdx <= 0}
+                className={`transition-colors ${miniPlayerIdx <= 0 ? 'text-zinc-700' : 'text-zinc-500 hover:text-zinc-300'}`}
+                aria-label="Previous"
+              >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
               </button>
-              <button className="text-zinc-300 hover:text-white transition-colors" aria-label="Play">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+              <button
+                data-testid="mini-play-btn"
+                onClick={handleMiniPlay}
+                className={`transition-colors ${miniIsPlaying ? 'text-violet-400' : 'text-zinc-300 hover:text-white'}`}
+                aria-label={miniIsPlaying ? 'Pause' : 'Play'}
+              >
+                {miniIsPlaying ? (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                )}
               </button>
-              <button className="text-zinc-500 hover:text-zinc-300 transition-colors" aria-label="Next">
+              <button
+                data-testid="mini-next-btn"
+                onClick={handleMiniNext}
+                disabled={miniPlayerIdx >= results.length - 1}
+                className={`transition-colors ${miniPlayerIdx >= results.length - 1 ? 'text-zinc-700' : 'text-zinc-500 hover:text-zinc-300'}`}
+                aria-label="Next"
+              >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M16 18h2V6h-2zm-2-6L5.5 6v12z" /></svg>
               </button>
-              <div className="flex-1 mx-1.5">
-                <div className="h-1 bg-[#2a2a2e] rounded-full">
-                  <div className="h-1 bg-teal-600 rounded-full w-0" />
+              <div
+                data-testid="mini-progress-bar"
+                className="flex-1 mx-1.5 cursor-pointer"
+                onClick={handleMiniSeek}
+              >
+                <div className="h-1 bg-[#2a2a2e] rounded-full relative">
+                  <div
+                    className="h-1 bg-violet-600 rounded-full transition-[width] duration-75"
+                    style={{ width: `${miniProgress * 100}%` }}
+                  />
                 </div>
               </div>
+              {miniResult && (
+                <span className="text-[9px] text-zinc-600 font-mono whitespace-nowrap">
+                  {miniResult.duration !== '--:--' ? miniResult.duration : ''}
+                </span>
+              )}
             </div>
+            {miniResult && (
+              <p className="text-[9px] text-zinc-500 truncate mt-1">{miniResult.title}</p>
+            )}
           </div>
         )}
       </div>

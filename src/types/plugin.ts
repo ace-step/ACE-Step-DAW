@@ -178,6 +178,48 @@ export interface PluginInstance {
   manifest: PluginManifest;
 }
 
+// ─── VST3 Plugin Types ──────────────────────────────────────────────────────
+
+/** Manifest for a VST3 plugin, extending the base PluginManifest. */
+export interface VST3PluginManifest extends PluginManifest {
+  /** VST3 unique component identifier. */
+  vst3Uid: string;
+  /** Plugin vendor name. */
+  vendor: string;
+  /** Latency introduced by the plugin in samples. */
+  latencySamples: number;
+  /** Output bus configuration. */
+  outputBusses: { name: string; channels: number }[];
+  /** Whether the plugin provides a GUI editor. */
+  hasEditor: boolean;
+  /** Discriminator to distinguish from base PluginManifest. */
+  isVST3: true;
+}
+
+/** Info returned from a VST3 plugin scan (before registration). */
+export interface VST3PluginInfo {
+  /** VST3 unique component identifier. */
+  uid: string;
+  /** Human-readable name. */
+  name: string;
+  /** Plugin vendor name. */
+  vendor: string;
+  /** Plugin type. */
+  pluginType: PluginType;
+  /** Version string. */
+  version: string;
+  /** Short description. */
+  description: string;
+  /** Latency in samples. */
+  latencySamples: number;
+  /** Output bus configuration. */
+  outputBusses: { name: string; channels: number }[];
+  /** Whether the plugin provides a GUI editor. */
+  hasEditor: boolean;
+  /** Parameter descriptors. */
+  parameters: PluginParamDescriptor[];
+}
+
 // ─── Plugin Factory ─────────────────────────────────────────────────────────
 
 /**

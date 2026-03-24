@@ -10,12 +10,19 @@ import type {
   PluginManifest,
   PluginInstance,
   PluginParamValues,
+  VST3PluginManifest,
+  VST3PluginInfo,
 } from '../types/plugin';
 import { v4 as uuidv4 } from 'uuid';
+
+/** Factory that creates a VST3 adapter — may be async. */
+type VST3AdapterFactory = (instanceId: string, ctx: AudioContext) => WAPPlugin | Promise<WAPPlugin>;
 
 export class PluginRegistry {
   /** Registered plugin factories by plugin ID. */
   private factories = new Map<string, PluginFactory>();
+  /** VST3 adapter factories by plugin ID. */
+  private vst3Factories = new Map<string, VST3AdapterFactory>();
   /** Plugin manifests by plugin ID. */
   private manifests = new Map<string, PluginManifest>();
   /** Live plugin instances by instance ID. */
@@ -72,10 +79,18 @@ export class PluginRegistry {
     const plugin = factory();
     plugin.createAudioNode(ctx);
 
+    return this.storeAndBuildInstance(pluginId, manifest, plugin);
+  }
+
+  /** Store a live plugin and build its serializable PluginInstance. */
+  private storeAndBuildInstance(
+    pluginId: string,
+    manifest: PluginManifest,
+    plugin: WAPPlugin,
+  ): { instance: PluginInstance; plugin: WAPPlugin } {
     const instanceId = uuidv4();
     this.instances.set(instanceId, plugin);
 
-    // Build default params from descriptors
     const defaultParams: PluginParamValues = {};
     for (const desc of manifest.parameters) {
       defaultParams[desc.id] = desc.defaultValue;
@@ -128,7 +143,111 @@ export class PluginRegistry {
    * Check if a plugin ID is registered.
    */
   isRegistered(pluginId: string): boolean {
-    return this.factories.has(pluginId);
+    return this.factories.has(pluginId) || this.vst3Factories.has(pluginId);
+  }
+
+  // ── VST3 Support ────────────────────────────────────────────────────────
+
+  /**
+   * Register a VST3 plugin from scan results.
+   * @param manifest - The VST3 plugin manifest.
+   * @param adapterFactory - Factory that creates a WAPPlugin adapter for this VST3 plugin.
+   */
+  registerVST3Plugin(
+    manifest: VST3PluginManifest,
+    adapterFactory: (instanceId: string, ctx: AudioContext) => WAPPlugin,
+  ): VST3PluginManifest {
+    this.vst3Factories.set(manifest.id, adapterFactory);
+    this.manifests.set(manifest.id, manifest);
+    return manifest;
+  }
+
+  /**
+   * Register all VST3 plugins from a scan.
+   * Converts VST3PluginInfo[] to VST3PluginManifest[] and registers each.
+   */
+  registerVST3Plugins(
+    plugins: VST3PluginInfo[],
+    createAdapter: (pluginUid: string, instanceId: string, ctx: AudioContext) => Promise<WAPPlugin>,
+  ): void {
+    for (const info of plugins) {
+      const pluginId = `vst3:${info.uid}`;
+      const manifest: VST3PluginManifest = {
+        id: pluginId,
+        name: info.name,
+        pluginType: info.pluginType,
+        version: info.version,
+        author: info.vendor,
+        description: info.description,
+        parameters: info.parameters,
+        vst3Uid: info.uid,
+        vendor: info.vendor,
+        latencySamples: info.latencySamples,
+        outputBusses: info.outputBusses,
+        hasEditor: info.hasEditor,
+        isVST3: true,
+      };
+      const adapterFactory: VST3AdapterFactory = (instanceId, ctx) =>
+        createAdapter(info.uid, instanceId, ctx);
+      this.vst3Factories.set(pluginId, adapterFactory);
+      this.manifests.set(pluginId, manifest);
+    }
+  }
+
+  /**
+   * Create instance — supports both sync WAP and async VST3.
+   */
+  async createInstanceAsync(
+    pluginId: string,
+    ctx: AudioContext,
+  ): Promise<{ instance: PluginInstance; plugin: WAPPlugin }> {
+    // Try WAP factory first (sync path)
+    if (this.factories.has(pluginId)) {
+      return this.createInstance(pluginId, ctx);
+    }
+
+    // Try VST3 factory (async path)
+    const vst3Factory = this.vst3Factories.get(pluginId);
+    if (!vst3Factory) {
+      throw new Error(`Plugin "${pluginId}" not registered`);
+    }
+
+    const manifest = this.manifests.get(pluginId);
+    if (!manifest) {
+      throw new Error(`Plugin manifest for "${pluginId}" not found`);
+    }
+
+    const tempId = uuidv4(); // temporary ID for factory call
+    const plugin = await vst3Factory(tempId, ctx);
+    plugin.createAudioNode(ctx);
+
+    return this.storeAndBuildInstance(pluginId, manifest, plugin);
+  }
+
+  /**
+   * Get only VST3 plugin manifests.
+   */
+  getVST3Plugins(): VST3PluginManifest[] {
+    return Array.from(this.vst3Factories.keys())
+      .map((id) => this.manifests.get(id) as VST3PluginManifest)
+      .filter(Boolean);
+  }
+
+  /**
+   * Check if a plugin is VST3.
+   */
+  isVST3Plugin(pluginId: string): boolean {
+    return this.vst3Factories.has(pluginId);
+  }
+
+  /**
+   * Unregister all VST3 plugins (for when companion disconnects).
+   */
+  unregisterVST3Plugins(): void {
+    for (const pluginId of this.vst3Factories.keys()) {
+      this.manifests.delete(pluginId);
+    }
+    this.vst3Factories.clear();
   }
 
   /**
@@ -140,6 +259,7 @@ export class PluginRegistry {
     }
     this.instances.clear();
     this.factories.clear();
+    this.vst3Factories.clear();
     this.manifests.clear();
   }
 }

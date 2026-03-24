@@ -15,6 +15,9 @@ scripts/metrics-latest.json
 .claude/worktrees/
 /tmp/daw-worktrees/
 
+# Reference repos (cloned for study, never commit)
+.claude/references/
+
 # Codex artifacts
 .codex/
 

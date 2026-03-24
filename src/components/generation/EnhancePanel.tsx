@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
@@ -13,6 +13,7 @@ import { useEnhancePlayback } from '../../hooks/useEnhancePlayback';
 import { computeWaveformPeaks } from '../../utils/waveformPeaks';
 import type { RepaintMode } from '../../types/api';
 import { ENHANCE_PRESETS, surpriseMe } from '../../constants/enhancePresets';
+import type { EnhancementNode } from '../../types/enhance';
 
 const ENHANCER_BASE_BOTTOM = 60;
 
@@ -52,6 +53,62 @@ interface ResultEntry {
 }
 
 type ABSide = 'A' | 'B';
+
+/** Recursive version tree node renderer */
+function VersionTreeNodes({
+  nodes,
+  getChildren,
+  activeNodeId,
+  onNodeClick,
+  depth,
+}: {
+  nodes: EnhancementNode[];
+  getChildren: (parentId: string) => EnhancementNode[];
+  activeNodeId: string | null;
+  onNodeClick: (node: EnhancementNode) => void;
+  depth: number;
+}) {
+  return (
+    <>
+      {nodes.map((node, idx) => {
+        const isActive = node.id === activeNodeId;
+        const children = getChildren(node.id);
+        const versionNum = idx + 1 + depth;
+        return (
+          <div key={node.id}>
+            <button
+              data-testid={`version-tree-node-${node.id}`}
+              onClick={() => onNodeClick(node)}
+              className={`w-full text-left py-1.5 rounded-md text-[10px] transition-colors truncate flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-[#2a2a2e] text-teal-300'
+                  : 'text-zinc-500 hover:bg-[#222226] hover:text-zinc-300'
+              }`}
+              style={{ paddingLeft: `${8 + depth * 10}px` }}
+            >
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                isActive ? 'bg-teal-400' : 'bg-zinc-600'
+              }`} />
+              <span className="truncate">
+                v{versionNum} ({node.label})
+                {isActive && ' \u2190'}
+              </span>
+            </button>
+            {children.length > 0 && (
+              <VersionTreeNodes
+                nodes={children}
+                getChildren={getChildren}
+                activeNodeId={activeNodeId}
+                onNodeClick={onNodeClick}
+                depth={depth + 1}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export function EnhancePanel() {
   const enhancerOpen = useUIStore((s) => s.enhancerOpen);
@@ -104,8 +161,19 @@ export function EnhancePanel() {
   // Playback
   const playback = useEnhancePlayback();
 
-  // Source audio key
-  const sourceAudioKey = clip?.isolatedAudioKey || clip?.cumulativeMixKey || '';
+  // Enhancement session (iterative chaining)
+  const enhancementSession = useUIStore((s) => s.enhancementSession);
+  const startEnhancementSession = useUIStore((s) => s.startEnhancementSession);
+  const addEnhancementNode = useUIStore((s) => s.addEnhancementNode);
+  const setActiveEnhancementNode = useUIStore((s) => s.setActiveEnhancementNode);
+  const rollbackToNode = useUIStore((s) => s.rollbackToNode);
+
+  // Track the overridden source audio key when using a result as new source
+  const [chainedSourceAudioKey, setChainedSourceAudioKey] = useState<string | null>(null);
+
+  // Source audio key — use chained source if iterating, otherwise clip audio
+  const clipAudioKey = clip?.isolatedAudioKey || clip?.cumulativeMixKey || '';
+  const sourceAudioKey = chainedSourceAudioKey || clipAudioKey;
 
   // Initialize form when enhancerTarget changes
   useEffect(() => {
@@ -143,6 +211,13 @@ export function EnhancePanel() {
       setAbSide('A');
       setSelectedResultId(null);
       setMiniPlayerIdx(0);
+      setChainedSourceAudioKey(null);
+
+      // Start an enhancement session for version tracking (only if no session exists for this clip)
+      const currentSession = useUIStore.getState().enhancementSession;
+      if (!currentSession || currentSession.clipId !== enhancerTarget.clipId) {
+        startEnhancementSession(enhancerTarget.clipId);
+      }
     }
   }, [enhancerTarget?.clipId]);
 
@@ -305,6 +380,52 @@ export function EnhancePanel() {
     }
   }, [abSide, results, selectedResultId, sourceAudioKey, playback]);
 
+  // Use result as new source for next enhancement round
+  const handleUseAsSource = useCallback((result: ResultEntry) => {
+    if (!result.audioKey || !enhancerTarget) return;
+
+    // Add an enhancement node to track this in the version tree
+    addEnhancementNode({
+      parentId: enhancementSession?.activeNodeId ?? null,
+      clipId: result.clipId,
+      audioKey: result.audioKey,
+      mode,
+      params: mode === 'cover'
+        ? { caption, lyrics, coverStrength: CONSISTENCY_VALUES[consistency] }
+        : { repaintRange: { start: selStart, end: selEnd }, repaintMode, repaintStrength },
+      label: result.title,
+    });
+
+    // Set this result's audio as the source for the next enhancement
+    setChainedSourceAudioKey(result.audioKey);
+
+    // Create a new session entry for the next round
+    handleNewSession();
+  }, [enhancerTarget, enhancementSession, addEnhancementNode, mode, caption, lyrics, consistency, selStart, selEnd, repaintMode, repaintStrength, handleNewSession]);
+
+  // Handle clicking a version tree node to load it as the current source
+  const handleVersionTreeClick = useCallback((node: EnhancementNode) => {
+    rollbackToNode(node.id);
+    setChainedSourceAudioKey(node.audioKey);
+  }, [rollbackToNode]);
+
+  // Handle clicking "Original" in the version tree — reset to original source
+  const handleVersionTreeOriginal = useCallback(() => {
+    setChainedSourceAudioKey(null);
+    setActiveEnhancementNode(null);
+  }, [setActiveEnhancementNode]);
+
+  // Build the version tree structure for rendering
+  const versionTreeRoots = useMemo(() => {
+    if (!enhancementSession) return [];
+    return enhancementSession.nodes.filter((n) => n.parentId === null);
+  }, [enhancementSession]);
+
+  const getNodeChildren = useCallback((parentId: string): EnhancementNode[] => {
+    if (!enhancementSession) return [];
+    return enhancementSession.nodes.filter((n) => n.parentId === parentId);
+  }, [enhancementSession]);
+
   // Mini player controls
   const miniResult = results[miniPlayerIdx] ?? null;
 
@@ -402,7 +523,7 @@ export function EnhancePanel() {
       className="fixed left-1/2 -translate-x-1/2 w-[820px] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
       style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
     >
-      {/* Left Sidebar — Session History */}
+      {/* Left Sidebar — Version Tree & Session History */}
       <div data-testid="enhance-history" className="w-[150px] min-w-[150px] border-r border-[#3a3a3a] flex flex-col bg-[#1a1a1e]">
         <div className="px-3 pt-3 pb-2">
           <button
@@ -414,6 +535,37 @@ export function EnhancePanel() {
             New Enhance
           </button>
         </div>
+
+        {/* Version Tree */}
+        {enhancementSession && enhancementSession.nodes.length > 0 && (
+          <div data-testid="version-tree" className="px-1.5 pb-2 border-b border-[#3a3a3a] mb-1">
+            <p className="text-[9px] text-zinc-600 uppercase tracking-wide px-2 mb-1">Versions</p>
+            {/* Original source */}
+            <button
+              data-testid="version-tree-original"
+              onClick={handleVersionTreeOriginal}
+              className={`w-full text-left px-2 py-1.5 rounded-md text-[10px] transition-colors truncate flex items-center gap-1.5 ${
+                enhancementSession.activeNodeId === null
+                  ? 'bg-[#2a2a2e] text-teal-300'
+                  : 'text-zinc-500 hover:bg-[#222226] hover:text-zinc-300'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                enhancementSession.activeNodeId === null ? 'bg-teal-400' : 'bg-zinc-600'
+              }`} />
+              v0 (Original)
+            </button>
+            {/* Tree nodes */}
+            <VersionTreeNodes
+              nodes={versionTreeRoots}
+              getChildren={getNodeChildren}
+              activeNodeId={enhancementSession.activeNodeId}
+              onNodeClick={handleVersionTreeClick}
+              depth={0}
+            />
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-1.5 pb-2 space-y-0.5">
           {sessions.map((s) => (
             <button
@@ -478,6 +630,9 @@ export function EnhancePanel() {
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] text-zinc-500 uppercase tracking-wide">
                 Source
+                {chainedSourceAudioKey && (
+                  <span className="ml-1 text-teal-400 normal-case" data-testid="chained-source-indicator">(chained)</span>
+                )}
                 {canAB && (
                   <span className={`ml-1.5 ${abSide === 'A' ? 'text-teal-400 font-bold' : 'text-zinc-600'}`}>A</span>
                 )}
@@ -884,6 +1039,16 @@ export function EnhancePanel() {
                       </p>
                       <p className="text-[10px] text-zinc-600">{r.duration}</p>
                     </div>
+                    {r.audioKey && (
+                      <button
+                        data-testid={`use-as-source-btn-${idx}`}
+                        onClick={(e) => { e.stopPropagation(); handleUseAsSource(r); }}
+                        className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[9px] font-medium bg-teal-700/50 text-teal-300 hover:bg-teal-600/60 transition-all whitespace-nowrap"
+                        title="Use this result as source for next enhancement"
+                      >
+                        Use as Source
+                      </button>
+                    )}
                     <button
                       className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-opacity"
                       aria-label="More options"

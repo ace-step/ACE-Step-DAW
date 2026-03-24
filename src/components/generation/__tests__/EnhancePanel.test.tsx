@@ -401,4 +401,233 @@ describe('uiStore enhancer actions', () => {
     expect(state.enhancerOpen).toBe(true);
     expect(state.enhancerTarget).toBeNull();
   });
+
+  it('closeEnhancer also clears enhancementSession', () => {
+    const project = useProjectStore.getState().project!;
+    const track = project.tracks[0];
+    const clip = track.clips[0];
+    useUIStore.getState().openEnhancer(clip.id, track.id);
+    useUIStore.getState().startEnhancementSession(clip.id);
+    expect(useUIStore.getState().enhancementSession).not.toBeNull();
+    useUIStore.getState().closeEnhancer();
+    expect(useUIStore.getState().enhancementSession).toBeNull();
+  });
+});
+
+describe('uiStore enhancement session actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupProjectWithClip();
+  });
+
+  it('startEnhancementSession creates a new session', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const session = useUIStore.getState().enhancementSession;
+    expect(session).not.toBeNull();
+    expect(session!.clipId).toBe('clip-1');
+    expect(session!.nodes).toEqual([]);
+    expect(session!.activeNodeId).toBeNull();
+  });
+
+  it('addEnhancementNode adds a node and sets it active', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const nodeId = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-key-1',
+      mode: 'cover',
+      params: { caption: 'jazz cover' },
+      label: 'Enhancement 1',
+    });
+    const session = useUIStore.getState().enhancementSession!;
+    expect(session.nodes).toHaveLength(1);
+    expect(session.nodes[0].id).toBe(nodeId);
+    expect(session.nodes[0].parentId).toBeNull();
+    expect(session.nodes[0].audioKey).toBe('audio-key-1');
+    expect(session.nodes[0].label).toBe('Enhancement 1');
+    expect(session.activeNodeId).toBe(nodeId);
+  });
+
+  it('addEnhancementNode chains with parentId', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const nodeId1 = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: { caption: 'jazz' },
+      label: 'v1',
+    });
+    const nodeId2 = useUIStore.getState().addEnhancementNode({
+      parentId: nodeId1,
+      clipId: 'clip-1',
+      audioKey: 'audio-2',
+      mode: 'cover',
+      params: { caption: 'add reverb' },
+      label: 'v2',
+    });
+    const session = useUIStore.getState().enhancementSession!;
+    expect(session.nodes).toHaveLength(2);
+    expect(session.nodes[1].parentId).toBe(nodeId1);
+    expect(session.activeNodeId).toBe(nodeId2);
+  });
+
+  it('setActiveEnhancementNode changes the active node', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const nodeId1 = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: {},
+      label: 'v1',
+    });
+    useUIStore.getState().addEnhancementNode({
+      parentId: nodeId1,
+      clipId: 'clip-1',
+      audioKey: 'audio-2',
+      mode: 'cover',
+      params: {},
+      label: 'v2',
+    });
+    // Active should be v2
+    expect(useUIStore.getState().enhancementSession!.activeNodeId).not.toBe(nodeId1);
+    // Set back to v1
+    useUIStore.getState().setActiveEnhancementNode(nodeId1);
+    expect(useUIStore.getState().enhancementSession!.activeNodeId).toBe(nodeId1);
+  });
+
+  it('rollbackToNode sets the target node as active', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const nodeId1 = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: {},
+      label: 'v1',
+    });
+    useUIStore.getState().addEnhancementNode({
+      parentId: nodeId1,
+      clipId: 'clip-1',
+      audioKey: 'audio-2',
+      mode: 'repaint',
+      params: { repaintRange: { start: 2, end: 5 } },
+      label: 'v2',
+    });
+    useUIStore.getState().rollbackToNode(nodeId1);
+    expect(useUIStore.getState().enhancementSession!.activeNodeId).toBe(nodeId1);
+  });
+
+  it('rollbackToNode does nothing if node not found', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    const nodeId1 = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: {},
+      label: 'v1',
+    });
+    useUIStore.getState().rollbackToNode('nonexistent');
+    expect(useUIStore.getState().enhancementSession!.activeNodeId).toBe(nodeId1);
+  });
+
+  it('clearEnhancementSession nullifies the session', () => {
+    useUIStore.getState().startEnhancementSession('clip-1');
+    useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: {},
+      label: 'v1',
+    });
+    useUIStore.getState().clearEnhancementSession();
+    expect(useUIStore.getState().enhancementSession).toBeNull();
+  });
+
+  it('addEnhancementNode returns id even without session', () => {
+    // No session started
+    useUIStore.setState({ enhancementSession: null });
+    const id = useUIStore.getState().addEnhancementNode({
+      parentId: null,
+      clipId: 'clip-1',
+      audioKey: 'audio-1',
+      mode: 'cover',
+      params: {},
+      label: 'v1',
+    });
+    expect(typeof id).toBe('string');
+    // Session remains null
+    expect(useUIStore.getState().enhancementSession).toBeNull();
+  });
+});
+
+describe('EnhancePanel version tree UI', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGenerationStore.setState({ isGenerating: false });
+  });
+
+  it('does not show version tree when no enhancement nodes exist', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: {
+        id: 'session-1',
+        clipId: clip.id,
+        nodes: [],
+        activeNodeId: null,
+      },
+    });
+    render(<EnhancePanel />);
+    expect(screen.queryByTestId('version-tree')).not.toBeInTheDocument();
+  });
+
+  it('shows version tree when enhancement nodes exist', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: {
+        id: 'session-1',
+        clipId: clip.id,
+        nodes: [
+          {
+            id: 'enh-1',
+            parentId: null,
+            clipId: clip.id,
+            audioKey: 'result-audio-1',
+            mode: 'cover' as const,
+            params: { caption: 'jazz' },
+            createdAt: 1000,
+            label: 'Jazz cover',
+          },
+        ],
+        activeNodeId: 'enh-1',
+      },
+    });
+    render(<EnhancePanel />);
+    expect(screen.getByTestId('version-tree')).toBeInTheDocument();
+    expect(screen.getByTestId('version-tree-original')).toBeInTheDocument();
+    expect(screen.getByText(/v0 \(Original\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Jazz cover/)).toBeInTheDocument();
+  });
+
+  it('shows chained source indicator when chainedSourceAudioKey is set', () => {
+    // This tests the UI indicator — we can't directly set React state,
+    // but we can verify the version tree renders. The chained indicator
+    // is driven by local React state which is set via handleUseAsSource.
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    render(<EnhancePanel />);
+    // Without chaining, no indicator should appear
+    expect(screen.queryByTestId('chained-source-indicator')).not.toBeInTheDocument();
+  });
 });

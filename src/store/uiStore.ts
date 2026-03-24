@@ -11,6 +11,7 @@ import { buildAssistantContext } from '../utils/aiAssistantContext';
 import { getAssistantSuggestions, streamAssistantResponse } from '../services/aiAssistantService';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
+import type { EnhancementNode, EnhancementSession } from '../types/enhance';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
   TRACK_LIST_COLLAPSED_WIDTH,
@@ -164,6 +165,9 @@ export interface UIState {
     range: { start: number; end: number } | null;
     mode: 'cover' | 'repaint';
   } | null;
+
+  // Iterative Enhancement Session (version tree / chaining)
+  enhancementSession: EnhancementSession | null;
 
   // Vocal2BGM / Audio Analysis
   vocal2bgmClipId: string | null;
@@ -326,6 +330,13 @@ export interface UIState {
   openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
   openEnhancerFromSelection: () => void;
   closeEnhancer: () => void;
+
+  // Iterative Enhancement Session
+  startEnhancementSession: (clipId: string) => void;
+  addEnhancementNode: (node: Omit<EnhancementNode, 'id' | 'createdAt'>) => string;
+  setActiveEnhancementNode: (nodeId: string | null) => void;
+  rollbackToNode: (nodeId: string) => void;
+  clearEnhancementSession: () => void;
 
   // Vocal2BGM / Audio Analysis
   setVocal2BGMModal: (clipId: string | null) => void;
@@ -538,6 +549,8 @@ export const useUIStore = create<UIState>()(
 
   enhancerOpen: false,
   enhancerTarget: null,
+
+  enhancementSession: null,
 
   vocal2bgmClipId: null,
   analysisClipId: null,
@@ -954,7 +967,55 @@ export const useUIStore = create<UIState>()(
     // No clip found in selection — open with guidance
     set({ enhancerOpen: true, enhancerTarget: null });
   },
-  closeEnhancer: () => set({ enhancerOpen: false, enhancerTarget: null }),
+  closeEnhancer: () => set({ enhancerOpen: false, enhancerTarget: null, enhancementSession: null }),
+
+  startEnhancementSession: (clipId) => {
+    const session: EnhancementSession = {
+      id: `enhance-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      clipId,
+      nodes: [],
+      activeNodeId: null,
+    };
+    set({ enhancementSession: session });
+  },
+
+  addEnhancementNode: (nodeData) => {
+    const id = `enh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const node: EnhancementNode = {
+      ...nodeData,
+      id,
+      createdAt: Date.now(),
+    };
+    const session = get().enhancementSession;
+    if (!session) return id;
+    set({
+      enhancementSession: {
+        ...session,
+        nodes: [...session.nodes, node],
+        activeNodeId: id,
+      },
+    });
+    return id;
+  },
+
+  setActiveEnhancementNode: (nodeId) => {
+    const session = get().enhancementSession;
+    if (!session) return;
+    if (nodeId !== null && !session.nodes.some((n) => n.id === nodeId)) return;
+    set({
+      enhancementSession: {
+        ...session,
+        activeNodeId: nodeId,
+      },
+    });
+  },
+
+  rollbackToNode: (nodeId) => {
+    // Alias for setActiveEnhancementNode — semantically loads an earlier version as active
+    get().setActiveEnhancementNode(nodeId);
+  },
+
+  clearEnhancementSession: () => set({ enhancementSession: null }),
 
   setVocal2BGMModal: (clipId) => set({ vocal2bgmClipId: clipId }),
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),

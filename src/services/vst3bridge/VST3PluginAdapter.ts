@@ -22,7 +22,7 @@ import type {
   InstantiatedResponse,
   AudioFrame,
 } from './VST3BridgeProtocol';
-import { createRingBuffer, type RingBuffer } from './ringBuffer';
+import { createRingBuffer, type W9RingBuffer } from './ringBuffer';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -43,16 +43,16 @@ export class VST3PluginAdapter implements WAPPlugin {
   readonly version: string;
   readonly author: string;
   readonly description: string;
+  readonly latencySamples: number;
 
   private instanceId: string;
   private bridgeClient: VST3BridgeClient;
   private paramDescriptors: PluginParamDescriptor[] = [];
   private paramValues: PluginParamValues = {};
-  private latencySamples: number = 0;
 
   // Audio streaming state
-  private inputRingBuffer: RingBuffer | null = null;
-  private outputRingBuffer: RingBuffer | null = null;
+  private inputRingBuffer: W9RingBuffer | null = null;
+  private outputRingBuffer: W9RingBuffer | null = null;
   private audioPumpTimer: ReturnType<typeof setInterval> | null = null;
   private audioNodeRef: PluginAudioNode | null = null;
   private disposed = false;
@@ -206,11 +206,11 @@ export class VST3PluginAdapter implements WAPPlugin {
   private mapParamDescriptors(params: VST3ParamInfo[]): PluginParamDescriptor[] {
     return params.map((p): FloatParamDescriptor => ({
       id: String(p.id),
-      name: p.title,
+      name: (p.title ?? p.name) as string,
       type: 'float' as const,
       min: p.min,
       max: p.max,
-      defaultValue: p.defaultValue,
+      defaultValue: (p.defaultValue ?? p.default) as number,
       step: p.stepCount > 0 ? (p.max - p.min) / p.stepCount : undefined,
     }));
   }
@@ -219,7 +219,7 @@ export class VST3PluginAdapter implements WAPPlugin {
   private buildDefaultParams(params: VST3ParamInfo[]): PluginParamValues {
     const values: PluginParamValues = {};
     for (const p of params) {
-      values[String(p.id)] = p.defaultValue;
+      values[String(p.id)] = (p.defaultValue ?? p.default) as number;
     }
     return values;
   }

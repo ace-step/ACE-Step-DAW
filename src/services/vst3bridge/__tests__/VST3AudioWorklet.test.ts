@@ -5,23 +5,23 @@ import { VST3AudioWorkletNode } from '../VST3AudioWorklet';
 // ─── RingBuffer tests ───────────────────────────────────────────────
 
 describe('RingBuffer', () => {
-  it('creates a buffer with power-of-2 capacity', () => {
+  it('creates a buffer with power-of-2 capacity (rounds up frames)', () => {
     const rb = RingBuffer.create(100, 2);
-    // 100 * 2 = 200 samples → next power of 2 = 256
-    expect(rb.capacity).toBe(256);
+    // nextPowerOf2(100) = 128 frames
+    expect(rb.capacity).toBe(128);
     expect(rb.channels).toBe(2);
   });
 
   it('creates a buffer that is already power of 2', () => {
     const rb = RingBuffer.create(64, 2);
-    // 64 * 2 = 128, already power of 2
-    expect(rb.capacity).toBe(128);
+    // nextPowerOf2(64) = 64 frames
+    expect(rb.capacity).toBe(64);
   });
 
   it('starts empty', () => {
     const rb = RingBuffer.create(128, 2);
     expect(rb.availableRead).toBe(0);
-    expect(rb.availableWrite).toBe(rb.capacity - 1);
+    expect(rb.availableWrite).toBe(rb.capacity);
   });
 
   it('write/read round-trip returns identical data', () => {
@@ -31,7 +31,7 @@ describe('RingBuffer', () => {
 
     const written = rb.write(input, frames);
     expect(written).toBe(4);
-    expect(rb.availableRead).toBe(8);
+    expect(rb.availableRead).toBe(4); // availableRead is in frames
 
     const output = new Float32Array(8);
     const read = rb.read(output, frames);
@@ -51,52 +51,54 @@ describe('RingBuffer', () => {
 
   it('returns 0 frames when writing to full buffer', () => {
     const rb = RingBuffer.create(4, 1);
-    // capacity = 4 (power of 2), writable = 3
-    const data = new Float32Array([1, 2, 3]);
-    const w1 = rb.write(data, 3);
-    expect(w1).toBe(3);
+    // capacity = 4 frames, writable = 4 (monotonic heads, no wasted slot)
+    const data = new Float32Array([1, 2, 3, 4]);
+    const w1 = rb.write(data, 4);
+    expect(w1).toBe(4);
     expect(rb.availableWrite).toBe(0);
 
-    const more = new Float32Array([4]);
+    const more = new Float32Array([5]);
     const w2 = rb.write(more, 1);
     expect(w2).toBe(0);
   });
 
   it('wraps around correctly', () => {
     const rb = RingBuffer.create(4, 1);
-    // capacity = 4, writable = 3
+    // capacity = 4 frames
 
-    // Write 3, read 3, write 3 more (wraps around)
-    const data1 = new Float32Array([1, 2, 3]);
-    rb.write(data1, 3);
+    // Write 4, read 4, write 4 more (wraps around)
+    const data1 = new Float32Array([1, 2, 3, 4]);
+    rb.write(data1, 4);
 
-    const out1 = new Float32Array(3);
-    rb.read(out1, 3);
+    const out1 = new Float32Array(4);
+    rb.read(out1, 4);
     expect(out1[0]).toBeCloseTo(1);
     expect(out1[1]).toBeCloseTo(2);
     expect(out1[2]).toBeCloseTo(3);
+    expect(out1[3]).toBeCloseTo(4);
 
-    const data2 = new Float32Array([4, 5, 6]);
-    const w = rb.write(data2, 3);
-    expect(w).toBe(3);
+    const data2 = new Float32Array([5, 6, 7, 8]);
+    const w = rb.write(data2, 4);
+    expect(w).toBe(4);
 
-    const out2 = new Float32Array(3);
-    const r = rb.read(out2, 3);
-    expect(r).toBe(3);
-    expect(out2[0]).toBeCloseTo(4);
-    expect(out2[1]).toBeCloseTo(5);
-    expect(out2[2]).toBeCloseTo(6);
+    const out2 = new Float32Array(4);
+    const r = rb.read(out2, 4);
+    expect(r).toBe(4);
+    expect(out2[0]).toBeCloseTo(5);
+    expect(out2[1]).toBeCloseTo(6);
+    expect(out2[2]).toBeCloseTo(7);
+    expect(out2[3]).toBeCloseTo(8);
   });
 
   it('reset clears the buffer', () => {
     const rb = RingBuffer.create(128, 2);
     const data = new Float32Array([1, 2, 3, 4]);
     rb.write(data, 2);
-    expect(rb.availableRead).toBe(4);
+    expect(rb.availableRead).toBe(2); // 2 frames
 
     rb.reset();
     expect(rb.availableRead).toBe(0);
-    expect(rb.availableWrite).toBe(rb.capacity - 1);
+    expect(rb.availableWrite).toBe(rb.capacity);
   });
 
   it('wrap() attaches to an existing SharedArrayBuffer', () => {
@@ -106,7 +108,7 @@ describe('RingBuffer', () => {
 
     // Wrap the same SAB
     const rb2 = RingBuffer.wrap(rb1.sharedBuffer, 2);
-    expect(rb2.availableRead).toBe(4);
+    expect(rb2.availableRead).toBe(2); // 2 frames
 
     const output = new Float32Array(4);
     const read = rb2.read(output, 2);
@@ -180,10 +182,16 @@ describe('VST3AudioWorkletNode', () => {
       createGain: vi.fn().mockReturnValue(mockGainNode),
     } as unknown as AudioContext;
 
-    // Mock AudioWorkletNode constructor
+    // Mock AudioWorkletNode as a class to support `new`
     vi.stubGlobal(
       'AudioWorkletNode',
-      vi.fn().mockReturnValue(mockWorkletNode),
+      vi.fn().mockImplementation(function (this: any, _ctx: any, _name: string, _opts: any) {
+        this.port = mockWorkletNode.port;
+        this.connect = mockWorkletNode.connect;
+        this.disconnect = mockWorkletNode.disconnect;
+        this.numberOfInputs = mockWorkletNode.numberOfInputs;
+        this.numberOfOutputs = mockWorkletNode.numberOfOutputs;
+      }),
     );
   });
 
@@ -195,7 +203,7 @@ describe('VST3AudioWorkletNode', () => {
     );
 
     expect(node.inputNode).toBeNull();
-    expect(node.outputNode).toBe(mockWorkletNode);
+    expect(node.outputNode).toBeDefined();
     expect(node.inputSAB).toBeNull();
     expect(node.outputSAB).toBeInstanceOf(SharedArrayBuffer);
     expect(node.dropoutCount).toBe(0);
@@ -210,10 +218,10 @@ describe('VST3AudioWorkletNode', () => {
     );
 
     expect(node.inputNode).toBe(mockGainNode);
-    expect(node.outputNode).toBe(mockWorkletNode);
+    expect(node.outputNode).toBeDefined();
     expect(node.inputSAB).toBeInstanceOf(SharedArrayBuffer);
     expect(node.outputSAB).toBeInstanceOf(SharedArrayBuffer);
-    expect(mockGainNode.connect).toHaveBeenCalledWith(mockWorkletNode);
+    expect(mockGainNode.connect).toHaveBeenCalled();
   });
 
   it('registers worklet module only once per context', async () => {

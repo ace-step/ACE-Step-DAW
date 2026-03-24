@@ -20,6 +20,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: serverPort,
     strictPort: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     proxy: {
       '/api': {
         target: apiTarget,

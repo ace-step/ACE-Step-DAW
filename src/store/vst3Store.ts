@@ -10,6 +10,7 @@ import type {
 export interface VST3Store {
   /* ── Connection ──────────────────────────────────────── */
   connectionStatus: VST3ConnectionStatus;
+  connectionError: string | null;
   companionVersion: string | null;
 
   /* ── Scanned plugin catalogue ───────────────────────── */
@@ -33,6 +34,13 @@ export interface VST3Store {
   selectPreset: (instanceId: string, preset: string) => void;
   savePreset: (instanceId: string, name: string) => void;
 
+  /* ── Public setters (used by hooks / bridge callbacks) ── */
+  setConnectionStatus: (status: VST3ConnectionStatus) => void;
+  setConnectionError: (error: string | null) => void;
+  setCompanionVersion: (version: string | null) => void;
+  setScannedPlugins: (plugins: VST3PluginInfo[]) => void;
+  markAllInstancesOffline: () => void;
+
   /* ── Internal setters (used by bridge callbacks) ────── */
   _setConnectionStatus: (status: VST3ConnectionStatus) => void;
   _setCompanionVersion: (version: string) => void;
@@ -46,6 +54,7 @@ export interface VST3Store {
 
 export const useVST3Store = create<VST3Store>()((set, get) => ({
   connectionStatus: 'disconnected',
+  connectionError: null,
   companionVersion: null,
   plugins: [],
   scanning: false,
@@ -111,6 +120,20 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
 
   savePreset: (_instanceId: string, _name: string) => {
     // Bridge implementation
+  },
+
+  // ── Public setters (used by hooks) ──────────────────────
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setConnectionError: (error) => set({ connectionError: error }),
+  setCompanionVersion: (version) => set({ companionVersion: version }),
+  setScannedPlugins: (plugins) => set({ plugins, scanning: false, scanProgress: null }),
+  markAllInstancesOffline: () => {
+    const { instances } = get();
+    const updated: Record<string, VST3ActiveInstance> = {};
+    for (const [id, inst] of Object.entries(instances)) {
+      updated[id] = { ...inst, online: false };
+    }
+    set({ instances: updated });
   },
 
   // ── Internal setters ────────────────────────────────────

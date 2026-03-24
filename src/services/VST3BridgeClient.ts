@@ -4,13 +4,13 @@
  * Stub implementation. The real client will manage a WebSocket connection
  * to the local companion app that hosts VST3 plugins.
  */
-import type { VST3ConnectionStatus, VST3PluginDescriptor, VST3ParamDescriptor } from '../types/vst3';
+import type { VST3ConnectionStatus, VST3PluginInfo, VST3Parameter } from '../types/vst3';
 
 type EventMap = {
   statusChange: (status: VST3ConnectionStatus) => void;
   error: (error: string) => void;
-  scanComplete: (plugins: VST3PluginDescriptor[]) => void;
-  instanceCreated: (instanceId: string, params: VST3ParamDescriptor[]) => void;
+  scanComplete: (plugins: VST3PluginInfo[]) => void;
+  instanceCreated: (instanceId: string, params: VST3Parameter[]) => void;
   instanceDestroyed: (instanceId: string) => void;
   paramChanged: (instanceId: string, paramId: number, value: number) => void;
 };

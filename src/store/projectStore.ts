@@ -5170,7 +5170,7 @@ export const useProjectStore = create<ProjectState>()(
     const nextProject = ensureProjectSession({
       ...get().project!,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
       tracks: newTracks,
     });
     set({ project: nextProject });
@@ -5254,7 +5254,7 @@ export const useProjectStore = create<ProjectState>()(
     const nextProject = ensureProjectSession({
       ...get().project!,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(newTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
       tracks: newTracks,
     });
     set({ project: nextProject });
@@ -5296,7 +5296,7 @@ export const useProjectStore = create<ProjectState>()(
     const nextProject = ensureProjectSession({
       ...get().project!,
       updatedAt: Date.now(),
-      totalDuration: computeTotalDuration(currentTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.tempoMap, get().project!.timeSignatureMap),
+      totalDuration: computeTotalDuration(currentTracks, get().project!.measures, bpm, get().project!.timeSignature, get().project!.timeSignatureDenominator, get().project!.tempoMap, get().project!.timeSignatureMap),
       tracks: currentTracks,
     });
     set({ project: nextProject });

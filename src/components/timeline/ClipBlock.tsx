@@ -25,7 +25,7 @@ import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
 import { FADE_HANDLE_KEYBOARD_STEP, getClipFadeBounds } from '../../utils/clipFade';
-import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX } from '../arrangement/trackSlotLayout';
+import { ARRANGEMENT_EMPTY_TRACK_ID_PREFIX, parseArrangementEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -248,6 +248,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
   const moveClipToTrack = useProjectStore((s) => s.moveClipToTrack);
   const duplicateClipToTrack = useProjectStore((s) => s.duplicateClipToTrack);
+  const addTrack = useProjectStore((s) => s.addTrack);
   const beginDrag = useProjectStore((s) => s.beginDrag);
   const endDrag = useProjectStore((s) => s.endDrag);
   const undo = useProjectStore((s) => s.undo);
@@ -258,7 +259,6 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     let best: { trackId: string; rect: DOMRect; dist: number } | null = null;
     for (const lane of lanes) {
       const trackId = lane.dataset.trackId!;
-      if (trackId.startsWith(ARRANGEMENT_EMPTY_TRACK_ID_PREFIX)) continue;
       const r = lane.getBoundingClientRect();
       const centerY = r.top + r.height / 2;
       const dist = Math.abs(clientY - centerY);
@@ -653,7 +653,17 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           ? Math.round((origStart + deltaSec) * 100) / 100
           : snapToGrid(origStart + deltaSec, bpm, 1));
 
-        if (ev.shiftKey && closest) {
+        // Resolve target trackId — if dropping on an empty slot, create a new track
+        let resolvedTargetId = closest?.trackId;
+        if (resolvedTargetId) {
+          const emptySlotIndex = parseArrangementEmptyTrackSlotIndex(resolvedTargetId);
+          if (emptySlotIndex !== null) {
+            const newTrack = addTrack(track.trackName, track.trackType, { order: emptySlotIndex + 1 });
+            resolvedTargetId = newTrack.id;
+          }
+        }
+
+        if (ev.shiftKey && closest && resolvedTargetId) {
           if (isMultiSelected && lastBatchOffset !== 0) {
             batchMoveClips([...selectedClipIds], -lastBatchOffset);
             lastBatchOffset = 0;
@@ -664,10 +674,10 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           if (isMultiSelected) {
             batchDuplicateClips([...selectedClipIds], timeOffset);
           } else {
-            duplicateClipToTrack(clip.id, closest.trackId, dropStart);
+            duplicateClipToTrack(clip.id, resolvedTargetId, dropStart);
           }
-        } else if (closest && closest.trackId !== track.id && !isMultiSelected) {
-          moveClipToTrack(clip.id, closest.trackId, dropStart);
+        } else if (resolvedTargetId && resolvedTargetId !== track.id && !isMultiSelected) {
+          moveClipToTrack(clip.id, resolvedTargetId, dropStart);
         }
       }
     };
@@ -675,7 +685,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, moveClipToTrack, duplicateClipToTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
+  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, track.trackName, track.trackType, moveClipToTrack, duplicateClipToTrack, addTrack, batchDuplicateClips, batchMoveClips, selectedClipIds, findClosestLane, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

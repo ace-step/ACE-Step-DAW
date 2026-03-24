@@ -90,6 +90,38 @@ describe('moveClipToTrack', () => {
   });
 });
 
+describe('move clip to new track (empty slot workflow)', () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+  });
+
+  it('can create a new track then move a clip to it', () => {
+    const store = useProjectStore.getState();
+    const trackA = store.addTrack('custom', 'sample');
+    const clip = store.addClip(trackA.id, {
+      startTime: 2,
+      duration: 4,
+      prompt: 'test',
+      globalCaption: '',
+      lyrics: '',
+    });
+
+    // Simulate ClipBlock's empty-slot resolution: create track, then move
+    const newTrack = store.addTrack('custom', 'sample', { order: 3 });
+    store.moveClipToTrack(clip.id, newTrack.id, 5);
+
+    const project = useProjectStore.getState().project!;
+    const srcTrack = project.tracks.find((t) => t.id === trackA.id)!;
+    const dstTrack = project.tracks.find((t) => t.id === newTrack.id)!;
+    expect(srcTrack.clips).toHaveLength(0);
+    expect(dstTrack.clips).toHaveLength(1);
+    expect(dstTrack.clips[0].id).toBe(clip.id);
+    expect(dstTrack.clips[0].startTime).toBe(5);
+    expect(dstTrack.order).toBe(3);
+  });
+});
+
 describe('addTrack with order', () => {
   beforeEach(() => {
     useProjectStore.setState({ project: null });

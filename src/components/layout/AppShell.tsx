@@ -16,6 +16,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
+import { useVST3Connection } from '../../hooks/useVST3Connection';
+import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { useShareLink } from '../../hooks/useShareLink';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
@@ -92,6 +94,8 @@ function EditorShell() {
 
   useKeyboardShortcuts();
   useEffectsSync();
+  useVST3Connection();
+  useVST3Sync();
 
   return (
     <div

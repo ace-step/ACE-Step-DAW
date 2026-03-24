@@ -8,6 +8,7 @@ import { useAudioImport } from '../../hooks/useAudioImport';
 import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { KEY_SCALES } from '../../constants/tracks';
+import { CompanionStatus } from '../plugins/CompanionStatus';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
@@ -757,6 +758,9 @@ export function Toolbar() {
       <div className="hidden lg:flex shrink-0">
         <HarmonySettingsStrip disabled={!project} />
       </div>
+
+      {/* VST3 Companion Status */}
+      <CompanionStatus />
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">

@@ -910,6 +910,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
           left,
           width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
+          contain: 'layout style paint',
           ...(isSelected ? { '--tw-ring-color': clipPresentation.selectionRingColor } as React.CSSProperties : {}),
         }}
         data-clip-block
@@ -1349,6 +1350,7 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
               borderLeft: `2px solid ${clipColor}`,
               boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${clipPresentation.bodyBorderColor}`,
               transition: 'top 80ms ease-out',
+              willChange: 'transform',
             }}
           >
             <div

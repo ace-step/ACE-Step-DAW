@@ -344,6 +344,9 @@ export function TrackLane({ track }: TrackLaneProps) {
           height: rowHeight,
           opacity: track.muted ? 0.4 : 1,
           borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
+          contain: 'content',
+          contentVisibility: 'auto',
+          containIntrinsicSize: `auto ${rowHeight}px`,
         }}
         onContextMenu={handleContextMenu}
         onDoubleClick={handleDoubleClick}

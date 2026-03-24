@@ -998,7 +998,7 @@ export function Timeline() {
             <GridOverlay />
             <Playhead />
 
-            <div ref={trackAreaRef} className="relative">
+            <div ref={trackAreaRef} className="relative" style={{ contain: 'style layout' }}>
 
               {/* Committed context window overlay — Apple Teal (#5AC8FA) */}
               {ctxLeft !== null && ctxWidth !== null && ctxVRange && (

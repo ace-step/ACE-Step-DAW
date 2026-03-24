@@ -17,7 +17,7 @@ describe('Playhead blink animation', () => {
     const line = container.firstElementChild as HTMLElement;
     expect(line).not.toBeNull();
     expect(line.style.backgroundColor).toBe('rgb(255, 255, 255)');
-    expect(line.style.left).toBe('300px');
+    expect(line.style.transform).toBe('translateX(300px)');
     expect(line.style.minHeight).toBe('100vh');
   });
 
@@ -35,7 +35,7 @@ describe('Playhead blink animation', () => {
     const { container } = render(<Playhead />);
     const line = container.firstElementChild as HTMLElement;
     expect(line).not.toBeNull();
-    expect(line.style.left).toBe('500px');
+    expect(line.style.transform).toBe('translateX(500px)');
   });
 
   it('hides transport line when currentTime equals playStartTime', () => {

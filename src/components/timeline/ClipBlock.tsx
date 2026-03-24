@@ -951,15 +951,22 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         >
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none select-none transition-opacity duration-100"
-            style={{
-              opacity: hoveredResizeEdge === 'left' ? 1 : 0,
-              color: 'rgba(255,255,255,0.85)',
-              fontSize: 13,
-              fontWeight: 700,
-              fontFamily: 'monospace',
-            }}
+            style={{ opacity: hoveredResizeEdge === 'left' ? 1 : 0 }}
             data-testid="resize-indicator-left"
-          >[</div>
+          >
+            <span
+              className="rounded-sm"
+              style={{
+                color: '#000',
+                backgroundColor: '#fff',
+                fontSize: 11,
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                lineHeight: 1,
+                padding: '1px 2px',
+              }}
+            >[</span>
+          </div>
         </div>
         <div
           className="absolute top-0 right-0 w-[16px] cursor-e-resize z-10"
@@ -970,15 +977,22 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
         >
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none select-none transition-opacity duration-100"
-            style={{
-              opacity: hoveredResizeEdge === 'right' ? 1 : 0,
-              color: 'rgba(255,255,255,0.85)',
-              fontSize: 13,
-              fontWeight: 700,
-              fontFamily: 'monospace',
-            }}
+            style={{ opacity: hoveredResizeEdge === 'right' ? 1 : 0 }}
             data-testid="resize-indicator-right"
-          >]</div>
+          >
+            <span
+              className="rounded-sm"
+              style={{
+                color: '#000',
+                backgroundColor: '#fff',
+                fontSize: 11,
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                lineHeight: 1,
+                padding: '1px 2px',
+              }}
+            >]</span>
+          </div>
         </div>
 
         <div
@@ -1116,7 +1130,8 @@ export function ClipBlock({ clip, track }: ClipBlockProps) {
 
         {totalVersions >= 1 && (
           <div
-            className="absolute top-0 right-0.5 flex items-center gap-0.5 z-20"
+            className="absolute top-0 flex items-center gap-0.5 z-20"
+            style={{ right: EDGE_HANDLE_PX + 2 }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >

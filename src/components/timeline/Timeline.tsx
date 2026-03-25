@@ -641,7 +641,7 @@ export function Timeline() {
     const ro = new ResizeObserver(updateViewportWidth);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [project, setTimelineViewportWidth, trackListWidth]);
+  }, [setTimelineViewportWidth, trackListWidth]);
 
   // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
   const wheelRef = useNonPassiveWheel(handleWheel);
@@ -674,7 +674,6 @@ export function Timeline() {
       const trackArea = trackAreaRef.current;
       if (!container || !trackArea) return;
 
-      const bpm = project?.bpm ?? 120;
       const scrollLeft = container.scrollLeft;
       const cRect = container.getBoundingClientRect();
       const timelineRectLeft = cRect.left + trackListWidth;
@@ -766,7 +765,7 @@ export function Timeline() {
             // Auto-select all clips overlapping the select window
             const overlappingClipIds: string[] = [];
             const trackIdSet = new Set(trackIds);
-            for (const track of (project?.tracks ?? [])) {
+            for (const track of tracks) {
               if (!trackIdSet.has(track.id)) continue;
               for (const clip of track.clips) {
                 const clipEnd = clip.startTime + clip.duration;
@@ -786,7 +785,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, selectClips, seek, setTimelineFocused, trackListWidth],
+    [bpm, pixelsPerSecond, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, selectClips, seek, setTimelineFocused, trackListWidth, tracks],
   );
 
   const startWindowMove = useCallback(

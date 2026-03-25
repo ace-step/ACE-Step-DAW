@@ -15,6 +15,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 
 use crate::error::Result;
+use crate::gui_manager::GuiManager;
 use crate::host_impl::ParamChangeCollector;
 use crate::plugin_host::PluginHost;
 use crate::plugin_scanner::PluginScanner;
@@ -26,6 +27,7 @@ pub struct AppState {
     pub scanner: PluginScanner,
     pub host: PluginHost,
     pub param_collector: ParamChangeCollector,
+    pub gui_manager: std::sync::Mutex<GuiManager>,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -37,6 +39,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         scanner: PluginScanner::new(),
         host: PluginHost::new(),
         param_collector: ParamChangeCollector::new(),
+        gui_manager: std::sync::Mutex::new(GuiManager::new()),
     });
 
     loop {
@@ -238,17 +241,37 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         }
 
         IncomingMessage::OpenEditor { instance_id } => {
-            info!(instance_id, "OpenEditor (stub)");
-            OutgoingMessage::EditorOpened {
-                instance_id,
-                width: 800,
-                height: 600,
+            info!(instance_id, "OpenEditor");
+            let mut gui = state.gui_manager.lock().unwrap();
+            // Default dimensions — a real implementation with IEditController
+            // would call open_editor_with_controller() to query IPlugView::getSize().
+            match gui.open_editor(&instance_id, 800, 600) {
+                Ok((width, height)) => OutgoingMessage::EditorOpened {
+                    instance_id,
+                    width,
+                    height,
+                },
+                Err(e) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "open_editor_error".into(),
+                    message: e,
+                },
             }
         }
 
         IncomingMessage::CloseEditor { instance_id } => {
-            info!(instance_id, "CloseEditor (stub)");
-            OutgoingMessage::EditorClosed { instance_id }
+            info!(instance_id, "CloseEditor");
+            let mut gui = state.gui_manager.lock().unwrap();
+            match gui.close_editor(&instance_id) {
+                Ok(()) => OutgoingMessage::EditorClosed { instance_id },
+                Err(e) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "close_editor_error".into(),
+                    message: e,
+                },
+            }
         }
 
         IncomingMessage::GetState { instance_id } => {
@@ -378,13 +401,18 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::connect_async;
 
-    #[test]
-    fn test_handle_message_hello() {
-        let state = AppState {
+    fn make_state() -> AppState {
+        AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
             param_collector: ParamChangeCollector::new(),
-        };
+            gui_manager: std::sync::Mutex::new(GuiManager::with_stub_backend()),
+        }
+    }
+
+    #[test]
+    fn test_handle_message_hello() {
+        let state = make_state();
         let resp = handle_message(
             IncomingMessage::Hello {
                 version: "1.0".into(),
@@ -407,11 +435,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_instantiate_and_destroy() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        };
+        let state = make_state();
 
         let resp = handle_message(
             IncomingMessage::Instantiate {
@@ -442,11 +466,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_get_latency() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        };
+        let state = make_state();
         // Must instantiate first so the instance exists
         state.host.instantiate("uid-1", "inst-1", None).unwrap();
         let resp = handle_message(
@@ -461,6 +481,97 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_handle_message_open_and_close_editor() {
+        let state = make_state();
+
+        // Open editor
+        let resp = handle_message(
+            IncomingMessage::OpenEditor {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::EditorOpened {
+                instance_id,
+                width,
+                height,
+            } => {
+                assert_eq!(instance_id, "inst-1");
+                assert_eq!(*width, 800);
+                assert_eq!(*height, 600);
+            }
+            other => panic!("Expected EditorOpened, got {other:?}"),
+        }
+
+        // Verify editor is tracked in gui_manager
+        assert!(state.gui_manager.lock().unwrap().is_editor_open("inst-1"));
+
+        // Close editor
+        let resp = handle_message(
+            IncomingMessage::CloseEditor {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::EditorClosed { instance_id } => {
+                assert_eq!(instance_id, "inst-1");
+            }
+            other => panic!("Expected EditorClosed, got {other:?}"),
+        }
+
+        // Verify editor is no longer tracked
+        assert!(!state.gui_manager.lock().unwrap().is_editor_open("inst-1"));
+    }
+
+    #[test]
+    fn test_handle_message_open_editor_duplicate_returns_error() {
+        let state = make_state();
+
+        // Open first time — succeeds
+        let resp = handle_message(
+            IncomingMessage::OpenEditor {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        assert!(matches!(resp, OutgoingMessage::EditorOpened { .. }));
+
+        // Open second time — should error
+        let resp = handle_message(
+            IncomingMessage::OpenEditor {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "open_editor_error");
+            }
+            other => panic!("Expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_message_close_nonexistent_editor_returns_error() {
+        let state = make_state();
+
+        let resp = handle_message(
+            IncomingMessage::CloseEditor {
+                instance_id: "nonexistent".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "close_editor_error");
+            }
+            other => panic!("Expected Error, got {other:?}"),
+        }
+    }
+
     /// Integration test: start the WS server, connect, send hello, receive hello_ack.
     #[tokio::test]
     async fn test_ws_hello_handshake() {
@@ -468,11 +579,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let state = Arc::new(AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        });
+        let state = Arc::new(make_state());
 
         // Spawn the accept loop.
         let server_state = Arc::clone(&state);
@@ -518,11 +625,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let state = Arc::new(AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        });
+        let state = Arc::new(make_state());
 
         let server_state = Arc::clone(&state);
         tokio::spawn(async move {

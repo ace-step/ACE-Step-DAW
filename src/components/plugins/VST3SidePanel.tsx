@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useVST3Store } from '../../store/vst3Store';
 import { useProjectStore } from '../../store/projectStore';
 import { VST3PluginBrowser } from './VST3PluginBrowser';
+import { ActivePlugins } from './ActivePlugins';
 import { Z } from '../../utils/zIndex';
 
 export function VST3SidePanel() {
@@ -61,9 +62,10 @@ export function VST3SidePanel() {
         </button>
       </div>
 
-      {/* Plugin Browser */}
+      {/* Plugin Browser + Active Plugins */}
       <div className="flex-1 overflow-y-auto">
         <VST3PluginBrowser onLoadPlugin={handleLoadPlugin} />
+        <ActivePlugins />
       </div>
     </aside>
   );

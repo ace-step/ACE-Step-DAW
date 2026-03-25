@@ -166,6 +166,13 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
 
   setParameter: (instanceId: string, paramId: number, value: number) => {
     get()._updateParameter(instanceId, paramId, value);
+    // Fire-and-forget: forward to bridge companion
+    try {
+      const client = _getBridgeClient();
+      client.setParam(instanceId, paramId, value);
+    } catch {
+      // Bridge not connected — ignore silently
+    }
   },
 
   selectPreset: (instanceId: string, preset: string) => {

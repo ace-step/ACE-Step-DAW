@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use vst3::Steinberg::Vst::{
-    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, ProcessData,
-    ProcessSetup, ProcessModes_, SymbolicSampleSizes_,
+    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait,
+    IEventList, ProcessData, ProcessSetup, ProcessModes_, SymbolicSampleSizes_,
 };
 use vst3::Steinberg::kResultOk;
 
+use crate::host_impl::{midi_to_vst3_event, EventList};
 use crate::vst3_loader::Vst3PluginInstance;
 
 /// A MIDI event to be processed by a VST3 plugin.
@@ -21,6 +22,17 @@ pub struct MidiEvent {
     pub data1: u8,
     pub data2: u8,
     pub sample_offset: u32,
+}
+
+impl From<&crate::protocol::MidiEvent> for MidiEvent {
+    fn from(e: &crate::protocol::MidiEvent) -> Self {
+        Self {
+            status: e.status,
+            data1: e.data1,
+            data2: e.data2,
+            sample_offset: e.sample_offset,
+        }
+    }
 }
 
 /// A queued parameter change.
@@ -161,9 +173,9 @@ impl AudioThread {
         let total = (channels * samples) as usize;
 
         // Drain queues
-        let mut _midi_events = Vec::new();
+        let mut midi_events = Vec::new();
         while let Some(event) = self.midi_queue.pop() {
-            _midi_events.push(event);
+            midi_events.push(event);
         }
         let mut _param_changes = Vec::new();
         while let Some(change) = self.param_queue.pop() {
@@ -176,7 +188,7 @@ impl AudioThread {
 
         // Try real VST3 processing
         if let Some(ref plugin) = self.plugin {
-            return self.process_vst3(plugin.clone(), input, channels, samples);
+            return self.process_vst3(plugin.clone(), &midi_events, input, channels, samples);
         }
 
         // Stub fallback
@@ -195,6 +207,7 @@ impl AudioThread {
     fn process_vst3(
         &self,
         plugin: Arc<Vst3PluginInstance>,
+        midi_events: &[MidiEvent],
         input: &[f32],
         channels: u32,
         samples: u32,
@@ -243,6 +256,24 @@ impl AudioThread {
             },
         };
 
+        // Convert MIDI events to VST3 events and pack into IEventList.
+        // Skip allocation when there are no events (common case).
+        let vst3_events: Vec<_> = midi_events
+            .iter()
+            .filter_map(midi_to_vst3_event)
+            .collect();
+
+        let event_list = if !vst3_events.is_empty() {
+            Some(EventList::with_events(vst3_events))
+        } else {
+            None
+        };
+        let input_events_ptr = event_list
+            .as_ref()
+            .and_then(|el| el.to_com_ptr::<IEventList>())
+            .map(|p| p.as_ptr())
+            .unwrap_or(ptr::null_mut());
+
         let mut process_data = ProcessData {
             processMode: ProcessModes_::kRealtime as i32,
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
@@ -251,9 +282,9 @@ impl AudioThread {
             numOutputs: 1,
             inputs: if self.is_instrument { ptr::null_mut() } else { &mut input_bus },
             outputs: &mut output_bus,
-            inputParameterChanges: ptr::null_mut(), // TODO: W4 will implement IParameterChanges
+            inputParameterChanges: ptr::null_mut(), // TODO: implement IParameterChanges
             outputParameterChanges: ptr::null_mut(),
-            inputEvents: ptr::null_mut(), // TODO: W4 will implement IEventList for MIDI
+            inputEvents: input_events_ptr,
             outputEvents: ptr::null_mut(),
             processContext: ptr::null_mut(),
         };
@@ -360,6 +391,7 @@ impl AudioFrame {
 /// State of a single running stream.
 struct StreamState {
     stop_flag: Arc<AtomicBool>,
+    midi_queue: Arc<SegQueue<MidiEvent>>,
 }
 
 /// Manages audio processing loops for multiple VST3 plugin instances,
@@ -420,6 +452,7 @@ impl AudioStreamManager {
         if let Some(p) = plugin {
             audio_thread.set_plugin(p);
         }
+        let midi_queue = Arc::clone(&audio_thread.midi_queue);
         audio_thread.start();
 
         std::thread::Builder::new()
@@ -431,7 +464,7 @@ impl AudioStreamManager {
 
         streams.insert(
             instance_id.to_string(),
-            StreamState { stop_flag },
+            StreamState { stop_flag, midi_queue },
         );
 
         true
@@ -442,6 +475,22 @@ impl AudioStreamManager {
         let mut streams = self.streams.lock().unwrap();
         if let Some(state) = streams.remove(instance_id) {
             state.stop_flag.store(true, Ordering::Release);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Send MIDI events to the audio thread for a given instance.
+    ///
+    /// Events are queued and will be picked up on the next `process()` call.
+    /// Returns `false` if no stream exists for the instance.
+    pub fn send_midi(&self, instance_id: &str, events: Vec<MidiEvent>) -> bool {
+        let streams = self.streams.lock().unwrap();
+        if let Some(state) = streams.get(instance_id) {
+            for event in events {
+                state.midi_queue.push(event);
+            }
             true
         } else {
             false
@@ -817,5 +866,30 @@ mod tests {
 
         manager.stop_stream("inst-a");
         manager.stop_stream("inst-b");
+    }
+
+    #[test]
+    fn stream_manager_send_midi_to_active_stream() {
+        let manager = AudioStreamManager::new();
+        manager.start_stream("inst-1", 44100.0, 512, None, true);
+
+        let events = vec![
+            MidiEvent { status: 0x90, data1: 60, data2: 100, sample_offset: 0 },
+            MidiEvent { status: 0x80, data1: 60, data2: 0, sample_offset: 128 },
+        ];
+        let sent = manager.send_midi("inst-1", events);
+        assert!(sent, "send_midi should return true for active stream");
+
+        manager.stop_stream("inst-1");
+    }
+
+    #[test]
+    fn stream_manager_send_midi_to_nonexistent_stream() {
+        let manager = AudioStreamManager::new();
+        let events = vec![
+            MidiEvent { status: 0x90, data1: 60, data2: 100, sample_offset: 0 },
+        ];
+        let sent = manager.send_midi("nonexistent", events);
+        assert!(!sent, "send_midi should return false for nonexistent stream");
     }
 }

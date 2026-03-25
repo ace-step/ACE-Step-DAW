@@ -97,6 +97,18 @@ pub enum IncomingMessage {
         #[serde(alias = "source_instance_id", rename = "sourceInstanceId")]
         source_instance_id: String,
     },
+    StartAudioStream {
+        #[serde(alias = "instance_id", rename = "instanceId")]
+        instance_id: String,
+        #[serde(alias = "sample_rate", rename = "sampleRate")]
+        sample_rate: f64,
+        #[serde(alias = "block_size", rename = "blockSize")]
+        block_size: u32,
+    },
+    StopAudioStream {
+        #[serde(alias = "instance_id", rename = "instanceId")]
+        instance_id: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +221,14 @@ pub enum OutgoingMessage {
         #[serde(rename = "instanceId")]
         instance_id: String,
         samples: u32,
+    },
+    AudioStreamStarted {
+        #[serde(rename = "instanceId")]
+        instance_id: String,
+    },
+    AudioStreamStopped {
+        #[serde(rename = "instanceId")]
+        instance_id: String,
     },
     Error {
         #[serde(skip_serializing_if = "Option::is_none", rename = "reqId")]
@@ -485,5 +505,69 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(val["type"], "paramsBatch");
         assert_eq!(val["changes"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_incoming_start_audio_stream_roundtrip() {
+        let msg = IncomingMessage::StartAudioStream {
+            instance_id: "inst-1".into(),
+            sample_rate: 48000.0,
+            block_size: 256,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: IncomingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["type"], "startAudioStream");
+    }
+
+    #[test]
+    fn test_incoming_stop_audio_stream_roundtrip() {
+        let msg = IncomingMessage::StopAudioStream {
+            instance_id: "inst-1".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: IncomingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["type"], "stopAudioStream");
+    }
+
+    #[test]
+    fn test_outgoing_audio_stream_started_roundtrip() {
+        let msg = OutgoingMessage::AudioStreamStarted {
+            instance_id: "inst-1".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["type"], "audioStreamStarted");
+    }
+
+    #[test]
+    fn test_outgoing_audio_stream_stopped_roundtrip() {
+        let msg = OutgoingMessage::AudioStreamStopped {
+            instance_id: "inst-1".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["type"], "audioStreamStopped");
+    }
+
+    #[test]
+    fn test_parse_start_audio_stream_from_raw_json() {
+        let raw = r#"{"type":"startAudioStream","instanceId":"inst-1","sampleRate":44100.0,"blockSize":512}"#;
+        let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            msg,
+            IncomingMessage::StartAudioStream {
+                instance_id: "inst-1".into(),
+                sample_rate: 44100.0,
+                block_size: 512,
+            }
+        );
     }
 }

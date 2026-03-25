@@ -713,7 +713,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('keydown', onKeyDown);
-  }, [clip, pixelsPerSecond, project, updateClip, getDragMode, track.id, track.trackName, track.trackType, moveClipToTrack, duplicateClipToTrack, addTrack, batchDuplicateClips, batchMoveClips, beginDrag, endDrag, undo, snapClipEdgeToZeroCrossing, sliceClipToRange, splitClipAtZeroCrossing, selectClip]);
+  }, [addTrack, batchDuplicateClips, batchMoveClips, beginDrag, bpm, clip, duplicateClipToTrack, endDrag, getDragMode, moveClipToTrack, pixelsPerSecond, selectClip, sliceClipToRange, snapClipEdgeToZeroCrossing, splitClipAtZeroCrossing, totalDuration, track.id, track.trackName, track.trackType, undo, updateClip]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

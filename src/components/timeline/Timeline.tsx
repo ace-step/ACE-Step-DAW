@@ -38,8 +38,8 @@ import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { convertTimelineWindowMode, moveTimelineWindow, type TimelineWindowRange } from './timelineWindowUtils';
 import {
   buildArrangementTrackSlots,
-  DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT,
   getArrangementEmptyTrackId,
+  getArrangementVisibleRowCount,
 } from '../arrangement/trackSlotLayout';
 import { DEFAULT_ARRANGEMENT_ROW_HEIGHT } from '../arrangement/rowLayout';
 import {
@@ -396,9 +396,13 @@ export function Timeline() {
       .filter((track) => !track.parentTrackId || !collapsedGroupIds.has(track.parentTrackId))
       .sort((a, b) => a.order - b.order);
   }, [tracks]);
-  const arrangementRows = useMemo(
-    () => buildArrangementTrackSlots(sortedTracks, PLACEHOLDER_ROW_COUNT),
+  const arrangementVisibleRowCount = useMemo(
+    () => getArrangementVisibleRowCount(sortedTracks),
     [sortedTracks],
+  );
+  const arrangementRows = useMemo(
+    () => buildArrangementTrackSlots(sortedTracks, arrangementVisibleRowCount),
+    [arrangementVisibleRowCount, sortedTracks],
   );
   const blockedEmptySlotOrders = useMemo(() => {
     const collapsedGroupIds = new Set(
@@ -1194,7 +1198,6 @@ export function Timeline() {
 
 /** Empty placeholder rows below tracks — infinite grid like ACE Studio */
 const PLACEHOLDER_ROW_HEIGHT = DEFAULT_ARRANGEMENT_ROW_HEIGHT;
-const PLACEHOLDER_ROW_COUNT = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT; // keep vertical range aligned with the 128-track project cap
 
 function ArrangementEmptyTrackHeaderRow({
   slotIndex,

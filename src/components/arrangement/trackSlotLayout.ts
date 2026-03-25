@@ -2,7 +2,8 @@ import type { Track } from '../../types/project';
 import { MAX_PROJECT_TRACKS } from '../../constants/defaults';
 
 export const ARRANGEMENT_EMPTY_TRACK_ID_PREFIX = '__empty-';
-export const DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT = MAX_PROJECT_TRACKS;
+export const MIN_ARRANGEMENT_VISIBLE_ROW_COUNT = 12;
+export const ARRANGEMENT_TRAILING_EMPTY_ROW_COUNT = 8;
 
 export type ArrangementTrackSlot =
   | { kind: 'track'; track: Track }
@@ -32,6 +33,32 @@ export function getFirstSelectedEmptyTrackSlotIndex(trackIds: Iterable<string>):
   }
 
   return minSlotIndex;
+}
+
+export function getArrangementVisibleRowCount(
+  tracks: Track[],
+  {
+    minimumVisibleRowCount = MIN_ARRANGEMENT_VISIBLE_ROW_COUNT,
+    trailingEmptyRowCount = ARRANGEMENT_TRAILING_EMPTY_ROW_COUNT,
+  }: {
+    minimumVisibleRowCount?: number;
+    trailingEmptyRowCount?: number;
+  } = {},
+): number {
+  const highestOccupiedSlotNumber = tracks.reduce((maxSlotNumber, track) => {
+    const slotNumber = Number.isFinite(track.order) && track.order > 0
+      ? Math.floor(track.order)
+      : 0;
+    return Math.max(maxSlotNumber, slotNumber);
+  }, 0);
+
+  return Math.min(
+    MAX_PROJECT_TRACKS,
+    Math.max(
+      minimumVisibleRowCount,
+      highestOccupiedSlotNumber + Math.max(0, trailingEmptyRowCount),
+    ),
+  );
 }
 
 export function buildArrangementTrackSlots(

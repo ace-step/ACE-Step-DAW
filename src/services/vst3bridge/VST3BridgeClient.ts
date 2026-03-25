@@ -22,6 +22,8 @@ import {
   type ErrorMessage,
 } from './VST3BridgeProtocol';
 
+import type { VST3ConnectionStatus } from '../../types/vst3';
+
 /** Events emitted by the bridge client (W9 compat). */
 export interface BridgeEvents {
   paramChanged: (instanceId: string, paramId: number, value: number) => void;
@@ -59,7 +61,6 @@ const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /** Maps companion message types to CustomEvent names dispatched on the client. */
-/** Maps companion message types to CustomEvent names dispatched on the client. */
 const EVENT_TYPE_MAP: Record<string, string> = {
   scanProgress: 'scanprogress',
   paramChanged: 'paramchanged',
@@ -83,6 +84,7 @@ export class VST3BridgeClient extends EventTarget {
   private readonly port: number;
   private ws: WebSocket | null = null;
   private _state: ConnectionState = 'disconnected';
+  private _version: string | null = null;
   private intentionalDisconnect = false;
 
   // Reconnect bookkeeping
@@ -118,6 +120,19 @@ export class VST3BridgeClient extends EventTarget {
     return this._state === 'connected';
   }
 
+  /**
+   * Current connection status (alias for connectionState).
+   * Uses the VST3ConnectionStatus type expected by the store.
+   */
+  get status(): VST3ConnectionStatus {
+    return this._state;
+  }
+
+  /** Companion app version string, available after handshake. */
+  get companionVersion(): string | null {
+    return this._version;
+  }
+
   /** Open a connection to the companion. Auto-reconnects on failure. */
   connect(): void {
     this.intentionalDisconnect = false;
@@ -134,6 +149,7 @@ export class VST3BridgeClient extends EventTarget {
       this.ws.close();
       this.ws = null;
     }
+    this._version = null;
     this.setConnectionState('disconnected');
   }
 
@@ -305,6 +321,45 @@ export class VST3BridgeClient extends EventTarget {
   }
 
   // -----------------------------------------------------------------------
+  // Backward-compat aliases (used by useVST3Connection / useVST3Sync)
+  // -----------------------------------------------------------------------
+
+  /** Create a plugin instance (alias for instantiate, fire-and-forget). */
+  createInstance(pluginUid: string, instanceId: string): void {
+    this.send({ type: 'instantiate', pluginUid, instanceId });
+  }
+
+  /** Destroy a plugin instance (alias for destroy). */
+  destroyInstance(instanceId: string): void {
+    this.destroy(instanceId);
+  }
+
+  // -----------------------------------------------------------------------
+  // Test helpers
+  // -----------------------------------------------------------------------
+
+  /** @internal For testing: simulate a successful connection. */
+  _simulateConnected(version = '1.0.0'): void {
+    this._state = 'connected';
+    this._version = version;
+    this.emitToHandlers('statusChange', { type: 'statusChange', status: 'connected' });
+  }
+
+  /** @internal For testing: simulate a disconnection. */
+  _simulateDisconnected(): void {
+    this._state = 'disconnected';
+    this._version = null;
+    this.emitToHandlers('statusChange', { type: 'statusChange', status: 'disconnected' });
+  }
+
+  /** @internal For testing: simulate an error. */
+  _simulateError(message: string): void {
+    this._state = 'error';
+    this.emitToHandlers('statusChange', { type: 'statusChange', status: 'error' });
+    this.emitToHandlers('error', { type: 'error', message });
+  }
+
+  // -----------------------------------------------------------------------
   // Internal — socket management
   // -----------------------------------------------------------------------
 
@@ -347,8 +402,9 @@ export class VST3BridgeClient extends EventTarget {
     });
 
     // Listen for helloAck to complete the handshake.
-    const onHelloAck = () => {
+    const onHelloAck = (msg: Record<string, unknown>) => {
       this.off('helloAck', onHelloAck);
+      this._version = (msg.version as string) || '0.0.0';
       this.backoffMs = INITIAL_BACKOFF_MS;
       this.setConnectionState('connected');
     };
@@ -459,6 +515,18 @@ export class VST3BridgeClient extends EventTarget {
     if (this._state === state) return;
     this._state = state;
     this.dispatchEvent(new CustomEvent('connectionchange', { detail: { state } }));
+    // Also emit to on('statusChange') handlers for backward compat
+    this.emitToHandlers('statusChange', { type: 'statusChange', status: state });
+  }
+
+  /** Emit a synthetic message to registered on() handlers for a given type. */
+  private emitToHandlers(type: string, msg: Record<string, unknown>): void {
+    const handlers = this.messageHandlers.get(type);
+    if (handlers) {
+      for (const handler of handlers) {
+        handler(msg);
+      }
+    }
   }
 
   private rejectAllPending(reason: string): void {

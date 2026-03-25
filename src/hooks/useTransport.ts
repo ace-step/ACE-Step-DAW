@@ -726,13 +726,21 @@ export function useTransport() {
   useEffect(() => {
     const engine = getAudioEngine();
     engine.setOnEndedCallback(() => {
-      const { loopEnabled, isRecording, loopRecordingEnabled, loopStart } = useTransportStore.getState();
+      const {
+        loopEnabled,
+        isRecording,
+        loopRecordingEnabled,
+        loopStart,
+        loopEnd,
+        playStartTime,
+      } = useTransportStore.getState();
       if (loopEnabled) {
+        const restartTime = loopEnd > loopStart ? loopStart : playStartTime;
         if (isRecording && loopRecordingEnabled) {
           void onLoopCycle();
         }
-        useTransportStore.getState().setCurrentTime(loopStart);
-        play(loopStart);
+        useTransportStore.getState().setCurrentTime(restartTime);
+        play(restartTime);
       } else if (useUIStore.getState().mainView === 'session' && Object.keys(useTransportStore.getState().launchedSessionClips).length > 0) {
         const now = useTransportStore.getState().currentTime;
         play(now);

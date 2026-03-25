@@ -9,7 +9,7 @@ import {
 } from '../store/generationStore';
 import { useModelStore } from '../store/modelStore';
 import { useUIStore } from '../store/uiStore';
-import type { LegoTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
+import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
@@ -2170,4 +2170,314 @@ function extractServerPath(audioPath: string): string | null {
   }
   if (audioPath.startsWith('/') && !audioPath.includes('?')) return audioPath;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Text2Music — Full-song generation
+// ---------------------------------------------------------------------------
+
+export interface Text2MusicRequest {
+  prompt: string;
+  lyrics: string;
+  durationSeconds: number;
+  bpm: number | null;
+  keyScale: string;
+  timeSignature: string;
+  /** Whether to auto-split into stems after generation */
+  splitToStems: boolean;
+  /** Stem count for auto-split (default 4) */
+  stemCount?: 2 | 4 | 6;
+  // Advanced overrides
+  inferenceSteps?: number;
+  guidanceScale?: number;
+  shift?: number;
+  thinking?: boolean;
+  seed?: number;
+  useRandomSeed?: boolean;
+  useCotCaption?: boolean;
+}
+
+export interface Text2MusicResult {
+  /** ID of the mix track created */
+  mixTrackId: string;
+  /** ID of the mix clip created */
+  mixClipId: string;
+  /** Audio blob of the generated mix */
+  audioBlob: Blob;
+  /** Stem track IDs (if splitToStems was true) */
+  stemTrackIds?: string[];
+  /** Whether generation succeeded */
+  succeeded: boolean;
+  /** Error message if failed */
+  errorMessage?: string;
+}
+
+/**
+ * Generate a full mixed song from a text prompt using the text2music model.
+ *
+ * Flow:
+ * 1. Ensure text2music model + LM are loaded
+ * 2. Create a 'mix' track and clip
+ * 3. Submit text2music task to backend
+ * 4. Poll for completion, download audio
+ * 5. Optionally split into stems via stem separation
+ */
+export async function generateText2Music(request: Text2MusicRequest): Promise<Text2MusicResult> {
+  const store = useProjectStore.getState();
+  const genStore = useGenerationStore.getState();
+  const modelStore = useModelStore.getState();
+  const project = store.project;
+
+  if (!project) {
+    throw new Error('No project open');
+  }
+
+  // Step 1: Ensure text2music model + LM are loaded
+  await modelStore.ensureModelForIntent('full-song');
+
+  // Step 2: Create mix track and clip
+  const mixTrack = store.addTrack('custom', 'mix', {
+    displayName: 'Full Mix',
+    color: '#8b5cf6',
+  });
+  if (!mixTrack) {
+    throw new Error('Failed to create mix track');
+  }
+
+  const clip = store.addClip(mixTrack.id, {
+    startTime: 0,
+    duration: request.durationSeconds,
+    prompt: request.prompt,
+    lyrics: request.lyrics,
+    globalCaption: request.prompt, // For text2music, the prompt IS the global caption
+  });
+  if (!clip) {
+    throw new Error('Failed to create mix clip');
+  }
+  const clipId = clip.id;
+
+  // Step 3: Build and submit task
+  const jobId = uuidv4();
+  genStore.addJob({
+    id: jobId,
+    clipId,
+    trackName: 'Full Mix',
+    status: 'queued',
+    progress: 'Queued',
+    stage: 'Queued',
+    progressPercent: null,
+    etaSeconds: null,
+    etaConfidence: 'none',
+  });
+  store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
+
+  try {
+    const defaults = project.generationDefaults;
+    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+
+    const params: Text2MusicTaskParams = {
+      task_type: 'text2music',
+      prompt: request.prompt,
+      lyrics: request.lyrics,
+      audio_duration: request.durationSeconds,
+      bpm: request.bpm,
+      key_scale: request.keyScale || '',
+      time_signature: request.timeSignature || '',
+      inference_steps: request.inferenceSteps ?? defaults.inferenceSteps,
+      guidance_scale: request.guidanceScale ?? defaults.guidanceScale,
+      shift: request.shift ?? defaults.shift,
+      batch_size: 1,
+      audio_format: 'wav',
+      thinking: request.thinking ?? defaults.thinking,
+      model: activeModel,
+    };
+
+    if (request.useRandomSeed === false && request.seed !== undefined) {
+      params.seed = request.seed;
+      params.use_random_seed = false;
+    } else if (request.useRandomSeed === true) {
+      params.use_random_seed = true;
+    }
+
+    if (request.useCotCaption !== undefined) {
+      params.use_cot_caption = request.useCotCaption;
+    }
+
+    // Submit — text2music doesn't need source audio, send silence as placeholder
+    const jobStartedAt = Date.now();
+    genStore.updateJob(jobId, {
+      status: 'generating',
+      startedAt: jobStartedAt,
+      progress: 'Submitting...',
+      stage: 'Submitting request',
+    });
+    store.updateClipStatus(clipId, 'generating');
+
+    const silenceBlob = generateSilenceWav(request.durationSeconds);
+    const releaseResp = await api.releaseLegoTask(silenceBlob, params);
+    const taskId = releaseResp.task_id;
+    genStore.updateJob(jobId, { taskId });
+
+    // Step 4: Poll for completion
+    const startTime = Date.now();
+    let resultAudioPath: string | null = null;
+    let firstResult: TaskResultItem | null = null;
+
+    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+      await sleep(POLL_INTERVAL_MS);
+
+      const entries = await api.queryResult([taskId]);
+      const entry = entries?.[0];
+      if (!entry) continue;
+
+      const { stage, progressPercent } = extractProgressMetadata(entry);
+
+      {
+        const currentJob = useGenerationStore.getState().jobs.find((j) => j.id === jobId);
+        useGenerationStore.getState().updateJob(jobId, {
+          ...deriveGenerationJobProgress(currentJob, {
+            status: 'generating',
+            progress: entry.progress_text || 'Generating...',
+            stage,
+            progressPercent,
+          }),
+        });
+      }
+
+      if (entry.status === 1) {
+        const resultItems: TaskResultItem[] = JSON.parse(entry.result);
+        firstResult = resultItems?.[0] ?? null;
+        resultAudioPath = firstResult?.file ?? null;
+        break;
+      } else if (entry.status === 2) {
+        throw new Error(`Generation failed: ${entry.result}`);
+      }
+    }
+
+    if (!resultAudioPath) {
+      throw new Error('Generation timed out');
+    }
+
+    // Download audio
+    genStore.updateJob(jobId, {
+      status: 'processing',
+      progress: 'Downloading audio...',
+      stage: 'Downloading audio',
+    });
+    store.updateClipStatus(clipId, 'processing');
+
+    const audioBlob = await api.downloadAudio(resultAudioPath);
+    logger.debug(`Text2Music: downloaded audio, size=${audioBlob.size}`);
+
+    // Store audio
+    const audioKey = await saveAudioBlob(project.id, clipId, 'isolated', audioBlob);
+
+    // Compute waveform
+    const engine = getAudioEngine();
+    const audioBuffer = await engine.decodeAudioData(audioBlob);
+    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+
+    // Build inferred metadata
+    const inferredMetas: InferredMetas | undefined = firstResult
+      ? {
+          bpm: firstResult.metas?.bpm,
+          keyScale: firstResult.metas?.keyscale,
+          timeSignature: firstResult.metas?.timesignature,
+          genres: firstResult.metas?.genres,
+          seed: firstResult.seed_value,
+          ditModel: firstResult.dit_model,
+        }
+      : undefined;
+
+    // Update clip as ready
+    useProjectStore.getState().updateClipStatus(clipId, 'ready', {
+      isolatedAudioKey: audioKey,
+      waveformPeaks: peaks,
+      inferredMetas,
+      audioDuration: request.durationSeconds,
+      audioOffset: 0,
+    });
+
+    genStore.updateJob(jobId, {
+      status: 'done',
+      progress: 'Done',
+      stage: 'Complete',
+    });
+
+    // Seed project global caption if empty
+    if (request.prompt && !project.globalCaption) {
+      useProjectStore.getState().updateProject({ globalCaption: request.prompt });
+    }
+
+    toastSuccess('Full song generated');
+
+    // Step 5: Optional stem separation
+    let stemTrackIds: string[] | undefined;
+    if (request.splitToStems) {
+      try {
+        toastInfo('Splitting into stems...');
+        const { separateClipAudioToStems } = await import('./stemSeparation');
+        const stems = await separateClipAudioToStems({
+          clipId,
+          sourceBlob: audioBlob,
+          stemCount: request.stemCount ?? 4,
+          sourceLabel: 'Full Mix',
+        });
+
+        stemTrackIds = [];
+        const currentProject = useProjectStore.getState().project;
+        if (currentProject) {
+          for (const stem of stems) {
+            const stemTrack = useProjectStore.getState().addTrack(stem.trackName, 'stems', {
+              displayName: stem.displayName,
+              color: stem.color,
+            });
+            if (stemTrack) {
+              const stemClip = useProjectStore.getState().addClip(stemTrack.id, {
+                startTime: 0,
+                duration: stem.audioDuration,
+                prompt: request.prompt,
+                lyrics: '',
+              });
+              if (stemClip) {
+                const stemAudioKey = await saveAudioBlob(currentProject.id, stemClip.id, 'isolated', stem.audioBlob);
+                useProjectStore.getState().updateClipStatus(stemClip.id, 'ready', {
+                  isolatedAudioKey: stemAudioKey,
+                  waveformPeaks: stem.waveformPeaks,
+                  audioDuration: stem.audioDuration,
+                  audioOffset: 0,
+                });
+              }
+              stemTrackIds.push(stemTrack.id);
+            }
+          }
+        }
+        toastSuccess(`Split into ${stems.length} stems`);
+      } catch (splitError) {
+        const msg = splitError instanceof Error ? splitError.message : 'Stem separation failed';
+        toastError(`Stem separation failed: ${msg}`);
+        // Don't fail the whole operation — the mix is still available
+      }
+    }
+
+    return {
+      mixTrackId: mixTrack.id,
+      mixClipId: clipId,
+      audioBlob,
+      stemTrackIds,
+      succeeded: true,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
+    genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
+    toastError(`Full song generation failed: ${message}`);
+    return {
+      mixTrackId: mixTrack.id,
+      mixClipId: clipId,
+      audioBlob: new Blob(),
+      succeeded: false,
+      errorMessage: message,
+    };
+  }
 }

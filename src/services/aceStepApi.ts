@@ -271,7 +271,7 @@ async function releaseTask(
 
 export async function releaseLegoTask(
   srcAudioBlob: Blob,
-  params: LegoTaskParams | CoverTaskParams | RepaintTaskParams,
+  params: LegoTaskParams | Text2MusicTaskParams | CoverTaskParams | RepaintTaskParams,
 ): Promise<ReleaseTaskResponse> {
   return releaseTask(srcAudioBlob, params);
 }

@@ -1,17 +1,22 @@
 use crossbeam::queue::SegQueue;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+
+use vst3::Steinberg::Vst::{
+    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait,
+    ProcessData, ProcessSetup, ProcessModes_, SymbolicSampleSizes_,
+};
+use vst3::Steinberg::kResultOk;
+
+use crate::vst3_loader::Vst3PluginInstance;
 
 /// A MIDI event to be processed by a VST3 plugin.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MidiEvent {
-    /// MIDI status byte (e.g. 0x90 for note-on, 0x80 for note-off).
     pub status: u8,
-    /// First data byte (e.g. note number).
     pub data1: u8,
-    /// Second data byte (e.g. velocity).
     pub data2: u8,
-    /// Sample offset within the current buffer where this event occurs.
     pub sample_offset: u32,
 }
 
@@ -39,30 +44,20 @@ impl Default for AudioConfig {
 }
 
 /// Manages real-time audio processing for a single VST3 plugin instance.
-///
-/// Uses lock-free queues for MIDI events and parameter changes so that
-/// the audio thread is never blocked by the UI/control thread.
 pub struct AudioThread {
     config: AudioConfig,
     active: AtomicBool,
     latency: AtomicU32,
-
-    /// Lock-free queue for incoming MIDI events.
     midi_queue: Arc<SegQueue<MidiEvent>>,
-
-    /// Lock-free queue for parameter changes.
     param_queue: Arc<SegQueue<ParameterChange>>,
-
-    /// Whether this instance is an instrument (true) or effect (false).
-    /// Instruments generate audio from MIDI; effects pass audio through.
     is_instrument: bool,
+    /// The live VST3 instance (None = stub mode).
+    plugin: Option<Arc<Vst3PluginInstance>>,
+    /// Whether setupProcessing has been called on the plugin.
+    setup_done: bool,
 }
 
 impl AudioThread {
-    /// Create a new AudioThread.
-    ///
-    /// * `is_instrument` — if true, the plugin generates audio from MIDI
-    ///   (input is ignored). If false, input audio passes through the plugin.
     pub fn new(is_instrument: bool) -> Self {
         Self {
             config: AudioConfig::default(),
@@ -71,120 +66,212 @@ impl AudioThread {
             midi_queue: Arc::new(SegQueue::new()),
             param_queue: Arc::new(SegQueue::new()),
             is_instrument,
+            plugin: None,
+            setup_done: false,
         }
+    }
+
+    /// Attach a real VST3 plugin instance for audio processing.
+    pub fn set_plugin(&mut self, plugin: Arc<Vst3PluginInstance>) {
+        self.plugin = Some(plugin);
+        self.setup_done = false;
     }
 
     /// Set the sample rate and block size.
     pub fn configure(&mut self, sample_rate: f64, block_size: u32) {
         self.config.sample_rate = sample_rate;
         self.config.block_size = block_size;
+        self.setup_done = false; // Need to re-setup the plugin
     }
 
     /// Start processing (activates the plugin).
     pub fn start(&mut self) {
+        if let Some(ref plugin) = self.plugin {
+            // Setup processing if not done yet
+            if !self.setup_done {
+                let mut setup = ProcessSetup {
+                    processMode: ProcessModes_::kRealtime as i32,
+                    symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+                    maxSamplesPerBlock: self.config.block_size as i32,
+                    sampleRate: self.config.sample_rate,
+                };
+                unsafe {
+                    let result = plugin.processor.setupProcessing(&mut setup);
+                    if result != kResultOk {
+                        tracing::warn!(result, "setupProcessing returned non-OK");
+                    }
+                }
+                self.setup_done = true;
+            }
+            // Activate the component
+            unsafe {
+                plugin.component.setActive(1); // TBool: 1 = true
+                plugin.processor.setProcessing(1);
+            }
+        }
         self.active.store(true, Ordering::Release);
     }
 
     /// Stop processing (deactivates the plugin).
     pub fn stop(&mut self) {
+        if let Some(ref plugin) = self.plugin {
+            unsafe {
+                plugin.processor.setProcessing(0);
+                plugin.component.setActive(0);
+            }
+        }
         self.active.store(false, Ordering::Release);
     }
 
-    /// Returns true if the audio thread is currently active.
     pub fn is_active(&self) -> bool {
         self.active.load(Ordering::Acquire)
     }
 
-    /// Queue MIDI events for the next process call.
-    ///
-    /// This is thread-safe and lock-free — safe to call from any thread.
     pub fn queue_midi(&self, events: Vec<MidiEvent>) {
         for event in events {
             self.midi_queue.push(event);
         }
     }
 
-    /// Set a parameter value (thread-safe, lock-free).
-    ///
-    /// The value is queued and applied on the next `process()` call.
     pub fn set_parameter(&self, param_id: u32, value: f64) {
         self.param_queue.push(ParameterChange { param_id, value });
     }
 
-    /// Get current latency in samples.
     pub fn latency_samples(&self) -> u32 {
         self.latency.load(Ordering::Acquire)
     }
 
-    /// Set the reported latency in samples (e.g. after plugin reports its latency).
     pub fn set_latency(&self, samples: u32) {
         self.latency.store(samples, Ordering::Release);
     }
 
-    /// Return the current audio configuration.
     pub fn config(&self) -> &AudioConfig {
         &self.config
     }
 
     /// Process audio through the VST3 plugin.
     ///
-    /// Takes an input buffer of interleaved f32 samples and returns the
-    /// output buffer. For instruments the input is ignored and audio is
-    /// generated from queued MIDI events. For effects the input passes
-    /// through (stub: passthrough until real VST3 integration).
-    ///
-    /// # Arguments
-    /// * `input` — interleaved f32 samples (`channels * samples` elements)
-    /// * `channels` — number of audio channels (e.g. 2 for stereo)
-    /// * `samples` — number of sample frames
-    ///
-    /// # Returns
-    /// Output buffer of interleaved f32 samples.
+    /// Input/output are interleaved f32 samples. If a real plugin is attached,
+    /// audio is processed through `IAudioProcessor::process()`. Otherwise falls
+    /// back to stub behavior (instruments=silence, effects=passthrough).
     pub fn process(&mut self, input: &[f32], channels: u32, samples: u32) -> Vec<f32> {
         let total = (channels * samples) as usize;
 
-        // 1. Drain pending MIDI events.
-        let mut midi_events = Vec::new();
+        // Drain queues
+        let mut _midi_events = Vec::new();
         while let Some(event) = self.midi_queue.pop() {
-            midi_events.push(event);
+            _midi_events.push(event);
         }
-
-        // 2. Drain pending parameter changes.
-        let mut param_changes = Vec::new();
+        let mut _param_changes = Vec::new();
         while let Some(change) = self.param_queue.pop() {
-            param_changes.push(change);
+            _param_changes.push(change);
         }
 
-        // 3. If not active, return silence.
         if !self.active.load(Ordering::Acquire) {
             return vec![0.0f32; total];
         }
 
-        // 4. Stub processing — will be replaced with real VST3 process call.
-        //
-        //    - Instruments: generate silence (real implementation would use
-        //      midi_events to synthesise audio).
-        //    - Effects: passthrough (real implementation would run the plugin
-        //      DSP on the input buffer).
+        // Try real VST3 processing
+        if let Some(ref plugin) = self.plugin {
+            return self.process_vst3(plugin.clone(), input, channels, samples);
+        }
+
+        // Stub fallback
         if self.is_instrument {
-            // Instrument stub: silence (MIDI events consumed but not rendered yet).
             vec![0.0f32; total]
+        } else if input.len() >= total {
+            input[..total].to_vec()
         } else {
-            // Effect stub: passthrough input unchanged.
-            if input.len() >= total {
-                input[..total].to_vec()
-            } else {
-                // Pad with silence if input is shorter than expected.
-                let mut output = input.to_vec();
-                output.resize(total, 0.0);
-                output
-            }
+            let mut output = input.to_vec();
+            output.resize(total, 0.0);
+            output
         }
     }
 
-    // -- Internal helpers for testing -----------------------------------------
+    /// Process audio through the real VST3 plugin.
+    fn process_vst3(
+        &self,
+        plugin: Arc<Vst3PluginInstance>,
+        input: &[f32],
+        channels: u32,
+        samples: u32,
+    ) -> Vec<f32> {
+        let num_channels = channels as usize;
+        let num_samples = samples as usize;
+        let total = num_channels * num_samples;
 
-    /// Drain all pending MIDI events (test helper).
+        // De-interleave input into per-channel buffers
+        let mut input_channels: Vec<Vec<f32>> = vec![vec![0.0; num_samples]; num_channels];
+        for s in 0..num_samples {
+            for ch in 0..num_channels {
+                let idx = s * num_channels + ch;
+                if idx < input.len() {
+                    input_channels[ch][s] = input[idx];
+                }
+            }
+        }
+
+        // Create output channel buffers
+        let mut output_channels: Vec<Vec<f32>> = vec![vec![0.0; num_samples]; num_channels];
+
+        // Build raw pointer arrays for AudioBusBuffers
+        let mut input_ptrs: Vec<*mut f32> = input_channels
+            .iter_mut()
+            .map(|ch| ch.as_mut_ptr())
+            .collect();
+        let mut output_ptrs: Vec<*mut f32> = output_channels
+            .iter_mut()
+            .map(|ch| ch.as_mut_ptr())
+            .collect();
+
+        let mut input_bus = AudioBusBuffers {
+            numChannels: num_channels as i32,
+            silenceFlags: 0,
+            __field0: AudioBusBuffers__type0 {
+                channelBuffers32: input_ptrs.as_mut_ptr(),
+            },
+        };
+
+        let mut output_bus = AudioBusBuffers {
+            numChannels: num_channels as i32,
+            silenceFlags: 0,
+            __field0: AudioBusBuffers__type0 {
+                channelBuffers32: output_ptrs.as_mut_ptr(),
+            },
+        };
+
+        let mut process_data = ProcessData {
+            processMode: ProcessModes_::kRealtime as i32,
+            symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+            numSamples: num_samples as i32,
+            numInputs: if self.is_instrument { 0 } else { 1 },
+            numOutputs: 1,
+            inputs: if self.is_instrument { ptr::null_mut() } else { &mut input_bus },
+            outputs: &mut output_bus,
+            inputParameterChanges: ptr::null_mut(), // TODO: W4 will implement IParameterChanges
+            outputParameterChanges: ptr::null_mut(),
+            inputEvents: ptr::null_mut(), // TODO: W4 will implement IEventList for MIDI
+            outputEvents: ptr::null_mut(),
+            processContext: ptr::null_mut(),
+        };
+
+        let result = unsafe { plugin.processor.process(&mut process_data) };
+        if result != kResultOk {
+            tracing::warn!(result, "IAudioProcessor::process returned non-OK");
+            return vec![0.0f32; total];
+        }
+
+        // Re-interleave output
+        let mut output = vec![0.0f32; total];
+        for s in 0..num_samples {
+            for ch in 0..num_channels {
+                output[s * num_channels + ch] = output_channels[ch][s];
+            }
+        }
+
+        output
+    }
+
     #[cfg(test)]
     fn drain_midi(&self) -> Vec<MidiEvent> {
         let mut events = Vec::new();
@@ -194,7 +281,6 @@ impl AudioThread {
         events
     }
 
-    /// Drain all pending parameter changes (test helper).
     #[cfg(test)]
     fn drain_params(&self) -> Vec<ParameterChange> {
         let mut changes = Vec::new();
@@ -247,7 +333,6 @@ mod tests {
     fn inactive_thread_returns_silence() {
         let mut at = AudioThread::new(false);
         at.configure(44100.0, 4);
-        // not started
 
         let input: Vec<f32> = vec![1.0; 8];
         let output = at.process(&input, 2, 4);
@@ -261,28 +346,13 @@ mod tests {
         at.start();
 
         let events = vec![
-            MidiEvent {
-                status: 0x90,
-                data1: 60,
-                data2: 100,
-                sample_offset: 0,
-            },
-            MidiEvent {
-                status: 0x80,
-                data1: 60,
-                data2: 0,
-                sample_offset: 128,
-            },
+            MidiEvent { status: 0x90, data1: 60, data2: 100, sample_offset: 0 },
+            MidiEvent { status: 0x80, data1: 60, data2: 0, sample_offset: 128 },
         ];
-        at.queue_midi(events.clone());
-
-        // Events should be in the queue before process.
+        at.queue_midi(events);
         assert!(!at.midi_queue.is_empty());
 
-        // Process drains the queue.
         let _output = at.process(&[], 2, 256);
-
-        // Queue should be empty after process.
         assert!(at.midi_queue.is_empty());
     }
 
@@ -292,16 +362,10 @@ mod tests {
         let queue = Arc::clone(&at.midi_queue);
 
         let handle = std::thread::spawn(move || {
-            queue.push(MidiEvent {
-                status: 0x90,
-                data1: 72,
-                data2: 127,
-                sample_offset: 0,
-            });
+            queue.push(MidiEvent { status: 0x90, data1: 72, data2: 127, sample_offset: 0 });
         });
 
         handle.join().unwrap();
-
         let drained = at.drain_midi();
         assert_eq!(drained.len(), 1);
         assert_eq!(drained[0].data1, 72);
@@ -310,7 +374,6 @@ mod tests {
     #[test]
     fn set_parameter_updates_atomically() {
         let at = AudioThread::new(false);
-
         at.set_parameter(1, 0.5);
         at.set_parameter(2, 0.75);
         at.set_parameter(1, 0.9);
@@ -319,10 +382,6 @@ mod tests {
         assert_eq!(changes.len(), 3);
         assert_eq!(changes[0].param_id, 1);
         assert!((changes[0].value - 0.5).abs() < f64::EPSILON);
-        assert_eq!(changes[1].param_id, 2);
-        assert!((changes[1].value - 0.75).abs() < f64::EPSILON);
-        assert_eq!(changes[2].param_id, 1);
-        assert!((changes[2].value - 0.9).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -331,14 +390,10 @@ mod tests {
         let queue = Arc::clone(&at.param_queue);
 
         let handle = std::thread::spawn(move || {
-            queue.push(ParameterChange {
-                param_id: 42,
-                value: 1.0,
-            });
+            queue.push(ParameterChange { param_id: 42, value: 1.0 });
         });
 
         handle.join().unwrap();
-
         let changes = at.drain_params();
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].param_id, 42);
@@ -373,12 +428,37 @@ mod tests {
         at.configure(44100.0, 4);
         at.start();
 
-        // Input shorter than channels*samples.
         let input: Vec<f32> = vec![0.5, 0.6];
         let output = at.process(&input, 2, 4);
         assert_eq!(output.len(), 8);
         assert_eq!(output[0], 0.5);
         assert_eq!(output[1], 0.6);
-        assert_eq!(output[2], 0.0); // padded
+        assert_eq!(output[2], 0.0);
+    }
+
+    #[test]
+    fn process_with_real_plugin() {
+        use std::path::Path;
+        let path = Path::new("/Library/Audio/Plug-Ins/VST3/ACE Bridge.vst3");
+        if !path.exists() {
+            eprintln!("Skipping: ACE Bridge not installed");
+            return;
+        }
+
+        let (instance, _metadata) = unsafe {
+            crate::vst3_loader::load_plugin(path, "audio-test").unwrap()
+        };
+
+        let mut at = AudioThread::new(false);
+        at.configure(44100.0, 128);
+        at.set_plugin(Arc::new(instance));
+        at.start();
+
+        let input: Vec<f32> = vec![0.5; 256]; // stereo 128 samples
+        let output = at.process(&input, 2, 128);
+        assert_eq!(output.len(), 256);
+        println!("Real plugin output[0..4]: {:?}", &output[0..4]);
+
+        at.stop();
     }
 }

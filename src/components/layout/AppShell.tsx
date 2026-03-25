@@ -64,6 +64,16 @@ function EditorShell() {
   const bounceInPlaceTrackId = useUIStore((s) => s.bounceInPlaceTrackId);
   const showKeyboardShortcutsDialog = useUIStore((s) => s.showKeyboardShortcutsDialog);
   const showShortcutEditorDialog = useUIStore((s) => s.showShortcutEditorDialog);
+  const showMixer = useUIStore((s) => s.showMixer);
+  const showSmartControls = useUIStore((s) => s.showSmartControls);
+  const openSequencerTrackId = useUIStore((s) => s.openSequencerTrackId);
+  const openDrumMachineTrackId = useUIStore((s) => s.openDrumMachineTrackId);
+  const strudelPanelOpen = useUIStore((s) => s.strudelPanelOpen);
+  const openPianoRollTrackId = useUIStore((s) => s.openPianoRollTrackId);
+  const openEffectChainTrackId = useUIStore((s) => s.openEffectChainTrackId);
+  const openMidiEffectChainTrackId = useUIStore((s) => s.openMidiEffectChainTrackId);
+  const showModelLibrary = useUIStore((s) => s.showModelLibrary);
+  const showVirtualKeyboard = useUIStore((s) => s.showVirtualKeyboard);
 
   const hasBlockingDialog =
     showNewProjectDialog ||
@@ -121,18 +131,18 @@ function EditorShell() {
 
       <StatusBar />
 
-      {project && <SmartControlsPanel />}
-      {project && <Suspense fallback={null}><SequencerEditor /></Suspense>}
-      {project && <Suspense fallback={null}><DrumMachineEditor /></Suspense>}
-      {project && <Suspense fallback={null}><PianoRoll /></Suspense>}
-      {project && <Suspense fallback={null}><StrudelEditor /></Suspense>}
-      {project && <Suspense fallback={null}><EffectChain /></Suspense>}
-      {project && <Suspense fallback={null}><MixerPanel /></Suspense>}
+      {project && showSmartControls && <SmartControlsPanel />}
+      {project && openSequencerTrackId && <Suspense fallback={null}><SequencerEditor /></Suspense>}
+      {project && openDrumMachineTrackId && <Suspense fallback={null}><DrumMachineEditor /></Suspense>}
+      {project && openPianoRollTrackId && <Suspense fallback={null}><PianoRoll /></Suspense>}
+      {project && strudelPanelOpen && <Suspense fallback={null}><StrudelEditor /></Suspense>}
+      {project && (openEffectChainTrackId || openMidiEffectChainTrackId) && <Suspense fallback={null}><EffectChain /></Suspense>}
+      {project && showMixer && <Suspense fallback={null}><MixerPanel /></Suspense>}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
       {project && <VST3SidePanel />}
-      {project && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
-      {project && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
+      {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
+      {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
       {project && <AddLayerPanel />}
       <ToastContainer />
       <UndoHistoryPanel />

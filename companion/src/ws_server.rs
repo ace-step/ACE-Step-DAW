@@ -180,13 +180,18 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             instance_id,
             param_id,
             value,
-        } => {
-            info!(instance_id, param_id, value, "SetParam (stub)");
-            OutgoingMessage::ParamChanged {
+        } => match state.host.set_parameter(&instance_id, param_id, value) {
+            Ok(()) => OutgoingMessage::ParamChanged {
                 instance_id,
                 param_id,
                 value,
-            }
+            },
+            Err(e) => OutgoingMessage::Error {
+                req_id: None,
+                instance_id: Some(instance_id),
+                code: "set_param_error".into(),
+                message: e.to_string(),
+            },
         }
 
         IncomingMessage::Midi {
@@ -218,26 +223,54 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         }
 
         IncomingMessage::GetState { instance_id } => {
-            info!(instance_id, "GetState (stub)");
-            OutgoingMessage::StateData {
-                instance_id,
-                data: base64::Engine::encode(
-                    &base64::engine::general_purpose::STANDARD,
-                    b"stub-state-data",
-                ),
+            match state.host.get_state(&instance_id) {
+                Ok(bytes) => OutgoingMessage::StateData {
+                    instance_id,
+                    data: base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        &bytes,
+                    ),
+                },
+                Err(e) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "get_state_error".into(),
+                    message: e.to_string(),
+                },
             }
         }
 
         IncomingMessage::SetState {
             instance_id,
-            data: _,
+            data,
         } => {
-            info!(instance_id, "SetState (stub)");
-            OutgoingMessage::Error {
-                req_id: None,
-                instance_id: Some(instance_id),
-                code: "ok".into(),
-                message: "State set (stub)".into(),
+            let bytes = match base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                &data,
+            ) {
+                Ok(b) => b,
+                Err(e) => {
+                    return OutgoingMessage::Error {
+                        req_id: None,
+                        instance_id: Some(instance_id),
+                        code: "set_state_error".into(),
+                        message: format!("Invalid base64 data: {e}"),
+                    };
+                }
+            };
+            match state.host.set_state(&instance_id, &bytes) {
+                Ok(()) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "ok".into(),
+                    message: "State set".into(),
+                },
+                Err(e) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "set_state_error".into(),
+                    message: e.to_string(),
+                },
             }
         }
 
@@ -257,21 +290,33 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         IncomingMessage::SetProcessing {
             instance_id,
             active,
-        } => {
-            info!(instance_id, active, "SetProcessing (stub)");
-            OutgoingMessage::Error {
+        } => match state.host.set_processing(&instance_id, active) {
+            Ok(()) => OutgoingMessage::Error {
                 req_id: None,
                 instance_id: Some(instance_id),
                 code: "ok".into(),
-                message: format!("Processing set to {active} (stub)"),
-            }
+                message: format!("Processing set to {active}"),
+            },
+            Err(e) => OutgoingMessage::Error {
+                req_id: None,
+                instance_id: Some(instance_id),
+                code: "set_processing_error".into(),
+                message: e.to_string(),
+            },
         }
 
         IncomingMessage::GetLatency { instance_id } => {
-            info!(instance_id, "GetLatency (stub)");
-            OutgoingMessage::LatencyInfo {
-                instance_id,
-                samples: 0,
+            match state.host.get_latency(&instance_id) {
+                Ok(samples) => OutgoingMessage::LatencyInfo {
+                    instance_id,
+                    samples,
+                },
+                Err(e) => OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "get_latency_error".into(),
+                    message: e.to_string(),
+                },
             }
         }
 
@@ -370,6 +415,8 @@ mod tests {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
         };
+        // Must instantiate first so the instance exists
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
         let resp = handle_message(
             IncomingMessage::GetLatency {
                 instance_id: "inst-1".into(),

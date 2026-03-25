@@ -256,7 +256,7 @@ describe('GenerationSidePanel', () => {
   it('switches between text-to-music, multi-track, and history inside the same side panel', () => {
     render(<GenerationSidePanel />);
 
-    expect(screen.getByRole('button', { name: 'Full Song' })).toBeInTheDocument();
+    expect(screen.getByTestId('generation-panel-tab-text-to-music')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('generation-panel-tab-multi-track'));
     expect(screen.getByTestId('multi-track-generation-section')).toBeInTheDocument();
@@ -265,6 +265,7 @@ describe('GenerationSidePanel', () => {
     expect(screen.getByTestId('generation-history-section')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('generation-panel-tab-text-to-music'));
+    // Default intent is single-track, so target track selector is visible
     expect(screen.getByRole('combobox', { name: 'Generation target track' })).toBeInTheDocument();
   });
 

@@ -18,6 +18,9 @@ import { computeEta, formatEtaDisplay } from '../../utils/generationProgress';
 import { MultiTrackGenerateSection } from './MultiTrackGenerateSection';
 import { GenerationHistorySection } from './GenerationHistorySection';
 import { GenerationSettingsSection } from './GenerationSettingsSection';
+import { IntentSelector } from './IntentSelector';
+import { FullSongForm } from './FullSongForm';
+import type { GenerationIntent } from '../../types/api';
 
 const VARIATION_STATUS_LABELS: Record<VariationStatus, string> = {
   pending: 'Waiting',
@@ -98,6 +101,7 @@ export function GenerationSidePanel() {
   const [styleTagsInput, setStyleTagsInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [renderPanel, setRenderPanel] = useState(show);
+  const [generationIntent, setGenerationIntent] = useState<GenerationIntent>('single-track');
 
   const stemsTracks = useMemo(
     () => project?.tracks.filter((track) => track.trackType === 'stems') ?? [],
@@ -459,8 +463,17 @@ export function GenerationSidePanel() {
         <GenerationHistorySection />
       ) : generationPanelView === 'settings' ? (
         <GenerationSettingsSection active={generationPanelView === 'settings'} />
+      ) : generationIntent === 'full-song' ? (
+        <>
+          <div className="px-3 pt-3">
+            <IntentSelector value={generationIntent} onChange={setGenerationIntent} disabled={isSessionActive} />
+          </div>
+          <FullSongForm />
+        </>
       ) : (
         <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
+          <IntentSelector value={generationIntent} onChange={setGenerationIntent} disabled={isSessionActive} />
+
           {statusMessage && (
           <div
             className={`rounded-md border px-3 py-2 text-xs ${

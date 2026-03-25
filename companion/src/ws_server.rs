@@ -30,6 +30,7 @@ pub struct AppState {
     pub param_collector: ParamChangeCollector,
     pub audio_streams: AudioStreamManager,
     pub preset_storage: PresetStorage,
+    pub gui_manager: std::sync::Mutex<crate::gui_manager::GuiManager>,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -51,6 +52,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         param_collector: ParamChangeCollector::new(),
         audio_streams,
         preset_storage,
+        gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::new()),
     });
 
     // Wrap the receiver in an Arc<Mutex> so it can be shared across connections
@@ -279,17 +281,35 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         }
 
         IncomingMessage::OpenEditor { instance_id } => {
-            info!(instance_id, "OpenEditor (stub)");
-            OutgoingMessage::EditorOpened {
-                instance_id,
-                width: 800,
-                height: 600,
+            // Get the IEditController from the live VST3 instance
+            match state.host.get_controller(&instance_id) {
+                Some(controller) => {
+                    let mut gui = state.gui_manager.lock().unwrap();
+                    match gui.open_editor_with_controller(&instance_id, &controller) {
+                        Ok((width, height)) => {
+                            info!(instance_id, width, height, "Editor opened");
+                            OutgoingMessage::EditorOpened {
+                                instance_id,
+                                width,
+                                height,
+                            }
+                        }
+                        Err(e) => instance_error(instance_id, "open_editor_error", e),
+                    }
+                }
+                None => instance_error(instance_id, "open_editor_error", "Plugin instance not found or not live".into()),
             }
         }
 
         IncomingMessage::CloseEditor { instance_id } => {
-            info!(instance_id, "CloseEditor (stub)");
-            OutgoingMessage::EditorClosed { instance_id }
+            let mut gui = state.gui_manager.lock().unwrap();
+            match gui.close_editor(&instance_id) {
+                Ok(()) => {
+                    info!(instance_id, "Editor closed");
+                    OutgoingMessage::EditorClosed { instance_id }
+                }
+                Err(e) => instance_error(instance_id, "close_editor_error", e),
+            }
         }
 
         IncomingMessage::GetState { instance_id } => {
@@ -530,6 +550,7 @@ mod tests {
             param_collector: ParamChangeCollector::new(),
             audio_streams: AudioStreamManager::new(),
             preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+            gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::with_stub_backend()),
         };
         (dir, state)
     }
@@ -545,6 +566,7 @@ mod tests {
             param_collector: ParamChangeCollector::new(),
             audio_streams,
             preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+            gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::with_stub_backend()),
         };
         (dir, state, rx)
     }

@@ -201,6 +201,12 @@ impl PluginHost {
         })
     }
 
+    /// Get the IEditController for an instance (for opening the native GUI editor).
+    pub fn get_controller(&self, instance_id: &str) -> Option<vst3::ComPtr<vst3::Steinberg::Vst::IEditController>> {
+        let guard = self.live_instances.lock().unwrap();
+        guard.get(instance_id).and_then(|inst| inst.controller.clone())
+    }
+
     /// Set processing active/inactive via IAudioProcessor::setProcessing().
     pub fn set_processing(&self, instance_id: &str, active: bool) -> Result<()> {
         self.with_live_instance(instance_id, (), |instance| {

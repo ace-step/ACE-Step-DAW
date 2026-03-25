@@ -163,8 +163,8 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     });
   },
 
-  openEditor: (_instanceId: string) => {
-    // Bridge tells companion to show native window
+  openEditor: (instanceId: string) => {
+    _getBridgeClient().send({ type: 'openEditor', instanceId });
   },
 
   setParameter: (instanceId: string, paramId: number, value: number) => {

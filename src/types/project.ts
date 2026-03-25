@@ -4,7 +4,7 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
+export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';

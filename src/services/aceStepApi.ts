@@ -1,5 +1,6 @@
 import type {
   LegoTaskParams,
+  Text2MusicTaskParams,
   CoverTaskParams,
   RepaintTaskParams,
   StemSeparationTaskParams,
@@ -10,10 +11,12 @@ import type {
   StatsResponse,
   InitModelRequest,
   InitModelResponse,
+  ModelCategory,
 } from '../types/api';
 
 export type AceStepTaskParams =
   | LegoTaskParams
+  | Text2MusicTaskParams
   | CoverTaskParams
   | RepaintTaskParams
   | StemSeparationTaskParams;
@@ -144,6 +147,25 @@ export function modelSupportsTaskType(taskType: string): boolean {
   if (!loaded) return true;
   if (!loaded.supported_task_types || loaded.supported_task_types.length === 0) return true;
   return loaded.supported_task_types.includes(taskType);
+}
+
+/**
+ * Infer a model's category from its metadata.
+ * Priority: explicit `category` field → heuristic from `supported_task_types`.
+ */
+export function inferModelCategory(model: { category?: ModelCategory; supported_task_types?: string[]; name?: string }): ModelCategory {
+  if (model.category) return model.category;
+  if (model.supported_task_types?.includes('text2music')) return 'text2music';
+  if (model.supported_task_types?.includes('lego')) return 'lego';
+  // Fallback: if name contains hints, use them
+  if (model.name?.toLowerCase().includes('lego')) return 'lego';
+  // Default to text2music (the more general model)
+  return 'text2music';
+}
+
+/** Return the cached model inventory, if available. */
+export function getCachedInventory(): ModelsListResponse | null {
+  return _cachedInventory;
 }
 
 export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {

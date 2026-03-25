@@ -12,6 +12,7 @@ export const TRACK_HEIGHT_PRESETS: Record<string, number> = {
 /** Default lane heights per track type (used for 'auto' preset). */
 const AUTO_DEFAULTS: Record<TrackType, number> = {
   stems: 80,
+  mix: 80,
   sample: 80,
   sequencer: 80,
   pianoRoll: 88,

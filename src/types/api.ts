@@ -50,6 +50,43 @@ export interface StemSeparationTaskParams {
   audio_format: 'wav';
 }
 
+/** Parameters for text2music — generates a full mixed song from text description */
+export interface Text2MusicTaskParams {
+  task_type: 'text2music';
+  prompt: string;              // Song description
+  lyrics: string;
+  audio_duration: number;
+  bpm: number | null;           // null = auto-infer
+  key_scale: string;            // "" = auto-infer
+  time_signature: string;       // "" = auto-infer
+  inference_steps: number;
+  guidance_scale: number;
+  shift: number;
+  batch_size: number;
+  audio_format: 'wav';
+  thinking: boolean;
+  model: string;
+  seed?: number;
+  use_random_seed?: boolean;
+  use_cot_caption?: boolean;
+}
+
+/**
+ * User's generation intent — drives automatic model selection.
+ *
+ * - `full-song`: text2music model → Text2MusicTaskParams
+ * - `single-track`: lego model → LegoTaskParams
+ * - `all-tracks`: lego model → LegoTaskParams (batch)
+ * - `cover`: either model → CoverTaskParams
+ * - `repaint`: either model → RepaintTaskParams
+ */
+export type GenerationIntent =
+  | 'full-song'
+  | 'single-track'
+  | 'all-tracks'
+  | 'cover'
+  | 'repaint';
+
 export interface LegoTaskParams {
   task_type: 'lego';
   track_name: string;
@@ -134,11 +171,16 @@ export interface HealthResponse {
   loaded_lm_model?: string | null;
 }
 
+/** Model family: text2music generates full mixed songs, lego generates single tracks with context */
+export type ModelCategory = 'text2music' | 'lego';
+
 export interface ModelEntry {
   name: string;
   is_default: boolean;
   is_loaded: boolean;
   supported_task_types?: string[];
+  /** Model family — provided by backend, or inferred from supported_task_types */
+  category?: ModelCategory;
 }
 
 export interface LmModelEntry {

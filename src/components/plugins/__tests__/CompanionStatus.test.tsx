@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CompanionStatus } from '../CompanionStatus';
 import { useVST3Store } from '../../../store/vst3Store';
+import { useUIStore } from '../../../store/uiStore';
 
 // Mock the bridge client singleton
 const mockConnect = vi.fn();
@@ -25,6 +26,7 @@ describe('CompanionStatus', () => {
       connectionStatus: 'disconnected',
       companionVersion: null,
     });
+    useUIStore.setState({ showVST3Panel: false });
   });
 
   it('renders "Disconnected" when disconnected', () => {
@@ -53,10 +55,25 @@ describe('CompanionStatus', () => {
     expect(mockConnect).toHaveBeenCalledOnce();
   });
 
-  it('calls bridge disconnect when clicked while connected', () => {
+  it('toggles VST3 panel when clicked while connected', () => {
     useVST3Store.setState({ connectionStatus: 'connected' });
     render(<CompanionStatus />);
     fireEvent.click(screen.getByTestId('companion-status'));
+    expect(useUIStore.getState().showVST3Panel).toBe(true);
+  });
+
+  it('closes VST3 panel when clicked again while connected', () => {
+    useVST3Store.setState({ connectionStatus: 'connected' });
+    useUIStore.setState({ showVST3Panel: true });
+    render(<CompanionStatus />);
+    fireEvent.click(screen.getByTestId('companion-status'));
+    expect(useUIStore.getState().showVST3Panel).toBe(false);
+  });
+
+  it('disconnects on right-click when connected', () => {
+    useVST3Store.setState({ connectionStatus: 'connected' });
+    render(<CompanionStatus />);
+    fireEvent.contextMenu(screen.getByTestId('companion-status'));
     expect(mockDisconnect).toHaveBeenCalledOnce();
   });
 
@@ -64,5 +81,12 @@ describe('CompanionStatus', () => {
     useVST3Store.setState({ connectionStatus: 'connected', companionVersion: '1.2.3' });
     render(<CompanionStatus />);
     expect(screen.getByTestId('companion-status')).toHaveAttribute('title', 'VST3 Companion v1.2.3');
+  });
+
+  it('highlights button when panel is open', () => {
+    useVST3Store.setState({ connectionStatus: 'connected' });
+    useUIStore.setState({ showVST3Panel: true });
+    render(<CompanionStatus />);
+    expect(screen.getByTestId('companion-status')).toHaveClass('bg-white/10');
   });
 });

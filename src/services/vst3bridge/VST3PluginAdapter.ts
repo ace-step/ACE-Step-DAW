@@ -77,7 +77,7 @@ export class VST3PluginAdapter implements WAPPlugin {
     this.paramValues = this.buildDefaultParams(instantiateResponse.parameters);
 
     // Listen for param changes from companion (e.g., native GUI adjustments)
-    this.bridgeClient.on('param_changed', this.handleParamChanged);
+    this.bridgeClient.on('paramChanged', this.handleParamChanged);
   }
 
   // ─── WAPPlugin: audio node ──────────────────────────────────────────────
@@ -156,7 +156,7 @@ export class VST3PluginAdapter implements WAPPlugin {
     if (this.disposed) return;
     this.disposed = true;
 
-    this.bridgeClient.off('param_changed', this.handleParamChanged);
+    this.bridgeClient.off('paramChanged', this.handleParamChanged);
     this.stopAudioPump();
     this.bridgeClient.destroy(this.instanceId);
 

@@ -18,6 +18,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useVST3Connection } from '../../hooks/useVST3Connection';
 import { useVST3Sync } from '../../hooks/useVST3Sync';
+import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
@@ -129,6 +130,7 @@ function EditorShell() {
       {project && <Suspense fallback={null}><MixerPanel /></Suspense>}
       {project && <GenerationPanel />}
       {project && <GenerationSidePanel />}
+      {project && <VST3SidePanel />}
       {project && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
       {project && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
       {project && <AddLayerPanel />}

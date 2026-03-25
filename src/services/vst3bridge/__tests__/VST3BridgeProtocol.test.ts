@@ -140,23 +140,23 @@ describe('isVST3BridgeMessage', () => {
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for a valid hello_ack message', () => {
+  it('returns true for a valid helloAck message', () => {
     const msg: HelloAckMessage = {
-      type: 'hello_ack',
+      type: 'helloAck',
       version: '1.0',
       capabilities: ['scan', 'process'],
     };
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for a valid scan_plugins message', () => {
-    const msg: ScanPluginsMessage = { type: 'scan_plugins' };
+  it('returns true for a valid scanPlugins message', () => {
+    const msg: ScanPluginsMessage = { type: 'scanPlugins' };
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for a valid scan_progress message', () => {
+  it('returns true for a valid scanProgress message', () => {
     const msg: ScanProgressMessage = {
-      type: 'scan_progress',
+      type: 'scanProgress',
       found: 5,
       current: 'Serum.vst3',
     };
@@ -191,9 +191,9 @@ describe('isVST3BridgeMessage', () => {
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for set_param message', () => {
+  it('returns true for setParam message', () => {
     const msg: SetParamMessage = {
-      type: 'set_param',
+      type: 'setParam',
       instanceId: 'inst-1',
       paramId: 0,
       value: 0.5,
@@ -206,18 +206,18 @@ describe('isVST3BridgeMessage', () => {
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for set_processing message', () => {
+  it('returns true for setProcessing message', () => {
     const msg: SetProcessingMessage = {
-      type: 'set_processing',
+      type: 'setProcessing',
       instanceId: 'inst-1',
       active: true,
     };
     expect(isVST3BridgeMessage(msg)).toBe(true);
   });
 
-  it('returns true for route_sidechain message', () => {
+  it('returns true for routeSidechain message', () => {
     const msg: RouteSidechainMessage = {
-      type: 'route_sidechain',
+      type: 'routeSidechain',
       instanceId: 'inst-1',
       sidechainInputBus: 1,
       sourceInstanceId: 'inst-2',

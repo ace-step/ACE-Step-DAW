@@ -67,7 +67,7 @@ describe('VST3PresetManager', () => {
       await manager.loadFactoryPreset('inst-1', 3);
 
       expect(bridge.request).toHaveBeenCalledWith({
-        type: 'load_preset',
+        type: 'loadPreset',
         instanceId: 'inst-1',
         presetId: 3,
       });

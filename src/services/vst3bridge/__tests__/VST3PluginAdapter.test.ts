@@ -144,9 +144,9 @@ describe('VST3PluginAdapter', () => {
       expect(adapter.pluginLatency).toBe(512);
     });
 
-    it('registers param_changed listener on bridge client', () => {
+    it('registers paramChanged listener on bridge client', () => {
       createAdapter();
-      expect(bridgeClient.on).toHaveBeenCalledWith('param_changed', expect.any(Function));
+      expect(bridgeClient.on).toHaveBeenCalledWith('paramChanged', expect.any(Function));
     });
   });
 
@@ -251,12 +251,12 @@ describe('VST3PluginAdapter', () => {
       expect(bridgeClient.destroy).toHaveBeenCalledWith('inst-001');
     });
 
-    it('unregisters param_changed listener', () => {
+    it('unregisters paramChanged listener', () => {
       const adapter = createAdapter();
 
       adapter.dispose();
 
-      expect(bridgeClient.off).toHaveBeenCalledWith('param_changed', expect.any(Function));
+      expect(bridgeClient.off).toHaveBeenCalledWith('paramChanged', expect.any(Function));
     });
 
     it('is idempotent — second dispose is a no-op', () => {
@@ -284,12 +284,12 @@ describe('VST3PluginAdapter', () => {
 
   // ─── 6. Param change from companion updates local state ──────────────
 
-  describe('param_changed from companion', () => {
+  describe('paramChanged from companion', () => {
     it('updates local param value when companion sends change', () => {
       const adapter = createAdapter();
 
       // Simulate companion pushing a param change
-      bridgeClient._emit('param_changed', 'inst-001', 0, 0.42);
+      bridgeClient._emit('paramChanged', 'inst-001', 0, 0.42);
 
       expect(adapter.getParameter('0')).toBe(0.42);
     });
@@ -297,7 +297,7 @@ describe('VST3PluginAdapter', () => {
     it('ignores param changes for other instances', () => {
       const adapter = createAdapter();
 
-      bridgeClient._emit('param_changed', 'other-instance', 0, 0.1);
+      bridgeClient._emit('paramChanged', 'other-instance', 0, 0.1);
 
       // Value should remain at default
       expect(adapter.getParameter('0')).toBe(0.8);

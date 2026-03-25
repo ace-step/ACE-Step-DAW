@@ -67,7 +67,7 @@ describe('VST3PluginScanner', () => {
       await expect(scanner.scan()).rejects.toThrow('Bridge client is not connected');
     });
 
-    it('forwards scan_progress events to onProgress callback', async () => {
+    it('forwards scanProgress events to onProgress callback', async () => {
       const onProgress = vi.fn();
       let progressHandler: ((msg: any) => void) | null = null;
 
@@ -81,7 +81,7 @@ describe('VST3PluginScanner', () => {
           return [createMockPlugin()];
         }),
         on: vi.fn().mockImplementation((type: string, handler: (msg: any) => void) => {
-          if (type === 'scan_progress') {
+          if (type === 'scanProgress') {
             progressHandler = handler;
           }
           return () => {

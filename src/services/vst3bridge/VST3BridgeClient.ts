@@ -24,7 +24,7 @@ import {
 
 /** Events emitted by the bridge client (W9 compat). */
 export interface BridgeEvents {
-  param_changed: (instanceId: string, paramId: number, value: number) => void;
+  paramChanged: (instanceId: string, paramId: number, value: number) => void;
   audio_frame: (frame: AudioFrame) => void;
   disconnected: () => void;
 }
@@ -59,10 +59,11 @@ const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /** Maps companion message types to CustomEvent names dispatched on the client. */
+/** Maps companion message types to CustomEvent names dispatched on the client. */
 const EVENT_TYPE_MAP: Record<string, string> = {
-  scan_progress: 'scanprogress',
-  param_changed: 'paramchanged',
-  editor_closed: 'editorclosed',
+  scanProgress: 'scanprogress',
+  paramChanged: 'paramchanged',
+  editorClosed: 'editorclosed',
 };
 
 // ---------------------------------------------------------------------------
@@ -74,9 +75,9 @@ const EVENT_TYPE_MAP: Record<string, string> = {
  *
  * Extends EventTarget so consumers can listen for:
  *   - `connectionchange` — fired when {@link connectionState} changes
- *   - `scanprogress`     — forwarded scan_progress messages
- *   - `paramchanged`     — forwarded param_changed messages
- *   - `editorclosed`     — forwarded editor_closed messages
+ *   - `scanprogress`     — forwarded scanProgress messages
+ *   - `paramchanged`     — forwarded paramChanged messages
+ *   - `editorclosed`     — forwarded editorClosed messages
  */
 export class VST3BridgeClient extends EventTarget {
   private readonly port: number;
@@ -244,7 +245,7 @@ export class VST3BridgeClient extends EventTarget {
 
   /** Scan for installed VST3 plugins. */
   async scanPlugins(): Promise<VST3PluginInfo[]> {
-    const res = await this.request<ScanCompleteMessage>({ type: 'scan_plugins' });
+    const res = await this.request<ScanCompleteMessage>({ type: 'scanPlugins' });
     return res.plugins;
   }
 
@@ -262,7 +263,7 @@ export class VST3BridgeClient extends EventTarget {
 
   /** Set a parameter value (fire-and-forget). */
   setParam(instanceId: string, paramId: number, value: number): void {
-    this.send({ type: 'set_param', instanceId, paramId, value });
+    this.send({ type: 'setParam', instanceId, paramId, value });
   }
 
   /** Send MIDI events to a plugin instance (fire-and-forget). */
@@ -273,7 +274,7 @@ export class VST3BridgeClient extends EventTarget {
   /** Open the plugin's native editor window. */
   async openEditor(instanceId: string): Promise<{ width: number; height: number }> {
     const res = await this.request<EditorOpenedMessage>({
-      type: 'open_editor',
+      type: 'openEditor',
       instanceId,
     });
     return { width: res.width, height: res.height };
@@ -281,13 +282,13 @@ export class VST3BridgeClient extends EventTarget {
 
   /** Close the plugin's native editor window (fire-and-forget). */
   closeEditor(instanceId: string): void {
-    this.send({ type: 'close_editor', instanceId });
+    this.send({ type: 'closeEditor', instanceId });
   }
 
   /** Retrieve the plugin's opaque state as a base64-encoded string. */
   async getState(instanceId: string): Promise<string> {
     const res = await this.request<StateDataMessage>({
-      type: 'get_state',
+      type: 'getState',
       instanceId,
     });
     return res.data;
@@ -295,7 +296,7 @@ export class VST3BridgeClient extends EventTarget {
 
   /** Restore plugin state from a base64-encoded string. */
   async setState(instanceId: string, data: string): Promise<void> {
-    await this.request({ type: 'set_state', instanceId, data });
+    await this.request({ type: 'setState', instanceId, data });
   }
 
   /** Destroy a plugin instance (fire-and-forget). */
@@ -336,19 +337,22 @@ export class VST3BridgeClient extends EventTarget {
     this.ws = ws;
   }
 
-  private async performHandshake(): Promise<void> {
-    try {
-      await this.request({
-        type: 'hello',
-        version: VST3_BRIDGE_VERSION,
-        sampleRate: 48000,
-        blockSize: 128,
-      });
-      this.backoffMs = INITIAL_BACKOFF_MS; // reset on success
+  private performHandshake(): void {
+    // Send hello without reqId — companion echoes helloAck without correlation.
+    this.send({
+      type: 'hello',
+      version: VST3_BRIDGE_VERSION,
+      sampleRate: 48000,
+      blockSize: 128,
+    });
+
+    // Listen for helloAck to complete the handshake.
+    const onHelloAck = () => {
+      this.off('helloAck', onHelloAck);
+      this.backoffMs = INITIAL_BACKOFF_MS;
       this.setConnectionState('connected');
-    } catch {
-      // Handshake failed — socket will eventually close and trigger reconnect.
-    }
+    };
+    this.on('helloAck', onHelloAck);
   }
 
   private scheduleReconnect(): void {

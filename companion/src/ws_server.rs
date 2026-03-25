@@ -404,8 +404,8 @@ mod tests {
         let hello = serde_json::json!({
             "type": "hello",
             "version": "1.0",
-            "sample_rate": 48000,
-            "block_size": 128
+            "sampleRate": 48000,
+            "blockSize": 128
         });
         sink.send(Message::Text(hello.to_string().into()))
             .await
@@ -415,7 +415,7 @@ mod tests {
         let response = stream.next().await.unwrap().unwrap();
         let text = response.into_text().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(parsed["type"], "hello_ack");
+        assert_eq!(parsed["type"], "helloAck");
         assert_eq!(parsed["version"], "0.1.0");
 
         // Clean up.

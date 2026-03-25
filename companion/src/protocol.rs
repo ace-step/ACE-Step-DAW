@@ -23,58 +23,78 @@ pub struct MidiEvent {
 
 /// Messages sent from the browser to the companion app.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum IncomingMessage {
     Hello {
         version: String,
+        #[serde(alias = "sample_rate", rename = "sampleRate")]
         sample_rate: u32,
+        #[serde(alias = "block_size", rename = "blockSize")]
         block_size: u32,
     },
     ScanPlugins,
     Instantiate {
+        #[serde(alias = "req_id", rename = "reqId")]
         req_id: String,
+        #[serde(alias = "plugin_uid", rename = "pluginUid")]
         plugin_uid: String,
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     SetParam {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
+        #[serde(alias = "param_id", rename = "paramId")]
         param_id: u32,
         value: f64,
     },
     Midi {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
         events: Vec<MidiEvent>,
     },
     OpenEditor {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     CloseEditor {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     GetState {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     SetState {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
         data: String,
     },
     LoadPreset {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
+        #[serde(alias = "preset_id", rename = "presetId")]
         preset_id: u32,
     },
     Destroy {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     SetProcessing {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
         active: bool,
     },
     GetLatency {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
     },
     RouteSidechain {
+        #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
+        #[serde(alias = "sidechain_input_bus", rename = "sidechainInputBus")]
         sidechain_input_bus: u32,
+        #[serde(alias = "source_instance_id", rename = "sourceInstanceId")]
         source_instance_id: String,
     },
 }
@@ -96,6 +116,7 @@ pub struct PluginInfo {
 
 /// Metadata about a single plugin parameter.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ParamInfo {
     pub id: u32,
     pub name: String,
@@ -114,7 +135,7 @@ pub struct PresetInfo {
 
 /// Messages sent from the companion app to the browser.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum OutgoingMessage {
     HelloAck {
         version: String,
@@ -128,38 +149,48 @@ pub enum OutgoingMessage {
         plugins: Vec<PluginInfo>,
     },
     Instantiated {
+        #[serde(rename = "reqId")]
         req_id: String,
+        #[serde(rename = "instanceId")]
         instance_id: String,
         parameters: Vec<ParamInfo>,
+        #[serde(rename = "latencySamples")]
         latency_samples: u32,
+        #[serde(rename = "tailSamples")]
         tail_samples: u32,
         presets: Vec<PresetInfo>,
     },
     ParamChanged {
+        #[serde(rename = "instanceId")]
         instance_id: String,
+        #[serde(rename = "paramId")]
         param_id: u32,
         value: f64,
     },
     EditorOpened {
+        #[serde(rename = "instanceId")]
         instance_id: String,
         width: u32,
         height: u32,
     },
     EditorClosed {
+        #[serde(rename = "instanceId")]
         instance_id: String,
     },
     StateData {
+        #[serde(rename = "instanceId")]
         instance_id: String,
         data: String,
     },
     LatencyInfo {
+        #[serde(rename = "instanceId")]
         instance_id: String,
         samples: u32,
     },
     Error {
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", rename = "reqId")]
         req_id: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "Option::is_none", rename = "instanceId")]
         instance_id: Option<String>,
         code: String,
         message: String,
@@ -196,7 +227,7 @@ mod tests {
         let parsed: IncomingMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(msg, parsed);
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(val["type"], "scan_plugins");
+        assert_eq!(val["type"], "scanPlugins");
     }
 
     #[test]
@@ -292,7 +323,7 @@ mod tests {
         let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(msg, parsed);
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(val["type"], "hello_ack");
+        assert_eq!(val["type"], "helloAck");
     }
 
     #[test]
@@ -363,7 +394,7 @@ mod tests {
         };
         let json = serde_json::to_string(&msg).unwrap();
         let val: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(val["instance_id"], "inst-1");
+        assert_eq!(val["instanceId"], "inst-1");
     }
 
     #[test]
@@ -382,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_parse_scan_plugins_from_raw_json() {
-        let raw = r#"{"type":"scan_plugins"}"#;
+        let raw = r#"{"type":"scanPlugins"}"#;
         let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
         assert_eq!(msg, IncomingMessage::ScanPlugins);
     }

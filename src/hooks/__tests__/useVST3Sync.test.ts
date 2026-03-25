@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useVST3Sync } from '../useVST3Sync';
 import { useVST3Store } from '../../store/vst3Store';
-import { VST3BridgeClient } from '../../services/VST3BridgeClient';
+import { VST3BridgeClient } from '../../services/vst3bridge/VST3BridgeClient';
 import { _resetBridgeClient } from '../useVST3Connection';
 
 const createInstanceSpy = vi.spyOn(VST3BridgeClient.prototype, 'createInstance');

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { v4 as uuidv4 } from 'uuid';
 import type {
   VST3ConnectionStatus,
   VST3PluginInfo,
@@ -6,6 +7,8 @@ import type {
   VST3ScanProgress,
   VST3Parameter,
 } from '../types/vst3';
+import { toastSuccess, toastError } from '../hooks/useToast';
+import { _getBridgeClient } from '../hooks/useVST3Connection';
 
 export interface VST3Store {
   /* ── Connection ──────────────────────────────────────── */
@@ -26,7 +29,7 @@ export interface VST3Store {
   disconnect: () => void;
   scanPlugins: () => void;
 
-  loadPlugin: (pluginId: string, trackId: string) => void;
+  loadPlugin: (pluginId: string, trackId: string) => Promise<void>;
   removeInstance: (instanceId: string) => void;
   toggleInstance: (instanceId: string) => void;
   openEditor: (instanceId: string) => void;
@@ -78,8 +81,67 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   },
 
   // ── Plugin lifecycle ────────────────────────────────────
-  loadPlugin: (_pluginId: string, _trackId: string) => {
-    // Bridge will call _upsertInstance once loaded
+  loadPlugin: async (pluginId: string, trackId: string) => {
+    const { plugins } = get();
+    const pluginInfo = plugins.find((p) => p.id === pluginId);
+    if (!pluginInfo) {
+      toastError(`Plugin "${pluginId}" not found in catalogue`);
+      return;
+    }
+
+    const instanceId = `vst3-${uuidv4()}`;
+
+    try {
+      const client = _getBridgeClient();
+
+      // Listen for the instanceCreated event from the bridge
+      const instancePromise = new Promise<VST3Parameter[]>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          client.off('instanceCreated', onCreated);
+          client.off('error', onError);
+          reject(new Error('Plugin instantiation timed out'));
+        }, 10_000);
+
+        const onCreated = (createdId: string, params: VST3Parameter[]) => {
+          if (createdId === instanceId) {
+            clearTimeout(timeout);
+            client.off('instanceCreated', onCreated);
+            client.off('error', onError);
+            resolve(params);
+          }
+        };
+
+        const onError = (errorMsg: string) => {
+          clearTimeout(timeout);
+          client.off('instanceCreated', onCreated);
+          client.off('error', onError);
+          reject(new Error(errorMsg));
+        };
+
+        client.on('instanceCreated', onCreated);
+        client.on('error', onError);
+      });
+
+      await client.createInstance(pluginId, instanceId);
+      const parameters = await instancePromise;
+
+      get()._upsertInstance({
+        instanceId,
+        pluginId,
+        pluginName: pluginInfo.name,
+        vendor: pluginInfo.vendor,
+        trackId,
+        enabled: true,
+        online: true,
+        parameters,
+        presets: [],
+        activePreset: null,
+      });
+
+      toastSuccess(`Loaded ${pluginInfo.name}`);
+    } catch (err) {
+      toastError(`Failed to load ${pluginInfo.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   },
 
   removeInstance: (instanceId: string) => {

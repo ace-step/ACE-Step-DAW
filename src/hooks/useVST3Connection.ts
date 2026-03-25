@@ -5,9 +5,9 @@
  * state to the vst3Store, and supports auto-connect via localStorage.
  */
 import { useEffect, useCallback, useRef } from 'react';
-import { VST3BridgeClient } from '../services/VST3BridgeClient';
+import { VST3BridgeClient } from '../services/vst3bridge/VST3BridgeClient';
 import { useVST3Store } from '../store/vst3Store';
-import type { VST3ConnectionStatus } from '../types/vst3';
+import type { VST3ConnectionStatus, VST3PluginInfo } from '../types/vst3';
 
 const AUTO_CONNECT_KEY = 'vst3-auto-connect';
 
@@ -29,6 +29,21 @@ export function _resetBridgeClient(): void {
   }
 }
 
+/**
+ * Map raw scanComplete plugin data from the companion to the store format.
+ * Handles both the protocol's uid-based format and the store's id-based format.
+ */
+function mapPluginsToStore(raw: Array<Record<string, string>>): VST3PluginInfo[] {
+  return raw.map((p) => ({
+    id: p.uid ?? p.id ?? '',
+    name: p.name ?? 'Unknown',
+    vendor: p.vendor ?? 'Unknown',
+    version: p.version ?? '0.0.0',
+    category: (p.category?.toLowerCase().includes('instrument') ? 'instrument' : 'effect') as 'instrument' | 'effect',
+    subcategory: p.category ?? '',
+  }));
+}
+
 export function useVST3Connection() {
   const status = useVST3Store((s) => s.connectionStatus);
   const error = useVST3Store((s) => s.connectionError);
@@ -40,42 +55,48 @@ export function useVST3Connection() {
     const client = clientRef.current;
     const store = useVST3Store.getState();
 
-    const onStatusChange = (newStatus: VST3ConnectionStatus) => {
+    // The new client's on() handlers receive the raw message object
+    const onStatusChange = (msg: Record<string, unknown>) => {
+      const newStatus = msg.status as VST3ConnectionStatus;
       store.setConnectionStatus(newStatus);
       if (newStatus === 'connected') {
         store.setCompanionVersion(client.companionVersion);
         store.setConnectionError(null);
-        // Auto-scan on connect
-        client.scanPlugins();
+        // Auto-scan on connect (fire-and-forget)
+        client.send({ type: 'scanPlugins' });
       } else if (newStatus === 'disconnected') {
         store.setCompanionVersion(null);
         store.markAllInstancesOffline();
       }
     };
 
-    const onError = (msg: string) => {
-      store.setConnectionError(msg);
+    const onError = (msg: Record<string, unknown>) => {
+      store.setConnectionError((msg.message as string) || 'Unknown error');
     };
 
-    const onScanComplete = (plugins: import('../types/vst3').VST3PluginInfo[]) => {
-      store.setScannedPlugins(plugins);
+    const onScanComplete = (msg: Record<string, unknown>) => {
+      const rawPlugins = (msg.plugins as Array<Record<string, string>>) || [];
+      store.setScannedPlugins(mapPluginsToStore(rawPlugins));
     };
 
-    const onScanProgress = (found: number, current: string) => {
+    const onScanProgress = (msg: Record<string, unknown>) => {
       store._setScanning(true);
-      store._setScanProgress({ scanned: found, total: 0, currentPlugin: current });
+      store._setScanProgress({
+        scanned: (msg.found as number) ?? 0,
+        total: 0,
+        currentPlugin: (msg.current as string) ?? '',
+      });
     };
 
-    client.on('statusChange', onStatusChange);
-    client.on('error', onError);
-    client.on('scanComplete', onScanComplete);
-    client.on('scanProgress', onScanProgress);
+    const unsubs = [
+      client.on('statusChange', onStatusChange),
+      client.on('error', onError),
+      client.on('scanComplete', onScanComplete),
+      client.on('scanProgress', onScanProgress),
+    ];
 
     return () => {
-      client.off('statusChange', onStatusChange);
-      client.off('error', onError);
-      client.off('scanComplete', onScanComplete);
-      client.off('scanProgress', onScanProgress);
+      for (const unsub of unsubs) unsub();
     };
   }, []);
 
@@ -98,19 +119,18 @@ export function useVST3Connection() {
   }, []);
 
   const scanPlugins = useCallback(() => {
-    clientRef.current.scanPlugins();
+    clientRef.current.send({ type: 'scanPlugins' });
   }, []);
 
   // Expose connect/disconnect via store so CompanionStatus can call them
   useEffect(() => {
     const store = useVST3Store.getState();
-    // Override the store's stub connect/disconnect with real bridge calls
     useVST3Store.setState({
       connect,
       disconnect,
       scanPlugins: () => {
         store._setScanning(true);
-        clientRef.current.scanPlugins();
+        clientRef.current.send({ type: 'scanPlugins' });
       },
     });
   }, [connect, disconnect]);

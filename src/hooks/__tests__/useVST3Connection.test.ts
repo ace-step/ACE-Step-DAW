@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useVST3Connection, _resetBridgeClient } from '../useVST3Connection';
 import { useVST3Store } from '../../store/vst3Store';
-import { VST3BridgeClient } from '../../services/VST3BridgeClient';
+import { VST3BridgeClient } from '../../services/vst3bridge/VST3BridgeClient';
 
 // Spy on the bridge client prototype so we can intercept calls
 const connectSpy = vi.spyOn(VST3BridgeClient.prototype, 'connect');

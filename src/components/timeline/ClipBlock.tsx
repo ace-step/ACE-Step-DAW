@@ -136,7 +136,9 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const batchMoveClips = useProjectStore((s) => s.batchMoveClips);
   const updateClipColors = useProjectStore((s) => s.updateClipColors);
   const setActiveVersion = useProjectStore((s) => s.setActiveVersion);
-  const project = useProjectStore((s) => s.project);
+  const tracks = useProjectStore((s) => s.project?.tracks);
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 600);
   const { generateClip } = useGeneration();
   const isMidiClip = Boolean(clip.midiData);
   const hasAudioBody = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey || clip.waveformPeaks);
@@ -352,8 +354,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     const origStretchMode = clip.stretchMode;
     const origSourceSpan = getClipSourceSpan(clip);
     const origAudibleSourceEnd = getClipAudibleSourceEnd(clip);
-    const bpm = project?.bpm ?? 120;
-    const totalDuration = project?.totalDuration ?? 600;
     dragRef.current = false;
     scissorRef.current = false;
     let isShiftCopy = e.shiftKey;
@@ -914,7 +914,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const contentOffset = getClipContentOffset(clip);
   const selectedActionClipIds = isClipSelected ? [...useUIStore.getState().selectedClipIds] : [clip.id];
   const selectedActionClips = selectedActionClipIds
-    .map((clipId) => project?.tracks.flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
+    .map((clipId) => (tracks ?? []).flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
     .filter((candidate): candidate is Clip => Boolean(candidate));
   const canConsolidate = selectedActionClips.length === selectedActionClipIds.length
     && selectedActionClips.every((candidate) => candidate.trackId === track.id)
@@ -1115,7 +1115,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             midiData={clip.midiData}
             width={width}
             duration={clip.duration}
-            bpm={project?.bpm ?? 120}
+            bpm={bpm}
             color={clipPresentation.waveformColor}
           />
         )}
@@ -1317,7 +1317,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             }}
             isMuted={selectedActionClipIds.length > 1
               ? selectedActionClipIds.every((id) => {
-                  const c = project?.tracks.flatMap((t) => t.clips).find((cl) => cl.id === id);
+                  const c = (tracks ?? []).flatMap((t) => t.clips).find((cl) => cl.id === id);
                   return c?.muted;
                 })
               : !!clip.muted
@@ -1416,7 +1416,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
                 midiData={clip.midiData}
                 width={dragGhost.width}
                 duration={clip.duration}
-                bpm={project?.bpm ?? 120}
+                bpm={bpm}
                 color={clipPresentation.waveformColor}
               />
             )}

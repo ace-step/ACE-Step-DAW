@@ -127,8 +127,23 @@ async fn handle_connection(
                         }
                     }
                     Message::Binary(data) => {
-                        info!(%peer, bytes = data.len(), "Received binary frame (echo)");
-                        sink.send(Message::Binary(data)).await?;
+                        // Binary frames carry input audio for effect instances.
+                        // Decode the frame and route samples to the effect's input buffer.
+                        if let Some(frame) = AudioFrame::decode(&data) {
+                            let sent = state.audio_streams.send_audio(
+                                &frame.instance_id,
+                                frame.samples,
+                            );
+                            if !sent {
+                                debug!(
+                                    %peer,
+                                    instance_id = %frame.instance_id,
+                                    "Binary frame dropped: no effect stream or instance is instrument"
+                                );
+                            }
+                        } else {
+                            warn!(%peer, bytes = data.len(), "Failed to decode binary audio frame");
+                        }
                     }
                     Message::Ping(payload) => {
                         sink.send(Message::Pong(payload)).await?;
@@ -475,8 +490,10 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             instance_id,
             sample_rate,
             block_size,
+            is_effect,
         } => {
-            info!(instance_id, sample_rate, block_size, "StartAudioStream");
+            let is_instrument = !is_effect;
+            info!(instance_id, sample_rate, block_size, is_effect, "StartAudioStream");
             if !state.host.has_instance(&instance_id) {
                 return OutgoingMessage::Error {
                     req_id: None,
@@ -490,7 +507,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 sample_rate,
                 block_size,
                 None, // Real plugin attachment is done separately
-                true, // Default to instrument for stub
+                is_instrument,
             );
             if started {
                 OutgoingMessage::AudioStreamStarted { instance_id }
@@ -752,6 +769,7 @@ mod tests {
                 instance_id: "inst-1".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             },
             &state,
         );
@@ -776,6 +794,7 @@ mod tests {
                 instance_id: "nonexistent".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             },
             &state,
         );
@@ -1048,5 +1067,113 @@ mod tests {
             }
             other => panic!("Expected error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_handle_start_audio_stream_as_effect() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "fx-1", None).unwrap();
+
+        let resp = handle_message(
+            IncomingMessage::StartAudioStream {
+                instance_id: "fx-1".into(),
+                sample_rate: 44100.0,
+                block_size: 512,
+                is_effect: true,
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::AudioStreamStarted { instance_id } => {
+                assert_eq!(instance_id, "fx-1");
+            }
+            other => panic!("Expected AudioStreamStarted, got {other:?}"),
+        }
+        assert!(state.audio_streams.is_streaming("fx-1"));
+        assert!(state.audio_streams.is_effect("fx-1"));
+
+        state.audio_streams.stop_stream("fx-1");
+    }
+
+    /// Integration test: send binary audio frames to an effect and receive processed output.
+    #[tokio::test]
+    async fn test_ws_effect_binary_routing() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
+        let state = Arc::new(app_state);
+        let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
+
+        // Instantiate a stub effect
+        state.host.instantiate("uid-1", "fx-1", None).unwrap();
+
+        let server_state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
+        tokio::spawn(async move {
+            let (stream, peer) = listener.accept().await.unwrap();
+            handle_connection(stream, peer, server_state, rx)
+                .await
+                .unwrap();
+        });
+
+        let url = format!("ws://{addr}");
+        let (ws, _) = connect_async(&url).await.unwrap();
+        let (mut sink, mut stream) = ws.split();
+
+        // Start audio stream as effect
+        let start_msg = serde_json::json!({
+            "type": "startAudioStream",
+            "instanceId": "fx-1",
+            "sampleRate": 44100.0,
+            "blockSize": 64,
+            "isEffect": true
+        });
+        sink.send(Message::Text(start_msg.to_string().into()))
+            .await
+            .unwrap();
+
+        // Receive the audioStreamStarted JSON response
+        let response = tokio::time::timeout(Duration::from_millis(500), stream.next())
+            .await
+            .expect("Timed out waiting for audioStreamStarted")
+            .unwrap()
+            .unwrap();
+        let text = response.into_text().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "audioStreamStarted");
+
+        // Send binary audio input frame (stereo * 64 samples = 128 f32s)
+        let input_frame = AudioFrame {
+            instance_id: "fx-1".into(),
+            samples: vec![0.3f32; 128],
+        };
+        sink.send(Message::Binary(input_frame.encode().into()))
+            .await
+            .unwrap();
+
+        // Wait for processed output binary frame
+        let mut got_output = false;
+        for _ in 0..50 {
+            let msg = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
+            if let Ok(Some(Ok(Message::Binary(data)))) = msg {
+                let frame = AudioFrame::decode(&data).unwrap();
+                assert_eq!(frame.instance_id, "fx-1");
+                assert_eq!(frame.samples.len(), 128);
+                got_output = true;
+                break;
+            }
+        }
+        assert!(got_output, "Expected processed binary audio frame from effect");
+
+        // Stop and clean up
+        let stop_msg = serde_json::json!({
+            "type": "stopAudioStream",
+            "instanceId": "fx-1"
+        });
+        sink.send(Message::Text(stop_msg.to_string().into()))
+            .await
+            .unwrap();
+        sink.send(Message::Close(None)).await.ok();
     }
 }

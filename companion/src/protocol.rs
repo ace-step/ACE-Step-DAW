@@ -106,6 +106,10 @@ pub enum IncomingMessage {
         sample_rate: f64,
         #[serde(alias = "block_size", rename = "blockSize")]
         block_size: u32,
+        /// If true, the instance is an effect that requires input audio.
+        /// Defaults to false (instrument, output-only).
+        #[serde(alias = "is_effect", rename = "isEffect", default)]
+        is_effect: bool,
     },
     StopAudioStream {
         #[serde(alias = "instance_id", rename = "instanceId")]
@@ -545,6 +549,7 @@ mod tests {
             instance_id: "inst-1".into(),
             sample_rate: 48000.0,
             block_size: 256,
+            is_effect: false,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: IncomingMessage = serde_json::from_str(&json).unwrap();
@@ -599,7 +604,36 @@ mod tests {
                 instance_id: "inst-1".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             }
         );
+    }
+
+    #[test]
+    fn test_parse_start_audio_stream_with_is_effect() {
+        let raw = r#"{"type":"startAudioStream","instanceId":"fx-1","sampleRate":44100.0,"blockSize":256,"isEffect":true}"#;
+        let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            msg,
+            IncomingMessage::StartAudioStream {
+                instance_id: "fx-1".into(),
+                sample_rate: 44100.0,
+                block_size: 256,
+                is_effect: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_is_effect_defaults_to_false() {
+        // When isEffect is omitted, it should default to false (instrument)
+        let raw = r#"{"type":"startAudioStream","instanceId":"inst-1","sampleRate":48000.0,"blockSize":128}"#;
+        let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
+        match msg {
+            IncomingMessage::StartAudioStream { is_effect, .. } => {
+                assert!(!is_effect, "is_effect should default to false when omitted");
+            }
+            _ => panic!("Expected StartAudioStream"),
+        }
     }
 }

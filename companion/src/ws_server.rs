@@ -14,10 +14,12 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 
+use crate::audio_thread::{AudioFrame, AudioStreamManager};
 use crate::error::Result;
 use crate::host_impl::ParamChangeCollector;
 use crate::plugin_host::PluginHost;
 use crate::plugin_scanner::PluginScanner;
+use crate::preset_storage::PresetStorage;
 use crate::protocol::{IncomingMessage, OutgoingMessage, ParamChangeEntry};
 
 
@@ -26,6 +28,8 @@ pub struct AppState {
     pub scanner: PluginScanner,
     pub host: PluginHost,
     pub param_collector: ParamChangeCollector,
+    pub audio_streams: AudioStreamManager,
+    pub preset_storage: PresetStorage,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -33,20 +37,35 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     info!("ACE-Step Companion v0.1.0 listening on ws://{addr}");
 
+    let mut audio_streams = AudioStreamManager::new();
+    let audio_frame_rx = audio_streams
+        .take_frame_receiver()
+        .expect("audio frame receiver already taken");
+
+    let preset_storage = PresetStorage::new().map_err(|e| {
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+    })?;
     let state = Arc::new(AppState {
         scanner: PluginScanner::new(),
         host: PluginHost::new(),
         param_collector: ParamChangeCollector::new(),
+        audio_streams,
+        preset_storage,
     });
+
+    // Wrap the receiver in an Arc<Mutex> so it can be shared across connections
+    // (only one active connection at a time, but the type needs to be cloneable).
+    let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_frame_rx));
 
     loop {
         let (stream, peer) = listener.accept().await?;
         info!(%peer, "New TCP connection");
         let state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
 
         // Spawn a task per connection but we expect only one DAW client.
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, peer, state).await {
+            if let Err(e) = handle_connection(stream, peer, state, rx).await {
                 error!(%peer, "Connection error: {e}");
             }
             info!(%peer, "Connection closed");
@@ -63,12 +82,14 @@ async fn handle_connection(
     stream: TcpStream,
     peer: SocketAddr,
     state: Arc<AppState>,
+    audio_frame_rx: Arc<tokio::sync::Mutex<crossbeam::channel::Receiver<AudioFrame>>>,
 ) -> Result<()> {
     let ws_stream = tokio_tungstenite::accept_async(stream).await?;
     info!(%peer, "WebSocket handshake complete");
 
     let (mut sink, mut stream) = ws_stream.split();
     let mut param_interval = tokio::time::interval(Duration::from_millis(10));
+    let mut audio_interval = tokio::time::interval(Duration::from_millis(1));
 
     loop {
         tokio::select! {
@@ -133,10 +154,30 @@ async fn handle_connection(
                 let json = serde_json::to_string(&batch)?;
                 sink.send(Message::Text(json.into())).await?;
             }
+
+            // Branch 3: forward audio frames as WebSocket binary messages
+            _ = audio_interval.tick() => {
+                let rx = audio_frame_rx.lock().await;
+                // Drain all available frames without blocking
+                while let Ok(frame) = rx.try_recv() {
+                    let binary = frame.encode();
+                    sink.send(Message::Binary(binary.into())).await?;
+                }
+            }
         }
     }
 
     Ok(())
+}
+
+/// Build an error response scoped to an instance.
+fn instance_error(instance_id: String, code: &str, message: String) -> OutgoingMessage {
+    OutgoingMessage::Error {
+        req_id: None,
+        instance_id: Some(instance_id),
+        code: code.into(),
+        message,
+    }
 }
 
 /// Dispatch an incoming protocol message and produce a response.
@@ -306,13 +347,26 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         IncomingMessage::LoadPreset {
             instance_id,
             preset_id,
+            name,
         } => {
-            info!(instance_id, preset_id, "LoadPreset (stub)");
-            OutgoingMessage::Error {
-                req_id: None,
-                instance_id: Some(instance_id),
-                code: "ok".into(),
-                message: format!("Loaded preset {preset_id} (stub)"),
+            if let Some(preset_name) = name {
+                // Name-based preset: load from disk and apply via setState
+                let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                    Ok(uid) => uid,
+                    Err(e) => return instance_error(instance_id, "load_preset_error", e.to_string()),
+                };
+                let state_bytes = match state.preset_storage.load(&plugin_uid, &preset_name) {
+                    Ok(bytes) => bytes,
+                    Err(e) => return instance_error(instance_id, "load_preset_error", e.to_string()),
+                };
+                match state.host.set_state(&instance_id, &state_bytes) {
+                    Ok(()) => instance_error(instance_id, "ok", format!("Loaded preset '{preset_name}'")),
+                    Err(e) => instance_error(instance_id, "load_preset_error", e.to_string()),
+                }
+            } else {
+                let id = preset_id.unwrap_or(0);
+                info!(%instance_id, id, "LoadPreset by ID (stub)");
+                instance_error(instance_id, "ok", format!("Loaded preset {id} (stub)"))
             }
         }
 
@@ -349,6 +403,47 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             }
         }
 
+        IncomingMessage::SavePreset {
+            instance_id,
+            name,
+        } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "save_preset_error", e.to_string()),
+            };
+            let state_bytes = match state.host.get_state(&instance_id) {
+                Ok(bytes) => bytes,
+                Err(e) => return instance_error(instance_id, "save_preset_error", e.to_string()),
+            };
+            match state.preset_storage.save(&plugin_uid, &name, &state_bytes) {
+                Ok(()) => OutgoingMessage::PresetSaved { instance_id, name },
+                Err(e) => instance_error(instance_id, "save_preset_error", e.to_string()),
+            }
+        }
+
+        IncomingMessage::ListPresets { instance_id } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "list_presets_error", e.to_string()),
+            };
+            let presets = state.preset_storage.list(&plugin_uid);
+            OutgoingMessage::PresetList { instance_id, presets }
+        }
+
+        IncomingMessage::DeletePreset {
+            instance_id,
+            name,
+        } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "delete_preset_error", e.to_string()),
+            };
+            match state.preset_storage.delete(&plugin_uid, &name) {
+                Ok(()) => OutgoingMessage::PresetDeleted { instance_id, name },
+                Err(e) => instance_error(instance_id, "delete_preset_error", e.to_string()),
+            }
+        }
+
         IncomingMessage::RouteSidechain {
             instance_id,
             sidechain_input_bus,
@@ -365,6 +460,54 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 message: "Sidechain routed (stub)".into(),
             }
         }
+
+        IncomingMessage::StartAudioStream {
+            instance_id,
+            sample_rate,
+            block_size,
+        } => {
+            info!(instance_id, sample_rate, block_size, "StartAudioStream");
+            if !state.host.has_instance(&instance_id) {
+                return OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "start_stream_error".into(),
+                    message: "Instance not found".into(),
+                };
+            }
+            let started = state.audio_streams.start_stream(
+                &instance_id,
+                sample_rate,
+                block_size,
+                None, // Real plugin attachment is done separately
+                true, // Default to instrument for stub
+            );
+            if started {
+                OutgoingMessage::AudioStreamStarted { instance_id }
+            } else {
+                OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "start_stream_error".into(),
+                    message: "Stream already active for this instance".into(),
+                }
+            }
+        }
+
+        IncomingMessage::StopAudioStream { instance_id } => {
+            info!(instance_id, "StopAudioStream");
+            let stopped = state.audio_streams.stop_stream(&instance_id);
+            if stopped {
+                OutgoingMessage::AudioStreamStopped { instance_id }
+            } else {
+                OutgoingMessage::Error {
+                    req_id: None,
+                    instance_id: Some(instance_id),
+                    code: "stop_stream_error".into(),
+                    message: "No active stream for this instance".into(),
+                }
+            }
+        }
     }
 }
 
@@ -378,13 +521,37 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::connect_async;
 
-    #[test]
-    fn test_handle_message_hello() {
+    /// Create an `AppState` with a temp-dir-backed `PresetStorage` and audio stream manager.
+    fn test_app_state() -> (tempfile::TempDir, AppState) {
+        let dir = tempfile::tempdir().unwrap();
         let state = AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
             param_collector: ParamChangeCollector::new(),
+            audio_streams: AudioStreamManager::new(),
+            preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
         };
+        (dir, state)
+    }
+
+    /// Like `test_app_state` but also returns the audio frame receiver.
+    fn test_app_state_with_audio() -> (tempfile::TempDir, AppState, crossbeam::channel::Receiver<AudioFrame>) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut audio_streams = AudioStreamManager::new();
+        let rx = audio_streams.take_frame_receiver().unwrap();
+        let state = AppState {
+            scanner: PluginScanner::new(),
+            host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
+            audio_streams,
+            preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+        };
+        (dir, state, rx)
+    }
+
+    #[test]
+    fn test_handle_message_hello() {
+        let (_dir, state) = test_app_state();
         let resp = handle_message(
             IncomingMessage::Hello {
                 version: "1.0".into(),
@@ -407,11 +574,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_instantiate_and_destroy() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        };
+        let (_dir, state) = test_app_state();
 
         let resp = handle_message(
             IncomingMessage::Instantiate {
@@ -442,11 +605,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_get_latency() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        };
+        let (_dir, state) = test_app_state();
         // Must instantiate first so the instance exists
         state.host.instantiate("uid-1", "inst-1", None).unwrap();
         let resp = handle_message(
@@ -461,6 +620,8 @@ mod tests {
         }
     }
 
+    // Second test_app_state removed — use the unified one above.
+
     /// Integration test: start the WS server, connect, send hello, receive hello_ack.
     #[tokio::test]
     async fn test_ws_hello_handshake() {
@@ -468,17 +629,16 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let state = Arc::new(AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        });
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
+        let state = Arc::new(app_state);
+        let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
 
         // Spawn the accept loop.
         let server_state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
         tokio::spawn(async move {
             let (stream, peer) = listener.accept().await.unwrap();
-            handle_connection(stream, peer, server_state)
+            handle_connection(stream, peer, server_state, rx)
                 .await
                 .unwrap();
         });
@@ -518,16 +678,15 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let state = Arc::new(AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-        });
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
+        let state = Arc::new(app_state);
+        let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
 
         let server_state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
         tokio::spawn(async move {
             let (stream, peer) = listener.accept().await.unwrap();
-            handle_connection(stream, peer, server_state)
+            handle_connection(stream, peer, server_state, rx)
                 .await
                 .unwrap();
         });
@@ -570,5 +729,314 @@ mod tests {
         assert_eq!(changes[1]["paramId"], 20);
 
         sink.send(Message::Close(None)).await.ok();
+    }
+
+    #[test]
+    fn test_handle_message_start_audio_stream() {
+        let (_dir, state) = test_app_state();
+        // Must instantiate first
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        let resp = handle_message(
+            IncomingMessage::StartAudioStream {
+                instance_id: "inst-1".into(),
+                sample_rate: 44100.0,
+                block_size: 512,
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::AudioStreamStarted { instance_id } => {
+                assert_eq!(instance_id, "inst-1");
+            }
+            other => panic!("Expected AudioStreamStarted, got {other:?}"),
+        }
+        assert!(state.audio_streams.is_streaming("inst-1"));
+
+        // Clean up
+        state.audio_streams.stop_stream("inst-1");
+    }
+
+    #[test]
+    fn test_handle_message_start_audio_stream_unknown_instance() {
+        let (_dir, state) = test_app_state();
+
+        let resp = handle_message(
+            IncomingMessage::StartAudioStream {
+                instance_id: "nonexistent".into(),
+                sample_rate: 44100.0,
+                block_size: 512,
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::Error { code, .. } => assert_eq!(code, "start_stream_error"),
+            other => panic!("Expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_message_stop_audio_stream() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+        state.audio_streams.start_stream("inst-1", 44100.0, 512, None, true);
+
+        let resp = handle_message(
+            IncomingMessage::StopAudioStream {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::AudioStreamStopped { instance_id } => {
+                assert_eq!(instance_id, "inst-1");
+            }
+            other => panic!("Expected AudioStreamStopped, got {other:?}"),
+        }
+        assert!(!state.audio_streams.is_streaming("inst-1"));
+    }
+
+    #[test]
+    fn test_handle_message_stop_audio_stream_not_streaming() {
+        let (_dir, state) = test_app_state();
+
+        let resp = handle_message(
+            IncomingMessage::StopAudioStream {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::Error { code, .. } => assert_eq!(code, "stop_stream_error"),
+            other => panic!("Expected Error, got {other:?}"),
+        }
+    }
+
+    /// Integration test: start an audio stream and verify binary frames arrive over WebSocket.
+    #[tokio::test]
+    async fn test_ws_audio_stream_binary_frames() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
+        let state = Arc::new(app_state);
+        let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
+
+        // Instantiate a stub plugin instance
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        let server_state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
+        tokio::spawn(async move {
+            let (stream, peer) = listener.accept().await.unwrap();
+            handle_connection(stream, peer, server_state, rx)
+                .await
+                .unwrap();
+        });
+
+        let url = format!("ws://{addr}");
+        let (ws, _) = connect_async(&url).await.unwrap();
+        let (mut sink, mut stream) = ws.split();
+
+        // Send startAudioStream
+        let start_msg = serde_json::json!({
+            "type": "startAudioStream",
+            "instanceId": "inst-1",
+            "sampleRate": 44100.0,
+            "blockSize": 64
+        });
+        sink.send(Message::Text(start_msg.to_string().into()))
+            .await
+            .unwrap();
+
+        // First response should be the JSON audioStreamStarted
+        let response = tokio::time::timeout(Duration::from_millis(500), stream.next())
+            .await
+            .expect("Timed out waiting for audioStreamStarted")
+            .unwrap()
+            .unwrap();
+        let text = response.into_text().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "audioStreamStarted");
+        assert_eq!(parsed["instanceId"], "inst-1");
+
+        // Wait for a binary frame to arrive
+        let mut got_binary = false;
+        for _ in 0..50 {
+            let msg = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
+            if let Ok(Some(Ok(Message::Binary(data)))) = msg {
+                // Decode and verify
+                let frame = AudioFrame::decode(&data).unwrap();
+                assert_eq!(frame.instance_id, "inst-1");
+                assert_eq!(frame.samples.len(), 128); // stereo * 64
+                got_binary = true;
+                break;
+            }
+        }
+        assert!(got_binary, "Expected at least one binary audio frame");
+
+        // Stop the stream
+        let stop_msg = serde_json::json!({
+            "type": "stopAudioStream",
+            "instanceId": "inst-1"
+        });
+        sink.send(Message::Text(stop_msg.to_string().into()))
+            .await
+            .unwrap();
+
+        // Clean up
+        sink.send(Message::Close(None)).await.ok();
+    }
+
+    #[test]
+    fn test_handle_save_and_list_presets() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save a preset
+        let resp = handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "My Patch".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetSaved { instance_id, name } => {
+                assert_eq!(instance_id, "inst-1");
+                assert_eq!(name, "My Patch");
+            }
+            other => panic!("Expected PresetSaved, got {other:?}"),
+        }
+
+        // List presets
+        let resp = handle_message(
+            IncomingMessage::ListPresets {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetList { instance_id, presets } => {
+                assert_eq!(instance_id, "inst-1");
+                assert_eq!(presets, &vec!["My Patch".to_string()]);
+            }
+            other => panic!("Expected PresetList, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_load_preset_by_name() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save a preset first
+        handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "Test Preset".into(),
+            },
+            &state,
+        );
+
+        // Load the preset by name
+        let resp = handle_message(
+            IncomingMessage::LoadPreset {
+                instance_id: "inst-1".into(),
+                preset_id: None,
+                name: Some("Test Preset".into()),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, message, .. } => {
+                assert_eq!(code, "ok");
+                assert!(message.contains("Test Preset"));
+            }
+            other => panic!("Expected ok Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_load_nonexistent_preset() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        let resp = handle_message(
+            IncomingMessage::LoadPreset {
+                instance_id: "inst-1".into(),
+                preset_id: None,
+                name: Some("Nonexistent".into()),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "load_preset_error");
+            }
+            other => panic!("Expected error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_delete_preset() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save then delete
+        handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "ToDelete".into(),
+            },
+            &state,
+        );
+
+        let resp = handle_message(
+            IncomingMessage::DeletePreset {
+                instance_id: "inst-1".into(),
+                name: "ToDelete".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetDeleted { name, .. } => {
+                assert_eq!(name, "ToDelete");
+            }
+            other => panic!("Expected PresetDeleted, got {other:?}"),
+        }
+
+        // Verify it's gone
+        let resp = handle_message(
+            IncomingMessage::ListPresets {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetList { presets, .. } => {
+                assert!(presets.is_empty());
+            }
+            other => panic!("Expected PresetList, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_preset_unknown_instance_errors() {
+        let (_dir, state) = test_app_state();
+
+        let resp = handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "nonexistent".into(),
+                name: "Test".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "save_preset_error");
+            }
+            other => panic!("Expected error, got {other:?}"),
+        }
     }
 }

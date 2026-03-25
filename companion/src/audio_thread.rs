@@ -1,11 +1,14 @@
+use crossbeam::channel::{self, Receiver, Sender};
 use crossbeam::queue::SegQueue;
+use std::collections::HashMap;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use vst3::Steinberg::Vst::{
-    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait,
-    ProcessData, ProcessSetup, ProcessModes_, SymbolicSampleSizes_,
+    AudioBusBuffers, AudioBusBuffers__type0, IAudioProcessorTrait, IComponentTrait, ProcessData,
+    ProcessSetup, ProcessModes_, SymbolicSampleSizes_,
 };
 use vst3::Steinberg::kResultOk;
 
@@ -292,6 +295,223 @@ impl AudioThread {
 }
 
 // =============================================================================
+// Audio Frame
+// =============================================================================
+
+/// A binary audio frame ready to be sent over WebSocket.
+///
+/// Layout: 4 bytes instance_id length (LE u32) + instance_id bytes + f32 PCM samples (LE).
+/// The browser reconstructs the instance_id to route audio to the correct track.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AudioFrame {
+    pub instance_id: String,
+    pub samples: Vec<f32>,
+}
+
+impl AudioFrame {
+    /// Encode this frame into a binary blob suitable for a WebSocket binary message.
+    ///
+    /// Format: [id_len: u32 LE][instance_id: utf-8 bytes][samples: f32 LE ...]
+    pub fn encode(&self) -> Vec<u8> {
+        let id_bytes = self.instance_id.as_bytes();
+        let id_len = id_bytes.len() as u32;
+        let sample_bytes = self.samples.len() * 4;
+        let total = 4 + id_bytes.len() + sample_bytes;
+
+        let mut buf = Vec::with_capacity(total);
+        buf.extend_from_slice(&id_len.to_le_bytes());
+        buf.extend_from_slice(id_bytes);
+        for &s in &self.samples {
+            buf.extend_from_slice(&s.to_le_bytes());
+        }
+        buf
+    }
+
+    /// Decode a binary blob back into an AudioFrame.
+    pub fn decode(data: &[u8]) -> Option<Self> {
+        if data.len() < 4 {
+            return None;
+        }
+        let id_len = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        let id_end = 4 + id_len;
+        if data.len() < id_end {
+            return None;
+        }
+        let instance_id = String::from_utf8(data[4..id_end].to_vec()).ok()?;
+        let sample_data = &data[id_end..];
+        if sample_data.len() % 4 != 0 {
+            return None;
+        }
+        let samples: Vec<f32> = sample_data
+            .chunks_exact(4)
+            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+            .collect();
+        Some(AudioFrame {
+            instance_id,
+            samples,
+        })
+    }
+}
+
+// =============================================================================
+// Audio Stream Manager
+// =============================================================================
+
+/// State of a single running stream.
+struct StreamState {
+    stop_flag: Arc<AtomicBool>,
+}
+
+/// Manages audio processing loops for multiple VST3 plugin instances,
+/// encoding output as f32 PCM binary frames and sending them to a channel
+/// for the WebSocket server to forward to the browser.
+pub struct AudioStreamManager {
+    /// Channel sender for outgoing audio frames — the WS server reads from the receiver.
+    frame_tx: Sender<AudioFrame>,
+    /// The receiver side, taken once by the WS server.
+    frame_rx: Option<Receiver<AudioFrame>>,
+    /// Active streams keyed by instance_id.
+    streams: Mutex<HashMap<String, StreamState>>,
+}
+
+impl AudioStreamManager {
+    pub fn new() -> Self {
+        let (tx, rx) = channel::bounded(256);
+        Self {
+            frame_tx: tx,
+            frame_rx: Some(rx),
+            streams: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Take the frame receiver. Should be called once by the WebSocket server.
+    pub fn take_frame_receiver(&mut self) -> Option<Receiver<AudioFrame>> {
+        self.frame_rx.take()
+    }
+
+    /// Start an audio stream for the given instance.
+    ///
+    /// Spawns a dedicated thread that runs a real-time processing loop,
+    /// calling `AudioThread::process()` at the cadence dictated by the
+    /// sample rate and block size, then sending the output via the channel.
+    pub fn start_stream(
+        &self,
+        instance_id: &str,
+        sample_rate: f64,
+        block_size: u32,
+        plugin: Option<Arc<Vst3PluginInstance>>,
+        is_instrument: bool,
+    ) -> bool {
+        let mut streams = self.streams.lock().unwrap();
+        if streams.contains_key(instance_id) {
+            return false; // already streaming
+        }
+
+        let channels = 2u32; // stereo
+
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_clone = Arc::clone(&stop_flag);
+        let tx = self.frame_tx.clone();
+        let id = instance_id.to_string();
+
+        // Build the AudioThread that will live inside the processing thread.
+        let mut audio_thread = AudioThread::new(is_instrument);
+        audio_thread.configure(sample_rate, block_size);
+        if let Some(p) = plugin {
+            audio_thread.set_plugin(p);
+        }
+        audio_thread.start();
+
+        std::thread::Builder::new()
+            .name(format!("audio-stream-{id}"))
+            .spawn(move || {
+                run_stream_loop(audio_thread, &id, block_size, channels, &stop_clone, &tx);
+            })
+            .expect("Failed to spawn audio stream thread");
+
+        streams.insert(
+            instance_id.to_string(),
+            StreamState { stop_flag },
+        );
+
+        true
+    }
+
+    /// Stop an audio stream for the given instance.
+    pub fn stop_stream(&self, instance_id: &str) -> bool {
+        let mut streams = self.streams.lock().unwrap();
+        if let Some(state) = streams.remove(instance_id) {
+            state.stop_flag.store(true, Ordering::Release);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if a stream is active for the given instance.
+    pub fn is_streaming(&self, instance_id: &str) -> bool {
+        self.streams.lock().unwrap().contains_key(instance_id)
+    }
+
+    /// Return the number of active streams.
+    pub fn stream_count(&self) -> usize {
+        self.streams.lock().unwrap().len()
+    }
+}
+
+/// The real-time audio processing loop that runs in a dedicated thread.
+///
+/// Owns the `AudioThread` and calls `process()` every block, encoding the
+/// output as an `AudioFrame` and sending it to the WebSocket via the channel.
+fn run_stream_loop(
+    mut audio_thread: AudioThread,
+    instance_id: &str,
+    block_size: u32,
+    channels: u32,
+    stop_flag: &AtomicBool,
+    tx: &Sender<AudioFrame>,
+) {
+    let sample_rate = audio_thread.config().sample_rate;
+    let block_duration = Duration::from_secs_f64(block_size as f64 / sample_rate);
+    let total_samples = (channels * block_size) as usize;
+    let input = vec![0.0f32; total_samples];
+
+    tracing::info!(
+        instance_id,
+        sample_rate,
+        block_size,
+        "Audio stream loop started"
+    );
+
+    loop {
+        let start = Instant::now();
+
+        if stop_flag.load(Ordering::Acquire) {
+            break;
+        }
+
+        let samples = audio_thread.process(&input, channels, block_size);
+
+        let frame = AudioFrame {
+            instance_id: instance_id.to_string(),
+            samples,
+        };
+
+        // Non-blocking send — if the channel is full, drop the frame
+        // rather than blocking the audio thread.
+        let _ = tx.try_send(frame);
+
+        let elapsed = start.elapsed();
+        if elapsed < block_duration {
+            std::thread::sleep(block_duration - elapsed);
+        }
+    }
+
+    audio_thread.stop();
+    tracing::info!(instance_id, "Audio stream loop stopped");
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -460,5 +680,142 @@ mod tests {
         println!("Real plugin output[0..4]: {:?}", &output[0..4]);
 
         at.stop();
+    }
+
+    // =========================================================================
+    // AudioFrame tests
+    // =========================================================================
+
+    #[test]
+    fn audio_frame_encode_decode_roundtrip() {
+        let frame = AudioFrame {
+            instance_id: "inst-42".into(),
+            samples: vec![0.1, 0.2, -0.3, 0.0],
+        };
+        let encoded = frame.encode();
+        let decoded = AudioFrame::decode(&encoded).unwrap();
+        assert_eq!(decoded.instance_id, "inst-42");
+        assert_eq!(decoded.samples.len(), 4);
+        assert!((decoded.samples[0] - 0.1).abs() < f32::EPSILON);
+        assert!((decoded.samples[2] - (-0.3)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn audio_frame_encode_empty_samples() {
+        let frame = AudioFrame {
+            instance_id: "x".into(),
+            samples: vec![],
+        };
+        let encoded = frame.encode();
+        let decoded = AudioFrame::decode(&encoded).unwrap();
+        assert_eq!(decoded.instance_id, "x");
+        assert!(decoded.samples.is_empty());
+    }
+
+    #[test]
+    fn audio_frame_decode_too_short_returns_none() {
+        assert!(AudioFrame::decode(&[]).is_none());
+        assert!(AudioFrame::decode(&[1, 0, 0]).is_none());
+    }
+
+    #[test]
+    fn audio_frame_decode_bad_id_len_returns_none() {
+        // id_len says 100 but data is only 8 bytes total
+        let data = [100, 0, 0, 0, 0, 0, 0, 0];
+        assert!(AudioFrame::decode(&data).is_none());
+    }
+
+    #[test]
+    fn audio_frame_decode_unaligned_samples_returns_none() {
+        // Valid id but sample data is 3 bytes (not multiple of 4)
+        let mut data = vec![1u8, 0, 0, 0, b'x'];
+        data.extend_from_slice(&[0, 0, 0]); // 3 bytes — not aligned
+        assert!(AudioFrame::decode(&data).is_none());
+    }
+
+    // =========================================================================
+    // AudioStreamManager tests
+    // =========================================================================
+
+    #[test]
+    fn stream_manager_start_and_stop() {
+        let manager = AudioStreamManager::new();
+        assert_eq!(manager.stream_count(), 0);
+
+        let started = manager.start_stream("inst-1", 44100.0, 512, None, false);
+        assert!(started);
+        assert!(manager.is_streaming("inst-1"));
+        assert_eq!(manager.stream_count(), 1);
+
+        let stopped = manager.stop_stream("inst-1");
+        assert!(stopped);
+        assert!(!manager.is_streaming("inst-1"));
+        assert_eq!(manager.stream_count(), 0);
+    }
+
+    #[test]
+    fn stream_manager_duplicate_start_returns_false() {
+        let manager = AudioStreamManager::new();
+        assert!(manager.start_stream("inst-1", 44100.0, 512, None, false));
+        assert!(!manager.start_stream("inst-1", 48000.0, 256, None, false));
+        assert_eq!(manager.stream_count(), 1);
+
+        manager.stop_stream("inst-1");
+    }
+
+    #[test]
+    fn stream_manager_stop_nonexistent_returns_false() {
+        let manager = AudioStreamManager::new();
+        assert!(!manager.stop_stream("nonexistent"));
+    }
+
+    #[test]
+    fn stream_manager_produces_frames() {
+        let mut manager = AudioStreamManager::new();
+        let rx = manager.take_frame_receiver().unwrap();
+
+        // Use a high sample rate and small block so frames arrive quickly
+        manager.start_stream("inst-1", 44100.0, 64, None, true);
+
+        // Wait for at least one frame
+        let frame = rx.recv_timeout(Duration::from_millis(500));
+        assert!(frame.is_ok(), "Expected to receive an audio frame");
+        let frame = frame.unwrap();
+        assert_eq!(frame.instance_id, "inst-1");
+        // Stereo * 64 samples = 128 f32 values
+        assert_eq!(frame.samples.len(), 128);
+        // Stub instrument produces silence
+        assert!(frame.samples.iter().all(|&s| s == 0.0));
+
+        manager.stop_stream("inst-1");
+    }
+
+    #[test]
+    fn stream_manager_take_receiver_only_once() {
+        let mut manager = AudioStreamManager::new();
+        assert!(manager.take_frame_receiver().is_some());
+        assert!(manager.take_frame_receiver().is_none());
+    }
+
+    #[test]
+    fn stream_manager_multiple_instances() {
+        let mut manager = AudioStreamManager::new();
+        let rx = manager.take_frame_receiver().unwrap();
+
+        manager.start_stream("inst-a", 44100.0, 64, None, true);
+        manager.start_stream("inst-b", 44100.0, 64, None, false);
+        assert_eq!(manager.stream_count(), 2);
+
+        // Collect frames for a short window
+        std::thread::sleep(Duration::from_millis(100));
+        let mut ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+        while let Ok(frame) = rx.try_recv() {
+            ids.insert(frame.instance_id.clone());
+        }
+        assert!(ids.contains("inst-a"), "Expected frames from inst-a");
+        assert!(ids.contains("inst-b"), "Expected frames from inst-b");
+
+        manager.stop_stream("inst-a");
+        manager.stop_stream("inst-b");
     }
 }

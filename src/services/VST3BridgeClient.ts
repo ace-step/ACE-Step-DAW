@@ -168,7 +168,17 @@ export class VST3BridgeClient {
         break;
 
       case 'scanComplete': {
-        const plugins = (msg.plugins as VST3PluginInfo[]) || [];
+        // Map companion format {uid, name, vendor, version, category, path}
+        // to store format {id, name, vendor, version, category, subcategory}
+        const raw = (msg.plugins as Array<Record<string, string>>) || [];
+        const plugins: VST3PluginInfo[] = raw.map((p) => ({
+          id: p.uid ?? p.id ?? '',
+          name: p.name ?? 'Unknown',
+          vendor: p.vendor ?? 'Unknown',
+          version: p.version ?? '0.0.0',
+          category: (p.category?.toLowerCase().includes('instrument') ? 'instrument' : 'effect') as 'instrument' | 'effect',
+          subcategory: p.category ?? '',
+        }));
         this.emit('scanComplete', plugins);
         break;
       }

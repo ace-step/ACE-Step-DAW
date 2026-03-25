@@ -18,6 +18,8 @@ clap = { version = "4", features = ["derive"] }
 walkdir = "2"
 crossbeam = "0.8"
 plist = "1"
+libloading = "0.8"
+vst3 = "0.3"
 
 [dev-dependencies]
 tempfile = "3"

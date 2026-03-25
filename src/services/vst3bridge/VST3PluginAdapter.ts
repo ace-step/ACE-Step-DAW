@@ -22,14 +22,16 @@ import type {
   InstantiatedResponse,
   AudioFrame,
 } from './VST3BridgeProtocol';
-import { createRingBuffer, type W9RingBuffer } from './ringBuffer';
+import { RingBuffer } from './ringBuffer';
+import { VST3AudioWorkletNode } from './VST3AudioWorklet';
+import { fnv1aHash } from './VST3BridgeProtocol';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 /** Ring buffer capacity in sample frames (≈ 0.5 s at 48 kHz). */
 const RING_BUFFER_FRAMES = 24_000;
 
-/** Interval (ms) for the audio pump loop. */
+/** Interval (ms) for the audio pump loop (input capture for effects). */
 const AUDIO_PUMP_INTERVAL_MS = 5;
 
 /** Audio block size sent per pump iteration (in sample frames). */
@@ -51,10 +53,12 @@ export class VST3PluginAdapter implements WAPPlugin {
   private paramValues: PluginParamValues = {};
 
   // Audio streaming state
-  private inputRingBuffer: W9RingBuffer | null = null;
-  private outputRingBuffer: W9RingBuffer | null = null;
+  private workletNode: VST3AudioWorkletNode | null = null;
+  private outputRingBuffer: RingBuffer | null = null;
   private audioPumpTimer: ReturnType<typeof setInterval> | null = null;
   private audioNodeRef: PluginAudioNode | null = null;
+  private audioFrameHandler: ((hash: number, seq: number, channels: number, samples: Float32Array[]) => void) | null = null;
+  private instanceIdHash: number;
   private disposed = false;
 
   constructor(
@@ -71,6 +75,7 @@ export class VST3PluginAdapter implements WAPPlugin {
     this.description = `VST3: ${pluginInfo.name} by ${pluginInfo.vendor}`;
     this.bridgeClient = bridgeClient;
     this.latencySamples = instantiateResponse.latencySamples;
+    this.instanceIdHash = fnv1aHash(instanceId);
 
     // Map VST3 params to WAP param descriptors
     this.paramDescriptors = this.mapParamDescriptors(instantiateResponse.parameters);
@@ -82,37 +87,79 @@ export class VST3PluginAdapter implements WAPPlugin {
 
   // ─── WAPPlugin: audio node ──────────────────────────────────────────────
 
-  createAudioNode(ctx: AudioContext): PluginAudioNode {
+  /**
+   * Create the audio node. Must be called with `await` since AudioWorklet
+   * registration is async. Returns a PluginAudioNode with input/output nodes.
+   */
+  async createAudioNodeAsync(ctx: AudioContext): Promise<PluginAudioNode> {
     const outputChannels = 2;
-    const inputChannels = this.pluginType === 'instrument' ? 0 : 2;
+    const isEffect = this.pluginType === 'effect';
 
-    // Create ring buffers for bridging worklet <-> WebSocket
-    this.inputRingBuffer = createRingBuffer(RING_BUFFER_FRAMES, Math.max(inputChannels, 1));
-    this.outputRingBuffer = createRingBuffer(RING_BUFFER_FRAMES, outputChannels);
+    // Create the VST3 AudioWorklet node (handles ring buffers + worklet registration)
+    this.workletNode = await VST3AudioWorkletNode.create(ctx, outputChannels, isEffect);
+    this.outputRingBuffer = RingBuffer.wrap(
+      this.workletNode.outputSAB,
+      outputChannels,
+    );
 
-    // For effects: input gain node captures audio to send to companion
-    const inputNode = this.pluginType === 'effect' ? ctx.createGain() : null;
+    // Subscribe to incoming audio frames from the companion
+    this.audioFrameHandler = (hash, _seq, channels, samples) => {
+      if (hash !== this.instanceIdHash) return;
+      if (!this.outputRingBuffer) return;
 
-    // Output gain node delivers processed audio back to the graph
-    const outputNode = ctx.createGain();
+      // Write received audio (per-channel Float32Array[]) into the ring buffer.
+      // The AudioWorklet reads from this ring buffer on the audio thread.
+      const numSamples = samples.length > 0 ? samples[0].length : 0;
+      if (numSamples > 0 && channels > 0) {
+        this.outputRingBuffer.writeDeinterleaved(samples, numSamples);
+      }
+    };
+    this.bridgeClient.onAudioFrame(this.audioFrameHandler);
 
-    // If effect, connect input → ScriptProcessorNode (capture) → silence
-    // In a full implementation this would be an AudioWorkletNode.
-    // For now we use a lightweight pump loop that the bridge client
-    // drives via audio_frame events.
-    if (inputNode) {
-      // Connect input through to keep the Web Audio graph alive,
-      // but at zero gain so captured audio doesn't double-play.
-      const silencer = ctx.createGain();
-      silencer.gain.value = 0;
-      inputNode.connect(silencer);
-      silencer.connect(ctx.destination);
+    // Tell the companion to start streaming audio for this instance
+    this.bridgeClient.send({
+      type: 'startAudioStream',
+      instanceId: this.instanceId,
+      sampleRate: ctx.sampleRate,
+      blockSize: BLOCK_SIZE,
+    });
+
+    // For effects: start the input pump that captures audio and sends to companion
+    if (isEffect && this.workletNode.inputSAB) {
+      this.startInputPump(outputChannels);
     }
 
-    // Start the audio pump loop
-    this.startAudioPump(inputChannels, outputChannels);
+    this.audioNodeRef = {
+      inputNode: this.workletNode.inputNode,
+      outputNode: this.workletNode.outputNode,
+    };
+    return this.audioNodeRef;
+  }
+
+  /**
+   * Synchronous createAudioNode for WAPPlugin interface compatibility.
+   * Kicks off async worklet creation internally. The audio graph won't
+   * produce sound until the async setup completes.
+   */
+  createAudioNode(ctx: AudioContext): PluginAudioNode {
+    // Create placeholder nodes immediately
+    const outputNode = ctx.createGain();
+    const inputNode = this.pluginType === 'effect' ? ctx.createGain() : null;
 
     this.audioNodeRef = { inputNode, outputNode };
+
+    // Kick off async setup — once ready, reconnect to real worklet nodes
+    this.createAudioNodeAsync(ctx).then((realNodes) => {
+      // Connect real worklet output → placeholder output so downstream graph works
+      if (realNodes.outputNode && realNodes.outputNode !== outputNode) {
+        (realNodes.outputNode as AudioNode).connect(outputNode);
+      }
+      // For effects: connect placeholder input → real worklet input
+      if (inputNode && realNodes.inputNode && realNodes.inputNode !== inputNode) {
+        inputNode.connect(realNodes.inputNode as AudioNode);
+      }
+    });
+
     return this.audioNodeRef;
   }
 
@@ -157,12 +204,25 @@ export class VST3PluginAdapter implements WAPPlugin {
     this.disposed = true;
 
     this.bridgeClient.off('paramChanged', this.handleParamChanged);
-    this.stopAudioPump();
+
+    // Unsubscribe from audio frames
+    if (this.audioFrameHandler) {
+      this.bridgeClient.offAudioFrame(this.audioFrameHandler);
+      this.audioFrameHandler = null;
+    }
+
+    // Tell companion to stop streaming
+    this.bridgeClient.send({
+      type: 'stopAudioStream',
+      instanceId: this.instanceId,
+    });
+
+    this.stopInputPump();
     this.bridgeClient.destroy(this.instanceId);
 
-    this.inputRingBuffer?.reset();
-    this.outputRingBuffer?.reset();
-    this.inputRingBuffer = null;
+    // Clean up worklet node (handles ring buffer reset + disconnect)
+    this.workletNode?.dispose();
+    this.workletNode = null;
     this.outputRingBuffer = null;
     this.audioNodeRef = null;
   }
@@ -237,39 +297,38 @@ export class VST3PluginAdapter implements WAPPlugin {
     this.paramValues[String(paramId)] = value;
   };
 
-  /** Start the audio pump loop that bridges ring buffers and the bridge client. */
-  private startAudioPump(inputChannels: number, _outputChannels: number): void {
-    // Pre-allocate the read buffer to avoid per-tick allocation
-    const inputBuf = inputChannels > 0
-      ? new Float32Array(BLOCK_SIZE * inputChannels)
-      : null;
+  /**
+   * Start the input pump loop for effect plugins.
+   * Reads captured audio from the input ring buffer (written by the worklet)
+   * and sends it to the companion for processing.
+   */
+  private startInputPump(channels: number): void {
+    if (!this.workletNode?.inputSAB) return;
+
+    const inputRingBuffer = RingBuffer.wrap(this.workletNode.inputSAB, channels);
+    // Pre-allocate per-channel read buffers
+    const channelBuffers = Array.from({ length: channels }, () => new Float32Array(BLOCK_SIZE));
 
     this.audioPumpTimer = setInterval(() => {
       if (this.disposed) return;
 
       // Read captured input from ring buffer and send to companion
-      if (this.inputRingBuffer && inputBuf) {
-        const available = this.inputRingBuffer.availableRead();
-        if (available >= inputBuf.length) {
-          this.inputRingBuffer.read(inputBuf);
-          const frame: AudioFrame = {
-            instanceId: this.instanceId,
-            samples: inputBuf,
-            channels: inputChannels,
-            frameCount: BLOCK_SIZE,
-          };
-          this.bridgeClient.sendAudioFrame(frame);
-        }
+      const available = inputRingBuffer.availableRead;
+      if (available >= BLOCK_SIZE) {
+        inputRingBuffer.readDeinterleaved(channelBuffers, BLOCK_SIZE);
+        const frame: AudioFrame = {
+          instanceId: this.instanceId,
+          samples: channelBuffers[0], // interleaved format for sendAudioFrame
+          channels,
+          frameCount: BLOCK_SIZE,
+        };
+        this.bridgeClient.sendAudioFrame(frame);
       }
-
-      // Read processed output from output ring buffer — handled by
-      // the audio_frame event listener which writes into the output
-      // ring buffer. The worklet reads from there.
     }, AUDIO_PUMP_INTERVAL_MS);
   }
 
-  /** Stop the audio pump loop. */
-  private stopAudioPump(): void {
+  /** Stop the input pump loop. */
+  private stopInputPump(): void {
     if (this.audioPumpTimer !== null) {
       clearInterval(this.audioPumpTimer);
       this.audioPumpTimer = null;

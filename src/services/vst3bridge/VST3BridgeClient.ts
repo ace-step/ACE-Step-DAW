@@ -255,6 +255,11 @@ export class VST3BridgeClient extends EventTarget {
     };
   }
 
+  /** Remove a previously registered audio frame handler. */
+  offAudioFrame(handler: AudioFrameHandler): void {
+    this.audioFrameHandlers.delete(handler);
+  }
+
   // -----------------------------------------------------------------------
   // Public API — convenience methods
   // -----------------------------------------------------------------------

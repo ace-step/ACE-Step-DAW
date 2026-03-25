@@ -286,12 +286,23 @@ fn plugin_info_from_path(path: &Path) -> Option<PluginInfo> {
     let plist_meta = read_plist_metadata(path);
     let category = read_category_from_moduleinfo(path);
 
+    // Category from moduleinfo.json may be a specific subcategory like "Fx|Reverb"
+    // Split into main category and subcategory
+    let raw_category = category.unwrap_or_default();
+    let (main_cat, sub_cat) = if raw_category.contains('|') {
+        let parts: Vec<&str> = raw_category.splitn(2, '|').collect();
+        (parts[0].to_string(), parts.get(1).unwrap_or(&"").to_string())
+    } else {
+        (raw_category.clone(), String::new())
+    };
+
     Some(PluginInfo {
         uid: Uuid::new_v4().to_string(),
         name: stem,
         vendor: plist_meta.vendor.unwrap_or_else(|| "Unknown".into()),
         version: plist_meta.version.unwrap_or_else(|| "0.0.0".into()),
-        category: category.unwrap_or_else(|| "Unknown".into()),
+        category: if main_cat.is_empty() { "Unknown".into() } else { main_cat },
+        subcategory: sub_cat,
         path: path.to_string_lossy().to_string(),
     })
 }
@@ -548,7 +559,8 @@ mod tests {
         add_moduleinfo(&bundle, &["Fx|EQ"]);
 
         let info = plugin_info_from_path(&bundle).unwrap();
-        assert_eq!(info.category, "Fx|EQ");
+        assert_eq!(info.category, "Fx");
+        assert_eq!(info.subcategory, "EQ");
     }
 
     #[test]
@@ -618,6 +630,7 @@ mod tests {
         assert_eq!(p.name, "FullPlugin");
         assert_eq!(p.vendor, "acme");
         assert_eq!(p.version, "1.2.3");
-        assert_eq!(p.category, "Instrument|Synth");
+        assert_eq!(p.category, "Instrument");
+        assert_eq!(p.subcategory, "Synth");
     }
 }

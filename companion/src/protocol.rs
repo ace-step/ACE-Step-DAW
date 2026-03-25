@@ -139,6 +139,8 @@ pub struct PluginInfo {
     pub vendor: String,
     pub version: String,
     pub category: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subcategory: String,
     pub path: String,
 }
 
@@ -410,6 +412,7 @@ mod tests {
                 vendor: "TestVendor".into(),
                 version: "1.0.0".into(),
                 category: "Instrument".into(),
+                subcategory: "Synth".into(),
                 path: "/Library/Audio/Plug-Ins/VST3/TestSynth.vst3".into(),
             }],
         };

@@ -133,6 +133,25 @@ pub struct PresetInfo {
     pub name: String,
 }
 
+/// A single parameter change entry within a batch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ParamChangeEntry {
+    pub instance_id: String,
+    pub param_id: u32,
+    pub value: f64,
+}
+
+impl From<crate::host_impl::HostParamChange> for ParamChangeEntry {
+    fn from(c: crate::host_impl::HostParamChange) -> Self {
+        Self {
+            instance_id: c.instance_id,
+            param_id: c.param_id,
+            value: c.value,
+        }
+    }
+}
+
 /// Messages sent from the companion app to the browser.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -166,6 +185,10 @@ pub enum OutgoingMessage {
         #[serde(rename = "paramId")]
         param_id: u32,
         value: f64,
+    },
+    /// Batch of parameter changes from plugins (sent periodically by the host).
+    ParamsBatch {
+        changes: Vec<ParamChangeEntry>,
     },
     EditorOpened {
         #[serde(rename = "instanceId")]
@@ -438,5 +461,29 @@ mod tests {
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
         assert_eq!(msg, parsed);
+    }
+
+    #[test]
+    fn test_outgoing_params_batch_roundtrip() {
+        let msg = OutgoingMessage::ParamsBatch {
+            changes: vec![
+                ParamChangeEntry {
+                    instance_id: "inst-1".into(),
+                    param_id: 0,
+                    value: 0.5,
+                },
+                ParamChangeEntry {
+                    instance_id: "inst-2".into(),
+                    param_id: 3,
+                    value: 1.0,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["type"], "paramsBatch");
+        assert_eq!(val["changes"].as_array().unwrap().len(), 2);
     }
 }

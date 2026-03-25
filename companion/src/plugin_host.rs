@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::error::{CompanionError, Result};
+use crate::host_impl::MemoryStream;
 use crate::protocol::{ParamInfo, PresetInfo};
 use crate::vst3_loader::{self, Vst3PluginInstance};
 
@@ -118,6 +119,115 @@ impl PluginHost {
                 "Instance '{instance_id}' not found"
             )))
         }
+    }
+
+    /// Run a closure on a live plugin instance, returning `stub_default` for
+    /// stub instances (registered but no real VST3 loaded).
+    ///
+    /// Returns `Err` if the instance_id is completely unknown.
+    fn with_live_instance<T, F>(&self, instance_id: &str, stub_default: T, f: F) -> Result<T>
+    where
+        F: FnOnce(&Vst3PluginInstance) -> T,
+    {
+        let guard = self.live_instances.lock().unwrap();
+        if let Some(instance) = guard.get(instance_id) {
+            Ok(f(instance))
+        } else if self.instances.lock().unwrap().contains_key(instance_id) {
+            Ok(stub_default)
+        } else {
+            Err(CompanionError::Plugin(format!(
+                "Instance '{instance_id}' not found"
+            )))
+        }
+    }
+
+    /// Set a parameter value on a live plugin instance via IEditController.
+    pub fn set_parameter(&self, instance_id: &str, param_id: u32, value: f64) -> Result<()> {
+        self.with_live_instance(instance_id, (), |instance| {
+            if let Some(ref controller) = instance.controller {
+                unsafe {
+                    use vst3::Steinberg::Vst::IEditControllerTrait;
+                    controller.setParamNormalized(param_id, value);
+                }
+                info!(instance_id, param_id, value, "Set parameter via IEditController");
+            } else {
+                warn!(instance_id, param_id, "No IEditController — parameter set ignored");
+            }
+        })
+    }
+
+    /// Get the current state of a plugin instance via IComponent::getState().
+    ///
+    /// Returns the raw state bytes, or an empty vec for stub instances.
+    pub fn get_state(&self, instance_id: &str) -> Result<Vec<u8>> {
+        self.with_live_instance(instance_id, vec![], |instance| {
+            let stream = MemoryStream::new();
+            let stream_ptr = stream.to_com_ptr::<vst3::Steinberg::IBStream>();
+            match stream_ptr {
+                Some(ptr) => {
+                    unsafe {
+                        use vst3::Steinberg::Vst::IComponentTrait;
+                        instance.component.getState(ptr.as_ptr());
+                    }
+                    let data = stream.into_data();
+                    info!(instance_id, bytes = data.len(), "Got plugin state");
+                    data
+                }
+                None => {
+                    warn!(instance_id, "Failed to create IBStream for getState");
+                    vec![]
+                }
+            }
+        })
+    }
+
+    /// Set the state of a plugin instance via IComponent::setState().
+    pub fn set_state(&self, instance_id: &str, data: &[u8]) -> Result<()> {
+        self.with_live_instance(instance_id, (), |instance| {
+            let stream = MemoryStream::from_data(data.to_vec());
+            let stream_ptr = stream.to_com_ptr::<vst3::Steinberg::IBStream>();
+            match stream_ptr {
+                Some(ptr) => {
+                    unsafe {
+                        use vst3::Steinberg::Vst::IComponentTrait;
+                        instance.component.setState(ptr.as_ptr());
+                    }
+                    info!(instance_id, bytes = data.len(), "Set plugin state");
+                }
+                None => {
+                    warn!(instance_id, "Failed to create IBStream for setState");
+                }
+            }
+        })
+    }
+
+    /// Set processing active/inactive via IAudioProcessor::setProcessing().
+    pub fn set_processing(&self, instance_id: &str, active: bool) -> Result<()> {
+        self.with_live_instance(instance_id, (), |instance| {
+            unsafe {
+                use vst3::Steinberg::Vst::{IAudioProcessorTrait, IComponentTrait};
+                if active {
+                    instance.component.setActive(1);
+                    instance.processor.setProcessing(1);
+                } else {
+                    instance.processor.setProcessing(0);
+                    instance.component.setActive(0);
+                }
+            }
+            info!(instance_id, active, "Set processing state");
+        })
+    }
+
+    /// Get latency from IAudioProcessor::getLatencySamples().
+    pub fn get_latency(&self, instance_id: &str) -> Result<u32> {
+        self.with_live_instance(instance_id, 0, |instance| {
+            let samples = unsafe {
+                use vst3::Steinberg::Vst::IAudioProcessorTrait;
+                instance.processor.getLatencySamples() as u32
+            };
+            info!(instance_id, samples, "Got latency");
+            samples
+        })
     }
 
     /// Check whether an instance exists.

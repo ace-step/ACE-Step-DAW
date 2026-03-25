@@ -239,6 +239,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 latency_samples: info.latency_samples,
                 tail_samples: info.tail_samples,
                 presets: info.presets,
+                output_busses: info.output_busses,
             },
             Err(e) => OutgoingMessage::Error {
                 req_id,
@@ -1168,6 +1169,7 @@ mod tests {
         // Send binary audio input frame (stereo * 64 samples = 128 f32s)
         let input_frame = AudioFrame {
             instance_id: "fx-1".into(),
+            bus_index: 0,
             samples: vec![0.3f32; 128],
         };
         sink.send(Message::Binary(input_frame.encode().into()))

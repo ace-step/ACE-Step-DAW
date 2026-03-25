@@ -160,6 +160,18 @@ pub struct ParamInfo {
     pub unit: String,
 }
 
+/// Metadata about a single output bus (e.g., "Main Out", "Kick", "Snare").
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputBusInfo {
+    /// Human-readable bus name from the plugin.
+    pub name: String,
+    /// Number of audio channels on this bus (e.g. 2 for stereo).
+    pub channels: u32,
+    /// Bus index (0-based).
+    pub index: u32,
+}
+
 /// Metadata about a factory preset.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PresetInfo {
@@ -213,6 +225,8 @@ pub enum OutgoingMessage {
         #[serde(rename = "tailSamples")]
         tail_samples: u32,
         presets: Vec<PresetInfo>,
+        #[serde(rename = "outputBusses")]
+        output_busses: Vec<OutputBusInfo>,
     },
     ParamChanged {
         #[serde(rename = "instanceId")]
@@ -444,6 +458,11 @@ mod tests {
                 id: 0,
                 name: "Default".into(),
             }],
+            output_busses: vec![OutputBusInfo {
+                name: "Main Output".into(),
+                channels: 2,
+                index: 0,
+            }],
         };
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
@@ -629,7 +648,6 @@ mod tests {
 
     #[test]
     fn test_is_effect_defaults_to_false() {
-        // When isEffect is omitted, it should default to false (instrument)
         let raw = r#"{"type":"startAudioStream","instanceId":"inst-1","sampleRate":48000.0,"blockSize":128}"#;
         let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
         match msg {
@@ -638,5 +656,45 @@ mod tests {
             }
             _ => panic!("Expected StartAudioStream"),
         }
+    }
+
+    #[test]
+    fn test_output_bus_info_roundtrip() {
+        let info = OutputBusInfo {
+            name: "Kick".into(),
+            channels: 2,
+            index: 1,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let parsed: OutputBusInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["name"], "Kick");
+        assert_eq!(val["channels"], 2);
+        assert_eq!(val["index"], 1);
+    }
+
+    #[test]
+    fn test_instantiated_with_output_busses_roundtrip() {
+        let msg = OutgoingMessage::Instantiated {
+            req_id: None,
+            instance_id: "inst-1".into(),
+            parameters: vec![],
+            latency_samples: 0,
+            tail_samples: 0,
+            presets: vec![],
+            output_busses: vec![
+                OutputBusInfo { name: "Main Out".into(), channels: 2, index: 0 },
+                OutputBusInfo { name: "Kick".into(), channels: 2, index: 1 },
+                OutputBusInfo { name: "Snare".into(), channels: 2, index: 2 },
+            ],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let busses = val["outputBusses"].as_array().unwrap();
+        assert_eq!(busses.len(), 3);
+        assert_eq!(busses[1]["name"], "Kick");
     }
 }

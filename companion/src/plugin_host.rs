@@ -10,7 +10,7 @@ use tracing::{info, warn};
 
 use crate::error::{CompanionError, Result};
 use crate::host_impl::MemoryStream;
-use crate::protocol::{ParamInfo, PresetInfo};
+use crate::protocol::{OutputBusInfo, ParamInfo, PresetInfo};
 use crate::vst3_loader::{self, Vst3PluginInstance};
 
 /// Metadata returned when a plugin is instantiated.
@@ -22,6 +22,7 @@ pub struct InstanceInfo {
     pub latency_samples: u32,
     pub tail_samples: u32,
     pub presets: Vec<PresetInfo>,
+    pub output_busses: Vec<OutputBusInfo>,
 }
 
 /// Plugin host that loads and manages real VST3 plugin instances.
@@ -67,6 +68,7 @@ impl PluginHost {
                 latency_samples: metadata.latency_samples,
                 tail_samples: metadata.tail_samples,
                 presets: vec![PresetInfo { id: 0, name: "Default".into() }],
+                output_busses: metadata.output_busses,
             };
 
             info!(
@@ -87,6 +89,11 @@ impl PluginHost {
                 latency_samples: 0,
                 tail_samples: 0,
                 presets: vec![PresetInfo { id: 0, name: "Default".into() }],
+                output_busses: vec![OutputBusInfo {
+                    name: "Main Output".into(),
+                    channels: 2,
+                    index: 0,
+                }],
             };
 
             warn!(instance_id, plugin_uid, "Instantiated stub (no plugin path)");

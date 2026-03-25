@@ -58,6 +58,13 @@ impl Default for AudioConfig {
     }
 }
 
+/// Information about an output bus for multi-output processing.
+#[derive(Debug, Clone)]
+pub struct OutputBusConfig {
+    /// Number of audio channels on this bus.
+    pub channels: u32,
+}
+
 /// Manages real-time audio processing for a single VST3 plugin instance.
 pub struct AudioThread {
     config: AudioConfig,
@@ -70,6 +77,8 @@ pub struct AudioThread {
     plugin: Option<Arc<Vst3PluginInstance>>,
     /// Whether setupProcessing has been called on the plugin.
     setup_done: bool,
+    /// Output bus configuration; defaults to a single stereo bus.
+    output_busses: Vec<OutputBusConfig>,
 }
 
 impl AudioThread {
@@ -83,7 +92,22 @@ impl AudioThread {
             is_instrument,
             plugin: None,
             setup_done: false,
+            output_busses: vec![OutputBusConfig { channels: 2 }],
         }
+    }
+
+    /// Set the output bus configuration for multi-output plugins.
+    pub fn set_output_busses(&mut self, busses: Vec<OutputBusConfig>) {
+        if busses.is_empty() {
+            self.output_busses = vec![OutputBusConfig { channels: 2 }];
+        } else {
+            self.output_busses = busses;
+        }
+    }
+
+    /// Return the output bus configuration.
+    pub fn output_busses(&self) -> &[OutputBusConfig] {
+        &self.output_busses
     }
 
     /// Attach a real VST3 plugin instance for audio processing.
@@ -164,12 +188,21 @@ impl AudioThread {
         &self.config
     }
 
-    /// Process audio through the VST3 plugin.
+    /// Process audio through the VST3 plugin, returning output for bus 0 only.
     ///
     /// Input/output are interleaved f32 samples. If a real plugin is attached,
     /// audio is processed through `IAudioProcessor::process()`. Otherwise falls
     /// back to stub behavior (instruments=silence, effects=passthrough).
     pub fn process(&mut self, input: &[f32], channels: u32, samples: u32) -> Vec<f32> {
+        let busses = self.process_multi(input, channels, samples);
+        busses.into_iter().next().unwrap_or_default()
+    }
+
+    /// Process audio and return output for all output busses.
+    ///
+    /// Returns a Vec of interleaved f32 sample buffers, one per output bus.
+    /// Bus 0 is always the main output.
+    pub fn process_multi(&mut self, input: &[f32], channels: u32, samples: u32) -> Vec<Vec<f32>> {
         let total = (channels * samples) as usize;
 
         // Drain queues
@@ -183,16 +216,16 @@ impl AudioThread {
         }
 
         if !self.active.load(Ordering::Acquire) {
-            return vec![0.0f32; total];
+            return vec![vec![0.0f32; total]];
         }
 
-        // Try real VST3 processing
+        // Try real VST3 processing with multi-output
         if let Some(ref plugin) = self.plugin {
-            return self.process_vst3(plugin.clone(), &midi_events, input, channels, samples);
+            return self.process_vst3_multi(plugin.clone(), &midi_events, input, channels, samples);
         }
 
-        // Stub fallback
-        if self.is_instrument {
+        // Stub fallback (single bus only)
+        let bus0 = if self.is_instrument {
             vec![0.0f32; total]
         } else if input.len() >= total {
             input[..total].to_vec()
@@ -200,18 +233,19 @@ impl AudioThread {
             let mut output = input.to_vec();
             output.resize(total, 0.0);
             output
-        }
+        };
+        vec![bus0]
     }
 
-    /// Process audio through the real VST3 plugin.
-    fn process_vst3(
+    /// Process audio through the real VST3 plugin, returning all output busses.
+    fn process_vst3_multi(
         &self,
         plugin: Arc<Vst3PluginInstance>,
         midi_events: &[MidiEvent],
         input: &[f32],
         channels: u32,
         samples: u32,
-    ) -> Vec<f32> {
+    ) -> Vec<Vec<f32>> {
         let num_channels = channels as usize;
         let num_samples = samples as usize;
         let total = num_channels * num_samples;
@@ -227,15 +261,8 @@ impl AudioThread {
             }
         }
 
-        // Create output channel buffers
-        let mut output_channels: Vec<Vec<f32>> = vec![vec![0.0; num_samples]; num_channels];
-
-        // Build raw pointer arrays for AudioBusBuffers
+        // Build raw pointer arrays for input AudioBusBuffers
         let mut input_ptrs: Vec<*mut f32> = input_channels
-            .iter_mut()
-            .map(|ch| ch.as_mut_ptr())
-            .collect();
-        let mut output_ptrs: Vec<*mut f32> = output_channels
             .iter_mut()
             .map(|ch| ch.as_mut_ptr())
             .collect();
@@ -248,16 +275,46 @@ impl AudioThread {
             },
         };
 
-        let mut output_bus = AudioBusBuffers {
-            numChannels: num_channels as i32,
-            silenceFlags: 0,
-            __field0: AudioBusBuffers__type0 {
-                channelBuffers32: output_ptrs.as_mut_ptr(),
-            },
-        };
+        // Create per-bus output channel buffers and AudioBusBuffers.
+        // `self.output_busses` is guaranteed non-empty (set_output_busses enforces this).
+        let num_output_busses = self.output_busses.len();
+        let mut all_output_channels: Vec<Vec<Vec<f32>>> = Vec::with_capacity(num_output_busses);
+        let mut all_output_ptrs: Vec<Vec<*mut f32>> = Vec::with_capacity(num_output_busses);
+
+        for bus in &self.output_busses {
+            let bus_ch = bus.channels as usize;
+            all_output_channels.push(vec![vec![0.0; num_samples]; bus_ch]);
+        }
+
+        // Build pointer arrays — must be done after all_output_channels is fully populated
+        for bus_channels in &mut all_output_channels {
+            let ptrs: Vec<*mut f32> = bus_channels
+                .iter_mut()
+                .map(|ch| ch.as_mut_ptr())
+                .collect();
+            all_output_ptrs.push(ptrs);
+        }
+
+        let mut output_busses: Vec<AudioBusBuffers> = all_output_ptrs
+            .iter_mut()
+            .enumerate()
+            .map(|(i, ptrs)| {
+                let bus_ch = if i < self.output_busses.len() {
+                    self.output_busses[i].channels as i32
+                } else {
+                    num_channels as i32
+                };
+                AudioBusBuffers {
+                    numChannels: bus_ch,
+                    silenceFlags: 0,
+                    __field0: AudioBusBuffers__type0 {
+                        channelBuffers32: ptrs.as_mut_ptr(),
+                    },
+                }
+            })
+            .collect();
 
         // Convert MIDI events to VST3 events and pack into IEventList.
-        // Skip allocation when there are no events (common case).
         let vst3_events: Vec<_> = midi_events
             .iter()
             .filter_map(midi_to_vst3_event)
@@ -279,9 +336,9 @@ impl AudioThread {
             symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
             numSamples: num_samples as i32,
             numInputs: if self.is_instrument { 0 } else { 1 },
-            numOutputs: 1,
+            numOutputs: output_busses.len() as i32,
             inputs: if self.is_instrument { ptr::null_mut() } else { &mut input_bus },
-            outputs: &mut output_bus,
+            outputs: output_busses.as_mut_ptr(),
             inputParameterChanges: ptr::null_mut(), // TODO: implement IParameterChanges
             outputParameterChanges: ptr::null_mut(),
             inputEvents: input_events_ptr,
@@ -292,18 +349,24 @@ impl AudioThread {
         let result = unsafe { plugin.processor.process(&mut process_data) };
         if result != kResultOk {
             tracing::warn!(result, "IAudioProcessor::process returned non-OK");
-            return vec![0.0f32; total];
+            return vec![vec![0.0f32; total]];
         }
 
-        // Re-interleave output
-        let mut output = vec![0.0f32; total];
-        for s in 0..num_samples {
-            for ch in 0..num_channels {
-                output[s * num_channels + ch] = output_channels[ch][s];
+        // Re-interleave each bus's output
+        let mut results = Vec::with_capacity(all_output_channels.len());
+        for bus_channels in &all_output_channels {
+            let bus_ch = bus_channels.len();
+            let bus_total = bus_ch * num_samples;
+            let mut interleaved = vec![0.0f32; bus_total];
+            for s in 0..num_samples {
+                for ch in 0..bus_ch {
+                    interleaved[s * bus_ch + ch] = bus_channels[ch][s];
+                }
             }
+            results.push(interleaved);
         }
 
-        output
+        results
     }
 
     #[cfg(test)]
@@ -336,22 +399,25 @@ impl AudioThread {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioFrame {
     pub instance_id: String,
+    /// Output bus index (0 = main, 1+ = auxiliary busses).
+    pub bus_index: u8,
     pub samples: Vec<f32>,
 }
 
 impl AudioFrame {
     /// Encode this frame into a binary blob suitable for a WebSocket binary message.
     ///
-    /// Format: [id_len: u32 LE][instance_id: utf-8 bytes][samples: f32 LE ...]
+    /// Format: [id_len: u32 LE][instance_id: utf-8 bytes][bus_index: u8][samples: f32 LE ...]
     pub fn encode(&self) -> Vec<u8> {
         let id_bytes = self.instance_id.as_bytes();
         let id_len = id_bytes.len() as u32;
         let sample_bytes = self.samples.len() * 4;
-        let total = 4 + id_bytes.len() + sample_bytes;
+        let total = 4 + id_bytes.len() + 1 + sample_bytes;
 
         let mut buf = Vec::with_capacity(total);
         buf.extend_from_slice(&id_len.to_le_bytes());
         buf.extend_from_slice(id_bytes);
+        buf.push(self.bus_index);
         for &s in &self.samples {
             buf.extend_from_slice(&s.to_le_bytes());
         }
@@ -365,11 +431,12 @@ impl AudioFrame {
         }
         let id_len = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
         let id_end = 4 + id_len;
-        if data.len() < id_end {
+        if data.len() < id_end + 1 {
             return None;
         }
         let instance_id = String::from_utf8(data[4..id_end].to_vec()).ok()?;
-        let sample_data = &data[id_end..];
+        let bus_index = data[id_end];
+        let sample_data = &data[id_end + 1..];
         if sample_data.len() % 4 != 0 {
             return None;
         }
@@ -379,6 +446,7 @@ impl AudioFrame {
             .collect();
         Some(AudioFrame {
             instance_id,
+            bus_index,
             samples,
         })
     }
@@ -439,12 +507,27 @@ impl AudioStreamManager {
         plugin: Option<Arc<Vst3PluginInstance>>,
         is_instrument: bool,
     ) -> bool {
+        self.start_stream_multi(instance_id, sample_rate, block_size, plugin, is_instrument, None)
+    }
+
+    /// Start an audio stream with multi-output bus configuration.
+    ///
+    /// If `output_busses` is None or empty, defaults to a single stereo bus.
+    pub fn start_stream_multi(
+        &self,
+        instance_id: &str,
+        sample_rate: f64,
+        block_size: u32,
+        plugin: Option<Arc<Vst3PluginInstance>>,
+        is_instrument: bool,
+        output_busses: Option<Vec<OutputBusConfig>>,
+    ) -> bool {
         let mut streams = self.streams.lock().unwrap();
         if streams.contains_key(instance_id) {
             return false; // already streaming
         }
 
-        let channels = 2u32; // stereo
+        let channels = 2u32; // stereo for input/main bus
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_clone = Arc::clone(&stop_flag);
@@ -456,6 +539,9 @@ impl AudioStreamManager {
         // Build the AudioThread that will live inside the processing thread.
         let mut audio_thread = AudioThread::new(is_instrument);
         audio_thread.configure(sample_rate, block_size);
+        if let Some(busses) = output_busses {
+            audio_thread.set_output_busses(busses);
+        }
         if let Some(p) = plugin {
             audio_thread.set_plugin(p);
         }
@@ -578,11 +664,13 @@ fn run_stream_loop(
         sample_rate,
         block_size,
         is_effect,
+        output_busses = audio_thread.output_busses().len(),
         "Audio stream loop started"
     );
 
     // Accumulator for effect input — partial frames are kept between iterations.
     let mut input_buf: Vec<f32> = Vec::new();
+    let id_owned = instance_id.to_string();
 
     loop {
         let start = Instant::now();
@@ -598,10 +686,8 @@ fn run_stream_loop(
             }
 
             if input_buf.len() >= total_samples {
-                // Use the first block's worth of samples directly from the buffer.
                 &input_buf[..total_samples]
             } else {
-                // Not enough input yet — sleep and retry next iteration.
                 let elapsed = start.elapsed();
                 if elapsed < block_duration {
                     std::thread::sleep(block_duration - elapsed);
@@ -609,25 +695,28 @@ fn run_stream_loop(
                 continue;
             }
         } else {
-            // Instruments generate audio from nothing (MIDI → output).
             &silence
         };
 
-        let samples = audio_thread.process(input, channels, block_size);
+        let bus_outputs = audio_thread.process_multi(input, channels, block_size);
 
         // For effects, discard the consumed samples after processing.
         if is_effect {
             input_buf.drain(..total_samples);
         }
 
-        let frame = AudioFrame {
-            instance_id: instance_id.to_string(),
-            samples,
-        };
+        // Send one AudioFrame per output bus
+        for (bus_idx, samples) in bus_outputs.into_iter().enumerate() {
+            let frame = AudioFrame {
+                instance_id: id_owned.clone(),
+                bus_index: bus_idx as u8,
+                samples,
+            };
 
-        // Non-blocking send — if the channel is full, drop the frame
-        // rather than blocking the audio thread.
-        let _ = tx.try_send(frame);
+            // Non-blocking send — if the channel is full, drop the frame
+            // rather than blocking the audio thread.
+            let _ = tx.try_send(frame);
+        }
 
         let elapsed = start.elapsed();
         if elapsed < block_duration {
@@ -818,25 +907,44 @@ mod tests {
     fn audio_frame_encode_decode_roundtrip() {
         let frame = AudioFrame {
             instance_id: "inst-42".into(),
+            bus_index: 0,
             samples: vec![0.1, 0.2, -0.3, 0.0],
         };
         let encoded = frame.encode();
         let decoded = AudioFrame::decode(&encoded).unwrap();
         assert_eq!(decoded.instance_id, "inst-42");
+        assert_eq!(decoded.bus_index, 0);
         assert_eq!(decoded.samples.len(), 4);
         assert!((decoded.samples[0] - 0.1).abs() < f32::EPSILON);
         assert!((decoded.samples[2] - (-0.3)).abs() < f32::EPSILON);
     }
 
     #[test]
+    fn audio_frame_encode_decode_with_bus_index() {
+        let frame = AudioFrame {
+            instance_id: "inst-99".into(),
+            bus_index: 3,
+            samples: vec![0.5, -0.5],
+        };
+        let encoded = frame.encode();
+        let decoded = AudioFrame::decode(&encoded).unwrap();
+        assert_eq!(decoded.instance_id, "inst-99");
+        assert_eq!(decoded.bus_index, 3);
+        assert_eq!(decoded.samples.len(), 2);
+        assert!((decoded.samples[0] - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
     fn audio_frame_encode_empty_samples() {
         let frame = AudioFrame {
             instance_id: "x".into(),
+            bus_index: 0,
             samples: vec![],
         };
         let encoded = frame.encode();
         let decoded = AudioFrame::decode(&encoded).unwrap();
         assert_eq!(decoded.instance_id, "x");
+        assert_eq!(decoded.bus_index, 0);
         assert!(decoded.samples.is_empty());
     }
 
@@ -859,6 +967,62 @@ mod tests {
         let mut data = vec![1u8, 0, 0, 0, b'x'];
         data.extend_from_slice(&[0, 0, 0]); // 3 bytes — not aligned
         assert!(AudioFrame::decode(&data).is_none());
+    }
+
+    // =========================================================================
+    // Multi-output bus tests
+    // =========================================================================
+
+    #[test]
+    fn output_bus_config_defaults_to_single_stereo() {
+        let at = AudioThread::new(true);
+        assert_eq!(at.output_busses().len(), 1);
+        assert_eq!(at.output_busses()[0].channels, 2);
+    }
+
+    #[test]
+    fn set_output_busses_configures_multiple() {
+        let mut at = AudioThread::new(true);
+        at.set_output_busses(vec![
+            OutputBusConfig { channels: 2 },
+            OutputBusConfig { channels: 2 },
+            OutputBusConfig { channels: 1 },
+        ]);
+        assert_eq!(at.output_busses().len(), 3);
+        assert_eq!(at.output_busses()[2].channels, 1);
+    }
+
+    #[test]
+    fn set_output_busses_empty_defaults_to_stereo() {
+        let mut at = AudioThread::new(true);
+        at.set_output_busses(vec![]);
+        assert_eq!(at.output_busses().len(), 1);
+        assert_eq!(at.output_busses()[0].channels, 2);
+    }
+
+    #[test]
+    fn process_multi_returns_single_bus_for_stub() {
+        let mut at = AudioThread::new(true);
+        at.configure(44100.0, 4);
+        at.start();
+
+        let input: Vec<f32> = vec![1.0; 8];
+        let busses = at.process_multi(&input, 2, 4);
+        assert_eq!(busses.len(), 1);
+        assert_eq!(busses[0].len(), 8);
+        assert!(busses[0].iter().all(|&s| s == 0.0)); // instrument = silence
+    }
+
+    #[test]
+    fn process_multi_effect_passthrough() {
+        let mut at = AudioThread::new(false);
+        at.configure(44100.0, 4);
+        at.start();
+
+        let input: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+        let busses = at.process_multi(&input, 2, 4);
+        assert_eq!(busses.len(), 1);
+        assert_eq!(busses[0], input);
     }
 
     // =========================================================================

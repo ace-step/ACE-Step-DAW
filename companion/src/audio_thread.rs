@@ -392,6 +392,11 @@ impl AudioFrame {
 struct StreamState {
     stop_flag: Arc<AtomicBool>,
     midi_queue: Arc<SegQueue<MidiEvent>>,
+    /// Input audio buffer for effect processing. The browser sends audio frames
+    /// which are queued here and consumed by the processing loop.
+    input_audio: Arc<SegQueue<Vec<f32>>>,
+    /// Whether this stream is an effect (needs input audio) or instrument (generates audio).
+    is_instrument: bool,
 }
 
 /// Manages audio processing loops for multiple VST3 plugin instances,
@@ -445,6 +450,8 @@ impl AudioStreamManager {
         let stop_clone = Arc::clone(&stop_flag);
         let tx = self.frame_tx.clone();
         let id = instance_id.to_string();
+        let input_audio: Arc<SegQueue<Vec<f32>>> = Arc::new(SegQueue::new());
+        let input_audio_clone = Arc::clone(&input_audio);
 
         // Build the AudioThread that will live inside the processing thread.
         let mut audio_thread = AudioThread::new(is_instrument);
@@ -458,13 +465,26 @@ impl AudioStreamManager {
         std::thread::Builder::new()
             .name(format!("audio-stream-{id}"))
             .spawn(move || {
-                run_stream_loop(audio_thread, &id, block_size, channels, &stop_clone, &tx);
+                run_stream_loop(
+                    audio_thread,
+                    &id,
+                    block_size,
+                    channels,
+                    &stop_clone,
+                    &tx,
+                    &input_audio_clone,
+                );
             })
             .expect("Failed to spawn audio stream thread");
 
         streams.insert(
             instance_id.to_string(),
-            StreamState { stop_flag, midi_queue },
+            StreamState {
+                stop_flag,
+                midi_queue,
+                input_audio,
+                is_instrument,
+            },
         );
 
         true
@@ -497,6 +517,32 @@ impl AudioStreamManager {
         }
     }
 
+    /// Send input audio samples to an effect stream for processing.
+    ///
+    /// The samples are interleaved f32 PCM (e.g. L R L R ...).
+    /// Returns `false` if no stream exists or the instance is an instrument.
+    pub fn send_audio(&self, instance_id: &str, samples: Vec<f32>) -> bool {
+        let streams = self.streams.lock().unwrap();
+        if let Some(state) = streams.get(instance_id) {
+            if state.is_instrument {
+                return false; // instruments don't accept input audio
+            }
+            state.input_audio.push(samples);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if an instance is an effect (accepts input audio).
+    pub fn is_effect(&self, instance_id: &str) -> bool {
+        let streams = self.streams.lock().unwrap();
+        streams
+            .get(instance_id)
+            .map(|s| !s.is_instrument)
+            .unwrap_or(false)
+    }
+
     /// Check if a stream is active for the given instance.
     pub fn is_streaming(&self, instance_id: &str) -> bool {
         self.streams.lock().unwrap().contains_key(instance_id)
@@ -519,18 +565,24 @@ fn run_stream_loop(
     channels: u32,
     stop_flag: &AtomicBool,
     tx: &Sender<AudioFrame>,
+    input_audio: &SegQueue<Vec<f32>>,
 ) {
     let sample_rate = audio_thread.config().sample_rate;
     let block_duration = Duration::from_secs_f64(block_size as f64 / sample_rate);
     let total_samples = (channels * block_size) as usize;
-    let input = vec![0.0f32; total_samples];
+    let silence = vec![0.0f32; total_samples];
+    let is_effect = !audio_thread.is_instrument;
 
     tracing::info!(
         instance_id,
         sample_rate,
         block_size,
+        is_effect,
         "Audio stream loop started"
     );
+
+    // Accumulator for effect input — partial frames are kept between iterations.
+    let mut input_buf: Vec<f32> = Vec::new();
 
     loop {
         let start = Instant::now();
@@ -539,7 +591,34 @@ fn run_stream_loop(
             break;
         }
 
-        let samples = audio_thread.process(&input, channels, block_size);
+        let input: &[f32] = if is_effect {
+            // Drain all queued input chunks into the accumulator.
+            while let Some(chunk) = input_audio.pop() {
+                input_buf.extend_from_slice(&chunk);
+            }
+
+            if input_buf.len() >= total_samples {
+                // Use the first block's worth of samples directly from the buffer.
+                &input_buf[..total_samples]
+            } else {
+                // Not enough input yet — sleep and retry next iteration.
+                let elapsed = start.elapsed();
+                if elapsed < block_duration {
+                    std::thread::sleep(block_duration - elapsed);
+                }
+                continue;
+            }
+        } else {
+            // Instruments generate audio from nothing (MIDI → output).
+            &silence
+        };
+
+        let samples = audio_thread.process(input, channels, block_size);
+
+        // For effects, discard the consumed samples after processing.
+        if is_effect {
+            input_buf.drain(..total_samples);
+        }
 
         let frame = AudioFrame {
             instance_id: instance_id.to_string(),
@@ -855,6 +934,12 @@ mod tests {
         manager.start_stream("inst-b", 44100.0, 64, None, false);
         assert_eq!(manager.stream_count(), 2);
 
+        // Feed input audio to the effect instance so it produces output.
+        let block = vec![0.5f32; 128]; // stereo * 64 samples
+        for _ in 0..5 {
+            manager.send_audio("inst-b", block.clone());
+        }
+
         // Collect frames for a short window
         std::thread::sleep(Duration::from_millis(100));
         let mut ids: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -891,5 +976,107 @@ mod tests {
         ];
         let sent = manager.send_midi("nonexistent", events);
         assert!(!sent, "send_midi should return false for nonexistent stream");
+    }
+
+    // =========================================================================
+    // Effect audio input routing tests
+    // =========================================================================
+
+    #[test]
+    fn send_audio_to_effect_stream() {
+        let mut manager = AudioStreamManager::new();
+        let rx = manager.take_frame_receiver().unwrap();
+
+        // Start an effect stream (is_instrument = false)
+        manager.start_stream("fx-1", 44100.0, 64, None, false);
+
+        // Send exactly one block of stereo audio (2 channels * 64 samples = 128 f32s)
+        let input = vec![0.25f32; 128];
+        let sent = manager.send_audio("fx-1", input.clone());
+        assert!(sent, "send_audio should succeed for effect stream");
+
+        // Wait for the effect to process and produce output
+        let frame = rx.recv_timeout(Duration::from_millis(500));
+        assert!(frame.is_ok(), "Expected output frame from effect stream");
+        let frame = frame.unwrap();
+        assert_eq!(frame.instance_id, "fx-1");
+        assert_eq!(frame.samples.len(), 128);
+        // Stub effect does passthrough — output should match input
+        assert!((frame.samples[0] - 0.25).abs() < f32::EPSILON);
+
+        manager.stop_stream("fx-1");
+    }
+
+    #[test]
+    fn send_audio_to_instrument_returns_false() {
+        let manager = AudioStreamManager::new();
+        manager.start_stream("synth-1", 44100.0, 64, None, true);
+
+        let sent = manager.send_audio("synth-1", vec![0.5; 128]);
+        assert!(!sent, "send_audio should return false for instrument streams");
+
+        manager.stop_stream("synth-1");
+    }
+
+    #[test]
+    fn send_audio_to_nonexistent_stream_returns_false() {
+        let manager = AudioStreamManager::new();
+        let sent = manager.send_audio("nonexistent", vec![0.5; 128]);
+        assert!(!sent, "send_audio should return false for nonexistent stream");
+    }
+
+    #[test]
+    fn is_effect_returns_correct_value() {
+        let manager = AudioStreamManager::new();
+
+        manager.start_stream("fx-1", 44100.0, 64, None, false);
+        manager.start_stream("synth-1", 44100.0, 64, None, true);
+
+        assert!(manager.is_effect("fx-1"), "Effect stream should report is_effect=true");
+        assert!(!manager.is_effect("synth-1"), "Instrument stream should report is_effect=false");
+        assert!(!manager.is_effect("nonexistent"), "Nonexistent stream should report is_effect=false");
+
+        manager.stop_stream("fx-1");
+        manager.stop_stream("synth-1");
+    }
+
+    #[test]
+    fn effect_stream_without_input_does_not_produce_frames() {
+        let mut manager = AudioStreamManager::new();
+        let rx = manager.take_frame_receiver().unwrap();
+
+        // Start an effect but don't send any audio input
+        manager.start_stream("fx-1", 44100.0, 64, None, false);
+
+        // Wait briefly — effect should NOT produce frames without input
+        std::thread::sleep(Duration::from_millis(50));
+        let result = rx.try_recv();
+        assert!(result.is_err(), "Effect should not produce frames without input audio");
+
+        manager.stop_stream("fx-1");
+    }
+
+    #[test]
+    fn effect_accumulates_partial_input() {
+        let mut manager = AudioStreamManager::new();
+        let rx = manager.take_frame_receiver().unwrap();
+
+        // Block needs 128 samples (stereo * 64), send in two halves
+        manager.start_stream("fx-1", 44100.0, 64, None, false);
+
+        manager.send_audio("fx-1", vec![0.1f32; 64]); // first half
+        std::thread::sleep(Duration::from_millis(20));
+        // No frame yet — not enough data
+        assert!(rx.try_recv().is_err(), "Should not produce frame from partial input");
+
+        manager.send_audio("fx-1", vec![0.2f32; 64]); // second half completes a block
+
+        let frame = rx.recv_timeout(Duration::from_millis(500));
+        assert!(frame.is_ok(), "Expected output frame after completing a block");
+        let frame = frame.unwrap();
+        assert_eq!(frame.instance_id, "fx-1");
+        assert_eq!(frame.samples.len(), 128);
+
+        manager.stop_stream("fx-1");
     }
 }

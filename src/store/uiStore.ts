@@ -200,6 +200,9 @@ export interface UIState {
   showGenerationHistoryPanel: boolean;
   generationPanelView: GenerationPanelView;
 
+  // VST3 Plugin Browser Panel
+  showVST3Panel: boolean;
+
   // AI Assistant
   showAIAssistant: boolean;
   aiChatMessages: AIChatMessage[];
@@ -380,6 +383,10 @@ export interface UIState {
   setShowCommandPalette: (v: boolean) => void;
   toggleCommandPalette: () => void;
 
+  // VST3 Plugin Browser Panel
+  toggleVST3Panel: () => void;
+  setShowVST3Panel: (v: boolean) => void;
+
   // AI Assistant
   toggleAIAssistant: () => void;
   setShowAIAssistant: (v: boolean) => void;
@@ -472,6 +479,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showGenerationHistoryPanel: false,
   showModelLibrary: false,
   showAIAssistant: false,
+  showVST3Panel: false,
 } as const;
 
 export const useUIStore = create<UIState>()(
@@ -580,6 +588,8 @@ export const useUIStore = create<UIState>()(
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
   generationPanelView: 'textToMusic',
+
+  showVST3Panel: false,
 
   showAIAssistant: false,
   aiChatMessages: [],
@@ -1081,6 +1091,9 @@ export const useUIStore = create<UIState>()(
 
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
   toggleCommandPalette: () => set((s) => ({ showCommandPalette: !s.showCommandPalette })),
+
+  toggleVST3Panel: () => set((s) => s.showVST3Panel ? { showVST3Panel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true }),
+  setShowVST3Panel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true } : { showVST3Panel: false }),
 
   toggleAIAssistant: () => set((state) => {
     const nextShow = !state.showAIAssistant;

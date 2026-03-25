@@ -60,7 +60,7 @@ export class VST3PresetManager {
   }
 
   async loadFactoryPreset(instanceId: string, presetId: number): Promise<void> {
-    await this.bridge.request({ type: 'load_preset', instanceId, presetId });
+    await this.bridge.request({ type: 'loadPreset', instanceId, presetId });
   }
 
   /* ---------- user presets ---------- */

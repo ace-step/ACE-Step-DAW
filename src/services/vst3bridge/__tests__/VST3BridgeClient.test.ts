@@ -102,13 +102,11 @@ async function flush() {
 /** Complete the hello handshake and flush microtasks. */
 async function completeHandshake(ws: MockWebSocket) {
   ws.simulateOpen();
-  const sentData = ws.send.mock.calls[0]?.[0];
-  const hello = JSON.parse(sentData as string);
+  // The client sends hello via send() (no reqId), then listens for helloAck.
   ws.simulateMessage({
-    type: 'hello_ack',
-    reqId: hello.reqId,
+    type: 'helloAck',
     version: VST3_BRIDGE_VERSION,
-    companionVersion: '1.0.0',
+    capabilities: ['scan', 'host', 'midi', 'state'],
   } satisfies HelloAckMessage);
   await flush();
 }
@@ -221,22 +219,22 @@ describe('VST3BridgeClient', () => {
       const ws = MockWebSocket.latest;
       await completeHandshake(ws);
 
-      const promise = client.request<ScanCompleteMessage>({ type: 'scan_plugins' });
+      const promise = client.request<ScanCompleteMessage>({ type: 'scanPlugins' });
 
       const lastCall = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const sent = JSON.parse(lastCall as string);
-      expect(sent.type).toBe('scan_plugins');
+      expect(sent.type).toBe('scanPlugins');
       expect(sent.reqId).toBeTruthy();
 
       const plugins = [makeSamplePluginInfo()];
       ws.simulateMessage({
-        type: 'scan_complete',
+        type: 'scanComplete',
         reqId: sent.reqId,
         plugins,
       } satisfies ScanCompleteMessage);
 
       const result = await promise;
-      expect(result.type).toBe('scan_complete');
+      expect(result.type).toBe('scanComplete');
       expect(result.plugins).toEqual(plugins);
     });
 
@@ -246,7 +244,7 @@ describe('VST3BridgeClient', () => {
       const ws = MockWebSocket.latest;
       await completeHandshake(ws);
 
-      const promise = client.request({ type: 'scan_plugins' });
+      const promise = client.request({ type: 'scanPlugins' });
 
       const lastCall = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const sent = JSON.parse(lastCall as string);
@@ -267,7 +265,7 @@ describe('VST3BridgeClient', () => {
       const ws = MockWebSocket.latest;
       await completeHandshake(ws);
 
-      const promise = client.request({ type: 'scan_plugins' }, 500);
+      const promise = client.request({ type: 'scanPlugins' }, 500);
 
       vi.advanceTimersByTime(501);
 
@@ -443,11 +441,11 @@ describe('VST3BridgeClient', () => {
       const ws = MockWebSocket.latest;
       await completeHandshake(ws);
 
-      const promise1 = client.request({ type: 'get_state', instanceId: 'a' });
+      const promise1 = client.request({ type: 'getState', instanceId: 'a' });
       const call1 = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const req1 = JSON.parse(call1 as string);
 
-      const promise2 = client.request({ type: 'get_state', instanceId: 'b' });
+      const promise2 = client.request({ type: 'getState', instanceId: 'b' });
       const call2 = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const req2 = JSON.parse(call2 as string);
 
@@ -461,7 +459,7 @@ describe('VST3BridgeClient', () => {
       await expect(promise1).rejects.toThrow('Instance not found');
 
       ws.simulateMessage({
-        type: 'state_data',
+        type: 'stateData',
         reqId: req2.reqId,
         instanceId: 'b',
         data: 'base64data',
@@ -469,7 +467,7 @@ describe('VST3BridgeClient', () => {
 
       const result = await promise2;
       expect(result).toEqual(
-        expect.objectContaining({ type: 'state_data', data: 'base64data' }),
+        expect.objectContaining({ type: 'stateData', data: 'base64data' }),
       );
     });
   });
@@ -489,11 +487,11 @@ describe('VST3BridgeClient', () => {
 
       const lastCall = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const sent = JSON.parse(lastCall as string);
-      expect(sent.type).toBe('scan_plugins');
+      expect(sent.type).toBe('scanPlugins');
 
       const plugins = [makeSamplePluginInfo()];
       ws.simulateMessage({
-        type: 'scan_complete',
+        type: 'scanComplete',
         reqId: sent.reqId,
         plugins,
       });
@@ -538,7 +536,7 @@ describe('VST3BridgeClient', () => {
       const sent = JSON.parse(lastCall as string);
 
       ws.simulateMessage({
-        type: 'editor_opened',
+        type: 'editorOpened',
         reqId: sent.reqId,
         instanceId: 'inst-1',
         width: 800,
@@ -561,7 +559,7 @@ describe('VST3BridgeClient', () => {
       const sent = JSON.parse(lastCall as string);
 
       ws.simulateMessage({
-        type: 'state_data',
+        type: 'stateData',
         reqId: sent.reqId,
         instanceId: 'inst-1',
         data: 'AQID',
@@ -580,7 +578,7 @@ describe('VST3BridgeClient', () => {
 
       const lastCall = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
       const sent = JSON.parse(lastCall as string);
-      expect(sent.type).toBe('set_param');
+      expect(sent.type).toBe('setParam');
       expect(sent.instanceId).toBe('inst-1');
       expect(sent.paramId).toBe(0);
       expect(sent.value).toBe(0.75);
@@ -627,10 +625,10 @@ describe('VST3BridgeClient', () => {
       await completeHandshake(ws);
 
       const handler = vi.fn();
-      client.on('param_changed', handler);
+      client.on('paramChanged', handler);
 
       ws.simulateMessage({
-        type: 'param_changed',
+        type: 'paramChanged',
         instanceId: 'inst-1',
         paramId: 0,
         value: 0.5,
@@ -638,7 +636,7 @@ describe('VST3BridgeClient', () => {
 
       expect(handler).toHaveBeenCalledTimes(1);
       expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'param_changed', value: 0.5 }),
+        expect.objectContaining({ type: 'paramChanged', value: 0.5 }),
       );
     });
 
@@ -649,11 +647,11 @@ describe('VST3BridgeClient', () => {
       await completeHandshake(ws);
 
       const handler = vi.fn();
-      const unsub = client.on('param_changed', handler);
+      const unsub = client.on('paramChanged', handler);
       unsub();
 
       ws.simulateMessage({
-        type: 'param_changed',
+        type: 'paramChanged',
         instanceId: 'inst-1',
         paramId: 0,
         value: 0.5,
@@ -672,7 +670,7 @@ describe('VST3BridgeClient', () => {
       client.addEventListener('scanprogress', handler);
 
       ws.simulateMessage({
-        type: 'scan_progress',
+        type: 'scanProgress',
         current: 3,
         total: 10,
         pluginName: 'TestPlug',
@@ -691,7 +689,7 @@ describe('VST3BridgeClient', () => {
       client.addEventListener('paramchanged', handler);
 
       ws.simulateMessage({
-        type: 'param_changed',
+        type: 'paramChanged',
         instanceId: 'inst-1',
         paramId: 0,
         value: 0.5,

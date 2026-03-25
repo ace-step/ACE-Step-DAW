@@ -106,7 +106,7 @@ export interface HelloMessage {
 
 /** Request a full plugin scan. */
 export interface ScanPluginsMessage {
-  type: 'scan_plugins';
+  type: 'scanPlugins';
 }
 
 /** Request to instantiate a plugin. */
@@ -119,7 +119,7 @@ export interface InstantiateMessage {
 
 /** Set a parameter value on a plugin instance. */
 export interface SetParamMessage {
-  type: 'set_param';
+  type: 'setParam';
   instanceId: string;
   paramId: number;
   value: number;
@@ -134,25 +134,25 @@ export interface MidiMessage {
 
 /** Request opening the plugin's native GUI editor. */
 export interface OpenEditorMessage {
-  type: 'open_editor';
+  type: 'openEditor';
   instanceId: string;
 }
 
 /** Request closing the plugin's native GUI editor. */
 export interface CloseEditorMessage {
-  type: 'close_editor';
+  type: 'closeEditor';
   instanceId: string;
 }
 
 /** Request the full serialized state of a plugin instance. */
 export interface GetStateMessage {
-  type: 'get_state';
+  type: 'getState';
   instanceId: string;
 }
 
 /** Restore serialized state to a plugin instance. */
 export interface SetStateMessage {
-  type: 'set_state';
+  type: 'setState';
   instanceId: string;
   /** Base64-encoded plugin state blob. */
   data: string;
@@ -160,7 +160,7 @@ export interface SetStateMessage {
 
 /** Load a factory preset by ID. */
 export interface LoadPresetMessage {
-  type: 'load_preset';
+  type: 'loadPreset';
   instanceId: string;
   presetId: number;
 }
@@ -173,20 +173,20 @@ export interface DestroyMessage {
 
 /** Enable or disable audio processing on a plugin instance. */
 export interface SetProcessingMessage {
-  type: 'set_processing';
+  type: 'setProcessing';
   instanceId: string;
   active: boolean;
 }
 
 /** Query the current processing latency of a plugin instance. */
 export interface GetLatencyMessage {
-  type: 'get_latency';
+  type: 'getLatency';
   instanceId: string;
 }
 
 /** Configure sidechain routing for a plugin instance. */
 export interface RouteSidechainMessage {
-  type: 'route_sidechain';
+  type: 'routeSidechain';
   instanceId: string;
   sidechainInputBus: number;
   sourceInstanceId: string;
@@ -196,21 +196,21 @@ export interface RouteSidechainMessage {
 
 /** Handshake acknowledgement from companion. */
 export interface HelloAckMessage {
-  type: 'hello_ack';
+  type: 'helloAck';
   version: string;
   capabilities: string[];
 }
 
 /** Progress update during plugin scanning. */
 export interface ScanProgressMessage {
-  type: 'scan_progress';
+  type: 'scanProgress';
   found: number;
   current: string;
 }
 
 /** Scan complete with full plugin list. */
 export interface ScanCompleteMessage {
-  type: 'scan_complete';
+  type: 'scanComplete';
   plugins: VST3PluginInfo[];
 }
 
@@ -227,7 +227,7 @@ export interface InstantiatedMessage {
 
 /** A parameter value was changed (e.g. from the plugin GUI). */
 export interface ParamChangedMessage {
-  type: 'param_changed';
+  type: 'paramChanged';
   instanceId: string;
   paramId: number;
   value: number;
@@ -235,7 +235,7 @@ export interface ParamChangedMessage {
 
 /** Plugin editor window opened. */
 export interface EditorOpenedMessage {
-  type: 'editor_opened';
+  type: 'editorOpened';
   instanceId: string;
   width: number;
   height: number;
@@ -243,13 +243,13 @@ export interface EditorOpenedMessage {
 
 /** Plugin editor window closed. */
 export interface EditorClosedMessage {
-  type: 'editor_closed';
+  type: 'editorClosed';
   instanceId: string;
 }
 
 /** Serialized plugin state (base64). */
 export interface StateDataMessage {
-  type: 'state_data';
+  type: 'stateData';
   instanceId: string;
   /** Base64-encoded plugin state blob. */
   data: string;
@@ -257,7 +257,7 @@ export interface StateDataMessage {
 
 /** Latency information for a plugin instance. */
 export interface LatencyInfoMessage {
-  type: 'latency_info';
+  type: 'latencyInfo';
   instanceId: string;
   samples: number;
 }
@@ -305,28 +305,28 @@ export type VST3BridgeMessage =
 /** Set of all valid message type strings for runtime validation. */
 const VALID_MESSAGE_TYPES = new Set<string>([
   'hello',
-  'hello_ack',
-  'scan_plugins',
-  'scan_progress',
-  'scan_complete',
+  'helloAck',
+  'scanPlugins',
+  'scanProgress',
+  'scanComplete',
   'instantiate',
   'instantiated',
-  'set_param',
-  'param_changed',
+  'setParam',
+  'paramChanged',
   'midi',
-  'open_editor',
-  'editor_opened',
-  'close_editor',
-  'editor_closed',
-  'get_state',
-  'state_data',
-  'set_state',
-  'load_preset',
+  'openEditor',
+  'editorOpened',
+  'closeEditor',
+  'editorClosed',
+  'getState',
+  'stateData',
+  'setState',
+  'loadPreset',
   'destroy',
-  'set_processing',
-  'get_latency',
-  'latency_info',
-  'route_sidechain',
+  'setProcessing',
+  'getLatency',
+  'latencyInfo',
+  'routeSidechain',
   'error',
 ]);
 

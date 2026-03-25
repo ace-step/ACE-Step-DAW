@@ -61,7 +61,7 @@ export class VST3PluginScanner {
     // Subscribe to progress events if callback provided
     let unsubscribe: (() => void) | null = null;
     if (onProgress) {
-      unsubscribe = this.bridgeClient.on('scan_progress', (msg) => {
+      unsubscribe = this.bridgeClient.on('scanProgress', (msg) => {
         onProgress(msg.found, msg.current);
       });
     }

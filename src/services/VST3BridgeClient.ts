@@ -72,7 +72,7 @@ export class VST3BridgeClient {
 
   /** Request a plugin scan from the companion app. */
   async scanPlugins(): Promise<void> {
-    this._send({ type: 'scan_plugins' });
+    this._send({ type: 'scanPlugins' });
   }
 
   /** Create a plugin instance in the companion app. */
@@ -93,7 +93,7 @@ export class VST3BridgeClient {
   /** Set a parameter value on a plugin instance. */
   async setParam(instanceId: string, paramId: number, value: number): Promise<void> {
     this._send({
-      type: 'set_param',
+      type: 'setParam',
       instance_id: instanceId,
       param_id: paramId,
       value,
@@ -158,17 +158,27 @@ export class VST3BridgeClient {
     }
 
     switch (msg.type) {
-      case 'hello_ack':
+      case 'helloAck':
         this._version = (msg.version as string) || '0.0.0';
         this._setStatus('connected');
         break;
 
-      case 'scan_progress':
+      case 'scanProgress':
         this.emit('scanProgress', msg.found as number, msg.current as string);
         break;
 
-      case 'scan_complete': {
-        const plugins = (msg.plugins as VST3PluginInfo[]) || [];
+      case 'scanComplete': {
+        // Map companion format {uid, name, vendor, version, category, path}
+        // to store format {id, name, vendor, version, category, subcategory}
+        const raw = (msg.plugins as Array<Record<string, string>>) || [];
+        const plugins: VST3PluginInfo[] = raw.map((p) => ({
+          id: p.uid ?? p.id ?? '',
+          name: p.name ?? 'Unknown',
+          vendor: p.vendor ?? 'Unknown',
+          version: p.version ?? '0.0.0',
+          category: (p.category?.toLowerCase().includes('instrument') ? 'instrument' : 'effect') as 'instrument' | 'effect',
+          subcategory: p.category ?? '',
+        }));
         this.emit('scanComplete', plugins);
         break;
       }
@@ -177,7 +187,7 @@ export class VST3BridgeClient {
         this.emit('instanceCreated', msg.instance_id as string, (msg.parameters as VST3Parameter[]) || []);
         break;
 
-      case 'param_changed':
+      case 'paramChanged':
         this.emit('paramChanged', msg.instance_id as string, msg.param_id as number, msg.value as number);
         break;
 

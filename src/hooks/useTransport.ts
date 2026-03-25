@@ -28,7 +28,7 @@ import {
 import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
 import { useVST3Store } from '../store/vst3Store';
-import { _getBridgeClient } from './useVST3Connection';
+import { pluginEngine } from '../engine/PluginEngine';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -414,20 +414,15 @@ export function useTransport() {
               const trackId = track.id;
 
               if (vst3Instrument) {
-                // Route to VST3 instrument via companion bridge
-                const instanceId = vst3Instrument.instanceId;
+                // Route to VST3 instrument via plugin engine (which calls the adapter's noteOn/noteOff)
                 const midiVelocity = Math.max(1, Math.round(velocity * 127));
-                const client = _getBridgeClient();
+                const trackId = track.id;
                 engine.scheduleMidiEvent(scheduledStart, () => {
-                  client.sendMidi(instanceId, [
-                    { type: 'noteOn', note: note.pitch, velocity: midiVelocity, sampleOffset: 0 },
-                  ]);
+                  pluginEngine.noteOn(trackId, note.pitch, midiVelocity);
                 });
                 // Schedule note-off
                 engine.scheduleMidiEvent(scheduledStart + scheduledDuration, () => {
-                  client.sendMidi(instanceId, [
-                    { type: 'noteOff', note: note.pitch, velocity: 0, sampleOffset: 0 },
-                  ]);
+                  pluginEngine.noteOff(trackId, note.pitch);
                 });
               } else if (useSampler) {
                 engine.scheduleMidiEvent(scheduledStart, () => {

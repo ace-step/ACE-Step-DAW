@@ -136,7 +136,15 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             req_id,
             plugin_uid,
             instance_id,
-        } => match state.host.instantiate(&plugin_uid, &instance_id) {
+        } => {
+            // Look up plugin path from scanner cache
+            let dirs = PluginScanner::default_search_dirs();
+            let plugins = state.scanner.scan(&dirs);
+            let plugin_path = plugins.iter()
+                .find(|p| p.uid == plugin_uid)
+                .map(|p| std::path::PathBuf::from(&p.path));
+
+            match state.host.instantiate(&plugin_uid, &instance_id, plugin_path.as_deref()) {
             Ok(info) => OutgoingMessage::Instantiated {
                 req_id,
                 instance_id: info.instance_id,
@@ -151,7 +159,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 code: "instantiate_error".into(),
                 message: e.to_string(),
             },
-        },
+        }},
 
         IncomingMessage::Destroy { instance_id } => match state.host.destroy(&instance_id) {
             Ok(()) => OutgoingMessage::Error {

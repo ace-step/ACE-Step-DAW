@@ -6,6 +6,7 @@ mod plugin_scanner;
 mod preset_manager;
 mod protocol;
 mod sidechain_router;
+mod vst3_loader;
 mod ws_server;
 
 use std::net::SocketAddr;

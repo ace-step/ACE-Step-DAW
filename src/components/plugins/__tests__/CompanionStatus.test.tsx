@@ -1,10 +1,26 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CompanionStatus } from '../CompanionStatus';
 import { useVST3Store } from '../../../store/vst3Store';
 
+// Mock the bridge client singleton
+const mockConnect = vi.fn();
+const mockDisconnect = vi.fn();
+
+vi.mock('../../../hooks/useVST3Connection', () => ({
+  _getBridgeClient: () => ({
+    connect: mockConnect,
+    disconnect: mockDisconnect,
+    status: 'disconnected',
+    isConnected: false,
+    companionVersion: null,
+  }),
+}));
+
 describe('CompanionStatus', () => {
   beforeEach(() => {
+    mockConnect.mockClear();
+    mockDisconnect.mockClear();
     useVST3Store.setState({
       connectionStatus: 'disconnected',
       companionVersion: null,
@@ -31,17 +47,17 @@ describe('CompanionStatus', () => {
     expect(screen.getByTestId('companion-status-dot')).toHaveClass('bg-emerald-500');
   });
 
-  it('calls connect when clicked while disconnected', () => {
+  it('calls bridge connect when clicked while disconnected', () => {
     render(<CompanionStatus />);
     fireEvent.click(screen.getByTestId('companion-status'));
-    expect(useVST3Store.getState().connectionStatus).toBe('connecting');
+    expect(mockConnect).toHaveBeenCalledOnce();
   });
 
-  it('calls disconnect when clicked while connected', () => {
+  it('calls bridge disconnect when clicked while connected', () => {
     useVST3Store.setState({ connectionStatus: 'connected' });
     render(<CompanionStatus />);
     fireEvent.click(screen.getByTestId('companion-status'));
-    expect(useVST3Store.getState().connectionStatus).toBe('disconnected');
+    expect(mockDisconnect).toHaveBeenCalledOnce();
   });
 
   it('shows companion version in tooltip when available', () => {

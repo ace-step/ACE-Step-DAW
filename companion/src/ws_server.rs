@@ -268,13 +268,23 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             instance_id,
             events,
         } => {
-            info!(instance_id, count = events.len(), "MIDI events (stub)");
-            // No response required for MIDI in the current protocol; send an ack-style message.
+            // Convert protocol MidiEvents to audio_thread MidiEvents
+            let audio_events: Vec<crate::audio_thread::MidiEvent> = events
+                .iter()
+                .map(crate::audio_thread::MidiEvent::from)
+                .collect();
+            let count = audio_events.len();
+            let sent = state.audio_streams.send_midi(&instance_id, audio_events);
+            if sent {
+                info!(instance_id, count, "MIDI events forwarded to audio thread");
+            } else {
+                warn!(instance_id, count, "No active audio stream for MIDI events");
+            }
             OutgoingMessage::Error {
                 req_id: None,
                 instance_id: Some(instance_id),
                 code: "ok".into(),
-                message: format!("Received {} MIDI events (stub)", events.len()),
+                message: format!("Received {count} MIDI events"),
             }
         }
 

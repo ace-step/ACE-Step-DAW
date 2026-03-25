@@ -138,6 +138,78 @@ describe('Active Plugins section in VST3SidePanel', () => {
   });
 });
 
+describe('track grouping in Active Plugins', () => {
+  it('groups instances by trackId with track headers', () => {
+    const INSTANCE_C: VST3ActiveInstance = {
+      instanceId: 'inst-c',
+      pluginId: 'com.acme.delay',
+      pluginName: 'AcmeDelay',
+      vendor: 'Acme',
+      trackId: 'track-1',
+      enabled: true,
+      online: true,
+      parameters: [],
+      presets: [],
+      activePreset: null,
+    };
+    setupWithInstances({
+      'inst-a': INSTANCE_A,
+      'inst-b': INSTANCE_B,
+      'inst-c': INSTANCE_C,
+    });
+    render(<VST3SidePanel />);
+
+    // Should have track group containers
+    expect(screen.getByTestId('track-group-track-1')).toBeInTheDocument();
+    expect(screen.getByTestId('track-group-track-2')).toBeInTheDocument();
+
+    // Track-1 group should contain both AcmeSynth and AcmeDelay
+    const group1 = screen.getByTestId('track-group-track-1');
+    expect(group1).toHaveTextContent('AcmeSynth');
+    expect(group1).toHaveTextContent('AcmeDelay');
+
+    // Track-2 group should contain AcmeVerb
+    const group2 = screen.getByTestId('track-group-track-2');
+    expect(group2).toHaveTextContent('AcmeVerb');
+  });
+
+  it('respects pluginOrder for track ordering', () => {
+    const INSTANCE_C: VST3ActiveInstance = {
+      instanceId: 'inst-c',
+      pluginId: 'com.acme.delay',
+      pluginName: 'AcmeDelay',
+      vendor: 'Acme',
+      trackId: 'track-1',
+      enabled: true,
+      online: true,
+      parameters: [],
+      presets: [],
+      activePreset: null,
+    };
+    setupWithInstances({
+      'inst-a': INSTANCE_A,
+      'inst-c': INSTANCE_C,
+    });
+    // Set order: delay before synth
+    useVST3Store.setState({ pluginOrder: { 'track-1': ['inst-c', 'inst-a'] } });
+
+    render(<VST3SidePanel />);
+
+    const rows = screen.getByTestId('track-group-track-1').querySelectorAll('[data-testid^="plugin-row-"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute('data-instance-id', 'inst-c');
+    expect(rows[1]).toHaveAttribute('data-instance-id', 'inst-a');
+  });
+
+  it('plugin rows are draggable', () => {
+    setupWithInstances({ 'inst-a': INSTANCE_A });
+    render(<VST3SidePanel />);
+
+    const row = screen.getByTestId('plugin-row-inst-a');
+    expect(row).toHaveAttribute('draggable', 'true');
+  });
+});
+
 describe('setParameter bridge forwarding', () => {
   it('updates store when setParameter is called', () => {
     useVST3Store.setState({

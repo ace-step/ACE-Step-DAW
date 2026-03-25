@@ -290,4 +290,61 @@ describe('vst3Store', () => {
       expect(Object.keys(instances)).toHaveLength(0);
     });
   });
+
+  describe('reorderPlugins', () => {
+    it('reorders instances for a track by the given instanceId order', () => {
+      useVST3Store.getState()._upsertInstance(mockInstance({ instanceId: 'i1', trackId: 'track-1' }));
+      useVST3Store.getState()._upsertInstance(mockInstance({ instanceId: 'i2', trackId: 'track-1' }));
+      useVST3Store.getState()._upsertInstance(mockInstance({ instanceId: 'i3', trackId: 'track-1' }));
+
+      useVST3Store.getState().reorderPlugins('track-1', ['i3', 'i1', 'i2']);
+
+      const order = useVST3Store.getState().pluginOrder['track-1'];
+      expect(order).toEqual(['i3', 'i1', 'i2']);
+    });
+
+    it('does nothing when track has no instances', () => {
+      useVST3Store.getState().reorderPlugins('track-empty', ['i1']);
+      const order = useVST3Store.getState().pluginOrder['track-empty'];
+      expect(order).toBeUndefined();
+    });
+
+    it('ignores instance IDs not belonging to the track', () => {
+      useVST3Store.getState()._upsertInstance(mockInstance({ instanceId: 'i1', trackId: 'track-1' }));
+      useVST3Store.getState()._upsertInstance(mockInstance({ instanceId: 'i2', trackId: 'track-2' }));
+
+      useVST3Store.getState().reorderPlugins('track-1', ['i2', 'i1']);
+
+      const order = useVST3Store.getState().pluginOrder['track-1'];
+      // Only i1 belongs to track-1
+      expect(order).toEqual(['i1']);
+    });
+  });
+
+  describe('setSidechain', () => {
+    it('sets sidechainSourceTrackId on an instance', () => {
+      useVST3Store.getState()._upsertInstance(
+        mockInstance({ instanceId: 'i1', hasSidechainInput: true }),
+      );
+
+      useVST3Store.getState().setSidechain('i1', 'track-2');
+
+      expect(useVST3Store.getState().instances['i1'].sidechainSourceTrackId).toBe('track-2');
+    });
+
+    it('clears sidechain when sourceTrackId is null', () => {
+      useVST3Store.getState()._upsertInstance(
+        mockInstance({ instanceId: 'i1', hasSidechainInput: true, sidechainSourceTrackId: 'track-2' }),
+      );
+
+      useVST3Store.getState().setSidechain('i1', null);
+
+      expect(useVST3Store.getState().instances['i1'].sidechainSourceTrackId).toBeNull();
+    });
+
+    it('does nothing for non-existent instance', () => {
+      useVST3Store.getState().setSidechain('non-existent', 'track-2');
+      expect(Object.keys(useVST3Store.getState().instances)).toHaveLength(0);
+    });
+  });
 });

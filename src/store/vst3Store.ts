@@ -24,6 +24,9 @@ export interface VST3Store {
   /* ── Active instances (keyed by instanceId) ─────────── */
   instances: Record<string, VST3ActiveInstance>;
 
+  /* ── Per-track plugin ordering ──────────────────────── */
+  pluginOrder: Record<string, string[]>;
+
   /* ── Actions ────────────────────────────────────────── */
   connect: () => void;
   disconnect: () => void;
@@ -36,6 +39,8 @@ export interface VST3Store {
   setParameter: (instanceId: string, paramId: number, value: number) => void;
   selectPreset: (instanceId: string, preset: string) => void;
   savePreset: (instanceId: string, name: string) => void;
+  reorderPlugins: (trackId: string, instanceIds: string[]) => void;
+  setSidechain: (instanceId: string, sourceTrackId: string | null) => void;
 
   /* ── Public setters (used by hooks / bridge callbacks) ── */
   setConnectionStatus: (status: VST3ConnectionStatus) => void;
@@ -63,6 +68,7 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   scanning: false,
   scanProgress: null,
   instances: {},
+  pluginOrder: {},
 
   // ── Connection ──────────────────────────────────────────
   connect: () => {
@@ -192,6 +198,42 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
 
   savePreset: (_instanceId: string, _name: string) => {
     // Bridge implementation
+  },
+
+  // ── Plugin chain ordering ──────────────────────────────
+  reorderPlugins: (trackId: string, instanceIds: string[]) => {
+    const { instances, pluginOrder } = get();
+    // Filter to only IDs that belong to this track
+    const trackInstanceIds = new Set(
+      Object.values(instances)
+        .filter((inst) => inst.trackId === trackId)
+        .map((inst) => inst.instanceId),
+    );
+    if (trackInstanceIds.size === 0) return;
+
+    const validOrder = instanceIds.filter((id) => trackInstanceIds.has(id));
+    if (validOrder.length === 0) return;
+
+    set({ pluginOrder: { ...pluginOrder, [trackId]: validOrder } });
+  },
+
+  setSidechain: (instanceId: string, sourceTrackId: string | null) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: { ...inst, sidechainSourceTrackId: sourceTrackId },
+      },
+    });
+    // Forward to bridge companion
+    try {
+      const client = _getBridgeClient();
+      client.send({ type: 'setSidechain', instanceId, sourceTrackId });
+    } catch {
+      // Bridge not connected — ignore silently
+    }
   },
 
   // ── Public setters (used by hooks) ──────────────────────

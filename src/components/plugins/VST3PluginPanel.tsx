@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVST3Store } from '../../store/vst3Store';
+import { useProjectStore } from '../../store/projectStore';
 import type { VST3ActiveInstance, VST3Parameter } from '../../types/vst3';
 
 // ── Inline icons ──────────────────────────────────────────────────────────────
@@ -26,6 +27,8 @@ interface VST3PluginPanelProps {
   instanceId: string;
 }
 
+const EMPTY_TRACKS: never[] = [];
+
 export function VST3PluginPanel({ instanceId }: VST3PluginPanelProps) {
   const instance = useVST3Store((s) => s.instances[instanceId]) as VST3ActiveInstance | undefined;
   const toggleInstance = useVST3Store((s) => s.toggleInstance);
@@ -34,6 +37,14 @@ export function VST3PluginPanel({ instanceId }: VST3PluginPanelProps) {
   const setParameter = useVST3Store((s) => s.setParameter);
   const selectPreset = useVST3Store((s) => s.selectPreset);
   const savePreset = useVST3Store((s) => s.savePreset);
+  const setSidechain = useVST3Store((s) => s.setSidechain);
+  const tracks = useProjectStore((s) => s.project?.tracks) ?? EMPTY_TRACKS;
+
+  // Available sidechain sources: all tracks except the one this plugin is on
+  const sidechainOptions = useMemo(
+    () => tracks.filter((t) => t.id !== instance?.trackId),
+    [tracks, instance?.trackId],
+  );
 
   if (!instance) {
     return (
@@ -123,6 +134,32 @@ export function VST3PluginPanel({ instanceId }: VST3PluginPanelProps) {
           Save
         </button>
       </div>
+
+      {/* Sidechain source selector — only for plugins with sidechain input */}
+      {instance.hasSidechainInput && (
+        <div
+          className="flex items-center gap-1 border-b border-white/5 px-2 py-1"
+          data-testid="sidechain-section"
+        >
+          <span className="text-[10px] text-zinc-500 shrink-0">Sidechain</span>
+          <select
+            value={instance.sidechainSourceTrackId ?? ''}
+            onChange={(e) =>
+              setSidechain(instanceId, e.target.value || null)
+            }
+            aria-label="Sidechain source"
+            data-testid="sidechain-selector"
+            className="flex-1 rounded border border-white/10 bg-transparent px-1 py-0.5 text-[10px] text-zinc-300 outline-none"
+          >
+            <option value="">-- None --</option>
+            {sidechainOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.displayName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Parameters */}
       <div className="flex flex-col gap-1 overflow-y-auto max-h-[260px] p-2" data-testid="param-list">

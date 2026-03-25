@@ -227,6 +227,7 @@ export function Timeline() {
   const selectWindow = useUIStore((s) => s.selectWindow);
   const setSelectWindow = useUIStore((s) => s.setSelectWindow);
   const selectedClipIds = useUIStore((s) => s.selectedClipIds);
+  const selectClips = useUIStore((s) => s.selectClips);
   const keyboardContext = useUIStore((s) => s.keyboardContext);
   const timelineZoomRequest = useUIStore((s) => s.timelineZoomRequest);
   const autoScrollEnabled = useUIStore((s) => s.autoScrollEnabled);
@@ -744,6 +745,23 @@ export function Timeline() {
               }
             }
             setSelectWindow(nextSelectWindow);
+            seek(startTime);
+
+            // Auto-select all clips overlapping the select window
+            const overlappingClipIds: string[] = [];
+            const trackIdSet = new Set(trackIds);
+            for (const track of (project?.tracks ?? [])) {
+              if (!trackIdSet.has(track.id)) continue;
+              for (const clip of track.clips) {
+                const clipEnd = clip.startTime + clip.duration;
+                if (clipEnd > startTime && clip.startTime < endTime) {
+                  overlappingClipIds.push(clip.id);
+                }
+              }
+            }
+            if (overlappingClipIds.length > 0) {
+              selectClips(overlappingClipIds);
+            }
           }
         }
         setDrag(null);
@@ -752,7 +770,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, seek, setTimelineFocused, trackListWidth],
+    [pixelsPerSecond, project, setContextWindow, setSelectWindow, deselectAllTracks, selectTrack, selectClips, seek, setTimelineFocused, trackListWidth],
   );
 
   const startWindowMove = useCallback(
@@ -777,20 +795,45 @@ export function Timeline() {
       const pointerTimeAtStart = (e.clientX - timelineRectLeft + container.scrollLeft) / pixelsPerSecond;
       const pointerOffsetTime = pointerTimeAtStart - windowRange.startTime;
 
-      const applyMove = (clientX: number) => {
+      // Track vertical state for cross-track movement
+      const startClientY = e.clientY;
+      const initialVRange = getTrackVerticalRange(container, windowRange.trackIds);
+      const initialWindowHeight = initialVRange ? initialVRange.height : 0;
+
+      let currentWindow = windowRange;
+
+      const applyMove = (clientX: number, clientY: number) => {
         const pointerTime = (clientX - timelineRectLeft + container.scrollLeft) / pixelsPerSecond;
         const desiredStartTime = snapToGrid(pointerTime - pointerOffsetTime, bpm, 1);
-        setWindow(moveTimelineWindow(windowRange, desiredStartTime, totalDuration));
+
+        // Calculate vertical delta and find new track set
+        const deltaY = clientY - startClientY;
+        if (initialVRange) {
+          const newTop = initialVRange.top + deltaY;
+          const newBottom = newTop + initialWindowHeight;
+          const newTrackIds = getIntersectedTrackIds(container, newTop, newBottom);
+          if (newTrackIds.length > 0) {
+            currentWindow = {
+              ...currentWindow,
+              trackIds: newTrackIds,
+              primaryTrackId: newTrackIds[0],
+            };
+          }
+        }
+
+        const moved = moveTimelineWindow(currentWindow, desiredStartTime, totalDuration);
+        currentWindow = moved;
+        setWindow(moved);
       };
 
       const onMouseMove = (ev: MouseEvent) => {
-        applyMove(ev.clientX);
+        applyMove(ev.clientX, ev.clientY);
       };
 
       const onMouseUp = (ev: MouseEvent) => {
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
-        applyMove(ev.clientX);
+        applyMove(ev.clientX, ev.clientY);
       };
 
       window.addEventListener('mousemove', onMouseMove);
@@ -1021,7 +1064,7 @@ export function Timeline() {
                 />
               )}
 
-              {/* Committed select window overlay — Apple Purple (#AF52DE) */}
+              {/* Committed select window overlay — Neutral White */}
               {selLeft !== null && selWidth !== null && selVRange && (
                 <TimelineWindowOverlay
                   kind="select"
@@ -1032,10 +1075,10 @@ export function Timeline() {
                   label="select window"
                   switchLabel="CTX"
                   switchAriaLabel="Convert select window into context window"
-                  accentTextColor="#AF52DE"
-                  fillColor="rgba(175, 82, 222, 0.10)"
-                  borderColor="rgba(175, 82, 222, 0.35)"
-                  edgeColor="rgba(175, 82, 222, 0.7)"
+                  accentTextColor="#FFFFFF"
+                  fillColor="rgba(255, 255, 255, 0.03)"
+                  borderColor="rgba(255, 255, 255, 1)"
+                  edgeColor="rgba(255, 255, 255, 1)"
                   align="right"
                   onMoveStart={(e) => startWindowMove('select', selectWindow!, e)}
                   onSwitch={() => switchTimelineWindow('select')}
@@ -1070,7 +1113,7 @@ export function Timeline() {
                 />
               )}
 
-              {/* Live select drag overlay — Apple Purple (#AF52DE) */}
+              {/* Live select drag overlay — Neutral White */}
               {selDrag && (
                 <div
                   className="absolute pointer-events-none z-10"
@@ -1079,11 +1122,11 @@ export function Timeline() {
                     width: selDrag.width,
                     top: selDrag.top,
                     height: selDrag.height,
-                    background: 'rgba(175, 82, 222, 0.12)',
-                    borderLeft: '1px solid rgba(175, 82, 222, 0.5)',
-                    borderRight: '1px solid rgba(175, 82, 222, 0.5)',
-                    borderTop: '1px solid rgba(175, 82, 222, 0.3)',
-                    borderBottom: '1px solid rgba(175, 82, 222, 0.3)',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderLeft: '1px solid rgba(255, 255, 255, 0.8)',
+                    borderRight: '1px solid rgba(255, 255, 255, 0.8)',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.8)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.8)',
                   }}
                 />
               )}

@@ -203,12 +203,17 @@ function TimelineWindowOverlay({
 }
 
 export function Timeline() {
-  const project = useProjectStore((s) => s.project);
+  const hasProject = useProjectStore((s) => Boolean(s.project));
+  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
+  const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
+  const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? []);
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
   const moveTrackToOrder = useProjectStore((s) => s.moveTrackToOrder);
-  const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const seek = useTransportStore((s) => s.seek);
   const currentTime = useTransportStore((s) => s.currentTime);
   const playStartTime = useTransportStore((s) => s.playStartTime);
@@ -331,23 +336,23 @@ export function Timeline() {
 
   const handleEmptyTrackHeaderDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
     e.preventDefault();
-    if (!draggedTrackIdRef.current || !project) return;
-    const draggedTrack = project.tracks.find((track) => track.id === draggedTrackIdRef.current);
+    if (!draggedTrackIdRef.current || !hasProject) return;
+    const draggedTrack = tracks.find((track) => track.id === draggedTrackIdRef.current);
     if (draggedTrack?.isGroup) return;
     setDragOverTrackId(null);
     setDragOverEmptySlotIndex(slotIndex);
-  }, [project]);
+  }, [hasProject, tracks]);
 
   const handleEmptyTrackHeaderDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
     e.preventDefault();
     const draggedTrackId = draggedTrackIdRef.current;
-    if (!draggedTrackId || !project) {
+    if (!draggedTrackId || !hasProject) {
       setDragOverTrackId(null);
       setDragOverEmptySlotIndex(null);
       draggedTrackIdRef.current = null;
       return;
     }
-    const draggedTrack = project.tracks.find((track) => track.id === draggedTrackId);
+    const draggedTrack = tracks.find((track) => track.id === draggedTrackId);
     if (draggedTrack?.isGroup) {
       setDragOverTrackId(null);
       setDragOverEmptySlotIndex(null);
@@ -358,7 +363,7 @@ export function Timeline() {
     setDragOverTrackId(null);
     setDragOverEmptySlotIndex(null);
     draggedTrackIdRef.current = null;
-  }, [moveTrackToOrder, project]);
+  }, [hasProject, moveTrackToOrder, tracks]);
 
   const handleTrackListResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -377,57 +382,66 @@ export function Timeline() {
     window.addEventListener('mouseup', onMouseUp);
   }, [setTrackListWidth, trackListWidth]);
 
-  const sortedTracks = project ? getVisibleTracks() : [];
+  const sortedTracks = useMemo(() => {
+    const collapsedGroupIds = new Set(
+      tracks
+        .filter((track) => track.isGroup && track.collapsed)
+        .map((track) => track.id),
+    );
+
+    return [...tracks]
+      .filter((track) => !track.parentTrackId || !collapsedGroupIds.has(track.parentTrackId))
+      .sort((a, b) => a.order - b.order);
+  }, [tracks]);
   const arrangementRows = useMemo(
     () => buildArrangementTrackSlots(sortedTracks, PLACEHOLDER_ROW_COUNT),
     [sortedTracks],
   );
   const blockedEmptySlotOrders = useMemo(() => {
-    if (!project) return new Set<number>();
     const collapsedGroupIds = new Set(
-      project.tracks
+      tracks
         .filter((track) => track.isGroup && track.collapsed)
         .map((track) => track.id),
     );
 
     return new Set(
-      project.tracks
+      tracks
         .filter((track) => track.parentTrackId && collapsedGroupIds.has(track.parentTrackId))
         .map((track) => track.order),
     );
-  }, [project]);
+  }, [tracks]);
   const showsArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
 
-  const totalWidth = project
-    ? getTimelineContentWidth(project.totalDuration, pixelsPerSecond, viewportWidth)
+  const totalWidth = hasProject
+    ? getTimelineContentWidth(totalDuration, pixelsPerSecond, viewportWidth)
     : 0;
   const selectedClipLabel = useMemo(() => {
-    if (!project || selectedClipIds.size === 0) return 'No clip selected';
+    if (!hasProject || selectedClipIds.size === 0) return 'No clip selected';
     const selectedId = Array.from(selectedClipIds)[0];
-    const selectedClip = project.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedId);
+    const selectedClip = tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedId);
     if (!selectedClip) return 'No clip selected';
-    const trackName = project.tracks.find((track) => track.id === selectedClip.trackId)?.displayName ?? 'Unknown track';
+    const trackName = tracks.find((track) => track.id === selectedClip.trackId)?.displayName ?? 'Unknown track';
     return `${trackName} @ ${selectedClip.startTime.toFixed(2)}s`;
-  }, [project, selectedClipIds]);
+  }, [hasProject, selectedClipIds, tracks]);
   const focusedTrackLabel = useMemo(() => {
-    if (!project || !keyboardContext.trackId) return 'Project';
-    return project.tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'Project';
-  }, [keyboardContext.trackId, project]);
+    if (!hasProject || !keyboardContext.trackId) return 'Project';
+    return tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'Project';
+  }, [hasProject, keyboardContext.trackId, tracks]);
 
   useEffect(() => {
-    if (!project || !timelineZoomRequest || !scrollRef.current) return;
+    if (!hasProject || !timelineZoomRequest || !scrollRef.current) return;
     if (handledTimelineZoomRequestIdRef.current === timelineZoomRequest.id) return;
 
     const container = scrollRef.current;
     const nextViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
-    const projectRange = { startTime: 0, endTime: project.totalDuration };
+    const projectRange = { startTime: 0, endTime: totalDuration };
     handledTimelineZoomRequestIdRef.current = timelineZoomRequest.id;
 
     let targetRange = projectRange;
     let usedFallback = false;
 
     if (timelineZoomRequest.mode === 'selection') {
-      const selectedClips = project.tracks
+      const selectedClips = tracks
         .flatMap((track) => track.clips)
         .filter((clip) => selectedClipIds.has(clip.id));
 
@@ -469,7 +483,7 @@ export function Timeline() {
         pixelsPerSecond,
         scrollLeft: container.scrollLeft,
         viewportWidth: nextViewportWidth,
-        totalDuration: project.totalDuration,
+        totalDuration,
       }, nextPixelsPerSecond, anchor);
 
       setPixelsPerSecond(nextViewport.pixelsPerSecond);
@@ -478,7 +492,7 @@ export function Timeline() {
       return;
     }
 
-    const nextViewport = getTimelineFitViewport(targetRange, nextViewportWidth, project.totalDuration, {
+    const nextViewport = getTimelineFitViewport(targetRange, nextViewportWidth, totalDuration, {
       paddingPx: timelineZoomRequest.mode === 'project' ? 0 : 40,
     });
     setPixelsPerSecond(nextViewport.pixelsPerSecond);
@@ -490,21 +504,23 @@ export function Timeline() {
     }
   }, [
     currentTime,
+    hasProject,
     isPlaying,
     pixelsPerSecond,
     playStartTime,
-    project,
     selectWindow,
     selectedClipIds,
     setPixelsPerSecond,
     setScrollX,
+    totalDuration,
     trackListWidth,
+    tracks,
     timelineZoomRequest,
   ]);
 
   useEffect(() => {
     const container = scrollRef.current;
-    if (!container || !project || !isPlaying || !autoScrollEnabled) return;
+    if (!container || !hasProject || !isPlaying || !autoScrollEnabled) return;
 
     const timelineViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
     const fixedPlayheadViewportX = Math.min(
@@ -513,7 +529,7 @@ export function Timeline() {
     );
     const nextScrollLeft = clampTimelineScrollLeft(
       currentTime * pixelsPerSecond - fixedPlayheadViewportX,
-      project.totalDuration,
+      totalDuration,
       pixelsPerSecond,
       timelineViewportWidth,
     );
@@ -521,7 +537,7 @@ export function Timeline() {
     if (Math.abs(container.scrollLeft - nextScrollLeft) < 1) return;
     container.scrollLeft = nextScrollLeft;
     setScrollX(nextScrollLeft);
-  }, [autoScrollEnabled, currentTime, isPlaying, pixelsPerSecond, project, setScrollX, trackListWidth]);
+  }, [autoScrollEnabled, currentTime, hasProject, isPlaying, pixelsPerSecond, setScrollX, totalDuration, trackListWidth]);
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
@@ -583,7 +599,7 @@ export function Timeline() {
             pixelsPerSecond: currentPixels,
             scrollLeft: liveContainer.scrollLeft,
             viewportWidth: Math.max(1, (liveContainer.clientWidth - trackListWidth) || window.innerWidth || 1),
-            totalDuration: project?.totalDuration ?? 0,
+            totalDuration,
           }, nextPixelsPerSecond, liveAnchor);
 
           setPixelsPerSecond(nextViewport.pixelsPerSecond);
@@ -602,7 +618,7 @@ export function Timeline() {
         zoomAnimationFrameRef.current = window.requestAnimationFrame(animateZoom);
       }
     },
-    [currentTime, isPlaying, pixelsPerSecond, playStartTime, project?.totalDuration, setPixelsPerSecond, setScrollX, trackListWidth],
+    [currentTime, isPlaying, pixelsPerSecond, playStartTime, setPixelsPerSecond, setScrollX, totalDuration, trackListWidth],
   );
 
   useEffect(() => () => {
@@ -782,13 +798,11 @@ export function Timeline() {
       if (e.button !== 0) return;
 
       const container = scrollRef.current;
-      if (!container || !project) return;
+      if (!container || !hasProject) return;
 
       e.preventDefault();
       e.stopPropagation();
 
-      const bpm = project.bpm ?? 120;
-      const totalDuration = project.totalDuration;
       const rect = container.getBoundingClientRect();
       const timelineRectLeft = rect.left + trackListWidth;
       const setWindow = kind === 'context' ? setContextWindow : setSelectWindow;
@@ -839,7 +853,7 @@ export function Timeline() {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
     },
-    [pixelsPerSecond, project, setContextWindow, setSelectWindow, trackListWidth],
+    [bpm, hasProject, pixelsPerSecond, setContextWindow, setSelectWindow, totalDuration, trackListWidth],
   );
 
   const switchTimelineWindow = useCallback(
@@ -852,7 +866,7 @@ export function Timeline() {
   );
 
 
-  if (!project) {
+  if (!hasProject) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm">
         Create a new project to get started
@@ -1229,7 +1243,11 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setTrackLaneRect = useUIStore((s) => s.setTrackLaneRect);
   const removeTrackLaneRect = useUIStore((s) => s.removeTrackLaneRect);
-  const project = useProjectStore((s) => s.project);
+  const hasProject = useProjectStore((s) => Boolean(s.project));
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
+  const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? []);
   const addTrack = useProjectStore((s) => s.addTrack);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
@@ -1240,8 +1258,8 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
 
-  const defaultClipDuration = project
-    ? getBarDuration(project.bpm, project.timeSignature, project.timeSignatureDenominator ?? 4) * 4
+  const defaultClipDuration = hasProject
+    ? getBarDuration(bpm, timeSignature, timeSignatureDenominator) * 4
     : 8;
 
   useLayoutEffect(() => {
@@ -1284,10 +1302,10 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
       e.dataTransfer.dropEffect = 'copy';
 
       const payload = getDragPayload();
-      if (payload && project) {
+      if (payload && hasProject) {
         const laneX = clientXToLaneX(e.clientX);
         const rawTime = laneX / pixelsPerSecond;
-        const snappedTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+        const snappedTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
         const ghostDuration = payload.duration ?? defaultClipDuration;
         setDropGhost({
           left: snappedTime * pixelsPerSecond,
@@ -1296,7 +1314,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
         });
       }
     }
-  }, [project, pixelsPerSecond, defaultClipDuration]);
+  }, [hasProject, pixelsPerSecond, defaultClipDuration, bpm, tempoMap]);
 
   const onDragLeave = useCallback(() => {
     dragCounterRef.current--;
@@ -1314,11 +1332,11 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
     setIsDragOver(false);
     setDropGhost(null);
     clearDragPayload();
-    if (!project) return;
+    if (!hasProject) return;
 
     const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
-    const startTime = Math.max(0, snapToGrid(rawTime, project.bpm, 1, project.tempoMap));
+    const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
 
     const loopId = e.dataTransfer.getData('application/x-loop-id');
     if (loopId) {
@@ -1341,7 +1359,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
         }
       }
     }
-  }, [project, pixelsPerSecond, addTrack, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler]);
+  }, [hasProject, pixelsPerSecond, addTrack, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler, bpm, tempoMap]);
 
   return (
     <div

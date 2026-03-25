@@ -18,10 +18,9 @@ import {
 import { DEFAULT_ARRANGEMENT_ROW_HEIGHT } from '../arrangement/rowLayout';
 
 export function TrackList() {
-  const project = useProjectStore((s) => s.project);
+  const tracks = useProjectStore((s) => s.project?.tracks);
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
   const moveTrackToOrder = useProjectStore((s) => s.moveTrackToOrder);
-  const getVisibleTracks = useProjectStore((s) => s.getVisibleTracks);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const trackListDisplayMode = useUIStore((s) => s.trackListDisplayMode);
   const setTrackListWidth = useUIStore((s) => s.setTrackListWidth);
@@ -99,12 +98,12 @@ export function TrackList() {
 
   const handleEmptyRowDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
     e.preventDefault();
-    if (!draggedIdRef.current || !project) return;
-    const draggedTrack = project.tracks.find((track) => track.id === draggedIdRef.current);
+    if (!draggedIdRef.current || !tracks) return;
+    const draggedTrack = tracks.find((track) => track.id === draggedIdRef.current);
     if (draggedTrack?.isGroup) return;
     setDragOverId(null);
     setDragOverEmptySlotIndex(slotIndex);
-  }, [project]);
+  }, [tracks]);
 
   const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
     e.preventDefault();
@@ -124,13 +123,13 @@ export function TrackList() {
   const handleEmptyRowDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
     e.preventDefault();
     const draggedId = draggedIdRef.current;
-    if (!draggedId || !project) {
+    if (!draggedId || !tracks) {
       setDragOverId(null);
       setDragOverEmptySlotIndex(null);
       draggedIdRef.current = null;
       return;
     }
-    const draggedTrack = project.tracks.find((track) => track.id === draggedId);
+    const draggedTrack = tracks.find((track) => track.id === draggedId);
     if (draggedTrack?.isGroup) {
       setDragOverId(null);
       setDragOverEmptySlotIndex(null);
@@ -141,7 +140,7 @@ export function TrackList() {
     setDragOverId(null);
     setDragOverEmptySlotIndex(null);
     draggedIdRef.current = null;
-  }, [moveTrackToOrder, project]);
+  }, [moveTrackToOrder, tracks]);
 
   const resizeDragRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -162,23 +161,33 @@ export function TrackList() {
     window.addEventListener('mouseup', onMouseUp);
   }, [trackListWidth, setTrackListWidth]);
 
-  if (!project) return null;
+  if (!tracks) return null;
 
-  const visibleTracks = useMemo(() => getVisibleTracks(), [getVisibleTracks, project]);
+  const visibleTracks = useMemo(() => {
+    const collapsedGroupIds = new Set(
+      tracks
+        .filter((track) => track.isGroup && track.collapsed)
+        .map((track) => track.id),
+    );
+
+    return [...tracks]
+      .filter((track) => !track.parentTrackId || !collapsedGroupIds.has(track.parentTrackId))
+      .sort((a, b) => a.order - b.order);
+  }, [tracks]);
   const rows = useMemo(() => buildArrangementTrackSlots(visibleTracks, PLACEHOLDER_ROW_COUNT), [visibleTracks]);
   const blockedEmptySlotOrders = useMemo(() => {
     const collapsedGroupIds = new Set(
-      project.tracks
+      tracks
         .filter((track) => track.isGroup && track.collapsed)
         .map((track) => track.id),
     );
 
     return new Set(
-      project.tracks
+      tracks
         .filter((track) => track.parentTrackId && collapsedGroupIds.has(track.parentTrackId))
         .map((track) => track.order),
     );
-  }, [project]);
+  }, [tracks]);
   const showsArrangementMarkers = useUIStore((s) => s.showArrangementMarkers);
 
   return (

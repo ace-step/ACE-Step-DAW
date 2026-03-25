@@ -2,6 +2,7 @@ import { useRef, useCallback, useState, useEffect, useMemo, useLayoutEffect } fr
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
+import type { TempoEvent, Track } from '../../types/project';
 import { TrackHeader } from '../tracks/TrackHeader';
 import { TrackListDisplayToggle } from '../tracks/TrackListDisplayToggle';
 import { TimeRuler } from './TimeRuler';
@@ -53,6 +54,8 @@ export const TRACK_INSPECTOR_HEIGHT = 220;
 
 const DRAG_THRESHOLD_PX = 4;
 const WINDOW_CONTROL_BAR_HEIGHT = 24;
+const EMPTY_TRACKS: Track[] = [];
+const EMPTY_TEMPO_MAP: TempoEvent[] = [];
 
 interface DragRect { left: number; width: number; top: number; height: number }
 
@@ -204,12 +207,12 @@ function TimelineWindowOverlay({
 
 export function Timeline() {
   const hasProject = useProjectStore((s) => Boolean(s.project));
-  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? EMPTY_TRACKS);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
   const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
-  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? []);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? EMPTY_TEMPO_MAP);
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
@@ -1246,7 +1249,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
   const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
-  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? []);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap ?? EMPTY_TEMPO_MAP);
   const addTrack = useProjectStore((s) => s.addTrack);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);

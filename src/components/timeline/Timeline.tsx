@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
+import { useRef, useCallback, useState, useEffect, useMemo, useLayoutEffect } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
@@ -1227,12 +1227,15 @@ function ArrangementEmptyTrackHeaderRow({
 function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
+  const setTrackLaneRect = useUIStore((s) => s.setTrackLaneRect);
+  const removeTrackLaneRect = useUIStore((s) => s.removeTrackLaneRect);
   const project = useProjectStore((s) => s.project);
   const addTrack = useProjectStore((s) => s.addTrack);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
   const { importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler } = useAudioImport();
 
+  const laneRef = useRef<HTMLDivElement>(null);
   const [dropGhost, setDropGhost] = useState<{ left: number; width: number; name: string } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
@@ -1240,6 +1243,29 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const defaultClipDuration = project
     ? getBarDuration(project.bpm, project.timeSignature, project.timeSignatureDenominator ?? 4) * 4
     : 8;
+
+  useLayoutEffect(() => {
+    const el = laneRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const parentEl = el.offsetParent as HTMLElement | null;
+      const parentOffset = parentEl ? parentEl.offsetTop : 0;
+      setTrackLaneRect(virtualId, {
+        top: el.offsetTop + parentOffset,
+        height: el.offsetHeight,
+      });
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+
+    return () => {
+      ro.disconnect();
+      removeTrackLaneRect(virtualId);
+    };
+  }, [removeTrackLaneRect, setTrackLaneRect, virtualId]);
 
   const onDragEnter = useCallback((e: React.DragEvent) => {
     const types = e.dataTransfer.types;
@@ -1319,6 +1345,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
 
   return (
     <div
+      ref={laneRef}
       data-track-id={virtualId}
       data-timeline-lane
       className="relative"

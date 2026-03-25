@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { TRACK_NAMES, TRACK_CATALOG, TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import type { TrackName, TrackType } from '../../types/project';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { getFirstSelectedEmptyTrackSlotIndex } from '../arrangement/trackSlotLayout';
 
 type PickerStep = 'type' | 'instrument';
 
@@ -11,6 +12,7 @@ export function InstrumentPicker() {
   const show = useUIStore((s) => s.showInstrumentPicker);
   const setShow = useUIStore((s) => s.setShowInstrumentPicker);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const addTrack = useProjectStore((s) => s.addTrack);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
@@ -21,6 +23,13 @@ export function InstrumentPicker() {
 
   const [step, setStep] = useState<PickerStep>('type');
   const [selectedType, setSelectedType] = useState<TrackType>('stems');
+  const selectedEmptySlotIndex = getFirstSelectedEmptyTrackSlotIndex(selectedTrackIds);
+  const addTrackAtSelectedSlot = useCallback((name: TrackName, type: TrackType) => {
+    const insertOptions = selectedEmptySlotIndex !== null
+      ? { order: selectedEmptySlotIndex + 1 }
+      : undefined;
+    return addTrack(name, type, insertOptions);
+  }, [addTrack, selectedEmptySlotIndex]);
 
   const close = useCallback(() => {
     setShow(false);
@@ -41,7 +50,7 @@ export function InstrumentPicker() {
   };
 
   const handleInstrumentSelect = (name: TrackName) => {
-    addTrack(name, selectedType);
+    addTrackAtSelectedSlot(name, selectedType);
     close();
   };
 
@@ -176,7 +185,7 @@ export function InstrumentPicker() {
         {step === 'instrument' && selectedType === 'sample' && (
           <div className="p-5 flex flex-col gap-3">
             <button
-              onClick={() => { addTrack('custom', 'sample'); close(); }}
+              onClick={() => { addTrackAtSelectedSlot('custom', 'sample'); close(); }}
               className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-[#484848] transition-colors text-left"
               style={{ borderLeft: `3px solid ${TRACK_TYPE_CATALOG.sample.color}` }}
             >
@@ -208,7 +217,7 @@ export function InstrumentPicker() {
             </div>
             <button
               onClick={() => {
-                addTrack('percussion', 'sequencer');
+                addTrackAtSelectedSlot('percussion', 'sequencer');
                 close();
               }}
               className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-[#484848] transition-colors text-left"
@@ -231,7 +240,7 @@ export function InstrumentPicker() {
             </div>
             <button
               onClick={() => {
-                addTrack('percussion', 'drumMachine');
+                addTrackAtSelectedSlot('percussion', 'drumMachine');
                 close();
               }}
               className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-[#484848] transition-colors text-left"
@@ -254,7 +263,7 @@ export function InstrumentPicker() {
             </div>
             <button
               onClick={() => {
-                addTrack('keyboard', 'pianoRoll');
+                addTrackAtSelectedSlot('keyboard', 'pianoRoll');
                 close();
               }}
               className="flex items-center gap-3 p-3 rounded-lg bg-daw-surface-2 hover:bg-[#484848] transition-colors text-left"
@@ -268,7 +277,7 @@ export function InstrumentPicker() {
             </button>
             <button
               onClick={() => {
-                const track = addTrack('keyboard', 'pianoRoll');
+                const track = addTrackAtSelectedSlot('keyboard', 'pianoRoll');
                 updateTrack(track.id, { displayName: 'Quick Sampler', synthPreset: 'sampler' });
                 setTrackSampler(track.id, { rootNote: 60 });
                 close();

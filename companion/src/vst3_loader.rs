@@ -147,8 +147,12 @@ pub unsafe fn load_plugin(
     let component = ComPtr::<IComponent>::from_raw(component_raw as *mut IComponent)
         .ok_or_else(|| CompanionError::Plugin("Null IComponent pointer".into()))?;
 
-    // 6. Initialize the component (with null context for now — W4 will add IHostApplication)
-    let result = component.initialize(ptr::null_mut());
+    // 6. Initialize the component with our host application context
+    let host_app = crate::host_impl::AceHostApplication::new();
+    let host_ptr = host_app.to_com_ptr::<vst3::Steinberg::Vst::IHostApplication>()
+        .map(|p| p.as_ptr() as *mut FUnknown)
+        .unwrap_or(ptr::null_mut());
+    let result = component.initialize(host_ptr);
     if result != kResultOk {
         warn!(result, "IComponent::initialize returned non-OK (may still work)");
     }

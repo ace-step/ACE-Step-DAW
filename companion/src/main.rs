@@ -1,6 +1,7 @@
 mod audio_thread;
 mod error;
 mod gui_manager;
+mod host_impl;
 mod plugin_host;
 mod plugin_scanner;
 mod preset_manager;

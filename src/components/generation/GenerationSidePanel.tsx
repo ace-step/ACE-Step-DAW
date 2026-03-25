@@ -381,10 +381,10 @@ export function GenerationSidePanel() {
 
       {renderPanel && (
         <aside
-          className={`fixed right-0 top-10 bottom-6 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl transition-all duration-300 ease-out ${
+          className={`fixed right-0 top-10 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl transition-all duration-300 ease-out ${
             show ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[calc(100%+28px)] opacity-0'
           }`}
-          style={{ zIndex: Z.panel }}
+          style={{ zIndex: Z.panel, bottom: showSmartControls ? 216 : 128 }}
           data-testid="generation-side-panel"
           aria-label="Generate panel"
           aria-hidden={!show}

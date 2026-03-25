@@ -73,8 +73,10 @@ pub enum IncomingMessage {
     LoadPreset {
         #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
-        #[serde(alias = "preset_id", rename = "presetId")]
-        preset_id: u32,
+        #[serde(alias = "preset_id", rename = "presetId", default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
     },
     Destroy {
         #[serde(alias = "instance_id", rename = "instanceId")]
@@ -108,6 +110,20 @@ pub enum IncomingMessage {
     StopAudioStream {
         #[serde(alias = "instance_id", rename = "instanceId")]
         instance_id: String,
+    },
+    SavePreset {
+        #[serde(alias = "instance_id", rename = "instanceId")]
+        instance_id: String,
+        name: String,
+    },
+    ListPresets {
+        #[serde(alias = "instance_id", rename = "instanceId")]
+        instance_id: String,
+    },
+    DeletePreset {
+        #[serde(alias = "instance_id", rename = "instanceId")]
+        instance_id: String,
+        name: String,
     },
 }
 
@@ -229,6 +245,21 @@ pub enum OutgoingMessage {
     AudioStreamStopped {
         #[serde(rename = "instanceId")]
         instance_id: String,
+    },
+    PresetSaved {
+        #[serde(rename = "instanceId")]
+        instance_id: String,
+        name: String,
+    },
+    PresetList {
+        #[serde(rename = "instanceId")]
+        instance_id: String,
+        presets: Vec<String>,
+    },
+    PresetDeleted {
+        #[serde(rename = "instanceId")]
+        instance_id: String,
+        name: String,
     },
     Error {
         #[serde(skip_serializing_if = "Option::is_none", rename = "reqId")]

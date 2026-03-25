@@ -230,6 +230,17 @@ impl PluginHost {
         })
     }
 
+    /// Get the plugin UID for an instance.
+    pub fn get_plugin_uid(&self, instance_id: &str) -> Result<String> {
+        let guard = self.instances.lock().unwrap();
+        guard
+            .get(instance_id)
+            .map(|info| info.plugin_uid.clone())
+            .ok_or_else(|| {
+                CompanionError::Plugin(format!("Instance '{instance_id}' not found"))
+            })
+    }
+
     /// Check whether an instance exists.
     pub fn has_instance(&self, instance_id: &str) -> bool {
         self.instances.lock().unwrap().contains_key(instance_id)

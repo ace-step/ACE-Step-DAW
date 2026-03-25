@@ -19,6 +19,7 @@ use crate::error::Result;
 use crate::host_impl::ParamChangeCollector;
 use crate::plugin_host::PluginHost;
 use crate::plugin_scanner::PluginScanner;
+use crate::preset_storage::PresetStorage;
 use crate::protocol::{IncomingMessage, OutgoingMessage, ParamChangeEntry};
 
 
@@ -28,6 +29,7 @@ pub struct AppState {
     pub host: PluginHost,
     pub param_collector: ParamChangeCollector,
     pub audio_streams: AudioStreamManager,
+    pub preset_storage: PresetStorage,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -40,11 +42,15 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         .take_frame_receiver()
         .expect("audio frame receiver already taken");
 
+    let preset_storage = PresetStorage::new().map_err(|e| {
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+    })?;
     let state = Arc::new(AppState {
         scanner: PluginScanner::new(),
         host: PluginHost::new(),
         param_collector: ParamChangeCollector::new(),
         audio_streams,
+        preset_storage,
     });
 
     // Wrap the receiver in an Arc<Mutex> so it can be shared across connections
@@ -162,6 +168,16 @@ async fn handle_connection(
     }
 
     Ok(())
+}
+
+/// Build an error response scoped to an instance.
+fn instance_error(instance_id: String, code: &str, message: String) -> OutgoingMessage {
+    OutgoingMessage::Error {
+        req_id: None,
+        instance_id: Some(instance_id),
+        code: code.into(),
+        message,
+    }
 }
 
 /// Dispatch an incoming protocol message and produce a response.
@@ -331,13 +347,26 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
         IncomingMessage::LoadPreset {
             instance_id,
             preset_id,
+            name,
         } => {
-            info!(instance_id, preset_id, "LoadPreset (stub)");
-            OutgoingMessage::Error {
-                req_id: None,
-                instance_id: Some(instance_id),
-                code: "ok".into(),
-                message: format!("Loaded preset {preset_id} (stub)"),
+            if let Some(preset_name) = name {
+                // Name-based preset: load from disk and apply via setState
+                let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                    Ok(uid) => uid,
+                    Err(e) => return instance_error(instance_id, "load_preset_error", e.to_string()),
+                };
+                let state_bytes = match state.preset_storage.load(&plugin_uid, &preset_name) {
+                    Ok(bytes) => bytes,
+                    Err(e) => return instance_error(instance_id, "load_preset_error", e.to_string()),
+                };
+                match state.host.set_state(&instance_id, &state_bytes) {
+                    Ok(()) => instance_error(instance_id, "ok", format!("Loaded preset '{preset_name}'")),
+                    Err(e) => instance_error(instance_id, "load_preset_error", e.to_string()),
+                }
+            } else {
+                let id = preset_id.unwrap_or(0);
+                info!(%instance_id, id, "LoadPreset by ID (stub)");
+                instance_error(instance_id, "ok", format!("Loaded preset {id} (stub)"))
             }
         }
 
@@ -371,6 +400,47 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                     code: "get_latency_error".into(),
                     message: e.to_string(),
                 },
+            }
+        }
+
+        IncomingMessage::SavePreset {
+            instance_id,
+            name,
+        } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "save_preset_error", e.to_string()),
+            };
+            let state_bytes = match state.host.get_state(&instance_id) {
+                Ok(bytes) => bytes,
+                Err(e) => return instance_error(instance_id, "save_preset_error", e.to_string()),
+            };
+            match state.preset_storage.save(&plugin_uid, &name, &state_bytes) {
+                Ok(()) => OutgoingMessage::PresetSaved { instance_id, name },
+                Err(e) => instance_error(instance_id, "save_preset_error", e.to_string()),
+            }
+        }
+
+        IncomingMessage::ListPresets { instance_id } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "list_presets_error", e.to_string()),
+            };
+            let presets = state.preset_storage.list(&plugin_uid);
+            OutgoingMessage::PresetList { instance_id, presets }
+        }
+
+        IncomingMessage::DeletePreset {
+            instance_id,
+            name,
+        } => {
+            let plugin_uid = match state.host.get_plugin_uid(&instance_id) {
+                Ok(uid) => uid,
+                Err(e) => return instance_error(instance_id, "delete_preset_error", e.to_string()),
+            };
+            match state.preset_storage.delete(&plugin_uid, &name) {
+                Ok(()) => OutgoingMessage::PresetDeleted { instance_id, name },
+                Err(e) => instance_error(instance_id, "delete_preset_error", e.to_string()),
             }
         }
 
@@ -451,14 +521,37 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::connect_async;
 
-    #[test]
-    fn test_handle_message_hello() {
+    /// Create an `AppState` with a temp-dir-backed `PresetStorage` and audio stream manager.
+    fn test_app_state() -> (tempfile::TempDir, AppState) {
+        let dir = tempfile::tempdir().unwrap();
         let state = AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
             param_collector: ParamChangeCollector::new(),
             audio_streams: AudioStreamManager::new(),
+            preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
         };
+        (dir, state)
+    }
+
+    /// Like `test_app_state` but also returns the audio frame receiver.
+    fn test_app_state_with_audio() -> (tempfile::TempDir, AppState, crossbeam::channel::Receiver<AudioFrame>) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut audio_streams = AudioStreamManager::new();
+        let rx = audio_streams.take_frame_receiver().unwrap();
+        let state = AppState {
+            scanner: PluginScanner::new(),
+            host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
+            audio_streams,
+            preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+        };
+        (dir, state, rx)
+    }
+
+    #[test]
+    fn test_handle_message_hello() {
+        let (_dir, state) = test_app_state();
         let resp = handle_message(
             IncomingMessage::Hello {
                 version: "1.0".into(),
@@ -481,12 +574,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_instantiate_and_destroy() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
 
         let resp = handle_message(
             IncomingMessage::Instantiate {
@@ -517,12 +605,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_get_latency() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
         // Must instantiate first so the instance exists
         state.host.instantiate("uid-1", "inst-1", None).unwrap();
         let resp = handle_message(
@@ -537,18 +620,7 @@ mod tests {
         }
     }
 
-    /// Helper to create test AppState with audio stream manager and return the frame receiver.
-    fn test_app_state() -> (AppState, crossbeam::channel::Receiver<AudioFrame>) {
-        let mut audio_streams = AudioStreamManager::new();
-        let rx = audio_streams.take_frame_receiver().unwrap();
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams,
-        };
-        (state, rx)
-    }
+    // Second test_app_state removed — use the unified one above.
 
     /// Integration test: start the WS server, connect, send hello, receive hello_ack.
     #[tokio::test]
@@ -557,7 +629,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let (app_state, audio_rx) = test_app_state();
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
         let state = Arc::new(app_state);
         let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
 
@@ -606,7 +678,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let (app_state, audio_rx) = test_app_state();
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
         let state = Arc::new(app_state);
         let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
 
@@ -661,12 +733,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_start_audio_stream() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
         // Must instantiate first
         state.host.instantiate("uid-1", "inst-1", None).unwrap();
 
@@ -692,12 +759,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_start_audio_stream_unknown_instance() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
 
         let resp = handle_message(
             IncomingMessage::StartAudioStream {
@@ -715,12 +777,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_stop_audio_stream() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
         state.host.instantiate("uid-1", "inst-1", None).unwrap();
         state.audio_streams.start_stream("inst-1", 44100.0, 512, None, true);
 
@@ -741,12 +798,7 @@ mod tests {
 
     #[test]
     fn test_handle_message_stop_audio_stream_not_streaming() {
-        let state = AppState {
-            scanner: PluginScanner::new(),
-            host: PluginHost::new(),
-            param_collector: ParamChangeCollector::new(),
-            audio_streams: AudioStreamManager::new(),
-        };
+        let (_dir, state) = test_app_state();
 
         let resp = handle_message(
             IncomingMessage::StopAudioStream {
@@ -766,7 +818,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let (app_state, audio_rx) = test_app_state();
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
         let state = Arc::new(app_state);
         let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
 
@@ -834,5 +886,157 @@ mod tests {
 
         // Clean up
         sink.send(Message::Close(None)).await.ok();
+    }
+
+    #[test]
+    fn test_handle_save_and_list_presets() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save a preset
+        let resp = handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "My Patch".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetSaved { instance_id, name } => {
+                assert_eq!(instance_id, "inst-1");
+                assert_eq!(name, "My Patch");
+            }
+            other => panic!("Expected PresetSaved, got {other:?}"),
+        }
+
+        // List presets
+        let resp = handle_message(
+            IncomingMessage::ListPresets {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetList { instance_id, presets } => {
+                assert_eq!(instance_id, "inst-1");
+                assert_eq!(presets, &vec!["My Patch".to_string()]);
+            }
+            other => panic!("Expected PresetList, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_load_preset_by_name() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save a preset first
+        handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "Test Preset".into(),
+            },
+            &state,
+        );
+
+        // Load the preset by name
+        let resp = handle_message(
+            IncomingMessage::LoadPreset {
+                instance_id: "inst-1".into(),
+                preset_id: None,
+                name: Some("Test Preset".into()),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, message, .. } => {
+                assert_eq!(code, "ok");
+                assert!(message.contains("Test Preset"));
+            }
+            other => panic!("Expected ok Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_load_nonexistent_preset() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        let resp = handle_message(
+            IncomingMessage::LoadPreset {
+                instance_id: "inst-1".into(),
+                preset_id: None,
+                name: Some("Nonexistent".into()),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "load_preset_error");
+            }
+            other => panic!("Expected error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_delete_preset() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "inst-1", None).unwrap();
+
+        // Save then delete
+        handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "inst-1".into(),
+                name: "ToDelete".into(),
+            },
+            &state,
+        );
+
+        let resp = handle_message(
+            IncomingMessage::DeletePreset {
+                instance_id: "inst-1".into(),
+                name: "ToDelete".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetDeleted { name, .. } => {
+                assert_eq!(name, "ToDelete");
+            }
+            other => panic!("Expected PresetDeleted, got {other:?}"),
+        }
+
+        // Verify it's gone
+        let resp = handle_message(
+            IncomingMessage::ListPresets {
+                instance_id: "inst-1".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::PresetList { presets, .. } => {
+                assert!(presets.is_empty());
+            }
+            other => panic!("Expected PresetList, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_preset_unknown_instance_errors() {
+        let (_dir, state) = test_app_state();
+
+        let resp = handle_message(
+            IncomingMessage::SavePreset {
+                instance_id: "nonexistent".into(),
+                name: "Test".into(),
+            },
+            &state,
+        );
+        match &resp {
+            OutgoingMessage::Error { code, .. } => {
+                assert_eq!(code, "save_preset_error");
+            }
+            other => panic!("Expected error, got {other:?}"),
+        }
     }
 }

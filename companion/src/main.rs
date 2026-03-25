@@ -4,7 +4,7 @@ mod gui_manager;
 mod host_impl;
 mod plugin_host;
 mod plugin_scanner;
-mod preset_manager;
+mod preset_storage;
 mod protocol;
 mod sidechain_router;
 mod vst3_loader;

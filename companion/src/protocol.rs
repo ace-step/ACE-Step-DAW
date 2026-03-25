@@ -34,8 +34,8 @@ pub enum IncomingMessage {
     },
     ScanPlugins,
     Instantiate {
-        #[serde(alias = "req_id", rename = "reqId")]
-        req_id: String,
+        #[serde(default, alias = "req_id", rename = "reqId", skip_serializing_if = "Option::is_none")]
+        req_id: Option<String>,
         #[serde(alias = "plugin_uid", rename = "pluginUid")]
         plugin_uid: String,
         #[serde(alias = "instance_id", rename = "instanceId")]
@@ -195,9 +195,10 @@ pub enum OutgoingMessage {
     ScanComplete {
         plugins: Vec<PluginInfo>,
     },
+    #[serde(rename = "instanceCreated")]
     Instantiated {
-        #[serde(rename = "reqId")]
-        req_id: String,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "reqId")]
+        req_id: Option<String>,
         #[serde(rename = "instanceId")]
         instance_id: String,
         parameters: Vec<ParamInfo>,
@@ -307,7 +308,7 @@ mod tests {
     #[test]
     fn test_incoming_instantiate_roundtrip() {
         let msg = IncomingMessage::Instantiate {
-            req_id: "r1".into(),
+            req_id: Some("r1".into()),
             plugin_uid: "uid-abc".into(),
             instance_id: "inst-1".into(),
         };
@@ -420,7 +421,7 @@ mod tests {
     #[test]
     fn test_outgoing_instantiated_roundtrip() {
         let msg = OutgoingMessage::Instantiated {
-            req_id: "r1".into(),
+            req_id: Some("r1".into()),
             instance_id: "inst-1".into(),
             parameters: vec![ParamInfo {
                 id: 0,

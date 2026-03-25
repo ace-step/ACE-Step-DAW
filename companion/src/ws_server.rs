@@ -216,7 +216,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
 
             match state.host.instantiate(&plugin_uid, &instance_id, plugin_path.as_deref()) {
             Ok(info) => OutgoingMessage::Instantiated {
-                req_id,
+                req_id: req_id.clone(),
                 instance_id: info.instance_id,
                 parameters: info.parameters,
                 latency_samples: info.latency_samples,
@@ -224,7 +224,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 presets: info.presets,
             },
             Err(e) => OutgoingMessage::Error {
-                req_id: Some(req_id),
+                req_id,
                 instance_id: Some(instance_id),
                 code: "instantiate_error".into(),
                 message: e.to_string(),
@@ -578,7 +578,7 @@ mod tests {
 
         let resp = handle_message(
             IncomingMessage::Instantiate {
-                req_id: "r1".into(),
+                req_id: Some("r1".into()),
                 plugin_uid: "uid-1".into(),
                 instance_id: "inst-1".into(),
             },

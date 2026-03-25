@@ -95,6 +95,17 @@ export function useVST3Connection() {
       client.on('scanProgress', onScanProgress),
     ];
 
+    // Sync current state immediately (handles HMR / singleton already connected)
+    if (client.isConnected) {
+      store.setConnectionStatus('connected');
+      store.setCompanionVersion(client.companionVersion);
+      store.setConnectionError(null);
+      // Trigger scan if plugins list is empty
+      if (store.plugins.length === 0) {
+        client.send({ type: 'scanPlugins' });
+      }
+    }
+
     return () => {
       for (const unsub of unsubs) unsub();
     };

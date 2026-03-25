@@ -67,11 +67,12 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   // ── Connection ──────────────────────────────────────────
   connect: () => {
     set({ connectionStatus: 'connecting' });
-    // Bridge implementation will call _setConnectionStatus('connected')
+    _getBridgeClient().connect();
   },
 
   disconnect: () => {
     set({ connectionStatus: 'disconnected', companionVersion: null });
+    _getBridgeClient().disconnect();
   },
 
   // ── Scanning ────────────────────────────────────────────
@@ -102,20 +103,22 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
           reject(new Error('Plugin instantiation timed out'));
         }, 10_000);
 
-        const onCreated = (createdId: string, params: VST3Parameter[]) => {
+        const onCreated = (msg: Record<string, unknown>) => {
+          const createdId = msg.instanceId as string;
           if (createdId === instanceId) {
             clearTimeout(timeout);
             client.off('instanceCreated', onCreated);
             client.off('error', onError);
+            const params = (msg.parameters as VST3Parameter[]) ?? [];
             resolve(params);
           }
         };
 
-        const onError = (errorMsg: string) => {
+        const onError = (msg: Record<string, unknown>) => {
           clearTimeout(timeout);
           client.off('instanceCreated', onCreated);
           client.off('error', onError);
-          reject(new Error(errorMsg));
+          reject(new Error((msg.message as string) ?? 'Unknown error'));
         };
 
         client.on('instanceCreated', onCreated);

@@ -230,7 +230,7 @@ describe('vst3Store', () => {
       const mockCreateInstance = vi.fn().mockImplementation((_pluginUid: string, instanceId: string) => {
         queueMicrotask(() => {
           for (const fn of listeners['instanceCreated'] ?? []) {
-            fn(instanceId, []);
+            fn({ type: 'instanceCreated', instanceId, parameters: [] });
           }
         });
         return Promise.resolve();

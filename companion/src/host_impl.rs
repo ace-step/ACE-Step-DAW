@@ -5,6 +5,7 @@
 
 use std::cell::RefCell;
 use std::ptr;
+use std::sync::Arc;
 
 use crossbeam::queue::SegQueue;
 use vst3::com_scrape_types::Guid;
@@ -26,20 +27,72 @@ use vst3::Steinberg::Vst::{
 /// A parameter change reported by the plugin (e.g. from its GUI).
 #[derive(Debug, Clone)]
 pub struct HostParamChange {
+    pub instance_id: String,
     pub param_id: u32,
     pub value: f64,
 }
 
+/// Shared collector that aggregates parameter changes from all plugin instances.
+///
+/// Passed to each `AceComponentHandler` via `Arc` so changes from any instance
+/// end up in a single queue that the WebSocket server can drain.
+#[derive(Clone)]
+pub struct ParamChangeCollector {
+    queue: Arc<SegQueue<HostParamChange>>,
+}
+
+impl ParamChangeCollector {
+    pub fn new() -> Self {
+        Self {
+            queue: Arc::new(SegQueue::new()),
+        }
+    }
+
+    /// Push a change into the queue (used by `AceComponentHandler` and tests).
+    pub fn push(&self, change: HostParamChange) {
+        self.queue.push(change);
+    }
+
+    /// Drain all pending changes, returning them as a `Vec`.
+    pub fn drain(&self) -> Vec<HostParamChange> {
+        let mut changes = Vec::new();
+        while let Some(change) = self.queue.pop() {
+            changes.push(change);
+        }
+        changes
+    }
+
+    /// Get a reference to the inner queue `Arc` (for passing to `AceComponentHandler`).
+    pub(crate) fn queue_arc(&self) -> &Arc<SegQueue<HostParamChange>> {
+        &self.queue
+    }
+}
+
 /// Implements `IComponentHandler` — receives parameter edit notifications from plugins.
 ///
-/// Changes are pushed to a lock-free queue for the WebSocket thread to consume.
+/// Changes are pushed to a shared lock-free queue for the WebSocket thread to consume.
 pub struct AceComponentHandler {
+    instance_id: String,
+    collector: Arc<SegQueue<HostParamChange>>,
+    /// Local queue for testing — populated when no collector is provided.
     pub changes: SegQueue<HostParamChange>,
 }
 
 impl AceComponentHandler {
+    /// Create a handler for testing (changes go to the local `changes` queue).
     pub fn new() -> ComWrapper<Self> {
         ComWrapper::new(Self {
+            instance_id: String::new(),
+            collector: Arc::new(SegQueue::new()),
+            changes: SegQueue::new(),
+        })
+    }
+
+    /// Create a handler wired to a shared collector.
+    pub fn with_collector(instance_id: String, collector: &ParamChangeCollector) -> ComWrapper<Self> {
+        ComWrapper::new(Self {
+            instance_id,
+            collector: Arc::clone(collector.queue_arc()),
             changes: SegQueue::new(),
         })
     }
@@ -55,10 +108,15 @@ impl IComponentHandlerTrait for AceComponentHandler {
     }
 
     unsafe fn performEdit(&self, id: ParamID, valueNormalized: ParamValue) -> tresult {
-        self.changes.push(HostParamChange {
+        let change = HostParamChange {
+            instance_id: self.instance_id.clone(),
             param_id: id,
             value: valueNormalized,
-        });
+        };
+        // Push to shared collector for WebSocket forwarding
+        self.collector.push(change.clone());
+        // Also push to local queue (useful for tests)
+        self.changes.push(change);
         kResultOk
     }
 
@@ -267,6 +325,32 @@ mod tests {
 
         let c2 = handler.changes.pop().unwrap();
         assert_eq!(c2.param_id, 7);
+    }
+
+    #[test]
+    fn collector_aggregates_changes_from_multiple_handlers() {
+        let collector = ParamChangeCollector::new();
+
+        let h1 = AceComponentHandler::with_collector("inst-1".into(), &collector);
+        let h2 = AceComponentHandler::with_collector("inst-2".into(), &collector);
+
+        unsafe {
+            h1.performEdit(1, 0.5);
+            h2.performEdit(2, 0.75);
+            h1.performEdit(3, 1.0);
+        }
+
+        let changes = collector.drain();
+        assert_eq!(changes.len(), 3);
+        assert_eq!(changes[0].instance_id, "inst-1");
+        assert_eq!(changes[0].param_id, 1);
+        assert_eq!(changes[1].instance_id, "inst-2");
+        assert_eq!(changes[1].param_id, 2);
+        assert_eq!(changes[2].instance_id, "inst-1");
+        assert_eq!(changes[2].param_id, 3);
+
+        // Queue should be empty after drain
+        assert!(collector.drain().is_empty());
     }
 
     #[test]

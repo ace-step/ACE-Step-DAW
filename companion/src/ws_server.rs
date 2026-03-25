@@ -7,21 +7,25 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::error::Result;
+use crate::host_impl::ParamChangeCollector;
 use crate::plugin_host::PluginHost;
 use crate::plugin_scanner::PluginScanner;
-use crate::protocol::{IncomingMessage, OutgoingMessage};
+use crate::protocol::{IncomingMessage, OutgoingMessage, ParamChangeEntry};
+
 
 /// Shared application state accessible from every connection handler.
 pub struct AppState {
     pub scanner: PluginScanner,
     pub host: PluginHost,
+    pub param_collector: ParamChangeCollector,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -32,6 +36,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     let state = Arc::new(AppState {
         scanner: PluginScanner::new(),
         host: PluginHost::new(),
+        param_collector: ParamChangeCollector::new(),
     });
 
     loop {
@@ -50,6 +55,10 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
 }
 
 /// Handle a single WebSocket connection.
+///
+/// Runs two concurrent loops:
+/// 1. Reads incoming messages from the client and dispatches responses.
+/// 2. Periodically drains the parameter change queue and sends batched updates.
 async fn handle_connection(
     stream: TcpStream,
     peer: SocketAddr,
@@ -59,51 +68,71 @@ async fn handle_connection(
     info!(%peer, "WebSocket handshake complete");
 
     let (mut sink, mut stream) = ws_stream.split();
+    let mut param_interval = tokio::time::interval(Duration::from_millis(10));
 
-    while let Some(msg_result) = stream.next().await {
-        let msg = match msg_result {
-            Ok(m) => m,
-            Err(e) => {
-                warn!(%peer, "Read error: {e}");
-                break;
-            }
-        };
+    loop {
+        tokio::select! {
+            // Branch 1: incoming message from client
+            msg_result = stream.next() => {
+                let msg = match msg_result {
+                    Some(Ok(m)) => m,
+                    Some(Err(e)) => {
+                        warn!(%peer, "Read error: {e}");
+                        break;
+                    }
+                    None => break, // stream ended
+                };
 
-        match msg {
-            Message::Text(text) => {
-                info!(%peer, "Received text: {text}");
-                match serde_json::from_str::<IncomingMessage>(&text) {
-                    Ok(incoming) => {
-                        let response = handle_message(incoming, &state);
-                        let json = serde_json::to_string(&response)?;
-                        sink.send(Message::Text(json.into())).await?;
+                match msg {
+                    Message::Text(text) => {
+                        info!(%peer, "Received text: {text}");
+                        match serde_json::from_str::<IncomingMessage>(&text) {
+                            Ok(incoming) => {
+                                let response = handle_message(incoming, &state);
+                                let json = serde_json::to_string(&response)?;
+                                sink.send(Message::Text(json.into())).await?;
+                            }
+                            Err(e) => {
+                                warn!(%peer, "Failed to parse message: {e}");
+                                let err = OutgoingMessage::Error {
+                                    req_id: None,
+                                    instance_id: None,
+                                    code: "parse_error".into(),
+                                    message: format!("Invalid message: {e}"),
+                                };
+                                let json = serde_json::to_string(&err)?;
+                                sink.send(Message::Text(json.into())).await?;
+                            }
+                        }
                     }
-                    Err(e) => {
-                        warn!(%peer, "Failed to parse message: {e}");
-                        let err = OutgoingMessage::Error {
-                            req_id: None,
-                            instance_id: None,
-                            code: "parse_error".into(),
-                            message: format!("Invalid message: {e}"),
-                        };
-                        let json = serde_json::to_string(&err)?;
-                        sink.send(Message::Text(json.into())).await?;
+                    Message::Binary(data) => {
+                        info!(%peer, bytes = data.len(), "Received binary frame (echo)");
+                        sink.send(Message::Binary(data)).await?;
                     }
+                    Message::Ping(payload) => {
+                        sink.send(Message::Pong(payload)).await?;
+                    }
+                    Message::Close(_) => {
+                        info!(%peer, "Client sent close frame");
+                        break;
+                    }
+                    _ => {}
                 }
             }
-            Message::Binary(data) => {
-                // Placeholder: echo binary frames back.
-                info!(%peer, bytes = data.len(), "Received binary frame (echo)");
-                sink.send(Message::Binary(data)).await?;
+
+            // Branch 2: periodic drain of parameter changes from plugins
+            _ = param_interval.tick() => {
+                let changes = state.param_collector.drain();
+                if changes.is_empty() {
+                    continue;
+                }
+                debug!(%peer, count = changes.len(), "Forwarding param changes");
+                let batch = OutgoingMessage::ParamsBatch {
+                    changes: changes.into_iter().map(ParamChangeEntry::from).collect(),
+                };
+                let json = serde_json::to_string(&batch)?;
+                sink.send(Message::Text(json.into())).await?;
             }
-            Message::Ping(payload) => {
-                sink.send(Message::Pong(payload)).await?;
-            }
-            Message::Close(_) => {
-                info!(%peer, "Client sent close frame");
-                break;
-            }
-            _ => {}
         }
     }
 
@@ -309,6 +338,7 @@ mod tests {
         let state = AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
         };
         let resp = handle_message(
             IncomingMessage::Hello {
@@ -335,6 +365,7 @@ mod tests {
         let state = AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
         };
 
         let resp = handle_message(
@@ -369,6 +400,7 @@ mod tests {
         let state = AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
         };
         let resp = handle_message(
             IncomingMessage::GetLatency {
@@ -392,6 +424,7 @@ mod tests {
         let state = Arc::new(AppState {
             scanner: PluginScanner::new(),
             host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
         });
 
         // Spawn the accept loop.
@@ -427,6 +460,68 @@ mod tests {
         assert_eq!(parsed["version"], "0.1.0");
 
         // Clean up.
+        sink.send(Message::Close(None)).await.ok();
+    }
+
+    /// Integration test: push param changes to the collector and verify they arrive as a batch.
+    #[tokio::test]
+    async fn test_ws_param_batch_forwarding() {
+        use crate::host_impl::HostParamChange;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let state = Arc::new(AppState {
+            scanner: PluginScanner::new(),
+            host: PluginHost::new(),
+            param_collector: ParamChangeCollector::new(),
+        });
+
+        let server_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let (stream, peer) = listener.accept().await.unwrap();
+            handle_connection(stream, peer, server_state)
+                .await
+                .unwrap();
+        });
+
+        let url = format!("ws://{addr}");
+        let (ws, _) = connect_async(&url).await.unwrap();
+        let (mut sink, mut stream) = ws.split();
+
+        // Push changes into the collector (simulating plugin GUI activity).
+        state.param_collector.push(HostParamChange {
+            instance_id: "inst-1".into(),
+            param_id: 10,
+            value: 0.42,
+        });
+        state.param_collector.push(HostParamChange {
+            instance_id: "inst-2".into(),
+            param_id: 20,
+            value: 0.99,
+        });
+
+        // Wait for the periodic drain to fire (interval is 10ms, give it 100ms).
+        let response = tokio::time::timeout(
+            Duration::from_millis(200),
+            stream.next(),
+        )
+        .await
+        .expect("Timed out waiting for paramsBatch")
+        .unwrap()
+        .unwrap();
+
+        let text = response.into_text().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "paramsBatch");
+
+        let changes = parsed["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0]["instanceId"], "inst-1");
+        assert_eq!(changes[0]["paramId"], 10);
+        assert_eq!(changes[1]["instanceId"], "inst-2");
+        assert_eq!(changes[1]["paramId"], 20);
+
         sink.send(Message::Close(None)).await.ok();
     }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useVST3Store } from '../vst3Store';
 import type { VST3ActiveInstance, VST3PluginInfo } from '../../types/vst3';
@@ -204,6 +204,90 @@ describe('vst3Store', () => {
       const { instances } = useVST3Store.getState();
       expect(instances['i1'].online).toBe(false);
       expect(instances['i2'].online).toBe(false);
+    });
+  });
+
+  describe('loadPlugin', () => {
+    const pluginInfo = mockPlugin({ id: 'com.xfer.serum', name: 'Serum', vendor: 'Xfer Records' });
+
+    beforeEach(() => {
+      useVST3Store.setState({ plugins: [pluginInfo], connectionStatus: 'connected' });
+    });
+
+    it('creates an instance in the store on success', async () => {
+      const { _getBridgeClient } = await import('../../hooks/useVST3Connection');
+      const client = _getBridgeClient();
+
+      // Intercept on/off to capture event listeners registered by loadPlugin
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      client.on = vi.fn().mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(handler);
+      });
+      client.off = vi.fn();
+
+      // Mock createInstance to simulate the companion responding with instanceCreated
+      const mockCreateInstance = vi.fn().mockImplementation((_pluginUid: string, instanceId: string) => {
+        queueMicrotask(() => {
+          for (const fn of listeners['instanceCreated'] ?? []) {
+            fn(instanceId, []);
+          }
+        });
+        return Promise.resolve();
+      });
+      client.createInstance = mockCreateInstance;
+
+      await useVST3Store.getState().loadPlugin('com.xfer.serum', 'track-1');
+
+      // Should have called createInstance with the pluginId and a generated instanceId
+      expect(mockCreateInstance).toHaveBeenCalledWith('com.xfer.serum', expect.any(String));
+
+      // Should have created an instance in the store
+      const { instances } = useVST3Store.getState();
+      const instanceIds = Object.keys(instances);
+      expect(instanceIds).toHaveLength(1);
+
+      const instance = instances[instanceIds[0]];
+      expect(instance.pluginId).toBe('com.xfer.serum');
+      expect(instance.pluginName).toBe('Serum');
+      expect(instance.vendor).toBe('Xfer Records');
+      expect(instance.trackId).toBe('track-1');
+      expect(instance.enabled).toBe(true);
+      expect(instance.online).toBe(true);
+    });
+
+    it('does not create an instance when bridge call fails', async () => {
+      const { _getBridgeClient } = await import('../../hooks/useVST3Connection');
+      const client = _getBridgeClient();
+
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      client.on = vi.fn().mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(handler);
+      });
+      client.off = vi.fn();
+
+      client.createInstance = vi.fn().mockImplementation(() => {
+        // Trigger the error listener
+        queueMicrotask(() => {
+          for (const fn of listeners['error'] ?? []) {
+            fn('Connection lost');
+          }
+        });
+        return Promise.resolve();
+      });
+
+      await useVST3Store.getState().loadPlugin('com.xfer.serum', 'track-1');
+
+      const { instances } = useVST3Store.getState();
+      expect(Object.keys(instances)).toHaveLength(0);
+    });
+
+    it('does not create instance for unknown plugin', async () => {
+      await useVST3Store.getState().loadPlugin('unknown-plugin', 'track-1');
+
+      const { instances } = useVST3Store.getState();
+      expect(Object.keys(instances)).toHaveLength(0);
     });
   });
 });

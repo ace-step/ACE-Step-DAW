@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
+import { useVST3Store } from '../../store/vst3Store';
+import { useProjectStore } from '../../store/projectStore';
 import { VST3PluginBrowser } from './VST3PluginBrowser';
 import { Z } from '../../utils/zIndex';
 
 export function VST3SidePanel() {
   const show = useUIStore((s) => s.showVST3Panel);
   const setShow = useUIStore((s) => s.setShowVST3Panel);
+  const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const firstTrackId = useProjectStore((s) => s.project?.tracks[0]?.id ?? '');
+  const loadPlugin = useVST3Store((s) => s.loadPlugin);
 
   // Delay unmount for exit animation
   const [renderPanel, setRenderPanel] = useState(show);
@@ -16,6 +21,17 @@ export function VST3SidePanel() {
       return () => clearTimeout(t);
     }
   }, [show]);
+
+  const handleLoadPlugin = useCallback(
+    (pluginId: string) => {
+      // Use the first selected track, or fall back to the first track in the project
+      const [firstSelected] = selectedTrackIds;
+      const trackId = firstSelected ?? firstTrackId;
+      if (!trackId) return;
+      loadPlugin(pluginId, trackId);
+    },
+    [selectedTrackIds, firstTrackId, loadPlugin],
+  );
 
   if (!renderPanel && !show) return null;
 
@@ -47,7 +63,7 @@ export function VST3SidePanel() {
 
       {/* Plugin Browser */}
       <div className="flex-1 overflow-y-auto">
-        <VST3PluginBrowser />
+        <VST3PluginBrowser onLoadPlugin={handleLoadPlugin} />
       </div>
     </aside>
   );

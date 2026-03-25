@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useUIStore } from '../../store/uiStore';
+import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import {
   getGenerationValidationError,
@@ -59,6 +59,7 @@ export function GenerationSidePanel() {
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const activeBottomPanel = useUIStore((s) => s.activeBottomPanel);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
+  const bottomPanelHeight = useUIStore(getBottomPanelHeight);
   const project = useProjectStore((s) => s.project);
 
   const generationForm = useGenerationStore((s) => s.generationForm);
@@ -380,80 +381,75 @@ export function GenerationSidePanel() {
       </div>
 
       {renderPanel && (
-        <aside
-          className={`fixed right-0 top-10 flex w-88 flex-col border-l border-[#333] bg-[#1e1e1e] shadow-2xl transition-all duration-300 ease-out ${
-            show ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[calc(100%+28px)] opacity-0'
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 flex w-[min(640px,calc(100vw-32px))] max-h-[60vh] flex-col bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 overflow-hidden transition-all duration-300 ease-out ${
+            show ? 'opacity-100 scale-100' : 'pointer-events-none opacity-0 scale-95'
           }`}
-          style={{ zIndex: Z.panel, bottom: showSmartControls ? 216 : 128 }}
+          style={{ zIndex: Z.toast + 1, bottom: `${76 + bottomPanelHeight}px` }}
           data-testid="generation-side-panel"
           aria-label="Generate panel"
           aria-hidden={!show}
         >
-          <div className="flex items-start justify-between border-b border-[#333] px-5 py-2">
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
-              <p className="text-[11px] text-zinc-400">{panelCopy.description}</p>
-            </div>
-            <div className="mt-0.5 flex items-center gap-2">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[#3a3a3a] px-5 py-3">
+            <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
+            <div className="flex items-center gap-2">
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#3a3a3a] bg-[#161618] p-0.5" data-testid="generation-panel-tabs">
+                <button
+                  type="button"
+                  onClick={() => setGenerationPanelView('textToMusic')}
+                  className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+                    generationPanelView === 'textToMusic'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+                  }`}
+                  data-testid="generation-panel-tab-text-to-music"
+                  aria-pressed={generationPanelView === 'textToMusic'}
+                >
+                  Generate
+                </button>
+                <button
+                  type="button"
+                  onClick={openMultiTrackView}
+                  className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+                    generationPanelView === 'multiTrack'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+                  }`}
+                  data-testid="generation-panel-tab-multi-track"
+                  aria-pressed={generationPanelView === 'multiTrack'}
+                >
+                  Multi-Track
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenerationPanelView('history')}
+                  className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+                    generationPanelView === 'history'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+                  }`}
+                  data-testid="generation-panel-tab-history"
+                  aria-pressed={generationPanelView === 'history'}
+                >
+                  History
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShow(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#404040] bg-[#262626] text-zinc-400 transition-colors hover:border-[#555] hover:text-zinc-200"
-                aria-label="Collapse generation panel"
-                title="Collapse Generate panel"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-[#2a2a2e] hover:text-zinc-200"
+                aria-label="Close generation panel"
                 data-testid="generation-panel-collapse"
               >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 3.5L10 8L5 12.5" />
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
                 </svg>
               </button>
             </div>
           </div>
 
-          <div className="border-b border-[#333] px-3 py-2">
-            <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#3a3a3a] bg-[#202020] p-1" data-testid="generation-panel-tabs">
-          <button
-            type="button"
-            onClick={() => setGenerationPanelView('textToMusic')}
-            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-              generationPanelView === 'textToMusic'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-            }`}
-            data-testid="generation-panel-tab-text-to-music"
-            aria-pressed={generationPanelView === 'textToMusic'}
-          >
-            Full Song
-          </button>
-          <button
-            type="button"
-            onClick={openMultiTrackView}
-            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-              generationPanelView === 'multiTrack'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-            }`}
-            data-testid="generation-panel-tab-multi-track"
-            aria-pressed={generationPanelView === 'multiTrack'}
-          >
-            Multi-Track
-          </button>
-          <button
-            type="button"
-            onClick={() => setGenerationPanelView('history')}
-            className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-              generationPanelView === 'history'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-            }`}
-            data-testid="generation-panel-tab-history"
-            aria-pressed={generationPanelView === 'history'}
-          >
-            History
-          </button>
-        </div>
-      </div>
-
+      {/* Body */}
       {generationPanelView === 'multiTrack' ? (
         <MultiTrackGenerateSection
           mode={batchGenerateMode ?? 'silence'}
@@ -463,17 +459,19 @@ export function GenerationSidePanel() {
         <GenerationHistorySection />
       ) : generationPanelView === 'settings' ? (
         <GenerationSettingsSection active={generationPanelView === 'settings'} />
-      ) : generationIntent === 'full-song' ? (
-        <>
-          <div className="px-3 pt-3">
-            <IntentSelector value={generationIntent} onChange={setGenerationIntent} disabled={isSessionActive} />
-          </div>
-          <FullSongForm />
-        </>
       ) : (
-        <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
-          <IntentSelector value={generationIntent} onChange={setGenerationIntent} disabled={isSessionActive} />
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Left: Form */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {/* Intent selector */}
+            <div className="px-4 pt-3 pb-2">
+              <IntentSelector value={generationIntent} onChange={setGenerationIntent} disabled={isSessionActive} />
+            </div>
 
+            {generationIntent === 'full-song' ? (
+              <FullSongForm />
+            ) : (
+              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-2">
           {statusMessage && (
           <div
             className={`rounded-md border px-3 py-2 text-xs ${
@@ -1113,8 +1111,49 @@ export function GenerationSidePanel() {
           </section>
         )}
       </div>
-          )}
-        </aside>
+            )}
+          </div>
+
+          {/* Right: History sidebar */}
+          <div className="w-[200px] min-w-[200px] border-l border-[#3a3a3a] bg-[#1a1a1e] flex flex-col">
+            <div className="px-3 py-2.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wide border-b border-[#3a3a3a]">
+              History
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+              {jobs.length === 0 ? (
+                <p className="px-2 py-4 text-center text-[10px] text-zinc-600">No generations yet</p>
+              ) : (
+                jobs.slice().reverse().map((job) => (
+                  <div
+                    key={job.id}
+                    className={`rounded-lg px-2.5 py-2 transition-colors cursor-pointer ${
+                      job.status === 'done'
+                        ? 'bg-[#222226] hover:bg-[#2a2a2e]'
+                        : job.status === 'error'
+                        ? 'bg-red-950/20'
+                        : 'bg-[#222226]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="truncate text-[11px] text-zinc-300">{job.trackName}</span>
+                      <span className={`ml-1 inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                        job.status === 'done' ? 'bg-emerald-400' :
+                        job.status === 'error' ? 'bg-red-400' :
+                        job.status === 'generating' ? 'bg-amber-400 animate-pulse' :
+                        'bg-zinc-600'
+                      }`} />
+                    </div>
+                    <span className="block truncate text-[10px] text-zinc-600 mt-0.5">
+                      {job.progress || job.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+        </div>
       )}
     </>
   );

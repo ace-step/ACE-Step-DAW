@@ -318,7 +318,7 @@ export function FullSongForm() {
       </section>
 
       {/* Generate button */}
-      <div className="sticky bottom-0 -mx-3 border-t border-[#333] bg-[#1e1e1e]/95 px-3 pb-3 pt-3 backdrop-blur">
+      <div className="mt-auto border-t border-[#3a3a3a] px-4 py-3">
         <Button
           variant="primary"
           size="md"

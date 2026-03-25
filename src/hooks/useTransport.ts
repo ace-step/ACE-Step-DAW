@@ -139,7 +139,10 @@ function collectTimelineScrubClips(project: Project): TimelineScrubClip[] {
 export function useTransport() {
   const { isPlaying, currentTime } = useTransportStore();
   const isRecording = useTransportStore((s) => s.isRecording);
-  const project = useProjectStore((s) => s.project);
+  const playbackTracks = useProjectStore((s) => s.project?.tracks);
+  const masterVolume = useProjectStore((s) => s.project?.masterVolume ?? 1.0);
+  const playbackLatency = useProjectStore((s) => s.project?.playbackLatency);
+  const mastering = useProjectStore((s) => s.project?.mastering);
   const { stopRecording, onLoopCycle } = useRecording();
   const mainView = useUIStore((s) => s.mainView);
   const scrubClipsRef = useRef<TimelineScrubClip[]>([]);
@@ -744,12 +747,12 @@ export function useTransport() {
 
   // Sync mixer params to audio engine TrackNodes during playback
   useEffect(() => {
-    if (!project || !isPlaying) return;
+    if (!playbackTracks || !isPlaying) return;
     const engine = getAudioEngine();
-    engine.masterVolume = project.masterVolume ?? 1.0;
-    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(project.playbackLatency));
-    engine.applyMastering(project.mastering);
-    for (const track of project.tracks) {
+    engine.masterVolume = masterVolume;
+    engine.setPlaybackLatencyCompensation(getPlaybackLatencyCompensationSeconds(playbackLatency));
+    engine.applyMastering(mastering);
+    for (const track of playbackTracks) {
       const trackNode = engine.trackNodes.get(track.id);
       if (trackNode) {
         trackNode.volume = track.volume;
@@ -770,7 +773,7 @@ export function useTransport() {
       }
     }
     engine.updateSoloState();
-  }, [project, isPlaying]);
+  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks]);
 
   return {
     isPlaying,

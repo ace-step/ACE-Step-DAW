@@ -16,7 +16,14 @@ const PLAYHEAD_LOOP_DRAG_THRESHOLD_PX = 4;
 const DRAG_THRESHOLD_PX = 3;
 
 export function TimeRuler() {
-  const project = useProjectStore((s) => s.project);
+  const hasProject = useProjectStore((s) => Boolean(s.project));
+  const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const timeSignature = useProjectStore((s) => s.project?.timeSignature ?? 4);
+  const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap);
+  const timeSignatureMap = useProjectStore((s) => s.project?.timeSignatureMap);
+  const measures = useProjectStore((s) => s.project?.measures ?? DEFAULT_MEASURES);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
@@ -42,15 +49,15 @@ export function TimeRuler() {
   } | null>(null);
 
   const getTimeFromX = useCallback((clientX: number, container: HTMLElement) => {
-    if (!project) return;
+    if (!hasProject) return;
     const rect = container.getBoundingClientRect();
     const x = clientX - rect.left;
-    return Math.max(0, Math.min(x / pixelsPerSecond, project.totalDuration));
-  }, [project, pixelsPerSecond]);
+    return Math.max(0, Math.min(x / pixelsPerSecond, totalDuration));
+  }, [hasProject, pixelsPerSecond, totalDuration]);
 
   /** Click = silent seek; drag = create loop region (no audio scrub) */
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!project || e.button !== 0) return;
+    if (!hasProject || e.button !== 0) return;
     e.preventDefault();
     const container = e.currentTarget;
     const time = getTimeFromX(e.clientX, container);
@@ -69,10 +76,10 @@ export function TimeRuler() {
     if ('setPointerCapture' in container) {
       container.setPointerCapture(e.pointerId);
     }
-  }, [getTimeFromX, project]);
+  }, [getTimeFromX, hasProject]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!project || !rulerDragRef.current) return;
+    if (!hasProject || !rulerDragRef.current) return;
     const drag = rulerDragRef.current;
     const container = e.currentTarget;
     const currentX = e.clientX;
@@ -94,7 +101,7 @@ export function TimeRuler() {
     if (!useTransportStore.getState().loopEnabled) {
       useTransportStore.setState({ loopEnabled: true });
     }
-  }, [getTimeFromX, project, setLoopRegion]);
+  }, [getTimeFromX, hasProject, setLoopRegion]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!rulerDragRef.current) return;
@@ -116,7 +123,7 @@ export function TimeRuler() {
   }, []);
 
   const beginLoopDrag = useCallback((kind: 'start' | 'end' | 'move') => (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!project || e.button !== 0) return;
+    if (!hasProject || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     loopDragRef.current = {
@@ -129,10 +136,10 @@ export function TimeRuler() {
     if ('setPointerCapture' in e.currentTarget) {
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-  }, [loopEnd, loopStart, project]);
+  }, [hasProject, loopEnd, loopStart]);
 
   const handleLoopDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!project || !loopDragRef.current || loopDragRef.current.pointerId !== e.pointerId) return;
+    if (!hasProject || !loopDragRef.current || loopDragRef.current.pointerId !== e.pointerId) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -141,7 +148,7 @@ export function TimeRuler() {
 
     if (drag.kind === 'move') {
       const duration = drag.startLoopEnd - drag.startLoopStart;
-      const nextStart = Math.max(0, Math.min(drag.startLoopStart + deltaSeconds, project.totalDuration - duration));
+      const nextStart = Math.max(0, Math.min(drag.startLoopStart + deltaSeconds, totalDuration - duration));
       setLoopRegion(nextStart, nextStart + duration);
       return;
     }
@@ -152,9 +159,9 @@ export function TimeRuler() {
       return;
     }
 
-    const nextEnd = Math.max(drag.startLoopStart + LOOP_MIN_DURATION, Math.min(drag.startLoopEnd + deltaSeconds, project.totalDuration));
+    const nextEnd = Math.max(drag.startLoopStart + LOOP_MIN_DURATION, Math.min(drag.startLoopEnd + deltaSeconds, totalDuration));
     setLoopRegion(drag.startLoopStart, nextEnd);
-  }, [pixelsPerSecond, project, setLoopRegion]);
+  }, [hasProject, pixelsPerSecond, setLoopRegion, totalDuration]);
 
   const endLoopDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!loopDragRef.current || loopDragRef.current.pointerId !== e.pointerId) return;
@@ -165,16 +172,7 @@ export function TimeRuler() {
   }, []);
 
   const markers = useMemo(() => {
-    if (!project) return [];
-    const {
-      tempoMap,
-      timeSignatureMap,
-      bpm,
-      timeSignature,
-      timeSignatureDenominator = 4,
-      totalDuration,
-      measures = DEFAULT_MEASURES,
-    } = project;
+    if (!hasProject) return [];
     const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const visibleDuration = Math.min(visualDuration, totalDuration);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
@@ -232,11 +230,11 @@ export function TimeRuler() {
       }
     }
     return result;
-  }, [project, pixelsPerSecond, timelineViewportWidth]);
+  }, [bpm, hasProject, measures, pixelsPerSecond, tempoMap, timeSignature, timeSignatureDenominator, timeSignatureMap, timelineViewportWidth, totalDuration]);
 
-  if (!project) return <div className="bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
+  if (!hasProject) return <div className="bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 
-  const visualDuration = getTimelineVisualDuration(project.totalDuration, pixelsPerSecond, timelineViewportWidth);
+  const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
   const totalWidth = visualDuration * pixelsPerSecond;
 
   return (
@@ -246,7 +244,7 @@ export function TimeRuler() {
       role="slider"
       aria-label="Timeline ruler — click to seek, drag to select loop region"
       aria-valuemin={0}
-      aria-valuemax={project.totalDuration}
+      aria-valuemax={totalDuration}
       aria-valuenow={currentTime}
       aria-valuetext={`${currentTime.toFixed(2)} seconds`}
       tabIndex={0}
@@ -290,7 +288,7 @@ export function TimeRuler() {
             role="slider"
             aria-label="Adjust loop end"
             aria-valuemin={loopStart}
-            aria-valuemax={project.totalDuration}
+            aria-valuemax={totalDuration}
             aria-valuenow={loopEnd}
             data-testid="timeline-loop-end-handle"
             onPointerDown={beginLoopDrag('end')}
@@ -345,13 +343,16 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
   const isPlaying = useTransportStore((s) => s.isPlaying);
   const setLoopRegion = useTransportStore((s) => s.setLoopRegion);
   const timelineFocused = useUIStore((s) => s.timelineFocused);
-  const project = useProjectStore((s) => s.project);
+  const hasProject = useProjectStore((s) => Boolean(s.project));
+  const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
+  const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
+  const tempoMap = useProjectStore((s) => s.project?.tempoMap);
   // Triangle always stays at the anchor position (playStartTime)
   const x = playStartTime * pixelsPerSecond;
   const blinking = !isPlaying && timelineFocused;
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !project) return;
+    if (event.button !== 0 || !hasProject) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -361,8 +362,8 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
 
     const updateLoopRegionFromPointer = (clientX: number, altKey: boolean) => {
       const deltaTime = (clientX - originX) / pixelsPerSecond;
-      const rawEnd = Math.max(0, Math.min(project.totalDuration, playStartTime + deltaTime));
-      const snappedEnd = altKey ? rawEnd : snapToGrid(rawEnd, project.bpm, 1, project.tempoMap);
+      const rawEnd = Math.max(0, Math.min(totalDuration, playStartTime + deltaTime));
+      const snappedEnd = altKey ? rawEnd : snapToGrid(rawEnd, bpm, 1, tempoMap ?? []);
       const start = Math.min(playStartTime, snappedEnd);
       const end = Math.max(playStartTime, snappedEnd);
       if (end - start < LOOP_MIN_DURATION) return;
@@ -386,7 +387,7 @@ const PlayheadRulerIndicator = memo(function PlayheadRulerIndicator({ pixelsPerS
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-  }, [pixelsPerSecond, playStartTime, project, setLoopRegion]);
+  }, [bpm, hasProject, pixelsPerSecond, playStartTime, setLoopRegion, tempoMap, totalDuration]);
 
   // SVG inverted equilateral triangle with crisp 1px white stroke.
   // Odd width (13px) so center pixel aligns with the 1px playhead line.

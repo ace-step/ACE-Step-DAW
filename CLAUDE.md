@@ -24,6 +24,7 @@ npx tsc --noEmit     # Type check only (no output)
 1. `npx tsc --noEmit` — 0 type errors
 2. `npm test` — all unit tests pass
 3. `npm run build` — succeeds with 0 errors
+4. **For UI changes**: start dev server, verify visually with preview tools — never claim a UI feature works without seeing it
 
 ## TDD Cycle (mandatory for all code changes)
 
@@ -31,6 +32,23 @@ npx tsc --noEmit     # Type check only (no output)
 2. **Green**: Write the minimum code to make the test pass
 3. **Refactor**: Clean up while keeping tests green
 4. **Commit**: `git commit` with conventional commit message
+
+## Agentic Work Discipline
+
+### Done Criteria (before coding features touching 3+ files)
+Write a checklist in `.llm/todo.md` before coding. State what must be true when done — specific, testable, no vibes. Include edge cases (non-standard BPMs, undo, keyboard path, scroll offsets). Each item must be verifiable by a test, screenshot, or store assertion — not "I looked at it."
+
+### External Evaluation Rule
+Never self-assess completion. Run `@tester` or `/qa` before every commit — its output is the gate, not your judgment. Do not say "looks good" or "works correctly" about your own code.
+
+### Context Anxiety Checklist
+If you notice yourself doing any of these, STOP and compact or start a new session:
+- Re-reading files you already read this session
+- Adding defensive checks "just in case"
+- Generating code that duplicates existing utilities
+- Losing track of which files you've modified
+- Rushing to commit with TODOs or stubs ("will finish later")
+- Skipping tests or visual verification due to context pressure
 
 ## Autonomous Work Rules
 
@@ -41,7 +59,9 @@ npx tsc --noEmit     # Type check only (no output)
 - Record blockers to `.llm/BLOCKERS.md` and continue with the next task
 - After completing a logical unit of work, commit immediately
 - Use `@do-todo` agent for individual tasks to keep main context clean
-- Use `@tester` agent after each task to run full regression
+- Use `@tester` agent after each task to run full regression — this is the external evaluator, not optional
+- Never write tests that only assert truthiness (`toBeTruthy`, `toBeDefined`) — assert specific values
+- For features with user interaction, write adversarial test cases in TDD Red phase (weird BPMs, rapid input, undo immediately after action, drag during playback)
 
 ## When Compacting, Always Preserve
 

@@ -185,6 +185,39 @@ When using Claude Code on this project, install these skills for better UX outpu
 - Never merge a PR before CI passes — check CI status first, fix if red
 - If CI fails: understand root cause → add fix commit → wait for green → then merge
 
+## Issue-First Workflow (mandatory for all interactive sessions)
+
+> When the user describes a problem, bug, or feature request in conversation, the agent MUST follow this workflow. Do NOT skip straight to coding.
+
+### The Rule
+
+**Every code change starts as a GitHub issue.** No exceptions for interactive Claude Code sessions.
+
+### Workflow
+
+1. **User describes a problem** (in any language)
+2. **Agent creates a GitHub issue** via `gh issue create`
+   - Title and body MUST be in **English** regardless of conversation language
+   - Use appropriate label: `bug`, `enhancement`, `docs`, `refactor`
+   - Include acceptance criteria as a checklist
+3. **Agent creates a branch** named `feat/issue-NUMBER` or `fix/issue-NUMBER`
+4. **Agent implements the fix/feature** following TDD and quality gates
+5. **Agent creates a PR** that includes `Closes #NUMBER` in the body
+6. **Agent reports the issue URL and PR URL** back to the user
+
+### Issue Quality Standards
+
+- **Title**: Concise, starts with `feat:`, `fix:`, `docs:`, `refactor:`, or `chore:`
+- **Body**: Problem description, proposed solution, acceptance criteria
+- **Labels**: At least one of `bug`, `enhancement`, `docs`, `refactor`
+- **Language**: Always English — this is a public repo
+
+### When to Skip
+
+- Pure questions / explanations (no code change needed)
+- Trivial typo fixes (< 3 lines changed, single file)
+- Work already tracked by an existing issue (reference it instead)
+
 ## gstack
 
 Use the `/browse` skill from gstack for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.

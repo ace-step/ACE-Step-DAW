@@ -25,6 +25,7 @@ interface TrackRow {
 interface Props {
   mode: 'silence' | 'context';
   onModeChange: (mode: 'silence' | 'context') => void;
+  onFooterChange?: (footer: { label: string; disabled: boolean; action: () => void }) => void;
 }
 
 function randomSeed() {
@@ -85,7 +86,7 @@ function buildInitialRows(project: NonNullable<ReturnType<typeof useProjectStore
   return rows.length > 0 ? rows : DEFAULT_MULTI_TRACK_NAMES.map((trackName) => createDraftRow(trackName));
 }
 
-export function MultiTrackGenerateSection({ mode, onModeChange }: Props) {
+export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }: Props) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
   const initialRange = useUIStore((s) => s.batchGenerateInitialRange);
@@ -217,6 +218,15 @@ export function MultiTrackGenerateSection({ mode, onModeChange }: Props) {
       sharedSeed,
     });
   }, [canGenerate, globalCaption, initialRange?.duration, initialRange?.startTime, mode, selectedRows, sharedSeed]);
+
+  // Sync footer state to parent dialog
+  if (onFooterChange) {
+    onFooterChange({
+      label: isGenerating ? 'Generating...' : `Generate ${selectedRows.length} Track${selectedRows.length === 1 ? '' : 's'}`,
+      disabled: !canGenerate,
+      action: () => void handleGenerate(),
+    });
+  }
 
   return (
     <div className="flex-1 overflow-y-auto px-3 py-3" data-testid="multi-track-generation-section">
@@ -418,20 +428,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange }: Props) {
           </p>
         </section>
 
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={!canGenerate}
-          className={`w-full rounded-lg py-2 text-sm font-medium transition-colors ${
-            canGenerate
-              ? isSilence
-                ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
-              : 'bg-[#444] text-zinc-400 cursor-not-allowed'
-          }`}
-        >
-          {isGenerating ? 'Generating...' : `Generate ${selectedRows.length} Track${selectedRows.length === 1 ? '' : 's'}`}
-        </button>
+        {/* Generate button moved to unified dialog footer */}
       </div>
     </div>
   );

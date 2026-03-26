@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import { useGenerationStore } from '../../store/generationStore';
@@ -7,6 +7,7 @@ import { MultiTrackGenerateSection } from './MultiTrackGenerateSection';
 import { GenerationSettingsSection } from './GenerationSettingsSection';
 import { FullSongForm } from './FullSongForm';
 import { SimpleModeForm } from './SimpleModeForm';
+import { Button } from '../ui/Button';
 
 export type MixSubMode = 'simple' | 'custom';
 
@@ -33,6 +34,19 @@ export function GenerationSidePanel() {
 
   const [renderPanel, setRenderPanel] = useState(show);
   const [mixSubMode, setMixSubMode] = useState<MixSubMode>('simple');
+
+  // Unified footer state — updated by active form child
+  const [footerState, setFooterState] = useState<{ label: string; disabled: boolean; action: () => void }>({
+    label: 'Create Sample', disabled: true, action: () => {},
+  });
+  const footerActionRef = useRef<() => void>(() => {});
+  const handleFooterChange = useCallback((state: { label: string; disabled: boolean; action: () => void }) => {
+    footerActionRef.current = state.action;
+    setFooterState((prev) => {
+      if (prev.label === state.label && prev.disabled === state.disabled) return prev;
+      return { label: state.label, disabled: state.disabled, action: state.action };
+    });
+  }, []);
 
   // Callback for Simple mode: when Create Sample succeeds, switch to Custom with pre-filled data
   const handleSampleCreated = useCallback((data: {
@@ -285,6 +299,7 @@ export function GenerationSidePanel() {
             <MultiTrackGenerateSection
               mode={batchGenerateMode ?? 'silence'}
               onModeChange={setBatchGenerateMode}
+              onFooterChange={handleFooterChange}
             />
           ) : generationPanelView === 'settings' ? (
             <GenerationSettingsSection active={generationPanelView === 'settings'} />
@@ -320,13 +335,29 @@ export function GenerationSidePanel() {
                 </div>
               </div>
 
-              {/* Form content */}
+              {/* Form content (scrollable body, no footer) */}
               {mixSubMode === 'simple' ? (
-                <SimpleModeForm onSampleCreated={handleSampleCreated} />
+                <SimpleModeForm onSampleCreated={handleSampleCreated} onFooterChange={handleFooterChange} />
               ) : (
-                <FullSongForm initialData={sampleData} />
+                <FullSongForm initialData={sampleData} onFooterChange={handleFooterChange} />
               )}
             </>
+          )}
+
+          {/* Unified footer — always at bottom, same position for all views */}
+          {generationPanelView !== 'settings' && (
+            <div className="border-t border-[#3a3a3a] px-4 py-3 flex-shrink-0" data-testid="generation-dialog-footer">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => footerActionRef.current()}
+                disabled={footerState.disabled}
+                className="w-full"
+                data-testid="generation-footer-btn"
+              >
+                {footerState.label}
+              </Button>
+            </div>
           )}
         </div>
       )}

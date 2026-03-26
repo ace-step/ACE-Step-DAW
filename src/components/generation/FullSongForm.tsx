@@ -7,7 +7,6 @@ import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/de
 import { getModelDefaults, inferModelVariant, type ModelVariant } from '../../constants/modelDefaults';
 import { generateText2Music } from '../../services/generationPipeline';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
-import { Button } from '../ui/Button';
 
 const VARIANT_LABELS: Record<ModelVariant, string> = {
   turbo: 'Turbo',
@@ -26,9 +25,11 @@ interface FullSongFormProps {
     timeSignature: string;
     vocalLanguage: string;
   } | null;
+  /** Called whenever footer button state changes */
+  onFooterChange: (footer: { label: string; disabled: boolean; action: () => void }) => void;
 }
 
-export function FullSongForm({ initialData }: FullSongFormProps) {
+export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
   const modelLoadingState = useModelStore((s) => s.modelLoadingState);
@@ -105,6 +106,14 @@ export function FullSongForm({ initialData }: FullSongFormProps) {
       setError(err instanceof Error ? err.message : 'Generation failed');
     }
   }, [prompt, lyrics, durationSeconds, bpm, keyScale, project?.timeSignature, splitToStems, stemCount, inferenceSteps, guidanceScale, shift, thinking]);
+
+  // Sync footer state to parent on every render
+  const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
+  onFooterChange({
+    label: isDisabled ? 'Generating...' : 'Generate Full Song',
+    disabled: isDisabled || !prompt.trim(),
+    action: footerAction,
+  });
 
   return (
     <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3" data-testid="full-song-form">
@@ -341,19 +350,6 @@ export function FullSongForm({ initialData }: FullSongFormProps) {
         )}
       </section>
 
-      {/* Generate button */}
-      <div className="mt-auto border-t border-[#3a3a3a] px-4 py-3">
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => void handleGenerate()}
-          disabled={isDisabled || !prompt.trim()}
-          className="w-full"
-          data-testid="full-song-generate-btn"
-        >
-          {isDisabled ? 'Generating...' : 'Generate Full Song'}
-        </Button>
-      </div>
     </div>
   );
 }

@@ -2,7 +2,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
-import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot } from '../../types/project';
+import { getSessionSlotProgress } from '../../utils/sessionProgress';
+import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch } from '../../types/project';
 
 const SESSION_QUANTIZATION_OPTIONS: SessionLaunchQuantization[] = [
   'none', '1/32', '1/16', '1/8', '1/4', '1/2', '1 bar', '2 bars', '4 bars', '8 bars',
@@ -28,11 +29,28 @@ function getClipLabel(clip: Clip, index: number): string {
   return `Clip ${index + 1}`;
 }
 
+/** Check if a clip slot has a matching pending launch (clip-level or scene-level). */
+function isClipQueued(
+  pendingLaunches: SessionPendingLaunch[],
+  trackId: string,
+  clipId: string,
+): boolean {
+  return pendingLaunches.some((launch) => {
+    if (launch.type === 'clip') return launch.trackId === trackId && launch.clipId === clipId;
+    // Scene launches queue all tracks in the scene — mark clips on matching tracks
+    if (launch.type === 'scene') return launch.trackId === undefined || launch.trackId === trackId;
+    return false;
+  });
+}
+
+const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 10; // r=10
+
 export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
   const setSessionSlotQuantization = useProjectStore((s) => s.setSessionSlotQuantization);
   const launchedSessionClips = useTransportStore((s) => s.launchedSessionClips);
+  const currentTime = useTransportStore((s) => s.currentTime);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const {
@@ -51,6 +69,7 @@ export function SessionView() {
   const sceneCount = Math.max(4, ...tracks.map((track) => getSessionClips(track).length));
   const sessionQuantization = project.session?.quantization ?? '1 bar';
   const sessionSlots = project.session?.slots ?? [];
+  const pendingLaunches = project.session?.pendingLaunches ?? [];
 
   return (
     <div className="flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto">
@@ -146,6 +165,9 @@ export function SessionView() {
               sessionSlots={sessionSlots}
               sceneCount={sceneCount}
               activeClipId={activeLaunch?.clipId ?? null}
+              activeLaunchedAt={activeLaunch?.launchedAt ?? null}
+              currentTime={currentTime}
+              pendingLaunches={pendingLaunches}
               onLaunch={(clipId, sceneIndex) => launchSessionClip(track.id, clipId, sceneIndex)}
               onStop={() => stopSessionTrack(track.id)}
               onSlotQuantizationChange={(slotId, q) => setSessionSlotQuantization(slotId, q)}
@@ -153,6 +175,7 @@ export function SessionView() {
           );
         })}
       </div>
+
     </div>
   );
 }
@@ -163,6 +186,9 @@ function FragmentRow({
   sessionSlots,
   sceneCount,
   activeClipId,
+  activeLaunchedAt,
+  currentTime,
+  pendingLaunches,
   onLaunch,
   onStop,
   onSlotQuantizationChange,
@@ -172,6 +198,9 @@ function FragmentRow({
   sessionSlots: SessionClipSlot[];
   sceneCount: number;
   activeClipId: string | null;
+  activeLaunchedAt: number | null;
+  currentTime: number;
+  pendingLaunches: SessionPendingLaunch[];
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
@@ -199,10 +228,20 @@ function FragmentRow({
       {Array.from({ length: sceneCount }, (_, sceneIndex) => {
         const clip = sessionClips[sceneIndex];
         const isActive = clip?.id === activeClipId;
-        // Find matching slot to show per-clip quantization badge
+        // Per-slot quantization badge (from #935)
         const matchingSlot = trackSlots.find((s) => s.clipId === clip?.id);
         const slotQuantization = matchingSlot?.quantization;
         const hasOverride = slotQuantization && slotQuantization !== 'global';
+        // Queued blinking & progress ring (from #936)
+        const isQueued = clip ? isClipQueued(pendingLaunches, track.id, clip.id) : false;
+
+        let progress = 0;
+        let loopCount = 1;
+        if (isActive && activeLaunchedAt !== null && clip) {
+          const result = getSessionSlotProgress(currentTime, activeLaunchedAt, clip.duration);
+          progress = result.progress;
+          loopCount = result.loopCount;
+        }
 
         return (
           <div key={`${track.id}-${sceneIndex}`} className="border-r border-b border-[#2e2e2e] bg-[#1b1b1b] p-2">
@@ -210,11 +249,14 @@ function FragmentRow({
               <div className="relative">
                 <button
                   onClick={() => void onLaunch(clip.id, sceneIndex)}
-                  className={`flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
+                  className={`relative flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
                     isActive
                       ? 'border-emerald-400 bg-emerald-500/20 shadow-[0_0_0_1px_rgba(74,222,128,0.35)]'
-                      : 'border-[#3a3a3a] bg-[#262626] hover:border-daw-accent hover:bg-[#2f2f2f]'
+                      : isQueued
+                        ? 'border-amber-400 bg-amber-500/10'
+                        : 'border-[#3a3a3a] bg-[#262626] hover:border-daw-accent hover:bg-[#2f2f2f]'
                   }`}
+                  style={isQueued && !isActive ? { animation: 'session-blink 500ms ease-in-out infinite' } : undefined}
                   aria-label={`Launch ${getClipLabel(clip, sceneIndex)} on ${track.displayName} in scene ${sceneIndex + 1}`}
                 >
                   <div>
@@ -227,7 +269,25 @@ function FragmentRow({
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-zinc-400">
                     <span>{clip.duration.toFixed(1)}s</span>
-                    <span className={isActive ? 'text-emerald-300' : ''}>{isActive ? 'LIVE' : `Start ${clip.startTime.toFixed(1)}s`}</span>
+                    {isActive ? (
+                      <span className="flex items-center gap-1">
+                        <svg width="24" height="24" className="shrink-0" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" fill="none" stroke="#444" strokeWidth="2" />
+                          <circle
+                            cx="12" cy="12" r="10"
+                            fill="none"
+                            stroke="#4ade80"
+                            strokeWidth="2"
+                            strokeDasharray={`${progress * PROGRESS_RING_CIRCUMFERENCE} ${PROGRESS_RING_CIRCUMFERENCE}`}
+                            strokeLinecap="round"
+                            transform="rotate(-90 12 12)"
+                          />
+                        </svg>
+                        <span className="text-xs text-emerald-400">{loopCount}</span>
+                      </span>
+                    ) : (
+                      <span>{isQueued ? 'QUEUED' : `Start ${clip.startTime.toFixed(1)}s`}</span>
+                    )}
                   </div>
                 </button>
                 {hasOverride && (
@@ -260,6 +320,7 @@ function FragmentRow({
           </div>
         );
       })}
+
     </>
   );
 }

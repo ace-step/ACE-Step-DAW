@@ -131,6 +131,11 @@ select:focus-visible,
 .playhead-triangle-blink polygon {
   animation: playhead-blink-fill 1.2s ease-in-out infinite;
 }
+/* Session view: queued clip blink */
+@keyframes session-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 /* Micro-animations for DAW interactions */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }

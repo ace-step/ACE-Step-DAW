@@ -6,6 +6,7 @@ import { Knob } from '../ui/Knob';
 import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
+import { VerticalFader } from './VerticalFader';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -250,12 +251,14 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
         <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter trackId={track.id} />
-          <input
-            type="range" min={0} max={1} step={0.01} value={vol}
-            onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}
+          <VerticalFader
+            value={vol}
+            min={0}
+            max={1}
+            defaultValue={0.8}
+            onChange={(v) => updateTrack(track.id, { volume: v })}
             aria-label={`${track.displayName} volume fader`}
-            className="appearance-none bg-transparent cursor-pointer"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 28, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: track.color }}
+            accentColor={track.color}
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
@@ -300,12 +303,15 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" />
           <LevelMeter masterStage="output" />
-          <input
-            type="range" min={0} max={1.5} step={0.01} value={masterVol}
-            onChange={(e) => handleChange(parseFloat(e.target.value))}
+          <VerticalFader
+            value={masterVol}
+            min={0}
+            max={1.5}
+            defaultValue={1.0}
+            onChange={handleChange}
             aria-label="Master volume fader"
-            className="appearance-none bg-transparent cursor-pointer"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', width: 32, height: '100%', minHeight: FADER_MIN_HEIGHT, accentColor: '#4A5FFF' }}
+            accentColor="#4A5FFF"
+            width={16}
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>
@@ -377,9 +383,18 @@ export function MixerPanel() {
         aria-label="Mixer navigation status"
         role="status"
         aria-live="polite"
-        className="px-3 py-1 text-[10px] text-zinc-300 border-b border-[#333] bg-[#252525]"
+        className="flex items-center px-3 py-1 text-[10px] text-zinc-300 border-b border-[#333] bg-[#252525]"
       >
-        Scope: <span className="text-zinc-100">Mixer</span> · Channel: <span className="text-zinc-100">{focusedTrackName}</span>
+        <span className="flex-1">Scope: <span className="text-zinc-100">Mixer</span> · Channel: <span className="text-zinc-100">{focusedTrackName}</span></span>
+        <button
+          onClick={() => useUIStore.getState().setShowMixer(false)}
+          aria-label="Close mixer"
+          title="Close mixer (M)"
+          className="ml-2 flex h-4 w-4 items-center justify-center rounded text-zinc-500 hover:bg-[#444] hover:text-zinc-200 transition-colors"
+          data-testid="mixer-close-btn"
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" /></svg>
+        </button>
       </div>
       <div className="flex-1 overflow-x-auto overflow-y-hidden pb-3">
         <div className="flex items-stretch h-full">

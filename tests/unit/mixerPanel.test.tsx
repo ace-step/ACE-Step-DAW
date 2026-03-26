@@ -36,14 +36,14 @@ describe('MixerPanel', () => {
 
     const masterFader = screen.getByRole('slider', { name: 'Master volume fader' });
     expect(masterFader).toBeInTheDocument();
-    expect(masterFader).toHaveStyle({ minHeight: '96px', height: '100%' });
+    expect(masterFader).toHaveStyle({ height: '100%' });
 
     expect(screen.getByTestId('master-controls-region')).toHaveClass('overflow-y-auto');
     expect(screen.getByTestId('master-fader-region')).toHaveClass('min-h-[96px]');
 
     const trackFader = screen.getByRole('slider', { name: 'Drums volume fader' });
     expect(trackFader).toBeInTheDocument();
-    expect(trackFader).toHaveStyle({ minHeight: '96px', height: '100%' });
+    expect(trackFader).toHaveStyle({ height: '100%' });
   });
 
   it('fader section does not shrink when mixer panel is small (#268)', () => {

@@ -221,10 +221,14 @@ export function GenerationSidePanel() {
 
       {renderPanel && (
         <div
-          className={`fixed left-1/2 -translate-x-1/2 flex w-[min(560px,calc(100vw-32px))] max-h-[60vh] flex-col bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 overflow-hidden transition-all duration-300 ease-out ${
+          className={`fixed left-1/2 -translate-x-1/2 flex w-[min(560px,calc(100vw-32px))] flex-col bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 overflow-hidden transition-all duration-300 ease-out ${
             show ? 'opacity-100 scale-100' : 'pointer-events-none opacity-0 scale-95'
           }`}
-          style={{ zIndex: Z.toast + 1, bottom: `${76 + bottomPanelHeight}px` }}
+          style={{
+            zIndex: Z.toast + 1,
+            bottom: `${(showSmartControls ? 224 : 140) + bottomPanelHeight}px`,
+            maxHeight: `calc(100vh - ${(showSmartControls ? 224 : 140) + bottomPanelHeight + 48}px)`,
+          }}
           data-testid="generation-side-panel"
           aria-label="Generate panel"
           aria-hidden={!show}

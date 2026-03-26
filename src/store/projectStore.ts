@@ -4256,6 +4256,7 @@ export const useProjectStore = create<ProjectState>()(
     const session = ensureProjectSession(state.project).session!;
     const slot = session.slots.find((s) => s.id === slotId);
     if (!slot) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,

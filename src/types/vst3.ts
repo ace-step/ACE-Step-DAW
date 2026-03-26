@@ -37,6 +37,10 @@ export interface VST3ActiveInstance {
   parameters: VST3Parameter[];
   presets: string[];
   activePreset: string | null;
+  /** Whether the plugin has a secondary (sidechain) input bus. */
+  hasSidechainInput?: boolean;
+  /** Track ID feeding the sidechain input, or null if none. */
+  sidechainSourceTrackId?: string | null;
 }
 
 /** A single parameter exposed by a VST3 plugin */

@@ -220,13 +220,32 @@ function PluginRow({
   plugin: VST3PluginInfo;
   onLoad: (id: string) => void;
 }) {
+  const [dragging, setDragging] = useState(false);
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      e.dataTransfer.setData('application/x-vst3-plugin', plugin.id);
+      e.dataTransfer.effectAllowed = 'copy';
+      setDragging(true);
+    },
+    [plugin.id],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDragging(false);
+  }, []);
+
   return (
     <div
       className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-zinc-300 hover:bg-white/5 cursor-pointer"
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onDoubleClick={() => onLoad(plugin.id)}
       data-testid="plugin-row"
       data-plugin-id={plugin.id}
       title={`${plugin.name} by ${plugin.vendor}`}
+      style={{ opacity: dragging ? 0.5 : 1 }}
     >
       <span className="flex-1 truncate">{plugin.name}</span>
       <span className="shrink-0 text-[10px] text-zinc-500 max-w-[80px] truncate">{plugin.vendor}</span>

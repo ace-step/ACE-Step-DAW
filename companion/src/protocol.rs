@@ -34,8 +34,8 @@ pub enum IncomingMessage {
     },
     ScanPlugins,
     Instantiate {
-        #[serde(alias = "req_id", rename = "reqId")]
-        req_id: String,
+        #[serde(default, alias = "req_id", rename = "reqId", skip_serializing_if = "Option::is_none")]
+        req_id: Option<String>,
         #[serde(alias = "plugin_uid", rename = "pluginUid")]
         plugin_uid: String,
         #[serde(alias = "instance_id", rename = "instanceId")]
@@ -106,6 +106,10 @@ pub enum IncomingMessage {
         sample_rate: f64,
         #[serde(alias = "block_size", rename = "blockSize")]
         block_size: u32,
+        /// If true, the instance is an effect that requires input audio.
+        /// Defaults to false (instrument, output-only).
+        #[serde(alias = "is_effect", rename = "isEffect", default)]
+        is_effect: bool,
     },
     StopAudioStream {
         #[serde(alias = "instance_id", rename = "instanceId")]
@@ -139,6 +143,8 @@ pub struct PluginInfo {
     pub vendor: String,
     pub version: String,
     pub category: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subcategory: String,
     pub path: String,
 }
 
@@ -152,6 +158,18 @@ pub struct ParamInfo {
     pub min_value: f64,
     pub max_value: f64,
     pub unit: String,
+}
+
+/// Metadata about a single output bus (e.g., "Main Out", "Kick", "Snare").
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputBusInfo {
+    /// Human-readable bus name from the plugin.
+    pub name: String,
+    /// Number of audio channels on this bus (e.g. 2 for stereo).
+    pub channels: u32,
+    /// Bus index (0-based).
+    pub index: u32,
 }
 
 /// Metadata about a factory preset.
@@ -195,9 +213,10 @@ pub enum OutgoingMessage {
     ScanComplete {
         plugins: Vec<PluginInfo>,
     },
+    #[serde(rename = "instanceCreated")]
     Instantiated {
-        #[serde(rename = "reqId")]
-        req_id: String,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "reqId")]
+        req_id: Option<String>,
         #[serde(rename = "instanceId")]
         instance_id: String,
         parameters: Vec<ParamInfo>,
@@ -206,6 +225,8 @@ pub enum OutgoingMessage {
         #[serde(rename = "tailSamples")]
         tail_samples: u32,
         presets: Vec<PresetInfo>,
+        #[serde(rename = "outputBusses")]
+        output_busses: Vec<OutputBusInfo>,
     },
     ParamChanged {
         #[serde(rename = "instanceId")]
@@ -307,7 +328,7 @@ mod tests {
     #[test]
     fn test_incoming_instantiate_roundtrip() {
         let msg = IncomingMessage::Instantiate {
-            req_id: "r1".into(),
+            req_id: Some("r1".into()),
             plugin_uid: "uid-abc".into(),
             instance_id: "inst-1".into(),
         };
@@ -409,6 +430,7 @@ mod tests {
                 vendor: "TestVendor".into(),
                 version: "1.0.0".into(),
                 category: "Instrument".into(),
+                subcategory: "Synth".into(),
                 path: "/Library/Audio/Plug-Ins/VST3/TestSynth.vst3".into(),
             }],
         };
@@ -420,7 +442,7 @@ mod tests {
     #[test]
     fn test_outgoing_instantiated_roundtrip() {
         let msg = OutgoingMessage::Instantiated {
-            req_id: "r1".into(),
+            req_id: Some("r1".into()),
             instance_id: "inst-1".into(),
             parameters: vec![ParamInfo {
                 id: 0,
@@ -435,6 +457,11 @@ mod tests {
             presets: vec![PresetInfo {
                 id: 0,
                 name: "Default".into(),
+            }],
+            output_busses: vec![OutputBusInfo {
+                name: "Main Output".into(),
+                channels: 2,
+                index: 0,
             }],
         };
         let json = serde_json::to_string(&msg).unwrap();
@@ -544,6 +571,7 @@ mod tests {
             instance_id: "inst-1".into(),
             sample_rate: 48000.0,
             block_size: 256,
+            is_effect: false,
         };
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: IncomingMessage = serde_json::from_str(&json).unwrap();
@@ -598,7 +626,75 @@ mod tests {
                 instance_id: "inst-1".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             }
         );
+    }
+
+    #[test]
+    fn test_parse_start_audio_stream_with_is_effect() {
+        let raw = r#"{"type":"startAudioStream","instanceId":"fx-1","sampleRate":44100.0,"blockSize":256,"isEffect":true}"#;
+        let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            msg,
+            IncomingMessage::StartAudioStream {
+                instance_id: "fx-1".into(),
+                sample_rate: 44100.0,
+                block_size: 256,
+                is_effect: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_is_effect_defaults_to_false() {
+        let raw = r#"{"type":"startAudioStream","instanceId":"inst-1","sampleRate":48000.0,"blockSize":128}"#;
+        let msg: IncomingMessage = serde_json::from_str(raw).unwrap();
+        match msg {
+            IncomingMessage::StartAudioStream { is_effect, .. } => {
+                assert!(!is_effect, "is_effect should default to false when omitted");
+            }
+            _ => panic!("Expected StartAudioStream"),
+        }
+    }
+
+    #[test]
+    fn test_output_bus_info_roundtrip() {
+        let info = OutputBusInfo {
+            name: "Kick".into(),
+            channels: 2,
+            index: 1,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let parsed: OutputBusInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(info, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(val["name"], "Kick");
+        assert_eq!(val["channels"], 2);
+        assert_eq!(val["index"], 1);
+    }
+
+    #[test]
+    fn test_instantiated_with_output_busses_roundtrip() {
+        let msg = OutgoingMessage::Instantiated {
+            req_id: None,
+            instance_id: "inst-1".into(),
+            parameters: vec![],
+            latency_samples: 0,
+            tail_samples: 0,
+            presets: vec![],
+            output_busses: vec![
+                OutputBusInfo { name: "Main Out".into(), channels: 2, index: 0 },
+                OutputBusInfo { name: "Kick".into(), channels: 2, index: 1 },
+                OutputBusInfo { name: "Snare".into(), channels: 2, index: 2 },
+            ],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: OutgoingMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, parsed);
+        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let busses = val["outputBusses"].as_array().unwrap();
+        assert_eq!(busses.len(), 3);
+        assert_eq!(busses[1]["name"], "Kick");
     }
 }

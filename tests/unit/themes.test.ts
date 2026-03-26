@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { THEMES, THEME_LIST } from '../../src/themes';
 import type { ThemeTokens } from '../../src/themes';
-import { aceStudioTheme } from '../../src/themes/aceStudio';
+import { abletonTheme } from '../../src/themes/ableton';
 
 const EXPECTED_TOKEN_KEYS: (keyof ThemeTokens)[] = [
   'daw-bg', 'daw-surface', 'daw-surface-2', 'daw-surface-3',
@@ -64,9 +64,9 @@ describe('Theme definitions', () => {
     });
   }
 
-  it('ACE Studio theme matches index.css defaults', () => {
-    expect(aceStudioTheme.tokens['daw-bg']).toBe('#191b1f');
-    expect(aceStudioTheme.tokens['daw-accent']).toBe('#4a90d9');
-    expect(aceStudioTheme.tokens['daw-playhead']).toBe('#5e59ff');
+  it('Ableton theme (default) matches index.css defaults', () => {
+    expect(abletonTheme.tokens['daw-bg']).toBe('#22242a');
+    expect(abletonTheme.tokens['daw-accent']).toBe('#f7a738');
+    expect(abletonTheme.tokens['daw-playhead']).toBe('#e6e6e6');
   });
 });

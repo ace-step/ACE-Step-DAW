@@ -61,6 +61,14 @@ export class VST3AudioWorkletNode {
     isEffect: boolean,
     bufferDepth: number = DEFAULT_BUFFER_DEPTH,
   ): Promise<VST3AudioWorkletNode> {
+    // SharedArrayBuffer requires COOP/COEP headers
+    if (typeof SharedArrayBuffer === 'undefined') {
+      throw new Error(
+        'SharedArrayBuffer is not available. VST3 audio requires Cross-Origin-Opener-Policy ' +
+        'and Cross-Origin-Embedder-Policy headers. Check your server configuration.',
+      );
+    }
+
     // Register the worklet module if not already done for this context
     if (!registeredContexts.has(ctx)) {
       await ctx.audioWorklet.addModule('/vst3-worklet-processor.js');

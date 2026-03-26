@@ -482,6 +482,19 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showVST3Panel: false,
 } as const;
 
+/** State slice that closes every modal dialog. Spread this when opening one. */
+const ALL_MODALS_CLOSED = {
+  showSettingsDialog: false,
+  showKeyboardShortcutsDialog: false,
+  showShortcutEditorDialog: false,
+  showExportDialog: false,
+  showProjectListDialog: false,
+  showNewProjectDialog: false,
+  showInstrumentPicker: false,
+  bounceInPlaceTrackId: null,
+  showCommandPalette: false,
+} as const;
+
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
@@ -598,7 +611,7 @@ export const useUIStore = create<UIState>()(
   aiAssistantError: null,
   workspaceComplexity: 'standard',
 
-  theme: 'ace-studio',
+  theme: 'ableton',
 
   regionRegenerateTarget: null,
   inlineSuggestions: [],
@@ -684,12 +697,12 @@ export const useUIStore = create<UIState>()(
   deselectAll: () => set({ selectedClipIds: new Set(), selectedTrackIds: new Set(), lastSelectionContext: null }),
 
   setEditingClip: (clipId) => set({ editingClipId: clipId }),
-  setShowNewProjectDialog: (v) => set({ showNewProjectDialog: v }),
-  setShowInstrumentPicker: (v) => set({ showInstrumentPicker: v }),
-  setShowExportDialog: (v) => set({ showExportDialog: v }),
-  setShowSettingsDialog: (v) => set({ showSettingsDialog: v }),
+  setShowNewProjectDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showNewProjectDialog: true } : { showNewProjectDialog: false }),
+  setShowInstrumentPicker: (v) => set(v ? { ...ALL_MODALS_CLOSED, showInstrumentPicker: true } : { showInstrumentPicker: false }),
+  setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
+  setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setTheme: (theme) => set({ theme }),
-  setShowProjectListDialog: (v) => set({ showProjectListDialog: v }),
+  setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),
   requestDeleteTracks: (trackIds) => {
@@ -725,8 +738,8 @@ export const useUIStore = create<UIState>()(
         generationPanelView: 'multiTrack',
       }),
   setBatchGenerateInitialRange: (v) => set({ batchGenerateInitialRange: v }),
-  setShowKeyboardShortcutsDialog: (v) => set({ showKeyboardShortcutsDialog: v }),
-  setShowShortcutEditorDialog: (v) => set({ showShortcutEditorDialog: v }),
+  setShowKeyboardShortcutsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showKeyboardShortcutsDialog: true } : { showKeyboardShortcutsDialog: false }),
+  setShowShortcutEditorDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showShortcutEditorDialog: true } : { showShortcutEditorDialog: false }),
   setShowVirtualKeyboard: (v) => set((state) => (
     v
       ? { showVirtualKeyboard: true }
@@ -736,7 +749,7 @@ export const useUIStore = create<UIState>()(
     showVirtualKeyboard: !state.showVirtualKeyboard,
     virtualKeyboardPressedPitches: state.showVirtualKeyboard ? [] : state.virtualKeyboardPressedPitches,
   })),
-  openCommandPalette: (query = '') => set({ showCommandPalette: true, commandPaletteQuery: query }),
+  openCommandPalette: (query = '') => set({ ...ALL_MODALS_CLOSED, showCommandPalette: true, commandPaletteQuery: query }),
   closeCommandPalette: () => set({ showCommandPalette: false, commandPaletteQuery: '' }),
   setCommandPaletteQuery: (query) => set({ commandPaletteQuery: query }),
   getCommandPaletteRegistry: (query) => {
@@ -1089,8 +1102,8 @@ export const useUIStore = create<UIState>()(
         : { showGenerationHistoryPanel: false }
   )),
 
-  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
-  toggleCommandPalette: () => set((s) => ({ showCommandPalette: !s.showCommandPalette })),
+  setShowCommandPalette: (v) => set(v ? { ...ALL_MODALS_CLOSED, showCommandPalette: true, commandPaletteQuery: '' } : { showCommandPalette: false }),
+  toggleCommandPalette: () => set((s) => s.showCommandPalette ? { showCommandPalette: false } : { ...ALL_MODALS_CLOSED, showCommandPalette: true }),
 
   toggleVST3Panel: () => set((s) => s.showVST3Panel ? { showVST3Panel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true }),
   setShowVST3Panel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true } : { showVST3Panel: false }),

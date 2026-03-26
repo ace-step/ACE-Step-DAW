@@ -27,6 +27,8 @@ import {
 } from '../utils/clipAudio';
 import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
+import { useVST3Store } from '../store/vst3Store';
+import { pluginEngine } from '../engine/PluginEngine';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -339,6 +341,12 @@ export function useTransport() {
       if (track.frozen && track.frozenAudioKey) continue;
 
       if (track.trackType === 'pianoRoll') {
+        // Check for VST3 instrument on this track
+        const vst3Instances = Object.values(useVST3Store.getState().instances);
+        const vst3Instrument = vst3Instances.find(
+          (inst) => inst.trackId === track.id && inst.enabled && inst.online,
+        );
+
         const preset = track.synthPreset ?? 'piano';
         const samplerConfig = track.samplerConfig
           ?? (preset === 'sampler' && track.sampler?.audioKey
@@ -348,7 +356,7 @@ export function useTransport() {
                 loopEnd: track.sampler.sampleDuration,
               })
             : null);
-        const useSampler = !!samplerConfig;
+        const useSampler = !vst3Instrument && !!samplerConfig;
 
         synthEngine.removeTrackSynth(track.id);
         samplerEngine.removeTrackSampler(track.id);
@@ -405,7 +413,18 @@ export function useTransport() {
               const velocity = Math.max(0, Math.min(1, note.velocity));
               const trackId = track.id;
 
-              if (useSampler) {
+              if (vst3Instrument) {
+                // Route to VST3 instrument via plugin engine (which calls the adapter's noteOn/noteOff)
+                const midiVelocity = Math.max(1, Math.round(velocity * 127));
+                const trackId = track.id;
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  pluginEngine.noteOn(trackId, note.pitch, midiVelocity);
+                });
+                // Schedule note-off
+                engine.scheduleMidiEvent(scheduledStart + scheduledDuration, () => {
+                  pluginEngine.noteOff(trackId, note.pitch);
+                });
+              } else if (useSampler) {
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });

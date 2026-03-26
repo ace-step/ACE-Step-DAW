@@ -92,4 +92,44 @@ describe('VST3PluginBrowser', () => {
     render(<VST3PluginBrowser />);
     expect(screen.getByTestId('scan-progress')).toBeInTheDocument();
   });
+
+  describe('drag and drop', () => {
+    it('plugin rows are draggable', () => {
+      render(<VST3PluginBrowser />);
+      const rows = screen.getAllByTestId('plugin-row');
+      expect(rows[0]).toHaveAttribute('draggable', 'true');
+    });
+
+    it('dragStart sets application/x-vst3-plugin data with plugin id', () => {
+      render(<VST3PluginBrowser />);
+      const rows = screen.getAllByTestId('plugin-row');
+      // First row is BassLine (p3) after alphabetical sort
+      const dataTransfer = {
+        setData: vi.fn(),
+        effectAllowed: '',
+      };
+      fireEvent.dragStart(rows[0], { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-vst3-plugin', 'p3');
+      expect(dataTransfer.effectAllowed).toBe('copy');
+    });
+
+    it('plugin row reduces opacity during drag', () => {
+      render(<VST3PluginBrowser />);
+      const rows = screen.getAllByTestId('plugin-row');
+      fireEvent.dragStart(rows[0], {
+        dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+      });
+      expect(rows[0]).toHaveStyle({ opacity: '0.5' });
+    });
+
+    it('plugin row restores opacity on drag end', () => {
+      render(<VST3PluginBrowser />);
+      const rows = screen.getAllByTestId('plugin-row');
+      fireEvent.dragStart(rows[0], {
+        dataTransfer: { setData: vi.fn(), effectAllowed: '' },
+      });
+      fireEvent.dragEnd(rows[0]);
+      expect(rows[0]).toHaveStyle({ opacity: '1' });
+    });
+  });
 });

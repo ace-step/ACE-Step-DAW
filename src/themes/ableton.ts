@@ -70,7 +70,7 @@ export const abletonTheme: ThemeDefinition = {
     'daw-track-selected': '#545a5d',
     // Clip colors — Ableton uses warm, slightly muted clip colors
     'daw-region-audio': '#5a9fd4',
-    'daw-region-midi': '#00ff81',
+    'daw-region-midi': '#87d65a',
     'daw-region-drummer': '#ffb532',
     'daw-region-sample': '#6dd7ff',
     // ScrollbarInnerHandle

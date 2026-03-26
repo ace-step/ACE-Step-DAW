@@ -10,8 +10,8 @@ use libloading::{Library, Symbol};
 use tracing::{debug, info, warn};
 use vst3::ComPtr;
 use vst3::Steinberg::Vst::{
-    IAudioProcessor, IAudioProcessorTrait, IComponent, IComponentTrait, IEditController,
-    IEditControllerTrait, ParameterInfo,
+    BusDirections_, BusInfo, IAudioProcessor, IAudioProcessorTrait, IComponent, IComponentTrait,
+    IEditController, IEditControllerTrait, MediaTypes_, ParameterInfo,
 };
 use vst3::Steinberg::{
     FUnknown, IPluginFactory, IPluginFactoryTrait, IPluginBaseTrait,
@@ -19,7 +19,7 @@ use vst3::Steinberg::{
 };
 
 use crate::error::CompanionError;
-use crate::protocol::ParamInfo;
+use crate::protocol::{OutputBusInfo, ParamInfo};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +45,7 @@ pub struct PluginMetadata {
     pub parameters: Vec<ParamInfo>,
     pub latency_samples: u32,
     pub tail_samples: u32,
+    pub output_busses: Vec<OutputBusInfo>,
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +171,16 @@ pub unsafe fn load_plugin(
     // 9. Extract parameters
     let parameters = extract_parameters(&controller);
 
-    // 10. Get latency and tail
+    // 10. Query output bus info
+    let output_busses = extract_output_busses(&component);
+
+    // 11. Get latency and tail
     let latency_samples = processor.getLatencySamples() as u32;
     let tail_samples = processor.getTailSamples() as u32;
 
     info!(
         params = parameters.len(),
+        output_busses = output_busses.len(),
         latency = latency_samples,
         tail = tail_samples,
         "Plugin loaded successfully"
@@ -185,6 +190,7 @@ pub unsafe fn load_plugin(
         parameters,
         latency_samples,
         tail_samples,
+        output_busses,
     };
 
     let instance = Vst3PluginInstance {
@@ -247,6 +253,50 @@ fn read_wstr(buf: &[u16]) -> String {
         .copied()
         .collect();
     String::from_utf16_lossy(&chars)
+}
+
+/// Query all output audio busses from the plugin component.
+fn extract_output_busses(component: &ComPtr<IComponent>) -> Vec<OutputBusInfo> {
+    let num_outputs = unsafe {
+        component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32)
+    };
+
+    if num_outputs <= 0 {
+        return vec![];
+    }
+
+    let mut busses = Vec::with_capacity(num_outputs as usize);
+    for i in 0..num_outputs {
+        let mut info: BusInfo = unsafe { std::mem::zeroed() };
+        let result = unsafe {
+            component.getBusInfo(
+                MediaTypes_::kAudio as i32,
+                BusDirections_::kOutput as i32,
+                i,
+                &mut info,
+            )
+        };
+        if result != kResultOk {
+            warn!(bus_index = i, result, "getBusInfo failed for output bus");
+            continue;
+        }
+
+        let bus_name = read_wstr(&info.name);
+        debug!(
+            bus_index = i,
+            name = %bus_name,
+            channels = info.channelCount,
+            "Output bus discovered"
+        );
+
+        busses.push(OutputBusInfo {
+            name: bus_name,
+            channels: info.channelCount as u32,
+            index: i as u32,
+        });
+    }
+
+    busses
 }
 
 /// Format a TUID (16 bytes) as a UUID-like string.

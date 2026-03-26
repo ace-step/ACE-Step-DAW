@@ -17,6 +17,9 @@ use vst3::Steinberg::{
 };
 use vst3::Steinberg::Vst::{
     IComponentHandler, IComponentHandlerTrait, IHostApplication, IHostApplicationTrait,
+    IEventList, IEventListTrait,
+    Event, Event__type0, Event_::EventTypes_,
+    NoteOnEvent, NoteOffEvent,
     String128, ParamID, ParamValue,
 };
 
@@ -305,6 +308,142 @@ impl IBStreamTrait for MemoryStream {
 }
 
 // ---------------------------------------------------------------------------
+// IEventList implementation for MIDI events
+// ---------------------------------------------------------------------------
+
+/// Implements `IEventList` — a simple in-memory list of VST3 events.
+///
+/// Used to pass MIDI note-on/off events into `IAudioProcessor::process()`.
+pub struct EventList {
+    events: RefCell<Vec<Event>>,
+}
+
+impl EventList {
+    /// Create an empty event list.
+    pub fn new() -> ComWrapper<Self> {
+        ComWrapper::new(Self {
+            events: RefCell::new(Vec::new()),
+        })
+    }
+
+    /// Create an event list pre-populated with events.
+    pub fn with_events(events: Vec<Event>) -> ComWrapper<Self> {
+        ComWrapper::new(Self {
+            events: RefCell::new(events),
+        })
+    }
+}
+
+impl Class for EventList {
+    type Interfaces = (IEventList,);
+}
+
+impl IEventListTrait for EventList {
+    unsafe fn getEventCount(&self) -> int32 {
+        self.events.borrow().len() as int32
+    }
+
+    unsafe fn getEvent(&self, index: int32, e: *mut Event) -> tresult {
+        let events = self.events.borrow();
+        if index < 0 || (index as usize) >= events.len() || e.is_null() {
+            return kInvalidArgument;
+        }
+        *e = events[index as usize];
+        kResultOk
+    }
+
+    unsafe fn addEvent(&self, e: *mut Event) -> tresult {
+        if e.is_null() {
+            return kInvalidArgument;
+        }
+        self.events.borrow_mut().push(*e);
+        kResultOk
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MIDI-to-VST3 Event conversion
+// ---------------------------------------------------------------------------
+
+use crate::audio_thread::MidiEvent;
+
+/// Convert a raw MIDI event (status/data1/data2) into a VST3 `Event`.
+///
+/// Supports note-on (0x90) and note-off (0x80) messages.
+/// Returns `None` for unsupported message types.
+pub fn midi_to_vst3_event(midi: &MidiEvent) -> Option<Event> {
+    let message_type = midi.status & 0xF0;
+    let channel = (midi.status & 0x0F) as i16;
+
+    match message_type {
+        0x90 => {
+            // Note-on with velocity 0 is treated as note-off per MIDI spec
+            if midi.data2 == 0 {
+                Some(make_note_off_event(
+                    channel,
+                    midi.data1 as i16,
+                    0.0,
+                    midi.sample_offset as i32,
+                ))
+            } else {
+                Some(make_note_on_event(
+                    channel,
+                    midi.data1 as i16,
+                    midi.data2 as f32 / 127.0,
+                    midi.sample_offset as i32,
+                ))
+            }
+        }
+        0x80 => Some(make_note_off_event(
+            channel,
+            midi.data1 as i16,
+            midi.data2 as f32 / 127.0,
+            midi.sample_offset as i32,
+        )),
+        _ => None, // Unsupported message type
+    }
+}
+
+fn make_note_on_event(channel: i16, pitch: i16, velocity: f32, sample_offset: i32) -> Event {
+    Event {
+        busIndex: 0,
+        sampleOffset: sample_offset,
+        ppqPosition: 0.0,
+        flags: 0,
+        r#type: EventTypes_::kNoteOnEvent as u16,
+        __field0: Event__type0 {
+            noteOn: NoteOnEvent {
+                channel,
+                pitch,
+                tuning: 0.0,
+                velocity,
+                length: 0, // not specified
+                noteId: -1, // unassigned
+            },
+        },
+    }
+}
+
+fn make_note_off_event(channel: i16, pitch: i16, velocity: f32, sample_offset: i32) -> Event {
+    Event {
+        busIndex: 0,
+        sampleOffset: sample_offset,
+        ppqPosition: 0.0,
+        flags: 0,
+        r#type: EventTypes_::kNoteOffEvent as u16,
+        __field0: Event__type0 {
+            noteOff: NoteOffEvent {
+                channel,
+                pitch,
+                velocity,
+                noteId: -1,
+                tuning: 0.0,
+            },
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -442,5 +581,143 @@ mod tests {
             stream.tell(&mut pos);
             assert_eq!(pos, 80);
         }
+    }
+
+    // =========================================================================
+    // EventList tests
+    // =========================================================================
+
+    #[test]
+    fn event_list_empty_has_zero_count() {
+        let list = EventList::new();
+        unsafe {
+            assert_eq!(list.getEventCount(), 0);
+        }
+    }
+
+    #[test]
+    fn event_list_add_and_get_events() {
+        let list = EventList::new();
+        let mut event = make_note_on_event(0, 60, 0.8, 0);
+
+        unsafe {
+            let result = list.addEvent(&mut event);
+            assert_eq!(result, kResultOk);
+            assert_eq!(list.getEventCount(), 1);
+
+            let mut retrieved: Event = std::mem::zeroed();
+            let result = list.getEvent(0, &mut retrieved);
+            assert_eq!(result, kResultOk);
+            assert_eq!(retrieved.r#type, EventTypes_::kNoteOnEvent as u16);
+            assert_eq!(retrieved.__field0.noteOn.pitch, 60);
+        }
+    }
+
+    #[test]
+    fn event_list_get_event_out_of_bounds() {
+        let list = EventList::new();
+        unsafe {
+            let mut event: Event = std::mem::zeroed();
+            let result = list.getEvent(0, &mut event);
+            assert_eq!(result, kInvalidArgument);
+            let result = list.getEvent(-1, &mut event);
+            assert_eq!(result, kInvalidArgument);
+        }
+    }
+
+    #[test]
+    fn event_list_with_events() {
+        let events = vec![
+            make_note_on_event(0, 60, 1.0, 0),
+            make_note_off_event(0, 60, 0.0, 100),
+        ];
+        let list = EventList::with_events(events);
+        unsafe {
+            assert_eq!(list.getEventCount(), 2);
+
+            let mut e: Event = std::mem::zeroed();
+            list.getEvent(0, &mut e);
+            assert_eq!(e.r#type, EventTypes_::kNoteOnEvent as u16);
+
+            list.getEvent(1, &mut e);
+            assert_eq!(e.r#type, EventTypes_::kNoteOffEvent as u16);
+        }
+    }
+
+    // =========================================================================
+    // MIDI-to-VST3 conversion tests
+    // =========================================================================
+
+    #[test]
+    fn midi_note_on_converts_correctly() {
+        let midi = MidiEvent {
+            status: 0x90,
+            data1: 60,
+            data2: 100,
+            sample_offset: 42,
+        };
+        let event = midi_to_vst3_event(&midi).unwrap();
+        assert_eq!(event.r#type, EventTypes_::kNoteOnEvent as u16);
+        assert_eq!(event.sampleOffset, 42);
+        unsafe {
+            assert_eq!(event.__field0.noteOn.channel, 0);
+            assert_eq!(event.__field0.noteOn.pitch, 60);
+            assert!((event.__field0.noteOn.velocity - 100.0 / 127.0).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn midi_note_off_converts_correctly() {
+        let midi = MidiEvent {
+            status: 0x80,
+            data1: 64,
+            data2: 0,
+            sample_offset: 10,
+        };
+        let event = midi_to_vst3_event(&midi).unwrap();
+        assert_eq!(event.r#type, EventTypes_::kNoteOffEvent as u16);
+        assert_eq!(event.sampleOffset, 10);
+        unsafe {
+            assert_eq!(event.__field0.noteOff.channel, 0);
+            assert_eq!(event.__field0.noteOff.pitch, 64);
+        }
+    }
+
+    #[test]
+    fn midi_note_on_velocity_zero_is_note_off() {
+        let midi = MidiEvent {
+            status: 0x90,
+            data1: 60,
+            data2: 0,
+            sample_offset: 0,
+        };
+        let event = midi_to_vst3_event(&midi).unwrap();
+        assert_eq!(event.r#type, EventTypes_::kNoteOffEvent as u16);
+    }
+
+    #[test]
+    fn midi_channel_extracted_from_status() {
+        let midi = MidiEvent {
+            status: 0x95, // note-on, channel 5
+            data1: 72,
+            data2: 80,
+            sample_offset: 0,
+        };
+        let event = midi_to_vst3_event(&midi).unwrap();
+        unsafe {
+            assert_eq!(event.__field0.noteOn.channel, 5);
+        }
+    }
+
+    #[test]
+    fn midi_unsupported_type_returns_none() {
+        // Control change (0xB0) is not supported yet
+        let midi = MidiEvent {
+            status: 0xB0,
+            data1: 1,
+            data2: 64,
+            sample_offset: 0,
+        };
+        assert!(midi_to_vst3_event(&midi).is_none());
     }
 }

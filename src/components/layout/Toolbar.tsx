@@ -667,7 +667,7 @@ export function Toolbar() {
       <div className="flex-1" />
 
       {/* Project timing settings */}
-      <div className="hidden md:flex shrink-0">
+      <div className="flex shrink-0">
         <ProjectTimingStrip disabled={!project} />
       </div>
 
@@ -755,7 +755,7 @@ export function Toolbar() {
 
       <div className="flex-1" />
 
-      <div className="hidden lg:flex shrink-0">
+      <div className="flex shrink-0">
         <HarmonySettingsStrip disabled={!project} />
       </div>
 

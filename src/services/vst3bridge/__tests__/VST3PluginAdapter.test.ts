@@ -7,6 +7,21 @@ import type {
   InstantiatedResponse,
 } from '../VST3BridgeProtocol';
 
+// Mock VST3AudioWorkletNode to avoid needing real AudioWorklet in tests
+vi.mock('../VST3AudioWorklet', () => ({
+  VST3AudioWorkletNode: {
+    create: vi.fn(async () => ({
+      inputNode: null,
+      outputNode: { connect: vi.fn(), disconnect: vi.fn() },
+      outputSAB: new SharedArrayBuffer(1024),
+      inputSAB: null,
+      dropoutCount: 0,
+      disposed: false,
+      dispose: vi.fn(),
+    })),
+  },
+}));
+
 // ─── Test helpers ───────────────────────────────────────────────────────────
 
 function createMockBridgeClient(): VST3BridgeClient & {
@@ -33,6 +48,9 @@ function createMockBridgeClient(): VST3BridgeClient & {
     setParam: vi.fn(),
     sendMidi: vi.fn(),
     sendAudioFrame: vi.fn(),
+    send: vi.fn(),
+    onAudioFrame: vi.fn(() => vi.fn()),
+    offAudioFrame: vi.fn(),
     openEditor: vi.fn(async () => ({ width: 800, height: 600 })),
     getState: vi.fn(async () => 'base64-state-data'),
     setState: vi.fn(async () => {}),
@@ -332,7 +350,61 @@ describe('VST3PluginAdapter', () => {
     });
   });
 
-  // ─── 8. VST3-specific methods ────────────────────────────────────────
+  // ─── 8. Audio receiving pipeline ────────────────────────────────────
+
+  describe('audio receiving pipeline', () => {
+    it('subscribes to audio frames on createAudioNodeAsync', async () => {
+      const adapter = createAdapter({ category: 'instrument' });
+      const ctx = createMockAudioContext();
+
+      await adapter.createAudioNodeAsync(ctx);
+
+      expect(bridgeClient.onAudioFrame).toHaveBeenCalledOnce();
+      adapter.dispose();
+    });
+
+    it('sends startAudioStream message on createAudioNodeAsync', async () => {
+      const adapter = createAdapter({ category: 'instrument' });
+      const ctx = createMockAudioContext();
+
+      await adapter.createAudioNodeAsync(ctx);
+
+      expect(bridgeClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'startAudioStream',
+          instanceId: 'inst-001',
+        }),
+      );
+      adapter.dispose();
+    });
+
+    it('sends stopAudioStream on dispose after audio node created', async () => {
+      const adapter = createAdapter({ category: 'instrument' });
+      const ctx = createMockAudioContext();
+
+      await adapter.createAudioNodeAsync(ctx);
+      adapter.dispose();
+
+      expect(bridgeClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'stopAudioStream',
+          instanceId: 'inst-001',
+        }),
+      );
+    });
+
+    it('unsubscribes audio frame handler on dispose', async () => {
+      const adapter = createAdapter({ category: 'instrument' });
+      const ctx = createMockAudioContext();
+
+      await adapter.createAudioNodeAsync(ctx);
+      adapter.dispose();
+
+      expect(bridgeClient.offAudioFrame).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── 9. VST3-specific methods ────────────────────────────────────────
 
   describe('VST3-specific API', () => {
     it('openEditor delegates to bridge client', async () => {

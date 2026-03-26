@@ -34,14 +34,18 @@ export function _resetBridgeClient(): void {
  * Handles both the protocol's uid-based format and the store's id-based format.
  */
 function mapPluginsToStore(raw: Array<Record<string, string>>): VST3PluginInfo[] {
-  return raw.map((p) => ({
-    id: p.uid ?? p.id ?? '',
-    name: p.name ?? 'Unknown',
-    vendor: p.vendor ?? 'Unknown',
-    version: p.version ?? '0.0.0',
-    category: (p.category?.toLowerCase().includes('instrument') ? 'instrument' : 'effect') as 'instrument' | 'effect',
-    subcategory: p.category ?? '',
-  }));
+  return raw.map((p) => {
+    const rawCat = (p.category ?? '').toLowerCase();
+    const isInstrument = rawCat.includes('instrument') || rawCat.includes('synth') || rawCat.includes('generator');
+    return {
+      id: p.uid ?? p.id ?? '',
+      name: p.name ?? 'Unknown',
+      vendor: p.vendor ?? 'Unknown',
+      version: p.version ?? '0.0.0',
+      category: (isInstrument ? 'instrument' : 'effect') as 'instrument' | 'effect',
+      subcategory: p.subcategory || p.category || '',
+    };
+  });
 }
 
 export function useVST3Connection() {
@@ -94,6 +98,17 @@ export function useVST3Connection() {
       client.on('scanComplete', onScanComplete),
       client.on('scanProgress', onScanProgress),
     ];
+
+    // Sync current state immediately (handles HMR / singleton already connected)
+    if (client.isConnected) {
+      store.setConnectionStatus('connected');
+      store.setCompanionVersion(client.companionVersion);
+      store.setConnectionError(null);
+      // Trigger scan if plugins list is empty
+      if (store.plugins.length === 0) {
+        client.send({ type: 'scanPlugins' });
+      }
+    }
 
     return () => {
       for (const unsub of unsubs) unsub();

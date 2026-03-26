@@ -31,11 +31,9 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({
 
 describe('BPM input — clamp on blur, not keystroke', () => {
   beforeEach(() => {
-    // Open dialogs via store
     localStorage.clear();
     useProjectStore.setState(useProjectStore.getInitialState(), true);
-    useUIStore.getState().setShowNewProjectDialog(true);
-    useUIStore.getState().setShowSettingsDialog(true);
+    useUIStore.setState(useUIStore.getInitialState(), true);
     useProjectStore.getState().createProject({ name: 'Latency Settings Test' });
   });
 
@@ -44,6 +42,10 @@ describe('BPM input — clamp on blur, not keystroke', () => {
   }
 
   describe('NewProjectDialog', () => {
+    beforeEach(() => {
+      useUIStore.getState().setShowNewProjectDialog(true);
+    });
+
     it('allows typing intermediate values below MIN_BPM without clamping', () => {
       const { container } = render(<NewProjectDialog />);
       const input = getBpmInput(container);
@@ -91,6 +93,7 @@ describe('BPM input — clamp on blur, not keystroke', () => {
 
   describe('SettingsDialog', () => {
     beforeEach(() => {
+      useUIStore.getState().setShowSettingsDialog(true);
       vi.mocked(getAudioEngine).mockReturnValue({
         previewMetronomeClick: vi.fn().mockResolvedValue(undefined),
       } as unknown as ReturnType<typeof getAudioEngine>);

@@ -30,6 +30,7 @@ pub struct AppState {
     pub param_collector: ParamChangeCollector,
     pub audio_streams: AudioStreamManager,
     pub preset_storage: PresetStorage,
+    pub gui_manager: std::sync::Mutex<crate::gui_manager::GuiManager>,
 }
 
 /// Start the WebSocket server and listen for connections forever.
@@ -51,6 +52,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         param_collector: ParamChangeCollector::new(),
         audio_streams,
         preset_storage,
+        gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::new()),
     });
 
     // Wrap the receiver in an Arc<Mutex> so it can be shared across connections
@@ -127,8 +129,23 @@ async fn handle_connection(
                         }
                     }
                     Message::Binary(data) => {
-                        info!(%peer, bytes = data.len(), "Received binary frame (echo)");
-                        sink.send(Message::Binary(data)).await?;
+                        // Binary frames carry input audio for effect instances.
+                        // Decode the frame and route samples to the effect's input buffer.
+                        if let Some(frame) = AudioFrame::decode(&data) {
+                            let sent = state.audio_streams.send_audio(
+                                &frame.instance_id,
+                                frame.samples,
+                            );
+                            if !sent {
+                                debug!(
+                                    %peer,
+                                    instance_id = %frame.instance_id,
+                                    "Binary frame dropped: no effect stream or instance is instrument"
+                                );
+                            }
+                        } else {
+                            warn!(%peer, bytes = data.len(), "Failed to decode binary audio frame");
+                        }
                     }
                     Message::Ping(payload) => {
                         sink.send(Message::Pong(payload)).await?;
@@ -216,15 +233,16 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
 
             match state.host.instantiate(&plugin_uid, &instance_id, plugin_path.as_deref()) {
             Ok(info) => OutgoingMessage::Instantiated {
-                req_id,
+                req_id: req_id.clone(),
                 instance_id: info.instance_id,
                 parameters: info.parameters,
                 latency_samples: info.latency_samples,
                 tail_samples: info.tail_samples,
                 presets: info.presets,
+                output_busses: info.output_busses,
             },
             Err(e) => OutgoingMessage::Error {
-                req_id: Some(req_id),
+                req_id,
                 instance_id: Some(instance_id),
                 code: "instantiate_error".into(),
                 message: e.to_string(),
@@ -268,28 +286,56 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             instance_id,
             events,
         } => {
-            info!(instance_id, count = events.len(), "MIDI events (stub)");
-            // No response required for MIDI in the current protocol; send an ack-style message.
+            // Convert protocol MidiEvents to audio_thread MidiEvents
+            let audio_events: Vec<crate::audio_thread::MidiEvent> = events
+                .iter()
+                .map(crate::audio_thread::MidiEvent::from)
+                .collect();
+            let count = audio_events.len();
+            let sent = state.audio_streams.send_midi(&instance_id, audio_events);
+            if sent {
+                info!(instance_id, count, "MIDI events forwarded to audio thread");
+            } else {
+                warn!(instance_id, count, "No active audio stream for MIDI events");
+            }
             OutgoingMessage::Error {
                 req_id: None,
                 instance_id: Some(instance_id),
                 code: "ok".into(),
-                message: format!("Received {} MIDI events (stub)", events.len()),
+                message: format!("Received {count} MIDI events"),
             }
         }
 
         IncomingMessage::OpenEditor { instance_id } => {
-            info!(instance_id, "OpenEditor (stub)");
-            OutgoingMessage::EditorOpened {
-                instance_id,
-                width: 800,
-                height: 600,
+            // Get the IEditController from the live VST3 instance
+            match state.host.get_controller(&instance_id) {
+                Some(controller) => {
+                    let mut gui = state.gui_manager.lock().unwrap();
+                    match gui.open_editor_with_controller(&instance_id, &controller) {
+                        Ok((width, height)) => {
+                            info!(instance_id, width, height, "Editor opened");
+                            OutgoingMessage::EditorOpened {
+                                instance_id,
+                                width,
+                                height,
+                            }
+                        }
+                        Err(e) => instance_error(instance_id, "open_editor_error", e),
+                    }
+                }
+                None => instance_error(instance_id, "open_editor_error", "Plugin instance not found or not live".into()),
             }
         }
 
         IncomingMessage::CloseEditor { instance_id } => {
-            info!(instance_id, "CloseEditor (stub)");
-            OutgoingMessage::EditorClosed { instance_id }
+            let mut gui = state.gui_manager.lock().unwrap();
+            match gui.close_editor(&instance_id) {
+                Ok(()) => {
+                    info!(instance_id, "Editor closed");
+                    OutgoingMessage::EditorClosed { instance_id }
+                }
+                Err(e) => instance_error(instance_id, "close_editor_error", e),
+            }
         }
 
         IncomingMessage::GetState { instance_id } => {
@@ -465,8 +511,10 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
             instance_id,
             sample_rate,
             block_size,
+            is_effect,
         } => {
-            info!(instance_id, sample_rate, block_size, "StartAudioStream");
+            let is_instrument = !is_effect;
+            info!(instance_id, sample_rate, block_size, is_effect, "StartAudioStream");
             if !state.host.has_instance(&instance_id) {
                 return OutgoingMessage::Error {
                     req_id: None,
@@ -480,7 +528,7 @@ fn handle_message(msg: IncomingMessage, state: &AppState) -> OutgoingMessage {
                 sample_rate,
                 block_size,
                 None, // Real plugin attachment is done separately
-                true, // Default to instrument for stub
+                is_instrument,
             );
             if started {
                 OutgoingMessage::AudioStreamStarted { instance_id }
@@ -530,6 +578,7 @@ mod tests {
             param_collector: ParamChangeCollector::new(),
             audio_streams: AudioStreamManager::new(),
             preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+            gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::with_stub_backend()),
         };
         (dir, state)
     }
@@ -545,6 +594,7 @@ mod tests {
             param_collector: ParamChangeCollector::new(),
             audio_streams,
             preset_storage: PresetStorage::with_base_dir(dir.path().to_path_buf()),
+            gui_manager: std::sync::Mutex::new(crate::gui_manager::GuiManager::with_stub_backend()),
         };
         (dir, state, rx)
     }
@@ -578,7 +628,7 @@ mod tests {
 
         let resp = handle_message(
             IncomingMessage::Instantiate {
-                req_id: "r1".into(),
+                req_id: Some("r1".into()),
                 plugin_uid: "uid-1".into(),
                 instance_id: "inst-1".into(),
             },
@@ -742,6 +792,7 @@ mod tests {
                 instance_id: "inst-1".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             },
             &state,
         );
@@ -766,6 +817,7 @@ mod tests {
                 instance_id: "nonexistent".into(),
                 sample_rate: 44100.0,
                 block_size: 512,
+                is_effect: false,
             },
             &state,
         );
@@ -1038,5 +1090,114 @@ mod tests {
             }
             other => panic!("Expected error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_handle_start_audio_stream_as_effect() {
+        let (_dir, state) = test_app_state();
+        state.host.instantiate("uid-1", "fx-1", None).unwrap();
+
+        let resp = handle_message(
+            IncomingMessage::StartAudioStream {
+                instance_id: "fx-1".into(),
+                sample_rate: 44100.0,
+                block_size: 512,
+                is_effect: true,
+            },
+            &state,
+        );
+        match resp {
+            OutgoingMessage::AudioStreamStarted { instance_id } => {
+                assert_eq!(instance_id, "fx-1");
+            }
+            other => panic!("Expected AudioStreamStarted, got {other:?}"),
+        }
+        assert!(state.audio_streams.is_streaming("fx-1"));
+        assert!(state.audio_streams.is_effect("fx-1"));
+
+        state.audio_streams.stop_stream("fx-1");
+    }
+
+    /// Integration test: send binary audio frames to an effect and receive processed output.
+    #[tokio::test]
+    async fn test_ws_effect_binary_routing() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let (_dir, app_state, audio_rx) = test_app_state_with_audio();
+        let state = Arc::new(app_state);
+        let audio_frame_rx = Arc::new(tokio::sync::Mutex::new(audio_rx));
+
+        // Instantiate a stub effect
+        state.host.instantiate("uid-1", "fx-1", None).unwrap();
+
+        let server_state = Arc::clone(&state);
+        let rx = Arc::clone(&audio_frame_rx);
+        tokio::spawn(async move {
+            let (stream, peer) = listener.accept().await.unwrap();
+            handle_connection(stream, peer, server_state, rx)
+                .await
+                .unwrap();
+        });
+
+        let url = format!("ws://{addr}");
+        let (ws, _) = connect_async(&url).await.unwrap();
+        let (mut sink, mut stream) = ws.split();
+
+        // Start audio stream as effect
+        let start_msg = serde_json::json!({
+            "type": "startAudioStream",
+            "instanceId": "fx-1",
+            "sampleRate": 44100.0,
+            "blockSize": 64,
+            "isEffect": true
+        });
+        sink.send(Message::Text(start_msg.to_string().into()))
+            .await
+            .unwrap();
+
+        // Receive the audioStreamStarted JSON response
+        let response = tokio::time::timeout(Duration::from_millis(500), stream.next())
+            .await
+            .expect("Timed out waiting for audioStreamStarted")
+            .unwrap()
+            .unwrap();
+        let text = response.into_text().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed["type"], "audioStreamStarted");
+
+        // Send binary audio input frame (stereo * 64 samples = 128 f32s)
+        let input_frame = AudioFrame {
+            instance_id: "fx-1".into(),
+            bus_index: 0,
+            samples: vec![0.3f32; 128],
+        };
+        sink.send(Message::Binary(input_frame.encode().into()))
+            .await
+            .unwrap();
+
+        // Wait for processed output binary frame
+        let mut got_output = false;
+        for _ in 0..50 {
+            let msg = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
+            if let Ok(Some(Ok(Message::Binary(data)))) = msg {
+                let frame = AudioFrame::decode(&data).unwrap();
+                assert_eq!(frame.instance_id, "fx-1");
+                assert_eq!(frame.samples.len(), 128);
+                got_output = true;
+                break;
+            }
+        }
+        assert!(got_output, "Expected processed binary audio frame from effect");
+
+        // Stop and clean up
+        let stop_msg = serde_json::json!({
+            "type": "stopAudioStream",
+            "instanceId": "fx-1"
+        });
+        sink.send(Message::Text(stop_msg.to_string().into()))
+            .await
+            .unwrap();
+        sink.send(Message::Close(None)).await.ok();
     }
 }

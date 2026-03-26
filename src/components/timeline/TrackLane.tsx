@@ -3,6 +3,7 @@ import type { Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
+import { useVST3Store } from '../../store/vst3Store';
 import { ClipBlock } from './ClipBlock';
 import { TakeLaneStrip } from './TakeLaneStrip';
 import { AutomationLaneView } from './AutomationLaneView';
@@ -59,6 +60,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   const convertMidiFileToStrudel = useProjectStore((s) => s.convertMidiFileToStrudel);
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const placeGenerationHistoryOnTrack = useGenerationStore((s) => s.placeGenerationHistoryOnTrack);
+  const loadVST3Plugin = useVST3Store((s) => s.loadPlugin);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; startTime: number; duration: number;
@@ -229,6 +231,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
       || types.includes('application/x-loop-id')
       || types.includes('application/x-asset-id')
       || types.includes('application/x-generation-history-id')
+      || types.includes('application/x-vst3-plugin')
     ) {
       e.preventDefault();
       dragCounterRef.current++;
@@ -243,6 +246,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
       || types.includes('application/x-loop-id')
       || types.includes('application/x-asset-id')
       || types.includes('application/x-generation-history-id')
+      || types.includes('application/x-vst3-plugin')
     ) {
       e.preventDefault();
       e.stopPropagation();
@@ -285,6 +289,13 @@ function TrackLaneInner({ track }: TrackLaneProps) {
     const laneX = clientXToLaneX(e.clientX);
     const rawTime = laneX / pixelsPerSecond;
     const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
+
+    // Handle VST3 plugin drop — loads a plugin instance onto this track
+    const vst3PluginId = e.dataTransfer.getData('application/x-vst3-plugin');
+    if (vst3PluginId) {
+      void loadVST3Plugin(vst3PluginId, track.id);
+      return;
+    }
 
     const historyId = e.dataTransfer.getData('application/x-generation-history-id');
     if (historyId) {
@@ -331,7 +342,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
         setOpenStrudelEditor,
       });
     }
-  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, placeGenerationHistoryOnTrack, hasProject, bpm, tempoMap, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
+  }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, loadVST3Plugin, placeGenerationHistoryOnTrack, hasProject, bpm, tempoMap, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
 
   const hasClips = track.clips.length > 0;
   const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;

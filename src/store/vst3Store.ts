@@ -9,6 +9,8 @@ import type {
 } from '../types/vst3';
 import { toastSuccess, toastError } from '../hooks/useToast';
 import { _getBridgeClient } from '../hooks/useVST3Connection';
+import { VST3PluginAdapter } from '../services/vst3bridge/VST3PluginAdapter';
+import { pluginEngine } from '../engine/PluginEngine';
 
 export interface VST3Store {
   /* ── Connection ──────────────────────────────────────── */
@@ -24,6 +26,9 @@ export interface VST3Store {
   /* ── Active instances (keyed by instanceId) ─────────── */
   instances: Record<string, VST3ActiveInstance>;
 
+  /* ── Per-track plugin ordering ──────────────────────── */
+  pluginOrder: Record<string, string[]>;
+
   /* ── Actions ────────────────────────────────────────── */
   connect: () => void;
   disconnect: () => void;
@@ -36,6 +41,8 @@ export interface VST3Store {
   setParameter: (instanceId: string, paramId: number, value: number) => void;
   selectPreset: (instanceId: string, preset: string) => void;
   savePreset: (instanceId: string, name: string) => void;
+  reorderPlugins: (trackId: string, instanceIds: string[]) => void;
+  setSidechain: (instanceId: string, sourceTrackId: string | null) => void;
 
   /* ── Public setters (used by hooks / bridge callbacks) ── */
   setConnectionStatus: (status: VST3ConnectionStatus) => void;
@@ -63,15 +70,17 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   scanning: false,
   scanProgress: null,
   instances: {},
+  pluginOrder: {},
 
   // ── Connection ──────────────────────────────────────────
   connect: () => {
     set({ connectionStatus: 'connecting' });
-    // Bridge implementation will call _setConnectionStatus('connected')
+    _getBridgeClient().connect();
   },
 
   disconnect: () => {
     set({ connectionStatus: 'disconnected', companionVersion: null });
+    _getBridgeClient().disconnect();
   },
 
   // ── Scanning ────────────────────────────────────────────
@@ -102,20 +111,22 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
           reject(new Error('Plugin instantiation timed out'));
         }, 10_000);
 
-        const onCreated = (createdId: string, params: VST3Parameter[]) => {
+        const onCreated = (msg: Record<string, unknown>) => {
+          const createdId = msg.instanceId as string;
           if (createdId === instanceId) {
             clearTimeout(timeout);
             client.off('instanceCreated', onCreated);
             client.off('error', onError);
+            const params = (msg.parameters as VST3Parameter[]) ?? [];
             resolve(params);
           }
         };
 
-        const onError = (errorMsg: string) => {
+        const onError = (msg: Record<string, unknown>) => {
           clearTimeout(timeout);
           client.off('instanceCreated', onCreated);
           client.off('error', onError);
-          reject(new Error(errorMsg));
+          reject(new Error((msg.message as string) ?? 'Unknown error'));
         };
 
         client.on('instanceCreated', onCreated);
@@ -137,6 +148,36 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
         presets: [],
         activePreset: null,
       });
+
+      // Create the audio adapter and register with the plugin engine
+      // so audio routing (effects) and MIDI (instruments) work through the graph
+      try {
+        const { getContext } = await import('tone');
+        const ctx = getContext().rawContext as AudioContext;
+        const adapter = new VST3PluginAdapter(
+          instanceId,
+          { ...pluginInfo, uid: pluginInfo.id },
+          {
+            instanceId,
+            parameters: parameters.map((p) => ({
+              id: p.id,
+              name: p.name,
+              title: p.name,
+              default: p.defaultValue,
+              defaultValue: p.defaultValue,
+              min: p.minValue,
+              max: p.maxValue,
+              stepCount: 0,
+              unit: '',
+            })),
+            latencySamples: 0,
+          },
+          client,
+        );
+        pluginEngine.addPlugin(trackId, instanceId, adapter, ctx);
+      } catch {
+        // Audio engine not ready — adapter will be created on next rebuild
+      }
 
       toastSuccess(`Loaded ${pluginInfo.name}`);
     } catch (err) {
@@ -160,8 +201,8 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     });
   },
 
-  openEditor: (_instanceId: string) => {
-    // Bridge tells companion to show native window
+  openEditor: (instanceId: string) => {
+    _getBridgeClient().send({ type: 'openEditor', instanceId });
   },
 
   setParameter: (instanceId: string, paramId: number, value: number) => {
@@ -189,6 +230,42 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
 
   savePreset: (_instanceId: string, _name: string) => {
     // Bridge implementation
+  },
+
+  // ── Plugin chain ordering ──────────────────────────────
+  reorderPlugins: (trackId: string, instanceIds: string[]) => {
+    const { instances, pluginOrder } = get();
+    // Filter to only IDs that belong to this track
+    const trackInstanceIds = new Set(
+      Object.values(instances)
+        .filter((inst) => inst.trackId === trackId)
+        .map((inst) => inst.instanceId),
+    );
+    if (trackInstanceIds.size === 0) return;
+
+    const validOrder = instanceIds.filter((id) => trackInstanceIds.has(id));
+    if (validOrder.length === 0) return;
+
+    set({ pluginOrder: { ...pluginOrder, [trackId]: validOrder } });
+  },
+
+  setSidechain: (instanceId: string, sourceTrackId: string | null) => {
+    const { instances } = get();
+    const inst = instances[instanceId];
+    if (!inst) return;
+    set({
+      instances: {
+        ...instances,
+        [instanceId]: { ...inst, sidechainSourceTrackId: sourceTrackId },
+      },
+    });
+    // Forward to bridge companion
+    try {
+      const client = _getBridgeClient();
+      client.send({ type: 'setSidechain', instanceId, sourceTrackId });
+    } catch {
+      // Bridge not connected — ignore silently
+    }
   },
 
   // ── Public setters (used by hooks) ──────────────────────

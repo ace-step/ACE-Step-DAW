@@ -55,6 +55,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [lyrics, setLyrics] = useState('');
   const [instrumental, setInstrumental] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(30);
+  const [durationAuto, setDurationAuto] = useState(false);
   const [seed, setSeed] = useState(Math.floor(Math.random() * 2147483647));
   const [useRandomSeed, setUseRandomSeed] = useState(true);
   const [vocalLanguage, setVocalLanguage] = useState('unknown');
@@ -190,21 +191,31 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       <section className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
-          <select
-            value={durationSeconds === -1 ? 'auto' : String(durationSeconds)}
-            onChange={(e) => setDurationSeconds(e.target.value === 'auto' ? -1 : Number(e.target.value))}
-            className="rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled}
-          >
-            <option value="auto">Auto</option>
-            <option value="15">15s</option>
-            <option value="30">30s</option>
-            <option value="60">60s</option>
-            <option value="120">2m</option>
-            <option value="180">3m</option>
-            <option value="240">4m</option>
-            <option value="300">5m</option>
-          </select>
+          <input
+            type="number"
+            value={durationSeconds === -1 ? '' : durationSeconds}
+            onChange={(e) => setDurationSeconds(e.target.value === '' ? -1 : Number(e.target.value))}
+            placeholder="Auto"
+            min={MIN_DURATION}
+            max={MAX_DURATION}
+            step={1}
+            className="w-[60px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled || durationAuto}
+          />
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={durationAuto}
+              onChange={(e) => {
+                setDurationAuto(e.target.checked);
+                if (e.target.checked) setDurationSeconds(-1);
+                else setDurationSeconds(30);
+              }}
+              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              disabled={isDisabled}
+            />
+            <span className="text-[9px] text-zinc-600">Auto</span>
+          </label>
         </div>
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
@@ -217,10 +228,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           />
           <button
             type="button"
-            onClick={() => setSeed(Math.floor(Math.random() * 2147483647))}
+            onClick={() => {
+              setSeed(Math.floor(Math.random() * 2147483647));
+              setUseRandomSeed(false);
+            }}
             className="text-[14px] leading-none transition-opacity hover:opacity-80"
             title="Random seed"
-            disabled={isDisabled || useRandomSeed}
+            disabled={isDisabled}
           >
             🎲
           </button>

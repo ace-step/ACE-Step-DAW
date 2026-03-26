@@ -158,24 +158,41 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         />
       </section>
 
-      {/* Lyrics — always visible, with Instrumental toggle */}
+      {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">
         <div className="flex items-center justify-between">
           <label className="text-[11px] font-medium uppercase text-zinc-400">Lyrics</label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={instrumental}
-              onChange={(e) => {
-                setInstrumental(e.target.checked);
-                if (e.target.checked) setLyrics('[Instrumental]');
-                else if (lyrics === '[Instrumental]') setLyrics('');
-              }}
-              className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
-              disabled={isDisabled}
-            />
-            <span className="text-[10px] text-zinc-500">Instrumental</span>
-          </label>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-zinc-500">Lang</span>
+              <select
+                value={vocalLanguage}
+                onChange={(e) => setVocalLanguage(e.target.value)}
+                className="rounded border border-[#444] bg-[#2a2a2a] px-1 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
+                disabled={isDisabled || instrumental}
+              >
+                <option value="unknown">Auto</option>
+                <option value="en">EN</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={instrumental}
+                onChange={(e) => {
+                  setInstrumental(e.target.checked);
+                  if (e.target.checked) setLyrics('[Instrumental]');
+                  else if (lyrics === '[Instrumental]') setLyrics('');
+                }}
+                className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+                disabled={isDisabled}
+              />
+              <span className="text-[10px] text-zinc-500">Instrumental</span>
+            </label>
+          </div>
         </div>
         <textarea
           value={lyrics}
@@ -189,88 +206,67 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       </section>
 
       {/* Parameters — clean two-row grid */}
-      {/* Parameters — 3-column grid */}
-      <section className="space-y-2 rounded border border-[#333] bg-[#1a1a1e] px-3 py-2.5">
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Duration</label>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                value={durationSeconds === -1 ? '' : durationSeconds}
-                onChange={(e) => setDurationSeconds(e.target.value === '' ? -1 : Number(e.target.value))}
-                placeholder="Auto"
-                min={MIN_DURATION}
-                max={MAX_DURATION}
-                step={1}
-                className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] focus:border-indigo-500 focus:outline-none"
-                disabled={isDisabled || durationAuto}
-              />
-              <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="Auto-detect duration">
-                <input
-                  type="checkbox"
-                  checked={durationAuto}
-                  onChange={(e) => {
-                    setDurationAuto(e.target.checked);
-                    if (e.target.checked) setDurationSeconds(-1);
-                    else setDurationSeconds(30);
-                  }}
-                  className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-                  disabled={isDisabled}
-                />
-                <span className="text-[8px] text-zinc-600">A</span>
-              </label>
-            </div>
-          </div>
-          <div>
-            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Language</label>
-            <select
-              value={vocalLanguage}
-              onChange={(e) => setVocalLanguage(e.target.value)}
-              className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] focus:border-indigo-500 focus:outline-none"
-              disabled={isDisabled || instrumental}
-            >
-              <option value="unknown">Auto</option>
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-              <option value="ja">日本語</option>
-              <option value="ko">한국어</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Seed</label>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                value={seed}
-                onChange={(e) => setSeed(Number(e.target.value))}
-                className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
-                disabled={isDisabled || useRandomSeed}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setSeed(Math.floor(Math.random() * 2147483647));
-                  setUseRandomSeed(false);
-                }}
-                className="shrink-0 text-[14px] leading-none transition-opacity hover:opacity-80"
-                title="Random seed"
-                disabled={isDisabled}
-              >
-                🎲
-              </button>
-              <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="Use random seed each time">
-                <input
-                  type="checkbox"
-                  checked={useRandomSeed}
-                  onChange={(e) => setUseRandomSeed(e.target.checked)}
-                  className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-                  disabled={isDisabled}
-                />
-                <span className="text-[8px] text-zinc-600">R</span>
-              </label>
-            </div>
-          </div>
+      {/* Duration + Seed — compact inline */}
+      <section className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
+          <input
+            type="number"
+            value={durationSeconds === -1 ? '' : durationSeconds}
+            onChange={(e) => setDurationSeconds(e.target.value === '' ? -1 : Number(e.target.value))}
+            placeholder="Auto"
+            min={MIN_DURATION}
+            max={MAX_DURATION}
+            step={1}
+            className="w-[60px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled || durationAuto}
+          />
+          <label className="flex items-center gap-1 cursor-pointer" title="Auto-detect duration">
+            <input
+              type="checkbox"
+              checked={durationAuto}
+              onChange={(e) => {
+                setDurationAuto(e.target.checked);
+                if (e.target.checked) setDurationSeconds(-1);
+                else setDurationSeconds(30);
+              }}
+              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              disabled={isDisabled}
+            />
+            <span className="text-[9px] text-zinc-600">Auto</span>
+          </label>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
+          <input
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(Number(e.target.value))}
+            className="w-[110px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled || useRandomSeed}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setSeed(Math.floor(Math.random() * 2147483647));
+              setUseRandomSeed(false);
+            }}
+            className="shrink-0 text-[14px] leading-none transition-opacity hover:opacity-80"
+            title="Random seed"
+            disabled={isDisabled}
+          >
+            🎲
+          </button>
+          <label className="flex items-center gap-1 cursor-pointer" title="Use random seed each time">
+            <input
+              type="checkbox"
+              checked={useRandomSeed}
+              onChange={(e) => setUseRandomSeed(e.target.checked)}
+              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              disabled={isDisabled}
+            />
+            <span className="text-[9px] text-zinc-600">Random</span>
+          </label>
         </div>
       </section>
 

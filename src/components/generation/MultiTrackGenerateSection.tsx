@@ -96,6 +96,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
   const [sharedSeed, setSharedSeed] = useState<number>(randomSeed);
   const [audioDuration, setAudioDuration] = useState(30);
   const [durationAuto, setDurationAuto] = useState(false);
+  const [useRandomSeed, setUseRandomSeed] = useState(true);
 
   useEffect(() => {
     if (!project) return;
@@ -416,15 +417,28 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
               className="w-[110px] rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[11px] font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
               min={0}
               max={2147483647}
+              disabled={useRandomSeed}
             />
             <button
               type="button"
-              onClick={() => setSharedSeed(randomSeed())}
+              onClick={() => {
+                setSharedSeed(randomSeed());
+                setUseRandomSeed(false);
+              }}
               className="text-[14px] leading-none transition-opacity hover:opacity-80"
               title="Random seed"
             >
               🎲
             </button>
+            <label className="flex items-center gap-1 cursor-pointer" title="Use random seed each time">
+              <input
+                type="checkbox"
+                checked={useRandomSeed}
+                onChange={(e) => setUseRandomSeed(e.target.checked)}
+                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              />
+              <span className="text-[9px] text-zinc-600">Random</span>
+            </label>
           </div>
         </section>
 

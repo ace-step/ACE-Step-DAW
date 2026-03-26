@@ -219,6 +219,53 @@ export async function createSample(req: CreateSampleRequest): Promise<CreateSamp
   return envelope.data;
 }
 
+/** Format/enhance input — LM refines prompt, lyrics, and infers metadata. */
+export interface FormatInputRequest {
+  prompt: string;
+  lyrics: string;
+  language?: string;
+  bpm?: number;
+  duration?: number;
+  key_scale?: string;
+  time_signature?: string;
+}
+
+export interface FormatInputResponse {
+  caption: string;
+  lyrics: string;
+  bpm?: number;
+  key_scale?: string;
+  time_signature?: string;
+  duration?: number;
+  vocal_language?: string;
+}
+
+export async function formatInput(req: FormatInputRequest): Promise<FormatInputResponse> {
+  const base = getApiBase();
+  const paramObj: Record<string, unknown> = {};
+  if (req.language) paramObj.language = req.language;
+  if (req.bpm) paramObj.bpm = req.bpm;
+  if (req.duration) paramObj.duration = req.duration;
+  if (req.key_scale) paramObj.key = req.key_scale;
+  if (req.time_signature) paramObj.time_signature = req.time_signature;
+
+  const res = await fetch(`${base}/format_input`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: req.prompt,
+      lyrics: req.lyrics,
+      param_obj: JSON.stringify(paramObj),
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`formatInput failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<FormatInputResponse> = await res.json();
+  return envelope.data;
+}
+
 export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {
   const base = getApiBase();
   const res = await fetch(`${base}/v1/init`, {

@@ -5,7 +5,18 @@ import { useModelStore } from '../../store/modelStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
 import { generateText2Music } from '../../services/generationPipeline';
+import { formatInput } from '../../services/aceStepApi';
+import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+
+/** Sparkle icon for AI enhance buttons */
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275L12 3z" />
+    </svg>
+  );
+}
 
 
 interface FullSongFormProps {
@@ -42,6 +53,45 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [stemCount, setStemCount] = useState<2 | 4 | 6>(4);
   const [thinking, setThinking] = useState(project?.generationDefaults?.thinking ?? true);
   const [error, setError] = useState<string | null>(null);
+  const [enhancingCaption, setEnhancingCaption] = useState(false);
+  const [enhancingLyrics, setEnhancingLyrics] = useState(false);
+
+  const handleEnhanceCaption = useCallback(async () => {
+    if (!prompt.trim()) return;
+    setEnhancingCaption(true);
+    try {
+      const result = await formatInput({
+        prompt: prompt.trim(),
+        lyrics,
+        language: vocalLanguage !== 'unknown' ? vocalLanguage : undefined,
+      });
+      if (result.caption) setPrompt(result.caption);
+      toastInfo('Caption enhanced');
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to enhance caption');
+    } finally {
+      setEnhancingCaption(false);
+    }
+  }, [prompt, lyrics, vocalLanguage]);
+
+  const handleEnhanceLyrics = useCallback(async () => {
+    if (!lyrics.trim() && !prompt.trim()) return;
+    setEnhancingLyrics(true);
+    try {
+      const result = await formatInput({
+        prompt: prompt.trim(),
+        lyrics: lyrics.trim(),
+        language: vocalLanguage !== 'unknown' ? vocalLanguage : undefined,
+      });
+      if (result.lyrics) setLyrics(result.lyrics);
+      if (result.caption && !prompt.trim()) setPrompt(result.caption);
+      toastInfo('Lyrics enhanced');
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to enhance lyrics');
+    } finally {
+      setEnhancingLyrics(false);
+    }
+  }, [prompt, lyrics, vocalLanguage]);
 
   // Apply initial data from Simple mode's Create Sample
   useEffect(() => {
@@ -103,9 +153,20 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
 
       {/* Music Caption */}
       <section className="space-y-1.5">
-        <label className="block text-[11px] font-medium uppercase text-zinc-400">
-          Music Caption
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-medium uppercase text-zinc-400">
+            Music Caption
+          </label>
+          <button
+            type="button"
+            onClick={handleEnhanceCaption}
+            disabled={isDisabled || enhancingCaption || !prompt.trim()}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="AI enhance caption"
+          >
+            <SparkleIcon className={enhancingCaption ? 'animate-spin' : ''} />
+          </button>
+        </div>
         <PromptAutocompleteTextarea
           value={prompt}
           onChange={setPrompt}
@@ -118,7 +179,18 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] font-medium uppercase text-zinc-400">Lyrics</label>
+          <div className="flex items-center gap-1">
+            <label className="text-[11px] font-medium uppercase text-zinc-400">Lyrics</label>
+            <button
+              type="button"
+              onClick={handleEnhanceLyrics}
+              disabled={isDisabled || enhancingLyrics || instrumental || (!lyrics.trim() && !prompt.trim())}
+              className="flex items-center rounded px-1 py-0.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="AI enhance lyrics"
+            >
+              <SparkleIcon className={enhancingLyrics ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <span className="text-[9px] text-zinc-500">Lang</span>

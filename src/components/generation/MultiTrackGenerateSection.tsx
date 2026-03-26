@@ -316,7 +316,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
           {rows.length === 0 ? (
             <p className="py-2 text-[11px] italic text-zinc-500">No tracks in project. Add tracks first.</p>
           ) : (
-            <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+            <div className="space-y-1 overflow-y-auto pr-1">
               {rows.map((row, index) => (
                 <div
                   key={row.rowId}
@@ -326,20 +326,21 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                       : 'border-[#3a3a3a] bg-[#222]/40'
                   }`}
                 >
-                  <div className="flex items-center gap-2 px-2.5 pt-2 pb-1.5">
+                  {/* Compact single-line row */}
+                  <div className="flex items-center gap-1.5 px-2 py-1.5">
                     <input
                       type="checkbox"
                       checked={row.checked}
                       onChange={() => toggleRow(row.rowId)}
-                      className="accent-indigo-500"
+                      className="accent-indigo-500 h-3.5 w-3.5"
                     />
                     <select
                       value={row.trackName}
                       onChange={(event) => updateTrackName(row.rowId, event.target.value as MultiTrackName)}
-                      className={`flex-1 rounded border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] focus:outline-none ${
+                      className={`flex-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none ${
                         row.checked
                           ? 'border-[#444] bg-[#222] text-indigo-100 focus:border-indigo-500'
-                          : 'border-[#3a3a3a] bg-[#222] text-zinc-400'
+                          : 'border-[#3a3a3a] bg-[#222] text-zinc-500'
                       }`}
                       aria-label={`Target track type for row ${index + 1}`}
                       data-testid={`multi-track-role-select-${index}`}
@@ -351,47 +352,38 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                       ))}
                     </select>
                     {row.hasExistingAudio && (
-                      <span className="text-[10px] italic text-zinc-500">has audio</span>
+                      <span className="text-[9px] italic text-zinc-600">audio</span>
                     )}
+                    {/* Inline description — compact single-line input */}
+                    <input
+                      type="text"
+                      value={row.localDescription}
+                      onChange={(e) => updateDescription(row.rowId, e.target.value)}
+                      placeholder="description..."
+                      className={`w-[120px] rounded border px-1.5 py-0.5 text-[10px] placeholder-zinc-600 focus:outline-none ${
+                        row.checked ? 'border-[#444] bg-[#222] text-zinc-200 focus:border-indigo-500' : 'border-[#3a3a3a] bg-[#222] text-zinc-500 opacity-50'
+                      }`}
+                    />
                     <button
                       type="button"
                       onClick={() => removeRow(row.rowId)}
                       disabled={rows.length === 1}
-                      className="rounded border border-[#444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-[#353535] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="text-[10px] text-zinc-500 transition-colors hover:text-red-400 disabled:opacity-30"
                       aria-label={`Remove track row ${index + 1}`}
                     >
-                      Remove
+                      ×
                     </button>
                   </div>
 
-                  <div className="px-2.5 pb-2">
-                    <label className={`mb-1 block text-[10px] ${row.checked ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                      Track description
-                    </label>
-                    <textarea
-                      value={row.localDescription}
-                      onChange={(e) => updateDescription(row.rowId, e.target.value)}
-                      placeholder={`${TRACK_CATALOG[row.trackName].displayName} track description...`}
-                      rows={2}
-                      className={`w-full rounded border px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none ${
-                        row.checked ? 'border-[#444] bg-[#222] focus:border-indigo-500' : 'border-[#3a3a3a] bg-[#222] opacity-50'
-                      }`}
-                    />
-                  </div>
-
-                  {VOCAL_TRACKS.has(row.trackName) && (
-                    <div className="px-2.5 pb-2.5">
-                      <label className={`mb-1 block text-[10px] ${row.checked ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                        Lyrics
-                      </label>
-                      <textarea
+                  {/* Lyrics row — only for vocal tracks, kept compact */}
+                  {VOCAL_TRACKS.has(row.trackName) && row.checked && (
+                    <div className="px-2 pb-1.5">
+                      <input
+                        type="text"
                         value={row.lyrics}
                         onChange={(e) => updateLyrics(row.rowId, e.target.value)}
-                        placeholder="Song lyrics..."
-                        rows={3}
-                        className={`w-full rounded border px-2 py-1.5 font-mono text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none ${
-                          row.checked ? 'border-[#444] bg-[#222] focus:border-indigo-500' : 'border-[#3a3a3a] bg-[#222] opacity-50'
-                        }`}
+                        placeholder="Lyrics..."
+                        className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[10px] font-mono text-zinc-200 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                   )}

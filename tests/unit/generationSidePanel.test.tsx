@@ -289,7 +289,7 @@ describe('GenerationSidePanel', () => {
 
     const newRoleSelect = screen.getByTestId(`multi-track-role-select-${beforeCount}`);
     fireEvent.change(newRoleSelect, { target: { value: 'vocals' } });
-    expect(screen.getAllByText('Lyrics').length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText('Lyrics...').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText(`Remove track row ${beforeCount + 1}`));
     expect(screen.getAllByLabelText(/Target track type for row/i)).toHaveLength(beforeCount);

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
@@ -1735,6 +1735,82 @@ function detectPlaybackLatencyFromEngine() {
     baseLatency: engine.ctx.baseLatency,
     outputLatency: engine.ctx.outputLatency,
   });
+}
+
+type PersistedProjectStoreState = {
+  project: Project | null;
+};
+
+const PROJECT_PERSIST_STORAGE_KEY = 'ace-step-daw-project';
+const PROJECT_PERSIST_WRITE_DEBOUNCE_MS = 750;
+const PROJECT_LIBRARY_AUTOSAVE_DEBOUNCE_MS = 1000;
+
+let _pendingProjectPersistName: string | null = null;
+let _pendingProjectPersistValue: StorageValue<PersistedProjectStoreState> | null = null;
+let _projectPersistWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let _hasRegisteredProjectPersistFlushListeners = false;
+
+function flushPendingProjectPersistWrite() {
+  if (_projectPersistWriteTimer) {
+    clearTimeout(_projectPersistWriteTimer);
+    _projectPersistWriteTimer = null;
+  }
+  if (typeof window === 'undefined') return;
+  if (!_pendingProjectPersistName || !_pendingProjectPersistValue) return;
+
+  localStorage.setItem(
+    _pendingProjectPersistName,
+    JSON.stringify(_pendingProjectPersistValue),
+  );
+
+  _pendingProjectPersistName = null;
+  _pendingProjectPersistValue = null;
+}
+
+function scheduleProjectPersistFlush() {
+  if (_projectPersistWriteTimer) {
+    clearTimeout(_projectPersistWriteTimer);
+  }
+
+  _projectPersistWriteTimer = setTimeout(() => {
+    _projectPersistWriteTimer = null;
+    flushPendingProjectPersistWrite();
+  }, PROJECT_PERSIST_WRITE_DEBOUNCE_MS);
+}
+
+const projectPersistStorage: PersistStorage<PersistedProjectStoreState> = {
+  getItem: (name) => {
+    if (typeof window === 'undefined') return null;
+    const value = localStorage.getItem(name);
+    if (!value) return null;
+    return JSON.parse(value) as StorageValue<PersistedProjectStoreState>;
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined') return;
+    _pendingProjectPersistName = name;
+    _pendingProjectPersistValue = value;
+    scheduleProjectPersistFlush();
+  },
+  removeItem: (name) => {
+    if (_projectPersistWriteTimer) {
+      clearTimeout(_projectPersistWriteTimer);
+      _projectPersistWriteTimer = null;
+    }
+
+    if (_pendingProjectPersistName === name) {
+      _pendingProjectPersistName = null;
+      _pendingProjectPersistValue = null;
+    }
+
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(name);
+  },
+};
+
+if (typeof window !== 'undefined' && !_hasRegisteredProjectPersistFlushListeners) {
+  _hasRegisteredProjectPersistFlushListeners = true;
+  window.addEventListener('pagehide', flushPendingProjectPersistWrite);
+  window.addEventListener('beforeunload', flushPendingProjectPersistWrite);
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -7498,19 +7574,27 @@ export const useProjectStore = create<ProjectState>()(
   },
 }),
     {
-      name: 'ace-step-daw-project',
+      name: PROJECT_PERSIST_STORAGE_KEY,
+      storage: projectPersistStorage,
       partialize: (state) => ({ project: state.project }),
     },
   ),
 );
 
 // Auto-save to project library (IDB) on changes, debounced
-let _saveTimer: ReturnType<typeof setTimeout>;
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+let _queuedProjectForLibrarySave: Project | null = null;
+let _lastSavedProjectRef: Project | null = null;
+let _lastSavedProjectUpdatedAt = 0;
 useProjectStore.subscribe((state) => {
-  if (!state.project) return;
-  clearTimeout(_saveTimer);
+  if (!state.project || _queuedProjectForLibrarySave === state.project) return;
+  _queuedProjectForLibrarySave = state.project;
+  if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     const proj = useProjectStore.getState().project;
-    if (proj) saveProjectToIDB(proj);
-  }, 1000);
+    if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
+    _lastSavedProjectRef = proj;
+    _lastSavedProjectUpdatedAt = proj.updatedAt;
+    void saveProjectToIDB(proj);
+  }, PROJECT_LIBRARY_AUTOSAVE_DEBOUNCE_MS);
 });

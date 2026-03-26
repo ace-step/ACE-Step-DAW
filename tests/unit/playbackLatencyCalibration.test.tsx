@@ -101,36 +101,44 @@ describe('playback latency calibration', () => {
   });
 
   it('stores detected browser latency and persists a manual override as the normalized compensation value', () => {
-    const store = useProjectStore.getState();
-    store.createProject({ name: 'Latency Test' });
+    vi.useFakeTimers();
+    try {
+      const store = useProjectStore.getState();
+      store.createProject({ name: 'Latency Test' });
 
-    store.detectPlaybackLatency({
-      baseLatency: 0.004,
-      outputLatency: 0.012,
-    });
+      store.detectPlaybackLatency({
+        baseLatency: 0.004,
+        outputLatency: 0.012,
+      });
 
-    expect(useProjectStore.getState().project?.playbackLatency).toMatchObject({
-      detectedBaseLatencyMs: 4,
-      detectedOutputLatencyMs: 12,
-      detectedLatencyMs: 16,
-      compensationMs: 16,
-      source: 'auto',
-      browserSupport: 'available',
-    });
+      expect(useProjectStore.getState().project?.playbackLatency).toMatchObject({
+        detectedBaseLatencyMs: 4,
+        detectedOutputLatencyMs: 12,
+        detectedLatencyMs: 16,
+        compensationMs: 16,
+        source: 'auto',
+        browserSupport: 'available',
+      });
 
-    store.setPlaybackLatencyOverride(42.5);
+      store.setPlaybackLatencyOverride(42.5);
 
-    expect(useProjectStore.getState().project?.playbackLatency).toMatchObject({
-      manualOverrideMs: 42.5,
-      compensationMs: 42.5,
-      source: 'manual',
-    });
+      expect(useProjectStore.getState().project?.playbackLatency).toMatchObject({
+        manualOverrideMs: 42.5,
+        compensationMs: 42.5,
+        source: 'manual',
+      });
 
-    const persisted = JSON.parse(localStorage.getItem('ace-step-daw-project') ?? '{}') as {
-      state?: { project?: { playbackLatency?: { compensationMs?: number; manualOverrideMs?: number } } };
-    };
-    expect(persisted.state?.project?.playbackLatency?.manualOverrideMs).toBe(42.5);
-    expect(persisted.state?.project?.playbackLatency?.compensationMs).toBe(42.5);
+      // Flush debounced persistence write (750ms debounce in projectStore)
+      vi.advanceTimersByTime(1000);
+
+      const persisted = JSON.parse(localStorage.getItem('ace-step-daw-project') ?? '{}') as {
+        state?: { project?: { playbackLatency?: { compensationMs?: number; manualOverrideMs?: number } } };
+      };
+      expect(persisted.state?.project?.playbackLatency?.manualOverrideMs).toBe(42.5);
+      expect(persisted.state?.project?.playbackLatency?.compensationMs).toBe(42.5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows a fallback state when browser latency is unavailable and restores a saved manual override in settings', async () => {

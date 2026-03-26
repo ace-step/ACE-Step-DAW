@@ -6,6 +6,30 @@
 
 React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js + Tailwind CSS v4
 
+## ⛔ Issue-First Workflow (BLOCKING — do this BEFORE any code)
+
+> **STOP.** Before writing ANY code, creating ANY branch, or running ANY tests — you MUST create a GitHub issue first. This is not optional. This is not skippable. Violating this rule wastes the team's time.
+
+### Sequence (every step blocks the next)
+
+1. **Create GitHub issue** via `gh issue create`
+   - Title and body MUST be in **English** regardless of conversation language
+   - Title starts with `feat:`, `fix:`, `docs:`, `refactor:`, or `chore:`
+   - Include acceptance criteria as a markdown checklist
+   - Use label: `bug`, `enhancement`, `docs`, or `refactor`
+2. **Create branch** named `feat/issue-NUMBER` or `fix/issue-NUMBER`
+3. **Implement** following TDD cycle and quality gates
+4. **Create PR** with `Closes #NUMBER` in the body
+5. **Report** the issue URL and PR URL back to the user
+
+### When to Skip (only these 3 cases)
+
+- Pure questions / explanations (no code change needed)
+- Trivial typo fixes (< 3 lines changed, single file)
+- Work already tracked by an existing issue (reference it instead)
+
+**When in doubt, create the issue.** It takes 10 seconds. Skipping it and fixing later takes much longer.
+
 ## Commands
 
 ```bash
@@ -184,39 +208,6 @@ When using Claude Code on this project, install these skills for better UX outpu
 - Never push directly to main — always use PR workflow
 - Never merge a PR before CI passes — check CI status first, fix if red
 - If CI fails: understand root cause → add fix commit → wait for green → then merge
-
-## Issue-First Workflow (mandatory for all interactive sessions)
-
-> When the user describes a problem, bug, or feature request in conversation, the agent MUST follow this workflow. Do NOT skip straight to coding.
-
-### The Rule
-
-**Every code change starts as a GitHub issue.** No exceptions for interactive Claude Code sessions.
-
-### Workflow
-
-1. **User describes a problem** (in any language)
-2. **Agent creates a GitHub issue** via `gh issue create`
-   - Title and body MUST be in **English** regardless of conversation language
-   - Use appropriate label: `bug`, `enhancement`, `docs`, `refactor`
-   - Include acceptance criteria as a checklist
-3. **Agent creates a branch** named `feat/issue-NUMBER` or `fix/issue-NUMBER`
-4. **Agent implements the fix/feature** following TDD and quality gates
-5. **Agent creates a PR** that includes `Closes #NUMBER` in the body
-6. **Agent reports the issue URL and PR URL** back to the user
-
-### Issue Quality Standards
-
-- **Title**: Concise, starts with `feat:`, `fix:`, `docs:`, `refactor:`, or `chore:`
-- **Body**: Problem description, proposed solution, acceptance criteria
-- **Labels**: At least one of `bug`, `enhancement`, `docs`, `refactor`
-- **Language**: Always English — this is a public repo
-
-### When to Skip
-
-- Pure questions / explanations (no code change needed)
-- Trivial typo fixes (< 3 lines changed, single file)
-- Work already tracked by an existing issue (reference it instead)
 
 ## gstack
 

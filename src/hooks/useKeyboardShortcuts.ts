@@ -462,7 +462,10 @@ export function useKeyboardShortcuts() {
               if (track) {
                 const clip = getSessionClips(track)[slot.sceneIndex];
                 if (clip) {
-                  void useTransportStore.getState().launchSessionClip(track.id, clip.id, slot.sceneIndex, useTransportStore.getState().currentTime);
+                  const sceneId = proj.session?.scenes[slot.sceneIndex]?.id;
+                  if (sceneId) {
+                    useProjectStore.getState().launchSessionClip(track.id, sceneId);
+                  }
                 }
               }
               return;
@@ -470,7 +473,7 @@ export function useKeyboardShortcuts() {
 
             if (matches('session.stop')) {
               event.preventDefault();
-              void useTransportStore.getState().stopSessionTrack(slot.trackId, useTransportStore.getState().currentTime);
+              useProjectStore.getState().stopSessionTrack(slot.trackId);
               return;
             }
 

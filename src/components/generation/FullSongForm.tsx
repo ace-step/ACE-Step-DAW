@@ -223,7 +223,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             type="number"
             value={seed}
             onChange={(e) => setSeed(Number(e.target.value))}
-            className="w-[80px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
+            className="w-[110px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
             disabled={isDisabled || useRandomSeed}
           />
           <button

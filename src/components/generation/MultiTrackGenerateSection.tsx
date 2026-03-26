@@ -95,6 +95,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
   const [rows, setRows] = useState<TrackRow[]>([]);
   const [sharedSeed, setSharedSeed] = useState<number>(randomSeed);
   const [audioDuration, setAudioDuration] = useState(30);
+  const [durationAuto, setDurationAuto] = useState(false);
 
   useEffect(() => {
     if (!project) return;
@@ -381,18 +382,30 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
         <section className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
-            <select
-              value={String(audioDuration)}
-              onChange={(e) => setAudioDuration(Number(e.target.value))}
-              className="rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
-            >
-              <option value="30">30s</option>
-              <option value="60">60s</option>
-              <option value="120">2m</option>
-              <option value="180">3m</option>
-              <option value="240">4m</option>
-              <option value="300">5m</option>
-            </select>
+            <input
+              type="number"
+              value={audioDuration === -1 ? '' : audioDuration}
+              onChange={(e) => setAudioDuration(e.target.value === '' ? -1 : Number(e.target.value))}
+              placeholder="Auto"
+              min={10}
+              max={600}
+              step={1}
+              className="w-[60px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
+              disabled={durationAuto}
+            />
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={durationAuto}
+                onChange={(e) => {
+                  setDurationAuto(e.target.checked);
+                  if (e.target.checked) setAudioDuration(-1);
+                  else setAudioDuration(30);
+                }}
+                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              />
+              <span className="text-[9px] text-zinc-600">Auto</span>
+            </label>
           </div>
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
@@ -400,7 +413,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
               type="number"
               value={sharedSeed}
               onChange={(e) => setSharedSeed(Number(e.target.value))}
-              className="w-[90px] rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[11px] font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
+              className="w-[110px] rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[11px] font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
               min={0}
               max={2147483647}
             />

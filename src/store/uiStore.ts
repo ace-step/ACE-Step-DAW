@@ -222,6 +222,9 @@ export interface UIState {
   // Playhead DOM cache — avoids per-frame layout queries in SelectedTrackCursor
   trackLaneRects: Map<string, { top: number; height: number }>;
 
+  // Session view keyboard navigation
+  selectedSessionSlot: { trackId: string; sceneIndex: number } | null;
+
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
@@ -407,6 +410,10 @@ export interface UIState {
   clearInlineSuggestions: () => void;
   setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
   applyWorkspaceComplexity: (tier: 'simple' | 'standard' | 'advanced') => void;
+
+  // Session view keyboard navigation
+  setSelectedSessionSlot: (slot: { trackId: string; sceneIndex: number } | null) => void;
+  clearSelectedSessionSlot: () => void;
 
   // Playhead DOM cache
   setTrackLaneRect: (trackId: string, rect: { top: number; height: number }) => void;
@@ -618,6 +625,8 @@ export const useUIStore = create<UIState>()(
   suggestionFrequency: 'subtle',
 
   trackLaneRects: new Map(),
+
+  selectedSessionSlot: null,
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
   toggleMainView: () => set((s) => {
@@ -1195,6 +1204,9 @@ export const useUIStore = create<UIState>()(
   clearInlineSuggestions: () => set({ inlineSuggestions: [] }),
   setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
   applyWorkspaceComplexity: (tier) => set(getComplexityDefaults(tier)),
+
+  setSelectedSessionSlot: (slot) => set({ selectedSessionSlot: slot }),
+  clearSelectedSessionSlot: () => set({ selectedSessionSlot: null }),
 
   setTrackLaneRect: (trackId, rect) =>
     set((s) => {

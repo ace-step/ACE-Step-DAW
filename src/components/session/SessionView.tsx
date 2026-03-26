@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
+import { getSessionClips } from '../../utils/sessionClips';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
@@ -15,16 +16,6 @@ const SESSION_QUANTIZATION_OPTIONS: SessionLaunchQuantization[] = [
 const SLOT_QUANTIZATION_OPTIONS: Array<'global' | SessionLaunchQuantization> = [
   'global', ...SESSION_QUANTIZATION_OPTIONS,
 ];
-
-function isPlayableClip(clip: Clip): boolean {
-  return clip.generationStatus === 'ready' || (clip.midiData?.notes.length ?? 0) > 0;
-}
-
-function getSessionClips(track: Track): Clip[] {
-  return [...track.clips]
-    .filter(isPlayableClip)
-    .sort((a, b) => a.startTime - b.startTime);
-}
 
 function getClipLabel(clip: Clip, index: number): string {
   if (clip.prompt.trim()) return clip.prompt.trim();
@@ -66,6 +57,9 @@ export function SessionView() {
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
+  const selectedSessionSlot = useUIStore((s) => s.selectedSessionSlot);
+  const setSelectedSessionSlot = useUIStore((s) => s.setSelectedSessionSlot);
+  const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const {
     launchSessionClip,
     stopSessionTrack,
@@ -91,6 +85,16 @@ export function SessionView() {
       setColorMenu(null);
     }
   }, [colorMenu, setSessionSlotColor]);
+
+  // Set keyboard context to 'session' on mount, restore previous on unmount
+  useEffect(() => {
+    const previousScope = useUIStore.getState().keyboardContext.scope;
+    const previousTrackId = useUIStore.getState().keyboardContext.trackId;
+    setKeyboardContext('session');
+    return () => {
+      setKeyboardContext(previousScope, previousTrackId);
+    };
+  }, [setKeyboardContext]);
 
   if (!project) {
     return <div className="flex-1 min-w-0 bg-[#202020]" />;
@@ -201,10 +205,12 @@ export function SessionView() {
               activeLaunchedAt={activeLaunch?.launchedAt ?? null}
               currentTime={currentTime}
               pendingLaunches={pendingLaunches}
+              selectedSceneIndex={selectedSessionSlot?.trackId === track.id ? selectedSessionSlot.sceneIndex : null}
               onLaunch={(clipId, sceneIndex) => launchSessionClip(track.id, clipId, sceneIndex)}
               onStop={() => stopSessionTrack(track.id)}
               onSlotQuantizationChange={(slotId, q) => setSessionSlotQuantization(slotId, q)}
               onContextMenuSlot={setColorMenu}
+              onSlotClick={(sceneIndex) => setSelectedSessionSlot({ trackId: track.id, sceneIndex })}
             />
           );
         })}
@@ -257,10 +263,12 @@ function FragmentRow({
   activeLaunchedAt,
   currentTime,
   pendingLaunches,
+  selectedSceneIndex,
   onLaunch,
   onStop,
   onSlotQuantizationChange,
   onContextMenuSlot,
+  onSlotClick,
 }: {
   track: Track;
   sessionClips: Clip[];
@@ -271,10 +279,12 @@ function FragmentRow({
   activeLaunchedAt: number | null;
   currentTime: number;
   pendingLaunches: SessionPendingLaunch[];
+  selectedSceneIndex: number | null;
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   onContextMenuSlot: (state: SlotColorMenuState) => void;
+  onSlotClick: (sceneIndex: number) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
 
@@ -339,6 +349,8 @@ function FragmentRow({
         // Queued blinking & progress ring (from #936)
         const sceneId = scenes[sceneIndex]?.id;
         const isQueued = clip ? isClipQueued(pendingLaunches, track.id, clip.id, sceneId) : false;
+        // Selection focus ring (from #924)
+        const isSelected = selectedSceneIndex === sceneIndex;
 
         let progress = 0;
         let loopCount = 1;
@@ -369,7 +381,10 @@ function FragmentRow({
             {clip ? (
               <div className="relative">
                 <button
-                  onClick={() => void onLaunch(clip.id, sceneIndex)}
+                  onClick={() => {
+                    onSlotClick(sceneIndex);
+                    void onLaunch(clip.id, sceneIndex);
+                  }}
                   onContextMenu={handleContextMenu}
                   className={`relative flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
                     isActive
@@ -377,7 +392,7 @@ function FragmentRow({
                       : isQueued
                         ? 'border-amber-400'
                         : 'border-[#3a3a3a] hover:border-daw-accent'
-                  }`}
+                  } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
                   style={{
                     ...((slotColor ?? track.color)
                       ? { backgroundColor: `${slotColor ?? track.color}33`, borderColor: isActive ? undefined : isQueued ? undefined : `${slotColor ?? track.color}88` }
@@ -390,6 +405,8 @@ function FragmentRow({
                   }}
                   aria-label={`Launch ${getClipLabel(clip, sceneIndex)} on ${track.displayName} in scene ${sceneIndex + 1}`}
                   data-slot-id={slot?.id}
+                  data-track-id={track.id}
+                  data-scene-index={sceneIndex}
                 >
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">
@@ -446,20 +463,34 @@ function FragmentRow({
               </div>
             ) : hasStopButton ? (
               <button
-                onClick={() => void onStop()}
+                onClick={() => {
+                  onSlotClick(sceneIndex);
+                  void onStop();
+                }}
                 onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className="flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#343434] bg-[#202020] transition-colors hover:border-[#555] hover:bg-[#272727]"
+                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#343434] bg-[#202020] transition-colors hover:border-[#555] hover:bg-[#272727] ${
+                  isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
+                }`}
                 aria-label={`Stop ${track.displayName} in scene ${sceneIndex + 1}`}
                 data-testid={`stop-slot-${track.id}-${sceneIndex}`}
+                data-track-id={track.id}
+                data-scene-index={sceneIndex}
               >
                 <span className="text-zinc-500 text-base leading-none" aria-hidden="true">&#9632;</span>
               </button>
             ) : (
               <div
+                onClick={() => onSlotClick(sceneIndex)}
                 onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className="flex h-24 items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d]"
+                className={`flex h-24 items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d] text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
+                  isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
+                }`}
                 data-testid={`empty-slot-${track.id}-${sceneIndex}`}
-              />
+                data-track-id={track.id}
+                data-scene-index={sceneIndex}
+              >
+                Empty
+              </div>
             )}
           </div>
         );

@@ -73,6 +73,15 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'pianoRoll.quantize',     category: 'pianoRoll', label: 'Quantize Selected Notes',   defaultCombo: { code: 'KeyQ' }, contexts: ['pianoRoll'] },
   { id: 'pianoRoll.quantizeOpts', category: 'pianoRoll', label: 'Quantize with Options',     defaultCombo: { code: 'KeyQ', mod: true }, contexts: ['pianoRoll'] },
   { id: 'pianoRoll.selectAll',    category: 'pianoRoll', label: 'Select All Notes',          defaultCombo: { code: 'KeyA', mod: true }, contexts: ['pianoRoll'] },
+
+  { id: 'session.up',             category: 'session',   label: 'Select Previous Track Slot', defaultCombo: { code: 'ArrowUp' }, contexts: ['session'] },
+  { id: 'session.down',           category: 'session',   label: 'Select Next Track Slot',     defaultCombo: { code: 'ArrowDown' }, contexts: ['session'] },
+  { id: 'session.left',           category: 'session',   label: 'Select Previous Scene Slot', defaultCombo: { code: 'ArrowLeft' }, contexts: ['session'] },
+  { id: 'session.right',          category: 'session',   label: 'Select Next Scene Slot',     defaultCombo: { code: 'ArrowRight' }, contexts: ['session'] },
+  { id: 'session.launch',         category: 'session',   label: 'Launch Selected Clip',       defaultCombo: { code: 'Enter' }, contexts: ['session'] },
+  { id: 'session.stop',           category: 'session',   label: 'Stop Selected Track',        defaultCombo: { code: 'Digit0' }, contexts: ['session'] },
+  { id: 'session.delete',         category: 'session',   label: 'Delete Selected Clip',       defaultCombo: { code: 'Backspace' }, contexts: ['session'] },
+  { id: 'session.duplicate',      category: 'session',   label: 'Duplicate Selected Clip',    defaultCombo: { code: 'KeyD', mod: true }, contexts: ['session'] },
 ];
 
 export const SHORTCUT_ACTION_MAP: Record<string, ShortcutAction> = Object.fromEntries(
@@ -89,4 +98,5 @@ export const SHORTCUT_CATEGORIES: { id: ShortcutCategory; label: string }[] = [
   { id: 'panels', label: 'Panels' },
   { id: 'project', label: 'Project' },
   { id: 'pianoRoll', label: 'Piano Roll' },
+  { id: 'session', label: 'Session' },
 ];

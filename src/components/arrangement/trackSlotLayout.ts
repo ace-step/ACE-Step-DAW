@@ -63,7 +63,7 @@ export function getArrangementVisibleRowCount(
 
 export function buildArrangementTrackSlots(
   tracks: Track[],
-  placeholderCount = DEFAULT_ARRANGEMENT_PLACEHOLDER_ROW_COUNT,
+  placeholderCount = MAX_PROJECT_TRACKS,
 ): ArrangementTrackSlot[] {
   const sortedTracks = [...tracks].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const slots: ArrangementTrackSlot[] = [];

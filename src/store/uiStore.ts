@@ -598,7 +598,7 @@ export const useUIStore = create<UIState>()(
   aiAssistantError: null,
   workspaceComplexity: 'standard',
 
-  theme: 'ace-studio',
+  theme: 'ableton',
 
   regionRegenerateTarget: null,
   inlineSuggestions: [],

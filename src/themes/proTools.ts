@@ -63,9 +63,9 @@ export const proToolsTheme: ThemeDefinition = {
     // Selected track — amber tinted
     'daw-track-selected': '#3a3420',
     // Region colors — conservative, professional palette
-    // Audio = slate blue, MIDI = sage green, Drummer = amber, Sample = dusty purple
-    'daw-region-audio': '#5a8ca8',
-    'daw-region-midi': '#6a9c5a',
+    // Audio = purple/violet (PT signature), MIDI = teal-green, Drummer = amber, Sample = dusty purple
+    'daw-region-audio': '#8b6aae',
+    'daw-region-midi': '#5a9c8a',
     'daw-region-drummer': '#d4a843',
     'daw-region-sample': '#8a6c9c',
     // Warm scrollbar

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
@@ -15,7 +15,20 @@ const VARIANT_LABELS: Record<ModelVariant, string> = {
   sft: 'SFT',
 };
 
-export function FullSongForm() {
+interface FullSongFormProps {
+  /** Pre-filled data from Simple mode's Create Sample */
+  initialData?: {
+    caption: string;
+    lyrics: string;
+    bpm: number | null;
+    keyScale: string;
+    duration: number;
+    timeSignature: string;
+    vocalLanguage: string;
+  } | null;
+}
+
+export function FullSongForm({ initialData }: FullSongFormProps) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
   const modelLoadingState = useModelStore((s) => s.modelLoadingState);
@@ -52,6 +65,17 @@ export function FullSongForm() {
   const [shift, setShift] = useState(modelDefaults.shift);
   const [thinking, setThinking] = useState(modelDefaults.thinking);
   const [error, setError] = useState<string | null>(null);
+
+  // Apply initial data from Simple mode's Create Sample
+  useEffect(() => {
+    if (!initialData) return;
+    setPrompt(initialData.caption);
+    setLyrics(initialData.lyrics);
+    if (initialData.bpm !== null) setBpm(initialData.bpm);
+    if (initialData.keyScale) setKeyScale(initialData.keyScale);
+    if (initialData.duration > 0) setDurationSeconds(initialData.duration);
+    if (initialData.lyrics.trim()) setShowLyrics(true);
+  }, [initialData]);
 
   const isDisabled = isGenerating || modelLoadingState === 'loading';
 

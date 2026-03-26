@@ -255,19 +255,23 @@ describe('GenerationSidePanel', () => {
     expect(screen.getByRole('listbox', { name: 'Prompt autocomplete suggestions' })).toBeInTheDocument();
   });
 
-  it('switches between text-to-music, multi-track, and history inside the same side panel', () => {
+  it('switches between Mix and Stems tabs', () => {
     render(<GenerationSidePanel />);
 
+    // Default: Mix tab (Simple sub-mode)
     expect(screen.getByTestId('generation-panel-tab-text-to-music')).toBeInTheDocument();
+    expect(screen.getByTestId('simple-mode-form')).toBeInTheDocument();
 
+    // Switch to Stems
     fireEvent.click(screen.getByTestId('generation-panel-tab-multi-track'));
     expect(screen.getByTestId('multi-track-generation-section')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('generation-panel-tab-history'));
-    expect(screen.getByTestId('generation-history-section')).toBeInTheDocument();
-
+    // Switch back to Mix
     fireEvent.click(screen.getByTestId('generation-panel-tab-text-to-music'));
-    // Default view is now FullSongForm
+    expect(screen.getByTestId('simple-mode-form')).toBeInTheDocument();
+
+    // Switch to Custom sub-mode
+    fireEvent.click(screen.getByTestId('mix-submode-custom'));
     expect(screen.getByTestId('full-song-form')).toBeInTheDocument();
   });
 

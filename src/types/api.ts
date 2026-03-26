@@ -225,3 +225,21 @@ export interface StatsResponse {
   queue_maxsize: number;
   avg_job_seconds: number;
 }
+
+/** Request for Simple mode "Create Sample" — LM infers full metadata from a short description */
+export interface CreateSampleRequest {
+  query: string;
+  vocal_language: string;
+  instrumental: boolean;
+}
+
+/** Response from Create Sample — all inferred metadata for a song */
+export interface CreateSampleResponse {
+  caption?: string;
+  lyrics?: string;
+  bpm?: number;
+  keyscale?: string;
+  duration?: number;
+  timesignature?: string;
+  vocal_language?: string;
+}

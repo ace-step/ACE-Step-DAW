@@ -12,6 +12,8 @@ import type {
   InitModelRequest,
   InitModelResponse,
   ModelCategory,
+  CreateSampleRequest,
+  CreateSampleResponse,
 } from '../types/api';
 
 export type AceStepTaskParams =
@@ -166,6 +168,25 @@ export function inferModelCategory(model: { category?: ModelCategory; supported_
 /** Return the cached model inventory, if available. */
 export function getCachedInventory(): ModelsListResponse | null {
   return _cachedInventory;
+}
+
+/**
+ * Simple mode "Create Sample" — sends a short description to the LM
+ * which infers full song metadata (caption, lyrics, BPM, key, duration, etc.).
+ */
+export async function createSample(req: CreateSampleRequest): Promise<CreateSampleResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/create_sample`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`createSample failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<CreateSampleResponse> = await res.json();
+  return envelope.data;
 }
 
 export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {

@@ -4,9 +4,11 @@ import { Z } from '../../utils/zIndex';
 import { useGenerationStore } from '../../store/generationStore';
 import { useProjectStore } from '../../store/projectStore';
 import { MultiTrackGenerateSection } from './MultiTrackGenerateSection';
-import { GenerationHistorySection } from './GenerationHistorySection';
 import { GenerationSettingsSection } from './GenerationSettingsSection';
 import { FullSongForm } from './FullSongForm';
+import { SimpleModeForm } from './SimpleModeForm';
+
+export type MixSubMode = 'simple' | 'custom';
 
 export function GenerationSidePanel() {
   const mainView = useUIStore((s) => s.mainView);
@@ -23,42 +25,39 @@ export function GenerationSidePanel() {
   const setGenerationPanelView = useUIStore((s) => s.setGenerationPanelView);
   const batchGenerateMode = useUIStore((s) => s.batchGenerateMode);
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
-  const selectClip = useUIStore((s) => s.selectClip);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const activeBottomPanel = useUIStore((s) => s.activeBottomPanel);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const bottomPanelHeight = useUIStore(getBottomPanelHeight);
   const project = useProjectStore((s) => s.project);
 
-  const isGenerating = useGenerationStore((s) => s.isGenerating);
-  const jobs = useGenerationStore((s) => s.jobs);
-
   const [renderPanel, setRenderPanel] = useState(show);
+  const [mixSubMode, setMixSubMode] = useState<MixSubMode>('simple');
 
-  const panelCopy = useMemo(() => {
-    switch (generationPanelView) {
-      case 'multiTrack':
-        return {
-          title: 'Generate',
-          description: 'Generate several tracks together with shared context, prompts, and seed control.',
-        };
-      case 'history':
-        return {
-          title: 'Generate',
-          description: 'Browse, preview, and reuse earlier AI generations from one place.',
-        };
-      case 'settings':
-        return {
-          title: 'Generate',
-          description: 'Tune models, backend, and generation defaults without leaving the generation workflow.',
-        };
-      default:
-        return {
-          title: 'Generate',
-          description: 'Create a full-song text-to-music idea without leaving the arrangement.',
-        };
-    }
-  }, [generationPanelView]);
+  // Callback for Simple mode: when Create Sample succeeds, switch to Custom with pre-filled data
+  const handleSampleCreated = useCallback((data: {
+    caption: string;
+    lyrics: string;
+    bpm: number | null;
+    keyScale: string;
+    duration: number;
+    timeSignature: string;
+    vocalLanguage: string;
+  }) => {
+    setMixSubMode('custom');
+    // FullSongForm will pick up these values via props
+    setSampleData(data);
+  }, []);
+
+  const [sampleData, setSampleData] = useState<{
+    caption: string;
+    lyrics: string;
+    bpm: number | null;
+    keyScale: string;
+    duration: number;
+    timeSignature: string;
+    vocalLanguage: string;
+  } | null>(null);
 
   const openMultiTrackView = useCallback(() => {
     if (batchGenerateMode) {
@@ -222,7 +221,7 @@ export function GenerationSidePanel() {
 
       {renderPanel && (
         <div
-          className={`fixed left-1/2 -translate-x-1/2 flex w-[min(640px,calc(100vw-32px))] max-h-[60vh] flex-col bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 overflow-hidden transition-all duration-300 ease-out ${
+          className={`fixed left-1/2 -translate-x-1/2 flex w-[min(560px,calc(100vw-32px))] max-h-[60vh] flex-col bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 overflow-hidden transition-all duration-300 ease-out ${
             show ? 'opacity-100 scale-100' : 'pointer-events-none opacity-0 scale-95'
           }`}
           style={{ zIndex: Z.toast + 1, bottom: `${76 + bottomPanelHeight}px` }}
@@ -230,11 +229,11 @@ export function GenerationSidePanel() {
           aria-label="Generate panel"
           aria-hidden={!show}
         >
-          {/* Header */}
+          {/* Header: Title + Tabs + Close */}
           <div className="flex items-center justify-between border-b border-[#3a3a3a] px-5 py-3">
-            <h2 className="text-sm font-semibold text-zinc-100">{panelCopy.title}</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">Generate</h2>
             <div className="flex items-center gap-2">
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#3a3a3a] bg-[#161618] p-0.5" data-testid="generation-panel-tabs">
+              <div className="grid grid-cols-2 gap-1 rounded-lg border border-[#3a3a3a] bg-[#161618] p-0.5" data-testid="generation-panel-tabs">
                 <button
                   type="button"
                   onClick={() => setGenerationPanelView('textToMusic')}
@@ -246,7 +245,7 @@ export function GenerationSidePanel() {
                   data-testid="generation-panel-tab-text-to-music"
                   aria-pressed={generationPanelView === 'textToMusic'}
                 >
-                  Generate
+                  Mix
                 </button>
                 <button
                   type="button"
@@ -259,20 +258,7 @@ export function GenerationSidePanel() {
                   data-testid="generation-panel-tab-multi-track"
                   aria-pressed={generationPanelView === 'multiTrack'}
                 >
-                  Multi-Track
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGenerationPanelView('history')}
-                  className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
-                    generationPanelView === 'history'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-                  }`}
-                  data-testid="generation-panel-tab-history"
-                  aria-pressed={generationPanelView === 'history'}
-                >
-                  History
+                  Stems
                 </button>
               </div>
               <button
@@ -289,62 +275,54 @@ export function GenerationSidePanel() {
             </div>
           </div>
 
-      {/* Body */}
-      {generationPanelView === 'multiTrack' ? (
-        <MultiTrackGenerateSection
-          mode={batchGenerateMode ?? 'silence'}
-          onModeChange={setBatchGenerateMode}
-        />
-      ) : generationPanelView === 'history' ? (
-        <GenerationHistorySection />
-      ) : generationPanelView === 'settings' ? (
-        <GenerationSettingsSection active={generationPanelView === 'settings'} />
-      ) : (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Left: Form */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <FullSongForm />
-          </div>
-
-          {/* Right: History sidebar */}
-          <div className="w-[200px] min-w-[200px] border-l border-[#3a3a3a] bg-[#1a1a1e] flex flex-col">
-            <div className="px-3 py-2.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wide border-b border-[#3a3a3a]">
-              History
-            </div>
-            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
-              {jobs.length === 0 ? (
-                <p className="px-2 py-4 text-center text-[10px] text-zinc-600">No generations yet</p>
-              ) : (
-                jobs.slice().reverse().map((job) => (
-                  <div
-                    key={job.id}
-                    className={`rounded-lg px-2.5 py-2 transition-colors cursor-pointer ${
-                      job.status === 'done'
-                        ? 'bg-[#222226] hover:bg-[#2a2a2e]'
-                        : job.status === 'error'
-                        ? 'bg-red-950/20'
-                        : 'bg-[#222226]'
+          {/* Body */}
+          {generationPanelView === 'multiTrack' ? (
+            <MultiTrackGenerateSection
+              mode={batchGenerateMode ?? 'silence'}
+              onModeChange={setBatchGenerateMode}
+            />
+          ) : generationPanelView === 'settings' ? (
+            <GenerationSettingsSection active={generationPanelView === 'settings'} />
+          ) : (
+            <>
+              {/* Sub-mode tabs: Simple | Custom */}
+              <div className="border-b border-[#3a3a3a] px-4 py-2">
+                <div className="grid grid-cols-2 gap-1 rounded-lg bg-[#161618] p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setMixSubMode('simple')}
+                    className={`rounded-md py-1.5 text-[11px] font-medium transition-colors ${
+                      mixSubMode === 'simple'
+                        ? 'bg-[#2a2a2e] text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-300'
                     }`}
+                    data-testid="mix-submode-simple"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="truncate text-[11px] text-zinc-300">{job.trackName}</span>
-                      <span className={`ml-1 inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${
-                        job.status === 'done' ? 'bg-emerald-400' :
-                        job.status === 'error' ? 'bg-red-400' :
-                        job.status === 'generating' ? 'bg-amber-400 animate-pulse' :
-                        'bg-zinc-600'
-                      }`} />
-                    </div>
-                    <span className="block truncate text-[10px] text-zinc-600 mt-0.5">
-                      {job.progress || job.status}
-                    </span>
-                  </div>
-                ))
+                    Simple
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMixSubMode('custom')}
+                    className={`rounded-md py-1.5 text-[11px] font-medium transition-colors ${
+                      mixSubMode === 'custom'
+                        ? 'bg-[#2a2a2e] text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    data-testid="mix-submode-custom"
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+
+              {/* Form content */}
+              {mixSubMode === 'simple' ? (
+                <SimpleModeForm onSampleCreated={handleSampleCreated} />
+              ) : (
+                <FullSongForm initialData={sampleData} />
               )}
-            </div>
-          </div>
-        </div>
-      )}
+            </>
+          )}
         </div>
       )}
     </>

@@ -675,6 +675,7 @@ export interface ProjectState {
   removeSessionScene: (sceneId: string) => void;
   assignClipToSessionSlot: (trackId: string, sceneId: string, clipId: string | null) => void;
   setSessionLaunchQuantization: (quantization: SessionLaunchQuantization) => void;
+  setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
   launchSessionScene: (sceneId: string) => void;
   stopSessionTrack: (trackId: string) => void;
@@ -998,6 +999,10 @@ function getSessionQuantizationSeconds(project: Project, quantization: SessionLa
   switch (quantization) {
     case 'none':
       return 0;
+    case '1/32':
+      return beatDuration / 8;
+    case '1/16':
+      return beatDuration / 4;
     case '1/8':
       return beatDuration / 2;
     case '1/4':
@@ -1006,6 +1011,12 @@ function getSessionQuantizationSeconds(project: Project, quantization: SessionLa
       return beatDuration * 2;
     case '1 bar':
       return beatDuration * project.timeSignature;
+    case '2 bars':
+      return beatDuration * project.timeSignature * 2;
+    case '4 bars':
+      return beatDuration * project.timeSignature * 4;
+    case '8 bars':
+      return beatDuration * project.timeSignature * 8;
   }
 }
 
@@ -1021,7 +1032,7 @@ function ensureSessionSlotsForTrack(session: SessionState, trackId: string): Ses
   for (const scene of session.scenes) {
     const exists = nextSlots.some((slot) => slot.trackId === trackId && slot.sceneId === scene.id);
     if (!exists) {
-      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null });
+      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null, quantization: 'global' });
       changed = true;
     }
   }
@@ -4178,6 +4189,24 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotQuantization: (slotId, quantization) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], quantization };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
   launchSessionClip: (trackId, sceneId) => {
     const state = get();
     if (!state.project) return;
@@ -4188,10 +4217,11 @@ export const useProjectStore = create<ProjectState>()(
     if (!slot?.clipId || !track.clips.some((clip) => clip.id === slot.clipId)) return;
 
     const transport = useTransportStore.getState();
-    const isImmediate = !transport.isPlaying || session.quantization === 'none';
+    const effectiveQuantization = slot.quantization && slot.quantization !== 'global' ? slot.quantization : session.quantization;
+    const isImmediate = !transport.isPlaying || effectiveQuantization === 'none';
     const executeAt = isImmediate
       ? transport.currentTime
-      : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, session.quantization));
+      : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, effectiveQuantization));
 
     if (isImmediate) {
       set({

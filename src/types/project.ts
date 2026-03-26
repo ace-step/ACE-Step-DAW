@@ -614,7 +614,7 @@ export interface Marker {
   color: string;
 }
 
-export type SessionLaunchQuantization = 'none' | '1/8' | '1/4' | '1/2' | '1 bar';
+export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4' | '1/2' | '1 bar' | '2 bars' | '4 bars' | '8 bars';
 
 export interface SessionScene {
   id: string;
@@ -627,6 +627,8 @@ export interface SessionClipSlot {
   trackId: string;
   sceneId: string;
   clipId: string | null;
+  /** Per-slot quantization override. 'global' (or undefined) defers to session quantization. */
+  quantization?: 'global' | SessionLaunchQuantization;
 }
 
 export interface SessionPendingLaunch {

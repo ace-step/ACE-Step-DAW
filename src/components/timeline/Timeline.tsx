@@ -280,11 +280,15 @@ export function Timeline() {
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
 
+    const laneX = clientXToLaneX(e.clientX);
+    const rawTime = laneX / pixelsPerSecond;
+    const startTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
+
     // Handle preset loop drop -> create new sample track
     const loopId = e.dataTransfer.getData('application/x-loop-id');
     if (loopId) {
       const newTrack = addTrack('custom', 'sample');
-      await importLoopToTrack(loopId, newTrack.id, 0);
+      await importLoopToTrack(loopId, newTrack.id, startTime);
       return;
     }
 
@@ -304,14 +308,14 @@ export function Timeline() {
           if (wantsQuickSampler) {
             await importAudioFileAsNewQuickSampler(file);
           } else {
-            await importAudioFile(file);
+            await importAudioFile(file, startTime);
           }
         } else if (/\.(mid|midi)$/i.test(file.name)) {
           await importMultipleFiles([file]);
         }
       }
     }
-  }, [addTrack, importAudioFile, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
+  }, [addTrack, bpm, tempoMap, pixelsPerSecond, importAudioFile, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
 
   const handleTrackHeaderDragStart = useCallback((trackId: string) => {
     draggedTrackIdRef.current = trackId;
@@ -1315,16 +1319,17 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
 
-      const payload = getDragPayload();
-      if (payload && hasProject) {
+      if (hasProject) {
+        const payload = getDragPayload();
         const laneX = clientXToLaneX(e.clientX);
         const rawTime = laneX / pixelsPerSecond;
         const snappedTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
-        const ghostDuration = payload.duration ?? defaultClipDuration;
+        const ghostDuration = payload?.duration ?? defaultClipDuration;
+        const ghostName = payload?.name ?? (types.includes('Files') ? 'Audio file' : 'Audio');
         setDropGhost({
           left: snappedTime * pixelsPerSecond,
           width: ghostDuration * pixelsPerSecond,
-          name: payload.name ?? 'Audio',
+          name: ghostName,
         });
       }
     }
@@ -1373,7 +1378,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
           if (wantsQuickSampler) {
             await importAudioFileAsNewQuickSampler(file);
           } else {
-            await importAudioFile(file);
+            await importAudioFile(file, startTime);
           }
         }
       }

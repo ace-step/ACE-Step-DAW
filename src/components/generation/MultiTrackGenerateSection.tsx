@@ -305,10 +305,11 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
               <button
                 type="button"
                 onClick={addRow}
-                className="rounded border border-[#444] bg-[#2c2c2c] px-2 py-1 text-[10px] font-medium text-zinc-200 transition-colors hover:bg-[#363636]"
+                className="flex h-5 w-5 items-center justify-center rounded border border-[#444] bg-[#2c2c2c] text-[12px] font-medium text-zinc-200 transition-colors hover:bg-[#363636]"
                 data-testid="multi-track-add-row"
+                title="Add track"
               >
-                + Add Track
+                +
               </button>
             </div>
           </div>
@@ -337,7 +338,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                     <select
                       value={row.trackName}
                       onChange={(event) => updateTrackName(row.rowId, event.target.value as MultiTrackName)}
-                      className={`flex-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none ${
+                      className={`w-[90px] shrink-0 rounded border px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] focus:outline-none ${
                         row.checked
                           ? 'border-[#444] bg-[#222] text-indigo-100 focus:border-indigo-500'
                           : 'border-[#3a3a3a] bg-[#222] text-zinc-500'
@@ -354,13 +355,12 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                     {row.hasExistingAudio && (
                       <span className="text-[9px] italic text-zinc-600">audio</span>
                     )}
-                    {/* Inline description — compact single-line input */}
                     <input
                       type="text"
                       value={row.localDescription}
                       onChange={(e) => updateDescription(row.rowId, e.target.value)}
                       placeholder="description..."
-                      className={`w-[120px] rounded border px-1.5 py-0.5 text-[10px] placeholder-zinc-600 focus:outline-none ${
+                      className={`flex-1 min-w-0 rounded border px-1.5 py-0.5 text-[10px] placeholder-zinc-600 focus:outline-none ${
                         row.checked ? 'border-[#444] bg-[#222] text-zinc-200 focus:border-indigo-500' : 'border-[#3a3a3a] bg-[#222] text-zinc-500 opacity-50'
                       }`}
                     />

@@ -82,7 +82,7 @@ function isSessionPlayableClip(clip: Clip): boolean {
   return clip.generationStatus === 'ready' || (clip.midiData?.notes.length ?? 0) > 0;
 }
 
-function getSessionTracks(project: Project): Array<{ track: Track; clip: Clip; launch: { sceneIndex: number; launchedAt: number } }> {
+function getSessionTracks(project: Project): Array<{ track: Track; clip: Clip; launch: { sceneIndex: number; launchedAt: number; startOffset?: number } }> {
   const launched = useTransportStore.getState().launchedSessionClips;
   return project.tracks.flatMap((track) => {
     const launch = launched[track.id];
@@ -264,18 +264,28 @@ export function useTransport() {
           const launch = sessionTrackMap.get(track.id)?.launch;
           if (!launch) continue;
           const clipDuration = Math.max(clip.duration, 0.001);
+          const legatoOffset = launch.startOffset ?? 0;
           const playbackEnd = getSessionPlaybackEnd(proj, fromTime ?? useTransportStore.getState().currentTime);
           let loopIndex = Math.max(0, Math.floor(((fromTime ?? useTransportStore.getState().currentTime) - launch.launchedAt) / clipDuration));
           while (true) {
             const loopStart = launch.launchedAt + loopIndex * clipDuration;
             if (loopStart >= playbackEnd) break;
+            // For the very first iteration (loopIndex 0) with legato,
+            // offset the audio start and shorten the duration.
+            const isFirstLegatoLoop = loopIndex === 0 && legatoOffset > 0;
+            const loopAudioOffset = isFirstLegatoLoop
+              ? scheduleAudioOffset + legatoOffset
+              : scheduleAudioOffset;
+            const loopClipDuration = isFirstLegatoLoop
+              ? Math.max(0.001, audibleDuration - legatoOffset)
+              : audibleDuration;
             clipBuffers.push({
               clipId: `${clip.id}-session-${loopIndex}`,
               trackId: track.id,
               startTime: loopStart + (audibleStartTime - clip.startTime),
               buffer,
-              audioOffset: scheduleAudioOffset,
-              clipDuration: audibleDuration,
+              audioOffset: loopAudioOffset,
+              clipDuration: loopClipDuration,
               timeStretchRate: clip.timeStretchRate,
               gainEnvelope: clip.gainEnvelope,
             });
@@ -386,13 +396,18 @@ export function useTransport() {
           const notes = [...(clip.midiData?.notes ?? [])].sort((a, b) => a.startBeat - b.startBeat);
           if (notes.length === 0) continue;
 
+          // For session MIDI, track which loop index is first for legato offset
+          let sessionMidiLegatoOffset = 0;
+          let sessionMidiFirstLoopIndex = 0;
           const loopStarts = mainView === 'session'
             ? (() => {
                 const launch = sessionTrackMap.get(track.id)?.launch;
                 if (!launch) return [];
+                sessionMidiLegatoOffset = launch.startOffset ?? 0;
                 const clipDuration = Math.max(clip.duration, 0.001);
                 const starts: number[] = [];
                 let loopIndex = Math.max(0, Math.floor((startFrom - launch.launchedAt) / clipDuration));
+                sessionMidiFirstLoopIndex = loopIndex;
                 while (true) {
                   const loopStart = launch.launchedAt + loopIndex * clipDuration;
                   if (loopStart >= effectiveEnd) break;
@@ -403,10 +418,19 @@ export function useTransport() {
               })()
             : [clip.startTime];
 
-          for (const loopStart of loopStarts) {
+          for (let loopListIdx = 0; loopListIdx < loopStarts.length; loopListIdx++) {
+            const loopStart = loopStarts[loopListIdx];
+            // For the first legato loop in session mode, skip notes before the offset
+            const isFirstLegatoLoop = mainView === 'session'
+              && sessionMidiLegatoOffset > 0
+              && loopListIdx === 0
+              && sessionMidiFirstLoopIndex === 0;
             for (let noteIndex = 0; noteIndex < notes.length; noteIndex++) {
               const note = notes[noteIndex];
-              const noteStart = loopStart + beatToTime(note.startBeat, tempoMap, fallbackBpm);
+              const noteTimeInClip = beatToTime(note.startBeat, tempoMap, fallbackBpm);
+              // Skip notes before legato offset on the first loop
+              if (isFirstLegatoLoop && noteTimeInClip < sessionMidiLegatoOffset) continue;
+              const noteStart = loopStart + noteTimeInClip;
               const noteDuration = Math.max(0, beatToTime(note.startBeat + note.durationBeats, tempoMap, fallbackBpm) - beatToTime(note.startBeat, tempoMap, fallbackBpm));
               const noteEnd = noteStart + noteDuration;
               if (noteEnd <= startFrom || noteStart >= effectiveEnd || noteDuration <= 0) continue;
@@ -679,9 +703,32 @@ export function useTransport() {
 
   const launchSessionClip = useCallback(async (trackId: string, clipId: string, sceneIndex: number) => {
     const transport = useTransportStore.getState();
-    useTransportStore.getState().launchSessionClip(trackId, clipId, sceneIndex, transport.currentTime);
+    const currentTime = transport.currentTime;
+
+    // Calculate legato offset: if the slot has legato enabled and a clip is already
+    // playing on this track, start the incoming clip at the outgoing clip's position.
+    let startOffset: number | undefined;
+    const session = useProjectStore.getState().project?.session;
+    const slot = session?.slots.find(
+      (s) => s.trackId === trackId && s.clipId === clipId,
+    );
+    if (slot?.legato) {
+      const outgoing = transport.launchedSessionClips[trackId];
+      const outgoingClip = outgoing
+        ? useProjectStore.getState().project?.tracks
+            .find((t) => t.id === trackId)
+            ?.clips.find((c) => c.id === outgoing.clipId)
+        : undefined;
+      if (outgoingClip) {
+        const outgoingDuration = Math.max(outgoingClip.duration, 0.001);
+        const elapsed = currentTime - outgoing!.launchedAt;
+        startOffset = elapsed % outgoingDuration;
+      }
+    }
+
+    transport.launchSessionClip(trackId, clipId, sceneIndex, currentTime, startOffset);
     if (transport.isPlaying && useUIStore.getState().mainView === 'session') {
-      await play(transport.currentTime);
+      await play(currentTime);
     }
   }, [play]);
 

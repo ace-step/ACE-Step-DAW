@@ -18,6 +18,8 @@ export interface SessionClipSlot {
   state: SessionClipState;
   /** Color override (inherits track color when null). */
   color: string | null;
+  /** When true, the incoming clip starts at the outgoing clip's current position. */
+  legato?: boolean;
 }
 
 /** A scene (horizontal row) that can trigger all slots at once. */

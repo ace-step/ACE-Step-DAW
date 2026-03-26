@@ -633,6 +633,8 @@ export interface SessionClipSlot {
   color?: string | null;
   /** When true (default), an empty slot acts as a stop button for the track. */
   hasStopButton?: boolean;
+  /** When true, the incoming clip starts at the outgoing clip's current position. */
+  legato?: boolean;
 }
 
 export interface SessionPendingLaunch {

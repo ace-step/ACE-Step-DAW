@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
-import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
+import { listModels, initModel, getBackendUrl, setBackendUrl, inferModelCategory } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
@@ -9,10 +9,6 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 import { THEME_LIST } from '../../themes';
 import type { ThemeId } from '../../themes';
-
-function modelSupportsThinking(modelName: string): boolean {
-  return modelName.includes('turbo') || modelName.includes('sft');
-}
 
 function ThemeSelector() {
   const currentTheme = useUIStore((s) => s.theme);
@@ -114,7 +110,6 @@ export function SettingsDialog() {
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
   const [guidance, setGuidance] = useState(DEFAULT_GENERATION.guidanceScale);
   const [shift, setShift] = useState(DEFAULT_GENERATION.shift);
-  const [thinking, setThinking] = useState(DEFAULT_GENERATION.thinking);
   const [model, setModel] = useState('');
   const [backendUrl, setBackendUrlLocal] = useState('');
   const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
@@ -129,9 +124,6 @@ export function SettingsDialog() {
 
   const handleModelChange = (newModel: string) => {
     setModel(newModel);
-    if (!modelSupportsThinking(newModel)) {
-      setThinking(false);
-    }
   };
 
   const refreshModels = async (preferredModel?: string, preferredLmModel?: string) => {
@@ -156,9 +148,6 @@ export function SettingsDialog() {
       }
       if (resolvedModel) {
         setModel(resolvedModel);
-        if (!modelSupportsThinking(resolvedModel)) {
-          setThinking(false);
-        }
       }
 
       let resolvedLm = preferredLmModel || '';
@@ -196,7 +185,6 @@ export function SettingsDialog() {
       setSteps(gen.inferenceSteps);
       setGuidance(gen.guidanceScale);
       setShift(gen.shift);
-      setThinking(gen.thinking);
       setModel(gen.model);
       setBackendUrlLocal(getBackendUrl());
       setInitMessage('');
@@ -224,7 +212,6 @@ export function SettingsDialog() {
             inferenceSteps: steps,
             guidanceScale: guidance,
             shift,
-            thinking,
             model,
           },
         },
@@ -485,37 +472,33 @@ export function SettingsDialog() {
                 className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
               />
             </div>
-            <div className="flex items-end pb-1">
-              <label className={`flex items-center gap-2 ${modelSupportsThinking(model) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                <input
-                  type="checkbox"
-                  checked={thinking}
-                  onChange={(e) => setThinking(e.target.checked)}
-                  disabled={!modelSupportsThinking(model)}
-                  className="w-4 h-4 rounded border-daw-border bg-daw-bg accent-daw-accent"
-                />
-                <span className="text-xs text-zinc-400">Thinking mode</span>
-              </label>
-            </div>
           </div>
 
+          {/* Text2Music Model — for full song generation */}
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Model</label>
+            <label className="block text-xs text-zinc-400 mb-1">
+              Text2Music Model
+              <span className="ml-1 text-[9px] text-zinc-600">(Full Song)</span>
+            </label>
             <select
               value={model}
               onChange={(e) => handleModelChange(e.target.value)}
               disabled={modelsLoading || initLoading}
               className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
             >
-              {availableModels.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {m.name}{m.is_default ? ' (default)' : ''}{m.is_loaded ? ' (loaded)' : ''}
-                </option>
-              ))}
+              {availableModels
+                .filter((m) => inferModelCategory(m) === 'text2music')
+                .map((m) => (
+                  <option key={m.name} value={m.name}>
+                    {m.name}{m.is_default ? ' (default)' : ''}{m.is_loaded ? ' ●' : ''}
+                  </option>
+                ))}
             </select>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-zinc-400">
-                {selectedModelEntry?.is_loaded ? 'Model is loaded' : 'Model is not loaded'}
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-zinc-500 flex items-center">
+                {selectedModelEntry?.is_loaded
+                  ? <><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1" />Loaded</>
+                  : <><span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600 mr-1" />Not loaded</>}
               </span>
               <button
                 type="button"
@@ -528,9 +511,13 @@ export function SettingsDialog() {
             </div>
           </div>
 
-          {modelSupportsThinking(model) && (
+          {/* LM Model — used for thinking in text2music */}
+          {availableLmModels.length > 0 && (
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">LM Model</label>
+              <label className="block text-xs text-zinc-400 mb-1">
+                LM Model
+                <span className="ml-1 text-[9px] text-zinc-600">(Thinking / CoT)</span>
+              </label>
               <select
                 value={selectedLmModel}
                 onChange={(e) => setSelectedLmModel(e.target.value)}
@@ -539,13 +526,15 @@ export function SettingsDialog() {
               >
                 {availableLmModels.map((m) => (
                   <option key={m.name} value={m.name}>
-                    {m.name}{m.is_loaded ? ' (loaded)' : ''}
+                    {m.name}{m.is_loaded ? ' ●' : ''}
                   </option>
                 ))}
               </select>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <span className="text-[10px] text-zinc-400">
-                  {llmInitialized ? 'LLM initialized' : 'LLM not initialized'}
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-zinc-500 flex items-center">
+                  {llmInitialized
+                    ? <><span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1" />Initialized</>
+                    : <><span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600 mr-1" />Not initialized</>}
                 </span>
                 <button
                   type="button"
@@ -553,9 +542,10 @@ export function SettingsDialog() {
                   disabled={initLoading || !selectedLmModel}
                   className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {initLoading ? 'Initializing...' : (selectedLmEntry?.is_loaded ? 'Reinitialize LLM' : 'Initialize LLM')}
+                  {initLoading ? 'Initializing...' : (selectedLmEntry?.is_loaded ? 'Reinitialize' : 'Initialize')}
                 </button>
               </div>
+              <p className="text-[9px] text-zinc-600 mt-1">Used when Thinking is enabled in Full Song generation</p>
             </div>
           )}
 
@@ -564,96 +554,6 @@ export function SettingsDialog() {
           )}
           {initMessage && !initError && (
             <p className="text-[10px] text-emerald-400">{initMessage}</p>
-          )}
-
-          {/* Custom Models inventory */}
-          {availableModels.length > 0 && (
-            <>
-              <h3 className="text-xs font-medium text-zinc-300 pt-2">Custom Models</h3>
-              <div className="bg-[#1a1a1a] rounded border border-daw-border max-h-[140px] overflow-y-auto">
-                <table className="w-full text-[10px]">
-                  <thead>
-                    <tr className="border-b border-daw-border text-zinc-400">
-                      <th className="text-left px-2 py-1.5 font-medium">DiT Model</th>
-                      <th className="text-center px-2 py-1.5 font-medium w-16">Default</th>
-                      <th className="text-center px-2 py-1.5 font-medium w-16">Loaded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {availableModels.map((m) => (
-                      <tr
-                        key={m.name}
-                        onClick={() => handleModelChange(m.name)}
-                        className={`border-b border-[#2a2a2a] cursor-pointer transition-colors ${
-                          m.name === model ? 'bg-daw-accent/15' : 'hover:bg-[#252525]'
-                        }`}
-                      >
-                        <td className="px-2 py-1.5 text-zinc-200 truncate max-w-[200px]">
-                          {m.name}
-                          {m.name === model && (
-                            <span className="ml-1.5 text-[8px] text-daw-accent font-bold uppercase">selected</span>
-                          )}
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          {m.is_default ? (
-                            <span className="text-emerald-400">Yes</span>
-                          ) : (
-                            <span className="text-zinc-600">-</span>
-                          )}
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          {m.is_loaded ? (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          ) : (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {availableLmModels.length > 0 && (
-                <div className="bg-[#1a1a1a] rounded border border-daw-border max-h-[100px] overflow-y-auto mt-2">
-                  <table className="w-full text-[10px]">
-                    <thead>
-                      <tr className="border-b border-daw-border text-zinc-400">
-                        <th className="text-left px-2 py-1.5 font-medium">LM Model</th>
-                        <th className="text-center px-2 py-1.5 font-medium w-16">Loaded</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availableLmModels.map((m) => (
-                        <tr
-                          key={m.name}
-                          onClick={() => setSelectedLmModel(m.name)}
-                          className={`border-b border-[#2a2a2a] cursor-pointer transition-colors ${
-                            m.name === selectedLmModel ? 'bg-daw-accent/15' : 'hover:bg-[#252525]'
-                          }`}
-                        >
-                          <td className="px-2 py-1.5 text-zinc-200 truncate max-w-[240px]">
-                            {m.name}
-                            {m.name === selectedLmModel && (
-                              <span className="ml-1.5 text-[8px] text-daw-accent font-bold uppercase">selected</span>
-                            )}
-                          </td>
-                          <td className="text-center px-2 py-1.5">
-                            {m.is_loaded ? (
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            ) : (
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <p className="text-[10px] text-zinc-600 mt-1">
-                Click a row to select it. Selection is saved with project settings.
-              </p>
-            </>
           )}
         </div>
 

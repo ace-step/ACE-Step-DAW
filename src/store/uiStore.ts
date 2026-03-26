@@ -749,7 +749,7 @@ export const useUIStore = create<UIState>()(
     showVirtualKeyboard: !state.showVirtualKeyboard,
     virtualKeyboardPressedPitches: state.showVirtualKeyboard ? [] : state.virtualKeyboardPressedPitches,
   })),
-  openCommandPalette: (query = '') => set({ showCommandPalette: true, commandPaletteQuery: query }),
+  openCommandPalette: (query = '') => set({ ...ALL_MODALS_CLOSED, showCommandPalette: true, commandPaletteQuery: query }),
   closeCommandPalette: () => set({ showCommandPalette: false, commandPaletteQuery: '' }),
   setCommandPaletteQuery: (query) => set({ commandPaletteQuery: query }),
   getCommandPaletteRegistry: (query) => {
@@ -1102,8 +1102,8 @@ export const useUIStore = create<UIState>()(
         : { showGenerationHistoryPanel: false }
   )),
 
-  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
-  toggleCommandPalette: () => set((s) => ({ showCommandPalette: !s.showCommandPalette })),
+  setShowCommandPalette: (v) => set(v ? { ...ALL_MODALS_CLOSED, showCommandPalette: true, commandPaletteQuery: '' } : { showCommandPalette: false }),
+  toggleCommandPalette: () => set((s) => s.showCommandPalette ? { showCommandPalette: false } : { ...ALL_MODALS_CLOSED, showCommandPalette: true }),
 
   toggleVST3Panel: () => set((s) => s.showVST3Panel ? { showVST3Panel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true }),
   setShowVST3Panel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true } : { showVST3Panel: false }),

@@ -150,7 +150,8 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Escape must work regardless of input focus (e.g. closing dialogs while an input is active)
+      // Escape must work regardless of input focus (e.g. closing dialogs while an input is active).
+      // Priority order: command palette → overlays/modals → editors → side panels → selection.
       if (event.code === 'Escape') {
         if (ui.showCommandPalette) {
           event.preventDefault();

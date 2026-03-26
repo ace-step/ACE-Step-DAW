@@ -227,7 +227,8 @@ export function GenerationSidePanel() {
           style={{
             zIndex: Z.toast + 1,
             bottom: `${(showSmartControls ? 224 : 140) + bottomPanelHeight}px`,
-            maxHeight: `calc(100vh - ${(showSmartControls ? 224 : 140) + bottomPanelHeight + 48}px)`,
+            height: `calc(100vh - ${(showSmartControls ? 224 : 140) + bottomPanelHeight + 48}px)`,
+            maxHeight: '580px',
           }}
           data-testid="generation-side-panel"
           aria-label="Generate panel"

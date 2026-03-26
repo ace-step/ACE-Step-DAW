@@ -533,7 +533,7 @@ export function useTransport() {
     }
 
     // Start automation playback
-    const allLanes = project?.automationLanes ?? [];
+    const allLanes = useProjectStore.getState().project?.automationLanes ?? [];
     if (allLanes.length > 0) {
       automationEngine.start(allLanes, () => getAudioEngine().getCurrentTime());
     }

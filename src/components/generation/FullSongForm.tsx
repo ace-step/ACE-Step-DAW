@@ -25,7 +25,7 @@ interface FullSongFormProps {
     vocalLanguage: string;
   } | null;
   /** Called whenever footer button state changes */
-  onFooterChange: (footer: { label: string; disabled: boolean; action: () => void }) => void;
+  onFooterChange: (footer: { label: string; disabled: boolean; action: () => void; thinkingState?: { checked: boolean; onChange: (v: boolean) => void; disabled: boolean } }) => void;
 }
 
 export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps) {
@@ -114,6 +114,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     label: isDisabled ? 'Generating...' : 'Generate Full Song',
     disabled: isDisabled || !prompt.trim(),
     action: footerAction,
+    thinkingState: { checked: thinking, onChange: setThinking, disabled: isDisabled },
   });
 
   return (
@@ -188,8 +189,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       </section>
 
       {/* Parameters — clean two-row grid */}
+      {/* Parameters — 3-column grid */}
       <section className="space-y-2 rounded border border-[#333] bg-[#1a1a1e] px-3 py-2.5">
-        <div className="grid grid-cols-4 items-center gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Duration</label>
             <div className="flex items-center gap-1">
@@ -257,29 +259,17 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
               >
                 🎲
               </button>
+              <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="Use random seed each time">
+                <input
+                  type="checkbox"
+                  checked={useRandomSeed}
+                  onChange={(e) => setUseRandomSeed(e.target.checked)}
+                  className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+                  disabled={isDisabled}
+                />
+                <span className="text-[8px] text-zinc-600">R</span>
+              </label>
             </div>
-          </div>
-          <div className="space-y-1.5 pt-3">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useRandomSeed}
-                onChange={(e) => setUseRandomSeed(e.target.checked)}
-                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-                disabled={isDisabled}
-              />
-              <span className="text-[10px] text-zinc-500">Random seed</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={thinking}
-                onChange={(e) => setThinking(e.target.checked)}
-                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-                disabled={isDisabled}
-              />
-              <span className="text-[10px] text-zinc-500">Thinking</span>
-            </label>
           </div>
         </div>
       </section>

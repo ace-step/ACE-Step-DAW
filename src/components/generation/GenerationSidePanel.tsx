@@ -36,15 +36,23 @@ export function GenerationSidePanel() {
   const [mixSubMode, setMixSubMode] = useState<MixSubMode>('simple');
 
   // Unified footer state — updated by active form child
-  const [footerState, setFooterState] = useState<{ label: string; disabled: boolean; action: () => void }>({
+  interface FooterState {
+    label: string;
+    disabled: boolean;
+    action: () => void;
+    thinkingState?: { checked: boolean; onChange: (v: boolean) => void; disabled: boolean };
+  }
+  const [footerState, setFooterState] = useState<FooterState>({
     label: 'Create Sample', disabled: true, action: () => {},
   });
   const footerActionRef = useRef<() => void>(() => {});
-  const handleFooterChange = useCallback((state: { label: string; disabled: boolean; action: () => void }) => {
+  const thinkingRef = useRef<FooterState['thinkingState']>(undefined);
+  const handleFooterChange = useCallback((state: FooterState) => {
     footerActionRef.current = state.action;
+    thinkingRef.current = state.thinkingState;
     setFooterState((prev) => {
-      if (prev.label === state.label && prev.disabled === state.disabled) return prev;
-      return { label: state.label, disabled: state.disabled, action: state.action };
+      if (prev.label === state.label && prev.disabled === state.disabled && prev.thinkingState?.checked === state.thinkingState?.checked) return prev;
+      return state;
     });
   }, []);
 
@@ -347,16 +355,30 @@ export function GenerationSidePanel() {
           {/* Unified footer — always at bottom, same position for all views */}
           {generationPanelView !== 'settings' && (
             <div className="border-t border-[#3a3a3a] px-4 py-3 flex-shrink-0" data-testid="generation-dialog-footer">
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => footerActionRef.current()}
-                disabled={footerState.disabled}
-                className="w-full"
-                data-testid="generation-footer-btn"
-              >
-                {footerState.label}
-              </Button>
+              <div className="flex items-center gap-3">
+                {footerState.thinkingState && (
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={footerState.thinkingState.checked}
+                      onChange={(e) => thinkingRef.current?.onChange(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+                      disabled={footerState.thinkingState.disabled}
+                    />
+                    <span className="text-[10px] text-zinc-400">Thinking</span>
+                  </label>
+                )}
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => footerActionRef.current()}
+                  disabled={footerState.disabled}
+                  className="flex-1"
+                  data-testid="generation-footer-btn"
+                >
+                  {footerState.label}
+                </Button>
+              </div>
             </div>
           )}
         </div>

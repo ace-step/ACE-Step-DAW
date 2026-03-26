@@ -187,92 +187,100 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         />
       </section>
 
-      {/* Duration + Seed + Thinking + Vocal Language — inline row */}
-      <section className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex items-center gap-1.5">
-          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
-          <input
-            type="number"
-            value={durationSeconds === -1 ? '' : durationSeconds}
-            onChange={(e) => setDurationSeconds(e.target.value === '' ? -1 : Number(e.target.value))}
-            placeholder="Auto"
-            min={MIN_DURATION}
-            max={MAX_DURATION}
-            step={1}
-            className="w-[60px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled || durationAuto}
-          />
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={durationAuto}
-              onChange={(e) => {
-                setDurationAuto(e.target.checked);
-                if (e.target.checked) setDurationSeconds(-1);
-                else setDurationSeconds(30);
-              }}
-              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-              disabled={isDisabled}
-            />
-            <span className="text-[9px] text-zinc-600">Auto</span>
-          </label>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
-          <input
-            type="number"
-            value={seed}
-            onChange={(e) => setSeed(Number(e.target.value))}
-            className="w-[110px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled || useRandomSeed}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setSeed(Math.floor(Math.random() * 2147483647));
-              setUseRandomSeed(false);
-            }}
-            className="text-[14px] leading-none transition-opacity hover:opacity-80"
-            title="Random seed"
-            disabled={isDisabled}
-          >
-            🎲
-          </button>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useRandomSeed}
-              onChange={(e) => setUseRandomSeed(e.target.checked)}
-              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
-              disabled={isDisabled}
-            />
-            <span className="text-[9px] text-zinc-600">Rand</span>
-          </label>
-        </div>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={thinking}
-            onChange={(e) => setThinking(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
-            disabled={isDisabled}
-          />
-          <span className="text-[10px] text-zinc-500">Thinking</span>
-        </label>
-        <div className="flex items-center gap-1.5">
-          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Lang</label>
-          <select
-            value={vocalLanguage}
-            onChange={(e) => setVocalLanguage(e.target.value)}
-            className="rounded border border-[#444] bg-[#2a2a2a] px-1 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled || instrumental}
-          >
-            <option value="unknown">Auto</option>
-            <option value="en">EN</option>
-            <option value="zh">中文</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-          </select>
+      {/* Parameters — clean two-row grid */}
+      <section className="space-y-2 rounded border border-[#333] bg-[#1a1a1e] px-3 py-2.5">
+        <div className="grid grid-cols-4 items-center gap-2">
+          <div>
+            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Duration</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={durationSeconds === -1 ? '' : durationSeconds}
+                onChange={(e) => setDurationSeconds(e.target.value === '' ? -1 : Number(e.target.value))}
+                placeholder="Auto"
+                min={MIN_DURATION}
+                max={MAX_DURATION}
+                step={1}
+                className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] focus:border-indigo-500 focus:outline-none"
+                disabled={isDisabled || durationAuto}
+              />
+              <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="Auto-detect duration">
+                <input
+                  type="checkbox"
+                  checked={durationAuto}
+                  onChange={(e) => {
+                    setDurationAuto(e.target.checked);
+                    if (e.target.checked) setDurationSeconds(-1);
+                    else setDurationSeconds(30);
+                  }}
+                  className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+                  disabled={isDisabled}
+                />
+                <span className="text-[8px] text-zinc-600">A</span>
+              </label>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Language</label>
+            <select
+              value={vocalLanguage}
+              onChange={(e) => setVocalLanguage(e.target.value)}
+              className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] focus:border-indigo-500 focus:outline-none"
+              disabled={isDisabled || instrumental}
+            >
+              <option value="unknown">Auto</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[9px] font-medium uppercase text-zinc-500 mb-0.5">Seed</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={seed}
+                onChange={(e) => setSeed(Number(e.target.value))}
+                className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
+                disabled={isDisabled || useRandomSeed}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setSeed(Math.floor(Math.random() * 2147483647));
+                  setUseRandomSeed(false);
+                }}
+                className="shrink-0 text-[14px] leading-none transition-opacity hover:opacity-80"
+                title="Random seed"
+                disabled={isDisabled}
+              >
+                🎲
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5 pt-3">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useRandomSeed}
+                onChange={(e) => setUseRandomSeed(e.target.checked)}
+                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+                disabled={isDisabled}
+              />
+              <span className="text-[10px] text-zinc-500">Random seed</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={thinking}
+                onChange={(e) => setThinking(e.target.checked)}
+                className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+                disabled={isDisabled}
+              />
+              <span className="text-[10px] text-zinc-500">Thinking</span>
+            </label>
+          </div>
         </div>
       </section>
 

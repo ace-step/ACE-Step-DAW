@@ -1017,6 +1017,8 @@ function getSessionQuantizationSeconds(project: Project, quantization: SessionLa
       return beatDuration * project.timeSignature * 4;
     case '8 bars':
       return beatDuration * project.timeSignature * 8;
+    default:
+      return 0;
   }
 }
 

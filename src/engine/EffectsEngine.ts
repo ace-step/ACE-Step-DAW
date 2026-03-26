@@ -62,12 +62,36 @@ function applyParametricEqFilters(
   previous.connect(output);
 }
 
+/**
+ * Unwrap a Tone.js node to its underlying native AudioNode.
+ * Tone.Effect subclasses (Reverb, Delay, etc.) have `.input` = Tone.Gain,
+ * and Tone.Gain has `.input` = native GainNode.  We need to walk the chain
+ * until we reach a real AudioNode that native `.connect()` can accept.
+ *
+ * A native AudioNode does NOT have a nested `.input`/`.output` object property
+ * (its `.connect` is a native function, not a Tone.js method).
+ */
+function unwrapToNative(node: unknown, prop: 'input' | 'output'): AudioNode {
+  let current = node;
+  // Walk up to 3 levels deep (Tone.Effect → Tone.Gain → native GainNode)
+  for (let i = 0; i < 3; i++) {
+    if (!current || typeof current !== 'object') break;
+    const next = (current as Record<string, unknown>)[prop];
+    // If there's no deeper level or it's the same object, we've reached the native node
+    if (!next || next === current || typeof next !== 'object') break;
+    current = next;
+  }
+  return current as AudioNode;
+}
+
 function getEffectInput(effectNode: EffectNode): AudioNode {
-  return effectNode.inputNode ?? (effectNode.node as unknown as { input: AudioNode }).input;
+  const raw = effectNode.inputNode ?? (effectNode.node as unknown as { input: unknown }).input;
+  return unwrapToNative(raw, 'input');
 }
 
 function getEffectOutput(effectNode: EffectNode): AudioNode {
-  return effectNode.outputNode ?? (effectNode.node as unknown as { output: AudioNode }).output;
+  const raw = effectNode.outputNode ?? (effectNode.node as unknown as { output: unknown }).output;
+  return unwrapToNative(raw, 'output');
 }
 
 function createNode(effect: TrackEffect): EffectNode {

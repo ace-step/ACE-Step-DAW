@@ -364,12 +364,12 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                   {/* Lyrics row — only for vocal tracks, kept compact */}
                   {VOCAL_TRACKS.has(row.trackName) && row.checked && (
                     <div className="px-2 pb-1.5">
-                      <input
-                        type="text"
+                      <textarea
                         value={row.lyrics}
                         onChange={(e) => updateLyrics(row.rowId, e.target.value)}
-                        placeholder="Lyrics..."
-                        className="w-full rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[10px] font-mono text-zinc-200 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                        placeholder="[Verse 1]\nLyrics here..."
+                        rows={3}
+                        className="w-full resize-none rounded border border-[#444] bg-[#222] px-1.5 py-1 text-[10px] font-mono text-zinc-200 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
                       />
                     </div>
                   )}

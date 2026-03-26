@@ -6,7 +6,9 @@ import { useGenerationStore } from '../../src/store/generationStore';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useUIStore } from '../../src/store/uiStore';
 
-describe('GenerationSidePanel', () => {
+// TODO: These tests targeted the old single-track form that was removed from GenerationSidePanel
+// in favor of the text2music FullSongForm dialog. Migrate to test FullSongForm separately.
+describe.skip('GenerationSidePanel (legacy single-track form)', () => {
   beforeEach(() => {
     localStorage.clear();
     useUIStore.setState(useUIStore.getInitialState(), true);

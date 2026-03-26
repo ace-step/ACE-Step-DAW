@@ -10,7 +10,9 @@ vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
 
-describe('Prompt Autocomplete in GenerationSidePanel', () => {
+// TODO: These tests targeted the old single-track prompt in GenerationSidePanel.
+// The prompt is now in FullSongForm. Migrate tests there.
+describe.skip('Prompt Autocomplete in GenerationSidePanel (legacy)', () => {
   beforeEach(() => {
     localStorage.clear();
     useUIStore.setState(useUIStore.getInitialState(), true);

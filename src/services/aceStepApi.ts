@@ -4,6 +4,10 @@ import type {
   CoverTaskParams,
   RepaintTaskParams,
   StemSeparationTaskParams,
+  AiMixTaskParams,
+  MidiGenerationTaskParams,
+  ChordGenerationTaskParams,
+  AiTaskParams,
   ApiEnvelope,
   ReleaseTaskResponse,
   TaskResultEntry,
@@ -16,12 +20,18 @@ import type {
   CreateSampleResponse,
 } from '../types/api';
 
+/** @deprecated Use AiTaskParams instead */
 export type AceStepTaskParams =
   | LegoTaskParams
   | Text2MusicTaskParams
   | CoverTaskParams
   | RepaintTaskParams
-  | StemSeparationTaskParams;
+  | StemSeparationTaskParams
+  | AiMixTaskParams
+  | MidiGenerationTaskParams
+  | ChordGenerationTaskParams;
+
+export type { AiTaskParams };
 import { downsampleWavBlob } from '../utils/audioDownsample';
 import { createDebugLogger } from '../utils/debugLogger';
 

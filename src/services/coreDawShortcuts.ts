@@ -171,5 +171,10 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
     return true;
   }
 
+  // Custom sliders (e.g. VerticalFader) need shortcut suppression when focused
+  if (target.getAttribute('role') === 'slider') {
+    return true;
+  }
+
   return target.closest('[contenteditable="true"], [role="textbox"]') !== null;
 }

@@ -66,6 +66,43 @@ export function VerticalFader({
     if (defaultValue !== undefined) onChange(defaultValue);
   }, [defaultValue, onChange]);
 
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const range = max - min;
+      const smallStep = range * 0.01;
+      const largeStep = range * 0.1;
+      let next: number | null = null;
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          next = Math.min(max, value + smallStep);
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          next = Math.max(min, value - smallStep);
+          break;
+        case 'PageUp':
+          next = Math.min(max, value + largeStep);
+          break;
+        case 'PageDown':
+          next = Math.max(min, value - largeStep);
+          break;
+        case 'Home':
+          next = max;
+          break;
+        case 'End':
+          next = min;
+          break;
+      }
+      if (next !== null) {
+        e.preventDefault();
+        e.stopPropagation();
+        onChange(next);
+      }
+    },
+    [value, min, max, onChange],
+  );
+
   const pct = ((value - min) / (max - min)) * 100;
   const capH = 20;
   const capW = width + 6;
@@ -79,6 +116,7 @@ export function VerticalFader({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
       role="slider"
       aria-label={ariaLabel}
       aria-valuemin={Math.round(min * 100)}

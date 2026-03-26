@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import {
@@ -147,6 +147,15 @@ export function GenerationSidePanel() {
     projectGuidanceScale,
     projectKeyScale,
   ]);
+
+  // Sync generation BPM whenever project BPM changes
+  const prevProjectBpmRef = useRef(projectBpm);
+  useEffect(() => {
+    if (projectBpm !== undefined && prevProjectBpmRef.current !== undefined && projectBpm !== prevProjectBpmRef.current) {
+      useGenerationStore.getState().setGenerationBpm(projectBpm);
+    }
+    prevProjectBpmRef.current = projectBpm;
+  }, [projectBpm]);
   const filteredPresets = presetCategory === 'All'
     ? GENERATION_PRESETS
     : GENERATION_PRESETS.filter((preset) => preset.category === presetCategory);
@@ -646,6 +655,16 @@ export function GenerationSidePanel() {
           <div>
             <label className="block text-[11px] font-medium uppercase text-zinc-400" htmlFor="generation-bpm-input">
               BPM
+              {projectBpm !== undefined && generationForm.bpm !== projectBpm && (
+                <button
+                  type="button"
+                  className="ml-1 text-[10px] text-amber-400 hover:text-amber-300"
+                  title={`Project BPM is ${projectBpm}. Click to sync.`}
+                  onClick={() => setGenerationBpm(projectBpm)}
+                >
+                  (sync to {projectBpm})
+                </button>
+              )}
             </label>
             <input
               id="generation-bpm-input"
@@ -928,8 +947,9 @@ export function GenerationSidePanel() {
         <button
           onClick={handleGenerate}
           disabled={Boolean(validationError) || isSessionActive}
-          className="w-full rounded bg-indigo-600 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-400"
+          className="w-full rounded bg-indigo-600 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
           data-testid="generation-generate-btn"
+          title={validationError ?? (isSessionActive ? 'Generation in progress' : undefined)}
         >
           {isSessionActive ? 'Generating...' : `Generate ${generationForm.variationCount} Variation${generationForm.variationCount === 1 ? '' : 's'}`}
         </button>

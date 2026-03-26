@@ -150,8 +150,7 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      if (isInputFocused(event)) return;
-
+      // Escape must work regardless of input focus (e.g. closing dialogs while an input is active)
       if (event.code === 'Escape') {
         if (ui.showCommandPalette) {
           event.preventDefault();
@@ -159,24 +158,15 @@ export function useKeyboardShortcuts() {
         } else if (ui.showUndoHistoryPanel) {
           event.preventDefault();
           ui.setShowUndoHistoryPanel(false);
-        } else if (ui.showAIAssistant) {
-          event.preventDefault();
-          ui.setShowAIAssistant(false);
         } else if (ui.bounceInPlaceTrackId !== null) {
           event.preventDefault();
           ui.closeBounceInPlaceDialog();
-        } else if (ui.editingClipId !== null) {
-          event.preventDefault();
-          ui.setEditingClip(null);
-        } else if (ui.showKeyboardShortcutsDialog) {
-          event.preventDefault();
-          ui.setShowKeyboardShortcutsDialog(false);
         } else if (ui.showShortcutEditorDialog) {
           event.preventDefault();
           ui.setShowShortcutEditorDialog(false);
-        } else if (ui.showInstrumentPicker) {
+        } else if (ui.showKeyboardShortcutsDialog) {
           event.preventDefault();
-          ui.setShowInstrumentPicker(false);
+          ui.setShowKeyboardShortcutsDialog(false);
         } else if (ui.showSettingsDialog) {
           event.preventDefault();
           ui.setShowSettingsDialog(false);
@@ -186,6 +176,30 @@ export function useKeyboardShortcuts() {
         } else if (ui.showProjectListDialog) {
           event.preventDefault();
           ui.setShowProjectListDialog(false);
+        } else if (ui.showNewProjectDialog) {
+          event.preventDefault();
+          ui.setShowNewProjectDialog(false);
+        } else if (ui.showInstrumentPicker) {
+          event.preventDefault();
+          ui.setShowInstrumentPicker(false);
+        } else if (ui.editingClipId !== null) {
+          event.preventDefault();
+          ui.setEditingClip(null);
+        } else if (ui.showGenerationPanel) {
+          event.preventDefault();
+          ui.setShowGenerationPanel(false);
+        } else if (ui.showAIAssistant) {
+          event.preventDefault();
+          ui.setShowAIAssistant(false);
+        } else if (ui.showModelLibrary) {
+          event.preventDefault();
+          ui.setShowModelLibrary(false);
+        } else if (ui.showVST3Panel) {
+          event.preventDefault();
+          ui.setShowVST3Panel(false);
+        } else if (ui.showGenerationHistoryPanel) {
+          event.preventDefault();
+          ui.setShowGenerationHistoryPanel(false);
         } else if (ui.selectWindow !== null) {
           event.preventDefault();
           ui.setSelectWindow(null);
@@ -197,6 +211,8 @@ export function useKeyboardShortcuts() {
         }
         return;
       }
+
+      if (isInputFocused(event)) return;
 
       const anyModalOpen =
         ui.showCommandPalette ||

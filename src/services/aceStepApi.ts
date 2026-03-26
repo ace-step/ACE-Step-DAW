@@ -24,16 +24,28 @@ const BACKEND_URL_KEY = 'ace-step-daw-backend-url';
 const HEALTH_CHECK_MIN_RETRY_DELAY_MS = 30_000;
 const HEALTH_CHECK_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
 
+const HEALTH_CHECK_MAX_CONSECUTIVE_FAILURES = 5;
+
 let healthCheckRetryDelayMs = 0;
 let healthCheckBlockedUntil = 0;
+let healthCheckConsecutiveFailures = 0;
+let healthCheckStopped = false;
 const logger = createDebugLogger('ace-step:api');
 
 function resetHealthCheckBackoff() {
   healthCheckRetryDelayMs = 0;
   healthCheckBlockedUntil = 0;
+  healthCheckConsecutiveFailures = 0;
+  healthCheckStopped = false;
 }
 
 function scheduleNextHealthCheckRetry(now: number) {
+  healthCheckConsecutiveFailures++;
+  if (healthCheckConsecutiveFailures >= HEALTH_CHECK_MAX_CONSECUTIVE_FAILURES) {
+    healthCheckStopped = true;
+    logger.info(`Health check stopped after ${healthCheckConsecutiveFailures} consecutive failures`);
+    return;
+  }
   healthCheckRetryDelayMs = healthCheckRetryDelayMs > 0
     ? Math.min(healthCheckRetryDelayMs * 2, HEALTH_CHECK_MAX_RETRY_DELAY_MS)
     : HEALTH_CHECK_MIN_RETRY_DELAY_MS;
@@ -66,7 +78,15 @@ export function setBackendUrl(url: string): void {
   resetHealthCheckBackoff();
 }
 
+/** Whether health polling has been permanently stopped due to repeated failures. */
+export function isHealthCheckStopped(): boolean {
+  return healthCheckStopped;
+}
+
 export async function healthCheck(): Promise<boolean> {
+  if (healthCheckStopped) {
+    return false;
+  }
   const now = Date.now();
   if (healthCheckBlockedUntil > now) {
     return false;

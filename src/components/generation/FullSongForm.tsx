@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
-import { KEY_SCALES } from '../../constants/tracks';
-import { MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../../constants/defaults';
+import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { getModelDefaults, inferModelVariant, type ModelVariant } from '../../constants/modelDefaults';
 import { generateText2Music } from '../../services/generationPipeline';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
@@ -54,10 +53,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
 
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
-  const [showLyrics, setShowLyrics] = useState(false);
-  const [bpm, setBpm] = useState(project?.bpm ?? 120);
-  const [keyScale, setKeyScale] = useState(project?.keyScale ?? 'C major');
+  const [instrumental, setInstrumental] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(30);
+  const [seed, setSeed] = useState(Math.floor(Math.random() * 2147483647));
+  const [useRandomSeed, setUseRandomSeed] = useState(true);
+  const [vocalLanguage, setVocalLanguage] = useState('unknown');
   const [splitToStems, setSplitToStems] = useState(false);
   const [stemCount, setStemCount] = useState<2 | 4 | 6>(4);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -72,10 +72,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     if (!initialData) return;
     setPrompt(initialData.caption);
     setLyrics(initialData.lyrics);
-    if (initialData.bpm !== null) setBpm(initialData.bpm);
-    if (initialData.keyScale) setKeyScale(initialData.keyScale);
     if (initialData.duration > 0) setDurationSeconds(initialData.duration);
-    if (initialData.lyrics.trim()) setShowLyrics(true);
+    if (initialData.vocalLanguage) setVocalLanguage(initialData.vocalLanguage);
   }, [initialData]);
 
   const isDisabled = isGenerating || modelLoadingState === 'loading';
@@ -90,10 +88,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     try {
       await generateText2Music({
         prompt: prompt.trim(),
-        lyrics,
-        durationSeconds,
-        bpm,
-        keyScale,
+        lyrics: instrumental ? '[Instrumental]' : lyrics,
+        durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
+        bpm: project?.bpm ?? null,
+        keyScale: project?.keyScale ?? '',
         timeSignature: String(project?.timeSignature ?? 4),
         splitToStems,
         stemCount,
@@ -101,11 +99,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         guidanceScale,
         shift,
         thinking,
+        seed: useRandomSeed ? undefined : seed,
+        useRandomSeed,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed');
     }
-  }, [prompt, lyrics, durationSeconds, bpm, keyScale, project?.timeSignature, splitToStems, stemCount, inferenceSteps, guidanceScale, shift, thinking]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project?.bpm, project?.keyScale, project?.timeSignature, splitToStems, stemCount, inferenceSteps, guidanceScale, shift, thinking, seed, useRandomSeed]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -142,10 +142,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         </div>
       )}
 
-      {/* Prompt */}
-      <section className="space-y-2">
+      {/* Music Caption */}
+      <section className="space-y-1.5">
         <label className="block text-[11px] font-medium uppercase text-zinc-400">
-          Song Description
+          Music Caption
         </label>
         <PromptAutocompleteTextarea
           value={prompt}
@@ -156,43 +156,110 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         />
       </section>
 
-      {/* Lyrics toggle */}
-      <section className="space-y-2">
-        <button
-          type="button"
-          onClick={() => setShowLyrics(!showLyrics)}
-          className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-zinc-400 transition-colors hover:text-zinc-200"
-        >
-          <span className="text-[9px]">{showLyrics ? '▼' : '▶'}</span>
-          Lyrics {lyrics.trim() ? '(added)' : '(optional)'}
-        </button>
-        {showLyrics && (
-          <textarea
-            value={lyrics}
-            onChange={(e) => setLyrics(e.target.value)}
-            rows={4}
-            placeholder="Add song lyrics here..."
-            className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled}
-            data-testid="full-song-lyrics"
-          />
-        )}
+      {/* Lyrics — always visible, with Instrumental toggle */}
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-medium uppercase text-zinc-400">Lyrics</label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={instrumental}
+              onChange={(e) => {
+                setInstrumental(e.target.checked);
+                if (e.target.checked) setLyrics('[Instrumental]');
+                else if (lyrics === '[Instrumental]') setLyrics('');
+              }}
+              className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+              disabled={isDisabled}
+            />
+            <span className="text-[10px] text-zinc-500">Instrumental</span>
+          </label>
+        </div>
+        <textarea
+          value={lyrics}
+          onChange={(e) => setLyrics(e.target.value)}
+          rows={3}
+          placeholder="[Verse 1]\nYour lyrics here..."
+          className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+          disabled={isDisabled || instrumental}
+          data-testid="full-song-lyrics"
+        />
       </section>
 
-      {/* Duration only — BPM/Key inherited from project */}
-      <section className="flex items-center gap-3">
-        <label className="text-[11px] font-medium uppercase text-zinc-400 shrink-0">Duration</label>
-        <input
-          type="number"
-          value={durationSeconds}
-          onChange={(e) => setDurationSeconds(Number(e.target.value))}
-          min={MIN_DURATION}
-          max={MAX_DURATION}
-          step={1}
-          className="w-20 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-          disabled={isDisabled}
-        />
-        <span className="text-[10px] text-zinc-600">{durationSeconds}s</span>
+      {/* Duration + Seed + Thinking + Vocal Language — inline row */}
+      <section className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
+          <select
+            value={durationSeconds === -1 ? 'auto' : String(durationSeconds)}
+            onChange={(e) => setDurationSeconds(e.target.value === 'auto' ? -1 : Number(e.target.value))}
+            className="rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled}
+          >
+            <option value="auto">Auto</option>
+            <option value="15">15s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+            <option value="120">2m</option>
+            <option value="180">3m</option>
+            <option value="240">4m</option>
+            <option value="300">5m</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
+          <input
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(Number(e.target.value))}
+            className="w-[80px] rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] font-mono focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled || useRandomSeed}
+          />
+          <button
+            type="button"
+            onClick={() => setSeed(Math.floor(Math.random() * 2147483647))}
+            className="text-[14px] leading-none transition-opacity hover:opacity-80"
+            title="Random seed"
+            disabled={isDisabled || useRandomSeed}
+          >
+            🎲
+          </button>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useRandomSeed}
+              onChange={(e) => setUseRandomSeed(e.target.checked)}
+              className="h-3 w-3 rounded border-[#444] accent-indigo-500"
+              disabled={isDisabled}
+            />
+            <span className="text-[9px] text-zinc-600">Rand</span>
+          </label>
+        </div>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={thinking}
+            onChange={(e) => setThinking(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+            disabled={isDisabled}
+          />
+          <span className="text-[10px] text-zinc-500">Thinking</span>
+        </label>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Lang</label>
+          <select
+            value={vocalLanguage}
+            onChange={(e) => setVocalLanguage(e.target.value)}
+            className="rounded border border-[#444] bg-[#2a2a2a] px-1 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled || instrumental}
+          >
+            <option value="unknown">Auto</option>
+            <option value="en">EN</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+          </select>
+        </div>
       </section>
 
       {/* Split to stems */}
@@ -279,32 +346,18 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] text-zinc-500">Shift</label>
-                <input
-                  type="number"
-                  value={shift}
-                  onChange={(e) => setShift(Number(e.target.value))}
-                  min={1}
-                  max={5}
-                  step={0.5}
-                  className="mt-0.5 w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
-                  disabled={isDisabled}
-                />
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={thinking}
-                    onChange={(e) => setThinking(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
-                    disabled={isDisabled}
-                  />
-                  <span className="text-[10px] text-zinc-500">Thinking (LM CoT)</span>
-                </label>
-              </div>
+            <div>
+              <label className="block text-[10px] text-zinc-500">Shift</label>
+              <input
+                type="number"
+                value={shift}
+                onChange={(e) => setShift(Number(e.target.value))}
+                min={1}
+                max={5}
+                step={0.5}
+                className="mt-0.5 w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none"
+                disabled={isDisabled}
+              />
             </div>
             {/* Reset to model defaults */}
             <button

@@ -94,6 +94,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
   const [globalCaption, setGlobalCaption] = useState(() => project?.globalCaption ?? '');
   const [rows, setRows] = useState<TrackRow[]>([]);
   const [sharedSeed, setSharedSeed] = useState<number>(randomSeed);
+  const [audioDuration, setAudioDuration] = useState(30);
 
   useEffect(() => {
     if (!project) return;
@@ -270,7 +271,7 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
             value={globalCaption}
             onChange={(e) => setGlobalCaption(e.target.value)}
             placeholder="Song description (optional)..."
-            rows={1}
+            rows={3}
             className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:border-indigo-500 focus:outline-none"
           />
         </section>
@@ -376,31 +377,42 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
           )}
         </section>
 
-        <section className="space-y-1.5">
-          <label className="font-medium text-zinc-400 uppercase tracking-wide text-[10px]">
-            Shared seed
-          </label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSharedSeed(randomSeed())}
-              className="rounded border border-[#444] bg-[#333] px-2 py-1.5 text-zinc-300 transition-colors hover:bg-[#444]"
-              title="Randomize seed"
+        {/* Duration + Seed — compact inline */}
+        <section className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Duration</label>
+            <select
+              value={String(audioDuration)}
+              onChange={(e) => setAudioDuration(Number(e.target.value))}
+              className="rounded border border-[#444] bg-[#2a2a2a] px-1.5 py-0.5 text-[11px] focus:border-indigo-500 focus:outline-none"
             >
-              Shuffle
-            </button>
+              <option value="30">30s</option>
+              <option value="60">60s</option>
+              <option value="120">2m</option>
+              <option value="180">3m</option>
+              <option value="240">4m</option>
+              <option value="300">5m</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
             <input
               type="number"
               value={sharedSeed}
               onChange={(e) => setSharedSeed(Number(e.target.value))}
-              className="flex-1 rounded border border-[#444] bg-[#222] px-2.5 py-1.5 text-xs font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
+              className="w-[90px] rounded border border-[#444] bg-[#222] px-1.5 py-0.5 text-[11px] font-mono text-zinc-100 focus:border-indigo-500 focus:outline-none"
               min={0}
               max={2147483647}
             />
+            <button
+              type="button"
+              onClick={() => setSharedSeed(randomSeed())}
+              className="text-[14px] leading-none transition-opacity hover:opacity-80"
+              title="Random seed"
+            >
+              🎲
+            </button>
           </div>
-          <p className="text-[10px] text-zinc-500">
-            All selected tracks share this seed for tighter harmonic correlation.
-          </p>
         </section>
 
         {/* Generate button moved to unified dialog footer */}

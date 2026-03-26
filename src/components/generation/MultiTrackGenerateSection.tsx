@@ -276,13 +276,13 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
         </section>
 
         <section className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pr-0.5">
             <label className="font-medium text-zinc-400 uppercase tracking-wide text-[10px]">
               Tracks to generate
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="text-zinc-600 text-[10px]">
-                {selectedRows.length} / {rows.length} selected
+                {selectedRows.length}/{rows.length}
               </span>
               <button
                 type="button"

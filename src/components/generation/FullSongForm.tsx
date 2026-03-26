@@ -58,7 +58,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [bpm, setBpm] = useState(project?.bpm ?? 120);
   const [keyScale, setKeyScale] = useState(project?.keyScale ?? 'C major');
   const [durationSeconds, setDurationSeconds] = useState(30);
-  const [splitToStems, setSplitToStems] = useState(true);
+  const [splitToStems, setSplitToStems] = useState(false);
   const [stemCount, setStemCount] = useState<2 | 4 | 6>(4);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [inferenceSteps, setInferenceSteps] = useState(modelDefaults.inferenceSteps);
@@ -179,47 +179,20 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         )}
       </section>
 
-      {/* BPM, Key, Duration */}
-      <section className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="block text-[11px] font-medium uppercase text-zinc-400">BPM</label>
-          <input
-            type="number"
-            value={bpm}
-            onChange={(e) => setBpm(Number(e.target.value))}
-            min={MIN_BPM}
-            max={MAX_BPM}
-            className="mt-1 w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled}
-          />
-        </div>
-        <div>
-          <label className="block text-[11px] font-medium uppercase text-zinc-400">Key</label>
-          <select
-            value={keyScale}
-            onChange={(e) => setKeyScale(e.target.value)}
-            className="mt-1 w-full rounded border border-[#444] bg-[#2a2a2a] px-1 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled}
-          >
-            {KEY_SCALES.map((key) => (
-              <option key={key} value={key}>{key}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-[11px] font-medium uppercase text-zinc-400">Duration</label>
-          <input
-            type="number"
-            value={durationSeconds}
-            onChange={(e) => setDurationSeconds(Number(e.target.value))}
-            min={MIN_DURATION}
-            max={MAX_DURATION}
-            step={1}
-            className="mt-1 w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
-            disabled={isDisabled}
-          />
-          <span className="mt-0.5 block text-[10px] text-zinc-600">{durationSeconds}s</span>
-        </div>
+      {/* Duration only — BPM/Key inherited from project */}
+      <section className="flex items-center gap-3">
+        <label className="text-[11px] font-medium uppercase text-zinc-400 shrink-0">Duration</label>
+        <input
+          type="number"
+          value={durationSeconds}
+          onChange={(e) => setDurationSeconds(Number(e.target.value))}
+          min={MIN_DURATION}
+          max={MAX_DURATION}
+          step={1}
+          className="w-20 rounded border border-[#444] bg-[#2a2a2a] px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+          disabled={isDisabled}
+        />
+        <span className="text-[10px] text-zinc-600">{durationSeconds}s</span>
       </section>
 
       {/* Split to stems */}

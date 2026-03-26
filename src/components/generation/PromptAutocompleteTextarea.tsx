@@ -137,7 +137,7 @@ export function PromptAutocompleteTextarea({
         onKeyDown={handleKeyDown}
         placeholder="Describe the music you want to generate..."
         className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
-        rows={4}
+        rows={3}
         disabled={disabled}
         role="combobox"
         aria-label="Generation prompt"

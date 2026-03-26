@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
+import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
 import { generateText2Music } from '../../services/generationPipeline';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 
@@ -36,7 +37,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [durationAuto, setDurationAuto] = useState(false);
   const [seed, setSeed] = useState(Math.floor(Math.random() * 2147483647));
   const [useRandomSeed, setUseRandomSeed] = useState(true);
-  const [vocalLanguage, setVocalLanguage] = useState('unknown');
+  const [vocalLanguage, setVocalLanguage] = useState(DEFAULT_VOCAL_LANGUAGE);
   const [splitToStems, setSplitToStems] = useState(false);
   const [stemCount, setStemCount] = useState<2 | 4 | 6>(4);
   const [thinking, setThinking] = useState(project?.generationDefaults?.thinking ?? true);
@@ -76,6 +77,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         thinking,
         seed: useRandomSeed ? undefined : seed,
         useRandomSeed,
+        vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed');
@@ -126,11 +128,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
                 className="rounded border border-[#444] bg-[#2a2a2a] px-1 py-0.5 text-[10px] focus:border-indigo-500 focus:outline-none"
                 disabled={isDisabled || instrumental}
               >
-                <option value="unknown">Auto</option>
-                <option value="en">EN</option>
-                <option value="zh">中文</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
+                {VOCAL_LANGUAGES.map((lang) => (
+                  <option key={lang.value} value={lang.value}>{lang.label}</option>
+                ))}
               </select>
             </div>
             <label className="flex items-center gap-1.5 cursor-pointer">

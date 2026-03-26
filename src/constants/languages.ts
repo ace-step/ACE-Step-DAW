@@ -1,0 +1,62 @@
+/**
+ * Vocal language options for music generation.
+ *
+ * All 51 languages from the server's VALID_LANGUAGES (acestep/constants.py).
+ * The server uses "unknown" to trigger Chain-of-Thought language auto-detection.
+ */
+export const VOCAL_LANGUAGES = [
+  { value: 'unknown', label: 'Auto' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'az', label: 'Azərbaycan' },
+  { value: 'bg', label: 'Български' },
+  { value: 'bn', label: 'বাংলা' },
+  { value: 'ca', label: 'Català' },
+  { value: 'cs', label: 'Čeština' },
+  { value: 'da', label: 'Dansk' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'el', label: 'Ελληνικά' },
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español' },
+  { value: 'fa', label: 'فارسی' },
+  { value: 'fi', label: 'Suomi' },
+  { value: 'fr', label: 'Français' },
+  { value: 'he', label: 'עברית' },
+  { value: 'hi', label: 'हिन्दी' },
+  { value: 'hr', label: 'Hrvatski' },
+  { value: 'ht', label: 'Kreyòl' },
+  { value: 'hu', label: 'Magyar' },
+  { value: 'id', label: 'Indonesia' },
+  { value: 'is', label: 'Íslenska' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'la', label: 'Latina' },
+  { value: 'lt', label: 'Lietuvių' },
+  { value: 'ms', label: 'Melayu' },
+  { value: 'ne', label: 'नेपाली' },
+  { value: 'nl', label: 'Nederlands' },
+  { value: 'no', label: 'Norsk' },
+  { value: 'pa', label: 'ਪੰਜਾਬੀ' },
+  { value: 'pl', label: 'Polski' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ro', label: 'Română' },
+  { value: 'ru', label: 'Русский' },
+  { value: 'sa', label: 'संस्कृत' },
+  { value: 'sk', label: 'Slovenčina' },
+  { value: 'sr', label: 'Српски' },
+  { value: 'sv', label: 'Svenska' },
+  { value: 'sw', label: 'Kiswahili' },
+  { value: 'ta', label: 'தமிழ்' },
+  { value: 'te', label: 'తెలుగు' },
+  { value: 'th', label: 'ไทย' },
+  { value: 'tl', label: 'Tagalog' },
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'uk', label: 'Українська' },
+  { value: 'ur', label: 'اردو' },
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'yue', label: '粵語' },
+  { value: 'zh', label: '中文' },
+] as const;
+
+/** Default vocal language — "unknown" triggers server-side auto-detection via CoT. */
+export const DEFAULT_VOCAL_LANGUAGE = 'unknown';

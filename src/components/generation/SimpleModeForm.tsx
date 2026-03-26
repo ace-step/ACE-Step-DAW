@@ -41,7 +41,7 @@ export function SimpleModeForm({ onSampleCreated, onFooterChange }: SimpleModeFo
 
     try {
       await useModelStore.getState().ensureModelForIntent('full-song');
-      toastInfo('Creating sample from description...');
+      toastInfo('Creating example from description...');
 
       const result = await api.createSample({
         query: query.trim(),
@@ -59,7 +59,7 @@ export function SimpleModeForm({ onSampleCreated, onFooterChange }: SimpleModeFo
         vocalLanguage: result.vocal_language ?? vocalLanguage,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create sample';
+      const message = err instanceof Error ? err.message : 'Failed to create example';
       setError(message);
       toastError(message);
     } finally {
@@ -70,7 +70,7 @@ export function SimpleModeForm({ onSampleCreated, onFooterChange }: SimpleModeFo
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleCreateSample(), [handleCreateSample]);
   onFooterChange({
-    label: isCreating ? 'Creating...' : 'Create Sample',
+    label: isCreating ? 'Creating...' : 'Create Example',
     disabled: isDisabled || !query.trim(),
     action: footerAction,
   });

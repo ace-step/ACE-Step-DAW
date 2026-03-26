@@ -209,6 +209,22 @@ export async function createSample(req: CreateSampleRequest): Promise<CreateSamp
   return envelope.data;
 }
 
+/** Fetch a random pre-loaded example for the Simple Mode form. */
+export async function getRandomExample(sampleType: 'simple_mode' | 'custom_mode' = 'simple_mode'): Promise<Record<string, unknown>> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/create_random_sample`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sample_type: sampleType }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`getRandomExample failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<Record<string, unknown>> = await res.json();
+  return envelope.data;
+}
+
 export async function initModel(req: InitModelRequest): Promise<InitModelResponse> {
   const base = getApiBase();
   const res = await fetch(`${base}/v1/init`, {

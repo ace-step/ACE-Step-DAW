@@ -73,6 +73,6 @@ describe('InstrumentPicker', () => {
     const drumMachineButton = screen.getByText('Drum Machine', { selector: '.text-sm.font-medium' });
     fireEvent.click(drumMachineButton);
 
-    expect(addTrackSpy).toHaveBeenCalledWith('percussion', 'drumMachine');
+    expect(addTrackSpy).toHaveBeenCalledWith('percussion', 'drumMachine', undefined);
   });
 });

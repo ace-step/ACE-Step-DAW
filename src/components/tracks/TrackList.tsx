@@ -290,6 +290,7 @@ function EmptyTrackHeaderRow({
   onDrop: (e: React.DragEvent, slotIndex: number) => void;
 }) {
   const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
+  const selectTrack = useUIStore((s) => s.selectTrack);
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
@@ -303,7 +304,10 @@ function EmptyTrackHeaderRow({
         backgroundColor: isDragOver ? 'rgba(94, 89, 255, 0.12)' : undefined,
         boxShadow: isDragOver ? 'inset 0 0 0 1px rgba(94, 89, 255, 0.45)' : undefined,
       }}
-      onClick={() => setShowInstrumentPicker(true)}
+      onClick={() => {
+        selectTrack(virtualId, false);
+        setShowInstrumentPicker(true);
+      }}
       onDragOver={isDropDisabled ? undefined : (e) => onDragOver(e, slotIndex)}
       onDrop={isDropDisabled ? undefined : (e) => onDrop(e, slotIndex)}
       aria-label={`Empty track slot ${slotIndex + 1}`}

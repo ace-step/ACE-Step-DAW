@@ -31,16 +31,24 @@ export function StatusBar() {
     .filter((j) => j.status === 'generating' || j.status === 'queued' || j.status === 'processing')
     .sort((a, b) => (a.lastUpdatedAt ?? 0) - (b.lastUpdatedAt ?? 0));
   const primaryJob = activeJobs[activeJobs.length - 1] ?? null;
-  const projectModel = useProjectStore((s) => s.project?.generationDefaults.model ?? '');
   const activeModelId = useModelStore((s) => s.activeModelId);
+  const activeLmModelId = useModelStore((s) => s.activeLmModelId);
+  const categoryOverrides = useModelStore((s) => s.categoryModelOverrides);
+  const availableModels = useModelStore((s) => s.availableModels);
+  const availableLmModels = useModelStore((s) => s.availableLmModels);
 
   useEffect(() => {
     let active = true;
     let interval: number | null = null;
     const check = async () => {
       const ok = await healthCheck();
+      const wasDisconnected = !lastKnownBackendConnection;
       lastKnownBackendConnection = ok;
       if (active) setConnected(ok);
+      // On first successful connection (or reconnect), sync model state from server
+      if (ok && wasDisconnected) {
+        void useModelStore.getState().refreshModels();
+      }
     };
 
     const timeout = window.setTimeout(() => {
@@ -60,7 +68,13 @@ export function StatusBar() {
   const jobCount = activeJobs.length;
   const jobLabel = jobCount === 1 ? '1 job' : `${jobCount} jobs`;
   const hasActiveJobs = activeJobs.length > 0;
-  const resolvedModelName = projectModel.trim() || activeModelId?.trim() || 'No model';
+  // Per-model loaded status
+  const t2mName = categoryOverrides.text2music || activeModelId || null;
+  const legoName = categoryOverrides.lego || null;
+  const lmName = activeLmModelId || null;
+  const isT2mLoaded = t2mName ? availableModels.some((m) => m.name === t2mName && m.is_loaded) : false;
+  const isLegoLoaded = legoName ? availableModels.some((m) => m.name === legoName && m.is_loaded) : false;
+  const isLmLoaded = lmName ? availableLmModels.some((m) => m.name === lmName && m.is_loaded) : false;
   const sourceCodeUrl = import.meta.env.VITE_SOURCE_CODE_URL?.trim() || DEFAULT_SOURCE_CODE_URL;
   const normalizedSourceCodeUrl = sourceCodeUrl.replace(/\/$/, '');
   const licenseUrl = import.meta.env.VITE_LICENSE_URL?.trim() || `${normalizedSourceCodeUrl}/blob/main/LICENSE`;
@@ -90,14 +104,27 @@ export function StatusBar() {
           className={`flex h-6 items-center gap-3 px-3 ${hasActiveJobs ? 'border-t border-white/4' : ''}`}
           data-testid="status-bar-meta-row"
         >
-          <div
-            className="flex items-center"
-            title={connected ? 'Backend connected' : 'Backend offline'}
-            data-testid="status-connection-indicator"
-          >
-            <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-          </div>
-          <span className="hidden lg:inline truncate text-daw-text-muted" data-testid="status-model-name">{resolvedModelName}</span>
+          <span className="hidden lg:inline-flex items-center gap-3 truncate text-daw-text-muted" data-testid="status-model-name">
+            {t2mName ? (
+              <span className="inline-flex items-center gap-1">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isT2mLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                <span>Mixture: {t2mName}</span>
+              </span>
+            ) : null}
+            {legoName ? (
+              <span className="inline-flex items-center gap-1">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLegoLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                <span>Stems: {legoName}</span>
+              </span>
+            ) : null}
+            {lmName ? (
+              <span className="inline-flex items-center gap-1">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isLmLoaded ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                <span>LM: {lmName}</span>
+              </span>
+            ) : null}
+            {!t2mName && !legoName && !lmName && <span>No model</span>}
+          </span>
           <span className="flex-1" />
           <div className="hidden items-center gap-1.5 text-[9px] text-daw-text-muted/80 md:flex" data-testid="status-legal-notice">
             <span className="whitespace-nowrap text-daw-text-muted/90" data-testid="status-copyright-notice">{copyrightNotice}</span>

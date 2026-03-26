@@ -58,23 +58,10 @@ describe('StatusBar', () => {
       expect(screen.queryByText('Offline')).not.toBeInTheDocument();
     });
 
-    it('renders a dot with title="Backend offline" when disconnected', () => {
+    it('shows "No model" when disconnected and no models configured', () => {
       healthCheckMock.mockResolvedValue(false);
       render(<StatusBar />);
-      const dotContainer = screen.getByTitle('Backend offline');
-      expect(dotContainer).toBeInTheDocument();
-    });
-
-    it('renders a dot with title="Backend connected" when connected', async () => {
-      healthCheckMock.mockResolvedValue(true);
-      render(<StatusBar />);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10_000);
-      });
-
-      const dotContainer = screen.getByTitle('Backend connected');
-      expect(dotContainer).toBeInTheDocument();
+      expect(screen.getByTestId('status-model-name')).toHaveTextContent('No model');
     });
   });
 

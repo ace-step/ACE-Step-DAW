@@ -53,7 +53,6 @@ describe('StatusBar controls', () => {
 
     expect(screen.queryByTestId('status-bar-job-row')).not.toBeInTheDocument();
     expect(screen.getByTestId('status-bar-meta-row')).toBeInTheDocument();
-    expect(screen.getByTestId('status-connection-indicator')).toBeInTheDocument();
   });
 
   it('shows a separate job row only when generation is active', () => {
@@ -83,7 +82,8 @@ describe('StatusBar controls', () => {
 
     render(<StatusBar />);
 
-    expect(screen.getByTestId('status-model-name')).toHaveTextContent('acestep-v15-base-lego');
+    // StatusBar now shows "Mixture: <name>" with per-model status dots
+    expect(screen.getByTestId('status-model-name')).toHaveTextContent('Mixture: acestep-v15-base-lego');
   });
 
   it('shows the AGPL source and license notice links', () => {

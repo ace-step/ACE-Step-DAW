@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
@@ -9,10 +10,6 @@ import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 import { THEME_LIST } from '../../themes';
 import type { ThemeId } from '../../themes';
-
-function modelSupportsThinking(modelName: string): boolean {
-  return modelName.includes('turbo') || modelName.includes('sft');
-}
 
 function ThemeSelector() {
   const currentTheme = useUIStore((s) => s.theme);
@@ -114,27 +111,31 @@ export function SettingsDialog() {
   const [steps, setSteps] = useState(DEFAULT_GENERATION.inferenceSteps);
   const [guidance, setGuidance] = useState(DEFAULT_GENERATION.guidanceScale);
   const [shift, setShift] = useState(DEFAULT_GENERATION.shift);
-  const [thinking, setThinking] = useState(DEFAULT_GENERATION.thinking);
-  const [model, setModel] = useState('');
+  const [text2musicModel, setText2musicModel] = useState('');
+  const [legoModel, setLegoModel] = useState('');
   const [backendUrl, setBackendUrlLocal] = useState('');
   const [availableModels, setAvailableModels] = useState<ModelEntry[]>([]);
   const [availableLmModels, setAvailableLmModels] = useState<LmModelEntry[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [initLoading, setInitLoading] = useState(false);
+  const [initLoadingT2m, setInitLoadingT2m] = useState(false);
+  const [initLoadingLego, setInitLoadingLego] = useState(false);
+  const [initLoadingLm, setInitLoadingLm] = useState(false);
   const [llmInitialized, setLlmInitialized] = useState(false);
   const [selectedLmModel, setSelectedLmModel] = useState('');
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
   const prevShow = useRef(false);
 
-  const handleModelChange = (newModel: string) => {
-    setModel(newModel);
-    if (!modelSupportsThinking(newModel)) {
-      setThinking(false);
-    }
+  const handleText2musicModelChange = (newModel: string) => {
+    setText2musicModel(newModel);
   };
 
-  const refreshModels = async (preferredModel?: string, preferredLmModel?: string) => {
+  const handleLegoModelChange = (newModel: string) => {
+    setLegoModel(newModel);
+  };
+
+  /** Refresh model lists from backend. Only sets dropdown values on first load (empty state). */
+  const refreshModels = async () => {
     setModelsLoading(true);
     try {
       const resp = await listModels();
@@ -144,31 +145,29 @@ export function SettingsDialog() {
       setAvailableLmModels(lmModels);
       setLlmInitialized(Boolean(resp?.llm_initialized));
 
-      let resolvedModel = preferredModel || '';
-      if (!resolvedModel && resp?.default_model) {
-        resolvedModel = resp.default_model;
-      }
-      if (!resolvedModel && models.length > 0) {
-        resolvedModel = models[0].name;
-      }
-      if (resolvedModel && !models.some((m) => m.name === resolvedModel)) {
-        resolvedModel = resp?.default_model ?? models[0]?.name ?? '';
-      }
-      if (resolvedModel) {
-        setModel(resolvedModel);
-        if (!modelSupportsThinking(resolvedModel)) {
-          setThinking(false);
-        }
-      }
+      // Only resolve dropdown values if they haven't been set yet (first open).
+      // After init, the user's current selection is preserved.
+      setText2musicModel((prev) => {
+        if (prev && models.some((m) => m.name === prev)) return prev;
+        const overrides = useModelStore.getState().categoryModelOverrides;
+        if (overrides.text2music && models.some((m) => m.name === overrides.text2music)) return overrides.text2music!;
+        if (resp?.default_model && models.some((m) => m.name === resp.default_model)) return resp.default_model;
+        return models[0]?.name ?? '';
+      });
 
-      let resolvedLm = preferredLmModel || '';
-      if (!resolvedLm && resp?.loaded_lm_model) {
-        resolvedLm = resp.loaded_lm_model;
-      }
-      if (!resolvedLm && lmModels.length > 0) {
-        resolvedLm = lmModels[0].name;
-      }
-      setSelectedLmModel(resolvedLm);
+      setLegoModel((prev) => {
+        if (prev && models.some((m) => m.name === prev)) return prev;
+        const overrides = useModelStore.getState().categoryModelOverrides;
+        if (overrides.lego && models.some((m) => m.name === overrides.lego)) return overrides.lego!;
+        const legoHit = models.find((m) => m.name.toLowerCase().includes('lego'));
+        return legoHit?.name ?? models[0]?.name ?? '';
+      });
+
+      setSelectedLmModel((prev) => {
+        if (prev && lmModels.some((m) => m.name === prev)) return prev;
+        if (resp?.loaded_lm_model) return resp.loaded_lm_model;
+        return lmModels[0]?.name ?? '';
+      });
     } catch {
       setAvailableModels([]);
       setAvailableLmModels([]);
@@ -196,13 +195,11 @@ export function SettingsDialog() {
       setSteps(gen.inferenceSteps);
       setGuidance(gen.guidanceScale);
       setShift(gen.shift);
-      setThinking(gen.thinking);
-      setModel(gen.model);
       setBackendUrlLocal(getBackendUrl());
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
-      void refreshModels(gen.model);
+      void refreshModels();
     }
     prevShow.current = show;
   }, [show, project]);
@@ -224,17 +221,22 @@ export function SettingsDialog() {
             inferenceSteps: steps,
             guidanceScale: guidance,
             shift,
-            thinking,
-            model,
           },
         },
       });
     }
     setBackendUrl(backendUrl);
+
+    // Persist model category overrides so intent routing uses user's choices
+    const ms = useModelStore.getState();
+    if (text2musicModel) ms.setCategoryModelOverride('text2music', text2musicModel);
+    if (legoModel) ms.setCategoryModelOverride('lego', legoModel);
+
     setShow(false);
   };
 
-  const selectedModelEntry = availableModels.find((m) => m.name === model);
+  const selectedT2mEntry = availableModels.find((m) => m.name === text2musicModel);
+  const selectedLegoEntry = availableModels.find((m) => m.name === legoModel);
   const selectedLmEntry = availableLmModels.find((m) => m.name === selectedLmModel);
   const playbackLatency = normalizePlaybackLatencySettings(project?.playbackLatency);
   const manualLatencyValue = manualLatencyText.trim() === '' ? null : Number.parseFloat(manualLatencyText);
@@ -247,41 +249,58 @@ export function SettingsDialog() {
     && pendingManualOverrideMs !== null
     && pendingManualOverrideMs !== playbackLatency.manualOverrideMs;
 
-  const handleInitSelectedModel = async () => {
-    if (!model) return;
-    setInitLoading(true);
+  const handleInitT2m = async () => {
+    if (!text2musicModel) return;
+    setInitLoadingT2m(true);
     setInitMessage('');
     setInitError('');
     try {
-      const resp = await initModel({ model });
-      setInitMessage(resp.message || `Initialized ${model}`);
-      await refreshModels(model, selectedLmModel);
+      const resp = await initModel({ model: text2musicModel });
+      setInitMessage(resp.message || `Initialized ${text2musicModel}`);
+      await refreshModels();
+      await useModelStore.getState().refreshModels();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to initialize model';
-      setInitError(msg);
+      setInitError(e instanceof Error ? e.message : 'Failed to initialize model');
     } finally {
-      setInitLoading(false);
+      setInitLoadingT2m(false);
+    }
+  };
+
+  const handleInitLego = async () => {
+    if (!legoModel) return;
+    setInitLoadingLego(true);
+    setInitMessage('');
+    setInitError('');
+    try {
+      const resp = await initModel({ model: legoModel });
+      setInitMessage(resp.message || `Initialized ${legoModel}`);
+      await refreshModels();
+      await useModelStore.getState().refreshModels();
+    } catch (e) {
+      setInitError(e instanceof Error ? e.message : 'Failed to initialize model');
+    } finally {
+      setInitLoadingLego(false);
     }
   };
 
   const handleInitSelectedLm = async () => {
     if (!selectedLmModel) return;
-    setInitLoading(true);
+    setInitLoadingLm(true);
     setInitMessage('');
     setInitError('');
     try {
       const resp = await initModel({
-        model,
+        model: text2musicModel || undefined,
         init_llm: true,
         lm_model_path: selectedLmModel,
       });
       setInitMessage(resp.message || `Initialized LLM ${selectedLmModel}`);
-      await refreshModels(model, selectedLmModel);
+      await refreshModels();
+      await useModelStore.getState().refreshModels();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to initialize LLM';
-      setInitError(msg);
+      setInitError(e instanceof Error ? e.message : 'Failed to initialize LLM');
     } finally {
-      setInitLoading(false);
+      setInitLoadingLm(false);
     }
   };
 
@@ -472,39 +491,26 @@ export function SettingsDialog() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Shift</label>
-              <input
-                type="number"
-                value={shift}
-                onChange={(e) => setShift(parseFloat(e.target.value) || 3.0)}
-                min={0}
-                max={10}
-                step={0.5}
-                className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
-              />
-            </div>
-            <div className="flex items-end pb-1">
-              <label className={`flex items-center gap-2 ${modelSupportsThinking(model) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
-                <input
-                  type="checkbox"
-                  checked={thinking}
-                  onChange={(e) => setThinking(e.target.checked)}
-                  disabled={!modelSupportsThinking(model)}
-                  className="w-4 h-4 rounded border-daw-border bg-daw-bg accent-daw-accent"
-                />
-                <span className="text-xs text-zinc-400">Thinking mode</span>
-              </label>
-            </div>
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">Shift</label>
+            <input
+              type="number"
+              value={shift}
+              onChange={(e) => setShift(parseFloat(e.target.value) || 3.0)}
+              min={0}
+              max={10}
+              step={0.5}
+              className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+            />
           </div>
 
+          {/* Text2Music Model — used for Full Song (Mix) generation */}
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Model</label>
+            <label className="block text-xs text-zinc-400 mb-1">Text2Music Model <span className="text-[9px] text-zinc-600">(Full Song)</span></label>
             <select
-              value={model}
-              onChange={(e) => handleModelChange(e.target.value)}
-              disabled={modelsLoading || initLoading}
+              value={text2musicModel}
+              onChange={(e) => handleText2musicModelChange(e.target.value)}
+              disabled={modelsLoading || initLoadingT2m}
               className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
             >
               {availableModels.map((m) => (
@@ -513,28 +519,59 @@ export function SettingsDialog() {
                 </option>
               ))}
             </select>
-            <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="mt-1.5 flex items-center justify-between gap-2">
               <span className="text-[10px] text-zinc-400">
-                {selectedModelEntry?.is_loaded ? 'Model is loaded' : 'Model is not loaded'}
+                {selectedT2mEntry?.is_loaded ? 'Model is loaded' : 'Model is not loaded'}
               </span>
               <button
                 type="button"
-                onClick={handleInitSelectedModel}
-                disabled={initLoading || !model}
+                onClick={handleInitT2m}
+                disabled={initLoadingT2m || !text2musicModel}
                 className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {initLoading ? 'Initializing...' : (selectedModelEntry?.is_loaded ? 'Reinitialize' : 'Initialize')}
+                {initLoadingT2m ? 'Initializing...' : (selectedT2mEntry?.is_loaded ? 'Reinitialize' : 'Initialize')}
               </button>
             </div>
           </div>
 
-          {modelSupportsThinking(model) && (
+          {/* Lego Model — used for Single Track / Stems generation */}
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">Lego Model <span className="text-[9px] text-zinc-600">(Single Track / Stems)</span></label>
+            <select
+              value={legoModel}
+              onChange={(e) => handleLegoModelChange(e.target.value)}
+              disabled={modelsLoading || initLoadingLego}
+              className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+            >
+              {availableModels.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.name}{m.is_loaded ? ' (loaded)' : ''}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-zinc-400">
+                {selectedLegoEntry?.is_loaded ? 'Model is loaded' : 'Model is not loaded'}
+              </span>
+              <button
+                type="button"
+                onClick={handleInitLego}
+                disabled={initLoadingLego || !legoModel}
+                className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {initLoadingLego ? 'Initializing...' : (selectedLegoEntry?.is_loaded ? 'Reinitialize' : 'Initialize')}
+              </button>
+            </div>
+          </div>
+
+          {/* LM Model — used for Thinking / CoT in text2music */}
+          {availableLmModels.length > 0 && (
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">LM Model</label>
+              <label className="block text-xs text-zinc-400 mb-1">LM Model <span className="text-[9px] text-zinc-600">(Thinking / CoT)</span></label>
               <select
                 value={selectedLmModel}
                 onChange={(e) => setSelectedLmModel(e.target.value)}
-                disabled={modelsLoading || initLoading}
+                disabled={modelsLoading || initLoadingLm}
                 className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
               >
                 {availableLmModels.map((m) => (
@@ -543,17 +580,17 @@ export function SettingsDialog() {
                   </option>
                 ))}
               </select>
-              <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="mt-1.5 flex items-center justify-between gap-2">
                 <span className="text-[10px] text-zinc-400">
                   {llmInitialized ? 'LLM initialized' : 'LLM not initialized'}
                 </span>
                 <button
                   type="button"
                   onClick={handleInitSelectedLm}
-                  disabled={initLoading || !selectedLmModel}
+                  disabled={initLoadingLm || !selectedLmModel}
                   className="px-2.5 py-1 text-[10px] font-medium bg-daw-surface-2 hover:bg-[#484848] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {initLoading ? 'Initializing...' : (selectedLmEntry?.is_loaded ? 'Reinitialize LLM' : 'Initialize LLM')}
+                  {initLoadingLm ? 'Initializing...' : (selectedLmEntry?.is_loaded ? 'Reinitialize LLM' : 'Initialize LLM')}
                 </button>
               </div>
             </div>
@@ -566,95 +603,6 @@ export function SettingsDialog() {
             <p className="text-[10px] text-emerald-400">{initMessage}</p>
           )}
 
-          {/* Custom Models inventory */}
-          {availableModels.length > 0 && (
-            <>
-              <h3 className="text-xs font-medium text-zinc-300 pt-2">Custom Models</h3>
-              <div className="bg-[#1a1a1a] rounded border border-daw-border max-h-[140px] overflow-y-auto">
-                <table className="w-full text-[10px]">
-                  <thead>
-                    <tr className="border-b border-daw-border text-zinc-400">
-                      <th className="text-left px-2 py-1.5 font-medium">DiT Model</th>
-                      <th className="text-center px-2 py-1.5 font-medium w-16">Default</th>
-                      <th className="text-center px-2 py-1.5 font-medium w-16">Loaded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {availableModels.map((m) => (
-                      <tr
-                        key={m.name}
-                        onClick={() => handleModelChange(m.name)}
-                        className={`border-b border-[#2a2a2a] cursor-pointer transition-colors ${
-                          m.name === model ? 'bg-daw-accent/15' : 'hover:bg-[#252525]'
-                        }`}
-                      >
-                        <td className="px-2 py-1.5 text-zinc-200 truncate max-w-[200px]">
-                          {m.name}
-                          {m.name === model && (
-                            <span className="ml-1.5 text-[8px] text-daw-accent font-bold uppercase">selected</span>
-                          )}
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          {m.is_default ? (
-                            <span className="text-emerald-400">Yes</span>
-                          ) : (
-                            <span className="text-zinc-600">-</span>
-                          )}
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          {m.is_loaded ? (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          ) : (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {availableLmModels.length > 0 && (
-                <div className="bg-[#1a1a1a] rounded border border-daw-border max-h-[100px] overflow-y-auto mt-2">
-                  <table className="w-full text-[10px]">
-                    <thead>
-                      <tr className="border-b border-daw-border text-zinc-400">
-                        <th className="text-left px-2 py-1.5 font-medium">LM Model</th>
-                        <th className="text-center px-2 py-1.5 font-medium w-16">Loaded</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availableLmModels.map((m) => (
-                        <tr
-                          key={m.name}
-                          onClick={() => setSelectedLmModel(m.name)}
-                          className={`border-b border-[#2a2a2a] cursor-pointer transition-colors ${
-                            m.name === selectedLmModel ? 'bg-daw-accent/15' : 'hover:bg-[#252525]'
-                          }`}
-                        >
-                          <td className="px-2 py-1.5 text-zinc-200 truncate max-w-[240px]">
-                            {m.name}
-                            {m.name === selectedLmModel && (
-                              <span className="ml-1.5 text-[8px] text-daw-accent font-bold uppercase">selected</span>
-                            )}
-                          </td>
-                          <td className="text-center px-2 py-1.5">
-                            {m.is_loaded ? (
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            ) : (
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <p className="text-[10px] text-zinc-600 mt-1">
-                Click a row to select it. Selection is saved with project settings.
-              </p>
-            </>
-          )}
         </div>
 
         <div className="px-4 pt-3 pb-1 space-y-2">

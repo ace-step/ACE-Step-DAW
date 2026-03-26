@@ -69,6 +69,7 @@ export interface Text2MusicTaskParams {
   seed?: number;
   use_random_seed?: boolean;
   use_cot_caption?: boolean;
+  vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
 }
 
 /**
@@ -115,6 +116,7 @@ export interface LegoTaskParams {
   use_random_seed?: boolean; // false = use seed field deterministically
   src_audio_path?: string;  // server-side path; when set, skips blob upload
   chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
+  vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
 }
 
 /** All API responses are wrapped in this envelope */

@@ -3,18 +3,7 @@ import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
 import * as api from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
-
-const VOCAL_LANGUAGES = [
-  { value: 'auto', label: 'Instrumental / auto' },
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-  { value: 'ja', label: '日本語' },
-  { value: 'ko', label: '한국어' },
-  { value: 'es', label: 'Español' },
-  { value: 'fr', label: 'Français' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'unknown', label: 'Other' },
-];
+import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
 
 interface SimpleModeFormProps {
   onSampleCreated: (data: {
@@ -35,7 +24,7 @@ export function SimpleModeForm({ onSampleCreated, onFooterChange }: SimpleModeFo
   const modelLoadingState = useModelStore((s) => s.modelLoadingState);
 
   const [query, setQuery] = useState('');
-  const [vocalLanguage, setVocalLanguage] = useState('auto');
+  const [vocalLanguage, setVocalLanguage] = useState(DEFAULT_VOCAL_LANGUAGE);
   const [instrumental, setInstrumental] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -2195,6 +2195,8 @@ export interface Text2MusicRequest {
   seed?: number;
   useRandomSeed?: boolean;
   useCotCaption?: boolean;
+  /** Vocal language code — "unknown" = server auto-detects via CoT */
+  vocalLanguage?: string;
 }
 
 export interface Text2MusicResult {
@@ -2301,6 +2303,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.useCotCaption !== undefined) {
       params.use_cot_caption = request.useCotCaption;
+    }
+
+    if (request.vocalLanguage) {
+      params.vocal_language = request.vocalLanguage;
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

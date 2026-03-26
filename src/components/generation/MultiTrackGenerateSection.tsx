@@ -231,65 +231,47 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
   return (
     <div className="flex-1 overflow-y-auto px-3 py-3" data-testid="multi-track-generation-section">
       <div className="space-y-4">
-        <section className="space-y-2 rounded-lg border border-[#333] bg-[#232323] p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Multi-Track</h3>
-              <p className="text-[11px] text-zinc-400">
-                Build a generation plan by adding or removing rows and assigning each one to a default track role.
-              </p>
+        {/* Mode toggle + Global description — compact */}
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 rounded-lg border border-[#3a3a3a] bg-[#1c1c1c] p-0.5">
+              <button
+                type="button"
+                onClick={() => onModeChange('silence')}
+                className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                  isSilence
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+                }`}
+                aria-pressed={isSilence}
+              >
+                From Silence
+              </button>
+              <button
+                type="button"
+                onClick={() => onModeChange('context')}
+                className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                  !isSilence
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
+                }`}
+                aria-pressed={!isSilence}
+              >
+                Use Context
+              </button>
             </div>
             {initialRange && (
-              <span className="rounded bg-[#333] px-1.5 py-0.5 text-[10px] font-mono text-zinc-300">
-                {initialRange.startTime.toFixed(1)}s - {(initialRange.startTime + initialRange.duration).toFixed(1)}s
+              <span className="rounded bg-[#333] px-1.5 py-0.5 text-[10px] font-mono text-zinc-400">
+                {initialRange.startTime.toFixed(1)}s – {(initialRange.startTime + initialRange.duration).toFixed(1)}s
               </span>
             )}
           </div>
-
-          <div className="flex gap-1 rounded-lg border border-[#3a3a3a] bg-[#1c1c1c] p-1">
-            <button
-              type="button"
-              onClick={() => onModeChange('silence')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                isSilence
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-              }`}
-              aria-pressed={isSilence}
-            >
-              From Silence
-            </button>
-            <button
-              type="button"
-              onClick={() => onModeChange('context')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                !isSilence
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-zinc-400 hover:bg-[#2a2a2a] hover:text-zinc-200'
-              }`}
-              aria-pressed={!isSilence}
-            >
-              Use Context
-            </button>
-          </div>
-          <p className="text-[10px] text-zinc-500">
-            {isSilence
-              ? 'Starts fresh across the selected tracks in parallel.'
-              : 'Uses existing generated material as context while keeping the same track-by-track workflow.'}
-          </p>
-        </section>
-
-        <section className="space-y-1.5">
-          <label className="font-medium text-zinc-400 uppercase tracking-wide text-[10px]">
-            Global song description
-            <span className="ml-1 normal-case font-normal text-zinc-600">(optional)</span>
-          </label>
           <textarea
             value={globalCaption}
             onChange={(e) => setGlobalCaption(e.target.value)}
-            placeholder="e.g. upbeat pop song with energetic drums and warm bass..."
-            rows={2}
-            className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:border-indigo-500 focus:outline-none"
+            placeholder="Song description (optional)..."
+            rows={1}
+            className="w-full rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:border-indigo-500 focus:outline-none"
           />
         </section>
 
@@ -368,10 +350,11 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
                       type="button"
                       onClick={() => removeRow(row.rowId)}
                       disabled={rows.length === 1}
-                      className="text-[10px] text-zinc-500 transition-colors hover:text-red-400 disabled:opacity-30"
+                      className="flex h-5 w-5 items-center justify-center rounded border border-[#444] bg-[#2c2c2c] text-[12px] font-medium text-zinc-400 transition-colors hover:bg-[#363636] hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
                       aria-label={`Remove track row ${index + 1}`}
+                      title="Remove track"
                     >
-                      ×
+                      −
                     </button>
                   </div>
 

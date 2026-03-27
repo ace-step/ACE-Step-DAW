@@ -47,6 +47,7 @@ import type {
   SynthFilter,
   SynthLfo,
   FilterEnvelope,
+  UnisonSettings,
   GainEnvelopePoint,
   LoudnessTarget,
   MasteringPreset,
@@ -631,6 +632,8 @@ export interface ProjectState {
   updateFilterEnvelope: (trackId: string, envelope: Partial<FilterEnvelope>) => void;
   /** Update LFO modulation settings on a synth track. */
   updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
+  /** Update unison / detune voice-stacking settings on a synth track. */
+  updateUnisonSettings: (trackId: string, settings: Partial<UnisonSettings>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
@@ -3359,6 +3362,32 @@ export const useProjectStore = create<ProjectState>()(
         tracks: state.project.tracks.map((t) =>
           t.id === trackId
             ? { ...t, synthLfo: { ...(t.synthLfo ?? { rate: 1, depth: 0.5, shape: 'sine' as const }), ...lfo } }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateUnisonSettings: (trackId, settings) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update unison settings', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                unisonSettings: {
+                  ...(t.unisonSettings ?? { voices: 1, detune: 0, spread: 0 }),
+                  ...settings,
+                  ...(settings.voices != null ? { voices: Math.max(1, Math.min(8, Math.round(settings.voices))) } : {}),
+                  ...(settings.detune != null ? { detune: Math.max(0, Math.min(100, settings.detune)) } : {}),
+                  ...(settings.spread != null ? { spread: Math.max(0, Math.min(1, settings.spread)) } : {}),
+                },
+              }
             : t,
         ),
       },

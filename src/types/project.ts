@@ -61,6 +61,16 @@ export interface SynthLfo {
   shape: LfoShape;
 }
 
+/** Unison / detune voice-stacking settings for a synth track. */
+export interface UnisonSettings {
+  /** Number of stacked voices (1–8). 1 = no unison. */
+  voices: number;
+  /** Detune amount in cents spread across voices (0–100). */
+  detune: number;
+  /** Stereo spread of detuned voices (0–1). 0 = mono, 1 = full stereo. */
+  spread: number;
+}
+
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
 /** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
@@ -763,6 +773,8 @@ export interface Track {
   filterEnvelope?: FilterEnvelope;
   /** LFO modulation settings. */
   synthLfo?: SynthLfo;
+  /** Unison / detune voice-stacking settings. */
+  unisonSettings?: UnisonSettings;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];

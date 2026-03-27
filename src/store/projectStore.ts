@@ -719,6 +719,9 @@ export interface ProjectState {
   renameSequencerRow: (trackId: string, rowId: string, name: string) => void;
   setSequencerRowColor: (trackId: string, rowId: string, color: string) => void;
   fillSequencerRow: (trackId: string, rowId: string, every: number) => void;
+  setSequencerStepProbability: (trackId: string, rowId: string, stepIndex: number, probability: number) => void;
+  setSequencerStepParams: (trackId: string, rowId: string, stepIndex: number, params: Record<string, number>) => void;
+  clearSequencerStepParam: (trackId: string, rowId: string, stepIndex: number, paramKey: string) => void;
   batchSetSequencerSteps: (trackId: string, ops: { rowId: string; stepIndex: number; active: boolean; velocity: number }[]) => void;
 
   // Strudel actions
@@ -1389,6 +1392,10 @@ function cloneMidiEffectsWithNewIds(effects: MidiEffect[] | undefined): MidiEffe
   }));
 }
 
+function createEmptyStep(): SequencerStep {
+  return { active: false, velocity: 0.8, probability: 1, stepParams: {} };
+}
+
 function createDefaultSequencerPattern(): SequencerPattern {
   const stepsPerBar = 16;
   const bars = 1;
@@ -1401,7 +1408,7 @@ function createDefaultSequencerPattern(): SequencerPattern {
       id: uuidv4(),
       name: kit.name,
       sampleKey: kit.id,
-      steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
+      steps: Array.from({ length: totalSteps }, createEmptyStep),
       volume: 0.8,
       pan: 0,
       muted: false,
@@ -4749,13 +4756,11 @@ export const useProjectStore = create<ProjectState>()(
     const stepsPerBar = 16;
     const bars = 1;
     const totalSteps = stepsPerBar * bars;
-    const emptyStep = (): SequencerStep => ({ active: false, velocity: 0.8 });
-
     const rows: SequencerRow[] = DEFAULT_DRUM_KIT.map((kit) => ({
       id: uuidv4(),
       name: kit.name,
       sampleKey: kit.id,
-      steps: Array.from({ length: totalSteps }, emptyStep),
+      steps: Array.from({ length: totalSteps }, createEmptyStep),
       volume: 0.8,
       pan: 0,
       muted: false,
@@ -4839,6 +4844,93 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSequencerStepProbability: (trackId, rowId, stepIndex, probability) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust sequencer step probability', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const newSteps = [...r.steps];
+                const s = newSteps[stepIndex];
+                if (s) newSteps[stepIndex] = { ...s, probability: Math.max(0, Math.min(1, probability)) };
+                return { ...r, steps: newSteps };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setSequencerStepParams: (trackId, rowId, stepIndex, params) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Set sequencer step param lock', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const newSteps = [...r.steps];
+                const s = newSteps[stepIndex];
+                if (s) newSteps[stepIndex] = { ...s, stepParams: { ...s.stepParams, ...params } };
+                return { ...r, steps: newSteps };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  clearSequencerStepParam: (trackId, rowId, stepIndex, paramKey) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear sequencer step param lock', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const newSteps = [...r.steps];
+                const s = newSteps[stepIndex];
+                if (s) {
+                  const { [paramKey]: _, ...rest } = s.stepParams;
+                  newSteps[stepIndex] = { ...s, stepParams: rest };
+                }
+                return { ...r, steps: newSteps };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
   addSequencerRow: (trackId, sampleId, name, color) => {
     const state = get();
     if (!state.project) return;
@@ -4854,7 +4946,7 @@ export const useProjectStore = create<ProjectState>()(
             id: uuidv4(),
             name,
             sampleKey: sampleId,
-            steps: Array.from({ length: totalSteps }, () => ({ active: false, velocity: 0.8 })),
+            steps: Array.from({ length: totalSteps }, createEmptyStep),
             volume: 0.8,
             pan: 0,
             muted: false,
@@ -4932,7 +5024,7 @@ export const useProjectStore = create<ProjectState>()(
               stepsPerBar,
               rows: p.rows.map((r) => {
                 const steps = [...r.steps];
-                while (steps.length < newTotal) steps.push({ active: false, velocity: 0.8 });
+                while (steps.length < newTotal) steps.push(createEmptyStep());
                 return { ...r, steps: steps.slice(0, newTotal) };
               }),
             },
@@ -4961,7 +5053,7 @@ export const useProjectStore = create<ProjectState>()(
               bars,
               rows: p.rows.map((r) => {
                 const steps = [...r.steps];
-                while (steps.length < newTotal) steps.push({ active: false, velocity: 0.8 });
+                while (steps.length < newTotal) steps.push(createEmptyStep());
                 return { ...r, steps: steps.slice(0, newTotal) };
               }),
             },

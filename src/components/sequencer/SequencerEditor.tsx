@@ -11,6 +11,7 @@ import { SamplePickerDropdown } from './SamplePicker';
 import { SequencerContextMenu, type RowContextMenuState } from './SequencerContextMenu';
 import { SequencerRowHeader } from './SequencerRowHeader';
 import { SequencerStepGrid } from './SequencerStepGrid';
+import { StepContextMenu } from './StepContextMenu';
 import { SequencerToolbar } from './SequencerToolbar';
 
 export function SequencerEditor() {
@@ -42,6 +43,7 @@ export function SequencerEditor() {
   const renameRow = useProjectStore((s) => s.renameSequencerRow);
   const setRowColor = useProjectStore((s) => s.setSequencerRowColor);
   const fillRow = useProjectStore((s) => s.fillSequencerRow);
+  const setStepProbability = useProjectStore((s) => s.setSequencerStepProbability);
 
   const [rowSize, setRowSize] = useState<keyof typeof ROW_SIZES>('normal');
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function SequencerEditor() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [inlineRenameRowId, setInlineRenameRowId] = useState<string | null>(null);
   const [inlineRenameValue, setInlineRenameValue] = useState('');
+  const [stepCtxMenu, setStepCtxMenu] = useState<{ rowId: string; stepIdx: number; x: number; y: number } | null>(null);
 
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
@@ -545,6 +548,7 @@ export function SequencerEditor() {
             onSetStepVelocity={setStepVelocity}
             onBatchSetSteps={batchSetSteps}
             onPreviewSample={(key, velocity) => void previewSample(key, velocity)}
+            onStepContextMenu={(rowId, stepIdx, x, y) => setStepCtxMenu({ rowId, stepIdx, x, y })}
             onAddBar={() => setBars(track.id, pattern.bars + 1)}
           />
         </div>
@@ -584,6 +588,24 @@ export function SequencerEditor() {
           if (selectedRow === rowId) setSelectedRow(null);
         }}
       />
+
+      {stepCtxMenu && (() => {
+        const ctxRow = pattern.rows.find((r) => r.id === stepCtxMenu.rowId);
+        const ctxStep = ctxRow?.steps[stepCtxMenu.stepIdx];
+        if (!ctxRow || !ctxStep) return null;
+        return (
+          <StepContextMenu
+            x={stepCtxMenu.x}
+            y={stepCtxMenu.y}
+            currentProbability={ctxStep.probability}
+            currentVelocity={ctxStep.velocity}
+            stepParams={ctxStep.stepParams}
+            onSetProbability={(val) => setStepProbability(track.id, stepCtxMenu.rowId, stepCtxMenu.stepIdx, val)}
+            onSetVelocity={(val) => setStepVelocity(track.id, stepCtxMenu.rowId, stepCtxMenu.stepIdx, val)}
+            onClose={() => setStepCtxMenu(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

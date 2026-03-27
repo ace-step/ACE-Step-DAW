@@ -24,7 +24,7 @@ TRANSPARENT_IMG.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAA
 type Tab = 'presets' | 'myLoops';
 type AssetFilter = 'all' | 'starred' | 'generated' | 'uploaded';
 
-const CATEGORIES: Array<'All' | LoopCategory> = ['All', 'Drums', 'Bass', 'Keys', 'Synth'];
+const CATEGORIES: Array<'All' | LoopCategory> = ['All', 'Drums', 'Bass', 'Keys', 'Synth', 'FX', 'Vocals'];
 
 const CATEGORY_COLORS: Record<string, string> = {
   All: 'text-white/70 bg-white/10 hover:bg-white/15',
@@ -32,6 +32,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Bass: 'text-blue-300 bg-blue-500/15 hover:bg-blue-500/25',
   Keys: 'text-green-300 bg-green-500/15 hover:bg-green-500/25',
   Synth: 'text-purple-300 bg-purple-500/15 hover:bg-purple-500/25',
+  FX: 'text-red-300 bg-red-500/15 hover:bg-red-500/25',
+  Vocals: 'text-pink-300 bg-pink-500/15 hover:bg-pink-500/25',
 };
 
 const CATEGORY_ACTIVE_COLORS: Record<string, string> = {
@@ -40,6 +42,8 @@ const CATEGORY_ACTIVE_COLORS: Record<string, string> = {
   Bass: 'text-blue-200 bg-blue-500/30',
   Keys: 'text-green-200 bg-green-500/30',
   Synth: 'text-purple-200 bg-purple-500/30',
+  FX: 'text-red-200 bg-red-500/30',
+  Vocals: 'text-pink-200 bg-pink-500/30',
 };
 
 // ─── Preview Player Singleton ───────────────────────────────────────────────
@@ -80,6 +84,7 @@ export function LoopBrowser() {
   const setSearch = useUIStore((s) => s.setLoopBrowserSearch);
   const setPreviewingId = useUIStore((s) => s.setPreviewingLoopId);
   const toggleBrowser = useUIStore((s) => s.toggleLoopBrowser);
+  const addRecentlyUsed = useUIStore((s) => s.addRecentlyUsedLoop);
 
   const project = useProjectStore((s) => s.project);
   const removeAsset = useProjectStore((s) => s.removeAsset);
@@ -130,10 +135,11 @@ export function LoopBrowser() {
       await playPreview(audioBuffer);
       setPreviewingId(def.id);
       setPreviewWaveform(waveformData);
+      addRecentlyUsed(def.id);
     } catch (err) {
       console.error('Failed to preview loop:', err);
     }
-  }, [previewingId, setPreviewingId]);
+  }, [previewingId, setPreviewingId, addRecentlyUsed]);
 
   const handleAssetPreview = useCallback(async (asset: AssetClip) => {
     if (previewingId === asset.id) {

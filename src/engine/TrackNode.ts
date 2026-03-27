@@ -391,6 +391,65 @@ export class TrackNode {
   }
 
   // -----------------------------------------------------------------------
+  // Aux Sends (pre/post fader routing)
+  // -----------------------------------------------------------------------
+
+  private readonly _sends = new Map<string, { gain: GainNode; mode: 'pre' | 'post'; destination: AudioNode }>();
+
+  /**
+   * Connect a new aux send from this track to a destination node (e.g. return track inputGain).
+   * Pre-fader taps after compressor (before volumeGain); post-fader taps after volumeGain.
+   */
+  connectSend(sendId: string, destination: AudioNode, amount: number, mode: 'pre' | 'post') {
+    // Remove existing send with same ID if present
+    this.disconnectSend(sendId);
+
+    const sendGain = this.ctx.createGain();
+    sendGain.gain.value = amount;
+
+    const tapPoint = mode === 'pre' ? this.compressor : this.volumeGain;
+    tapPoint.connect(sendGain);
+    sendGain.connect(destination);
+
+    this._sends.set(sendId, { gain: sendGain, mode, destination });
+  }
+
+  /** Disconnect and remove an aux send by ID. */
+  disconnectSend(sendId: string) {
+    const entry = this._sends.get(sendId);
+    if (!entry) return;
+    try { entry.gain.disconnect(); } catch { /* already disconnected */ }
+    // Disconnect tap point — safe to call even if not connected
+    const tapPoint = entry.mode === 'pre' ? this.compressor : this.volumeGain;
+    try { tapPoint.disconnect(entry.gain); } catch { /* already disconnected */ }
+    this._sends.delete(sendId);
+  }
+
+  /** Update the send level (gain amount) of an existing send. */
+  updateSendAmount(sendId: string, amount: number) {
+    const entry = this._sends.get(sendId);
+    if (!entry) return;
+    entry.gain.gain.value = amount;
+  }
+
+  /** Switch a send between pre-fader and post-fader tap point. */
+  updateSendPrePost(sendId: string, mode: 'pre' | 'post') {
+    const entry = this._sends.get(sendId);
+    if (!entry) return;
+    if (entry.mode === mode) return; // no change
+
+    // Disconnect from old tap point
+    const oldTap = entry.mode === 'pre' ? this.compressor : this.volumeGain;
+    try { oldTap.disconnect(entry.gain); } catch { /* already disconnected */ }
+
+    // Connect to new tap point
+    const newTap = mode === 'pre' ? this.compressor : this.volumeGain;
+    newTap.connect(entry.gain);
+
+    entry.mode = mode;
+  }
+
+  // -----------------------------------------------------------------------
 
   /**
    * Re-route the final output (analyserNode) to a new destination node.
@@ -402,6 +461,11 @@ export class TrackNode {
   }
 
   disconnect() {
+    // Disconnect all aux sends
+    for (const [sendId] of this._sends) {
+      this.disconnectSend(sendId);
+    }
+
     this.inputGain.disconnect();
     this.panNode.disconnect();
     this.eqLow.disconnect();

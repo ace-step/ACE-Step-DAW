@@ -836,6 +836,7 @@ export interface ProjectState {
   removeReturnTrack: (returnTrackId: string) => void;
   updateReturnTrack: (returnTrackId: string, updates: Partial<Pick<ReturnTrack, 'name' | 'volume' | 'pan' | 'effects'>>) => void;
   updateTrackSend: (trackId: string, returnTrackId: string, amount: number) => void;
+  setSendPrePost: (trackId: string, sendIndex: number, mode: 'pre' | 'post') => void;
 
   // Track grouping / folder tracks
   createGroupTrack: (name: string) => Track;
@@ -7428,8 +7429,27 @@ export const useProjectStore = create<ProjectState>()(
           } else if (existingIdx >= 0) {
             sends[existingIdx] = { ...sends[existingIdx], amount };
           } else {
-            sends.push({ returnTrackId, amount });
+            sends.push({ returnTrackId, amount, prePost: 'post' });
           }
+          return { ...track, sends };
+        }),
+      },
+    });
+  },
+
+  setSendPrePost: (trackId, sendIndex, mode) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Toggle send pre/post fader', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          const sends = [...(track.sends ?? [])];
+          if (sendIndex < 0 || sendIndex >= sends.length) return track;
+          sends[sendIndex] = { ...sends[sendIndex], prePost: mode };
           return { ...track, sends };
         }),
       },

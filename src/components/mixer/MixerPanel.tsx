@@ -50,6 +50,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
   const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const updateTrackSend = useProjectStore((s) => s.updateTrackSend);
+  const setSendPrePost = useProjectStore((s) => s.setSendPrePost);
   const setGroupMuted = useProjectStore((s) => s.setGroupMuted);
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
@@ -241,6 +242,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
               const rt = returnTracks[i];
               const send = rt ? sends.find((s) => s.returnTrackId === rt.id) : undefined;
               const amount = send?.amount ?? 0;
+              const isPre = (send?.prePost ?? 'post') === 'pre';
               return (
                 <div
                   key={i}
@@ -250,6 +252,25 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                   {rt ? (
                     <>
                       <span className="text-[10px] text-zinc-400 truncate flex-1" title={rt.name}>{rt.name}</span>
+                      <button
+                        type="button"
+                        data-testid={`send-prepost-${i}`}
+                        className={`h-4 rounded px-1 text-[8px] font-bold uppercase leading-none transition-colors ${
+                          isPre
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-[#333] text-zinc-500 hover:bg-[#3a3a3a]'
+                        }`}
+                        aria-label={`Toggle pre/post fader for send to ${rt.name}`}
+                        disabled={isFrozen}
+                        onClick={() => {
+                          const sendIdx = sends.findIndex((s) => s.returnTrackId === rt.id);
+                          if (sendIdx >= 0) {
+                            setSendPrePost(track.id, sendIdx, isPre ? 'post' : 'pre');
+                          }
+                        }}
+                      >
+                        {isPre ? 'PRE' : 'POST'}
+                      </button>
                       <input
                         type="range"
                         min={0}

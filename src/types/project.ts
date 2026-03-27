@@ -615,6 +615,8 @@ export interface SequencerPattern {
 export interface Send {
   returnTrackId: string;
   amount: number;  // 0–1
+  /** Pre-fader sends tap before the channel fader; post-fader sends tap after. Default: 'post'. */
+  prePost: 'pre' | 'post';
 }
 
 export interface ReturnTrack {

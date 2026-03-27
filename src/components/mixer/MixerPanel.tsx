@@ -7,6 +7,7 @@ import { LevelMeter } from './LevelMeter';
 import { MasteringPanel } from './MasteringPanel';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import { VerticalFader } from './VerticalFader';
+import { SidechainRoutingOverlay } from './SidechainRoutingOverlay';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -394,6 +395,7 @@ export function MixerPanel() {
   const project = useProjectStore((s) => s.project);
 
   const dragState = useRef<{ startY: number; startH: number } | null>(null);
+  const channelStripContainerRef = useRef<HTMLDivElement>(null);
 
   const onResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -460,8 +462,9 @@ export function MixerPanel() {
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" /></svg>
         </button>
       </div>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-3">
-        <div className="flex items-stretch h-full">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-3 relative">
+        <SidechainRoutingOverlay containerRef={channelStripContainerRef} />
+        <div ref={channelStripContainerRef} className="flex items-stretch h-full">
           {project.tracks.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">
               Add tracks to see mixer channels

@@ -47,6 +47,7 @@ import type {
   SamplerConfig,
   SessionClipSlot,
   SessionLaunchEvent,
+  SessionLaunchMode,
   SessionLaunchQuantization,
   SessionPendingLaunch,
   SessionScene,
@@ -679,6 +680,7 @@ export interface ProjectState {
   setSessionLaunchQuantization: (quantization: SessionLaunchQuantization) => void;
   setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   setSessionSlotLegato: (slotId: string, legato: boolean) => void;
+  setSessionSlotLaunchMode: (slotId: string, launchMode: SessionLaunchMode) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
   launchSessionScene: (sceneId: string) => void;
   stopSessionTrack: (trackId: string) => void;
@@ -4269,6 +4271,24 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotLaunchMode: (slotId, launchMode) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], launchMode };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
   launchSessionClip: (trackId, sceneId) => {
     const state = get();
     if (!state.project) return;
@@ -4277,6 +4297,13 @@ export const useProjectStore = create<ProjectState>()(
     const session = ensureProjectSession(state.project).session!;
     const slot = session.slots.find((candidate) => candidate.trackId === trackId && candidate.sceneId === sceneId);
     if (!slot?.clipId || !track.clips.some((clip) => clip.id === slot.clipId)) return;
+
+    // Toggle mode: if the clip is already active, stop the track instead of re-launching
+    const launchMode = slot.launchMode ?? 'trigger';
+    if (launchMode === 'toggle' && session.activeClipIdsByTrackId[trackId] === slot.clipId) {
+      get().stopSessionTrack(trackId);
+      return;
+    }
 
     const transport = useTransportStore.getState();
     const effectiveQuantization = slot.quantization && slot.quantization !== 'global' ? slot.quantization : session.quantization;

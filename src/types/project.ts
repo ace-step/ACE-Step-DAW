@@ -616,6 +616,9 @@ export interface Marker {
 
 export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4' | '1/2' | '1 bar' | '2 bars' | '4 bars' | '8 bars';
 
+/** Clip launch behavior mode for session view slots. */
+export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
+
 export interface SessionScene {
   id: string;
   name: string;
@@ -635,6 +638,8 @@ export interface SessionClipSlot {
   hasStopButton?: boolean;
   /** When true, the incoming clip starts at the outgoing clip's current position. */
   legato?: boolean;
+  /** Clip launch behavior: trigger (default), gate, toggle, or repeat. */
+  launchMode?: SessionLaunchMode;
 }
 
 export interface SessionPendingLaunch {

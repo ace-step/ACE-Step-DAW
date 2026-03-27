@@ -15,8 +15,6 @@ const MIXER_RESIZE_HANDLE_HEIGHT = 6;
 const CHANNEL_STRIP_RESERVED_HEIGHT = 380;
 const CHANNEL_STRIP_BOTTOM_PADDING = 12;
 const FADER_MIN_HEIGHT = 96;
-const MAX_INSERT_SLOTS = 4;
-const MAX_SEND_SLOTS = 2;
 
 const EFFECT_SHORT_NAMES: Record<string, string> = {
   eq3: 'EQ3',
@@ -30,6 +28,16 @@ const EFFECT_SHORT_NAMES: Record<string, string> = {
   flanger: 'Flanger',
   phaser: 'Phaser',
 };
+
+/** Small "X" icon used for remove buttons in insert/send slots. */
+function SlotRemoveIcon() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="1" y1="1" x2="7" y2="7" />
+      <line x1="7" y1="1" x2="1" y2="7" />
+    </svg>
+  );
+}
 
 function volumeToDb(v: number): string {
   if (v <= 0) return '-inf';
@@ -48,9 +56,12 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
   const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const updateTrackSend = useProjectStore((s) => s.updateTrackSend);
   const setSendPrePost = useProjectStore((s) => s.setSendPrePost);
+  const addReturnTrack = useProjectStore((s) => s.addReturnTrack);
+  const removeReturnTrack = useProjectStore((s) => s.removeReturnTrack);
   const setGroupMuted = useProjectStore((s) => s.setGroupMuted);
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
@@ -199,53 +210,63 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
         {/* Section separator */}
         <div className="w-4/5 border-t border-[#3a3a3a]" />
 
-        {/* Inserts section — 4 effect slots */}
+        {/* Inserts section — dynamic effect slots */}
         <div data-testid="inserts-section" className={`w-full py-1 transition-opacity ${effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
           <div className="text-[10px] text-zinc-400 uppercase tracking-widest mb-1">Inserts</div>
           <div className="flex flex-col gap-1">
-            {Array.from({ length: MAX_INSERT_SLOTS }).map((_, i) => {
-              const effect = effects[i];
+            {effects.map((effect, i) => {
+              const label = EFFECT_SHORT_NAMES[effect.type] ?? effect.type;
               return (
-                <button
-                  key={i}
+                <div
+                  key={effect.id}
                   data-testid={`insert-slot-${i}`}
-                  className={`text-[10px] w-full rounded px-1.5 py-1 text-left truncate transition-colors ${
-                    effect
-                      ? effect.enabled
-                        ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
-                        : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
-                      : 'bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]'
+                  className={`flex items-center gap-0.5 text-[10px] w-full rounded px-1.5 py-1 text-left truncate transition-colors ${
+                    effect.enabled
+                      ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
+                      : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
                   }`}
-                  title={effect ? `${EFFECT_SHORT_NAMES[effect.type] ?? effect.type}${effect.enabled ? '' : ' (bypassed)'}` : 'Add insert effect'}
-                  onClick={() => {
-                    if (!effect && !isFrozen) {
-                      addTrackEffect(track.id, 'reverb' as TrackEffectType);
-                    }
-                  }}
-                  disabled={isFrozen}
+                  title={`${label}${effect.enabled ? '' : ' (bypassed)'}`}
                 >
-                  {effect ? (EFFECT_SHORT_NAMES[effect.type] ?? effect.type) : '+'}
-                </button>
+                  <span className="flex-1 truncate">{label}</span>
+                  <button
+                    data-testid={`remove-insert-btn-${i}`}
+                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    aria-label={`Remove ${label} insert`}
+                    title="Remove insert"
+                    onClick={() => removeTrackEffect(track.id, effect.id)}
+                    disabled={isFrozen}
+                  >
+                    <SlotRemoveIcon />
+                  </button>
+                </div>
               );
             })}
+            <button
+              data-testid="add-insert-btn"
+              className="text-[10px] w-full rounded px-1.5 py-1 text-center transition-colors bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]"
+              title="Add insert effect"
+              onClick={() => addTrackEffect(track.id, 'reverb' as TrackEffectType)}
+              disabled={isFrozen}
+            >
+              +
+            </button>
           </div>
         </div>
 
         {/* Section separator */}
         <div className="w-4/5 border-t border-[#3a3a3a]" />
 
-        {/* Sends section — 2 send slots */}
+        {/* Sends section — dynamic send slots */}
         <div data-testid="sends-section" className="w-full py-1">
           <div className="text-[10px] text-zinc-400 uppercase tracking-widest mb-1">Sends</div>
           <div className="flex flex-col gap-1">
-            {Array.from({ length: MAX_SEND_SLOTS }).map((_, i) => {
-              const rt = returnTracks[i];
-              const send = rt ? sends.find((s) => s.returnTrackId === rt.id) : undefined;
+            {returnTracks.map((rt, i) => {
+              const send = sends.find((s) => s.returnTrackId === rt.id);
               const amount = send?.amount ?? 0;
               const isPre = (send?.prePost ?? 'post') === 'pre';
               return (
                 <div
-                  key={i}
+                  key={rt.id}
                   data-testid={`send-slot-${i}`}
                   className="flex items-center gap-1.5"
                 >
@@ -282,6 +303,15 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                         className="w-14 h-3 accent-blue-500"
                         disabled={isFrozen}
                       />
+                      <button
+                        data-testid={`remove-send-btn-${i}`}
+                        className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                        aria-label={`Remove send to ${rt.name}`}
+                        title="Remove send"
+                        onClick={() => removeReturnTrack(rt.id)}
+                      >
+                        <SlotRemoveIcon />
+                      </button>
                     </>
                   ) : (
                     <span className="text-[10px] text-zinc-600 w-full text-center">&mdash;</span>
@@ -289,6 +319,17 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                 </div>
               );
             })}
+            <button
+              data-testid="add-send-btn"
+              className="text-[10px] w-full rounded px-1.5 py-1 text-center transition-colors bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]"
+              title="Add send bus"
+              onClick={() => {
+                const idx = returnTracks.length + 1;
+                addReturnTrack(`FX ${idx}`);
+              }}
+            >
+              +
+            </button>
           </div>
         </div>
 

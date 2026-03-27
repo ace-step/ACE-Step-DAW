@@ -6,6 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
+import { findSlideSourceNote } from '../engine/SynthEngine';
 import { samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
@@ -454,12 +455,7 @@ export function useTransport() {
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
-                const previousOverlap = note.isSlide
-                  ? [...notes]
-                      .slice(0, noteIndex)
-                      .reverse()
-                      .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
-                  : undefined;
+                const previousOverlap = findSlideSourceNote(notes, noteIndex);
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   if (previousOverlap) {
                     void synthEngine.playSlideNote(

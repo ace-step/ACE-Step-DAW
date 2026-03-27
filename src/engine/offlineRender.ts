@@ -3,6 +3,8 @@ import type { ToneAudioBuffer } from 'tone';
 import { createDrumVoicesForKit } from './DrumEngine';
 import {
   createSynthPlaybackChain,
+  findSlideSourceNote,
+  triggerSlidePlayback,
   type SynthPlaybackChain,
   type SynthSource,
 } from './SynthEngine';
@@ -56,7 +58,7 @@ export async function renderMidiTrackOffline(
     transport.bpm.value = bpm;
     const secondsPerBeat = 60 / bpm;
 
-    for (const note of notes) {
+    for (const [noteIndex, note] of notes.entries()) {
       const noteDuration = Math.max(0, note.durationBeats * secondsPerBeat);
       const noteStart = clipStartTime + note.startBeat * secondsPerBeat;
       const noteEnd = noteStart + noteDuration;
@@ -64,8 +66,22 @@ export async function renderMidiTrackOffline(
 
       const velocity = Math.max(0, Math.min(1, note.velocity));
       const frequency = Tone.Frequency(note.pitch, 'midi').toFrequency();
+      const previousOverlap = findSlideSourceNote(notes, noteIndex);
       transport.schedule((time) => {
         playback?.restartModulation(time);
+        if (previousOverlap && playback) {
+          triggerSlidePlayback(
+            playback.synth,
+            previousOverlap.pitch,
+            note.pitch,
+            velocity,
+            noteDuration,
+            source,
+            time,
+          );
+          return;
+        }
+
         playback?.synth.triggerAttackRelease(frequency, noteDuration, time, velocity);
       }, noteStart);
     }

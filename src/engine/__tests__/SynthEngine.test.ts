@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { createSynthModulationSpec, createSynthRuntimeSpec, resolveSlidePortamentoSeconds } from '../SynthEngine';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  createSynthModulationSpec,
+  createSynthRuntimeSpec,
+  findSlideSourceNote,
+  resolveSlidePortamentoSeconds,
+  triggerSlidePlayback,
+} from '../SynthEngine';
 import {
   createDefaultFmInstrument,
   createDefaultSamplerInstrument,
@@ -267,5 +273,73 @@ describe('resolveSlidePortamentoSeconds', () => {
     expect(resolveSlidePortamentoSeconds(subtractive, 0.5)).toBeCloseTo(0.12, 5);
     expect(resolveSlidePortamentoSeconds(fm, 0.4)).toBeCloseTo(0.12, 5);
     expect(resolveSlidePortamentoSeconds('lead', 0.04)).toBeCloseTo(0.03, 5);
+  });
+});
+
+describe('findSlideSourceNote', () => {
+  it('returns the closest earlier overlapping note for slide notes only', () => {
+    const notes = [
+      { id: 'n1', pitch: 60, startBeat: 0, durationBeats: 1.5, velocity: 0.8 },
+      { id: 'n2', pitch: 64, startBeat: 1, durationBeats: 1, velocity: 0.8 },
+      { id: 'n3', pitch: 67, startBeat: 1.5, durationBeats: 0.5, velocity: 0.8, isSlide: true },
+      { id: 'n4', pitch: 69, startBeat: 3, durationBeats: 0.5, velocity: 0.8, isSlide: true },
+    ];
+
+    expect(findSlideSourceNote(notes, 0)).toBeUndefined();
+    expect(findSlideSourceNote(notes, 2)?.id).toBe('n2');
+    expect(findSlideSourceNote(notes, 3)).toBeUndefined();
+  });
+});
+
+describe('triggerSlidePlayback', () => {
+  it('uses canonical glide time for absolute-time slide scheduling', () => {
+    const synth = {
+      set: vi.fn(),
+      triggerAttack: vi.fn(),
+      triggerRelease: vi.fn(),
+      triggerAttackRelease: vi.fn(),
+    };
+    const instrument = createDefaultSubtractiveInstrument('lead', {
+      settings: {
+        glideTime: 0.48,
+      },
+    });
+
+    const glideTime = triggerSlidePlayback(synth, 60, 64, 0.75, 0.2, instrument, 12);
+
+    expect(glideTime).toBeCloseTo(0.48, 5);
+    expect(synth.set).toHaveBeenCalledWith({ portamento: 0.48 });
+
+    const attackCall = synth.triggerAttack.mock.calls[0];
+    const releaseCall = synth.triggerRelease.mock.calls[0];
+    const attackReleaseCall = synth.triggerAttackRelease.mock.calls[0];
+
+    expect(attackCall[0]).toBeCloseTo(261.6256, 3);
+    expect(attackCall[1]).toBe(12);
+    expect(attackCall[2]).toBe(0.75);
+    expect(releaseCall[0]).toBeCloseTo(261.6256, 3);
+    expect(releaseCall[1]).toBeCloseTo(12.48, 5);
+    expect(attackReleaseCall[0]).toBeCloseTo(329.6276, 3);
+    expect(attackReleaseCall[1]).toBeCloseTo(0.2, 5);
+    expect(attackReleaseCall[2]).toBeCloseTo(12.48, 5);
+    expect(attackReleaseCall[3]).toBe(0.75);
+  });
+
+  it('falls back to relative-time legacy glide scheduling when no canonical glide is set', () => {
+    const synth = {
+      set: vi.fn(),
+      triggerAttack: vi.fn(),
+      triggerRelease: vi.fn(),
+      triggerAttackRelease: vi.fn(),
+    };
+
+    const glideTime = triggerSlidePlayback(synth, 60, 62, 0.5, 0.02, 'lead');
+
+    expect(glideTime).toBeCloseTo(0.03, 5);
+    expect(synth.set).toHaveBeenCalledWith({ portamento: 0.03 });
+    expect(synth.triggerAttack.mock.calls[0][1]).toBeUndefined();
+    expect(synth.triggerRelease.mock.calls[0][1]).toBe('+0.03');
+    expect(synth.triggerAttackRelease.mock.calls[0][1]).toBeCloseTo(0.04, 5);
+    expect(synth.triggerAttackRelease.mock.calls[0][2]).toBe('+0.03');
   });
 });

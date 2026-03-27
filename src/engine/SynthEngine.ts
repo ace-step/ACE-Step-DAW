@@ -3,6 +3,7 @@ import type {
   FmTrackInstrument,
   InstrumentLfoTarget,
   LegacySynthVoicePreset,
+  MidiNote,
   SubtractiveTrackInstrument,
   SynthPreset,
   TrackInstrument,
@@ -19,6 +20,13 @@ type SynthModulationEffectType = 'tremolo' | 'autoPanner' | 'autoFilter' | 'vibr
 const DEFAULT_TRACK_GAIN = 0.55;
 const MIN_LINEAR_GAIN = 0.0001;
 const MAX_FAT_SPREAD_CENTS = 120;
+
+type SlidePlaybackSynth = {
+  set: (options: Record<string, unknown>) => void;
+  triggerAttack: (note: number, time?: string | number, velocity?: number) => void;
+  triggerRelease: (note: number, time?: string | number) => void;
+  triggerAttackRelease: (note: number, duration: number, time?: string | number, velocity?: number) => void;
+};
 
 interface RuntimeModulationRack {
   node: Tone.ToneAudioNode;
@@ -236,6 +244,40 @@ export function resolveSlidePortamentoSeconds(source: SynthSource, duration: num
   return configured > 0
     ? configured
     : getLegacySlidePortamentoSeconds(duration);
+}
+
+export function findSlideSourceNote(notes: MidiNote[], noteIndex: number): MidiNote | undefined {
+  const note = notes[noteIndex];
+  if (!note?.isSlide) return undefined;
+
+  return notes
+    .slice(0, noteIndex)
+    .reverse()
+    .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat);
+}
+
+export function triggerSlidePlayback(
+  synth: SlidePlaybackSynth,
+  fromPitch: number,
+  toPitch: number,
+  velocity: number,
+  duration: number,
+  source: SynthSource,
+  time?: string | number,
+): number {
+  const glideTime = resolveSlidePortamentoSeconds(source, duration);
+  const fromFreq = Tone.Frequency(fromPitch, 'midi').toFrequency();
+  const toFreq = Tone.Frequency(toPitch, 'midi').toFrequency();
+  const glideAt = typeof time === 'number'
+    ? time + glideTime
+    : `+${glideTime}`;
+
+  synth.set({ portamento: glideTime });
+  synth.triggerAttack(fromFreq, time, velocity);
+  synth.triggerRelease(fromFreq, glideAt);
+  synth.triggerAttackRelease(toFreq, Math.max(0.04, duration), glideAt, velocity);
+
+  return glideTime;
 }
 
 export function createSynthModulationSpec(source: SynthSource): SynthModulationSpec | null {
@@ -514,20 +556,16 @@ class SynthEngine {
     source: SynthSource,
   ) {
     await this.ensureStarted();
-    const synth = this.ensureTrackSynth(trackId, source) as unknown as {
-      set: (options: Record<string, unknown>) => void;
-      triggerAttack: (note: number, time?: string | number, velocity?: number) => void;
-      triggerRelease: (note: number, time?: string | number) => void;
-      triggerAttackRelease: (note: number, duration: number, time?: string | number, velocity?: number) => void;
-    };
+    const synth = this.ensureTrackSynth(trackId, source) as unknown as SlidePlaybackSynth;
     restartPlaybackModulation(this.synths.get(trackId));
-    const glideTime = resolveSlidePortamentoSeconds(source, duration);
-    const fromFreq = Tone.Frequency(fromPitch, 'midi').toFrequency();
-    const toFreq = Tone.Frequency(toPitch, 'midi').toFrequency();
-    synth.set({ portamento: glideTime });
-    synth.triggerAttack(fromFreq, undefined, velocity / 127);
-    synth.triggerRelease(fromFreq, `+${glideTime}`);
-    synth.triggerAttackRelease(toFreq, Math.max(0.04, duration), `+${glideTime}`, velocity / 127);
+    triggerSlidePlayback(
+      synth,
+      fromPitch,
+      toPitch,
+      velocity / 127,
+      duration,
+      source,
+    );
   }
 
   /** Trigger note on for a track synth (for live playing / recording). */

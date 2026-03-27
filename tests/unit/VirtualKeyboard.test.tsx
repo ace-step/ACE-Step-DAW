@@ -57,7 +57,13 @@ describe('VirtualKeyboard', () => {
     render(<VirtualKeyboard />);
 
     fireEvent.keyDown(window, { code: 'KeyA' });
-    expect(synthEngineSpies.ensureTrackSynth).toHaveBeenCalledWith(track.id, 'organ');
+    expect(synthEngineSpies.ensureTrackSynth).toHaveBeenCalledWith(
+      track.id,
+      expect.objectContaining({
+        kind: 'subtractive',
+        preset: 'organ',
+      }),
+    );
     expect(synthEngineSpies.noteOn).toHaveBeenCalledWith(track.id, 60, 96);
     expect(useUIStore.getState().virtualKeyboardPressedPitches).toEqual([60]);
 

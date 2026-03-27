@@ -19,6 +19,7 @@ type TrackInstrumentSyncInput = Pick<
 >;
 
 type TrackInstrumentSyncState = Pick<Track, 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig'>;
+export type TrackInstrumentSelectValue = LegacySynthVoicePreset | 'sampler' | 'fm';
 
 const DEFAULT_AMP_ENVELOPE: InstrumentEnvelope = {
   attack: 0.01,
@@ -297,6 +298,27 @@ export function getLegacySynthPresetFromInstrument(instrument: TrackInstrument):
     default:
       return instrument.preset;
   }
+}
+
+export function resolveTrackInstrument(input: TrackInstrumentSyncInput): TrackInstrument | undefined {
+  return syncTrackInstrumentState(input).instrument;
+}
+
+export function getTrackInstrumentSelectValue(input: TrackInstrumentSyncInput): TrackInstrumentSelectValue {
+  const instrument = resolveTrackInstrument(input);
+
+  if (instrument?.kind === 'subtractive') return instrument.preset;
+  if (instrument?.kind === 'sampler') return 'sampler';
+  if (instrument?.kind === 'fm') return 'fm';
+
+  const fallbackPreset = input.synthPreset ?? getDefaultTrackInstrumentPreset(input.trackName);
+  return fallbackPreset === 'sampler' ? 'sampler' : fallbackPreset;
+}
+
+export function getTrackSamplerConfigFromInstrument(input: TrackInstrumentSyncInput): SamplerConfig | null {
+  const instrument = resolveTrackInstrument(input);
+  if (instrument?.kind !== 'sampler') return null;
+  return buildLegacySamplerState(instrument).samplerConfig ?? null;
 }
 
 function normalizeExistingInstrument(

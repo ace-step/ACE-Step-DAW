@@ -6,6 +6,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import type { Track } from '../../types/project';
+import { getTrackInstrumentSelectValue, resolveTrackInstrument } from '../../utils/trackInstrument';
 
 const WHITE_KEY_BINDINGS = [
   { code: 'KeyA', semitone: 0, label: 'A' },
@@ -158,7 +159,16 @@ export function VirtualKeyboard() {
       let clipStartTime = 0;
 
       if (targetTrack) {
-        synthEngine.ensureTrackSynth(targetTrack.id, targetTrack.synthPreset ?? 'piano');
+        const trackInstrument = resolveTrackInstrument(targetTrack);
+        const instrumentSelectValue = getTrackInstrumentSelectValue(targetTrack);
+        synthEngine.ensureTrackSynth(
+          targetTrack.id,
+          trackInstrument ?? (
+            instrumentSelectValue === 'fm' || instrumentSelectValue === 'sampler'
+              ? 'piano'
+              : instrumentSelectValue
+          ),
+        );
         synthEngine.noteOn(targetTrack.id, pitch, nextVelocity);
         captureService.noteOn(targetTrack.id, pitch, velocityNormalized, startTime);
 

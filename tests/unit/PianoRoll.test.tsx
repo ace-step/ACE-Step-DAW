@@ -158,4 +158,27 @@ describe('PianoRoll', () => {
     expect(screen.getByLabelText('Piano roll navigation status')).toHaveTextContent('1 note selected');
     expect(screen.getByLabelText('Piano roll canvas stub')).toHaveAttribute('data-selected-note-ids', 'note-c4');
   });
+
+  it('writes canonical instrument state when the piano-roll instrument selector changes', () => {
+    render(<PianoRoll />);
+
+    const instrumentSelect = screen.getByLabelText('Track synth preset');
+    fireEvent.change(instrumentSelect, { target: { value: 'sampler' } });
+
+    let track = useProjectStore.getState().project?.tracks[0];
+    expect(track?.instrument).toMatchObject({
+      kind: 'sampler',
+      preset: 'sampler',
+    });
+    expect(screen.getByText('sampler')).toBeInTheDocument();
+
+    fireEvent.change(instrumentSelect, { target: { value: 'pad' } });
+
+    track = useProjectStore.getState().project?.tracks[0];
+    expect(track?.instrument).toMatchObject({
+      kind: 'subtractive',
+      preset: 'pad',
+    });
+    expect(screen.queryByText('sampler')).not.toBeInTheDocument();
+  });
 });

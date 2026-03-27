@@ -6,6 +6,10 @@ import { useUIStore } from '../../store/uiStore';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
+import {
+  getTrackInstrumentSelectValue,
+  resolveTrackInstrument,
+} from '../../utils/trackInstrument';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
 import { drawVelocityLane } from './VelocityLane';
 import { DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
@@ -108,14 +112,20 @@ export function PianoRollCanvas({
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const currentTime = useTransportStore((s) => s.currentTime);
   const previewEnabled = true;
-  const synthPreset = track.synthPreset ?? 'piano';
+  const trackInstrument = resolveTrackInstrument(track);
+  const instrumentSelectValue = getTrackInstrumentSelectValue(track);
+  const synthSource = trackInstrument ?? (
+    instrumentSelectValue === 'fm' || instrumentSelectValue === 'sampler'
+      ? 'piano'
+      : instrumentSelectValue
+  );
   const previewNoteAtPitch = useCallback((pitch: number, velocity = 100, duration = 0.3) => {
-    if (synthPreset === 'sampler') {
+    if (trackInstrument?.kind === 'sampler') {
       void samplerEngine.previewTrackNote(track, pitch, velocity, duration);
       return;
     }
-    void synthEngine.previewNote(pitch, velocity, duration, synthPreset);
-  }, [synthPreset, track]);
+    void synthEngine.previewNote(pitch, velocity, duration, synthSource);
+  }, [synthSource, track, trackInstrument]);
 
   const keyHeight = PIANO_ROLL_KEY_HEIGHT * prZoomY;
   const pixelsPerBeat = 40 * prZoomX;

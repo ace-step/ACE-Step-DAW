@@ -278,7 +278,7 @@ export function InstrumentPicker() {
             <button
               onClick={() => {
                 const track = addTrackAtSelectedSlot('keyboard', 'pianoRoll');
-                updateTrack(track.id, { displayName: 'Quick Sampler', synthPreset: 'sampler' });
+                updateTrack(track.id, { displayName: 'Quick Sampler' });
                 setTrackSampler(track.id, { rootNote: 60 });
                 close();
                 setOpenPianoRoll(track.id);

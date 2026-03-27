@@ -4,6 +4,12 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import type { PianoRollGrid, SamplerConfig } from '../../types/project';
 import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
+import {
+  createDefaultSubtractiveInstrument,
+  getTrackInstrumentSelectValue,
+  resolveTrackInstrument,
+  type TrackInstrumentSelectValue,
+} from '../../utils/trackInstrument';
 import { QuickSamplerEditor } from './QuickSamplerEditor';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
@@ -30,7 +36,7 @@ export function PianoRoll() {
   const [samplerDropActive, setSamplerDropActive] = useState(false);
 
   const project = useProjectStore((s) => s.project);
-  const updateTrack = useProjectStore((s) => s.updateTrack);
+  const setTrackInstrument = useProjectStore((s) => s.setTrackInstrument);
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
   const clearTrackSampler = useProjectStore((s) => s.clearTrackSampler);
   const updateSamplerConfig = useProjectStore((s) => s.updateSamplerConfig);
@@ -105,6 +111,15 @@ export function PianoRoll() {
     }
     return track.clips.find((candidate) => candidate.midiData) ?? null;
   }, [openClipId, track]);
+
+  const trackInstrument = useMemo(
+    () => (track ? resolveTrackInstrument(track) : null),
+    [track],
+  );
+  const instrumentSelectValue = useMemo<TrackInstrumentSelectValue>(
+    () => (track ? getTrackInstrumentSelectValue(track) : 'piano'),
+    [track],
+  );
 
   const ghostNotes = useMemo(() => {
     if (!showGhostNotes || !project || !track) return [];
@@ -312,8 +327,23 @@ export function PianoRoll() {
 
         <select
           aria-label="Track synth preset"
-          value={track.synthPreset ?? 'piano'}
-          onChange={(e) => updateTrack(track.id, { synthPreset: e.target.value as typeof track.synthPreset })}
+          value={instrumentSelectValue}
+          onChange={(e) => {
+            const nextValue = e.target.value as TrackInstrumentSelectValue;
+            if (nextValue === 'fm') return;
+
+            if (nextValue === 'sampler') {
+              setTrackSampler(track.id, {
+                audioKey: track.sampler?.audioKey,
+                sampleName: track.sampler?.sampleName,
+                rootNote: track.sampler?.rootNote ?? samplerConfig?.rootNote ?? 60,
+                sampleDuration: track.sampler?.sampleDuration ?? samplerConfig?.trimEnd ?? 1,
+              });
+              return;
+            }
+
+            setTrackInstrument(track.id, createDefaultSubtractiveInstrument(nextValue));
+          }}
           className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300"
         >
           <option value="piano">Piano</option>
@@ -323,6 +353,7 @@ export function PianoRoll() {
           <option value="bass">Bass</option>
           <option value="organ">Organ</option>
           <option value="sampler">Quick Sampler</option>
+          {trackInstrument?.kind === 'fm' && <option value="fm">FM</option>}
         </select>
 
         {clip && <TransformMenu clipId={clip.id} selectedNoteIds={selectedNoteIds} />}
@@ -411,7 +442,7 @@ export function PianoRoll() {
         </div>
       </div>
 
-      {track.synthPreset === 'sampler' && (
+      {trackInstrument?.kind === 'sampler' && (
         <div
           aria-label="Quick Sampler target"
           className={samplerDropActive ? 'ring-1 ring-cyan-400/70 shrink-0' : 'shrink-0'}

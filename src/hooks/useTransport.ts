@@ -6,7 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
-import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
+import { samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import {
@@ -25,6 +25,10 @@ import {
   getClipAudibleStartTime,
   getClipAudibleTimelineDuration,
 } from '../utils/clipAudio';
+import {
+  getTrackSamplerConfigFromInstrument,
+  resolveTrackInstrument,
+} from '../utils/trackInstrument';
 import { toastInfo } from './useToast';
 import type { TimelineScrubClip } from '../engine/AudioEngine';
 import { useVST3Store } from '../store/vst3Store';
@@ -360,16 +364,9 @@ export function useTransport() {
           (inst) => inst.trackId === track.id && inst.enabled && inst.online,
         );
 
-        const preset = track.synthPreset ?? 'piano';
-        const samplerConfig = track.samplerConfig
-          ?? (preset === 'sampler' && track.sampler?.audioKey
-            ? createSamplerConfig(track.sampler.audioKey, {
-                rootNote: track.sampler.rootNote ?? 60,
-                trimEnd: track.sampler.sampleDuration,
-                loopEnd: track.sampler.sampleDuration,
-              })
-            : null);
-        const useSampler = !vst3Instrument && !!samplerConfig;
+        const instrument = resolveTrackInstrument(track);
+        const samplerConfig = getTrackSamplerConfigFromInstrument(track);
+        const useSampler = !vst3Instrument && instrument?.kind === 'sampler' && !!samplerConfig;
 
         synthEngine.removeTrackSynth(track.id);
         samplerEngine.removeTrackSampler(track.id);
@@ -384,8 +381,8 @@ export function useTransport() {
               trackNode.inputGain as unknown as Tone.InputNode,
             );
           }
-        } else if (preset !== 'sampler') {
-          synthEngine.ensureTrackSynth(track.id, preset);
+        } else if (instrument?.kind !== 'sampler') {
+          synthEngine.ensureTrackSynth(track.id, instrument ?? (track.synthPreset ?? 'piano'));
         }
 
         const midiClips = mainView === 'session'
@@ -471,7 +468,7 @@ export function useTransport() {
                       note.pitch,
                       Math.max(1, Math.round(velocity * 127)),
                       scheduledDuration,
-                      preset,
+                      instrument ?? (track.synthPreset ?? 'piano'),
                     );
                     return;
                   }

@@ -65,6 +65,8 @@ import type {
   StrudelFromMidiOptions,
   StrudelFromMidiResult,
   TrackInstrument,
+  FmInstrumentSettings,
+  VelocityLayer,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
@@ -129,6 +131,7 @@ import {
 } from '../utils/playbackLatency';
 import {
   createDefaultSubtractiveInstrument,
+  createDefaultFmInstrument,
   getDefaultTrackInstrumentPreset,
   syncTrackInstrumentState,
 } from '../utils/trackInstrument';
@@ -629,6 +632,12 @@ export interface ProjectState {
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
   updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
+  /** Add a velocity layer to a track's samplerConfig. */
+  addVelocityLayer: (trackId: string, layer: VelocityLayer) => void;
+  /** Remove a velocity layer by index from a track's samplerConfig. */
+  removeVelocityLayer: (trackId: string, index: number) => void;
+  /** Partially update a velocity layer at the given index. */
+  updateVelocityLayer: (trackId: string, index: number, partial: Partial<VelocityLayer>) => void;
   createQuickSamplerTrack: (input: {
     audioKey: string;
     sampleName?: string;
@@ -3196,6 +3205,37 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure FM synth', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const existing = t.instrument?.kind === 'fm' ? t.instrument : createDefaultFmInstrument();
+          const merged: FmInstrumentSettings = {
+            ...existing.settings,
+            ...params,
+            carrier: { ...existing.settings.carrier, ...params.carrier },
+            modulator: { ...existing.settings.modulator, ...params.modulator },
+            ampEnvelope: { ...existing.settings.ampEnvelope, ...params.ampEnvelope },
+          };
+          const instrument = createDefaultFmInstrument({
+            ...existing,
+            settings: merged,
+          });
+          return {
+            ...t,
+            ...syncTrackInstrumentFields(t, { instrument }),
+          };
+        }),
+      },
+    });
+  },
+
   loadSynthPreset: (trackId, presetId) => {
     const state = get();
     if (_isViewerMode()) return;
@@ -3396,6 +3436,85 @@ export const useProjectStore = create<ProjectState>()(
                     samplerConfig: undefined,
                   }),
                 })
+            : t,
+        ),
+      },
+    });
+  },
+
+  addVelocityLayer: (trackId, layer) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Add velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: [...(t.samplerConfig!.velocityLayers ?? []), layer],
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  removeVelocityLayer: (trackId, index) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.velocityLayers) return;
+    if (index < 0 || index >= track.samplerConfig.velocityLayers.length) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Remove velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: t.samplerConfig!.velocityLayers!.filter((_, i) => i !== index),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateVelocityLayer: (trackId, index, partial) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.velocityLayers) return;
+    if (index < 0 || index >= track.samplerConfig.velocityLayers.length) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: t.samplerConfig!.velocityLayers!.map((l, i) =>
+                    i === index ? { ...l, ...partial } : l,
+                  ),
+                },
+              }
             : t,
         ),
       },

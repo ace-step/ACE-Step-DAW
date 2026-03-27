@@ -132,6 +132,20 @@ export interface SamplerConfig {
   sustain: number;
   /** ADSR release time in seconds. */
   release: number;
+  /** Optional velocity layers for multi-sample velocity switching and crossfading. */
+  velocityLayers?: VelocityLayer[];
+}
+
+/** A single velocity layer in a sampler instrument zone. */
+export interface VelocityLayer {
+  /** Minimum velocity that triggers this layer (0–127). */
+  minVelocity: number;
+  /** Maximum velocity that triggers this layer (0–127). */
+  maxVelocity: number;
+  /** IndexedDB audio key for the layer's sample. */
+  sampleUrl: string;
+  /** Output gain multiplier for this layer (0–1, default 1). */
+  gain: number;
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;

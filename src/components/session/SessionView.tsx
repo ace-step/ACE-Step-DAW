@@ -341,8 +341,8 @@ function FragmentRow({
                         : 'border-[#3a3a3a] hover:border-daw-accent'
                   }`}
                   style={{
-                    ...(slotColor
-                      ? { backgroundColor: `${slotColor}33`, borderColor: isActive ? undefined : isQueued ? undefined : `${slotColor}88` }
+                    ...((slotColor ?? track.color)
+                      ? { backgroundColor: `${slotColor ?? track.color}33`, borderColor: isActive ? undefined : isQueued ? undefined : `${slotColor ?? track.color}88` }
                       : isActive
                         ? { backgroundColor: 'rgba(16, 185, 129, 0.2)' }
                         : isQueued

@@ -41,6 +41,7 @@ export function useAudioImport() {
   const updateProject = useProjectStore((s) => s.updateProject);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const createQuickSamplerTrack = useProjectStore((s) => s.createQuickSamplerTrack);
+  const restoreAssetToNewTrack = useProjectStore((s) => s.restoreAssetToNewTrack);
   const updateClipStatus = useProjectStore((s) => s.updateClipStatus);
 
   const maybeApplyImportedMidiMetadata = useCallback((fileName: string, bpm?: number, timeSignature?: number) => {
@@ -433,6 +434,32 @@ export function useAudioImport() {
     toastSuccess(`Created Quick Sampler: ${asset.prompt || asset.trackDisplayName}`);
   }, [createQuickSamplerTrack]);
 
+  const importAssetAsNewTrack = useCallback(async (
+    assetId: string,
+    startTime: number,
+    options?: { order?: number },
+  ) => {
+    const project = useProjectStore.getState().project;
+    if (!project) return;
+
+    const asset = (project.assets ?? []).find((candidate) => candidate.id === assetId);
+    if (!asset) return;
+
+    if (asset.source === 'generated') {
+      const hadOriginSnapshot = Boolean(asset.originTrackSnapshot);
+      const restoredTrack = restoreAssetToNewTrack(assetId, startTime, options);
+      if (restoredTrack) {
+        if (!hadOriginSnapshot) {
+          toastInfo('Original AI track metadata was unavailable, so the asset was restored as an audio track');
+        }
+        toastSuccess(`Restored generated track: ${restoredTrack.displayName}`);
+        return;
+      }
+    }
+
+    await importAssetAsQuickSampler(assetId);
+  }, [importAssetAsQuickSampler, restoreAssetToNewTrack]);
+
   return {
     importAudioFile,
     importAudioBufferToTrack,
@@ -447,5 +474,6 @@ export function useAudioImport() {
     importLoopToTrack,
     importAssetToTrack,
     importAssetAsQuickSampler,
+    importAssetAsNewTrack,
   };
 }

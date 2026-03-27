@@ -15,6 +15,8 @@ import type {
   InputMonitoringMode,
   ClipGenerationStatus,
   AssetClip,
+  AssetClipSnapshot,
+  AssetTrackSnapshot,
   SequencerPattern,
   SequencerRow,
   SequencerStep,
@@ -609,6 +611,8 @@ export interface ProjectState {
   createQuickSamplerFromClip: (trackId: string, clipId: string) => Track | undefined;
   /** Create a Quick Sampler track directly from a project asset by ID. */
   createQuickSamplerFromAsset: (assetId: string, options?: { trackId?: string; rootNote?: number }) => Track | undefined;
+  /** Recreate a new track from a persisted asset snapshot. */
+  restoreAssetToNewTrack: (assetId: string, startTime: number, options?: { order?: number }) => Track | undefined;
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
@@ -1708,6 +1712,180 @@ function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
   };
 }
 
+function buildAssetTrackSnapshot(track: Track): AssetTrackSnapshot {
+  const settings: TrackPresetSettings = {
+    color: track.color,
+    volume: track.volume,
+    laneHeight: track.laneHeight,
+    synthPreset: track.synthPreset,
+    sampler: track.sampler ? createDefaultSamplerSettings(track.sampler) : undefined,
+    samplerConfig: track.samplerConfig ? createDefaultSamplerConfig(track.samplerConfig.audioKey, track.samplerConfig) : undefined,
+    drumKit: track.drumKit,
+    pan: track.pan,
+    panMode: track.panMode,
+    panLeft: track.panLeft,
+    panRight: track.panRight,
+    eqLowGain: track.eqLowGain,
+    eqMidGain: track.eqMidGain,
+    eqHighGain: track.eqHighGain,
+    compressorEnabled: track.compressorEnabled,
+    compressorThreshold: track.compressorThreshold,
+    compressorRatio: track.compressorRatio,
+    effectsBypassed: track.effectsBypassed ?? false,
+    reverbMix: track.reverbMix,
+    reverbRoomSize: track.reverbRoomSize,
+    localCaption: track.localCaption,
+  };
+
+  return {
+    trackName: track.trackName,
+    trackType: track.trackType ?? (track.trackName === 'custom' ? 'sample' : 'stems'),
+    displayName: track.displayName,
+    muted: track.muted,
+    soloed: track.soloed,
+    armed: track.armed,
+    inputMonitoring: track.inputMonitoring,
+    settings,
+    effects: cloneTrackEffectsForPreset(track.effects),
+    midiEffects: structuredClone(track.midiEffects ?? []),
+  };
+}
+
+function buildAssetClipSnapshot(clip: Clip, starred: boolean): AssetClipSnapshot {
+  const {
+    id: _ignoredId,
+    trackId: _ignoredTrackId,
+    startTime: _ignoredStartTime,
+    generationJobId: _ignoredGenerationJobId,
+    ...snapshot
+  } = structuredClone(clip);
+
+  return {
+    ...snapshot,
+    starred,
+  };
+}
+
+function restoreTrackFromAssetSnapshot(
+  existingTracks: Track[],
+  snapshot: AssetTrackSnapshot,
+  order?: number,
+): Track {
+  const existingOrders = existingTracks.map((track) => track.order);
+  const maxOrder = existingOrders.length > 0 ? Math.max(...existingOrders) : 0;
+
+  return ensureTrackDefaults({
+    id: uuidv4(),
+    trackName: snapshot.trackName,
+    trackType: snapshot.trackType,
+    displayName: snapshot.displayName,
+    color: snapshot.settings.color,
+    order: order ?? maxOrder + 1,
+    volume: snapshot.settings.volume,
+    muted: snapshot.muted,
+    soloed: snapshot.soloed,
+    armed: snapshot.armed,
+    inputMonitoring: snapshot.inputMonitoring,
+    clips: [],
+    laneHeight: snapshot.settings.laneHeight,
+    synthPreset: snapshot.settings.synthPreset,
+    sampler: snapshot.settings.sampler ? createDefaultSamplerSettings(snapshot.settings.sampler) : undefined,
+    samplerConfig: snapshot.settings.samplerConfig
+      ? createDefaultSamplerConfig(snapshot.settings.samplerConfig.audioKey, snapshot.settings.samplerConfig)
+      : undefined,
+    drumKit: snapshot.settings.drumKit,
+    pan: snapshot.settings.pan,
+    panMode: snapshot.settings.panMode,
+    panLeft: snapshot.settings.panLeft,
+    panRight: snapshot.settings.panRight,
+    eqLowGain: snapshot.settings.eqLowGain,
+    eqMidGain: snapshot.settings.eqMidGain,
+    eqHighGain: snapshot.settings.eqHighGain,
+    compressorEnabled: snapshot.settings.compressorEnabled,
+    compressorThreshold: snapshot.settings.compressorThreshold,
+    compressorRatio: snapshot.settings.compressorRatio,
+    effectsBypassed: snapshot.settings.effectsBypassed ?? false,
+    reverbMix: snapshot.settings.reverbMix,
+    reverbRoomSize: snapshot.settings.reverbRoomSize,
+    localCaption: snapshot.settings.localCaption,
+    effects: cloneTrackEffectsWithNewIds(snapshot.effects),
+    midiEffects: cloneMidiEffectsWithNewIds(snapshot.midiEffects),
+  });
+}
+
+function restoreClipFromAsset(asset: AssetClip, trackId: string, startTime: number): Clip {
+  const snapshot = asset.originClipSnapshot;
+  if (!snapshot) {
+    return {
+      id: uuidv4(),
+      trackId,
+      startTime,
+      duration: asset.duration,
+      prompt: asset.prompt,
+      globalCaption: '',
+      lyrics: '',
+      generationStatus: 'ready',
+      generationJobId: null,
+      cumulativeMixKey: asset.cumulativeMixKey,
+      isolatedAudioKey: asset.isolatedAudioKey,
+      waveformPeaks: asset.waveformPeaks,
+      source: asset.source,
+      starred: asset.starred,
+      audioDuration: asset.duration,
+      audioOffset: 0,
+    };
+  }
+
+  return {
+    ...structuredClone(snapshot),
+    id: uuidv4(),
+    trackId,
+    startTime,
+    generationJobId: null,
+    duration: snapshot.duration ?? asset.duration,
+    prompt: snapshot.prompt || asset.prompt,
+    cumulativeMixKey: snapshot.cumulativeMixKey ?? asset.cumulativeMixKey,
+    isolatedAudioKey: snapshot.isolatedAudioKey ?? asset.isolatedAudioKey,
+    waveformPeaks: snapshot.waveformPeaks ?? asset.waveformPeaks,
+    source: snapshot.source ?? asset.source,
+    starred: asset.starred,
+  };
+}
+
+function hydrateAssetOriginSnapshots(project: Project): Project {
+  const assets = project.assets ?? [];
+  if (assets.length === 0) return project;
+
+  let changed = false;
+  const trackAndClipByClipId = new Map<string, { track: Track; clip: Clip }>();
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      trackAndClipByClipId.set(clip.id, { track, clip });
+    }
+  }
+
+  const nextAssets = assets.map((asset) => {
+    if (asset.originTrackSnapshot && asset.originClipSnapshot) return asset;
+    const source = trackAndClipByClipId.get(asset.clipId);
+    if (!source) return asset;
+    changed = true;
+    return {
+      ...asset,
+      trackDisplayName: asset.trackDisplayName || source.track.displayName,
+      prompt: asset.prompt || source.clip.prompt,
+      originTrackSnapshot: asset.originTrackSnapshot ?? buildAssetTrackSnapshot(source.track),
+      originClipSnapshot: asset.originClipSnapshot ?? buildAssetClipSnapshot(source.clip, asset.starred),
+    };
+  });
+
+  return changed
+    ? {
+        ...project,
+        assets: nextAssets,
+      }
+    : project;
+}
+
 function ensureTrackDefaults(track: Track): Track {
   // Fix persisted tracks where trackName was incorrectly set to a TrackType value (e.g. 'strudel')
   const fixedTrackName: TrackName = (track.trackName in TRACK_CATALOG) ? track.trackName : 'custom';
@@ -1843,7 +2021,7 @@ export const useProjectStore = create<ProjectState>()(
   setProject: (project) => {
     _clearHistory();
     // Migration: backfill trackType for projects created before the field existed
-    const migratedBase: Project = {
+    const migratedBase: Project = hydrateAssetOriginSnapshots({
       ...project,
       trackPresets: project.trackPresets ?? [],
       tracks: project.tracks.map((t) => {
@@ -1861,7 +2039,7 @@ export const useProjectStore = create<ProjectState>()(
         project.playbackLatency
           ? normalizePlaybackLatencySettings(project.playbackLatency)
           : detectPlaybackLatencyFromEngine(),
-    };
+    });
     set({ project: ensureProjectSession(migratedBase) });
   },
 
@@ -2685,6 +2863,71 @@ export const useProjectStore = create<ProjectState>()(
       rootNote: options?.rootNote,
       trackId: options?.trackId,
     });
+  },
+
+  restoreAssetToNewTrack: (assetId, startTime, options) => {
+    const state = get();
+    if (!state.project) return undefined;
+    const asset = (state.project.assets ?? []).find((candidate) => candidate.id === assetId);
+    if (!asset) return undefined;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Restore asset track' });
+
+    const track = restoreTrackFromAssetSnapshot(
+      state.project.tracks,
+      asset.originTrackSnapshot ?? {
+        trackName: 'custom',
+        trackType: 'sample',
+        displayName: asset.trackDisplayName || asset.prompt || 'Generated Audio',
+        muted: false,
+        soloed: false,
+        settings: {
+          color: '#f97316',
+          volume: 0.8,
+        },
+        effects: [],
+        midiEffects: [],
+      },
+      options?.order,
+    );
+    const clip = restoreClipFromAsset(asset, track.id, startTime);
+    const nextTracks = [...state.project.tracks, { ...track, clips: [clip] }];
+    const originalClipExists = state.project.tracks.some((candidate) => candidate.clips.some((candidateClip) => candidateClip.id === asset.clipId));
+    const nextAssets = (state.project.assets ?? []).map((candidate) => (
+      candidate.id !== assetId
+        ? candidate
+        : {
+            ...candidate,
+            clipId: originalClipExists ? candidate.clipId : clip.id,
+            trackDisplayName: track.displayName,
+            prompt: clip.prompt,
+            source: clip.source ?? candidate.source,
+            isolatedAudioKey: clip.isolatedAudioKey ?? candidate.isolatedAudioKey,
+            cumulativeMixKey: clip.cumulativeMixKey ?? candidate.cumulativeMixKey,
+            waveformPeaks: clip.waveformPeaks ?? candidate.waveformPeaks,
+            duration: clip.duration,
+            originTrackSnapshot: buildAssetTrackSnapshot(track),
+            originClipSnapshot: buildAssetClipSnapshot(clip, candidate.starred),
+          }
+    ));
+    const session = ensureProjectSession({
+      ...state.project,
+      tracks: nextTracks,
+      session: autoAssignClipToSession(ensureProjectSession(state.project).session!, track.id, clip.id),
+    }).session!;
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(nextTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: nextTracks,
+        assets: nextAssets,
+        session,
+      },
+    });
+
+    return track;
   },
 
   deleteTrackPreset: (presetId) => {
@@ -3852,8 +4095,10 @@ export const useProjectStore = create<ProjectState>()(
       const clip = track?.clips.find((c) => c.id === clipId);
       if (track && clip) {
         const existingIdx = assets.findIndex((a) => a.clipId === clipId);
+        const existingAsset = existingIdx >= 0 ? assets[existingIdx] : null;
+        const starred = existingAsset?.starred ?? clip.starred ?? false;
         const asset: AssetClip = {
-          id: existingIdx >= 0 ? assets[existingIdx].id : uuidv4(),
+          id: existingAsset?.id ?? uuidv4(),
           clipId,
           trackDisplayName: track.displayName,
           prompt: clip.prompt,
@@ -3861,9 +4106,11 @@ export const useProjectStore = create<ProjectState>()(
           isolatedAudioKey: clip.isolatedAudioKey ?? (extra?.isolatedAudioKey as string | null) ?? null,
           cumulativeMixKey: clip.cumulativeMixKey ?? (extra?.cumulativeMixKey as string | null) ?? null,
           waveformPeaks: clip.waveformPeaks ?? (extra?.waveformPeaks as number[] | null) ?? null,
-          starred: existingIdx >= 0 ? assets[existingIdx].starred : false,
-          createdAt: Date.now(),
+          starred,
+          createdAt: existingAsset?.createdAt ?? Date.now(),
           duration: clip.duration,
+          originTrackSnapshot: buildAssetTrackSnapshot(track),
+          originClipSnapshot: buildAssetClipSnapshot(clip, starred),
         };
         if (existingIdx >= 0) {
           assets[existingIdx] = asset;

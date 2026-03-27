@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
-import { DEFAULT_MEASURES, MAX_PROJECT_TRACKS } from '../../constants/defaults';
+import { DEFAULT_GENERATION, DEFAULT_MEASURES, MAX_PROJECT_TRACKS } from '../../constants/defaults';
 
 // Mock projectStorage to prevent IndexedDB calls during testing
 vi.mock('../../services/projectStorage', () => ({
@@ -255,6 +255,190 @@ describe('projectStore', () => {
       const track = useProjectStore.getState().addTrack('drums');
       useProjectStore.getState().removeTrack(track.id);
       expect(useProjectStore.getState().project!.tracks).toHaveLength(0);
+    });
+  });
+
+  describe('asset restoration', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('persists origin snapshots when a generated clip becomes ready', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('bass', 'stems');
+      store.setTrackLocalCaption(track.id, 'Warm bass pulse');
+
+      const clip = store.addClip(track.id, {
+        startTime: 0,
+        duration: 4,
+        prompt: 'Warm bass groove',
+        globalCaption: 'Night drive',
+        lyrics: '',
+        source: 'generated',
+      });
+
+      store.updateClipStatus(clip.id, 'ready', {
+        isolatedAudioKey: 'audio:isolated:bass',
+        cumulativeMixKey: 'audio:cumulative:bass',
+        waveformPeaks: [0.1, 0.4, 0.2],
+        audioDuration: 4,
+        audioOffset: 0,
+        inferredMetas: {
+          bpm: 120,
+          keyScale: 'C minor',
+          genres: 'synthwave',
+        },
+        generatedFromContext: true,
+      });
+
+      const asset = useProjectStore.getState().project!.assets?.[0];
+      expect(asset).toBeDefined();
+      expect(asset?.originTrackSnapshot).toMatchObject({
+        trackName: 'bass',
+        trackType: 'stems',
+        displayName: track.displayName,
+        settings: {
+          color: track.color,
+          localCaption: 'Warm bass pulse',
+        },
+      });
+      expect(asset?.originClipSnapshot).toMatchObject({
+        prompt: 'Warm bass groove',
+        globalCaption: 'Night drive',
+        source: 'generated',
+        generationStatus: 'ready',
+        isolatedAudioKey: 'audio:isolated:bass',
+        cumulativeMixKey: 'audio:cumulative:bass',
+        generatedFromContext: true,
+        inferredMetas: {
+          bpm: 120,
+          keyScale: 'C minor',
+          genres: 'synthwave',
+        },
+      });
+    });
+
+    it('restores a generated asset as a new AI track after the source track is deleted', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'stems');
+      store.setTrackLocalCaption(track.id, 'Glass lead');
+
+      const clip = store.addClip(track.id, {
+        startTime: 0,
+        duration: 6,
+        prompt: 'Glass lead hook',
+        globalCaption: 'Neon skyline',
+        lyrics: '',
+        source: 'generated',
+      });
+
+      store.updateClipStatus(clip.id, 'ready', {
+        isolatedAudioKey: 'audio:isolated:lead',
+        cumulativeMixKey: 'audio:cumulative:lead',
+        waveformPeaks: [0.2, 0.6, 0.3],
+        audioDuration: 6,
+        audioOffset: 0,
+        inferredMetas: {
+          bpm: 128,
+          keyScale: 'A minor',
+        },
+        generatedFromContext: true,
+      });
+
+      const asset = useProjectStore.getState().project!.assets?.[0];
+      expect(asset).toBeDefined();
+
+      store.removeTrack(track.id);
+      const restoredTrack = store.restoreAssetToNewTrack(asset!.id, 8);
+
+      expect(restoredTrack).toBeDefined();
+      expect(restoredTrack?.trackType).toBe('stems');
+      expect(restoredTrack?.trackName).toBe('synth');
+      expect(restoredTrack?.displayName).toBe(track.displayName);
+      expect(restoredTrack?.localCaption).toBe('Glass lead');
+
+      const liveTrack = useProjectStore.getState().project!.tracks.find((candidate) => candidate.id === restoredTrack?.id);
+      const restoredClip = liveTrack?.clips[0];
+      expect(restoredClip).toMatchObject({
+        startTime: 8,
+        duration: 6,
+        prompt: 'Glass lead hook',
+        globalCaption: 'Neon skyline',
+        source: 'generated',
+        generationStatus: 'ready',
+        isolatedAudioKey: 'audio:isolated:lead',
+        cumulativeMixKey: 'audio:cumulative:lead',
+        generatedFromContext: true,
+      });
+      expect(useProjectStore.getState().project!.assets?.[0]?.clipId).toBe(restoredClip?.id);
+    });
+
+    it('backfills missing origin snapshots for legacy assets when the source clip still exists', () => {
+      useProjectStore.getState().setProject({
+        id: 'legacy-project',
+        name: 'Legacy Project',
+        createdAt: 1,
+        updatedAt: 1,
+        bpm: 120,
+        keyScale: 'C major',
+        timeSignature: 4,
+        timeSignatureDenominator: 4,
+        totalDuration: 32,
+        tracks: [{
+          id: 'track-1',
+          trackName: 'synth',
+          trackType: 'stems',
+          displayName: 'Synth',
+          color: '#3b82f6',
+          order: 1,
+          volume: 0.8,
+          muted: false,
+          soloed: false,
+          clips: [{
+            id: 'clip-1',
+            trackId: 'track-1',
+            startTime: 0,
+            duration: 4,
+            prompt: 'Legacy synth phrase',
+            globalCaption: 'Retro night',
+            lyrics: '',
+            generationStatus: 'ready',
+            generationJobId: null,
+            cumulativeMixKey: 'audio:cumulative:legacy',
+            isolatedAudioKey: 'audio:isolated:legacy',
+            waveformPeaks: [0.1, 0.3],
+            source: 'generated',
+          }],
+          effects: [],
+          midiEffects: [],
+        }],
+        generationDefaults: DEFAULT_GENERATION,
+        assets: [{
+          id: 'asset-1',
+          clipId: 'clip-1',
+          trackDisplayName: 'Synth',
+          prompt: 'Legacy synth phrase',
+          source: 'generated',
+          isolatedAudioKey: 'audio:isolated:legacy',
+          cumulativeMixKey: 'audio:cumulative:legacy',
+          waveformPeaks: [0.1, 0.3],
+          starred: false,
+          createdAt: 1,
+          duration: 4,
+        }],
+      } as any);
+
+      const asset = useProjectStore.getState().project!.assets?.[0];
+      expect(asset?.originTrackSnapshot).toMatchObject({
+        trackName: 'synth',
+        trackType: 'stems',
+        displayName: 'Synth',
+      });
+      expect(asset?.originClipSnapshot).toMatchObject({
+        prompt: 'Legacy synth phrase',
+        globalCaption: 'Retro night',
+        source: 'generated',
+      });
     });
   });
 

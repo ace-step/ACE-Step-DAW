@@ -256,17 +256,21 @@ function buildLegacySamplerState(instrument: SamplerTrackInstrument): Pick<Track
   const sampleDuration = settings.sampleDuration
     ?? settings.trimEnd
     ?? settings.loopEnd;
+  const hasSamplerSource = Boolean(settings.audioKey);
+  const audioKey = settings.audioKey;
 
-  const sampler: SamplerSettings = {
-    audioKey: settings.audioKey,
-    sampleName: settings.sampleName,
-    rootNote: settings.rootNote,
-    sampleDuration,
-  };
-
-  const samplerConfig: SamplerConfig | undefined = settings.audioKey
+  const sampler: SamplerSettings | undefined = hasSamplerSource
     ? {
-        audioKey: settings.audioKey,
+        audioKey: audioKey!,
+        sampleName: settings.sampleName,
+        rootNote: settings.rootNote,
+        sampleDuration,
+      }
+    : undefined;
+
+  const samplerConfig: SamplerConfig | undefined = hasSamplerSource
+    ? {
+        audioKey: audioKey!,
         rootNote: settings.rootNote,
         trimStart: settings.trimStart,
         trimEnd: settings.trimEnd,

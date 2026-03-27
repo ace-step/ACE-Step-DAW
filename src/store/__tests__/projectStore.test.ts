@@ -209,6 +209,31 @@ describe('projectStore', () => {
       });
     });
 
+    it('clears sampler metadata without restoring stale sampler config', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('keyboard', 'pianoRoll');
+
+      store.updateTrack(track.id, { synthPreset: 'sampler' });
+      store.setTrackSampler(track.id, {
+        audioKey: 'audio:test:clear-sampler',
+        sampleName: 'Transient Hit',
+        rootNote: 52,
+        sampleDuration: 0.75,
+      });
+
+      store.updateSamplerConfig(track.id, null);
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      expect(updated.instrument).toMatchObject({
+        kind: 'sampler',
+        settings: {
+          audioKey: undefined,
+        },
+      });
+      expect(updated.sampler).toBeUndefined();
+      expect(updated.samplerConfig).toBeUndefined();
+    });
+
     it('creates a quick sampler track from an audio key via store API', () => {
       const store = useProjectStore.getState();
       const track = store.createQuickSamplerTrack({

@@ -1478,8 +1478,8 @@ function syncSamplerState(
     samplerConfig?: SamplerConfig | undefined;
   },
 ): Pick<Track, 'sampler' | 'samplerConfig'> {
-  const nextSampler = updates.sampler ?? track.sampler;
-  const nextConfig = updates.samplerConfig ?? track.samplerConfig;
+  const nextSampler = 'sampler' in updates ? updates.sampler : track.sampler;
+  const nextConfig = 'samplerConfig' in updates ? updates.samplerConfig : track.samplerConfig;
 
   if (nextConfig) {
     return {

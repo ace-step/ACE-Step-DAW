@@ -9,6 +9,18 @@ vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
 
+vi.mock('../../src/hooks/useTransport', () => ({
+  useTransport: () => ({
+    seek: vi.fn(),
+    play: vi.fn(),
+    pause: vi.fn(),
+    stop: vi.fn(),
+    startScrub: vi.fn(),
+    scrubTo: vi.fn(),
+    endScrub: vi.fn(),
+  }),
+}));
+
 vi.mock('../../src/hooks/useAudioImport', () => ({
   useAudioImport: () => ({
     importMultipleFiles: vi.fn(),

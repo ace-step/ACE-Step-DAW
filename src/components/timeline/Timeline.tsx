@@ -16,6 +16,7 @@ import { RegionContextMenu } from './RegionContextMenu';
 import { CanvasContextMenu } from './CanvasContextMenu';
 import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
+import { useTransport } from '../../hooks/useTransport';
 import { getDragPayload, clearDragPayload } from '../../utils/dragPayload';
 import { clientXToLaneX } from '../../utils/timelineCoords';
 import { Minimap } from './Minimap';
@@ -218,6 +219,7 @@ export function Timeline() {
   const reorderTrack = useProjectStore((s) => s.reorderTrack);
   const moveTrackToOrder = useProjectStore((s) => s.moveTrackToOrder);
   const seek = useTransportStore((s) => s.seek);
+  const { seek: transportSeek } = useTransport();
   const currentTime = useTransportStore((s) => s.currentTime);
   const playStartTime = useTransportStore((s) => s.playStartTime);
   const isPlaying = useTransportStore((s) => s.isPlaying);
@@ -1016,7 +1018,7 @@ export function Timeline() {
             className="sticky top-0 z-30 bg-[#1c1d22]"
             style={{ gridColumn: '2', gridRow: '1', width: totalWidth }}
           >
-            <TimeRuler />
+            <TimeRuler onSeek={transportSeek} />
             {showsArrangementMarkers && <ArrangementMarkers />}
             {showTempoLane && (
               <>

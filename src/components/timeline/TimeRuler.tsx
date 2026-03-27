@@ -15,7 +15,7 @@ const PLAYHEAD_LOOP_DRAG_THRESHOLD_PX = 4;
 /** Minimum pixel distance before a click becomes a drag */
 const DRAG_THRESHOLD_PX = 3;
 
-export function TimeRuler() {
+export function TimeRuler({ onSeek }: { onSeek?: (time: number) => void } = {}) {
   const hasProject = useProjectStore((s) => Boolean(s.project));
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -26,6 +26,7 @@ export function TimeRuler() {
   const measures = useProjectStore((s) => s.project?.measures ?? DEFAULT_MEASURES);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const loopStart = useTransportStore((s) => s.loopStart);
   const loopEnd = useTransportStore((s) => s.loopEnd);
@@ -63,8 +64,14 @@ export function TimeRuler() {
     const time = getTimeFromX(e.clientX, container);
     if (time === undefined) return;
 
-    // Silent seek — no audio engine calls
-    useTransportStore.getState().seek(time);
+    // During playback, use the transport-level seek (stops engine + restarts)
+    // so the audio engine actually moves to the new position.
+    // When stopped, use the store-level seek (silent, no engine calls).
+    if (isPlaying && onSeek) {
+      onSeek(time);
+    } else {
+      useTransportStore.getState().seek(time);
+    }
 
     rulerDragRef.current = {
       startX: e.clientX,
@@ -76,7 +83,7 @@ export function TimeRuler() {
     if ('setPointerCapture' in container) {
       container.setPointerCapture(e.pointerId);
     }
-  }, [getTimeFromX, hasProject]);
+  }, [getTimeFromX, hasProject, isPlaying, onSeek]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || !rulerDragRef.current) return;

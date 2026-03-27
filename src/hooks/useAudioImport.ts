@@ -124,7 +124,7 @@ export function useAudioImport() {
     toastSuccess('Audio file imported');
   }, [addClip, updateClipStatus]);
 
-  const importAudioFile = useCallback(async (file: File) => {
+  const importAudioFile = useCallback(async (file: File, startTime: number = 0) => {
     const project = useProjectStore.getState().project;
     if (!project) return;
 
@@ -142,10 +142,11 @@ export function useAudioImport() {
       displayName: file.name.replace(/\.[^.]+$/, ''),
     });
 
-    // Create a clip spanning the audio
-    const clipDuration = Math.min(duration, project.totalDuration);
+    // Create a clip spanning the audio at the specified position
+    const clipDuration = Math.min(duration, project.totalDuration - startTime);
+    if (clipDuration <= 0) return;
     const clip = addClip(track.id, {
-      startTime: 0,
+      startTime,
       duration: clipDuration,
       prompt: `Imported: ${file.name}`,
       lyrics: '',

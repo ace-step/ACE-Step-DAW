@@ -1,6 +1,12 @@
 import type { PianoRollGrid } from '../../types/project';
 
-export type PianoRollTool = 'select' | 'pencil' | 'paint' | 'erase' | 'slide';
+export type PianoRollTool =
+  | 'select'
+  | 'pencil'
+  | 'paint'
+  | 'erase'
+  | 'slide'
+  | 'velocityPaint';
 
 export const MIDI_MAX_NOTE = 127;
 export const PIANO_ROLL_KEY_HEIGHT = 14;
@@ -124,6 +130,8 @@ export function getPianoRollToolShortcut(tool: PianoRollTool): string {
       return '4';
     case 'slide':
       return '5';
+    case 'velocityPaint':
+      return '6';
   }
 }
 

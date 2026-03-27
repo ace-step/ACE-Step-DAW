@@ -120,6 +120,8 @@ export interface UIState {
   openPianoRollClipId: string | null;
   selectedPianoRollNoteIds: string[];
   activePianoRollTool: PianoRollTool;
+  /** Whether ghost notes from other tracks are visible in the piano roll. */
+  showGhostNotes: boolean;
   /** Abbreviation of the currently selected chord shape for chord stamp (e.g. 'maj', 'min', '7', 'dim'). */
   activeChordShape: PianoRollChordShape;
   /** Alias for activeChordShape — used by PianoRoll component and tests. */
@@ -222,6 +224,9 @@ export interface UIState {
   // Playhead DOM cache — avoids per-frame layout queries in SelectedTrackCursor
   trackLaneRects: Map<string, { top: number; height: number }>;
 
+  // Session view keyboard navigation
+  selectedSessionSlot: { trackId: string; sceneIndex: number } | null;
+
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
@@ -291,6 +296,8 @@ export interface UIState {
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
+  toggleGhostNotes: () => void;
+  setShowGhostNotes: (v: boolean) => void;
   setActiveChordShape: (abbr: PianoRollChordShape | string) => void;
   /** Alias for setActiveChordShape. */
   setActivePianoRollChordShape: (abbr: PianoRollChordShape | string) => void;
@@ -407,6 +414,10 @@ export interface UIState {
   clearInlineSuggestions: () => void;
   setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
   applyWorkspaceComplexity: (tier: 'simple' | 'standard' | 'advanced') => void;
+
+  // Session view keyboard navigation
+  setSelectedSessionSlot: (slot: { trackId: string; sceneIndex: number } | null) => void;
+  clearSelectedSessionSlot: () => void;
 
   // Playhead DOM cache
   setTrackLaneRect: (trackId: string, rect: { top: number; height: number }) => void;
@@ -548,6 +559,7 @@ export const useUIStore = create<UIState>()(
   openPianoRollClipId: null,
   selectedPianoRollNoteIds: [],
   activePianoRollTool: 'select',
+  showGhostNotes: false,
   activeChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   activePianoRollChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   openEffectChainTrackId: null,
@@ -618,6 +630,8 @@ export const useUIStore = create<UIState>()(
   suggestionFrequency: 'subtle',
 
   trackLaneRects: new Map(),
+
+  selectedSessionSlot: null,
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
   toggleMainView: () => set((s) => {
@@ -899,6 +913,8 @@ export const useUIStore = create<UIState>()(
   })),
   setSelectedPianoRollNoteIds: (noteIds) => set({ selectedPianoRollNoteIds: [...noteIds] }),
   setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
+  toggleGhostNotes: () => set((state) => ({ showGhostNotes: !state.showGhostNotes })),
+  setShowGhostNotes: (v) => set({ showGhostNotes: v }),
   setActiveChordShape: (abbr) => {
     const clamped = clampPianoRollChordShape(abbr);
     set({ activeChordShape: clamped, activePianoRollChordShape: clamped });
@@ -1196,6 +1212,9 @@ export const useUIStore = create<UIState>()(
   setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
   applyWorkspaceComplexity: (tier) => set(getComplexityDefaults(tier)),
 
+  setSelectedSessionSlot: (slot) => set({ selectedSessionSlot: slot }),
+  clearSelectedSessionSlot: () => set({ selectedSessionSlot: null }),
+
   setTrackLaneRect: (trackId, rect) =>
     set((s) => {
       const prev = s.trackLaneRects.get(trackId);
@@ -1223,6 +1242,7 @@ export const useUIStore = create<UIState>()(
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
+        showGhostNotes: state.showGhostNotes,
         activeChordShape: state.activeChordShape,
         activePianoRollChordShape: state.activePianoRollChordShape,
         // Panel sizes

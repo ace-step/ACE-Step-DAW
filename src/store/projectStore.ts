@@ -47,6 +47,7 @@ import type {
   SamplerConfig,
   SessionClipSlot,
   SessionLaunchEvent,
+  SessionLaunchMode,
   SessionLaunchQuantization,
   SessionPendingLaunch,
   SessionScene,
@@ -674,8 +675,12 @@ export interface ProjectState {
   createSessionScene: (name?: string) => SessionScene | undefined;
   removeSessionScene: (sceneId: string) => void;
   assignClipToSessionSlot: (trackId: string, sceneId: string, clipId: string | null) => void;
+  setSessionSlotColor: (slotId: string, color: string | null) => void;
+  setSessionSlotStopButton: (slotId: string, hasStopButton: boolean) => void;
   setSessionLaunchQuantization: (quantization: SessionLaunchQuantization) => void;
   setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
+  setSessionSlotLegato: (slotId: string, legato: boolean) => void;
+  setSessionSlotLaunchMode: (slotId: string, launchMode: SessionLaunchMode) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
   launchSessionScene: (sceneId: string) => void;
   stopSessionTrack: (trackId: string) => void;
@@ -683,6 +688,8 @@ export interface ProjectState {
   commitPendingSessionLaunches: (currentTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
+  moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
+  reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -750,6 +757,8 @@ export interface ProjectState {
     minDurationBeats?: number;
   }) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
+  /** Set a single note's velocity, clamped to 1–127. */
+  setNoteVelocity: (clipId: string, noteId: string, velocity: number) => void;
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   populateMidiPattern: (clipId: string, options: PatternOptions) => string[];
@@ -1034,7 +1043,7 @@ function ensureSessionSlotsForTrack(session: SessionState, trackId: string): Ses
   for (const scene of session.scenes) {
     const exists = nextSlots.some((slot) => slot.trackId === trackId && slot.sceneId === scene.id);
     if (!exists) {
-      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null, quantization: 'global' });
+      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null, quantization: 'global', color: null, hasStopButton: true, legato: false });
       changed = true;
     }
   }
@@ -4175,6 +4184,44 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotColor: (slotId, color) => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], color };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionSlotStopButton: (slotId, hasStopButton) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.slots.some((slot) => slot.id === slotId)) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          slots: session.slots.map((slot) =>
+            slot.id === slotId ? { ...slot, hasStopButton } : slot,
+          ),
+        },
+      },
+    });
+  },
+
   setSessionLaunchQuantization: (quantization) => {
     const state = get();
     if (!state.project) return;
@@ -4209,6 +4256,43 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotLegato: (slotId, legato) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slot = session.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          slots: session.slots.map((s) => (s.id === slotId ? { ...s, legato } : s)),
+        },
+      },
+    });
+  },
+
+  setSessionSlotLaunchMode: (slotId, launchMode) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], launchMode };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
   launchSessionClip: (trackId, sceneId) => {
     const state = get();
     if (!state.project) return;
@@ -4217,6 +4301,13 @@ export const useProjectStore = create<ProjectState>()(
     const session = ensureProjectSession(state.project).session!;
     const slot = session.slots.find((candidate) => candidate.trackId === trackId && candidate.sceneId === sceneId);
     if (!slot?.clipId || !track.clips.some((clip) => clip.id === slot.clipId)) return;
+
+    // Toggle mode: if the clip is already active, stop the track instead of re-launching
+    const launchMode = slot.launchMode ?? 'trigger';
+    if (launchMode === 'toggle' && session.activeClipIdsByTrackId[trackId] === slot.clipId) {
+      get().stopSessionTrack(trackId);
+      return;
+    }
 
     const transport = useTransportStore.getState();
     const effectiveQuantization = slot.quantization && slot.quantization !== 'global' ? slot.quantization : session.quantization;
@@ -4260,6 +4351,10 @@ export const useProjectStore = create<ProjectState>()(
       let nextProject = state.project;
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && candidate.clipId)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, executeAt, 'scene', sceneId);
+      }
+      // Stop tracks whose empty slots have hasStopButton enabled (default true)
+      for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+        nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, executeAt, 'stop');
       }
       set({ project: nextProject });
       return;
@@ -4360,6 +4455,10 @@ export const useProjectStore = create<ProjectState>()(
         const nextSession = ensureProjectSession(nextProject).session!;
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId);
+        }
+        // Stop tracks whose empty slots have hasStopButton enabled (default true)
+        for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+          nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
         }
         continue;
       }
@@ -4468,6 +4567,58 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return printedClips;
+  },
+
+  moveSessionSlotClip: (sourceSlotId, targetSlotId) => {
+    const state = get();
+    if (!state.project) return;
+    if (sourceSlotId === targetSlotId) return;
+    const session = ensureProjectSession(state.project).session!;
+    const sourceSlot = session.slots.find((s) => s.id === sourceSlotId);
+    const targetSlot = session.slots.find((s) => s.id === targetSlotId);
+    if (!sourceSlot || !targetSlot) return;
+    // Don't move if source slot has no clip
+    if (sourceSlot.clipId === null) return;
+    _pushHistory(state.project);
+    const sourceClipId = sourceSlot.clipId;
+    const targetClipId = targetSlot.clipId;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          slots: session.slots.map((slot) => {
+            if (slot.id === sourceSlotId) return { ...slot, clipId: targetClipId };
+            if (slot.id === targetSlotId) return { ...slot, clipId: sourceClipId };
+            return slot;
+          }),
+        },
+      },
+    });
+  },
+
+  reorderSessionScenes: (fromIndex, toIndex) => {
+    const state = get();
+    if (!state.project) return;
+    if (fromIndex === toIndex) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (fromIndex < 0 || fromIndex >= session.scenes.length || toIndex < 0 || toIndex >= session.scenes.length) return;
+    _pushHistory(state.project);
+    const scenes = [...session.scenes].sort((a, b) => a.index - b.index);
+    const [removed] = scenes.splice(fromIndex, 1);
+    scenes.splice(toIndex, 0, removed);
+    const reindexed = scenes.map((scene, idx) => ({ ...scene, index: idx }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: reindexed,
+        },
+      },
+    });
   },
 
   removeAsset: (assetId) => {
@@ -5764,6 +5915,36 @@ export const useProjectStore = create<ProjectState>()(
                   midiData: {
                     ...clip.midiData,
                     notes: clip.midiData.notes.filter((note) => note.id !== noteId),
+                  },
+                }
+              : clip,
+          ),
+        })),
+      },
+    });
+  },
+
+  setNoteVelocity: (clipId, noteId, velocity) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const clampedVelocity = Math.round(Math.max(1, Math.min(127, velocity)));
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Set note velocity', clipId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === clipId && clip.midiData
+              ? {
+                  ...clip,
+                  midiData: {
+                    ...clip.midiData,
+                    notes: clip.midiData.notes.map((note) =>
+                      note.id === noteId ? { ...note, velocity: clampedVelocity } : note,
+                    ),
                   },
                 }
               : clip,

@@ -95,6 +95,7 @@ export function PianoRollCanvas({
   const stampChord = useProjectStore((s) => s.stampChord);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
+  const setNoteVelocity = useProjectStore((s) => s.setNoteVelocity);
   const resizeMidiNote = useProjectStore((s) => s.resizeMidiNote);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const beginDrag = useProjectStore((s) => s.beginDrag);
@@ -130,7 +131,9 @@ export function PianoRollCanvas({
       ? 'not-allowed'
       : activeTool === 'slide'
         ? 'alias'
-        : 'crosshair';
+        : activeTool === 'velocityPaint'
+          ? 'ns-resize'
+          : 'crosshair';
   const canvasCursor = hoverCursor ?? defaultCanvasCursor;
   const canvasTitle = activeTool === 'select'
     ? 'Select notes, drag a marquee, or resize existing notes'
@@ -140,7 +143,9 @@ export function PianoRollCanvas({
         ? 'Paint tool: drag across the grid to stamp repeated notes'
         : activeTool === 'erase'
           ? 'Erase tool: click or drag across notes to remove them'
-          : 'Slide tool: create slide notes for portamento transitions';
+          : activeTool === 'velocityPaint'
+            ? 'Velocity paint: drag across notes to set velocity based on vertical position'
+            : 'Slide tool: create slide notes for portamento transitions';
 
   const beatToX = useCallback(
     (beat: number) => PIANO_KEYBOARD_WIDTH + beat * pixelsPerBeat - prScrollX,
@@ -604,6 +609,27 @@ export function PianoRollCanvas({
         return;
       }
 
+      if (activeTool === 'velocityPaint') {
+        if (hit) {
+          // Map vertical position within the note area: top = 127, bottom = 1
+          const velocityFromY = Math.round(Math.max(1, Math.min(127, ((noteAreaHeight - y) / noteAreaHeight) * 127)));
+          beginDrag({ scope: 'pianoRoll', label: 'Velocity paint', clipId: clip.id });
+          setNoteVelocity(clip.id, hit.note.id, velocityFromY);
+          toolStrokeRef.current.noteIds.add(hit.note.id);
+          dragRef.current = {
+            mode: 'velocity',
+            noteId: hit.note.id,
+            startMouseX: x,
+            startMouseY: y,
+            originalPitch: hit.note.pitch,
+            originalStartBeat: hit.note.startBeat,
+            originalDurationBeats: hit.note.durationBeats,
+            originalVelocity: hit.note.velocity,
+          };
+        }
+        return;
+      }
+
       if (activeTool === 'erase') {
         if (hit) {
           toolStrokeRef.current.noteIds.add(hit.note.id);
@@ -722,6 +748,7 @@ export function PianoRollCanvas({
       previewEnabled,
       previewNoteAtPitch,
       selectedNoteIds,
+      setNoteVelocity,
       stampChordAt,
       updateMidiNote,
       velocityHeight,
@@ -799,6 +826,14 @@ export function PianoRollCanvas({
       const isPrimaryButtonDown = (e.buttons & 1) === 1;
 
       if (!drag && isPrimaryButtonDown && y <= noteAreaHeight && x >= PIANO_KEYBOARD_WIDTH) {
+        if (activeTool === 'velocityPaint') {
+          const hit = findNoteAt(x, y);
+          if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
+            const velocityFromY = Math.round(Math.max(1, Math.min(127, ((noteAreaHeight - y) / noteAreaHeight) * 127)));
+            setNoteVelocity(clip.id, hit.note.id, velocityFromY);
+            toolStrokeRef.current.noteIds.add(hit.note.id);
+          }
+        }
         if (activeTool === 'erase') {
           const hit = findNoteAt(x, y);
           if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
@@ -950,6 +985,7 @@ export function PianoRollCanvas({
     previewEnabled,
     previewNoteAtPitch,
     resizeMidiNote,
+    setNoteVelocity,
     snapBeat,
     undo,
     updateMidiNote,

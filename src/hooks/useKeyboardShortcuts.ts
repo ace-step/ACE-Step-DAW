@@ -21,6 +21,7 @@ import {
 import { resolveFocusedTrackId } from '../services/focusResolution';
 import type { KeyCombo } from '../types/shortcuts';
 import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from '../utils/timelineZoom';
+import { getSessionClips } from '../utils/sessionClips';
 
 function isInputFocused(event: KeyboardEvent): boolean {
   return isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement);
@@ -316,8 +317,95 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Session duplicate (Cmd+D) — must be before the `if (mod) return` guard
+      if (ui.keyboardContext.scope === 'session' && matches('session.duplicate')) {
+        event.preventDefault();
+        const slot = ui.selectedSessionSlot;
+        if (slot && project.project) {
+          const track = project.project.tracks.find((t) => t.id === slot.trackId);
+          if (track) {
+            const clip = getSessionClips(track)[slot.sceneIndex];
+            if (clip) project.duplicateClip(clip.id);
+          }
+        }
+        return;
+      }
+
       if (mod) return;
       if (anyModalOpen) return;
+
+      // Session view keyboard shortcuts — must run BEFORE global transport/clip
+      // handlers that share the same key combos (Enter, Digit0, Backspace, arrows).
+      if (ui.keyboardContext.scope === 'session' && !event.shiftKey && !event.altKey) {
+        const proj = project.project;
+        if (proj) {
+          const orderedTracks = [...proj.tracks].sort((a, b) => a.order - b.order);
+          if (orderedTracks.length === 0) return;
+
+          const sceneCount = Math.max(4, ...orderedTracks.map((t) => getSessionClips(t).length));
+          const slot = ui.selectedSessionSlot;
+
+          const isUp = matches('session.up');
+          const isDown = !isUp && matches('session.down');
+          const isLeft = !isUp && !isDown && matches('session.left');
+          const isRight = !isUp && !isDown && !isLeft && matches('session.right');
+
+          if (isUp || isDown || isLeft || isRight) {
+            event.preventDefault();
+            if (!slot) {
+              ui.setSelectedSessionSlot({ trackId: orderedTracks[0].id, sceneIndex: 0 });
+            } else {
+              const trackIdx = Math.max(0, orderedTracks.findIndex((t) => t.id === slot.trackId));
+              if (isUp) {
+                const next = Math.max(0, trackIdx - 1);
+                ui.setSelectedSessionSlot({ trackId: orderedTracks[next].id, sceneIndex: slot.sceneIndex });
+              } else if (isDown) {
+                const next = Math.min(orderedTracks.length - 1, trackIdx + 1);
+                ui.setSelectedSessionSlot({ trackId: orderedTracks[next].id, sceneIndex: slot.sceneIndex });
+              } else if (isLeft) {
+                ui.setSelectedSessionSlot({ trackId: slot.trackId, sceneIndex: Math.max(0, slot.sceneIndex - 1) });
+              } else {
+                ui.setSelectedSessionSlot({ trackId: slot.trackId, sceneIndex: Math.min(sceneCount - 1, slot.sceneIndex + 1) });
+              }
+            }
+            return;
+          }
+
+          if (slot) {
+            if (matches('session.launch')) {
+              event.preventDefault();
+              const track = orderedTracks.find((t) => t.id === slot.trackId);
+              if (track) {
+                const clip = getSessionClips(track)[slot.sceneIndex];
+                if (clip) {
+                  const sceneId = proj.session?.scenes[slot.sceneIndex]?.id;
+                  if (sceneId) {
+                    useProjectStore.getState().launchSessionClip(track.id, sceneId);
+                  }
+                }
+              }
+              return;
+            }
+
+            if (matches('session.stop')) {
+              event.preventDefault();
+              useProjectStore.getState().stopSessionTrack(slot.trackId);
+              return;
+            }
+
+            if (matches('session.delete')) {
+              event.preventDefault();
+              const track = orderedTracks.find((t) => t.id === slot.trackId);
+              if (track) {
+                const clip = getSessionClips(track)[slot.sceneIndex];
+                if (clip) project.removeClip(clip.id);
+              }
+              return;
+            }
+          }
+        }
+      }
+
       if (shouldDeferToPianoRollTools(event)) return;
       if (shouldDeferToDrumMachine(event)) return;
 

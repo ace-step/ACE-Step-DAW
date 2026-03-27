@@ -40,7 +40,8 @@ export type ShortcutCategory =
   | 'generation'
   | 'panels'
   | 'project'
-  | 'pianoRoll';
+  | 'pianoRoll'
+  | 'session';
 
 export type ShortcutContext =
   | 'global'
@@ -48,7 +49,8 @@ export type ShortcutContext =
   | 'pianoRoll'
   | 'mixer'
   | 'drumMachine'
-  | 'strudel';
+  | 'strudel'
+  | 'session';
 
 /** A complete set of overrides keyed by actionId. */
 export type ShortcutMap = Record<string, KeyCombo>;

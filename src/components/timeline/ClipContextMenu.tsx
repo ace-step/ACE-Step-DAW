@@ -1,5 +1,5 @@
-import { TRACK_COLOR_PALETTE } from '../../constants/colorPalette';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
+import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { AIToolsSubmenu, type ClipAIContext } from './AIToolsSubmenu';
 
 interface ClipContextMenuProps {
@@ -130,31 +130,12 @@ export function ClipContextMenu({
 
       {/* Inline color swatches */}
       <ContextMenuSeparator />
-      <div className="px-2 py-1.5 flex flex-wrap gap-1" data-testid="color-swatch-palette">
-        {hasCustomColor && (
-          <button
-            type="button"
-            aria-label="Reset to track color"
-            className="w-5 h-5 rounded-full border border-white/20 flex items-center justify-center cursor-pointer hover:border-white/50 transition-colors"
-            style={{ backgroundColor: '#555' }}
-            onClick={() => onResetColor()}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 2L8 8M8 2L2 8" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
-        {TRACK_COLOR_PALETTE.map((color) => (
-          <button
-            key={color}
-            type="button"
-            aria-label={`Assign clip color ${color}`}
-            className="w-5 h-5 rounded-full border border-white/20 cursor-pointer hover:border-white/50 hover:scale-110 transition-all"
-            style={{ backgroundColor: color }}
-            onClick={() => onAssignColor(color)}
-          />
-        ))}
-      </div>
+      <ColorSwatchPalette
+        hasCustomColor={hasCustomColor}
+        onAssignColor={onAssignColor}
+        onResetColor={onResetColor}
+        labelPrefix="Assign clip color"
+      />
     </ContextMenuWrapper>
   );
 }

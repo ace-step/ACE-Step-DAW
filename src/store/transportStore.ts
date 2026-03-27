@@ -4,6 +4,8 @@ export interface SessionLaunchState {
   clipId: string;
   sceneIndex: number;
   launchedAt: number;
+  /** Offset into the clip (in seconds) for legato playback start. */
+  startOffset?: number;
 }
 
 export interface SessionArrangementRecordEvent {
@@ -69,7 +71,7 @@ export interface TransportState {
   toggleLoopRecording: () => void;
   setLoopCycleCount: (count: number) => void;
   incrementLoopCycle: () => void;
-  launchSessionClip: (trackId: string, clipId: string, sceneIndex: number, launchedAt?: number) => void;
+  launchSessionClip: (trackId: string, clipId: string, sceneIndex: number, launchedAt?: number, startOffset?: number) => void;
   stopSessionTrack: (trackId: string, stopTime?: number) => void;
   stopAllSessionClips: (stopTime?: number) => void;
   launchSessionScene: (sceneIndex: number, clips: Array<{ trackId: string; clipId: string }>, launchedAt?: number) => void;
@@ -178,9 +180,14 @@ export const useTransportStore = create<TransportState>((set) => ({
     }),
   setLoopCycleCount: (count) => set({ loopCycleCount: count }),
   incrementLoopCycle: () => set((s) => ({ loopCycleCount: s.loopCycleCount + 1 })),
-  launchSessionClip: (trackId, clipId, sceneIndex, launchedAt) => set((s) => {
+  launchSessionClip: (trackId, clipId, sceneIndex, launchedAt, startOffset) => set((s) => {
     const launchTime = launchedAt ?? s.currentTime;
-    const nextLaunch = { clipId, sceneIndex, launchedAt: launchTime };
+    const nextLaunch: SessionLaunchState = {
+      clipId,
+      sceneIndex,
+      launchedAt: launchTime,
+      ...(startOffset !== undefined ? { startOffset } : {}),
+    };
     const nextEvents = s.sessionArrangementRecording
       ? [
           ...s.sessionArrangementRecordEvents.map((event) => (

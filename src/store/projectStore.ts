@@ -28,6 +28,9 @@ import type {
   AutomationParameter,
   AutomationPoint,
   AutomationLane,
+  AutomationCurveType,
+  AutomationRecordingMode,
+  LFOAutomationParams,
   ReturnTrack,
   TrackPreset,
   TrackPresetSettings,
@@ -108,7 +111,7 @@ import {
   getClipPlaybackRate,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
-import { snapToGrid } from '../utils/time';
+import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,
   detectPlaybackLatencySettings,
@@ -805,6 +808,9 @@ export interface ProjectState {
   removeAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number) => void;
   updateAutomationPoint: (trackId: string, parameter: AutomationParameter, pointIndex: number, updates: Partial<AutomationPoint>) => void;
   clearAutomationLane: (trackId: string, parameter: AutomationParameter) => void;
+  setAutomationPointCurve: (trackId: string, parameter: AutomationParameter, pointIndex: number, curveType: AutomationCurveType) => void;
+  setAutomationRecordingMode: (trackId: string, parameter: AutomationParameter, mode: AutomationRecordingMode) => void;
+  generateLFOAutomation: (trackId: string, parameter: AutomationParameter, params: LFOAutomationParams) => void;
 
   // Return tracks (sends/returns mixer buses)
   addReturnTrack: (name?: string) => ReturnTrack;
@@ -6709,6 +6715,90 @@ export const useProjectStore = create<ProjectState>()(
     const lanes = (state.project.automationLanes ?? []).filter(
       (l: AutomationLane) => !(l.trackId === trackId && automationParamEquals(l.parameter, parameter)),
     );
+    set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  setAutomationPointCurve: (trackId, parameter, pointIndex, curveType) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const lanes = (state.project.automationLanes ?? []).map((lane) => {
+      if (lane.trackId !== trackId || !automationParamEquals(lane.parameter, parameter)) return lane;
+      const newPoints = lane.points.map((p: AutomationPoint, i: number) =>
+        i === pointIndex ? { ...p, curveType } : p,
+      );
+      return { ...lane, points: newPoints };
+    });
+    set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  setAutomationRecordingMode: (trackId, parameter, mode) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const lanes = (state.project.automationLanes ?? []).map((lane) => {
+      if (lane.trackId !== trackId || !automationParamEquals(lane.parameter, parameter)) return lane;
+      return { ...lane, recordingMode: mode };
+    });
+    set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
+  },
+
+  generateLFOAutomation: (trackId, parameter, params) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+
+    const bpm = state.project.bpm;
+    const startTime = beatsToSeconds(params.startBeat, bpm);
+    const endTime = beatsToSeconds(params.endBeat, bpm);
+    const duration = endTime - startTime;
+    const pointsPerCycle = 32;
+    const totalCycles = params.rate;
+    const totalPoints = Math.max(4, Math.round(pointsPerCycle * totalCycles));
+    const phaseRad = (params.phase * Math.PI) / 180;
+
+    const points: AutomationPoint[] = [];
+    for (let i = 0; i <= totalPoints; i++) {
+      const t = i / totalPoints;
+      const angle = 2 * Math.PI * totalCycles * t + phaseRad;
+      let rawValue: number;
+
+      switch (params.shape) {
+        case 'sine':
+          rawValue = Math.sin(angle);
+          break;
+        case 'triangle': {
+          const normalizedPhase = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          rawValue = normalizedPhase < Math.PI
+            ? -1 + (2 * normalizedPhase) / Math.PI
+            : 3 - (2 * normalizedPhase) / Math.PI;
+          break;
+        }
+        case 'saw': {
+          const normalizedPhase = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          rawValue = -1 + normalizedPhase / Math.PI;
+          break;
+        }
+        case 'square':
+          rawValue = Math.sin(angle) >= 0 ? 1 : -1;
+          break;
+      }
+
+      // Map from [-1, 1] to [0, 1] with depth and center at 0.5
+      const value = Math.max(0, Math.min(1, 0.5 + (rawValue * params.depth) / 2));
+      points.push({ time: startTime + t * duration, value });
+    }
+
+    // Insert or replace the lane
+    const lanes = [...(state.project.automationLanes ?? [])];
+    const matchLane = (l: AutomationLane) =>
+      l.trackId === trackId && automationParamEquals(l.parameter, parameter);
+    const existingIdx = lanes.findIndex(matchLane);
+    if (existingIdx >= 0) {
+      lanes[existingIdx] = { ...lanes[existingIdx], points };
+    } else {
+      lanes.push({ id: uuidv4(), trackId, parameter, points });
+    }
     set({ project: { ...state.project, updatedAt: Date.now(), automationLanes: lanes } });
   },
 

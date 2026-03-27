@@ -899,10 +899,35 @@ export interface TimeSignatureEvent {
 
 // ─── Automation Types ────────────────────────────────────────────────────────
 
+/** Curve interpolation mode between automation points */
+export type AutomationCurveType = 'linear' | 'exponential' | 's-curve' | 'step';
+
+/** Recording mode for automation lanes */
+export type AutomationRecordingMode = 'touch' | 'latch' | 'write';
+
+/** LFO waveform shape for automation generation */
+export type LFOShape = 'sine' | 'triangle' | 'saw' | 'square';
+
+/** Parameters for LFO automation generation */
+export interface LFOAutomationParams {
+  shape: LFOShape;
+  /** Cycles per beat-range (e.g. 1 = one full cycle over the range) */
+  rate: number;
+  /** Amplitude 0–1 (1 = full range) */
+  depth: number;
+  /** Phase offset in degrees (0–360) */
+  phase: number;
+  /** Start beat (inclusive) */
+  startBeat: number;
+  /** End beat (exclusive) */
+  endBeat: number;
+}
+
 export interface AutomationPoint {
   time: number;   // seconds
   value: number;  // normalized 0–1
   curve?: number; // -1 (ease-in) to +1 (ease-out), 0 = linear
+  curveType?: AutomationCurveType; // interpolation mode to next point
 }
 
 export type AutomatableEffectTarget =
@@ -925,6 +950,7 @@ export interface AutomationLane {
   trackId: string;
   parameter: AutomationParameter;
   points: AutomationPoint[];
+  recordingMode?: AutomationRecordingMode;
 }
 
 /** Compare two AutomationParameter values for equality */

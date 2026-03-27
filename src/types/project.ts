@@ -629,6 +629,10 @@ export interface SessionClipSlot {
   clipId: string | null;
   /** Per-slot quantization override. 'global' (or undefined) defers to session quantization. */
   quantization?: 'global' | SessionLaunchQuantization;
+  /** Color override for this slot (inherits track color when null). */
+  color?: string | null;
+  /** When true (default), an empty slot acts as a stop button for the track. */
+  hasStopButton?: boolean;
 }
 
 export interface SessionPendingLaunch {

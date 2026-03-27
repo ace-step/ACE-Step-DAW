@@ -1,8 +1,11 @@
+import { useCallback, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
+import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
+import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
 
 const SESSION_QUANTIZATION_OPTIONS: SessionLaunchQuantization[] = [
@@ -46,6 +49,14 @@ function isClipQueued(
 
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 10; // r=10
 
+interface SlotColorMenuState {
+  x: number;
+  y: number;
+  slotId: string;
+  currentColor: string | null;
+}
+
+
 export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
@@ -54,6 +65,7 @@ export function SessionView() {
   const currentTime = useTransportStore((s) => s.currentTime);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
+  const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
   const {
     launchSessionClip,
     stopSessionTrack,
@@ -61,6 +73,24 @@ export function SessionView() {
     launchSessionScene,
     toggleSessionArrangementRecording,
   } = useTransport();
+
+  const [colorMenu, setColorMenu] = useState<SlotColorMenuState | null>(null);
+
+  const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
+
+  const handleAssignColor = useCallback((color: string) => {
+    if (colorMenu) {
+      setSessionSlotColor(colorMenu.slotId, color);
+      setColorMenu(null);
+    }
+  }, [colorMenu, setSessionSlotColor]);
+
+  const handleResetColor = useCallback(() => {
+    if (colorMenu) {
+      setSessionSlotColor(colorMenu.slotId, null);
+      setColorMenu(null);
+    }
+  }, [colorMenu, setSessionSlotColor]);
 
   if (!project) {
     return <div className="flex-1 min-w-0 bg-[#202020]" />;
@@ -174,13 +204,47 @@ export function SessionView() {
               onLaunch={(clipId, sceneIndex) => launchSessionClip(track.id, clipId, sceneIndex)}
               onStop={() => stopSessionTrack(track.id)}
               onSlotQuantizationChange={(slotId, q) => setSessionSlotQuantization(slotId, q)}
+              onContextMenuSlot={setColorMenu}
             />
           );
         })}
       </div>
 
+      {colorMenu && (
+        <ContextMenuWrapper
+          x={colorMenu.x}
+          y={colorMenu.y}
+          onClose={handleCloseColorMenu}
+          testId="session-slot-color-menu"
+          minWidth={180}
+        >
+          <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+            Slot Color
+          </div>
+          <ContextMenuSeparator />
+          <ColorSwatchPalette
+            hasCustomColor={colorMenu.currentColor != null}
+            onAssignColor={handleAssignColor}
+            onResetColor={handleResetColor}
+            labelPrefix="Assign slot color"
+            testId="session-color-swatch-palette"
+          />
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            label="Reset Color"
+            onClick={handleResetColor}
+          />
+        </ContextMenuWrapper>
+      )}
     </div>
   );
+}
+
+interface StopButtonContextMenuState {
+  x: number;
+  y: number;
+  slotId: string;
+  hasStopButton: boolean;
 }
 
 function FragmentRow({
@@ -196,6 +260,7 @@ function FragmentRow({
   onLaunch,
   onStop,
   onSlotQuantizationChange,
+  onContextMenuSlot,
 }: {
   track: Track;
   sessionClips: Clip[];
@@ -209,8 +274,42 @@ function FragmentRow({
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
+  onContextMenuSlot: (state: SlotColorMenuState) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
+
+  const [contextMenu, setContextMenu] = useState<StopButtonContextMenuState | null>(null);
+  const setSessionSlotStopButton = useProjectStore((s) => s.setSessionSlotStopButton);
+
+  // Build a sceneIndex -> slot lookup map to avoid repeated .find() in the render loop
+  const slotBySceneIndex = useMemo(() => {
+    const sceneIdToIndex = new Map(scenes.map((s) => [s.id, s.index]));
+    const map = new Map<number, SessionClipSlot>();
+    for (const slot of sessionSlots) {
+      if (slot.trackId !== track.id) continue;
+      const idx = sceneIdToIndex.get(slot.sceneId);
+      if (idx !== undefined) map.set(idx, slot);
+    }
+    return map;
+  }, [scenes, sessionSlots, track.id]);
+
+  const handleEmptySlotContextMenu = useCallback((e: React.MouseEvent, sceneIndex: number) => {
+    e.preventDefault();
+    const slot = slotBySceneIndex.get(sceneIndex);
+    if (!slot) return;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      slotId: slot.id,
+      hasStopButton: slot.hasStopButton !== false,
+    });
+  }, [slotBySceneIndex]);
+
+  const handleToggleStopButton = useCallback(() => {
+    if (!contextMenu) return;
+    setSessionSlotStopButton(contextMenu.slotId, !contextMenu.hasStopButton);
+    setContextMenu(null);
+  }, [contextMenu, setSessionSlotStopButton]);
 
   return (
     <>
@@ -249,21 +348,48 @@ function FragmentRow({
           loopCount = result.loopCount;
         }
 
+        // Look up the session slot for this track+scene to get the custom color and stop button state
+        const slot = slotBySceneIndex.get(sceneIndex);
+        const slotColor = slot?.color ?? null;
+        const hasStopButton = slot ? slot.hasStopButton !== false : true;
+
+        const handleContextMenu = (e: React.MouseEvent) => {
+          if (!clip || !slot) return;
+          e.preventDefault();
+          onContextMenuSlot({
+            x: e.clientX,
+            y: e.clientY,
+            slotId: slot.id,
+            currentColor: slotColor,
+          });
+        };
+
         return (
           <div key={`${track.id}-${sceneIndex}`} className="border-r border-b border-[#2e2e2e] bg-[#1b1b1b] p-2">
             {clip ? (
               <div className="relative">
                 <button
                   onClick={() => void onLaunch(clip.id, sceneIndex)}
+                  onContextMenu={handleContextMenu}
                   className={`relative flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
                     isActive
-                      ? 'border-emerald-400 bg-emerald-500/20 shadow-[0_0_0_1px_rgba(74,222,128,0.35)]'
+                      ? 'border-emerald-400 shadow-[0_0_0_1px_rgba(74,222,128,0.35)]'
                       : isQueued
-                        ? 'border-amber-400 bg-amber-500/10'
-                        : 'border-[#3a3a3a] bg-[#262626] hover:border-daw-accent hover:bg-[#2f2f2f]'
+                        ? 'border-amber-400'
+                        : 'border-[#3a3a3a] hover:border-daw-accent'
                   }`}
-                  style={isQueued && !isActive ? { animation: 'session-blink 500ms ease-in-out infinite' } : undefined}
+                  style={{
+                    ...((slotColor ?? track.color)
+                      ? { backgroundColor: `${slotColor ?? track.color}33`, borderColor: isActive ? undefined : isQueued ? undefined : `${slotColor ?? track.color}88` }
+                      : isActive
+                        ? { backgroundColor: 'rgba(16, 185, 129, 0.2)' }
+                        : isQueued
+                          ? { backgroundColor: 'rgba(245, 158, 11, 0.1)' }
+                          : { backgroundColor: '#262626' }),
+                    ...(isQueued && !isActive ? { animation: 'session-blink 500ms ease-in-out infinite' } : {}),
+                  }}
                   aria-label={`Launch ${getClipLabel(clip, sceneIndex)} on ${track.displayName} in scene ${sceneIndex + 1}`}
+                  data-slot-id={slot?.id}
                 >
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">
@@ -318,15 +444,35 @@ function FragmentRow({
                   </select>
                 )}
               </div>
+            ) : hasStopButton ? (
+              <button
+                onClick={() => void onStop()}
+                onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                className="flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#343434] bg-[#202020] transition-colors hover:border-[#555] hover:bg-[#272727]"
+                aria-label={`Stop ${track.displayName} in scene ${sceneIndex + 1}`}
+                data-testid={`stop-slot-${track.id}-${sceneIndex}`}
+              >
+                <span className="text-zinc-500 text-base leading-none" aria-hidden="true">&#9632;</span>
+              </button>
             ) : (
-              <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-[#343434] bg-[#202020] text-[11px] uppercase tracking-[0.16em] text-zinc-600">
-                Empty
-              </div>
+              <div
+                onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                className="flex h-24 items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d]"
+                data-testid={`empty-slot-${track.id}-${sceneIndex}`}
+              />
             )}
           </div>
         );
       })}
 
+      {contextMenu && (
+        <ContextMenuWrapper x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem
+            label={contextMenu.hasStopButton ? 'Remove Stop Button' : 'Add Stop Button'}
+            onClick={handleToggleStopButton}
+          />
+        </ContextMenuWrapper>
+      )}
     </>
   );
 }

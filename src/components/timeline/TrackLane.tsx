@@ -252,17 +252,18 @@ function TrackLaneInner({ track }: TrackLaneProps) {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
 
-      // Compute ghost preview position
-      const payload = getDragPayload();
-      if (payload && hasProject) {
+      // Compute ghost preview position (works for both internal drag payloads and external OS file drags)
+      if (hasProject) {
+        const payload = getDragPayload();
         const laneX = clientXToLaneX(e.clientX);
         const rawTime = laneX / pixelsPerSecond;
         const snappedTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
-        const ghostDuration = payload.duration ?? defaultClipDuration;
+        const ghostDuration = payload?.duration ?? defaultClipDuration;
+        const ghostName = payload?.name ?? (types.includes('Files') ? 'Audio file' : 'Audio');
         setDropGhost({
           left: snappedTime * pixelsPerSecond,
           width: ghostDuration * pixelsPerSecond,
-          name: payload.name ?? 'Audio',
+          name: ghostName,
         });
       }
     }

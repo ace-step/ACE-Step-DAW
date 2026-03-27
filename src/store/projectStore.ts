@@ -674,6 +674,8 @@ export interface ProjectState {
   createSessionScene: (name?: string) => SessionScene | undefined;
   removeSessionScene: (sceneId: string) => void;
   assignClipToSessionSlot: (trackId: string, sceneId: string, clipId: string | null) => void;
+  setSessionSlotColor: (slotId: string, color: string | null) => void;
+  setSessionSlotStopButton: (slotId: string, hasStopButton: boolean) => void;
   setSessionLaunchQuantization: (quantization: SessionLaunchQuantization) => void;
   setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
@@ -1034,7 +1036,7 @@ function ensureSessionSlotsForTrack(session: SessionState, trackId: string): Ses
   for (const scene of session.scenes) {
     const exists = nextSlots.some((slot) => slot.trackId === trackId && slot.sceneId === scene.id);
     if (!exists) {
-      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null, quantization: 'global' });
+      nextSlots.push({ id: uuidv4(), trackId, sceneId: scene.id, clipId: null, quantization: 'global', color: null, hasStopButton: true });
       changed = true;
     }
   }
@@ -4175,6 +4177,44 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setSessionSlotColor: (slotId, color) => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], color };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionSlotStopButton: (slotId, hasStopButton) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.slots.some((slot) => slot.id === slotId)) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          slots: session.slots.map((slot) =>
+            slot.id === slotId ? { ...slot, hasStopButton } : slot,
+          ),
+        },
+      },
+    });
+  },
+
   setSessionLaunchQuantization: (quantization) => {
     const state = get();
     if (!state.project) return;
@@ -4260,6 +4300,10 @@ export const useProjectStore = create<ProjectState>()(
       let nextProject = state.project;
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && candidate.clipId)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, executeAt, 'scene', sceneId);
+      }
+      // Stop tracks whose empty slots have hasStopButton enabled (default true)
+      for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+        nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, executeAt, 'stop');
       }
       set({ project: nextProject });
       return;
@@ -4360,6 +4404,10 @@ export const useProjectStore = create<ProjectState>()(
         const nextSession = ensureProjectSession(nextProject).session!;
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId);
+        }
+        // Stop tracks whose empty slots have hasStopButton enabled (default true)
+        for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+          nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
         }
         continue;
       }

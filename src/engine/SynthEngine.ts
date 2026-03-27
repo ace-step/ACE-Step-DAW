@@ -16,6 +16,7 @@ import {
 export type SynthSource = TrackInstrument | SynthPreset;
 type RuntimeInstrument = SubtractiveTrackInstrument | FmTrackInstrument;
 type SynthVoiceType = 'mono' | 'fm';
+type SynthCharacterEffectType = 'distortion';
 type SynthModulationEffectType = 'tremolo' | 'autoPanner' | 'autoFilter' | 'vibrato';
 const DEFAULT_TRACK_GAIN = 0.55;
 const MIN_LINEAR_GAIN = 0.0001;
@@ -32,6 +33,12 @@ interface RuntimeModulationRack {
   node: Tone.ToneAudioNode;
   retriggerOnNote: boolean;
   restart: (time?: number) => void;
+  dispose: () => void;
+}
+
+interface RuntimeCharacterRack {
+  input: Tone.ToneAudioNode;
+  output: Tone.ToneAudioNode;
   dispose: () => void;
 }
 
@@ -61,6 +68,15 @@ export interface SynthModulationSpec {
   depth: number;
   retrigger: boolean;
   options: Record<string, unknown>;
+}
+
+export interface SynthCharacterSpec {
+  effectType: SynthCharacterEffectType;
+  drive: number;
+  amount: number;
+  wet: number;
+  preGain: number;
+  outputTrim: number;
 }
 
 interface CreateSynthPlaybackChainOptions {
@@ -364,6 +380,27 @@ export function createSynthModulationSpec(source: SynthSource): SynthModulationS
   return null;
 }
 
+export function createSynthCharacterSpec(source: SynthSource): SynthCharacterSpec | null {
+  const instrument = typeof source !== 'string' && source.kind === 'subtractive'
+    ? source
+    : null;
+
+  if (!instrument) return null;
+
+  const { filter } = instrument.settings;
+  const drive = clamp(filter.drive, 0, 1);
+  if (!filter.enabled || drive <= 0.001) return null;
+
+  return {
+    effectType: 'distortion',
+    drive,
+    amount: clamp((drive * 0.85) + 0.05, 0.05, 0.9),
+    wet: clamp(drive * 0.9, 0.05, 0.95),
+    preGain: 1 + (drive * 3),
+    outputTrim: clamp(1 - (drive * 0.22), 0.72, 1),
+  };
+}
+
 export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
   return createSynthForSource(preset);
 }
@@ -437,18 +474,52 @@ function createRuntimeModulationRack(source: SynthSource): RuntimeModulationRack
   }
 }
 
+function createRuntimeCharacterRack(source: SynthSource): RuntimeCharacterRack | null {
+  const spec = createSynthCharacterSpec(source);
+  if (!spec) return null;
+
+  switch (spec.effectType) {
+    case 'distortion': {
+      const input = new Tone.Gain(spec.preGain);
+      const distortion = new Tone.Distortion({
+        distortion: spec.amount,
+        wet: spec.wet,
+      });
+      const output = new Tone.Gain(spec.outputTrim);
+      input.connect(distortion);
+      distortion.connect(output);
+      return {
+        input,
+        output,
+        dispose: () => {
+          input.dispose();
+          distortion.dispose();
+          output.dispose();
+        },
+      };
+    }
+  }
+}
+
 function connectSynthChain(
   synth: Tone.PolySynth,
+  character: RuntimeCharacterRack | null,
   modulation: RuntimeModulationRack | null,
   gain: Tone.Gain,
   connectTo?: Tone.InputNode,
   routeToDestination: boolean = true,
 ) {
+  const sourceNode = character?.output ?? synth;
+
+  if (character) {
+    synth.connect(character.input);
+  }
+
   if (modulation) {
-    synth.connect(modulation.node);
+    sourceNode.connect(modulation.node);
     modulation.node.connect(gain);
   } else {
-    synth.connect(gain);
+    sourceNode.connect(gain);
   }
 
   if (connectTo) {
@@ -465,9 +536,10 @@ export function createSynthPlaybackChain(
   const { gainScale = 1, connectTo, routeToDestination = true } = options;
   const spec = createSynthRuntimeSpec(source);
   const synth = createSynthForSource(source);
+  const character = createRuntimeCharacterRack(source);
   const modulation = createRuntimeModulationRack(source);
   const gain = new Tone.Gain(Math.max(0, Math.min(2, spec.gainLevel * gainScale)));
-  connectSynthChain(synth, modulation, gain, connectTo, routeToDestination);
+  connectSynthChain(synth, character, modulation, gain, connectTo, routeToDestination);
 
   return {
     synth,
@@ -479,6 +551,7 @@ export function createSynthPlaybackChain(
     dispose: () => {
       synth.releaseAll();
       synth.dispose();
+      character?.dispose();
       modulation?.dispose();
       gain.dispose();
     },

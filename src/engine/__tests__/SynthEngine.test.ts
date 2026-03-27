@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createSynthCharacterSpec,
   createSynthModulationSpec,
   createSynthRuntimeSpec,
   findSlideSourceNote,
@@ -248,6 +249,67 @@ describe('createSynthModulationSpec', () => {
 
     const options = spec?.options as { depth: number };
     expect(options.depth).toBeCloseTo(0.85, 5);
+  });
+});
+
+describe('createSynthCharacterSpec', () => {
+  it('maps subtractive filter drive to an audible distortion character stage', () => {
+    const instrument = createDefaultSubtractiveInstrument('lead', {
+      settings: {
+        filter: {
+          enabled: true,
+          type: 'lowpass',
+          cutoffHz: 1800,
+          resonance: 5,
+          drive: 0.6,
+          keyTracking: 0.2,
+        },
+      },
+    });
+
+    const spec = createSynthCharacterSpec(instrument);
+
+    expect(spec).toMatchObject({
+      effectType: 'distortion',
+      drive: 0.6,
+      amount: 0.56,
+      wet: 0.54,
+      preGain: 2.8,
+    });
+    expect(spec?.outputTrim).toBeCloseTo(0.868, 5);
+  });
+
+  it('returns null when drive is inactive, the filter is bypassed, or the source is not subtractive', () => {
+    const zeroDrive = createDefaultSubtractiveInstrument('pad', {
+      settings: {
+        filter: {
+          enabled: true,
+          type: 'lowpass',
+          cutoffHz: 2200,
+          resonance: 2,
+          drive: 0,
+          keyTracking: 0.1,
+        },
+      },
+    });
+    const filterBypassed = createDefaultSubtractiveInstrument('pad', {
+      settings: {
+        filter: {
+          enabled: false,
+          type: 'lowpass',
+          cutoffHz: 2200,
+          resonance: 2,
+          drive: 0.7,
+          keyTracking: 0.1,
+        },
+      },
+    });
+
+    expect(createSynthCharacterSpec(zeroDrive)).toBeNull();
+    expect(createSynthCharacterSpec(filterBypassed)).toBeNull();
+    expect(createSynthCharacterSpec(createDefaultFmInstrument())).toBeNull();
+    expect(createSynthCharacterSpec(createDefaultSamplerInstrument({ audioKey: 'audio:test' }))).toBeNull();
+    expect(createSynthCharacterSpec('lead')).toBeNull();
   });
 });
 

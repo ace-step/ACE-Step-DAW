@@ -10,14 +10,12 @@ on:
 jobs:
   post-merge:
     if: github.event.pull_request.merged == true || github.event_name == 'check_suite'
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Auto-merge ready PRs (all checks must pass)
         run: |
-          cd /Users/junmingong/.openclaw/workspace/acestep-daw
-
           # Auto-merge any PR that's ready + ALL checks green
           READY=$(gh pr list --repo ${{ github.repository }} --state open --json number,isDraft,mergeable --jq '.[] | select(.isDraft==false and .mergeable=="MERGEABLE") | .number')
           for PR in $READY; do
@@ -63,7 +61,10 @@ jobs:
       - name: Run Project Manager brain
         if: steps.verify-tests.outputs.tests_passed == 'true'
         run: |
-          cd /Users/junmingong/.openclaw/workspace/acestep-daw
-          bash scripts/agents/project-manager.sh &
+          if [ -f scripts/agents/project-manager.sh ]; then
+            bash scripts/agents/project-manager.sh
+          else
+            echo "project-manager.sh not found — skipping"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

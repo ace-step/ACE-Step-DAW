@@ -1,4 +1,4 @@
-name: E2E Tests (non-blocking)
+name: E2E Tests
 
 on:
   push:
@@ -12,7 +12,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-test:
+  # Critical E2E tests that MUST pass before merge
+  e2e-critical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run critical E2E tests
+        run: npx playwright test --grep "@critical"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-critical
+          path: playwright-report/
+          retention-days: 7
+
+  # Non-critical E2E tests — failures tracked but don't block merge
+  e2e-extended:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -25,10 +50,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests
+      - name: Run extended E2E tests
         id: e2e
         run: |
-          npx playwright test 2>&1 | tee /tmp/e2e-output.txt
+          npx playwright test --grep-invert "@critical" 2>&1 | tee /tmp/e2e-output.txt
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
@@ -36,7 +61,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-extended
           path: playwright-report/
           retention-days: 7
 

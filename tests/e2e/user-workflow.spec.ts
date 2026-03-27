@@ -15,7 +15,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Core User Workflow: Create → Add → Edit → Play → Export', () => {
+test.describe('Core User Workflow: Create → Add → Edit → Play → Export @critical', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');

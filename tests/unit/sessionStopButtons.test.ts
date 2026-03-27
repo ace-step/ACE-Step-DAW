@@ -32,40 +32,56 @@ describe('session empty slot stop buttons', () => {
     expect(restored?.hasStopButton).toBe(true);
   });
 
-  it('setSessionSlotStopButton does nothing for non-existent slot', () => {
+  it('setSessionSlotStopButton is a no-op for non-existent slot IDs', () => {
     useProjectStore.getState().addTrack('drums');
+    const updatedAtBefore = useProjectStore.getState().project?.updatedAt;
     const slotsBefore = useProjectStore.getState().project?.session?.slots;
     useProjectStore.getState().setSessionSlotStopButton('non-existent-id', false);
+    const updatedAtAfter = useProjectStore.getState().project?.updatedAt;
     const slotsAfter = useProjectStore.getState().project?.session?.slots;
-    // Should still update (map returns new array) but no slot values changed
-    expect(slotsAfter?.length).toBe(slotsBefore?.length);
+    // Early-return: no history push, no updatedAt change, slots unchanged
+    expect(updatedAtAfter).toBe(updatedAtBefore);
+    expect(slotsAfter).toBe(slotsBefore);
   });
 
   it('scene launch stops tracks whose empty slot has hasStopButton true', () => {
     const store = useProjectStore.getState();
     const track1 = store.addTrack('drums');
 
-    // Get session data
     const session = useProjectStore.getState().project?.session;
     expect(session).toBeDefined();
 
     const scenes = session!.scenes;
     expect(scenes.length).toBeGreaterThanOrEqual(2);
 
-    // Find slot for track1 in first scene - it should be empty with hasStopButton=true
     const scene1 = scenes[0];
     const track1Scene1Slot = session!.slots.find(s => s.trackId === track1.id && s.sceneId === scene1.id);
     expect(track1Scene1Slot).toBeDefined();
     expect(track1Scene1Slot!.clipId).toBeNull();
     expect(track1Scene1Slot!.hasStopButton).toBe(true);
 
-    // Launch scene1 - since slot is empty with stop button, it should trigger stop
-    // (This tests the code path; the actual stop behavior is in applySessionTrackLaunch)
+    // Pre-set an active clip on the track to simulate a playing clip
+    const fakeClipId = 'fake-active-clip';
+    useProjectStore.setState((prev) => ({
+      project: {
+        ...prev.project!,
+        session: {
+          ...prev.project!.session!,
+          activeClipIdsByTrackId: {
+            ...prev.project!.session!.activeClipIdsByTrackId,
+            [track1.id]: fakeClipId,
+          },
+        },
+      },
+    }));
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[track1.id]).toBe(fakeClipId);
+
+    // Launch scene1 - empty slot with hasStopButton=true should stop the track
     useProjectStore.getState().launchSessionScene(scene1.id);
 
-    // Verify no error occurred and state is still valid
-    const afterState = useProjectStore.getState().project;
-    expect(afterState).toBeDefined();
+    // Assert the track was stopped (activeClipId set to null)
+    const afterActive = useProjectStore.getState().project?.session?.activeClipIdsByTrackId[track1.id];
+    expect(afterActive).toBeNull();
   });
 
   it('scene launch does not stop track when empty slot has hasStopButton=false', () => {
@@ -82,17 +98,31 @@ describe('session empty slot stop buttons', () => {
 
     // Remove stop button
     useProjectStore.getState().setSessionSlotStopButton(track1Scene1Slot!.id, false);
-
-    // Verify it's set
     const updatedSlot = useProjectStore.getState().project?.session?.slots.find(s => s.id === track1Scene1Slot!.id);
     expect(updatedSlot?.hasStopButton).toBe(false);
 
-    // Launch scene - should not stop the track since hasStopButton is false
+    // Pre-set an active clip on the track to simulate a playing clip
+    const fakeClipId = 'fake-active-clip';
+    useProjectStore.setState((prev) => ({
+      project: {
+        ...prev.project!,
+        session: {
+          ...prev.project!.session!,
+          activeClipIdsByTrackId: {
+            ...prev.project!.session!.activeClipIdsByTrackId,
+            [track1.id]: fakeClipId,
+          },
+        },
+      },
+    }));
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[track1.id]).toBe(fakeClipId);
+
+    // Launch scene - should NOT stop the track since hasStopButton is false
     useProjectStore.getState().launchSessionScene(scene1.id);
 
-    // Verify no error and state is valid
-    const afterState = useProjectStore.getState().project;
-    expect(afterState).toBeDefined();
+    // Assert the track is still active (not stopped)
+    const afterActive = useProjectStore.getState().project?.session?.activeClipIdsByTrackId[track1.id];
+    expect(afterActive).toBe(fakeClipId);
   });
 
   it('all slots for a new track are created with hasStopButton true', () => {

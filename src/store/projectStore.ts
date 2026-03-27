@@ -4198,8 +4198,9 @@ export const useProjectStore = create<ProjectState>()(
   setSessionSlotStopButton: (slotId, hasStopButton) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project);
     const session = ensureProjectSession(state.project).session!;
+    if (!session.slots.some((slot) => slot.id === slotId)) return;
+    _pushHistory(state.project);
     set({
       project: {
         ...state.project,

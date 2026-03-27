@@ -38,3 +38,5 @@ test-results/
 # PM agent persistent memory
 .pm/
 /companion/target/
+# ONNX models (too large for git, download via script)
+public/models/*.onnx

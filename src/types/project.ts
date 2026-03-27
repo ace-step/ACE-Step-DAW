@@ -159,7 +159,7 @@ export interface VelocityLayer {
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -278,10 +278,43 @@ export interface FmTrackInstrument {
   settings: FmInstrumentSettings;
 }
 
+// ─── Wavetable Synthesis Types ──────────────────────────────────────────────
+
+/** Description of a single waveform in a wavetable — stored as an array of harmonic partial amplitudes. */
+export interface WavetableWaveform {
+  /** Human-readable label (e.g. "Saw", "Square", "Formant A"). */
+  name: string;
+  /** Harmonic partial amplitudes. Index 0 = fundamental, 1 = 2nd harmonic, etc. */
+  partials: number[];
+}
+
+/** Settings for wavetable synthesis on a track. */
+export interface WavetableSettings {
+  /** Ordered array of waveforms in the wavetable (minimum 2). */
+  waveforms: WavetableWaveform[];
+  /** Crossfade position between waveforms (0–1). 0 = first waveform, 1 = last. */
+  position: number;
+  /** Speed of automatic morphing in Hz (0 = static, no modulation). */
+  morphSpeed: number;
+  /** ADSR amplitude envelope. */
+  ampEnvelope: InstrumentEnvelope;
+  /** Output gain multiplier (0–2, default 0.55). */
+  outputGain: number;
+}
+
+export interface WavetableTrackInstrument {
+  kind: 'wavetable';
+  preset: 'wavetable';
+  name: string;
+  fallbackPreset: LegacySynthVoicePreset;
+  settings: WavetableSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
-  | FmTrackInstrument;
+  | FmTrackInstrument
+  | WavetableTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -775,6 +808,8 @@ export interface Track {
   synthLfo?: SynthLfo;
   /** Unison / detune voice-stacking settings. */
   unisonSettings?: UnisonSettings;
+  /** Wavetable synthesis settings (only for wavetable instruments). */
+  wavetableSettings?: WavetableSettings;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];

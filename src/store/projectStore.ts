@@ -67,6 +67,7 @@ import type {
   StrudelFromMidiResult,
   TrackInstrument,
   FmInstrumentSettings,
+  WavetableSettings,
   VelocityLayer,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
@@ -101,6 +102,7 @@ import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager'
 import * as audioEngineHooks from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
+import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
@@ -634,6 +636,8 @@ export interface ProjectState {
   updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
   /** Update unison / detune voice-stacking settings on a synth track. */
   updateUnisonSettings: (trackId: string, settings: Partial<UnisonSettings>) => void;
+  /** Update wavetable synthesis settings on a track with undo support. */
+  updateWavetableSettings: (trackId: string, settings: Partial<WavetableSettings>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
@@ -3390,6 +3394,37 @@ export const useProjectStore = create<ProjectState>()(
               }
             : t,
         ),
+      },
+    });
+  },
+
+  updateWavetableSettings: (trackId, settings) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update wavetable settings', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const existing: WavetableSettings = t.wavetableSettings ?? {
+            ...DEFAULT_WAVETABLE_SETTINGS,
+            waveforms: [...DEFAULT_WAVETABLE_SETTINGS.waveforms],
+            ampEnvelope: { ...DEFAULT_WAVETABLE_SETTINGS.ampEnvelope },
+          };
+          return {
+            ...t,
+            wavetableSettings: {
+              ...existing,
+              ...settings,
+              waveforms: settings.waveforms ?? existing.waveforms,
+              ampEnvelope: settings.ampEnvelope
+                ? { ...existing.ampEnvelope, ...settings.ampEnvelope }
+                : existing.ampEnvelope,
+            },
+          };
+        }),
       },
     });
   },

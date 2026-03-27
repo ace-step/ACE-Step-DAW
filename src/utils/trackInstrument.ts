@@ -295,6 +295,8 @@ export function getLegacySynthPresetFromInstrument(instrument: TrackInstrument):
       return 'sampler';
     case 'fm':
       return instrument.fallbackPreset;
+    case 'wavetable':
+      return instrument.fallbackPreset;
     case 'subtractive':
     default:
       return instrument.preset;
@@ -314,6 +316,8 @@ function normalizeExistingInstrument(
       });
     case 'fm':
       return createDefaultFmInstrument(instrument);
+    case 'wavetable':
+      return instrument;
     case 'subtractive':
     default:
       return createDefaultSubtractiveInstrument(instrument.preset, instrument);

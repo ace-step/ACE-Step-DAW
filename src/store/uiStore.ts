@@ -12,6 +12,7 @@ import { getAssistantSuggestions, streamAssistantResponse } from '../services/ai
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
+import type { SynthPresetDefinition, SynthPresetCategory } from '../data/synthPresets';
 import type { LoopCategory } from '../engine/LoopLibrary';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
@@ -425,6 +426,15 @@ export interface UIState {
   // Playhead DOM cache
   setTrackLaneRect: (trackId: string, rect: { top: number; height: number }) => void;
   removeTrackLaneRect: (trackId: string) => void;
+
+  // Synth Preset Browser
+  userSynthPresets: SynthPresetDefinition[];
+  saveSynthPreset: (
+    name: string,
+    category: SynthPresetCategory,
+    params: Pick<SynthPresetDefinition, 'waveform' | 'envelope' | 'filter' | 'detuneCents' | 'glideTime' | 'outputGain' | 'legacyPreset'>,
+  ) => SynthPresetDefinition;
+  deleteUserSynthPreset: (presetId: string) => void;
 }
 
 const MIN_VIRTUAL_KEYBOARD_OCTAVE = 1;
@@ -1237,6 +1247,30 @@ export const useUIStore = create<UIState>()(
       next.delete(trackId);
       return { trackLaneRects: next };
     }),
+
+  // Synth Preset Browser
+  userSynthPresets: [],
+  saveSynthPreset: (name, category, params) => {
+    const preset: SynthPresetDefinition = {
+      id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      category,
+      isFactory: false,
+      waveform: params.waveform,
+      envelope: params.envelope,
+      legacyPreset: params.legacyPreset,
+      ...(params.filter ? { filter: params.filter } : {}),
+      ...(params.detuneCents !== undefined ? { detuneCents: params.detuneCents } : {}),
+      ...(params.glideTime !== undefined ? { glideTime: params.glideTime } : {}),
+      ...(params.outputGain !== undefined ? { outputGain: params.outputGain } : {}),
+    };
+    set((s) => ({ userSynthPresets: [...s.userSynthPresets, preset] }));
+    return preset;
+  },
+  deleteUserSynthPreset: (presetId) =>
+    set((s) => ({
+      userSynthPresets: s.userSynthPresets.filter((p) => p.id !== presetId),
+    })),
 }),
     {
       name: 'ace-step-daw-ui',
@@ -1292,6 +1326,8 @@ export const useUIStore = create<UIState>()(
         recentCommandIds: state.recentCommandIds,
         // Theme
         theme: state.theme,
+        // Synth presets
+        userSynthPresets: state.userSynthPresets,
       }),
     },
   ),

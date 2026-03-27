@@ -672,6 +672,8 @@ export interface Track {
   instrument?: TrackInstrument;
   /** Legacy mirror of the instrument kind for existing engine/UI paths. */
   synthPreset?: SynthPreset;
+  /** ID of the active synth preset definition (factory or user). */
+  synthPresetDefinitionId?: string;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];

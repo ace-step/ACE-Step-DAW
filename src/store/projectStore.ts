@@ -100,6 +100,7 @@ import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
 import { clampClipFadeDurations } from '../utils/clipFade';
+import { getSynthPresetById } from '../data/synthPresets';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
@@ -121,6 +122,7 @@ import {
   setPlaybackLatencyOverrideSettings,
 } from '../utils/playbackLatency';
 import {
+  createDefaultSubtractiveInstrument,
   getDefaultTrackInstrumentPreset,
   syncTrackInstrumentState,
 } from '../utils/trackInstrument';
@@ -607,6 +609,8 @@ export interface ProjectState {
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
+  /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
+  loadSynthPreset: (trackId: string, presetId: string) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
@@ -3167,6 +3171,64 @@ export const useProjectStore = create<ProjectState>()(
             ? {
                 ...t,
                 ...syncTrackInstrumentFields(t, { instrument }),
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  loadSynthPreset: (trackId, presetId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    // Dynamic import to avoid circular dependency at module scope.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useUIStore: _uiStore } = require('./uiStore') as {
+      useUIStore: { getState: () => { userSynthPresets: import('../data/synthPresets').SynthPresetDefinition[] } };
+    };
+    const userPresets = _uiStore.getState().userSynthPresets;
+    const presetDef = getSynthPresetById(presetId, userPresets);
+    if (!presetDef) return;
+    _pushHistory(state.project, { scope: 'track', label: `Load synth preset: ${presetDef.name}`, trackId });
+    // Build a full SubtractiveTrackInstrument from the preset definition.
+    const base = createDefaultSubtractiveInstrument(presetDef.legacyPreset, { name: presetDef.name });
+    const instrument = {
+      ...base,
+      settings: {
+        ...base.settings,
+        oscillator: {
+          ...base.settings.oscillator,
+          waveform: presetDef.waveform,
+          detuneCents: presetDef.detuneCents ?? base.settings.oscillator.detuneCents,
+        },
+        ampEnvelope: { ...presetDef.envelope },
+        filter: presetDef.filter?.enabled
+          ? {
+              ...base.settings.filter,
+              enabled: true,
+              type: presetDef.filter.type ?? base.settings.filter.type,
+              cutoffHz: presetDef.filter.cutoffHz ?? base.settings.filter.cutoffHz,
+              resonance: presetDef.filter.resonance ?? base.settings.filter.resonance,
+            }
+          : base.settings.filter,
+        glideTime: presetDef.glideTime ?? base.settings.glideTime,
+        outputGain: presetDef.outputGain ?? base.settings.outputGain,
+      },
+    };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                synthPresetDefinitionId: presetId,
+                ...syncTrackInstrumentFields(t, {
+                  instrument,
+                  synthPreset: presetDef.legacyPreset,
+                }),
               }
             : t,
         ),

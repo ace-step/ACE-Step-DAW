@@ -22,6 +22,30 @@ import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuS
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
 
+/** Snowflake-style icon shown next to frozen track names. */
+function FrozenIcon() {
+  return (
+    <svg
+      className="inline-block text-cyan-400 mr-0.5 align-text-bottom"
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-label="Frozen"
+    >
+      <title>Frozen</title>
+      <line x1="12" y1="2" x2="12" y2="22" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <line x1="5" y1="5" x2="19" y2="19" />
+      <line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  );
+}
+
 interface TrackHeaderProps {
   track: Track;
   isCollapsed?: boolean;
@@ -408,7 +432,7 @@ export function TrackHeader({
                   title={track.displayName}
                   onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
                 >
-                  {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+                  {track.frozen && <FrozenIcon />}
                   {track.displayName}
                 </span>
               )}
@@ -441,11 +465,13 @@ export function TrackHeader({
                 <button
                   onClick={() => setOpenEffectChainTrackId(track.id)}
                   className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
-                    effectsBypassed
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                    track.frozen
+                      ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                      : effectsBypassed
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                   }`}
-                  title="Effects chain (FX)"
+                  title={track.frozen ? 'Effects bypassed (track frozen)' : 'Effects chain (FX)'}
                   aria-label={`Effects for ${track.displayName}`}
                 >FX</button>
               )}
@@ -486,7 +512,7 @@ export function TrackHeader({
                 title={track.displayName}
                 onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
               >
-                {track.frozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+                {track.frozen && <FrozenIcon />}
                 {track.displayName}
               </span>
             )}
@@ -602,6 +628,7 @@ export function TrackHeader({
           )}
         </div>
         <ContextMenuItem label="Bounce in Place..." onClick={() => { setCtxMenu(null); openBounceInPlaceDialog(track.id); }} />
+        <ContextMenuItem label="Bounce to Audio" onClick={() => { setCtxMenu(null); void useProjectStore.getState().bounceTrackToAudio(track.id); }} />
         {track.trackType === 'strudel' && (
           <>
             <ContextMenuSeparator />

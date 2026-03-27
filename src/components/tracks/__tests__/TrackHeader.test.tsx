@@ -113,4 +113,21 @@ describe('TrackHeader icon bar', () => {
     expect(screen.getByTitle('Solo (S)')).toBeInTheDocument();
     expect(screen.getByTitle('Effects chain (FX)')).toBeInTheDocument();
   });
+
+  it('shows snowflake icon when track is frozen', () => {
+    render(<TrackHeader track={makeTrack({ frozen: true })} {...defaultProps} />);
+    expect(screen.getByTitle('Frozen')).toBeInTheDocument();
+  });
+
+  it('does not show snowflake icon when track is not frozen', () => {
+    render(<TrackHeader track={makeTrack({ frozen: false })} {...defaultProps} />);
+    expect(screen.queryByTitle('Frozen')).not.toBeInTheDocument();
+  });
+
+  it('FX button shows grayed-out style and frozen tooltip when track is frozen', () => {
+    render(<TrackHeader track={makeTrack({ frozen: true })} {...defaultProps} />);
+    const fxBtn = screen.getByTitle('Effects bypassed (track frozen)');
+    expect(fxBtn).toBeInTheDocument();
+    expect(fxBtn.className).toContain('cursor-not-allowed');
+  });
 });

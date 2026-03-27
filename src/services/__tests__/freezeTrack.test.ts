@@ -82,6 +82,11 @@ describe('freeze / flatten store actions', () => {
     expect(clip.waveformPeaks).toEqual([0.2, 0.8]);
   });
 
+  it('bounceTrackToAudio action exists in the store', () => {
+    const store = useProjectStore.getState();
+    expect(typeof store.bounceTrackToAudio).toBe('function');
+  });
+
   it('mute/solo still work on frozen tracks', () => {
     const trackId = useProjectStore.getState().project!.tracks[0].id;
     useProjectStore.getState().freezeTrack(trackId, 'frozen-key');

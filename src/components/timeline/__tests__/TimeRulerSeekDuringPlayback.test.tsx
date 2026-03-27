@@ -5,11 +5,14 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useTransportStore } from '../../../store/transportStore';
 
+const mockSeek = vi.fn();
+
 vi.mock('../../../hooks/useTransport', () => ({
   useTransport: () => ({
     startScrub: vi.fn(),
     scrubTo: vi.fn(),
     endScrub: vi.fn(),
+    seek: mockSeek,
   }),
 }));
 
@@ -50,57 +53,38 @@ describe('TimeRuler seek during playback', () => {
     });
   });
 
-  it('calls onSeek prop when clicking ruler during playback', () => {
-    const onSeek = vi.fn();
+  it('calls useTransport().seek when clicking ruler during playback (#994)', () => {
     useTransportStore.setState({ isPlaying: true, currentTime: 10 });
 
-    render(<TimeRuler onSeek={onSeek} />);
+    render(<TimeRuler />);
     const ruler = screen.getByTestId('timeline-scrub-ruler');
 
     // Click at x=250, pixelsPerSecond=50 → time=5s
     fireEvent.pointerDown(ruler, { clientX: 250, button: 0, pointerId: 1 });
     fireEvent.pointerUp(ruler, { clientX: 250, pointerId: 1 });
 
-    expect(onSeek).toHaveBeenCalledWith(5);
+    expect(mockSeek).toHaveBeenCalledWith(5);
   });
 
-  it('does NOT call onSeek when clicking ruler while stopped', () => {
-    const onSeek = vi.fn();
+  it('does NOT call useTransport().seek when clicking ruler while stopped', () => {
     useTransportStore.setState({ isPlaying: false, currentTime: 0 });
-
-    render(<TimeRuler onSeek={onSeek} />);
-    const ruler = screen.getByTestId('timeline-scrub-ruler');
-
-    fireEvent.pointerDown(ruler, { clientX: 250, button: 0, pointerId: 1 });
-    fireEvent.pointerUp(ruler, { clientX: 250, pointerId: 1 });
-
-    // Should use store seek, not onSeek
-    expect(onSeek).not.toHaveBeenCalled();
-    // Store should be updated
-    expect(useTransportStore.getState().currentTime).toBeGreaterThan(0);
-  });
-
-  it('uses store seek when onSeek prop is not provided', () => {
-    useTransportStore.setState({ isPlaying: true, currentTime: 10 });
 
     render(<TimeRuler />);
     const ruler = screen.getByTestId('timeline-scrub-ruler');
 
-    // Click at x=250
     fireEvent.pointerDown(ruler, { clientX: 250, button: 0, pointerId: 1 });
     fireEvent.pointerUp(ruler, { clientX: 250, pointerId: 1 });
 
-    // Should still update store even without onSeek
-    const state = useTransportStore.getState();
-    expect(state.currentTime).toBe(5);
-    expect(state.playStartTime).toBe(5);
+    // Should use store seek, not useTransport().seek
+    expect(mockSeek).not.toHaveBeenCalled();
+    // Store should be updated via direct store seek
+    expect(useTransportStore.getState().currentTime).toBeGreaterThan(0);
   });
 
-  it('drag-to-loop still works during playback without calling onSeek', () => {
-    const onSeek = vi.fn();
+  it('drag-to-loop still works during playback', () => {
     useTransportStore.setState({ isPlaying: true, currentTime: 10 });
 
-    render(<TimeRuler onSeek={onSeek} />);
+    render(<TimeRuler />);
     const ruler = screen.getByTestId('timeline-scrub-ruler');
 
     vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({

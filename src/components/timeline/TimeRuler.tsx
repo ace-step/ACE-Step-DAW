@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, memo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
+import { useTransport } from '../../hooks/useTransport';
 import { getBarDuration, getBeatDuration, snapToGrid } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
@@ -15,7 +16,7 @@ const PLAYHEAD_LOOP_DRAG_THRESHOLD_PX = 4;
 /** Minimum pixel distance before a click becomes a drag */
 const DRAG_THRESHOLD_PX = 3;
 
-export function TimeRuler({ onSeek }: { onSeek?: (time: number) => void } = {}) {
+export function TimeRuler() {
   const hasProject = useProjectStore((s) => Boolean(s.project));
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -32,6 +33,7 @@ export function TimeRuler({ onSeek }: { onSeek?: (time: number) => void } = {}) 
   const loopEnd = useTransportStore((s) => s.loopEnd);
   const setLoopRegion = useTransportStore((s) => s.setLoopRegion);
   const currentTime = useTransportStore((s) => s.currentTime);
+  const { seek: transportSeek } = useTransport();
 
   /** Tracks click-vs-drag state for ruler interactions */
   const rulerDragRef = useRef<{
@@ -64,12 +66,13 @@ export function TimeRuler({ onSeek }: { onSeek?: (time: number) => void } = {}) 
     const time = getTimeFromX(e.clientX, container);
     if (time === undefined) return;
 
-    // During playback, use the transport-level seek (stops engine + restarts)
-    // so the audio engine actually moves to the new position.
-    // When stopped, use the store-level seek (silent, no engine calls).
-    if (isPlaying && onSeek) {
-      onSeek(time);
+    // During playback, use transportSeek which stops+restarts the audio engine
+    // at the new position. Without this, the engine's RAF loop immediately
+    // overwrites currentTime back to the old offset (#994).
+    if (isPlaying) {
+      transportSeek(time);
     } else {
+      // Silent seek — no audio engine calls needed when paused
       useTransportStore.getState().seek(time);
     }
 
@@ -83,7 +86,7 @@ export function TimeRuler({ onSeek }: { onSeek?: (time: number) => void } = {}) 
     if ('setPointerCapture' in container) {
       container.setPointerCapture(e.pointerId);
     }
-  }, [getTimeFromX, hasProject, isPlaying, onSeek]);
+  }, [getTimeFromX, hasProject, isPlaying, transportSeek]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || !rulerDragRef.current) return;

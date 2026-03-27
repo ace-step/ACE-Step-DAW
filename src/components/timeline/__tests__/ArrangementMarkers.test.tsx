@@ -43,6 +43,11 @@ describe('ArrangementMarkers', () => {
     expect(el.style.cursor).toBe('crosshair');
   });
 
+  it('keeps the marker lane bottom border so the track column starts on the same row edge as the timeline', () => {
+    render(<ArrangementMarkers />);
+    expect(screen.getByTestId('arrangement-markers').className).toContain('border-b');
+  });
+
   it('renders marker sections with correct data attributes', () => {
     const store = useProjectStore.getState();
     store.addMarker(0, 'Intro');

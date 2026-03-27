@@ -329,7 +329,7 @@ export function ArrangementMarkers() {
   return (
     <div
       ref={containerRef}
-      className="relative select-none"
+      className="relative select-none border-b border-[#333]"
       style={{ width: totalWidth, height: ARRANGEMENT_MARKERS_HEIGHT, cursor: 'crosshair' }}
       onMouseDown={handleContainerMouseDown}
       data-testid="arrangement-markers"

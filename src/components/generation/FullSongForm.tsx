@@ -136,7 +136,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     if (!initialData) return;
     setPrompt(initialData.caption);
     setLyrics(initialData.lyrics);
-    if (initialData.duration > 0) setDurationSeconds(initialData.duration);
+    if (initialData.duration > 0) {
+      setDurationSeconds(initialData.duration);
+      setDurationAuto(false);
+    }
     if (initialData.vocalLanguage) setVocalLanguage(initialData.vocalLanguage);
   }, [initialData]);
 

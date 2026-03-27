@@ -12,7 +12,7 @@ export const DEFAULT_GENERATION: GenerationDefaults = {
   inferenceSteps: 50,
   guidanceScale: 7.0,
   shift: 3.0,
-  thinking: false,
+  thinking: true,
   model: '',
 };
 

@@ -629,6 +629,8 @@ export interface SessionClipSlot {
   clipId: string | null;
   /** Per-slot quantization override. 'global' (or undefined) defers to session quantization. */
   quantization?: 'global' | SessionLaunchQuantization;
+  /** Color override for this slot (inherits track color when null). */
+  color?: string | null;
 }
 
 export interface SessionPendingLaunch {

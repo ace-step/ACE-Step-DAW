@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import { getBeatDuration, getBarDuration } from '../../utils/time';
+import { getBeatDuration, getBarDuration, getEffectiveMeasures } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { useMetaKeyDown } from '../../hooks/useMetaKeyDown';
@@ -59,7 +59,8 @@ export function GridOverlay() {
       timeSignatureDenominator = 4,
       totalDuration,
     } = project;
-    const effectiveMeasures = project.measures ?? DEFAULT_MEASURES;
+    const configuredMeasures = project.measures ?? DEFAULT_MEASURES;
+    const effectiveMeasures = getEffectiveMeasures(configuredMeasures, totalDuration, bpm, timeSignature, timeSignatureDenominator);
     const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
     const hasTsMap = timeSignatureMap && timeSignatureMap.length > 0;

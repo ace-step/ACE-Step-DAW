@@ -77,3 +77,22 @@ export function getBarDuration(bpm: number, timeSignature: number, timeSignature
 export function getBeatDuration(bpm: number): number {
   return 60 / bpm;
 }
+
+/**
+ * Compute the effective measures for rendering grid/ruler.
+ * If totalDuration exceeds the configured measures boundary, expand to fit
+ * (rounded up to the next multiple of 8 bars).
+ */
+export function getEffectiveMeasures(
+  configuredMeasures: number,
+  totalDuration: number,
+  bpm: number,
+  timeSignature: number,
+  timeSignatureDenominator: number = 4,
+): number {
+  const barDur = getBarDuration(bpm, timeSignature, timeSignatureDenominator);
+  const configuredDuration = configuredMeasures * barDur;
+  if (totalDuration <= configuredDuration) return configuredMeasures;
+  const required = Math.ceil(totalDuration / barDur) + 4;
+  return Math.ceil(required / 8) * 8;
+}

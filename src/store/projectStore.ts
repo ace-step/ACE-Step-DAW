@@ -950,6 +950,7 @@ function computeTotalDuration(
   return Math.max(measuredDuration, maxEnd + TIMELINE_PADDING);
 }
 
+
 function buildBouncedClip(trackId: string, input: {
   startTime: number;
   duration: number;

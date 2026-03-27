@@ -3,7 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useTransport } from '../../hooks/useTransport';
-import { getBarDuration, getBeatDuration, snapToGrid } from '../../utils/time';
+import { getBarDuration, getBeatDuration, getEffectiveMeasures, snapToGrid } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
@@ -25,7 +25,7 @@ export function TimeRuler() {
   const timeSignatureDenominator = useProjectStore((s) => s.project?.timeSignatureDenominator ?? 4);
   const tempoMap = useProjectStore((s) => s.project?.tempoMap);
   const timeSignatureMap = useProjectStore((s) => s.project?.timeSignatureMap);
-  const measures = useProjectStore((s) => s.project?.measures ?? DEFAULT_MEASURES);
+  const configuredMeasures = useProjectStore((s) => s.project?.measures ?? DEFAULT_MEASURES);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const isPlaying = useTransportStore((s) => s.isPlaying);
@@ -184,6 +184,7 @@ export function TimeRuler() {
 
   const markers = useMemo(() => {
     if (!hasProject) return [];
+    const measures = getEffectiveMeasures(configuredMeasures, totalDuration, bpm, timeSignature, timeSignatureDenominator);
     const visualDuration = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth);
     const visibleDuration = Math.min(visualDuration, totalDuration);
     const hasTempoMap = tempoMap && tempoMap.length > 0;
@@ -241,7 +242,7 @@ export function TimeRuler() {
       }
     }
     return result;
-  }, [bpm, hasProject, measures, pixelsPerSecond, tempoMap, timeSignature, timeSignatureDenominator, timeSignatureMap, timelineViewportWidth, totalDuration]);
+  }, [bpm, hasProject, configuredMeasures, pixelsPerSecond, tempoMap, timeSignature, timeSignatureDenominator, timeSignatureMap, timelineViewportWidth, totalDuration]);
 
   if (!hasProject) return <div className="bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)]" style={{ height: TIMELINE_RULER_HEIGHT }} />;
 

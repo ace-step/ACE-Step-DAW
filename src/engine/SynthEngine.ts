@@ -1,10 +1,12 @@
 import * as Tone from 'tone';
-import type { SynthPreset } from '../types/project';
+import type { SynthPreset, FilterEnvelope } from '../types/project';
 
 interface SynthInstance {
   synth: Tone.PolySynth;
   preset: SynthPreset;
   gain: Tone.Gain;
+  filter?: Tone.Filter;
+  filterEnvelope?: Tone.FrequencyEnvelope;
 }
 
 export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
@@ -71,6 +73,8 @@ class SynthEngine {
       existing.synth.releaseAll();
       existing.synth.dispose();
       existing.gain.dispose();
+      existing.filter?.dispose();
+      existing.filterEnvelope?.dispose();
     }
 
     const synth = createSynthForPreset(preset);
@@ -83,6 +87,63 @@ class SynthEngine {
     }
     this.synths.set(trackId, { synth, preset, gain });
     return synth;
+  }
+
+  /**
+   * Apply a filter envelope to a track's synth signal chain.
+   * Inserts a Tone.Filter between synth and gain, controlled by a FrequencyEnvelope.
+   * Pass null to remove the filter envelope.
+   */
+  setFilterEnvelope(trackId: string, envelope: FilterEnvelope | null): void {
+    const instance = this.synths.get(trackId);
+    if (!instance) return;
+
+    // Clean up existing filter envelope
+    if (instance.filterEnvelope) {
+      instance.filterEnvelope.dispose();
+      instance.filterEnvelope = undefined;
+    }
+    if (instance.filter) {
+      // Reconnect synth directly to gain
+      instance.synth.disconnect();
+      instance.filter.dispose();
+      instance.filter = undefined;
+      instance.synth.connect(instance.gain);
+    }
+
+    if (!envelope) return;
+
+    // Create filter and frequency envelope
+    const filter = new Tone.Filter({
+      type: 'lowpass',
+      frequency: envelope.baseFrequency,
+      Q: 2,
+    });
+
+    const freqEnv = new Tone.FrequencyEnvelope({
+      attack: envelope.attack,
+      decay: envelope.decay,
+      sustain: envelope.sustain,
+      release: envelope.release,
+      baseFrequency: envelope.baseFrequency,
+      octaves: envelope.octaves,
+    });
+
+    // Connect frequency envelope output to the filter's frequency param
+    freqEnv.connect(filter.frequency);
+
+    // Re-route: synth -> filter -> gain
+    instance.synth.disconnect();
+    instance.synth.connect(filter);
+    filter.connect(instance.gain);
+
+    instance.filter = filter;
+    instance.filterEnvelope = freqEnv;
+  }
+
+  /** Get the filter envelope node for a track (for triggering). */
+  getFilterEnvelope(trackId: string): Tone.FrequencyEnvelope | undefined {
+    return this.synths.get(trackId)?.filterEnvelope;
   }
 
   getSynth(trackId: string): Tone.PolySynth | null {
@@ -104,6 +165,11 @@ class SynthEngine {
     await this.ensureStarted();
     const synth = this.ensureTrackSynth(trackId, preset);
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    // Trigger filter envelope if present
+    const filterEnv = this.synths.get(trackId)?.filterEnvelope;
+    if (filterEnv) {
+      filterEnv.triggerAttackRelease(duration);
+    }
     synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
 
@@ -128,6 +194,11 @@ class SynthEngine {
     synth.set({ portamento: glideTime });
     synth.triggerAttack(fromFreq, undefined, velocity / 127);
     synth.triggerRelease(fromFreq, `+${glideTime}`);
+    // Trigger filter envelope for slide note
+    const filterEnv = this.synths.get(trackId)?.filterEnvelope;
+    if (filterEnv) {
+      filterEnv.triggerAttackRelease(Math.max(0.04, duration) + glideTime);
+    }
     synth.triggerAttackRelease(toFreq, Math.max(0.04, duration), `+${glideTime}`, velocity / 127);
   }
 
@@ -136,6 +207,8 @@ class SynthEngine {
     const instance = this.synths.get(trackId);
     if (!instance) return;
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    // Trigger filter envelope attack
+    instance.filterEnvelope?.triggerAttack();
     instance.synth.triggerAttack(freq, undefined, velocity / 127);
   }
 
@@ -144,12 +217,15 @@ class SynthEngine {
     const instance = this.synths.get(trackId);
     if (!instance) return;
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    // Trigger filter envelope release
+    instance.filterEnvelope?.triggerRelease();
     instance.synth.triggerRelease(freq);
   }
 
   /** Release all currently sounding notes on all track synths. */
   releaseAll() {
     for (const instance of this.synths.values()) {
+      instance.filterEnvelope?.triggerRelease();
       instance.synth.releaseAll();
     }
   }
@@ -160,6 +236,8 @@ class SynthEngine {
     instance.synth.releaseAll();
     instance.synth.dispose();
     instance.gain.dispose();
+    instance.filter?.dispose();
+    instance.filterEnvelope?.dispose();
     this.synths.delete(trackId);
   }
 

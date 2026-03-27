@@ -46,6 +46,7 @@ import type {
   SynthEnvelope,
   SynthFilter,
   SynthLfo,
+  FilterEnvelope,
   GainEnvelopePoint,
   LoudnessTarget,
   MasteringPreset,
@@ -78,6 +79,7 @@ import {
   estimateMasteredLufs,
 } from '../utils/mastering';
 import { TRACK_CATALOG, TRACK_TYPE_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
+import { DEFAULT_FILTER_ENVELOPE } from '../components/synth/filterEnvelopeDefaults';
 import {
   DEFAULT_BPM,
   DEFAULT_KEY_SCALE,
@@ -619,6 +621,8 @@ export interface ProjectState {
   updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
   /** Update filter settings on a synth track. */
   updateSynthFilter: (trackId: string, filter: Partial<SynthFilter>) => void;
+  /** Update filter envelope (ADSR on filter cutoff) on a synth track. */
+  updateFilterEnvelope: (trackId: string, envelope: Partial<FilterEnvelope>) => void;
   /** Update LFO modulation settings on a synth track. */
   updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
@@ -3261,6 +3265,23 @@ export const useProjectStore = create<ProjectState>()(
         tracks: state.project.tracks.map((t) =>
           t.id === trackId
             ? { ...t, synthEnvelope: { ...(t.synthEnvelope ?? { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 }), ...envelope } }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateFilterEnvelope: (trackId, envelope) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update filter envelope', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, filterEnvelope: { ...(t.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE), ...envelope } }
             : t,
         ),
       },

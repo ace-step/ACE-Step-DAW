@@ -56,6 +56,7 @@ import type {
   DrumMachineConfig,
   DrumKitName,
   SamplerConfig,
+  FollowActionConfig,
   SessionClipSlot,
   SessionLaunchEvent,
   SessionLaunchMode,
@@ -114,6 +115,7 @@ import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { getSynthPresetById } from '../data/synthPresets';
+import { detectClipGroups, resolveFollowAction, rollFollowAction } from '../utils/followActions';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
@@ -723,6 +725,9 @@ export interface ProjectState extends MidiSliceActions {
   stopSessionTrack: (trackId: string) => void;
   stopAllSessionClips: () => void;
   commitPendingSessionLaunches: (currentTime: number) => void;
+  setSessionSlotFollowAction: (slotId: string, config: Partial<import('../types/project').FollowActionConfig>) => void;
+  setSessionFollowActionsEnabled: (enabled: boolean) => void;
+  scheduleFollowAction: (trackId: string, currentSlotId: string, launchTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
@@ -5200,6 +5205,15 @@ export const useProjectStore = create<ProjectState>()(
         nextProject = applySessionTrackLaunch(nextProject, launch.trackId, null, launch.executeAt, 'stop');
         continue;
       }
+      if (launch.type === 'follow-action' && launch.trackId) {
+        if (launch.clipId) {
+          nextProject = applySessionTrackLaunch(nextProject, launch.trackId, launch.clipId, launch.executeAt, 'clip', launch.sceneId ?? null);
+        } else {
+          // follow-action resolved to 'stop'
+          nextProject = applySessionTrackLaunch(nextProject, launch.trackId, null, launch.executeAt, 'stop');
+        }
+        continue;
+      }
       if (launch.type === 'stop-all') {
         for (const track of nextProject.tracks) {
           nextProject = applySessionTrackLaunch(nextProject, track.id, null, launch.executeAt, 'stop');
@@ -5208,6 +5222,96 @@ export const useProjectStore = create<ProjectState>()(
     }
 
     set({ project: nextProject });
+  },
+
+  setSessionSlotFollowAction: (slotId, config) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+
+    _pushHistory(state.project);
+    const currentSlot = session.slots[slotIndex];
+    const defaultConfig: FollowActionConfig = {
+      actionA: 'next',
+      actionB: 'stop',
+      chanceA: 1,
+      time: 4,
+      enabled: true,
+    };
+    const merged: FollowActionConfig = {
+      ...(currentSlot.followAction ?? defaultConfig),
+      ...config,
+    };
+
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...currentSlot, followAction: merged };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionFollowActionsEnabled: (enabled) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, followActionsEnabled: enabled },
+      },
+    });
+  },
+
+  scheduleFollowAction: (trackId, currentSlotId, launchTime) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+
+    // Check global toggle (default true)
+    if (session.followActionsEnabled === false) return;
+
+    const currentSlot = session.slots.find((s) => s.id === currentSlotId);
+    if (!currentSlot?.followAction?.enabled) return;
+
+    const followAction = currentSlot.followAction;
+
+    // Detect the clip group containing the current slot
+    const groups = detectClipGroups(session.slots, session.scenes, trackId);
+    const group = groups.find((g) => g.some((s) => s.id === currentSlotId));
+    if (!group) return;
+
+    // Roll A/B and resolve target
+    const action = rollFollowAction(followAction);
+    const targetSlot = resolveFollowAction(action, currentSlot, group);
+
+    // Calculate fire time: launchTime + followAction.time beats
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const executeAt = launchTime + followAction.time * beatDuration;
+
+    // Queue a follow-action pending launch
+    const nextSession = queuePendingSessionLaunch(session, {
+      type: 'follow-action',
+      trackId,
+      sceneId: targetSlot?.sceneId,
+      clipId: targetSlot?.clipId ?? null,
+      executeAt,
+    });
+
+    set({
+      project: {
+        ...state.project,
+        session: nextSession,
+      },
+    });
   },
 
   startSessionArrangementRecording: (startTime) => {

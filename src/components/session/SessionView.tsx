@@ -9,7 +9,7 @@ import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } fro
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
-import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType } from '../../types/project';
+import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
 
@@ -80,7 +80,19 @@ interface SlotContextMenuState {
   currentColor: string | null;
   legato: boolean;
   currentLaunchMode: SessionLaunchMode;
+  followAction?: FollowActionConfig;
 }
+
+const CLIP_FOLLOW_ACTION_OPTIONS: { value: FollowActionType; label: string }[] = [
+  { value: 'stop', label: 'Stop' },
+  { value: 'again', label: 'Again' },
+  { value: 'previous', label: 'Previous' },
+  { value: 'next', label: 'Next' },
+  { value: 'first', label: 'First' },
+  { value: 'last', label: 'Last' },
+  { value: 'any', label: 'Any' },
+  { value: 'other', label: 'Other' },
+];
 
 
 export function SessionView() {
@@ -94,6 +106,8 @@ export function SessionView() {
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
   const setSessionSlotLegato = useProjectStore((s) => s.setSessionSlotLegato);
   const setSessionSlotLaunchMode = useProjectStore((s) => s.setSessionSlotLaunchMode);
+  const setSessionSlotFollowAction = useProjectStore((s) => s.setSessionSlotFollowAction);
+  const setSessionFollowActionsEnabled = useProjectStore((s) => s.setSessionFollowActionsEnabled);
   const selectedSessionSlot = useUIStore((s) => s.selectedSessionSlot);
   const setSelectedSessionSlot = useUIStore((s) => s.setSelectedSessionSlot);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -135,6 +149,20 @@ export function SessionView() {
     }
   }, [colorMenu, setSessionSlotLaunchMode]);
 
+  const handleFollowActionChange = useCallback((field: string, value: string | number | boolean) => {
+    if (!colorMenu) return;
+    setSessionSlotFollowAction(colorMenu.slotId, { [field]: value });
+    // Update local state to reflect change immediately
+    setColorMenu((prev) => {
+      if (!prev) return null;
+      const defaultFA: FollowActionConfig = { actionA: 'next', actionB: 'stop', chanceA: 1, time: 4, enabled: true };
+      return {
+        ...prev,
+        followAction: { ...(prev.followAction ?? defaultFA), [field]: value },
+      };
+    });
+  }, [colorMenu, setSessionSlotFollowAction]);
+
   // Set keyboard context to 'session' on mount, restore previous on unmount
   useEffect(() => {
     const previousScope = useUIStore.getState().keyboardContext.scope;
@@ -166,6 +194,7 @@ export function SessionView() {
   const sessionSlots = project.session?.slots ?? [];
   const pendingLaunches = project.session?.pendingLaunches ?? [];
   const scenes = project.session?.scenes ?? [];
+  const followActionsEnabled = project.session?.followActionsEnabled !== false;
 
   return (
     <div className="flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto">
@@ -190,6 +219,17 @@ export function SessionView() {
                 ))}
               </select>
             </label>
+            <button
+              onClick={() => setSessionFollowActionsEnabled(!followActionsEnabled)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                followActionsEnabled
+                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-500 hover:bg-[#343434]'
+              }`}
+              aria-label={followActionsEnabled ? 'Disable follow actions' : 'Enable follow actions'}
+            >
+              Follow Actions {followActionsEnabled ? 'ON' : 'OFF'}
+            </button>
             <button
               onClick={() => void toggleSessionArrangementRecording()}
               className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
@@ -372,6 +412,81 @@ export function SessionView() {
               setColorMenu(null);
             }}
           />
+          <ContextMenuSeparator />
+          <div className="px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+            Follow Action
+          </div>
+          <div className="px-3 py-1 flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={colorMenu.followAction?.enabled ?? false}
+                onChange={(e) => handleFollowActionChange('enabled', e.target.checked)}
+                className="accent-purple-500"
+                aria-label="Enable follow action for this slot"
+              />
+              Enabled
+            </label>
+          </div>
+          {(colorMenu.followAction?.enabled) && (
+            <>
+              <div className="px-3 py-1 flex items-center gap-2">
+                <label className="text-[11px] text-zinc-400 w-10">A:</label>
+                <select
+                  value={colorMenu.followAction?.actionA ?? 'next'}
+                  onChange={(e) => handleFollowActionChange('actionA', e.target.value)}
+                  className="flex-1 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+                  aria-label="Follow action A"
+                >
+                  {CLIP_FOLLOW_ACTION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="px-3 py-1 flex items-center gap-2">
+                <label className="text-[11px] text-zinc-400 w-10">B:</label>
+                <select
+                  value={colorMenu.followAction?.actionB ?? 'stop'}
+                  onChange={(e) => handleFollowActionChange('actionB', e.target.value)}
+                  className="flex-1 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+                  aria-label="Follow action B"
+                >
+                  {CLIP_FOLLOW_ACTION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="px-3 py-1 flex items-center gap-2">
+                <label className="text-[11px] text-zinc-400 w-10">A%:</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round((colorMenu.followAction?.chanceA ?? 1) * 100)}
+                  onChange={(e) => handleFollowActionChange('chanceA', Number(e.target.value) / 100)}
+                  className="flex-1 accent-purple-500"
+                  aria-label="Follow action A probability"
+                />
+                <span className="text-[10px] text-zinc-400 w-8 text-right">
+                  {Math.round((colorMenu.followAction?.chanceA ?? 1) * 100)}%
+                </span>
+              </div>
+              <div className="px-3 py-1 flex items-center gap-2">
+                <label className="text-[11px] text-zinc-400 w-10">Time:</label>
+                <input
+                  type="number"
+                  min={0.25}
+                  max={64}
+                  step={0.25}
+                  value={colorMenu.followAction?.time ?? 4}
+                  onChange={(e) => handleFollowActionChange('time', Number(e.target.value))}
+                  className="w-16 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+                  aria-label="Follow action time in beats"
+                />
+                <span className="text-[10px] text-zinc-400">beats</span>
+              </div>
+            </>
+          )}
         </ContextMenuWrapper>
       )}
 
@@ -651,6 +766,7 @@ function FragmentRow({
             currentColor: slotColor,
             legato: slot.legato ?? false,
             currentLaunchMode: slotLaunchMode,
+            followAction: slot.followAction,
           });
         };
 
@@ -758,6 +874,15 @@ function FragmentRow({
                     data-testid={`launch-mode-badge-${slot?.id}`}
                   >
                     {launchModeBadge}
+                  </span>
+                )}
+                {slot?.followAction?.enabled && (
+                  <span
+                    className="absolute top-1 left-6 rounded bg-purple-600/80 px-1 py-0.5 text-[9px] font-semibold text-white leading-none pointer-events-none"
+                    title={`Follow: ${slot.followAction.actionA} / ${slot.followAction.actionB}`}
+                    data-testid={`follow-badge-${slot.id}`}
+                  >
+                    &#x2192;
                   </span>
                 )}
                 {hasOverride && (

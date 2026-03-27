@@ -1,0 +1,191 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MixerPanel } from '../MixerPanel';
+import { useProjectStore } from '../../../store/projectStore';
+import { useUIStore } from '../../../store/uiStore';
+
+vi.mock('../../../services/projectStorage', () => ({
+  saveProject: vi.fn(),
+}));
+
+vi.mock('../../../hooks/useAudioEngine', () => ({
+  getAudioEngine: () => ({
+    getTrackLevel: () => 0,
+    getTrackMeter: () => ({ level: 0, leftLevel: 0, rightLevel: 0, clipped: false }),
+    getMasterMeter: () => ({ level: 0, clipped: false }),
+    resetTrackClip: vi.fn(),
+    resetMasterClip: vi.fn(),
+    masterVolume: 1,
+    getMasterLevel: () => ({ left: 0, right: 0 }),
+    getMasterInputLevel: () => ({ left: 0, right: 0 }),
+    getAnalyserData: () => null,
+  }),
+}));
+
+vi.mock('../SpectrumAnalyzer', () => ({
+  SpectrumAnalyzer: () => null,
+}));
+
+function setupWithTrack() {
+  useProjectStore.getState().createProject();
+  useProjectStore.getState().addTrack('stems');
+  useUIStore.setState({ showMixer: true, mixerHeight: 500 });
+}
+
+describe('Channel strip improvements', () => {
+  describe('solo/mute visual states', () => {
+    it('mute button has red background when muted', () => {
+      setupWithTrack();
+      const tracks = useProjectStore.getState().project!.tracks;
+      useProjectStore.getState().updateTrack(tracks[0].id, { muted: true });
+
+      render(<MixerPanel />);
+      const muteBtn = screen.getAllByTestId('mute-btn')[0];
+      expect(muteBtn.className).toContain('bg-red-500');
+      expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('mute button has default background when not muted', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const muteBtn = screen.getAllByTestId('mute-btn')[0];
+      expect(muteBtn.className).toContain('bg-[#444]');
+      expect(muteBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('solo button has yellow background when soloed', () => {
+      setupWithTrack();
+      const tracks = useProjectStore.getState().project!.tracks;
+      useProjectStore.getState().updateTrack(tracks[0].id, { soloed: true });
+
+      render(<MixerPanel />);
+      const soloBtn = screen.getAllByTestId('solo-btn')[0];
+      expect(soloBtn.className).toContain('bg-yellow-400');
+      expect(soloBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('solo button has default background when not soloed', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const soloBtn = screen.getAllByTestId('solo-btn')[0];
+      expect(soloBtn.className).toContain('bg-[#444]');
+      expect(soloBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('clicking mute toggles muted state', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const muteBtn = screen.getAllByTestId('mute-btn')[0];
+      fireEvent.click(muteBtn);
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.muted).toBe(true);
+    });
+
+    it('clicking solo toggles soloed state', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const soloBtn = screen.getAllByTestId('solo-btn')[0];
+      fireEvent.click(soloBtn);
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.soloed).toBe(true);
+    });
+  });
+
+  describe('double-click to rename', () => {
+    it('shows rename input on double-click', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const nameEl = screen.getAllByTestId('channel-name')[0];
+      fireEvent.doubleClick(nameEl);
+      const input = screen.getByTestId('channel-rename-input');
+      expect(input).toBeDefined();
+      expect((input as HTMLInputElement).value).toBe(
+        useProjectStore.getState().project!.tracks[0].displayName,
+      );
+    });
+
+    it('commits rename on Enter key', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const nameEl = screen.getAllByTestId('channel-name')[0];
+      fireEvent.doubleClick(nameEl);
+      const input = screen.getByTestId('channel-rename-input');
+      fireEvent.change(input, { target: { value: 'NewName' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.displayName).toBe('NewName');
+    });
+
+    it('cancels rename on Escape key', () => {
+      setupWithTrack();
+      const originalName = useProjectStore.getState().project!.tracks[0].displayName;
+      render(<MixerPanel />);
+      const nameEl = screen.getAllByTestId('channel-name')[0];
+      fireEvent.doubleClick(nameEl);
+      const input = screen.getByTestId('channel-rename-input');
+      fireEvent.change(input, { target: { value: 'Discarded' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.displayName).toBe(originalName);
+    });
+
+    it('commits rename on blur', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const nameEl = screen.getAllByTestId('channel-name')[0];
+      fireEvent.doubleClick(nameEl);
+      const input = screen.getByTestId('channel-rename-input');
+      fireEvent.change(input, { target: { value: 'BlurName' } });
+      fireEvent.blur(input);
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.displayName).toBe('BlurName');
+    });
+
+    it('does not rename if value is empty after trim', () => {
+      setupWithTrack();
+      const originalName = useProjectStore.getState().project!.tracks[0].displayName;
+      render(<MixerPanel />);
+      const nameEl = screen.getAllByTestId('channel-name')[0];
+      fireEvent.doubleClick(nameEl);
+      const input = screen.getByTestId('channel-rename-input');
+      fireEvent.change(input, { target: { value: '   ' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      const track = useProjectStore.getState().project!.tracks[0];
+      expect(track.displayName).toBe(originalName);
+    });
+  });
+
+  describe('track color strip', () => {
+    it('renders color strip with track color', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const strip = screen.getAllByTestId('track-color-strip')[0];
+      // backgroundColor is set via inline style; jsdom converts hex to rgb
+      expect(strip.style.backgroundColor).toBeTruthy();
+      // Verify it's actually a color value (not empty)
+      expect(strip.style.backgroundColor.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('master channel strip', () => {
+    it('renders master strip with data-testid', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      const masterStrip = screen.getByTestId('master-strip');
+      expect(masterStrip).toBeDefined();
+    });
+
+    it('renders master label text', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      expect(screen.getByText('Master')).toBeDefined();
+    });
+
+    it('renders IN and OUT meter labels', () => {
+      setupWithTrack();
+      render(<MixerPanel />);
+      expect(screen.getByText('IN')).toBeDefined();
+      expect(screen.getByText('OUT')).toBeDefined();
+    });
+  });
+});

@@ -9,12 +9,14 @@ import { useTransportStore } from '../../../store/transportStore';
 const mockStartScrub = vi.fn();
 const mockScrubTo = vi.fn();
 const mockEndScrub = vi.fn();
+const mockSeek = vi.fn();
 
 vi.mock('../../../hooks/useTransport', () => ({
   useTransport: () => ({
     startScrub: mockStartScrub,
     scrubTo: mockScrubTo,
     endScrub: mockEndScrub,
+    seek: mockSeek,
   }),
 }));
 
@@ -166,6 +168,44 @@ describe('TimeRuler silent seek + drag-to-loop', () => {
 
     // Loop should be disabled
     expect(useTransportStore.getState().loopEnabled).toBe(false);
+  });
+
+  it('click during playback calls useTransport.seek to restart engine (#994)', () => {
+    // Simulate playback is active
+    useTransportStore.setState({ isPlaying: true, currentTime: 5, playStartTime: 0 });
+
+    render(<TimeRuler />);
+    const ruler = screen.getByTestId('timeline-scrub-ruler');
+
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, top: 0, bottom: 30, width: 1000, height: 30, x: 0, y: 0, toJSON: () => {},
+    });
+
+    // Click at x=500 → time=10s (at 50px/s)
+    fireEvent.pointerDown(ruler, { clientX: 500, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(ruler, { clientX: 500, pointerId: 1 });
+
+    // Should call useTransport's seek (which restarts the engine)
+    expect(mockSeek).toHaveBeenCalledWith(10);
+  });
+
+  it('click while NOT playing does NOT call useTransport.seek', () => {
+    useTransportStore.setState({ isPlaying: false, currentTime: 0, playStartTime: 0 });
+
+    render(<TimeRuler />);
+    const ruler = screen.getByTestId('timeline-scrub-ruler');
+
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, top: 0, bottom: 30, width: 1000, height: 30, x: 0, y: 0, toJSON: () => {},
+    });
+
+    fireEvent.pointerDown(ruler, { clientX: 250, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(ruler, { clientX: 250, pointerId: 1 });
+
+    // Should NOT call useTransport.seek when not playing
+    expect(mockSeek).not.toHaveBeenCalled();
+    // Should use store's seek directly
+    expect(useTransportStore.getState().currentTime).toBeGreaterThan(0);
   });
 
   it('clicking outside an existing loop region does NOT clear the loop', () => {

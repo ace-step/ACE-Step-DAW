@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, memo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransportStore } from '../../store/transportStore';
+import { useTransport } from '../../hooks/useTransport';
 import { getBarDuration, getBeatDuration, snapToGrid } from '../../utils/time';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../../utils/tempoMap';
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
@@ -26,11 +27,13 @@ export function TimeRuler() {
   const measures = useProjectStore((s) => s.project?.measures ?? DEFAULT_MEASURES);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const loopStart = useTransportStore((s) => s.loopStart);
   const loopEnd = useTransportStore((s) => s.loopEnd);
   const setLoopRegion = useTransportStore((s) => s.setLoopRegion);
   const currentTime = useTransportStore((s) => s.currentTime);
+  const { seek: transportSeek } = useTransport();
 
   /** Tracks click-vs-drag state for ruler interactions */
   const rulerDragRef = useRef<{
@@ -63,8 +66,15 @@ export function TimeRuler() {
     const time = getTimeFromX(e.clientX, container);
     if (time === undefined) return;
 
-    // Silent seek — no audio engine calls
-    useTransportStore.getState().seek(time);
+    // During playback, use transportSeek which stops+restarts the audio engine
+    // at the new position. Without this, the engine's RAF loop immediately
+    // overwrites currentTime back to the old offset (#994).
+    if (isPlaying) {
+      transportSeek(time);
+    } else {
+      // Silent seek — no audio engine calls needed when paused
+      useTransportStore.getState().seek(time);
+    }
 
     rulerDragRef.current = {
       startX: e.clientX,
@@ -76,7 +86,7 @@ export function TimeRuler() {
     if ('setPointerCapture' in container) {
       container.setPointerCapture(e.pointerId);
     }
-  }, [getTimeFromX, hasProject]);
+  }, [getTimeFromX, hasProject, isPlaying, transportSeek]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || !rulerDragRef.current) return;

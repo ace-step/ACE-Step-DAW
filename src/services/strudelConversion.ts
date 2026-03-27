@@ -114,9 +114,11 @@ export function strudelEventsToDrumPattern(
     const steps: SequencerStep[] = Array.from({ length: totalSteps }, () => ({
       active: false,
       velocity: 0.8,
+      probability: 1,
+      stepParams: {},
     }));
     for (const hit of hits) {
-      steps[hit.stepIndex] = { active: true, velocity: hit.velocity };
+      steps[hit.stepIndex] = { active: true, velocity: hit.velocity, probability: 1, stepParams: {} };
     }
     return {
       id: `strudel-row-${sampleKey}-${hits.length}`,

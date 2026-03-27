@@ -33,6 +33,8 @@ function createSteps(activeIndexes: number[], length = 16) {
   return Array.from({ length }, (_, index) => ({
     active: activeIndexes.includes(index),
     velocity: activeIndexes.includes(index) ? 0.85 : 0,
+    probability: 1,
+    stepParams: {},
   }));
 }
 

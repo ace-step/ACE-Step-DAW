@@ -23,12 +23,12 @@ import type { KeyCombo } from '../types/shortcuts';
 import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from '../utils/timelineZoom';
 import { getSessionClips } from '../utils/sessionClips';
 
-function isInputFocused(event: KeyboardEvent): boolean {
+export function isInputFocused(event: KeyboardEvent): boolean {
   return isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement);
 }
 
 const NUDGE_SECONDS = 5;
-function eventMatchesCombo(event: KeyboardEvent, combo: KeyCombo): boolean {
+export function eventMatchesCombo(event: KeyboardEvent, combo: KeyCombo): boolean {
   const mod = event.metaKey || event.ctrlKey;
   return (
     event.code === combo.code &&
@@ -79,7 +79,7 @@ function focusTrack(delta: number) {
   }
 }
 
-function shouldDeferToPianoRollTools(event: KeyboardEvent): boolean {
+export function shouldDeferToPianoRollTools(event: KeyboardEvent): boolean {
   const ui = useUIStore.getState();
   if (ui.keyboardContext.scope !== 'pianoRoll') return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;

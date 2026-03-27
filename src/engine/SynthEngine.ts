@@ -1,5 +1,11 @@
 import * as Tone from 'tone';
-import type { SynthPreset, FilterEnvelope, FmInstrumentSettings } from '../types/project';
+import type { SynthPreset, FilterEnvelope, FmInstrumentSettings, UnisonSettings } from '../types/project';
+
+interface UnisonVoice {
+  synth: Tone.PolySynth;
+  panner: Tone.Panner;
+  gain: Tone.Gain;
+}
 
 interface SynthInstance {
   synth: Tone.PolySynth;
@@ -127,9 +133,33 @@ export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
   return synth;
 }
 
+/**
+ * Compute the detune and pan offsets for each extra unison voice.
+ * Voices are spread symmetrically: e.g. for 4 total voices (3 extra),
+ * detune offsets are [-detune, 0, +detune] and pan is spread accordingly.
+ */
+function computeUnisonOffsets(
+  extraVoiceCount: number,
+  detuneCents: number,
+  spread: number,
+): Array<{ detune: number; pan: number }> {
+  if (extraVoiceCount <= 0) return [];
+  const offsets: Array<{ detune: number; pan: number }> = [];
+  for (let i = 0; i < extraVoiceCount; i++) {
+    // Map i to a position in [-1, 1] across extra voices
+    const t = extraVoiceCount === 1 ? 0 : (2 * i) / (extraVoiceCount - 1) - 1;
+    offsets.push({
+      detune: t * detuneCents,
+      pan: t * spread,
+    });
+  }
+  return offsets;
+}
+
 class SynthEngine {
   private synths = new Map<string, SynthInstance>();
   private fmSynths = new Map<string, FmSynthInstance>();
+  private unisonVoices = new Map<string, UnisonVoice[]>();
   private previewSynth: Tone.PolySynth | null = null;
   private previewGain: Tone.Gain | null = null;
 
@@ -263,6 +293,55 @@ class SynthEngine {
     this.fmSynths.delete(trackId);
   }
 
+  /** Get the extra unison voices for a track (does not include the main synth). */
+  getUnisonVoices(trackId: string): UnisonVoice[] {
+    return this.unisonVoices.get(trackId) ?? [];
+  }
+
+  /** Apply unison voice stacking. Creates/removes extra detuned synth voices. */
+  applyUnison(trackId: string, settings: UnisonSettings): void {
+    const instance = this.synths.get(trackId);
+    if (!instance) return;
+
+    // Dispose existing unison voices
+    this.disposeUnisonVoices(trackId);
+
+    const extraCount = Math.max(0, settings.voices - 1);
+    if (extraCount === 0) return;
+
+    const offsets = computeUnisonOffsets(extraCount, settings.detune, settings.spread);
+    const voices: UnisonVoice[] = [];
+
+    // Reduce main voice gain to compensate for added voices
+    const perVoiceGain = 0.55 / (extraCount + 1);
+    instance.gain.gain.value = perVoiceGain;
+
+    for (const offset of offsets) {
+      const synth = createSynthForPreset(instance.preset);
+      synth.set({ detune: offset.detune });
+      const panner = new Tone.Panner(offset.pan);
+      const gain = new Tone.Gain(perVoiceGain);
+      synth.connect(gain);
+      gain.connect(panner);
+      panner.toDestination();
+      voices.push({ synth, panner, gain });
+    }
+
+    this.unisonVoices.set(trackId, voices);
+  }
+
+  private disposeUnisonVoices(trackId: string): void {
+    const voices = this.unisonVoices.get(trackId);
+    if (!voices) return;
+    for (const voice of voices) {
+      voice.synth.releaseAll();
+      voice.synth.dispose();
+      voice.panner.dispose();
+      voice.gain.dispose();
+    }
+    this.unisonVoices.delete(trackId);
+  }
+
   async previewNote(pitch: number, velocity = 100, duration = 0.3, preset: SynthPreset = 'piano') {
     await this.ensureStarted();
     if (!this.previewSynth || !this.previewGain) {
@@ -284,6 +363,14 @@ class SynthEngine {
       filterEnv.triggerAttackRelease(duration);
     }
     synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
+
+    // Trigger unison voices too
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
+      }
+    }
   }
 
   async playSlideNote(
@@ -323,6 +410,14 @@ class SynthEngine {
     // Trigger filter envelope attack
     instance.filterEnvelope?.triggerAttack();
     instance.synth.triggerAttack(freq, undefined, velocity / 127);
+
+    // Trigger unison voices too
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.triggerAttack(freq, undefined, velocity / 127);
+      }
+    }
   }
 
   /** Trigger note off for a track synth. */
@@ -333,6 +428,14 @@ class SynthEngine {
     // Trigger filter envelope release
     instance.filterEnvelope?.triggerRelease();
     instance.synth.triggerRelease(freq);
+
+    // Release unison voices too
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.triggerRelease(freq);
+      }
+    }
   }
 
   /** Release all currently sounding notes on all track synths. */
@@ -341,9 +444,15 @@ class SynthEngine {
       instance.filterEnvelope?.triggerRelease();
       instance.synth.releaseAll();
     }
+    for (const voices of this.unisonVoices.values()) {
+      for (const voice of voices) {
+        voice.synth.releaseAll();
+      }
+    }
   }
 
   removeTrackSynth(trackId: string) {
+    this.disposeUnisonVoices(trackId);
     const instance = this.synths.get(trackId);
     if (!instance) return;
     instance.synth.releaseAll();

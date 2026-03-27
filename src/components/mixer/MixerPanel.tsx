@@ -186,19 +186,17 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
             >
               S
             </button>
-            {!track.isGroup && (
-              <button
-                onClick={() => toggleTrackEffectsBypass(track.id)}
-                aria-label={`FX bypass ${track.displayName}`}
-                aria-keyshortcuts="P"
-                title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
-                className={`flex h-[18px] min-w-[26px] items-center justify-center rounded-sm px-1.5 text-[9px] font-semibold leading-none transition-colors ${
-                  effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
-                }`}
-              >
-                FX
-              </button>
-            )}
+            <button
+              onClick={() => toggleTrackEffectsBypass(track.id)}
+              aria-label={`FX bypass ${track.displayName}`}
+              aria-keyshortcuts="P"
+              title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
+              className={`flex h-[18px] min-w-[26px] items-center justify-center rounded-sm px-1.5 text-[9px] font-semibold leading-none transition-colors ${
+                effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
+              }`}
+            >
+              FX
+            </button>
           </div>
         </div>
 

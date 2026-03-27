@@ -167,6 +167,62 @@ describe('Channel strip improvements', () => {
     });
   });
 
+  describe('group track effects support', () => {
+    function setupWithGroupTrack() {
+      useProjectStore.getState().createProject();
+      const group = useProjectStore.getState().createGroupTrack('Bus A');
+      useUIStore.setState({ showMixer: true, mixerHeight: 500 });
+      return group;
+    }
+
+    function getGroupStrip(trackId: string): HTMLElement {
+      const strips = screen.getAllByTestId('channel-strip');
+      const strip = strips.find((el) => el.getAttribute('data-track-id') === trackId);
+      expect(strip).toBeDefined();
+      return strip!;
+    }
+
+    it('renders FX bypass button on group track channel strip', () => {
+      const group = setupWithGroupTrack();
+      render(<MixerPanel />);
+      const groupStrip = getGroupStrip(group.id);
+      const fxBtn = groupStrip.querySelector('[aria-label*="FX bypass"]');
+      expect(fxBtn).not.toBeNull();
+    });
+
+    it('renders inserts section on group track channel strip', () => {
+      const group = setupWithGroupTrack();
+      render(<MixerPanel />);
+      const groupStrip = getGroupStrip(group.id);
+      const insertsSection = groupStrip.querySelector('[data-testid="inserts-section"]');
+      expect(insertsSection).not.toBeNull();
+    });
+
+    it('can add an effect insert to a group track', () => {
+      const group = setupWithGroupTrack();
+      render(<MixerPanel />);
+      const groupStrip = getGroupStrip(group.id);
+      const addBtn = groupStrip.querySelector('[data-testid="add-insert-btn"]');
+      expect(addBtn).not.toBeNull();
+      fireEvent.click(addBtn!);
+      const updatedGroup = useProjectStore.getState().project!.tracks.find((t) => t.id === group.id);
+      expect(updatedGroup!.effects).toHaveLength(1);
+      expect(updatedGroup!.effects![0].type).toBe('reverb');
+    });
+
+    it('toggles FX bypass on group track', () => {
+      const group = setupWithGroupTrack();
+      useProjectStore.getState().addTrackEffect(group.id, 'compressor');
+      render(<MixerPanel />);
+      const groupStrip = getGroupStrip(group.id);
+      const fxBtn = groupStrip.querySelector('[aria-label*="FX bypass"]') as HTMLButtonElement;
+      expect(fxBtn).not.toBeNull();
+      fireEvent.click(fxBtn);
+      const updatedGroup = useProjectStore.getState().project!.tracks.find((t) => t.id === group.id);
+      expect(updatedGroup!.effectsBypassed).toBe(true);
+    });
+  });
+
   describe('master channel strip', () => {
     it('renders master strip with data-testid', () => {
       setupWithTrack();

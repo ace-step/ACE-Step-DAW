@@ -114,7 +114,7 @@ export function GenerationSidePanel() {
         style={{
           left: dockLeft,
           zIndex: Z.toast,
-          bottom: showSmartControls ? 208 : 68,
+          bottom: (showSmartControls ? 208 : 68) + bottomPanelHeight,
           opacity: activeBottomPanel ? 0 : 1,
           pointerEvents: activeBottomPanel ? 'none' : 'auto',
           transform: `translateX(-50%) translateY(${activeBottomPanel ? '16px' : '0px'})`,

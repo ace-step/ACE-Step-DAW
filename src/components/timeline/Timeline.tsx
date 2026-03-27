@@ -266,7 +266,7 @@ export function Timeline() {
   const zoomAnchorRef = useRef<{ time: number; viewportX: number } | null>(null);
   const zoomFrameTimeRef = useRef<number | null>(null);
   const handledTimelineZoomRequestIdRef = useRef<number | null>(null);
-  const { importAudioFile, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
+  const { importAudioFile, importAudioToTrack: importAudioToTrackMain, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler } = useAudioImport();
   const isTrackListCollapsed = trackListDisplayMode === 'collapsed';
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -308,14 +308,18 @@ export function Timeline() {
           if (wantsQuickSampler) {
             await importAudioFileAsNewQuickSampler(file);
           } else {
-            await importAudioFile(file, startTime);
+            const newTrack = addTrack('custom', 'sample');
+            useProjectStore.getState().updateTrack(newTrack.id, {
+              displayName: file.name.replace(/\.[^.]+$/, ''),
+            });
+            await importAudioToTrackMain(file, newTrack.id, startTime);
           }
         } else if (/\.(mid|midi)$/i.test(file.name)) {
           await importMultipleFiles([file]);
         }
       }
     }
-  }, [addTrack, bpm, tempoMap, pixelsPerSecond, importAudioFile, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
+  }, [addTrack, bpm, tempoMap, pixelsPerSecond, importAudioToTrackMain, importMultipleFiles, importLoopToTrack, importAssetToTrack, importAudioFileAsNewQuickSampler, importAssetAsQuickSampler]);
 
   const handleTrackHeaderDragStart = useCallback((trackId: string) => {
     draggedTrackIdRef.current = trackId;
@@ -1269,7 +1273,7 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const addTrack = useProjectStore((s) => s.addTrack);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
-  const { importAudioFile, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler } = useAudioImport();
+  const { importAudioFile, importAudioToTrack, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler } = useAudioImport();
 
   const laneRef = useRef<HTMLDivElement>(null);
   const [dropGhost, setDropGhost] = useState<{ left: number; width: number; name: string } | null>(null);
@@ -1378,12 +1382,16 @@ function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
           if (wantsQuickSampler) {
             await importAudioFileAsNewQuickSampler(file);
           } else {
-            await importAudioFile(file, startTime);
+            const newTrack = addTrack('custom', 'sample', { order: slotIndex + 1 });
+            useProjectStore.getState().updateTrack(newTrack.id, {
+              displayName: file.name.replace(/\.[^.]+$/, ''),
+            });
+            await importAudioToTrack(file, newTrack.id, startTime);
           }
         }
       }
     }
-  }, [hasProject, pixelsPerSecond, addTrack, importAudioFile, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler, bpm, tempoMap]);
+  }, [hasProject, pixelsPerSecond, addTrack, importAudioToTrack, importLoopToTrack, importAssetToTrack, importAssetAsQuickSampler, importAudioFileAsNewQuickSampler, bpm, tempoMap]);
 
   return (
     <div

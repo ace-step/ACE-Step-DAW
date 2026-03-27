@@ -67,6 +67,14 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
       lane.parameter.type === 'effect' && trackEffect.id === lane.parameter.effectId,
     ) ?? null,
   );
+  const sendReturnName = useProjectStore((s) => {
+    if (lane.parameter.type !== 'send') return null;
+    const track = s.project?.tracks.find((t) => t.id === trackId);
+    const send = track?.sends?.[lane.parameter.sendIndex];
+    if (!send) return null;
+    const rt = (s.project?.returnTracks ?? []).find((r) => r.id === send.returnTrackId);
+    return rt?.name ?? null;
+  });
 
   const [showLFODialog, setShowLFODialog] = useState(false);
   const [lfoShape, setLfoShape] = useState<LFOShape>('sine');
@@ -116,7 +124,9 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
 
   const paramLabel = lane.parameter.type === 'mixer'
     ? lane.parameter.param.charAt(0).toUpperCase() + lane.parameter.param.slice(1)
-    : `${effect?.type ?? lane.parameter.effectType} • ${getEffectAutomationLabel(lane.parameter.effectType, lane.parameter.param)}`;
+    : lane.parameter.type === 'send'
+      ? `Send ${lane.parameter.sendIndex + 1}${sendReturnName ? ` (${sendReturnName})` : ''} • Amount`
+      : `${effect?.type ?? lane.parameter.effectType} • ${getEffectAutomationLabel(lane.parameter.effectType, lane.parameter.param)}`;
 
   // Double-click to add a new point
   const handleDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {

@@ -129,6 +129,9 @@ export function getEffectAutomationColor(parameter: AutomationParameter): string
   if (parameter.type === 'mixer') {
     return parameter.param === 'volume' ? '#22c55e' : '#3b82f6';
   }
+  if (parameter.type === 'send') {
+    return '#f97316'; // orange for sends
+  }
   return getEffectAutomationSpec(parameter.effectType, parameter.param)?.color ?? '#8b5cf6';
 }
 

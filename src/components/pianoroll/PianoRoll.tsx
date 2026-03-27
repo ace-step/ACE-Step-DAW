@@ -5,12 +5,14 @@ import { useUIStore } from '../../store/uiStore';
 import type { PianoRollGrid, SamplerConfig } from '../../types/project';
 import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import {
+  createDefaultFmInstrument,
   createDefaultSubtractiveInstrument,
   getTrackInstrumentSelectValue,
   resolveTrackInstrument,
   type TrackInstrumentSelectValue,
 } from '../../utils/trackInstrument';
 import { QuickSamplerEditor } from './QuickSamplerEditor';
+import { SynthInstrumentEditor } from './SynthInstrumentEditor';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
@@ -330,8 +332,6 @@ export function PianoRoll() {
           value={instrumentSelectValue}
           onChange={(e) => {
             const nextValue = e.target.value as TrackInstrumentSelectValue;
-            if (nextValue === 'fm') return;
-
             if (nextValue === 'sampler') {
               setTrackSampler(track.id, {
                 audioKey: track.sampler?.audioKey,
@@ -339,6 +339,11 @@ export function PianoRoll() {
                 rootNote: track.sampler?.rootNote ?? samplerConfig?.rootNote ?? 60,
                 sampleDuration: track.sampler?.sampleDuration ?? samplerConfig?.trimEnd ?? 1,
               });
+              return;
+            }
+
+            if (nextValue === 'fm') {
+              setTrackInstrument(track.id, createDefaultFmInstrument());
               return;
             }
 
@@ -352,8 +357,8 @@ export function PianoRoll() {
           <option value="lead">Lead</option>
           <option value="bass">Bass</option>
           <option value="organ">Organ</option>
+          <option value="fm">FM</option>
           <option value="sampler">Quick Sampler</option>
-          {trackInstrument?.kind === 'fm' && <option value="fm">FM</option>}
         </select>
 
         {clip && <TransformMenu clipId={clip.id} selectedNoteIds={selectedNoteIds} />}
@@ -458,6 +463,13 @@ export function PianoRoll() {
             onLoadSample={() => openSamplerFilePicker(track.id)}
           />
         </div>
+      )}
+
+      {trackInstrument && trackInstrument.kind !== 'sampler' && (
+        <SynthInstrumentEditor
+          instrument={trackInstrument}
+          onInstrumentChange={(nextInstrument) => setTrackInstrument(track.id, nextInstrument)}
+        />
       )}
 
       {clip ? (

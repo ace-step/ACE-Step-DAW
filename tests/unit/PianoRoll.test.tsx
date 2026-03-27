@@ -38,6 +38,12 @@ vi.mock('../../src/components/pianoroll/QuickSamplerEditor', () => ({
   QuickSamplerEditor: () => <div>sampler</div>,
 }));
 
+vi.mock('../../src/components/pianoroll/SynthInstrumentEditor', () => ({
+  SynthInstrumentEditor: ({ instrument }: { instrument: { kind: string } }) => (
+    <div data-testid="synth-editor">{instrument.kind}</div>
+  ),
+}));
+
 vi.mock('../../src/components/pianoroll/GeneratePatternDialog', () => ({
   GeneratePatternDialog: () => null,
 }));
@@ -163,6 +169,8 @@ describe('PianoRoll', () => {
     render(<PianoRoll />);
 
     const instrumentSelect = screen.getByLabelText('Track synth preset');
+    expect(screen.getByTestId('synth-editor')).toHaveTextContent('subtractive');
+
     fireEvent.change(instrumentSelect, { target: { value: 'sampler' } });
 
     let track = useProjectStore.getState().project?.tracks[0];
@@ -171,6 +179,17 @@ describe('PianoRoll', () => {
       preset: 'sampler',
     });
     expect(screen.getByText('sampler')).toBeInTheDocument();
+    expect(screen.queryByTestId('synth-editor')).not.toBeInTheDocument();
+
+    fireEvent.change(instrumentSelect, { target: { value: 'fm' } });
+
+    track = useProjectStore.getState().project?.tracks[0];
+    expect(track?.instrument).toMatchObject({
+      kind: 'fm',
+      preset: 'fm',
+    });
+    expect(screen.getByTestId('synth-editor')).toHaveTextContent('fm');
+    expect(screen.queryByText('sampler')).not.toBeInTheDocument();
 
     fireEvent.change(instrumentSelect, { target: { value: 'pad' } });
 
@@ -179,6 +198,6 @@ describe('PianoRoll', () => {
       kind: 'subtractive',
       preset: 'pad',
     });
-    expect(screen.queryByText('sampler')).not.toBeInTheDocument();
+    expect(screen.getByTestId('synth-editor')).toHaveTextContent('subtractive');
   });
 });

@@ -47,6 +47,11 @@ describe('getBottomPanelHeight', () => {
     expect(getBottomPanelHeight(useUIStore.getState())).toBe(420);
   });
 
+  it('clamps mixer height to minimum visible height (360)', () => {
+    useUIStore.setState({ activeBottomPanel: null, showMixer: true, mixerHeight: 160 });
+    expect(getBottomPanelHeight(useUIStore.getState())).toBe(360);
+  });
+
   it('combines bottom panel and mixer heights', () => {
     useUIStore.setState({
       activeBottomPanel: 'drumMachine',

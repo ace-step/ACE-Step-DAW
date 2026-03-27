@@ -1,8 +1,8 @@
 # Suno 5.5 Competitive Research
 
-**Date**: 2026-03-27 (updated with deep research pass)
+**Date**: 2026-03-27 (second deep research pass -- covers, remix, Studio 1.2, generation params, pricing, vocal transformation)
 **Source**: Suno official blog, help center, industry coverage, user guides, API documentation
-**Context**: Suno acquired WavTool (browser-based AI DAW) in June 2025; raised $250M Series C at $2.45B valuation in Nov 2025; hit $300M ARR in Feb 2026 (404% YoY growth). Warner Music Group partnership signed Nov 2025.
+**Context**: Suno acquired WavTool (browser-based AI DAW) in June 2025; raised $250M Series C at $2.45B valuation in Nov 2025; hit $300M ARR in Feb 2026 (404% YoY growth). Warner Music Group partnership signed Nov 2025. Suno v5.5 launched same day as Google Lyria 3 Pro (March 26, 2026).
 
 ## Executive Summary
 
@@ -165,7 +165,7 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 
 ---
 
-## 6. Pricing
+## 6. Pricing (Summary)
 
 | Feature | Free | Pro ($10/mo) | Premier ($30/mo) |
 |---------|------|-------------|-------------------|
@@ -175,6 +175,8 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 | Custom Models | No | Yes (3 slots) | Yes (3 slots) |
 | Stem Export | No | Yes | Yes |
 | MIDI Export | No | No | Yes (experimental) |
+
+(See Section 13 for detailed pricing breakdown including credits, annual pricing, and commercial rights.)
 
 ---
 
@@ -215,7 +217,235 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 
 ---
 
-## 8. Gap Analysis: ACE-Step-DAW vs Suno 5.5
+## 8. Covers & Remix (Deep Dive)
+
+### Covers Feature
+Covers let users reimagine songs by keeping the melody and adapting the track to a different style. This is a **full re-performance**, not an edit of the original recording.
+
+**How Covers work under the hood:**
+1. Suno analyzes input audio to identify melodic contours, phrasing, and structure -- extracting a "musical blueprint"
+2. User provides a style prompt describing the new direction
+3. Suno regenerates a new performance using the style instructions, preserving the original melody and structure
+4. Output is a completely new audio file, not a filter applied to the original
+
+**Covers capabilities:**
+- Works with uploaded audio (demos, voice memos, loops) -- not just Suno-generated tracks
+- Can add vocals to instrumental tracks (vocal generation on covers)
+- Can transform genre entirely (e.g., pop -> jazz, acoustic -> trap)
+- Maintains melody fidelity while changing everything else
+
+### Remix System
+"Remix" is the umbrella feature that includes: Cover, Extend, Reuse Prompt, and Adjust Speed.
+
+**Access:** More Actions (...) menu on any song. For remixing others' songs, the original creator must have remixes enabled.
+
+**Control sliders:**
+- **Weirdness**: Controls unpredictability (0% = conservative, higher = experimental)
+- **Style Influence**: How strongly the new style prompt is followed vs. original style
+- **Audio Influence**: Appears in audio upload workflows; balances fidelity to upload vs. freer interpretation
+
+**Remix intensity levels:**
+- Subtle (10-30%): Minor variations
+- Moderate (40-60%): Noticeable changes
+- Heavy (70-90%): Significant rearrangement
+- Full (100%): Complete transformation
+
+### Attribution & Commercial Use
+- Every remix links back to the original -- visual chain of attribution
+- **Remixes are NOT eligible for commercial use** even if you have a Pro/Premier plan
+- Original creator retains attribution rights regardless of remix depth
+- Default: songs created before May 21, 2025 have Remix disabled; new songs have it enabled but set to link-only visibility
+
+---
+
+## 9. Generation Parameters (Deep Dive)
+
+### Prompt Architecture
+Suno has **two separate prompt fields** with different character limits:
+- **Style prompt**: ~200 characters -- holds sonic intent and style descriptors
+- **Lyrics field**: 3,000 characters -- holds lyrics and structure tags
+
+**Recommended prompt formula:** `Mood + Genre/Era + Key Instruments + Vocal Type + Production/Mix Tone + Tempo/Energy`
+
+Primary genre should appear **first** in the prompt -- Suno weights early words more heavily than later descriptors.
+
+### BPM & Key Control
+BPM and key can be specified directly in the style prompt:
+- Example: `"Contemporary R&B song at 92 BPM in F minor"`
+- Bracket syntax also works: `"[BPM: 110] [Key: A Minor] [Mood: Nostalgic]"`
+- Tempo changes mid-song are possible via lyrics field structure tags
+
+### Song Structure Tags (in lyrics field)
+Suno interprets section tags to guide song form:
+- `[Intro]`, `[Verse]`, `[Pre-Chorus]`, `[Chorus]`, `[Bridge]`, `[Outro]`
+- **Bar counts**: `[Intro 4] [Verse 16] [Pre 8] [Chorus 16] [Bridge 8] [Outro 8]`
+- **Instrumental breaks**: `[Instrumental]`, `[Solo]`
+- **Dynamic markers**: `[Build]`, `[Drop]`, `[Breakdown]`
+
+### Vocal Control Tags
+- Gender/type: `"deep male baritone"`, `"airy female soprano"`, `"children's choir"`
+- Delivery: `"whispered"`, `"belted"`, `"spoken word"`, `"rap flow"`
+- Negative prompting: `"no autotune"`, `"no falsetto"`, `"avoid vibrato"`
+- Layering: `"stacked vocals"`, `"harmonized chorus"`, `"call and response"`
+
+### Instrumentation Control
+- Specific: `"electric guitar, synth pad, live drums, upright bass"`
+- Exclusion: `"no crowd chants"`, `"no sound effects"`, `"dry vocal"`
+- Production: `"lo-fi production"`, `"stadium mix"`, `"bedroom recording quality"`
+
+### Key Prompting Tips
+- Write descriptions, not commands ("a warm jazz ballad" not "create a jazz song")
+- Short specific lines beat long prose
+- Structure: genre, references, instrumentation, structure -- in that order
+- Be explicit about sub-genre: not "rock" but "1980s synth-pop"
+
+---
+
+## 10. Vocal Transformation (Deep Dive)
+
+### Voice Tags for Pitch & Range
+- Pitch/range modifications via prompt: `"high-pitched"`, `"deep bass voice"`, `"falsetto register"`
+- These affect the generated vocal, not post-processing
+
+### Vocal Swap (v4.5+/v5)
+- From any owned track, users can **swap in a new voice** while keeping lyrics and melody intact
+- Under the hood: applies a new Voice/Persona via the Cover tool
+- Can change tone, style, gender of the vocal performance
+- Preserves lyrical content and melodic structure
+
+### Voice-as-Input (v5+)
+- Users can record **beatbox** as drum direction
+- **Humming** becomes melody direction
+- **Rhythmic speech** shapes cadence and flow
+- The recording is a blueprint/control signal, not the final mix
+
+### Changing Voice Style Without Restarting
+- Combine positive and negative prompting: `"low female alto vocal, warm chest voice, smooth midrange tone, avoid high soprano, restrained delivery"`
+- Small production and genre shifts widen the vocal pool Suno draws from
+- Using Covers feature to re-perform with different vocal characteristics
+
+### External Vocal Transformation Workflow
+- Many users use Kits.ai or similar tools for voice conversion on Suno output
+- Workflow: Suno generates track -> export stems -> apply voice model in Kits.ai -> re-import
+- Kits.ai provides: pitch shifting, voice blending, custom voice model training
+
+### v5.5 Voice Cloning as Transformation
+- With Voices feature, users can now apply their own voice to any generated song
+- Combined with Covers: take any song, apply your voice, change genre -- full transformation chain
+- Audio Influence slider controls blend between AI voice and cloned voice
+
+---
+
+## 11. Stems & Separation (Deep Dive)
+
+### Built-in Stem Extraction
+Suno offers stem extraction that splits tracks into up to **12 clean stems**:
+
+**2-stem mode:** Vocals + Instrumental (basic, available on all plans)
+
+**12-stem mode (Pro/Premier):**
+1. Lead Vocals
+2. Backing Vocals
+3. Harmonies
+4. Kick
+5. Bass
+6. Drums (full kit)
+7. Guitar
+8. Keyboard/Piano
+9. Strings
+10. Brass
+11. Synth
+12. FX/Other
+
+**Access:** More Actions (...) > Get Stems > choose 2-track or 12-track option. Also available in Song Editor via the Get Stems icon (top right).
+
+### Suno Studio Export Options
+- **Full Song**: Complete mix of all tracks and processing
+- **Selected Time Range**: Export only a specific section or loop
+- **Multitrack**: Export all tracks as individual stems within the Studio mix context
+- **MIDI Export**: Available from any melodic stem (piano, guitar, keys) -- useful for importing chord progressions into external DAWs
+
+### Export Formats
+- WAV (lossless, Pro/Premier only)
+- MP3 (all plans for basic downloads)
+- All stems are time-aligned for seamless DAW import
+- Free plan users cannot download WAV or extract stems
+
+### Quality Assessment
+User reports indicate Suno's vocal stem isolation is "surprisingly clean for AI-generated audio" and "often usable directly in professional mixes." The 12-stem separation is notably better than typical source separation tools because Suno has access to the generation model's internal representation.
+
+---
+
+## 12. Suno Studio 1.2 Features (February 2026, Deep Dive)
+
+### Warp Markers
+- Click directly on clip waveform to add markers at specific points
+- Drag markers to move audio points in time -- corrects timing without affecting pitch
+- Similar to Ableton Live's Warp or Logic's Flex Time
+- **Quantize function**: Auto-set markers on transients, snap to grid
+- Best for subtle timing corrections; extreme stretching degrades quality
+- Can intentionally build swing and "imperfect" groove by moving markers off-grid
+
+### Remove FX
+- Select clip > context menu > "Remove FX"
+- Suno generates a **dry version** of the clip (strips reverb, delay, etc.)
+- Places the dry version on the timeline alongside the original
+- Designed for export workflows: get dry stems, apply your own effects in external DAW
+- Works on both vocal and instrumental clips
+
+### Alternates (Improved Take Lane)
+- Generate multiple alternate versions of a section
+- Preview takes quickly in the take lane UI
+- Choose favorite, commit to timeline
+- Workflow shifts from "re-roll and hope" to "compare multiple options and choose"
+- Closer to traditional DAW comping workflow
+
+### Time Signature Support
+- Set numerator (beats per bar, 1-99) and denominator (beat duration)
+- Grid and metronome update immediately
+- Supports: 3/4, 5/4, 6/8, 7/8, 11/4, and any custom signature
+- Enables waltz, jazz, progressive rock, and world music meters
+
+### Workflow Integration
+These tools work together: Time Signature sets the canvas, Warp Markers perfect timing, Remove FX cleans up sounds, Alternates choose the best performances. Studio 1.2 moves Suno from "generate-and-use" toward a DAW-like environment.
+
+---
+
+## 13. Pricing (Deep Dive)
+
+### Tier Details
+
+| | Free | Pro ($10/mo) | Premier ($30/mo) | Enterprise |
+|---|------|-------------|-------------------|------------|
+| **Credits** | 50/day (~10 songs) | 2,500/month (~500 songs) | 10,000/month (~2,000 songs) | Custom |
+| **Model Access** | v4.5-All only | v5 + v5.5 | v5 + v5.5 | Custom |
+| **Voices** | No | Yes | Yes | Yes |
+| **Custom Models** | No | Yes (3 slots) | Yes (3 slots) | Custom |
+| **Suno Studio** | No | No | Yes | Yes |
+| **Stem Export (WAV)** | No | Yes (2-stem) | Yes (12-stem) | Yes |
+| **MIDI Export** | No | No | Yes | Yes |
+| **Audio Upload** | 1 min max | 8 min per project | 8 min per project | Custom |
+| **Commercial Rights** | No | Yes (while subscribed) | Yes (while subscribed) | Yes |
+| **My Taste** | Yes | Yes | Yes | Yes |
+
+### Annual Pricing
+- Pro: $8/month billed annually (20% savings)
+- Premier: $24/month billed annually (20% savings)
+
+### Credit Policies
+- **No rollover**: Monthly credits do not carry over
+- **Fallback credits**: Pro/Premier users get up to 50 credits/day after monthly allotment is used
+- **Top-ups**: $8 for 2,500 credits or $24 for 10,000 credits (purchased credits do not expire but require active subscription)
+- **Cost per song**: ~$0.012/song on Premier annual plan
+
+### Commercial Rights Details
+- Free plan: Suno retains ownership. Upgrading later does NOT grant retroactive commercial rights.
+- Pro/Premier: Full commercial use license while subscribed
+- Remixes of others' songs: NOT eligible for commercial use regardless of plan
+
+---
+
+## 14. Gap Analysis: ACE-Step-DAW vs Suno 5.5 (Updated)
 
 ### Currently Missing in ACE-Step-DAW
 
@@ -233,6 +463,15 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 | **Stem export to WAV** | Built-in | Partial (stem separation exists) | P2 |
 | **Song section editing** | In-app | Repaint exists (partial) | P2 |
 | **MIDI export from audio** | Experimental | None | P2 |
+| **Covers / style transfer** | Upload audio + style prompt -> full re-performance | Repaint (partial) | P1 |
+| **Warp markers / time stretch** | Click-and-drag timing correction | None | P2 |
+| **Remove FX / dry stems** | AI-powered effect stripping | None | P2 |
+| **Alternates / comping** | Take lane with multiple generated variants | None | P2 |
+| **Generative stems** | AI generates NEW complementary parts in context | None | P1 |
+| **12-stem separation** | 12 individual stems from generated audio | 2/4/6 stem modes | P2 |
+| **Remix attribution chain** | Visual chain back to original creator | None | P3 |
+| **Vocal swap** | Re-sing with different voice keeping melody/lyrics | None | P1 |
+| **Credit/usage metering** | Transparent per-song credit costs | No usage tracking | P3 |
 
 ### What ACE-Step-DAW Already Has (Advantages)
 
@@ -246,7 +485,7 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 
 ---
 
-## 9. Recommended Issues for ACE-Step-DAW
+## 15. Recommended Issues for ACE-Step-DAW
 
 ### P0 — Critical (match Suno 5.5 core features)
 1. **Voice Cloning / Reference Voice Generation** — Upload/record reference vocals, use as generation conditioning
@@ -266,7 +505,7 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 
 ---
 
-## 10. ACE-Step DAW Competitive Positioning
+## 16. ACE-Step DAW Competitive Positioning
 
 ACE-Step DAW can differentiate from Suno by:
 - Being a **real DAW** (MIDI editing, sequencer, mixer, effects, automation) where Suno Studio is generation-first
@@ -283,16 +522,36 @@ The key risk: Suno is rapidly converging toward DAW functionality through the Wa
 
 Sources:
 - [Suno v5.5: More Expressive. More You. (Official Blog)](https://suno.com/blog/v5-5)
-- [Suno Launches v5.5 With Voices — Digital Music News](https://www.digitalmusicnews.com/2026/03/26/suno-launches-version-5-5/)
-- [Suno 5.5 Voice Cloning: How It Works — UCStrategies](https://ucstrategies.com/news/suno-5-5-is-out-you-can-now-clone-your-own-voice-heres-how-it-actually-works/)
-- [Suno v5.5 Features Explained — Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-v5-5-features-explained-workflow-changes-studio-editing-creator-guide)
-- [Suno Studio Tutorial — HookGenius](https://hookgenius.app/learn/suno-studio-tutorial/)
-- [Suno 5.5 New Features — SoundsSpace](https://soundsspace.com/blog/index.php/component/k2/item/274-suno-5-5-new-features-ai-music-generator)
-- [Suno Acquires WavTool — TechCrunch](https://techcrunch.com/2025/06/26/suno-snaps-up-wavtool-for-its-ai-music-editing-tools-amid-ongoing-dispute-with-music-labels/)
-- [Suno v5.5 Voice Cloning — Metaverse Post](https://mpost.io/suno-unveils-v5-5-with-voice-cloning-and-personalized-ai-music-creation-tools/)
-- [Suno vs Udio 2026 — Solfej](https://www.solfej.io/blog/suno-vs-udio)
-- [Suno v5 Complete Guide — HookGenius](https://hookgenius.app/learn/suno-v5-complete-guide/)
-- [Suno API Documentation](https://docs.sunoapi.org/)
-- [Suno Help Center — Model Timeline](https://help.suno.com/en/articles/5782721)
-- [Suno Acquires WavTool — Billboard](https://www.billboard.com/pro/suno-acquires-wavtool-a-music-editing-tools/)
-- [Suno revenue & valuation — Sacra](https://sacra.com/c/suno/)
+- [Suno Studio 1.2: What's New (Official Blog)](https://suno.com/blog/studio1_2)
+- [Introducing Covers (Official Blog)](https://suno.com/blog/covers)
+- [Suno Launches v5.5 With Voices -- Digital Music News](https://www.digitalmusicnews.com/2026/03/26/suno-launches-version-5-5/)
+- [Suno Adds Voices With Label-Enabled Future -- Music Ally](https://musically.com/2026/03/27/suno-adds-voices-with-label-enabled-future-models-in-mind/)
+- [Suno 5.5 Voice Cloning: How It Works -- UCStrategies](https://ucstrategies.com/news/suno-5-5-is-out-you-can-now-clone-your-own-voice-heres-how-it-actually-works/)
+- [Suno v5.5 Features Explained -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-v5-5-features-explained-workflow-changes-studio-editing-creator-guide)
+- [Suno AI Personas Update Dec 2025 -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-ai-personas-update-dec-2025-what-changed-how-to-use-it)
+- [Suno v4.5+ Vocal Swap, Flip, Spark -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-v45-plus-features-guide)
+- [Suno AI Covers Guide 2026 -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-ai-covers-guide-v4-transform-your-songs-by-style)
+- [Suno Studio 1.2 Workflow Upgrade -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-studio-1-2-master-guide)
+- [Suno Studio Tutorial -- HookGenius](https://hookgenius.app/learn/suno-studio-tutorial/)
+- [Suno v5 Complete Guide -- HookGenius](https://hookgenius.app/learn/suno-v5-complete-guide/)
+- [Suno 5.5 New Features -- SoundsSpace](https://soundsspace.com/blog/index.php/component/k2/item/274-suno-5-5-new-features-ai-music-generator)
+- [Suno v5.5 Voice Cloning -- Metaverse Post](https://mpost.io/suno-unveils-v5-5-with-voice-cloning-and-personalized-ai-music-creation-tools/)
+- [Suno v5.5 Voices Launch -- Aihola](https://aihola.com/article/suno-v5-5-voices-launch)
+- [Suno Unveils v5.5 -- Music In Africa](https://www.musicinafrica.net/magazine/suno-unveils-v55-music-model-voice-personalisation-tools)
+- [Studio 1.2 Four Powerful Features -- GenX Notes](https://blog.genxnotes.com/en/suno-studio-1-2-update/)
+- [Suno Pricing 2026 -- CostBench](https://costbench.com/software/ai-music-generators/suno/)
+- [Suno Pricing 2026 -- Marga Bagus](https://margabagus.com/suno-pricing/)
+- [Suno Help Center: Remix FAQ](https://help.suno.com/en/articles/5663873)
+- [Suno Help Center: Stem Extraction](https://help.suno.com/en/articles/6141441)
+- [Suno Help Center: Exporting from Studio](https://help.suno.com/en/articles/8128193)
+- [Suno Help Center: Studio 1.2](https://help.suno.com/en/articles/10625089)
+- [Suno Help Center: Model Timeline](https://help.suno.com/en/articles/5782721)
+- [Suno API Documentation (Unofficial)](https://docs.sunoapi.org/)
+- [The Suno API Reality -- AIML API Blog](https://aimlapi.com/blog/the-suno-api-reality)
+- [Warner Music Strikes AI Deal with Suno -- TechBuzz](https://www.techbuzz.ai/articles/warner-music-strikes-ai-deal-with-suno-for-artist-voice-cloning)
+- [Suno Previews 2026 Changes Under Warner Deal -- Digital Music News](https://www.digitalmusicnews.com/2025/12/22/suno-warner-music-deal-changes/)
+- [Suno Acquires WavTool -- TechCrunch](https://techcrunch.com/2025/06/26/suno-snaps-up-wavtool-for-its-ai-music-editing-tools-amid-ongoing-dispute-with-music-labels/)
+- [How to Prompt Suno AI -- HowToPromptSuno.com](https://howtopromptsuno.com/making-music)
+- [Suno AI Prompt Guide 2026 -- MusicSmith](https://musicsmith.ai/blog/ai-music-generation-prompts-best-practices)
+- [Suno v5 and Studio Complete Guide -- Medium](https://medium.com/@creativeaininja/suno-v5-and-studio-the-complete-guide-to-professional-ai-music-production-d55c0747a48e)
+- [Suno v5 vs v4.5 Upgrade Guide -- Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-v5-vs-v4-5-upgrade-guide)

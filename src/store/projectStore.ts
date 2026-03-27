@@ -618,6 +618,8 @@ export interface ProjectState {
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
+  /** Configure FM synthesis parameters on a track, creating or updating the FM instrument. */
+  setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
   /** Update ADSR envelope on a synth track. */

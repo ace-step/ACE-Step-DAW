@@ -240,11 +240,22 @@ export interface FmOperatorSettings {
   level: number;
 }
 
+/**
+ * FM synthesis routing algorithm.
+ * - `serial`   -- Modulator -> Carrier (classic 2-op FM).
+ * - `parallel` -- Both operators output as independent carriers.
+ * - `stack`    -- Two modulators feed a single carrier (thick modulation).
+ * - `feedback` -- Modulator feeds back into itself, then into the carrier.
+ */
+export type FmAlgorithm = 'serial' | 'parallel' | 'stack' | 'feedback';
+
 export interface FmInstrumentSettings {
   carrier: FmOperatorSettings;
   modulator: FmOperatorSettings;
   modulationIndex: number;
+  harmonicity: number;
   feedback: number;
+  algorithm: FmAlgorithm;
   ampEnvelope: InstrumentEnvelope;
   outputGain: number;
 }

@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import type { SynthPreset, FilterEnvelope } from '../types/project';
+import type { SynthPreset, FilterEnvelope, FmInstrumentSettings } from '../types/project';
 
 interface SynthInstance {
   synth: Tone.PolySynth;
@@ -7,6 +7,79 @@ interface SynthInstance {
   gain: Tone.Gain;
   filter?: Tone.Filter;
   filterEnvelope?: Tone.FrequencyEnvelope;
+}
+
+interface FmSynthInstance {
+  synth: Tone.FMSynth;
+  params: FmInstrumentSettings;
+  gain: Tone.Gain;
+}
+
+/**
+ * Build a Tone.FMSynth configuration from FmInstrumentSettings.
+ * Different algorithms map to different harmonicity / modulationIndex / envelope shapes.
+ */
+function buildFmSynthOptions(params: FmInstrumentSettings): Partial<Tone.FMSynthOptions> {
+  const { carrier, modulator, modulationIndex, harmonicity, feedback, algorithm, ampEnvelope } = params;
+
+  const base: Partial<Tone.FMSynthOptions> = {
+    modulationIndex,
+    harmonicity,
+    oscillator: { type: carrier.waveform } as Tone.FMSynthOptions['oscillator'],
+    modulation: { type: modulator.waveform } as Tone.FMSynthOptions['modulation'],
+    envelope: {
+      attack: ampEnvelope.attack,
+      decay: ampEnvelope.decay,
+      sustain: ampEnvelope.sustain,
+      release: ampEnvelope.release,
+    } as Tone.FMSynthOptions['envelope'],
+  };
+
+  // Algorithm-specific parameter mapping
+  switch (algorithm) {
+    case 'serial':
+      // Classic: Modulator -> Carrier, standard FM
+      break;
+
+    case 'parallel':
+      // Both operators as carriers: reduce modulation, boost harmonicity
+      base.modulationIndex = modulationIndex * 0.3;
+      break;
+
+    case 'stack':
+      // Two modulators feeding one carrier: increase modulation depth
+      base.modulationIndex = modulationIndex * 1.5;
+      base.harmonicity = harmonicity * 0.5;
+      break;
+
+    case 'feedback':
+      // Modulator self-feedback: boost modulation with feedback factor
+      base.modulationIndex = modulationIndex * (1 + feedback);
+      break;
+  }
+
+  return base;
+}
+
+/** Check whether two FmInstrumentSettings are identical. */
+function fmParamsEqual(a: FmInstrumentSettings, b: FmInstrumentSettings): boolean {
+  return (
+    a.modulationIndex === b.modulationIndex &&
+    a.harmonicity === b.harmonicity &&
+    a.feedback === b.feedback &&
+    a.algorithm === b.algorithm &&
+    a.outputGain === b.outputGain &&
+    a.carrier.waveform === b.carrier.waveform &&
+    a.carrier.ratio === b.carrier.ratio &&
+    a.carrier.level === b.carrier.level &&
+    a.modulator.waveform === b.modulator.waveform &&
+    a.modulator.ratio === b.modulator.ratio &&
+    a.modulator.level === b.modulator.level &&
+    a.ampEnvelope.attack === b.ampEnvelope.attack &&
+    a.ampEnvelope.decay === b.ampEnvelope.decay &&
+    a.ampEnvelope.sustain === b.ampEnvelope.sustain &&
+    a.ampEnvelope.release === b.ampEnvelope.release
+  );
 }
 
 export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
@@ -56,6 +129,7 @@ export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
 
 class SynthEngine {
   private synths = new Map<string, SynthInstance>();
+  private fmSynths = new Map<string, FmSynthInstance>();
   private previewSynth: Tone.PolySynth | null = null;
   private previewGain: Tone.Gain | null = null;
 
@@ -148,6 +222,45 @@ class SynthEngine {
 
   getSynth(trackId: string): Tone.PolySynth | null {
     return this.synths.get(trackId)?.synth ?? null;
+  }
+
+  /** Create or retrieve an FM synth for a track. Reuses existing instance when params match. */
+  ensureFmSynth(trackId: string, params: FmInstrumentSettings, connectTo?: Tone.InputNode): Tone.FMSynth {
+    const existing = this.fmSynths.get(trackId);
+    if (existing && fmParamsEqual(existing.params, params)) return existing.synth;
+
+    if (existing) {
+      existing.synth.dispose();
+      existing.gain.dispose();
+    }
+
+    const synth = new Tone.FMSynth();
+    const options = buildFmSynthOptions(params);
+    synth.set(options);
+
+    const gain = new Tone.Gain(0.55);
+    synth.connect(gain);
+    if (connectTo) {
+      gain.connect(connectTo);
+    } else {
+      gain.toDestination();
+    }
+    this.fmSynths.set(trackId, { synth, params, gain });
+    return synth;
+  }
+
+  /** Retrieve an existing FM synth for a track, or null. */
+  getFmSynth(trackId: string): Tone.FMSynth | null {
+    return this.fmSynths.get(trackId)?.synth ?? null;
+  }
+
+  /** Remove and dispose an FM synth for a track. */
+  removeFmSynth(trackId: string) {
+    const instance = this.fmSynths.get(trackId);
+    if (!instance) return;
+    instance.synth.dispose();
+    instance.gain.dispose();
+    this.fmSynths.delete(trackId);
   }
 
   async previewNote(pitch: number, velocity = 100, duration = 0.3, preset: SynthPreset = 'piano') {
@@ -244,6 +357,9 @@ class SynthEngine {
   dispose() {
     for (const trackId of this.synths.keys()) {
       this.removeTrackSynth(trackId);
+    }
+    for (const trackId of this.fmSynths.keys()) {
+      this.removeFmSynth(trackId);
     }
     this.previewSynth?.dispose();
     this.previewGain?.dispose();

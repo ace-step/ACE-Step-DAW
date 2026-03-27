@@ -709,20 +709,30 @@ export function useTransport() {
     // playing on this track, start the incoming clip at the outgoing clip's position.
     let startOffset: number | undefined;
     const session = useProjectStore.getState().project?.session;
-    const slot = session?.slots.find(
-      (s) => s.trackId === trackId && s.clipId === clipId,
-    );
+    const sceneId = session?.scenes.find((sc) => sc.index === sceneIndex)?.id;
+    const slot = sceneId
+      ? session?.slots.find(
+          (s) => s.trackId === trackId && s.sceneId === sceneId,
+        )
+      : undefined;
     if (slot?.legato) {
       const outgoing = transport.launchedSessionClips[trackId];
+      const projectTracks = useProjectStore.getState().project?.tracks;
       const outgoingClip = outgoing
-        ? useProjectStore.getState().project?.tracks
-            .find((t) => t.id === trackId)
+        ? projectTracks
+            ?.find((t) => t.id === trackId)
             ?.clips.find((c) => c.id === outgoing.clipId)
         : undefined;
+      const incomingClip = projectTracks
+        ?.find((t) => t.id === trackId)
+        ?.clips.find((c) => c.id === clipId);
       if (outgoingClip) {
         const outgoingDuration = Math.max(outgoingClip.duration, 0.001);
         const elapsed = currentTime - outgoing!.launchedAt;
-        startOffset = elapsed % outgoingDuration;
+        const rawOffset = elapsed % outgoingDuration;
+        // Clamp offset to the incoming clip's duration so it's always valid
+        const incomingDuration = Math.max(incomingClip?.duration ?? outgoingDuration, 0.001);
+        startOffset = rawOffset % incomingDuration;
       }
     }
 

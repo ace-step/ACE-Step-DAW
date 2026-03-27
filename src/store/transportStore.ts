@@ -182,7 +182,12 @@ export const useTransportStore = create<TransportState>((set) => ({
   incrementLoopCycle: () => set((s) => ({ loopCycleCount: s.loopCycleCount + 1 })),
   launchSessionClip: (trackId, clipId, sceneIndex, launchedAt, startOffset) => set((s) => {
     const launchTime = launchedAt ?? s.currentTime;
-    const nextLaunch: SessionLaunchState = { clipId, sceneIndex, launchedAt: launchTime, startOffset };
+    const nextLaunch: SessionLaunchState = {
+      clipId,
+      sceneIndex,
+      launchedAt: launchTime,
+      ...(startOffset !== undefined ? { startOffset } : {}),
+    };
     const nextEvents = s.sessionArrangementRecording
       ? [
           ...s.sessionArrangementRecordEvents.map((event) => (

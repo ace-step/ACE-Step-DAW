@@ -6,41 +6,19 @@ import { useUIStore } from '../../store/uiStore';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
-import { drawPianoRollKeyboard } from './PianoRollKeyboard';
-import { drawVelocityLane } from './VelocityLane';
 import { DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import {
   generateNoteId,
-  getPianoRollToolShortcut,
-  getPianoRollNoteVisualStyle,
   gridSizeToBeats,
-  isBlackKey,
   MIDI_MAX_NOTE,
-  midiNoteToName,
-  normalizeMidiVelocity,
   PIANO_KEYBOARD_WIDTH,
   PIANO_ROLL_KEY_HEIGHT,
   type PianoRollTool,
   VELOCITY_LANE_HEIGHT,
 } from './PianoRollConstants';
-
-type NoteDragMode = null | 'move' | 'resize-left' | 'resize-right' | 'velocity';
-
-interface NoteDragState {
-  mode: NoteDragMode;
-  noteId: string;
-  startMouseX: number;
-  startMouseY: number;
-  originalPitch: number;
-  originalStartBeat: number;
-  originalDurationBeats: number;
-  originalVelocity: number;
-  isBoxSelect?: boolean;
-  boxSelectBaseSelection?: Set<string>;
-  boxStartX?: number;
-  boxStartY?: number;
-}
+import { drawPianoRoll } from './PianoRollRenderer';
+import { usePianoRollDrag } from './usePianoRollDrag';
 
 export interface GhostNote {
   pitch: number;
@@ -77,12 +55,6 @@ export function PianoRollCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>(0);
-  const dragRef = useRef<NoteDragState | null>(null);
-  const dividerDragRef = useRef<{ startY: number; startHeight: number } | null>(null);
-  const toolStrokeRef = useRef<{
-    noteIds: Set<string>;
-    cells: Set<string>;
-  }>({ noteIds: new Set(), cells: new Set() });
 
   const [velocityHeight, setVelocityHeight] = useState(VELOCITY_LANE_HEIGHT);
   const [prZoomY, setPrZoomY] = useState(1);
@@ -95,12 +67,7 @@ export function PianoRollCanvas({
   const stampChord = useProjectStore((s) => s.stampChord);
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
-  const setNoteVelocity = useProjectStore((s) => s.setNoteVelocity);
-  const resizeMidiNote = useProjectStore((s) => s.resizeMidiNote);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
-  const beginDrag = useProjectStore((s) => s.beginDrag);
-  const endDrag = useProjectStore((s) => s.endDrag);
-  const undo = useProjectStore((s) => s.undo);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
 
@@ -147,6 +114,8 @@ export function PianoRollCanvas({
             ? 'Velocity paint: drag across notes to set velocity based on vertical position'
             : 'Slide tool: create slide notes for portamento transitions';
 
+  // --- Coordinate conversion helpers ---
+
   const beatToX = useCallback(
     (beat: number) => PIANO_KEYBOARD_WIDTH + beat * pixelsPerBeat - prScrollX,
     [pixelsPerBeat, prScrollX],
@@ -179,6 +148,8 @@ export function PianoRollCanvas({
     (beat: number, pitch: number) => `${Math.round(beat / gridBeats)}:${pitch}`,
     [gridBeats],
   );
+
+  // --- Note creation / deletion helpers ---
 
   const createNoteAt = useCallback(
     (x: number, y: number, options?: { isSlide?: boolean; select?: boolean; velocity?: number }) => {
@@ -254,6 +225,8 @@ export function PianoRollCanvas({
     [clip.id, removeMidiNote, setSelectedNoteIds],
   );
 
+  // --- Hit-testing ---
+
   const findNoteAt = useCallback(
     (x: number, y: number): { note: MidiNote; edge: 'body' | 'left' | 'right' } | null => {
       for (let i = notes.length - 1; i >= 0; i--) {
@@ -294,6 +267,44 @@ export function PianoRollCanvas({
     [notes, beatToX, pixelsPerBeat],
   );
 
+  // --- Drag state machine (extracted hook) ---
+
+  const {
+    dragRef,
+    dividerDragRef,
+    toolStrokeRef,
+    handleMouseDown,
+    handleDoubleClick,
+    handleClick,
+  } = usePianoRollDrag({
+    canvasRef,
+    clip,
+    notes,
+    activeTool,
+    gridSize,
+    pixelsPerBeat,
+    keyHeight,
+    selectedNoteIds,
+    setSelectedNoteIds,
+    beatToX,
+    xToBeat,
+    pitchToY,
+    yToPitch,
+    snapBeat,
+    getCellKey,
+    findNoteAt,
+    findVelocityLaneNoteAt,
+    createNoteAt,
+    stampChordAt,
+    deleteNoteById,
+    previewEnabled,
+    previewNoteAtPitch,
+    velocityHeight,
+    setVelocityHeight,
+  });
+
+  // --- Canvas drawing (extracted renderer) ---
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -310,230 +321,40 @@ export function PianoRollCanvas({
     canvas.style.height = `${rect.height}px`;
     ctx.scale(dpr, dpr);
 
-    const width = rect.width;
-    const height = rect.height;
-    const noteAreaHeight = height - velocityHeight;
+    const liveTime = useTransportStore.getState().currentTime;
 
-    ctx.fillStyle = '#1a1a1e';
-    ctx.fillRect(0, 0, width, height);
-
-    drawPianoRollKeyboard({
+    drawPianoRoll({
       ctx,
-      noteAreaHeight,
+      width: rect.width,
+      height: rect.height,
+      velocityHeight,
       keyHeight,
       prZoomY,
-      pitchToY,
-    });
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(PIANO_KEYBOARD_WIDTH, 0, width - PIANO_KEYBOARD_WIDTH, noteAreaHeight);
-    ctx.clip();
-
-    for (let note = 0; note <= MIDI_MAX_NOTE; note++) {
-      const y = pitchToY(note);
-      if (y + keyHeight < 0 || y > noteAreaHeight) continue;
-
-      if (isBlackKey(note)) {
-        ctx.fillStyle = 'rgba(255,255,255,0.02)';
-        ctx.fillRect(PIANO_KEYBOARD_WIDTH, y, width - PIANO_KEYBOARD_WIDTH, keyHeight);
-      }
-
-      ctx.strokeStyle = note % 12 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
-      ctx.lineWidth = note % 12 === 0 ? 1 : 0.5;
-      ctx.beginPath();
-      ctx.moveTo(PIANO_KEYBOARD_WIDTH, y + keyHeight);
-      ctx.lineTo(width, y + keyHeight);
-      ctx.stroke();
-    }
-
-    const beatsPerBar = 4;
-    const startBeat = Math.floor(prScrollX / pixelsPerBeat);
-    const endBeat = Math.ceil((prScrollX + width) / pixelsPerBeat);
-
-    for (let beat = startBeat; beat <= endBeat; beat += gridBeats) {
-      const x = PIANO_KEYBOARD_WIDTH + beat * pixelsPerBeat - prScrollX;
-      if (x < PIANO_KEYBOARD_WIDTH || x > width) continue;
-
-      const isBar = Math.abs(beat % beatsPerBar) < 0.001;
-      const isBeat = Math.abs(beat % 1) < 0.001;
-
-      ctx.strokeStyle = isBar
-        ? 'rgba(255,255,255,0.12)'
-        : isBeat
-          ? 'rgba(255,255,255,0.06)'
-          : 'rgba(255,255,255,0.025)';
-      ctx.lineWidth = isBar ? 1 : 0.5;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, noteAreaHeight);
-      ctx.stroke();
-
-      if (isBar) {
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.font = '9px "Geist Mono", monospace';
-        ctx.textBaseline = 'top';
-        ctx.fillText(`${Math.floor(beat / beatsPerBar) + 1}`, x + 3, 3);
-      }
-    }
-
-    // Ghost notes from other tracks (drawn first, behind main notes)
-    if (ghostNotes.length > 0) {
-      ctx.globalAlpha = 0.15;
-      for (const gn of ghostNotes) {
-        const gnX = beatToX(gn.startBeat);
-        const gnY = pitchToY(gn.pitch);
-        const gnW = gn.durationBeats * pixelsPerBeat;
-        const gnH = keyHeight - 1;
-        if (gnX + gnW < PIANO_KEYBOARD_WIDTH || gnX > width) continue;
-        if (gnY + gnH < 0 || gnY > noteAreaHeight) continue;
-        ctx.fillStyle = gn.color;
-        ctx.fillRect(gnX, gnY, Math.max(gnW - 1, 2), gnH);
-      }
-      ctx.globalAlpha = 1.0;
-    }
-
-    for (const note of notes) {
-      // Use quantize preview positions when available (real-time preview)
-      const preview = quantizePreviewPositions?.[note.id];
-      const drawStartBeat = preview ? preview.startBeat : note.startBeat;
-      const drawDuration = preview ? preview.durationBeats : note.durationBeats;
-      const hasPreview = !!preview;
-
-      const noteX = beatToX(drawStartBeat);
-      const noteY = pitchToY(note.pitch);
-      const noteWidth = drawDuration * pixelsPerBeat;
-      const noteHeight = keyHeight - 1;
-      if (noteX + noteWidth < PIANO_KEYBOARD_WIDTH || noteX > width) continue;
-      if (noteY + noteHeight < 0 || noteY > noteAreaHeight) continue;
-
-      const isSelected = selectedNoteIds.has(note.id);
-      const isSlide = note.isSlide === true;
-      const normalizedVelocity = normalizeMidiVelocity(note.velocity);
-      const velocityRatio = normalizedVelocity / 127;
-      const noteVisualStyle = getPianoRollNoteVisualStyle(note.velocity, { isSelected, isSlide });
-
-      // Draw ghost of original position when preview is active
-      if (hasPreview) {
-        const origX = beatToX(note.startBeat);
-        const origW = note.durationBeats * pixelsPerBeat;
-        ctx.globalAlpha = 0.2;
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.beginPath();
-        ctx.roundRect(origX, noteY, Math.max(origW, 3), noteHeight, 2);
-        ctx.fill();
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(origX, noteY, Math.max(origW, 3), noteHeight, 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1.0;
-      }
-
-      ctx.fillStyle = noteVisualStyle.fillStyle;
-      ctx.globalAlpha = noteVisualStyle.globalAlpha;
-      ctx.beginPath();
-      ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
-      ctx.fill();
-
-      ctx.strokeStyle = noteVisualStyle.strokeStyle;
-      ctx.lineWidth = noteVisualStyle.strokeWidth;
-      ctx.beginPath();
-      ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1.0;
-
-      if (isSlide && noteWidth > 10) {
-        ctx.strokeStyle = 'rgba(24,24,27,0.75)';
-        ctx.lineWidth = 1.25;
-        ctx.beginPath();
-        ctx.moveTo(noteX + 3, noteY + noteHeight - 3);
-        ctx.lineTo(noteX + noteWidth - 6, noteY + 3);
-        ctx.lineTo(noteX + noteWidth - 3, noteY + 6);
-        ctx.stroke();
-      }
-
-      if (noteWidth > 30 && noteHeight > 8) {
-        ctx.fillStyle = isSlide ? 'rgba(24,24,27,0.85)' : 'rgba(0,0,0,0.6)';
-        ctx.font = `${Math.min(9, noteHeight * 0.7)}px "Geist Mono", monospace`;
-        ctx.textBaseline = 'middle';
-        ctx.fillText(isSlide ? `${midiNoteToName(note.pitch)} SL` : midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
-      }
-
-      if (!isSlide && noteWidth > 8 && noteHeight > 6) {
-        ctx.fillStyle = `rgba(255,255,255,${noteVisualStyle.velocityAccentOpacity})`;
-        ctx.fillRect(noteX + 2, noteY + noteHeight - 3, Math.max((noteWidth - 4) * velocityRatio, 2), 1.5);
-      }
-
-      if (isSelected && noteWidth > 10) {
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fillRect(noteX + 1, noteY + 2, 3, noteHeight - 4);
-        ctx.fillRect(noteX + noteWidth - 4, noteY + 2, 3, noteHeight - 4);
-      }
-    }
-
-    const drag = dragRef.current;
-    if (drag?.isBoxSelect && drag.boxStartX !== undefined && drag.boxStartY !== undefined) {
-      const boxX = Math.min(drag.boxStartX, drag.startMouseX);
-      const boxY = Math.min(drag.boxStartY, drag.startMouseY);
-      const boxWidth = Math.abs(drag.startMouseX - drag.boxStartX);
-      const boxHeight = Math.abs(drag.startMouseY - drag.boxStartY);
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.15)';
-      ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-    }
-
-    const clipStartBeat = clip.startTime * (bpm / 60);
-    const liveTime = useTransportStore.getState().currentTime;
-    const currentBeat = liveTime * (bpm / 60) - clipStartBeat;
-    const clipDurationBeats = clip.duration * (bpm / 60);
-    if (currentBeat >= 0 && currentBeat <= clipDurationBeats) {
-      const cursorX = beatToX(currentBeat);
-      if (cursorX >= PIANO_KEYBOARD_WIDTH && cursorX <= width) {
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cursorX, 0);
-        ctx.lineTo(cursorX, noteAreaHeight);
-        ctx.stroke();
-      }
-    }
-
-    ctx.restore();
-
-    const dividerY = noteAreaHeight;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(0, dividerY, width, 3);
-
-    drawVelocityLane({
-      ctx,
-      width,
-      dividerY,
-      velocityHeight,
+      pixelsPerBeat,
+      gridSize,
+      prScrollX,
+      activeTool,
       notes,
       selectedNoteIds,
+      ghostNotes,
       beatToX,
-      pixelsPerBeat,
+      pitchToY,
+      bpm,
+      clipStartTime: clip.startTime,
+      clipDuration: clip.duration,
+      currentBeat: liveTime,
+      drag: dragRef.current,
+      quantizePreviewPositions,
     });
-
-    if (activeTool !== 'select') {
-      ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
-      ctx.fillRect(width - 86, 4, 82, 16);
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '9px "Geist", sans-serif';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${activeTool.toUpperCase()} ${getPianoRollToolShortcut(activeTool)}`, width - 80, 12);
-    }
   }, [
     activeTool,
     beatToX,
     bpm,
-    clip,
-    gridBeats,
+    clip.duration,
+    clip.startTime,
+    dragRef,
+    ghostNotes,
+    gridSize,
     keyHeight,
     notes,
     pixelsPerBeat,
@@ -555,448 +376,12 @@ export function PianoRollCanvas({
     return () => cancelAnimationFrame(animRef.current);
   }, [draw]);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const noteAreaHeight = rect.height - velocityHeight;
-
-      if (Math.abs(y - noteAreaHeight) < 5) {
-        dividerDragRef.current = { startY: e.clientY, startHeight: velocityHeight };
-        return;
-      }
-
-      if (y > noteAreaHeight + 3) {
-        const velAreaTop = noteAreaHeight + 3;
-        const velAreaHeight = velocityHeight - 6;
-        const note = findVelocityLaneNoteAt(x);
-        if (note) {
-          setSelectedNoteIds(new Set([note.id]));
-          beginDrag({ scope: 'pianoRoll', label: 'Edit MIDI velocity', clipId: clip.id });
-          updateMidiNote(clip.id, note.id, {
-            velocity: Math.round(Math.max(1, Math.min(127, ((velAreaTop + velAreaHeight - y) / velAreaHeight) * 127))),
-          });
-          dragRef.current = {
-            mode: 'velocity',
-            noteId: note.id,
-            startMouseX: x,
-            startMouseY: y,
-            originalPitch: note.pitch,
-            originalStartBeat: note.startBeat,
-            originalDurationBeats: note.durationBeats,
-            originalVelocity: note.velocity,
-          };
-          return;
-        }
-        return;
-      }
-
-      if (x < PIANO_KEYBOARD_WIDTH) {
-        const pitch = yToPitch(y);
-        if (pitch >= 0 && pitch <= MIDI_MAX_NOTE && previewEnabled) {
-          previewNoteAtPitch(pitch, 100, 0.5);
-        }
-        return;
-      }
-
-      const hit = findNoteAt(x, y);
-
-      if (e.shiftKey && activeTool !== 'select') {
-        return;
-      }
-
-      if (activeTool === 'velocityPaint') {
-        if (hit) {
-          // Map vertical position within the note area: top = 127, bottom = 1
-          const velocityFromY = Math.round(Math.max(1, Math.min(127, ((noteAreaHeight - y) / noteAreaHeight) * 127)));
-          beginDrag({ scope: 'pianoRoll', label: 'Velocity paint', clipId: clip.id });
-          setNoteVelocity(clip.id, hit.note.id, velocityFromY);
-          toolStrokeRef.current.noteIds.add(hit.note.id);
-          dragRef.current = {
-            mode: 'velocity',
-            noteId: hit.note.id,
-            startMouseX: x,
-            startMouseY: y,
-            originalPitch: hit.note.pitch,
-            originalStartBeat: hit.note.startBeat,
-            originalDurationBeats: hit.note.durationBeats,
-            originalVelocity: hit.note.velocity,
-          };
-        }
-        return;
-      }
-
-      if (activeTool === 'erase') {
-        if (hit) {
-          toolStrokeRef.current.noteIds.add(hit.note.id);
-          deleteNoteById(hit.note.id);
-        }
-        return;
-      }
-
-      if (activeTool === 'paint') {
-        if (hit) {
-          return;
-        }
-
-        const newNote = createNoteAt(x, y, { select: false });
-        if (!newNote) return;
-
-        toolStrokeRef.current.noteIds.add(newNote.id);
-        toolStrokeRef.current.cells.add(getCellKey(newNote.startBeat, newNote.pitch));
-        setSelectedNoteIds(new Set([newNote.id]));
-        return;
-      }
-
-      if (activeTool === 'pencil' || activeTool === 'slide') {
-        if (hit && activeTool !== 'slide') {
-          deleteNoteById(hit.note.id);
-          return;
-        }
-
-        const newNote = createNoteAt(x, y, { isSlide: activeTool === 'slide' });
-        if (!newNote) return;
-
-        beginDrag({ scope: 'pianoRoll', label: 'Resize MIDI note', clipId: clip.id });
-        toolStrokeRef.current.noteIds.add(newNote.id);
-        toolStrokeRef.current.cells.add(getCellKey(newNote.startBeat, newNote.pitch));
-        dragRef.current = {
-          mode: 'resize-right',
-          noteId: newNote.id,
-          startMouseX: x,
-          startMouseY: y,
-          originalPitch: newNote.pitch,
-          originalStartBeat: newNote.startBeat,
-          originalDurationBeats: newNote.durationBeats,
-          originalVelocity: newNote.velocity,
-        };
-        return;
-      }
-
-      if (hit) {
-        if (e.shiftKey) {
-          setSelectedNoteIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(hit.note.id)) next.delete(hit.note.id);
-            else next.add(hit.note.id);
-            return next;
-          });
-        } else if (!selectedNoteIds.has(hit.note.id)) {
-          setSelectedNoteIds(new Set([hit.note.id]));
-        }
-
-        beginDrag({
-          scope: 'pianoRoll',
-          label: hit.edge === 'body' ? 'Edit MIDI note' : 'Resize MIDI note',
-          clipId: clip.id,
-        });
-        dragRef.current = {
-          mode: hit.edge === 'right' ? 'resize-right' : hit.edge === 'left' ? 'resize-left' : 'move',
-          noteId: hit.note.id,
-          startMouseX: x,
-          startMouseY: y,
-          originalPitch: hit.note.pitch,
-          originalStartBeat: hit.note.startBeat,
-          originalDurationBeats: hit.note.durationBeats,
-          originalVelocity: hit.note.velocity,
-        };
-        return;
-      }
-
-      // In select mode, dragging empty space starts marquee selection by default.
-      // Shift preserves the current selection and adds intersecting notes.
-      if (activeTool === 'select') {
-        if (!e.shiftKey) {
-          setSelectedNoteIds(new Set());
-        }
-        dragRef.current = {
-          mode: null,
-          noteId: '',
-          startMouseX: x,
-          startMouseY: y,
-          originalPitch: 0,
-          originalStartBeat: 0,
-          originalDurationBeats: 0,
-          originalVelocity: 0,
-          isBoxSelect: true,
-          boxSelectBaseSelection: e.shiftKey ? new Set(selectedNoteIds) : new Set(),
-          boxStartX: x,
-          boxStartY: y,
-        };
-        return;
-      }
-
-      setSelectedNoteIds(new Set());
-    },
-    [
-      activeChordShape,
-      activeTool,
-      beatToX,
-      beginDrag,
-      clip.id,
-      createNoteAt,
-      deleteNoteById,
-      findNoteAt,
-      findVelocityLaneNoteAt,
-      getCellKey,
-      gridBeats,
-      notes,
-      previewEnabled,
-      previewNoteAtPitch,
-      selectedNoteIds,
-      setNoteVelocity,
-      stampChordAt,
-      updateMidiNote,
-      velocityHeight,
-      xToBeat,
-      yToPitch,
-    ],
-  );
-
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas || activeTool !== 'select') return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const noteAreaHeight = rect.height - velocityHeight;
-
-      if (x < PIANO_KEYBOARD_WIDTH || y > noteAreaHeight) return;
-
-      const hit = findNoteAt(x, y);
-      if (hit) {
-        deleteNoteById(hit.note.id);
-        return;
-      }
-
-      createNoteAt(x, y);
-    },
-    [
-      activeTool,
-      createNoteAt,
-      deleteNoteById,
-      findNoteAt,
-      velocityHeight,
-    ],
-  );
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas || !e.shiftKey) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const noteAreaHeight = rect.height - velocityHeight;
-
-      if (x < PIANO_KEYBOARD_WIDTH || y > noteAreaHeight) return;
-
-      const hit = findNoteAt(x, y);
-      if (hit && activeTool === 'select') return;
-
-      stampChordAt(x, y);
-    },
-    [activeTool, findNoteAt, stampChordAt, velocityHeight],
-  );
-
-  useEffect(() => {
-    const handleGlobalMove = (e: MouseEvent) => {
-      if (dividerDragRef.current) {
-        const deltaY = dividerDragRef.current.startY - e.clientY;
-        setVelocityHeight(Math.max(30, Math.min(150, dividerDragRef.current.startHeight + deltaY)));
-        return;
-      }
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const noteAreaHeight = rect.height - velocityHeight;
-      const drag = dragRef.current;
-
-      const isPrimaryButtonDown = (e.buttons & 1) === 1;
-
-      if (!drag && isPrimaryButtonDown && y <= noteAreaHeight && x >= PIANO_KEYBOARD_WIDTH) {
-        if (activeTool === 'velocityPaint') {
-          const hit = findNoteAt(x, y);
-          if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
-            const velocityFromY = Math.round(Math.max(1, Math.min(127, ((noteAreaHeight - y) / noteAreaHeight) * 127)));
-            setNoteVelocity(clip.id, hit.note.id, velocityFromY);
-            toolStrokeRef.current.noteIds.add(hit.note.id);
-          }
-        }
-        if (activeTool === 'erase') {
-          const hit = findNoteAt(x, y);
-          if (hit && !toolStrokeRef.current.noteIds.has(hit.note.id)) {
-            toolStrokeRef.current.noteIds.add(hit.note.id);
-            deleteNoteById(hit.note.id);
-          }
-        }
-        if (activeTool === 'paint') {
-          const pitch = yToPitch(y);
-          if (pitch >= 0 && pitch <= MIDI_MAX_NOTE) {
-            const beat = Math.max(0, snapBeat(xToBeat(x), e.altKey));
-            const cellKey = getCellKey(beat, pitch);
-            const hit = findNoteAt(x, y);
-            if (!hit && !toolStrokeRef.current.cells.has(cellKey)) {
-              const newNote = createNoteAt(x, y, { select: false });
-              if (newNote) {
-                toolStrokeRef.current.noteIds.add(newNote.id);
-                toolStrokeRef.current.cells.add(cellKey);
-              }
-            }
-          }
-        }
-      }
-      if (!drag) return;
-
-      if (drag.isBoxSelect) {
-        drag.startMouseX = x;
-        drag.startMouseY = y;
-        const boxX1 = Math.min(x, drag.boxStartX!);
-        const boxY1 = Math.min(y, drag.boxStartY!);
-        const boxX2 = Math.max(x, drag.boxStartX!);
-        const boxY2 = Math.max(y, drag.boxStartY!);
-
-        const nextSelectedIds = new Set(drag.boxSelectBaseSelection ?? []);
-        for (const note of notes) {
-          const noteX = beatToX(note.startBeat);
-          const noteY = pitchToY(note.pitch);
-          const noteWidth = note.durationBeats * pixelsPerBeat;
-          const noteHeight = keyHeight - 1;
-          if (noteX + noteWidth > boxX1 && noteX < boxX2 && noteY + noteHeight > boxY1 && noteY < boxY2) {
-            nextSelectedIds.add(note.id);
-          }
-        }
-        setSelectedNoteIds(nextSelectedIds);
-        return;
-      }
-
-      if (drag.mode === 'velocity') {
-        const velAreaTop = noteAreaHeight + 3;
-        const velAreaHeight = velocityHeight - 6;
-        updateMidiNote(clip.id, drag.noteId, {
-          velocity: Math.round(Math.max(1, Math.min(127, ((velAreaTop + velAreaHeight - y) / velAreaHeight) * 127))),
-        });
-        return;
-      }
-
-      if (drag.mode === 'move') {
-        const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
-        const newStartBeat = Math.max(0, snapBeat(drag.originalStartBeat + beatDelta, e.altKey));
-        const newPitch = Math.max(0, Math.min(MIDI_MAX_NOTE, yToPitch(y)));
-        updateMidiNote(clip.id, drag.noteId, { startBeat: newStartBeat, pitch: newPitch });
-        if (previewEnabled && newPitch !== drag.originalPitch) {
-          previewNoteAtPitch(newPitch, 80, 0.15);
-          drag.originalPitch = newPitch;
-        }
-        return;
-      }
-
-      if (drag.mode === 'resize-left') {
-        const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
-        const snappedStart = Math.max(0, snapBeat(drag.originalStartBeat + beatDelta, e.altKey));
-        resizeMidiNote(clip.id, drag.noteId, {
-          edge: 'left',
-          startBeat: snappedStart,
-          minDurationBeats: gridBeats * 0.5,
-        });
-        return;
-      }
-
-      if (drag.mode === 'resize-right') {
-        const beatDelta = (x - drag.startMouseX) / pixelsPerBeat;
-        const endBeat = snapBeat(drag.originalStartBeat + drag.originalDurationBeats + beatDelta, e.altKey);
-        resizeMidiNote(clip.id, drag.noteId, {
-          edge: 'right',
-          endBeat,
-          minDurationBeats: gridBeats * 0.5,
-        });
-      }
-    };
-
-    const handleGlobalUp = () => {
-      dividerDragRef.current = null;
-      if (dragRef.current) endDrag();
-      toolStrokeRef.current = { noteIds: new Set(), cells: new Set() };
-      dragRef.current = null;
-    };
-
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (dividerDragRef.current) {
-        setVelocityHeight(dividerDragRef.current.startHeight);
-        dividerDragRef.current = null;
-        return;
-      }
-      const drag = dragRef.current;
-      if (!drag) return;
-      if (drag.isBoxSelect) {
-        setSelectedNoteIds(new Set());
-        dragRef.current = null;
-        return;
-      }
-      // Restore the note to its original state before cancelling
-      if (drag.mode && drag.noteId) {
-        updateMidiNote(clip.id, drag.noteId, {
-          pitch: drag.originalPitch,
-          startBeat: drag.originalStartBeat,
-          durationBeats: drag.originalDurationBeats,
-          velocity: drag.originalVelocity,
-        });
-      }
-      endDrag();
-      undo();
-      toolStrokeRef.current = { noteIds: new Set(), cells: new Set() };
-      dragRef.current = null;
-    };
-
-    window.addEventListener('mousemove', handleGlobalMove);
-    window.addEventListener('mouseup', handleGlobalUp);
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => {
-      window.removeEventListener('mousemove', handleGlobalMove);
-      window.removeEventListener('mouseup', handleGlobalUp);
-      window.removeEventListener('keydown', handleGlobalKeyDown);
-    };
-  }, [
-    activeTool,
-    beatToX,
-    clip.id,
-    createNoteAt,
-    deleteNoteById,
-    endDrag,
-    findNoteAt,
-    getCellKey,
-    gridBeats,
-    keyHeight,
-    notes,
-    pitchToY,
-    pixelsPerBeat,
-    previewEnabled,
-    previewNoteAtPitch,
-    resizeMidiNote,
-    setNoteVelocity,
-    snapBeat,
-    undo,
-    updateMidiNote,
-    velocityHeight,
-    xToBeat,
-    yToPitch,
-  ]);
+  // --- Scroll / zoom ---
 
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault();
+
       if (e.ctrlKey || e.metaKey) {
         const delta = e.deltaY > 0 ? -0.25 : 0.25;
         onZoomXChange((zoom) => Math.max(0.25, Math.min(8, zoom + delta)));
@@ -1018,12 +403,13 @@ export function PianoRollCanvas({
     [onZoomXChange],
   );
 
-  // Use non-passive wheel listener so preventDefault() works for trackpad pinch-zoom
   const wheelRef = useNonPassiveWheel(handleWheel);
   const mergedCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
     (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = el;
     wheelRef(el);
   }, [wheelRef]);
+
+  // --- Keyboard shortcuts ---
 
   const clipboardNotes = useMemo(
     () => notes.filter((note) => selectedNoteIds.has(note.id)),
@@ -1052,7 +438,6 @@ export function PianoRollCanvas({
       }
 
       if (e.key === 'Escape') {
-        // During an active drag, the global keydown handler cancels the drag
         if (!dragRef.current && !dividerDragRef.current) {
           setSelectedNoteIds(new Set());
         }
@@ -1060,17 +445,14 @@ export function PianoRollCanvas({
       }
 
       if (key === 'q') {
-        // Use selected notes, or all notes if nothing is selected
         const targetIds = selectedNoteIds.size > 0
           ? Array.from(selectedNoteIds)
           : notes.map((n) => n.id);
         if (targetIds.length === 0) return;
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {
-          // Ctrl/Cmd+Q: open quantize dialog with options
           openQuantizeDialog(clip.id, targetIds);
         } else {
-          // Q: quick quantize to current grid
           quantizeMidiNotes(clip.id, targetIds, gridBeats);
         }
         return;
@@ -1154,14 +536,20 @@ export function PianoRollCanvas({
     clip.startTime,
     clipboardNotes,
     currentTime,
+    dividerDragRef,
+    dragRef,
     gridBeats,
     notes,
     removeMidiNote,
     selectedNoteIds,
+    setSelectedNoteIds,
     snapBeat,
     updateMidiNote,
     openQuantizeDialog,
+    quantizeMidiNotes,
   ]);
+
+  // --- Context menu ---
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -1173,7 +561,6 @@ export function PianoRollCanvas({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      // If right-clicking on a note that isn't selected, auto-select it
       const hit = findNoteAt(x, y);
       if (hit && !selectedNoteIds.has(hit.note.id)) {
         setSelectedNoteIds(new Set([hit.note.id]));
@@ -1196,6 +583,8 @@ export function PianoRollCanvas({
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
+  // --- Hover cursor ---
+
   const handleCanvasMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (activeTool !== 'select' || dragRef.current) {
@@ -1213,7 +602,7 @@ export function PianoRollCanvas({
         setHoverCursor(nextCursor);
       }
     },
-    [activeTool, findNoteAt, hoverCursor],
+    [activeTool, dragRef, findNoteAt, hoverCursor],
   );
 
   const handleCanvasMouseLeave = useCallback(() => {
@@ -1221,6 +610,8 @@ export function PianoRollCanvas({
       setHoverCursor(null);
     }
   }, [hoverCursor]);
+
+  // --- Agent/E2E helpers exposed on window ---
 
   useEffect(() => {
     const globalWindow = window as Window & {
@@ -1350,6 +741,8 @@ export function PianoRollCanvas({
     setSelectedNoteIds,
     snapBeat,
     stampChordAt,
+    toolStrokeRef,
+    velocityHeight,
     xToBeat,
     yToPitch,
   ]);

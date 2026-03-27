@@ -16,7 +16,16 @@ export function stripHeavyDataForPersist(project: Project): Project {
       clips: track.clips.map((clip) => ({
         ...clip,
         waveformPeaks: null,
+        versions: clip.versions?.map((v) => ({ ...v, waveformPeaks: null })),
+        takes: clip.takes?.map((t) => ({ ...t, waveformPeaks: null })),
       })),
+    })),
+    assets: project.assets?.map((a) => ({
+      ...a,
+      waveformPeaks: null,
+      originClipSnapshot: a.originClipSnapshot
+        ? { ...a.originClipSnapshot, waveformPeaks: null }
+        : undefined,
     })),
   };
 }

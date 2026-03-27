@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { stripHeavyDataForPersist } from '../projectPersistUtils';
-import type { Project, Clip, Track } from '../../types/project';
+import type { Project, Clip, Track, ClipVersion, Take, AssetClip } from '../../types/project';
 
 function makeClip(overrides: Partial<Clip> = {}): Clip {
   return {
@@ -103,5 +103,65 @@ describe('stripHeavyDataForPersist', () => {
     });
     const stripped = stripHeavyDataForPersist(project);
     expect(stripped.tracks[0].clips[0].waveformPeaks).toBeNull();
+  });
+
+  it('nullifies waveformPeaks in clip versions', () => {
+    const versions: ClipVersion[] = [
+      { id: 'v1', cumulativeMixKey: null, isolatedAudioKey: 'k1', waveformPeaks: [0.1, 0.2], generatedAt: 1000 },
+      { id: 'v2', cumulativeMixKey: null, isolatedAudioKey: 'k2', waveformPeaks: [0.3, 0.4], generatedAt: 2000 },
+    ];
+    const project = makeProject({
+      tracks: [makeTrack({ clips: [makeClip({ versions })] })],
+    });
+
+    const stripped = stripHeavyDataForPersist(project);
+    for (const v of stripped.tracks[0].clips[0].versions!) {
+      expect(v.waveformPeaks).toBeNull();
+    }
+    // Original not mutated
+    expect(project.tracks[0].clips[0].versions![0].waveformPeaks).toEqual([0.1, 0.2]);
+  });
+
+  it('nullifies waveformPeaks in clip takes', () => {
+    const takes: Take[] = [
+      { id: 't1', audioKey: 'a1', selected: true, waveformPeaks: [0.5, 0.6] },
+    ];
+    const project = makeProject({
+      tracks: [makeTrack({ clips: [makeClip({ takes })] })],
+    });
+
+    const stripped = stripHeavyDataForPersist(project);
+    expect(stripped.tracks[0].clips[0].takes![0].waveformPeaks).toBeNull();
+    // Original not mutated
+    expect(project.tracks[0].clips[0].takes![0].waveformPeaks).toEqual([0.5, 0.6]);
+  });
+
+  it('nullifies waveformPeaks in project assets and their originClipSnapshot', () => {
+    const assets = [
+      {
+        id: 'a1',
+        clipId: 'c1',
+        trackDisplayName: 'T1',
+        prompt: 'test',
+        source: 'generated' as const,
+        isolatedAudioKey: 'k1',
+        cumulativeMixKey: null,
+        waveformPeaks: [0.7, 0.8],
+        starred: false,
+        createdAt: 1000,
+        duration: 5,
+        originClipSnapshot: {
+          waveformPeaks: [0.9, 1.0],
+        },
+      },
+    ] as AssetClip[];
+
+    const project = makeProject({ assets });
+    const stripped = stripHeavyDataForPersist(project);
+
+    expect(stripped.assets![0].waveformPeaks).toBeNull();
+    expect(stripped.assets![0].originClipSnapshot!.waveformPeaks).toBeNull();
+    // Original not mutated
+    expect(project.assets![0].waveformPeaks).toEqual([0.7, 0.8]);
   });
 });

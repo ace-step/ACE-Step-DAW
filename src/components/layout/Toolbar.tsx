@@ -12,6 +12,7 @@ import { CompanionStatus } from '../plugins/CompanionStatus';
 import { formatTime, formatBarsBeats } from '../../utils/time';
 import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
+import { LatencyDisplay } from './LatencyDisplay';
 
 const KEY_ROOT_LABELS: Record<string, string> = {
   C: 'C',
@@ -752,6 +753,9 @@ export function Toolbar() {
 
       {/* LCD Display */}
       <LCDDisplay />
+
+      {/* Latency Display */}
+      <LatencyDisplay />
 
       <div className="flex-1" />
 

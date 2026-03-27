@@ -20,6 +20,7 @@ describe('transportStore', () => {
       punchInTime: null,
       punchOutTime: null,
       punchEnabled: false,
+      countInBars: 1,
       loopRecordingEnabled: false,
       loopCycleCount: 0,
       launchedSessionClips: {},
@@ -195,6 +196,54 @@ describe('transportStore', () => {
           endTime: 10,
         },
       ]);
+    });
+  });
+
+  describe('punch-in/out', () => {
+    it('setPunchIn sets the punch-in time', () => {
+      useTransportStore.getState().setPunchIn(4);
+      expect(useTransportStore.getState().punchInTime).toBe(4);
+    });
+
+    it('setPunchOut sets the punch-out time', () => {
+      useTransportStore.getState().setPunchOut(16);
+      expect(useTransportStore.getState().punchOutTime).toBe(16);
+    });
+
+    it('togglePunch toggles punchEnabled', () => {
+      expect(useTransportStore.getState().punchEnabled).toBe(false);
+      useTransportStore.getState().togglePunch();
+      expect(useTransportStore.getState().punchEnabled).toBe(true);
+      useTransportStore.getState().togglePunch();
+      expect(useTransportStore.getState().punchEnabled).toBe(false);
+    });
+
+    it('setPunchRange sets both times and enables punch', () => {
+      useTransportStore.getState().setPunchRange(4, 16);
+      const state = useTransportStore.getState();
+      expect(state.punchInTime).toBe(4);
+      expect(state.punchOutTime).toBe(16);
+      expect(state.punchEnabled).toBe(true);
+    });
+  });
+
+  describe('countInBars', () => {
+    it('defaults to 1', () => {
+      expect(useTransportStore.getState().countInBars).toBe(1);
+    });
+
+    it('setCountInBars updates the count-in bar count', () => {
+      useTransportStore.getState().setCountInBars(2);
+      expect(useTransportStore.getState().countInBars).toBe(2);
+    });
+
+    it('setCountInBars clamps to 0-4 range', () => {
+      useTransportStore.getState().setCountInBars(0);
+      expect(useTransportStore.getState().countInBars).toBe(0);
+      useTransportStore.getState().setCountInBars(5);
+      expect(useTransportStore.getState().countInBars).toBe(4);
+      useTransportStore.getState().setCountInBars(-1);
+      expect(useTransportStore.getState().countInBars).toBe(0);
     });
   });
 });

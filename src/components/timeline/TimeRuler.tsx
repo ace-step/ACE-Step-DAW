@@ -9,6 +9,7 @@ import { TIMELINE_RULER_HEIGHT } from './timelineLayout';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
 import { DEFAULT_MEASURES } from '../../constants/defaults';
 import { CURSOR_BRACKET_LEFT, CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
+import { PunchMarkers } from './PunchMarkers';
 
 const LOOP_MIN_DURATION = 0.01;
 const LOOP_HANDLE_WIDTH = 10;
@@ -338,6 +339,9 @@ export function TimeRuler() {
           </span>
         </div>
       ))}
+
+      {/* Punch-in/out markers */}
+      <PunchMarkers />
 
       {/* Playhead triangle indicator in ruler */}
       <PlayheadRulerIndicator pixelsPerSecond={pixelsPerSecond} />

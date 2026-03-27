@@ -860,10 +860,21 @@ export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4'
 /** Clip launch behavior mode for session view slots. */
 export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 
+/** Action to perform automatically when a scene finishes playing. */
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+
 export interface SessionScene {
   id: string;
   name: string;
   index: number;
+  /** Optional tempo override (BPM) applied when this scene launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this scene launches. */
+  timeSignature?: [number, number];
+  /** Action to trigger after the scene finishes playing. Defaults to 'none'. */
+  followAction?: SceneFollowActionType;
+  /** Duration in bars after which the follow action triggers. */
+  followActionTime?: number;
 }
 
 export interface SessionClipSlot {

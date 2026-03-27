@@ -757,6 +757,8 @@ export interface ProjectState {
     minDurationBeats?: number;
   }) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
+  /** Set a single note's velocity, clamped to 1–127. */
+  setNoteVelocity: (clipId: string, noteId: string, velocity: number) => void;
   quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
   stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
   populateMidiPattern: (clipId: string, options: PatternOptions) => string[];
@@ -5913,6 +5915,36 @@ export const useProjectStore = create<ProjectState>()(
                   midiData: {
                     ...clip.midiData,
                     notes: clip.midiData.notes.filter((note) => note.id !== noteId),
+                  },
+                }
+              : clip,
+          ),
+        })),
+      },
+    });
+  },
+
+  setNoteVelocity: (clipId, noteId, velocity) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const clampedVelocity = Math.round(Math.max(1, Math.min(127, velocity)));
+    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Set note velocity', clipId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === clipId && clip.midiData
+              ? {
+                  ...clip,
+                  midiData: {
+                    ...clip.midiData,
+                    notes: clip.midiData.notes.map((note) =>
+                      note.id === noteId ? { ...note, velocity: clampedVelocity } : note,
+                    ),
                   },
                 }
               : clip,

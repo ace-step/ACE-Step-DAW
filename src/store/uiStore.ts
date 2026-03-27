@@ -120,6 +120,8 @@ export interface UIState {
   openPianoRollClipId: string | null;
   selectedPianoRollNoteIds: string[];
   activePianoRollTool: PianoRollTool;
+  /** Whether ghost notes from other tracks are visible in the piano roll. */
+  showGhostNotes: boolean;
   /** Abbreviation of the currently selected chord shape for chord stamp (e.g. 'maj', 'min', '7', 'dim'). */
   activeChordShape: PianoRollChordShape;
   /** Alias for activeChordShape — used by PianoRoll component and tests. */
@@ -294,6 +296,8 @@ export interface UIState {
   setOpenPianoRoll: (trackId: string | null, clipId?: string | null) => void;
   setSelectedPianoRollNoteIds: (noteIds: string[]) => void;
   setActivePianoRollTool: (tool: PianoRollTool) => void;
+  toggleGhostNotes: () => void;
+  setShowGhostNotes: (v: boolean) => void;
   setActiveChordShape: (abbr: PianoRollChordShape | string) => void;
   /** Alias for setActiveChordShape. */
   setActivePianoRollChordShape: (abbr: PianoRollChordShape | string) => void;
@@ -555,6 +559,7 @@ export const useUIStore = create<UIState>()(
   openPianoRollClipId: null,
   selectedPianoRollNoteIds: [],
   activePianoRollTool: 'select',
+  showGhostNotes: false,
   activeChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   activePianoRollChordShape: DEFAULT_PIANO_ROLL_CHORD_SHAPE,
   openEffectChainTrackId: null,
@@ -908,6 +913,8 @@ export const useUIStore = create<UIState>()(
   })),
   setSelectedPianoRollNoteIds: (noteIds) => set({ selectedPianoRollNoteIds: [...noteIds] }),
   setActivePianoRollTool: (tool) => set({ activePianoRollTool: tool }),
+  toggleGhostNotes: () => set((state) => ({ showGhostNotes: !state.showGhostNotes })),
+  setShowGhostNotes: (v) => set({ showGhostNotes: v }),
   setActiveChordShape: (abbr) => {
     const clamped = clampPianoRollChordShape(abbr);
     set({ activeChordShape: clamped, activePianoRollChordShape: clamped });
@@ -1235,6 +1242,7 @@ export const useUIStore = create<UIState>()(
         showSmartControls: state.showSmartControls,
         keyboardContext: state.keyboardContext,
         activePianoRollTool: state.activePianoRollTool,
+        showGhostNotes: state.showGhostNotes,
         activeChordShape: state.activeChordShape,
         activePianoRollChordShape: state.activePianoRollChordShape,
         // Panel sizes

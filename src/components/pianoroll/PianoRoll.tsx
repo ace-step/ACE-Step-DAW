@@ -21,10 +21,10 @@ const PIANO_ROLL_TOOL_BUTTONS = [
   { tool: 'pencil', label: 'Pencil', icon: '✏' },
   { tool: 'paint', label: 'Paint', icon: '▦' },
   { tool: 'erase', label: 'Erase', icon: '⌫' },
+  { tool: 'velocityPaint', label: 'Vel Paint', icon: '⇕' },
 ] as const satisfies ReadonlyArray<{ tool: PianoRollTool; label: string; icon: string }>;
 
 export function PianoRoll() {
-  const [showGhostNotes, setShowGhostNotes] = useState(false);
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
   const [samplerDropActive, setSamplerDropActive] = useState(false);
@@ -48,6 +48,8 @@ export function PianoRoll() {
   const selectedPianoRollNoteIds = useUIStore((s) => s.selectedPianoRollNoteIds);
   const activeTool = useUIStore((s) => s.activePianoRollTool);
   const activeChordShapeAbbr = useUIStore((s) => s.activePianoRollChordShape);
+  const showGhostNotes = useUIStore((s) => s.showGhostNotes);
+  const toggleGhostNotes = useUIStore((s) => s.toggleGhostNotes);
   const pianoRollHeight = useUIStore((s) => s.pianoRollHeight);
   const setPianoRollHeight = useUIStore((s) => s.setPianoRollHeight);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
@@ -76,6 +78,7 @@ export function PianoRoll() {
         Digit3: 'paint',
         Digit4: 'erase',
         Digit5: 'slide',
+        Digit6: 'velocityPaint',
       };
 
       const tool = toolByCode[event.code];
@@ -289,7 +292,7 @@ export function PianoRoll() {
           className={`px-2 py-1 rounded text-[10px] transition-colors ${
             showGhostNotes ? 'bg-cyan-600/50 text-cyan-200' : 'bg-white/5 text-zinc-400 hover:bg-white/10'
           }`}
-          onClick={() => setShowGhostNotes((v) => !v)}
+          onClick={toggleGhostNotes}
           title="Show notes from other tracks"
         >
           Ghost

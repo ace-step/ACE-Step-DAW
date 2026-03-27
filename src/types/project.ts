@@ -623,6 +623,33 @@ export interface TrackPreset {
   createdAt: number;
 }
 
+export interface AssetTrackSnapshot {
+  trackName: TrackName;
+  trackType: TrackType;
+  displayName: string;
+  muted: boolean;
+  soloed: boolean;
+  armed?: boolean;
+  inputMonitoring?: InputMonitoringMode;
+  settings: TrackPresetSettings;
+  effects: TrackEffect[];
+  midiEffects: MidiEffect[];
+}
+
+export interface AssetClipSnapshot extends Omit<
+  Clip,
+  | 'id'
+  | 'trackId'
+  | 'startTime'
+  | 'generationJobId'
+  | 'versions'
+  | 'activeVersionIdx'
+  | 'midiData'
+  | 'takes'
+  | 'warpMarkers'
+  | 'gainEnvelope'
+> {}
+
 export interface Track {
   id: string;
   trackType?: TrackType;
@@ -704,6 +731,8 @@ export interface AssetClip {
   starred: boolean;
   createdAt: number;
   duration: number;
+  originTrackSnapshot?: AssetTrackSnapshot;
+  originClipSnapshot?: AssetClipSnapshot;
 }
 
 export interface GenerationDefaults {

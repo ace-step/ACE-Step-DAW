@@ -28,6 +28,7 @@ export function GenerationSidePanel() {
   const setBatchGenerateMode = useUIStore((s) => s.setBatchGenerateMode);
   const showSmartControls = useUIStore((s) => s.showSmartControls);
   const activeBottomPanel = useUIStore((s) => s.activeBottomPanel);
+  const showSettingsDialog = useUIStore((s) => s.showSettingsDialog);
   const trackListWidth = useUIStore((s) => s.trackListWidth);
   const bottomPanelHeight = useUIStore(getBottomPanelHeight);
   const project = useProjectStore((s) => s.project);
@@ -115,9 +116,9 @@ export function GenerationSidePanel() {
           left: dockLeft,
           zIndex: Z.toast,
           bottom: showSmartControls ? 208 : 68,
-          opacity: activeBottomPanel || showMixer ? 0 : 1,
-          pointerEvents: activeBottomPanel || showMixer ? 'none' : 'auto',
-          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer ? '16px' : '0px'})`,
+          opacity: activeBottomPanel || showMixer || showSettingsDialog ? 0 : 1,
+          pointerEvents: activeBottomPanel || showMixer || showSettingsDialog ? 'none' : 'auto',
+          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer || showSettingsDialog ? '16px' : '0px'})`,
         }}
         data-testid="generation-dock"
       >

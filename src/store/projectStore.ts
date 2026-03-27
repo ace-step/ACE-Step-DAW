@@ -594,6 +594,7 @@ export interface ProjectState {
   unfreezeTrack: (trackId: string) => void;
   flattenTrack: (trackId: string, audioKey: string, waveformPeaks?: number[], duration?: number) => void;
   bounceInPlace: (trackId: string, options?: Partial<BounceInPlaceOptions>) => Promise<Clip | undefined>;
+  bounceTrackToAudio: (trackId: string) => Promise<Clip | undefined>;
 
   addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number; color?: string; displayName?: string }) => Track;
   removeTrack: (trackId: string) => void;
@@ -2539,6 +2540,10 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return resultClip;
+  },
+
+  bounceTrackToAudio: async (trackId) => {
+    return get().bounceInPlace(trackId, { replaceOriginal: false });
   },
 
   addTrack: (trackName, trackType, options) => {

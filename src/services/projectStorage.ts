@@ -30,13 +30,17 @@ export interface TemplateSummary {
 // ── Project library (IndexedDB) ──
 
 export async function saveProject(project: Project): Promise<void> {
-  await set(`${PROJECT_PREFIX}${project.id}`, JSON.stringify(project));
+  // Store the object directly — IDB uses structured clone which is faster
+  // than JSON.stringify on the main thread and avoids double-serialization.
+  await set(`${PROJECT_PREFIX}${project.id}`, project);
 }
 
 export async function loadProject(id: string): Promise<Project | null> {
-  const data = await get<string>(`${PROJECT_PREFIX}${id}`);
+  const data = await get<string | Project>(`${PROJECT_PREFIX}${id}`);
   if (!data) return null;
-  return JSON.parse(data);
+  // Handle both legacy JSON-string format and new direct-object format
+  if (typeof data === 'string') return JSON.parse(data);
+  return data;
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -51,9 +55,9 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
   const summaries: ProjectSummary[] = [];
   for (const key of projectKeys) {
-    const data = await get<string>(key as string);
+    const data = await get<string | Project>(key as string);
     if (data) {
-      const project = JSON.parse(data) as Project;
+      const project: Project = typeof data === 'string' ? JSON.parse(data) : data;
       summaries.push({
         id: project.id,
         name: project.name,

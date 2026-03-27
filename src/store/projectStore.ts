@@ -92,6 +92,7 @@ import {
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
+import { stripHeavyDataForPersist } from './projectPersistUtils';
 import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
@@ -8692,12 +8693,21 @@ export const useProjectStore = create<ProjectState>()(
     {
       name: PROJECT_PERSIST_STORAGE_KEY,
       storage: projectPersistStorage,
-      partialize: (state) => ({ project: state.project }),
+      partialize: (state) => ({
+        project: state.project ? stripHeavyDataForPersist(state.project) : null,
+      }),
     },
   ),
 );
 
-// Auto-save to project library (IDB) on changes, debounced
+// Auto-save to project library (IDB) on changes, debounced.
+// Uses requestIdleCallback to defer the IDB write until the browser is idle,
+// keeping it off the critical interaction path (fixes #856).
+const _scheduleIdle: (cb: () => void) => void =
+  typeof requestIdleCallback === 'function'
+    ? (cb) => requestIdleCallback(cb, { timeout: 3000 })
+    : (cb) => setTimeout(cb, 0);
+
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _queuedProjectForLibrarySave: Project | null = null;
 let _lastSavedProjectRef: Project | null = null;
@@ -8707,10 +8717,14 @@ useProjectStore.subscribe((state) => {
   _queuedProjectForLibrarySave = state.project;
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    const proj = useProjectStore.getState().project;
-    if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
-    _lastSavedProjectRef = proj;
-    _lastSavedProjectUpdatedAt = proj.updatedAt;
-    void saveProjectToIDB(proj);
+    // Defer the actual IDB write to an idle callback so it doesn't block
+    // drag, scroll, or other high-priority interactions.
+    _scheduleIdle(() => {
+      const proj = useProjectStore.getState().project;
+      if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
+      _lastSavedProjectRef = proj;
+      _lastSavedProjectUpdatedAt = proj.updatedAt;
+      void saveProjectToIDB(proj);
+    });
   }, PROJECT_LIBRARY_AUTOSAVE_DEBOUNCE_MS);
 });

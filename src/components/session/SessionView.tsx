@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
 import { getSessionClips } from '../../utils/sessionClips';
+import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } from '../../hooks/useSessionDragDrop';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
@@ -88,6 +89,7 @@ export function SessionView() {
   } = useTransport();
 
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
+  const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -121,6 +123,17 @@ export function SessionView() {
       setKeyboardContext(previousScope, previousTrackId);
     };
   }, [setKeyboardContext]);
+
+  // Cancel drag on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dragState) {
+        cancelDrag();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dragState, cancelDrag]);
 
   if (!project) {
     return <div className="flex-1 min-w-0 bg-[#202020]" />;
@@ -185,7 +198,12 @@ export function SessionView() {
         </div>
       </div>
 
-      <div className="grid min-w-[980px]" style={{ gridTemplateColumns: `220px repeat(${sceneCount}, minmax(150px, 1fr))` }}>
+      <div
+        className="grid min-w-[980px]"
+        style={{ gridTemplateColumns: `220px repeat(${sceneCount}, minmax(150px, 1fr))` }}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
         <div className="sticky top-[72px] z-10 border-b border-r border-[#333] bg-[#242424] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
           Tracks
         </div>
@@ -194,11 +212,27 @@ export function SessionView() {
             const clip = getSessionClips(track)[sceneIndex];
             return clip ? [{ trackId: track.id, clipId: clip.id }] : [];
           });
+          const isSceneDragTarget = dragState?.type === 'scene' && dropTarget?.sceneIndex === sceneIndex && dropTarget?.valid;
+          const isSceneDragSource = dragState?.type === 'scene' && dragState?.sourceSceneIndex === sceneIndex;
 
           return (
-            <div key={`scene-${sceneIndex}`} className="sticky top-[72px] z-10 border-b border-r border-[#333] bg-[#242424] px-3 py-2">
+            <div
+              key={`scene-${sceneIndex}`}
+              className={`sticky top-[72px] z-10 border-b border-r bg-[#242424] px-3 py-2 transition-colors ${
+                isSceneDragTarget ? 'border-blue-500 bg-blue-500/10' : isSceneDragSource ? 'opacity-40 border-[#333]' : 'border-[#333]'
+              }`}
+              data-scene-index={sceneIndex}
+              data-scene-header=""
+              onPointerDown={(e) => {
+                handlePointerDown(e, 'scene', {
+                  sourceSceneIndex: sceneIndex,
+                  label: `Scene ${sceneIndex + 1}`,
+                  color: '#6366f1',
+                });
+              }}
+            >
               <div className="flex items-center justify-between gap-2">
-                <div>
+                <div className="cursor-grab active:cursor-grabbing">
                   <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
                   <div className="text-sm font-semibold text-zinc-100">{sceneIndex + 1}</div>
                 </div>
@@ -207,6 +241,7 @@ export function SessionView() {
                   disabled={sceneLaunches.length === 0}
                   className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30"
                   aria-label={`Launch scene ${sceneIndex + 1}`}
+                  onPointerDown={(e) => e.stopPropagation()}
                 >
                   Launch
                 </button>
@@ -236,6 +271,9 @@ export function SessionView() {
               onSlotQuantizationChange={(slotId, q) => setSessionSlotQuantization(slotId, q)}
               onContextMenuSlot={setColorMenu}
               onSlotClick={(sceneIndex) => setSelectedSessionSlot({ trackId: track.id, sceneIndex })}
+              dragState={dragState}
+              dropTarget={dropTarget}
+              onDragStart={handlePointerDown}
             />
           );
         })}
@@ -287,6 +325,21 @@ export function SessionView() {
           />
         </ContextMenuWrapper>
       )}
+
+      {/* Drag ghost overlay */}
+      {dragState && (
+        <div
+          className="pointer-events-none fixed z-50 flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 shadow-xl backdrop-blur-sm"
+          style={{
+            left: dragState.ghostX + 12,
+            top: dragState.ghostY - 16,
+            backgroundColor: `${dragState.color}cc`,
+          }}
+          data-testid="session-drag-ghost"
+        >
+          <span className="text-xs font-medium text-white truncate max-w-[140px]">{dragState.label}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -314,6 +367,9 @@ function FragmentRow({
   onSlotQuantizationChange,
   onContextMenuSlot,
   onSlotClick,
+  dragState,
+  dropTarget,
+  onDragStart,
 }: {
   track: Track;
   sessionClips: Clip[];
@@ -330,6 +386,9 @@ function FragmentRow({
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   onContextMenuSlot: (state: SlotContextMenuState) => void;
   onSlotClick: (sceneIndex: number) => void;
+  dragState: SessionDragState | null;
+  dropTarget: SessionDropTarget | null;
+  onDragStart: (e: React.PointerEvent, type: 'clip' | 'scene', opts: { sourceSlotId?: string; sourceSceneIndex?: number; label: string; color: string }) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
 
@@ -426,18 +485,31 @@ function FragmentRow({
           });
         };
 
+        // Drag visual feedback
+        const isDragSource = dragState?.type === 'clip' && dragState?.sourceSlotId === slot?.id;
+        const isDropTarget = dragState?.type === 'clip' && dropTarget?.slotId === slot?.id && dropTarget?.valid && !isDragSource;
+
         return (
           <div key={`${track.id}-${sceneIndex}`} className="border-r border-b border-[#2e2e2e] bg-[#1b1b1b] p-2">
             {clip ? (
               <div className="relative">
                 <button
                   onClick={() => {
+                    if (dragState) return; // Don't launch during drag
                     onSlotClick(sceneIndex);
                     // Gate and Repeat modes use pointer events, not click
                     if (slotLaunchMode === 'gate' || slotLaunchMode === 'repeat') return;
                     void onLaunch(clip.id, sceneIndex);
                   }}
                   onPointerDown={(e) => {
+                    // Drag-and-drop initiation
+                    if (slot) {
+                      onDragStart(e, 'clip', {
+                        sourceSlotId: slot.id,
+                        label: getClipLabel(clip, sceneIndex),
+                        color: slotColor ?? track.color ?? '#6366f1',
+                      });
+                    }
                     if (slotLaunchMode !== 'gate' && slotLaunchMode !== 'repeat') return;
                     // Prevent default to avoid focus issues; capture pointer for reliable up events
                     e.currentTarget.setPointerCapture(e.pointerId);
@@ -453,15 +525,19 @@ function FragmentRow({
                   }}
                   onContextMenu={handleContextMenu}
                   className={`relative flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
-                    isActive
-                      ? 'border-emerald-400 shadow-[0_0_0_1px_rgba(74,222,128,0.35)]'
-                      : isQueued
-                        ? 'border-amber-400'
-                        : 'border-[#3a3a3a] hover:border-daw-accent'
-                  } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
+                    isDragSource
+                      ? 'opacity-40 border-dashed border-zinc-500'
+                      : isDropTarget
+                        ? 'border-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                        : isActive
+                          ? 'border-emerald-400 shadow-[0_0_0_1px_rgba(74,222,128,0.35)]'
+                          : isQueued
+                            ? 'border-amber-400'
+                            : 'border-[#3a3a3a] hover:border-daw-accent'
+                  } ${isSelected && !isDragSource ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
                   style={{
                     ...((slotColor ?? track.color)
-                      ? { backgroundColor: `${slotColor ?? track.color}33`, borderColor: isActive ? undefined : isQueued ? undefined : `${slotColor ?? track.color}88` }
+                      ? { backgroundColor: `${slotColor ?? track.color}33`, borderColor: isDragSource ? undefined : isDropTarget ? undefined : isActive ? undefined : isQueued ? undefined : `${slotColor ?? track.color}88` }
                       : isActive
                         ? { backgroundColor: 'rgba(16, 185, 129, 0.2)' }
                         : isQueued
@@ -540,15 +616,19 @@ function FragmentRow({
             ) : hasStopButton ? (
               <button
                 onClick={() => {
+                  if (dragState) return;
                   onSlotClick(sceneIndex);
                   void onStop();
                 }}
                 onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#343434] bg-[#202020] transition-colors hover:border-[#555] hover:bg-[#272727] ${
-                  isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
-                }`}
+                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed transition-colors ${
+                  isDropTarget
+                    ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                    : 'border-[#343434] bg-[#202020] hover:border-[#555] hover:bg-[#272727]'
+                } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
                 aria-label={`Stop ${track.displayName} in scene ${sceneIndex + 1}`}
                 data-testid={`stop-slot-${track.id}-${sceneIndex}`}
+                data-slot-id={slot?.id}
                 data-track-id={track.id}
                 data-scene-index={sceneIndex}
               >
@@ -557,12 +637,18 @@ function FragmentRow({
             ) : (
               <button
                 type="button"
-                onClick={() => onSlotClick(sceneIndex)}
+                onClick={() => {
+                  if (dragState) return;
+                  onSlotClick(sceneIndex);
+                }}
                 onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d] text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
-                  isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
-                }`}
+                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
+                  isDropTarget
+                    ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                    : 'border-[#2a2a2a] bg-[#1d1d1d]'
+                } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
                 data-testid={`empty-slot-${track.id}-${sceneIndex}`}
+                data-slot-id={slot?.id}
                 data-track-id={track.id}
                 data-scene-index={sceneIndex}
                 aria-label={`Empty slot, ${track.displayName} scene ${sceneIndex + 1}`}

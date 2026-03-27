@@ -688,6 +688,8 @@ export interface ProjectState {
   commitPendingSessionLaunches: (currentTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
+  moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
+  reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -4563,6 +4565,58 @@ export const useProjectStore = create<ProjectState>()(
       },
     });
     return printedClips;
+  },
+
+  moveSessionSlotClip: (sourceSlotId, targetSlotId) => {
+    const state = get();
+    if (!state.project) return;
+    if (sourceSlotId === targetSlotId) return;
+    const session = ensureProjectSession(state.project).session!;
+    const sourceSlot = session.slots.find((s) => s.id === sourceSlotId);
+    const targetSlot = session.slots.find((s) => s.id === targetSlotId);
+    if (!sourceSlot || !targetSlot) return;
+    // Don't move if source slot has no clip
+    if (sourceSlot.clipId === null) return;
+    _pushHistory(state.project);
+    const sourceClipId = sourceSlot.clipId;
+    const targetClipId = targetSlot.clipId;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          slots: session.slots.map((slot) => {
+            if (slot.id === sourceSlotId) return { ...slot, clipId: targetClipId };
+            if (slot.id === targetSlotId) return { ...slot, clipId: sourceClipId };
+            return slot;
+          }),
+        },
+      },
+    });
+  },
+
+  reorderSessionScenes: (fromIndex, toIndex) => {
+    const state = get();
+    if (!state.project) return;
+    if (fromIndex === toIndex) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (fromIndex < 0 || fromIndex >= session.scenes.length || toIndex < 0 || toIndex >= session.scenes.length) return;
+    _pushHistory(state.project);
+    const scenes = [...session.scenes].sort((a, b) => a.index - b.index);
+    const [removed] = scenes.splice(fromIndex, 1);
+    scenes.splice(toIndex, 0, removed);
+    const reindexed = scenes.map((scene, idx) => ({ ...scene, index: idx }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: reindexed,
+        },
+      },
+    });
   },
 
   removeAsset: (assetId) => {

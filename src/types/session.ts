@@ -22,12 +22,23 @@ export interface SessionClipSlot {
   legato?: boolean;
 }
 
+/** Action to perform automatically when a scene finishes playing. */
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+
 /** A scene (horizontal row) that can trigger all slots at once. */
 export interface SessionScene {
   id: string;
   name: string;
   /** Row index in the session grid. */
   index: number;
+  /** Optional tempo override (BPM) applied when this scene launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this scene launches. */
+  timeSignature?: [number, number];
+  /** Action to trigger after the scene finishes playing. Defaults to 'none'. */
+  followAction?: SceneFollowActionType;
+  /** Duration in bars after which the follow action triggers. */
+  followActionTime?: number;
 }
 
 /** A buffered MIDI event for retroactive capture. */

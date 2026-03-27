@@ -8,7 +8,7 @@ import { getSessionClips } from '../../utils/sessionClips';
 import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } from '../../hooks/useSessionDragDrop';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
-import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
+import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
 
@@ -56,6 +56,22 @@ function isClipQueued(
 
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 10; // r=10
 
+const FOLLOW_ACTION_OPTIONS: SceneFollowActionType[] = ['none', 'next', 'previous', 'random', 'stop'];
+const FOLLOW_ACTION_LABELS: Record<SceneFollowActionType, string> = {
+  none: 'None',
+  next: 'Next',
+  previous: 'Previous',
+  random: 'Random',
+  stop: 'Stop',
+};
+
+interface SceneContextMenuState {
+  x: number;
+  y: number;
+  sceneId: string;
+  sceneIndex: number;
+}
+
 interface SlotContextMenuState {
   x: number;
   y: number;
@@ -88,7 +104,10 @@ export function SessionView() {
     toggleSessionArrangementRecording,
   } = useTransport();
 
+  const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
+  const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
+  const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
@@ -230,6 +249,13 @@ export function SessionView() {
                   color: '#6366f1',
                 });
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                const sceneId = scenes[sceneIndex]?.id;
+                if (sceneId) {
+                  setSceneMenu({ x: e.clientX, y: e.clientY, sceneId, sceneIndex });
+                }
+              }}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="cursor-grab active:cursor-grabbing">
@@ -246,6 +272,22 @@ export function SessionView() {
                   Launch
                 </button>
               </div>
+              {scenes[sceneIndex]?.followAction && scenes[sceneIndex].followAction !== 'none' && (
+                <div className="text-[9px] text-zinc-500 mt-0.5">
+                  Follow: {FOLLOW_ACTION_LABELS[scenes[sceneIndex].followAction!]}
+                  {scenes[sceneIndex].followActionTime ? ` (${scenes[sceneIndex].followActionTime} bars)` : ''}
+                </div>
+              )}
+              {scenes[sceneIndex]?.tempo && (
+                <div className="text-[9px] text-zinc-500">
+                  {scenes[sceneIndex].tempo} BPM
+                </div>
+              )}
+              {scenes[sceneIndex]?.timeSignature && (
+                <div className="text-[9px] text-zinc-500">
+                  {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
+                </div>
+              )}
             </div>
           );
         })}
@@ -325,6 +367,126 @@ export function SessionView() {
           />
         </ContextMenuWrapper>
       )}
+
+      {sceneMenu && (() => {
+        const scene = scenes.find((s) => s.id === sceneMenu.sceneId);
+        return (
+          <ContextMenuWrapper
+            x={sceneMenu.x}
+            y={sceneMenu.y}
+            onClose={() => setSceneMenu(null)}
+            testId="session-scene-context-menu"
+            minWidth={200}
+          >
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              Tempo Override
+            </div>
+            <div className="px-2 py-1.5 flex items-center gap-1.5">
+              <input
+                type="number"
+                min={20}
+                max={300}
+                step={1}
+                placeholder={`${project.bpm}`}
+                defaultValue={scene?.tempo ?? ''}
+                className="w-16 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  updateSessionSceneProperties(sceneMenu.sceneId, {
+                    tempo: val ? Math.max(20, Math.min(300, Number(val))) : undefined,
+                  });
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                data-testid="scene-tempo-input"
+              />
+              <span className="text-[10px] text-zinc-400">BPM</span>
+            </div>
+            <ContextMenuSeparator />
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              Time Signature Override
+            </div>
+            <div className="px-2 py-1.5 flex items-center gap-1">
+              <input
+                type="number"
+                min={1}
+                max={32}
+                step={1}
+                placeholder={`${project.timeSignature}`}
+                defaultValue={scene?.timeSignature?.[0] ?? ''}
+                className="w-10 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+                onBlur={(e) => {
+                  const num = e.target.value.trim();
+                  if (!num) {
+                    updateSessionSceneProperties(sceneMenu.sceneId, { timeSignature: undefined });
+                  } else {
+                    const denom = scene?.timeSignature?.[1] ?? project.timeSignatureDenominator ?? 4;
+                    updateSessionSceneProperties(sceneMenu.sceneId, {
+                      timeSignature: [Math.max(1, Math.min(32, Number(num))), denom],
+                    });
+                  }
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                data-testid="scene-timesig-num-input"
+              />
+              <span className="text-[10px] text-zinc-400">/</span>
+              <select
+                defaultValue={scene?.timeSignature?.[1] ?? project.timeSignatureDenominator ?? 4}
+                className="w-12 rounded bg-[#2a2a2a] border border-[#444] px-1 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+                onChange={(e) => {
+                  const num = scene?.timeSignature?.[0] ?? project.timeSignature;
+                  updateSessionSceneProperties(sceneMenu.sceneId, {
+                    timeSignature: [num, Number(e.target.value)],
+                  });
+                }}
+                data-testid="scene-timesig-denom-select"
+              >
+                {[2, 4, 8, 16].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <ContextMenuSeparator />
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              Follow Action
+            </div>
+            {FOLLOW_ACTION_OPTIONS.map((action) => (
+              <ContextMenuItem
+                key={action}
+                label={`${FOLLOW_ACTION_LABELS[action]}${scene?.followAction === action || (!scene?.followAction && action === 'none') ? ' \u2713' : ''}`}
+                onClick={() => {
+                  setSessionSceneFollowAction(sceneMenu.sceneId, action, action === 'none' ? undefined : (scene?.followActionTime ?? 4));
+                }}
+              />
+            ))}
+            {scene?.followAction && scene.followAction !== 'none' && (
+              <>
+                <ContextMenuSeparator />
+                <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                  Follow After (bars)
+                </div>
+                <div className="px-2 py-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={64}
+                    step={1}
+                    defaultValue={scene.followActionTime ?? 4}
+                    className="w-14 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+                    onBlur={(e) => {
+                      const val = Number(e.target.value);
+                      if (val >= 1 && val <= 64) {
+                        setSessionSceneFollowAction(sceneMenu.sceneId, scene.followAction!, val);
+                      }
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    data-testid="scene-follow-bars-input"
+                  />
+                </div>
+              </>
+            )}
+          </ContextMenuWrapper>
+        );
+      })()}
 
       {/* Drag ghost overlay */}
       {dragState && (

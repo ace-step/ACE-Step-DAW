@@ -60,6 +60,7 @@ import type {
   SessionLaunchMode,
   SessionLaunchQuantization,
   SessionPendingLaunch,
+  SceneFollowActionType,
   SessionScene,
   SessionState,
   PlaybackLatencySettings,
@@ -743,6 +744,8 @@ export interface ProjectState {
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -5378,6 +5381,47 @@ export const useProjectStore = create<ProjectState>()(
         session: {
           ...session,
           scenes: reindexed,
+        },
+      },
+    });
+  },
+
+  updateSessionSceneProperties: (sceneId, properties) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.scenes.some((scene) => scene.id === sceneId)) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId ? { ...scene, ...properties } : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  setSessionSceneFollowAction: (sceneId, action, bars?) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followAction: action, followActionTime: action === 'none' ? undefined : bars }
+              : scene,
+          ),
         },
       },
     });

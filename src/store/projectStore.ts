@@ -107,6 +107,7 @@ import { getSynthPresetById } from '../data/synthPresets';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
+import { buildRoutingGraph, wouldCreateCycle } from '../utils/routingGraph';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
@@ -6743,6 +6744,16 @@ export const useProjectStore = create<ProjectState>()(
   setSidechainSource: (trackId, effectId, sourceTrackId) => {
     const state = get();
     if (!state.project) return;
+
+    // Validate: setting a sidechain source must not create a routing cycle
+    if (sourceTrackId !== undefined) {
+      const graph = buildRoutingGraph(state.project.tracks, state.project.returnTracks ?? []);
+      if (wouldCreateCycle(graph, sourceTrackId, trackId)) {
+        toastError('Cannot set sidechain source: it would create a feedback loop in the routing graph');
+        return;
+      }
+    }
+
     _pushHistory(state.project);
     set({
       project: {
@@ -7388,6 +7399,20 @@ export const useProjectStore = create<ProjectState>()(
   updateTrackSend: (trackId, returnTrackId, amount) => {
     const state = get();
     if (!state.project) return;
+
+    // Validate: adding a new send with amount > 0 must not create a routing cycle
+    if (amount > 0) {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      const isNewSend = !(track?.sends ?? []).some((s) => s.returnTrackId === returnTrackId);
+      if (isNewSend) {
+        const graph = buildRoutingGraph(state.project.tracks, state.project.returnTracks ?? []);
+        if (wouldCreateCycle(graph, trackId, returnTrackId)) {
+          toastError('Cannot add send: it would create a feedback loop in the routing graph');
+          return;
+        }
+      }
+    }
+
     _pushHistory(state.project);
     set({
       project: {

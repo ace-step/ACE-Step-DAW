@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { useProjectStore } from '../../store/projectStore';
-import type { SynthEnvelope, SynthFilter, SynthLfo } from '../../types/project';
+import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope } from '../../types/project';
 import { ADSREnvelopeEditor } from './ADSREnvelopeEditor';
 import { SynthFilterControls } from './SynthFilterControls';
+import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeEditor';
 import { LFODisplay } from './LFODisplay';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
@@ -18,6 +19,7 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
   const updateSynthEnvelope = useProjectStore((s) => s.updateSynthEnvelope);
   const updateSynthFilter = useProjectStore((s) => s.updateSynthFilter);
   const updateSynthLfo = useProjectStore((s) => s.updateSynthLfo);
+  const updateFilterEnvelope = useProjectStore((s) => s.updateFilterEnvelope);
 
   const onEnvelopeChange = useCallback(
     (updates: Partial<SynthEnvelope>) => updateSynthEnvelope(trackId, updates),
@@ -31,12 +33,17 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
     (updates: Partial<SynthLfo>) => updateSynthLfo(trackId, updates),
     [trackId, updateSynthLfo],
   );
+  const onFilterEnvelopeChange = useCallback(
+    (updates: Partial<FilterEnvelope>) => updateFilterEnvelope(trackId, updates),
+    [trackId, updateFilterEnvelope],
+  );
 
   if (!track) return null;
 
   const envelope = track.synthEnvelope ?? DEFAULT_ENVELOPE;
   const filter = track.synthFilter ?? DEFAULT_FILTER;
   const lfo = track.synthLfo ?? DEFAULT_LFO;
+  const filterEnvelope = track.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE;
 
   return (
     <div className="flex flex-col gap-4 p-3 bg-[#222] rounded-lg border border-[#333]" data-track-id={trackId}>
@@ -46,6 +53,8 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
       <ADSREnvelopeEditor envelope={envelope} onChange={onEnvelopeChange} />
       <div className="h-px bg-[#333]" />
       <SynthFilterControls filter={filter} onChange={onFilterChange} />
+      <div className="h-px bg-[#333]" />
+      <FilterEnvelopeEditor envelope={filterEnvelope} onChange={onFilterEnvelopeChange} />
       <div className="h-px bg-[#333]" />
       <LFODisplay lfo={lfo} onChange={onLfoChange} />
     </div>

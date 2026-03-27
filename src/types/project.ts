@@ -22,6 +22,22 @@ export interface SynthEnvelope {
   release: number;
 }
 
+/** Filter envelope (ADSR applied to filter cutoff frequency). */
+export interface FilterEnvelope {
+  /** Attack time in seconds (0.001–5). */
+  attack: number;
+  /** Decay time in seconds (0.001–5). */
+  decay: number;
+  /** Sustain level (0–1, fraction of the frequency range). */
+  sustain: number;
+  /** Release time in seconds (0.001–10). */
+  release: number;
+  /** Base frequency in Hz (20–20000) — the resting cutoff when envelope is at 0. */
+  baseFrequency: number;
+  /** Number of octaves the envelope sweeps above baseFrequency (0–8). */
+  octaves: number;
+}
+
 export type SynthFilterType = 'lowpass' | 'highpass' | 'bandpass';
 
 /** Filter settings for a synth track. */
@@ -718,6 +734,8 @@ export interface Track {
   synthEnvelope?: SynthEnvelope;
   /** Synth filter settings (lowpass/highpass/bandpass). */
   synthFilter?: SynthFilter;
+  /** Filter envelope (ADSR modulating filter cutoff). */
+  filterEnvelope?: FilterEnvelope;
   /** LFO modulation settings. */
   synthLfo?: SynthLfo;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */

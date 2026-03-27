@@ -6,6 +6,10 @@ import { loadAudioBlobByKey } from './audioFileManager';
 import { cloudStorage, type SharedProjectRecord, type SharedStemAsset } from './cloudStorageService';
 import { DEFAULT_EXPORT_OPTIONS } from '../utils/audioEncoders';
 import type { Project, Track } from '../types/project';
+import {
+  getTrackInstrumentPlaybackSource,
+  getTrackSamplerPlaybackState,
+} from '../utils/trackInstrument';
 
 export interface ProjectShareProgress {
   completedTracks: number;
@@ -40,6 +44,9 @@ async function renderTrackClips(project: Project, track: Track): Promise<ExportC
   const clips: ExportClip[] = [];
 
   if (track.trackType === 'pianoRoll') {
+    const playbackSource = getTrackInstrumentPlaybackSource(track);
+    const samplerState = getTrackSamplerPlaybackState(track);
+
     for (const clip of track.clips) {
       const notes = clip.midiData?.notes ?? [];
       if (notes.length === 0) {
@@ -47,8 +54,8 @@ async function renderTrackClips(project: Project, track: Track): Promise<ExportC
       }
 
       let buffer: AudioBuffer | null = null;
-      if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-        const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
+      if (samplerState) {
+        const samplerBlob = await loadAudioBlobByKey(samplerState.audioKey);
         if (samplerBlob) {
           const sampleBuffer = await engine.decodeAudioData(samplerBlob);
           buffer = await renderSamplerTrackOffline(
@@ -56,11 +63,7 @@ async function renderTrackClips(project: Project, track: Track): Promise<ExportC
             clip.startTime,
             project.bpm,
             sampleBuffer,
-            track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-              rootNote: track.sampler.rootNote,
-              trimEnd: track.sampler.sampleDuration,
-              loopEnd: track.sampler.sampleDuration,
-            }),
+            samplerState.config ?? createSamplerConfig(samplerState.audioKey),
             project.totalDuration,
           );
         }
@@ -69,7 +72,7 @@ async function renderTrackClips(project: Project, track: Track): Promise<ExportC
           notes,
           clip.startTime,
           project.bpm,
-          track.synthPreset ?? 'piano',
+          playbackSource,
           project.totalDuration,
         );
       }

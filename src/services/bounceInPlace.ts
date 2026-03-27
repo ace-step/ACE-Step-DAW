@@ -19,6 +19,10 @@ import {
   type Project,
   type Track,
 } from '../types/project';
+import {
+  getTrackInstrumentPlaybackSource,
+  getTrackSamplerPlaybackState,
+} from '../utils/trackInstrument';
 
 const DEFAULT_SAMPLE_RATE = 48_000;
 const NORMALIZE_TARGET_PEAK = 0.99;
@@ -333,8 +337,11 @@ async function renderTrackSourceBuffer(
   if (track.trackType === 'pianoRoll') {
     const notes = trimMidiNotesToRange(track, bpm, range);
     if (notes.length > 0) {
-      if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-        const blob = await loadAudioBlobByKey(track.sampler.audioKey);
+      const playbackSource = getTrackInstrumentPlaybackSource(track);
+      const samplerState = getTrackSamplerPlaybackState(track);
+
+      if (samplerState) {
+        const blob = await loadAudioBlobByKey(samplerState.audioKey);
         if (blob) {
           const sampleBuffer = await getAudioEngine().decodeAudioData(blob);
           const rendered = await renderSamplerTrackOffline(
@@ -342,11 +349,7 @@ async function renderTrackSourceBuffer(
             0,
             bpm,
             sampleBuffer,
-            track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-              rootNote: track.sampler.rootNote,
-              trimEnd: track.sampler.sampleDuration,
-              loopEnd: track.sampler.sampleDuration,
-            }),
+            samplerState.config ?? createSamplerConfig(samplerState.audioKey),
             range.duration,
             DEFAULT_SAMPLE_RATE,
           );
@@ -357,7 +360,7 @@ async function renderTrackSourceBuffer(
           notes,
           0,
           bpm,
-          track.synthPreset ?? 'piano',
+          playbackSource,
           range.duration,
           DEFAULT_SAMPLE_RATE,
         );

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createDefaultFmInstrument,
   createDefaultSamplerInstrument,
+  getTrackInstrumentPlaybackSource,
+  getTrackSamplerPlaybackState,
   getTrackInstrumentSelectValue,
   getTrackSamplerConfigFromInstrument,
   resolveTrackInstrument,
@@ -60,5 +62,53 @@ describe('trackInstrument helpers', () => {
     });
 
     expect(selectValue).toBe('fm');
+  });
+
+  it('returns the canonical playback source for fm instruments', () => {
+    const source = getTrackInstrumentPlaybackSource({
+      trackName: 'synth',
+      trackType: 'pianoRoll',
+      instrument: createDefaultFmInstrument({
+        name: 'FM Bell',
+        fallbackPreset: 'lead',
+      }),
+      synthPreset: 'lead',
+      sampler: undefined,
+      samplerConfig: undefined,
+    });
+
+    expect(source).toMatchObject({
+      kind: 'fm',
+      name: 'FM Bell',
+      fallbackPreset: 'lead',
+    });
+  });
+
+  it('derives sampler playback state from canonical sampler instruments without legacy mirrors', () => {
+    const samplerState = getTrackSamplerPlaybackState({
+      trackName: 'keyboard',
+      trackType: 'pianoRoll',
+      instrument: createDefaultSamplerInstrument({
+        audioKey: 'audio:test:vox',
+        sampleName: 'Glass Vox',
+        rootNote: 48,
+        sampleDuration: 1.5,
+        trimEnd: 1.25,
+        loopEnd: 1.1,
+      }),
+      synthPreset: undefined,
+      sampler: undefined,
+      samplerConfig: undefined,
+    });
+
+    expect(samplerState).toMatchObject({
+      audioKey: 'audio:test:vox',
+      config: {
+        audioKey: 'audio:test:vox',
+        rootNote: 48,
+        trimEnd: 1.25,
+        loopEnd: 1.1,
+      },
+    });
   });
 });

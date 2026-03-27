@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../../store/projectStore';
 import { freezeTrackToAudio, flattenTrackToAudio } from '../freezeTrack';
+import { createDefaultFmInstrument } from '../../utils/trackInstrument';
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,36 @@ describe('freezeTrackToAudio', () => {
     const track = useProjectStore.getState().project!.tracks.find((t) => t.id === trackId)!;
     expect(track.frozen).toBe(true);
     expect(track.frozenAudioKey).toBe('frozen-audio-key-123');
+  });
+
+  it('passes canonical FM instruments into freeze rendering', async () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().updateTrack(trackId, { trackType: 'pianoRoll' });
+    useProjectStore.getState().setTrackInstrument(trackId, createDefaultFmInstrument({
+      name: 'FM Bell',
+      fallbackPreset: 'lead',
+    }));
+
+    useProjectStore.getState().addClip(trackId, 0, 4);
+    const clipId = useProjectStore.getState().project!.tracks[0].clips[0].id;
+    useProjectStore.getState().addMidiNote(clipId, {
+      pitch: 64,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 0.82,
+    });
+
+    const mockBuffer = createMockAudioBuffer(4);
+    mockRenderMidiTrackOffline.mockResolvedValueOnce(mockBuffer);
+
+    await freezeTrackToAudio(trackId);
+
+    expect(mockRenderMidiTrackOffline).toHaveBeenCalledOnce();
+    const [, , , source] = mockRenderMidiTrackOffline.mock.calls[0] ?? [];
+    expect(source).toMatchObject({
+      kind: 'fm',
+      name: 'FM Bell',
+    });
   });
 
   it('renders sequencer track offline when no ready clips exist', async () => {

@@ -321,6 +321,29 @@ export function getTrackSamplerConfigFromInstrument(input: TrackInstrumentSyncIn
   return buildLegacySamplerState(instrument).samplerConfig ?? null;
 }
 
+export function getTrackInstrumentPlaybackSource(
+  input: TrackInstrumentSyncInput,
+): TrackInstrument | SynthPreset {
+  return resolveTrackInstrument(input)
+    ?? input.synthPreset
+    ?? getDefaultTrackInstrumentPreset(input.trackName);
+}
+
+export function getTrackSamplerPlaybackState(
+  input: TrackInstrumentSyncInput,
+): { audioKey: string; config: SamplerConfig } | null {
+  const instrument = resolveTrackInstrument(input);
+  if (instrument?.kind !== 'sampler') return null;
+
+  const samplerConfig = buildLegacySamplerState(instrument).samplerConfig;
+  if (!samplerConfig?.audioKey) return null;
+
+  return {
+    audioKey: samplerConfig.audioKey,
+    config: samplerConfig,
+  };
+}
+
 function normalizeExistingInstrument(
   input: TrackInstrumentSyncInput,
   instrument: TrackInstrument,

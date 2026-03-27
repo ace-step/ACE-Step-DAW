@@ -1,8 +1,12 @@
 import * as Tone from 'tone';
 import type { ToneAudioBuffer } from 'tone';
 import { createDrumVoicesForKit } from './DrumEngine';
-import { createSynthForPreset } from './SynthEngine';
-import type { DrumKitName, MidiNote, SamplerConfig, SequencerPattern, SynthPreset } from '../types/project';
+import {
+  createSynthPlaybackChain,
+  type SynthPlaybackChain,
+  type SynthSource,
+} from './SynthEngine';
+import type { DrumKitName, MidiNote, SamplerConfig, SequencerPattern } from '../types/project';
 
 const DRUM_PAD_INDEX_BY_SAMPLE_KEY: Record<string, number> = {
   kick: 0,
@@ -40,14 +44,14 @@ export async function renderMidiTrackOffline(
   notes: MidiNote[],
   clipStartTime: number,
   bpm: number,
-  synthPreset: SynthPreset,
+  source: SynthSource,
   totalDuration: number,
   sampleRate: number = 48000,
 ): Promise<AudioBuffer> {
+  let playback: SynthPlaybackChain | null = null;
+
   const buffer = await Tone.Offline(({ transport }) => {
-    const synth = createSynthForPreset(synthPreset);
-    const gain = new Tone.Gain(0.55).toDestination();
-    synth.connect(gain);
+    playback = createSynthPlaybackChain(source, { routeToDestination: true });
 
     transport.bpm.value = bpm;
     const secondsPerBeat = 60 / bpm;
@@ -61,7 +65,8 @@ export async function renderMidiTrackOffline(
       const velocity = Math.max(0, Math.min(1, note.velocity));
       const frequency = Tone.Frequency(note.pitch, 'midi').toFrequency();
       transport.schedule((time) => {
-        synth.triggerAttackRelease(frequency, noteDuration, time, velocity);
+        playback?.restartModulation(time);
+        playback?.synth.triggerAttackRelease(frequency, noteDuration, time, velocity);
       }, noteStart);
     }
 

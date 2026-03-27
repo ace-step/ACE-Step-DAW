@@ -6,6 +6,10 @@ import { ensureMasteringState } from '../utils/mastering';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from './offlineRender';
 import { createSamplerConfig } from './SamplerEngine';
+import {
+  getTrackInstrumentPlaybackSource,
+  getTrackSamplerPlaybackState,
+} from '../utils/trackInstrument';
 
 export interface ExportClip {
   startTime: number;
@@ -106,13 +110,16 @@ export async function buildTrackExportClips(
   const clips: ExportClip[] = [];
 
   if (track.trackType === 'pianoRoll') {
+    const playbackSource = getTrackInstrumentPlaybackSource(track);
+    const samplerState = getTrackSamplerPlaybackState(track);
+
     for (const clip of track.clips) {
       const notes = clip.midiData?.notes ?? [];
       if (notes.length === 0) continue;
 
       let buffer: AudioBuffer | null = null;
-      if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-        const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
+      if (samplerState) {
+        const samplerBlob = await loadAudioBlobByKey(samplerState.audioKey);
         if (samplerBlob) {
           const sampleBuffer = await audioDecoder.decodeAudioData(samplerBlob);
           buffer = await renderSamplerTrackOffline(
@@ -120,11 +127,7 @@ export async function buildTrackExportClips(
             clip.startTime,
             project.bpm,
             sampleBuffer,
-            track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-              rootNote: track.sampler.rootNote,
-              trimEnd: track.sampler.sampleDuration,
-              loopEnd: track.sampler.sampleDuration,
-            }),
+            samplerState.config ?? createSamplerConfig(samplerState.audioKey),
             project.totalDuration,
           );
         }
@@ -133,7 +136,7 @@ export async function buildTrackExportClips(
           notes,
           clip.startTime,
           project.bpm,
-          track.synthPreset ?? 'piano',
+          playbackSource,
           project.totalDuration,
         );
       }

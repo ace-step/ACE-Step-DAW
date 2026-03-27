@@ -6,7 +6,11 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { getAudioEngine } from '../hooks/useAudioEngine';
-import type { SynthPreset, DrumKitName } from '../types/project';
+import type { DrumKitName } from '../types/project';
+import {
+  getTrackInstrumentPlaybackSource,
+  getTrackSamplerPlaybackState,
+} from '../utils/trackInstrument';
 
 /**
  * Freeze a track by rendering its content to a single audio bounce.
@@ -31,8 +35,11 @@ export async function freezeTrackToAudio(trackId: string): Promise<void> {
       })),
     );
     if (allNotes.length > 0) {
-      if (track.synthPreset === 'sampler' && track.sampler?.audioKey) {
-        const samplerBlob = await loadAudioBlobByKey(track.sampler.audioKey);
+      const playbackSource = getTrackInstrumentPlaybackSource(track);
+      const samplerState = getTrackSamplerPlaybackState(track);
+
+      if (samplerState) {
+        const samplerBlob = await loadAudioBlobByKey(samplerState.audioKey);
         if (samplerBlob) {
           const engine = getAudioEngine();
           const sampleBuffer = await engine.decodeAudioData(samplerBlob);
@@ -41,11 +48,7 @@ export async function freezeTrackToAudio(trackId: string): Promise<void> {
             0,
             project.bpm,
             sampleBuffer,
-            track.samplerConfig ?? createSamplerConfig(track.sampler.audioKey, {
-              rootNote: track.sampler.rootNote,
-              trimEnd: track.sampler.sampleDuration,
-              loopEnd: track.sampler.sampleDuration,
-            }),
+            samplerState.config ?? createSamplerConfig(samplerState.audioKey),
             project.totalDuration,
           );
         }
@@ -54,7 +57,7 @@ export async function freezeTrackToAudio(trackId: string): Promise<void> {
           allNotes,
           0,
           project.bpm,
-          (track.synthPreset ?? 'piano') as SynthPreset,
+          playbackSource,
           project.totalDuration,
         );
       }

@@ -80,6 +80,120 @@ export interface SamplerConfig {
   release: number;
 }
 
+export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm';
+export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
+export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
+
+export interface InstrumentEnvelope {
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+export interface InstrumentOscillatorSettings {
+  waveform: InstrumentWaveform;
+  octave: number;
+  detuneCents: number;
+  level: number;
+}
+
+export interface InstrumentFilterSettings {
+  enabled: boolean;
+  type: 'lowpass' | 'highpass' | 'bandpass';
+  cutoffHz: number;
+  resonance: number;
+  drive: number;
+  keyTracking: number;
+}
+
+export interface InstrumentFilterEnvelopeSettings extends InstrumentEnvelope {
+  amount: number;
+}
+
+export interface InstrumentLfoSettings {
+  enabled: boolean;
+  waveform: InstrumentWaveform;
+  target: InstrumentLfoTarget;
+  rateHz: number;
+  depth: number;
+  retrigger: boolean;
+}
+
+export interface InstrumentUnisonSettings {
+  voices: number;
+  detuneCents: number;
+  stereoSpread: number;
+  blend: number;
+}
+
+export interface SubtractiveInstrumentSettings {
+  oscillator: InstrumentOscillatorSettings;
+  ampEnvelope: InstrumentEnvelope;
+  filter: InstrumentFilterSettings;
+  filterEnvelope: InstrumentFilterEnvelopeSettings;
+  lfo: InstrumentLfoSettings;
+  unison: InstrumentUnisonSettings;
+  glideTime: number;
+  outputGain: number;
+}
+
+export interface SubtractiveTrackInstrument {
+  kind: 'subtractive';
+  preset: LegacySynthVoicePreset;
+  name: string;
+  settings: SubtractiveInstrumentSettings;
+}
+
+export interface SamplerInstrumentSettings {
+  audioKey?: string;
+  sampleName?: string;
+  rootNote: number;
+  sampleDuration?: number;
+  trimStart: number;
+  trimEnd: number;
+  playbackMode: SamplerPlaybackMode;
+  loopStart: number;
+  loopEnd: number;
+  ampEnvelope: InstrumentEnvelope;
+}
+
+export interface SamplerTrackInstrument {
+  kind: 'sampler';
+  preset: 'sampler';
+  name: string;
+  settings: SamplerInstrumentSettings;
+}
+
+export interface FmOperatorSettings {
+  waveform: InstrumentWaveform;
+  ratio: number;
+  level: number;
+}
+
+export interface FmInstrumentSettings {
+  carrier: FmOperatorSettings;
+  modulator: FmOperatorSettings;
+  modulationIndex: number;
+  feedback: number;
+  ampEnvelope: InstrumentEnvelope;
+  outputGain: number;
+}
+
+export interface FmTrackInstrument {
+  kind: 'fm';
+  preset: 'fm';
+  name: string;
+  fallbackPreset: LegacySynthVoicePreset;
+  settings: FmInstrumentSettings;
+}
+
+export type TrackInstrument =
+  | SubtractiveTrackInstrument
+  | SamplerTrackInstrument
+  | FmTrackInstrument;
+
 export interface SamplerSettings {
   audioKey?: string;
   sampleName?: string;
@@ -475,6 +589,7 @@ export interface TrackPresetSettings {
   color: string;
   volume: number;
   laneHeight?: number;
+  instrument?: TrackInstrument;
   synthPreset?: SynthPreset;
   sampler?: SamplerSettings;
   samplerConfig?: SamplerConfig;
@@ -524,7 +639,11 @@ export interface Track {
   isGroup?: boolean;
   collapsed?: boolean;
   sequencerPattern?: SequencerPattern;
+  /** Canonical instrument model used by synth/sampler editors and agent automation. */
+  instrument?: TrackInstrument;
+  /** Legacy mirror of the instrument kind for existing engine/UI paths. */
   synthPreset?: SynthPreset;
+  /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];
   effectsBypassed?: boolean;
@@ -704,6 +823,7 @@ export interface ProjectTemplateTrack {
   pan?: number;
   effects?: TrackEffect[];
   midiEffects?: MidiEffect[];
+  instrument?: TrackInstrument;
   synthPreset?: SynthPreset;
   drumKit?: DrumKitName;
   localCaption?: string;

@@ -55,6 +55,7 @@ import type {
   PlaybackLatencySettings,
   StrudelFromMidiOptions,
   StrudelFromMidiResult,
+  TrackInstrument,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
@@ -114,6 +115,10 @@ import {
   normalizePlaybackLatencySettings,
   setPlaybackLatencyOverrideSettings,
 } from '../utils/playbackLatency';
+import {
+  getDefaultTrackInstrumentPreset,
+  syncTrackInstrumentState,
+} from '../utils/trackInstrument';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
 import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
@@ -303,7 +308,7 @@ function getTrackUpdateHistoryOptions(trackId: string, updates: Partial<Track>):
       ? 'Adjust channel strip'
       : keys.includes('displayName')
         ? 'Rename track'
-        : keys.includes('synthPreset') || keys.includes('sampler') || keys.includes('samplerConfig')
+        : keys.includes('instrument') || keys.includes('synthPreset') || keys.includes('sampler') || keys.includes('samplerConfig')
           ? 'Configure instrument'
           : 'Edit track';
   return { scope, label, trackId };
@@ -594,7 +599,8 @@ export interface ProjectState {
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
-  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
+  updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
+  setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
@@ -951,6 +957,7 @@ function createNeutralBouncedTrack(track: Track, bouncedClip: Clip, displayName:
     armed: false,
     clips: [bouncedClip],
     sequencerPattern: undefined,
+    instrument: undefined,
     synthPreset: undefined,
     sampler: undefined,
     samplerConfig: undefined,
@@ -1475,8 +1482,8 @@ function syncSamplerState(
     samplerConfig?: SamplerConfig | undefined;
   },
 ): Pick<Track, 'sampler' | 'samplerConfig'> {
-  const nextSampler = updates.sampler ?? track.sampler;
-  const nextConfig = updates.samplerConfig ?? track.samplerConfig;
+  const nextSampler = 'sampler' in updates ? updates.sampler : track.sampler;
+  const nextConfig = 'samplerConfig' in updates ? updates.samplerConfig : track.samplerConfig;
 
   if (nextConfig) {
     return {
@@ -1507,12 +1514,35 @@ function syncSamplerState(
   };
 }
 
-function getDefaultTrackSynthPreset(trackName: TrackName): Track['synthPreset'] {
-  return trackName === 'bass' ? 'bass'
-    : trackName === 'strings' ? 'strings'
-      : trackName === 'synth' ? 'lead'
-        : trackName === 'keyboard' ? 'organ'
-          : 'piano';
+function syncTrackInstrumentFields(
+  track: Track,
+  updates: Partial<Pick<Track, 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig'>> = {},
+): Pick<Track, 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig'> {
+  const clearsSamplerMirror =
+    ('instrument' in updates && updates.instrument?.kind !== undefined && updates.instrument.kind !== 'sampler')
+    || ('synthPreset' in updates && updates.synthPreset !== undefined && updates.synthPreset !== 'sampler');
+  const instrumentSource = 'instrument' in updates
+    ? updates.instrument
+    : (('synthPreset' in updates || 'sampler' in updates || 'samplerConfig' in updates)
+      ? undefined
+      : track.instrument);
+  const samplerState = syncSamplerState(track, {
+    sampler: clearsSamplerMirror
+      ? undefined
+      : ('sampler' in updates ? updates.sampler : track.sampler),
+    samplerConfig: clearsSamplerMirror
+      ? undefined
+      : ('samplerConfig' in updates ? updates.samplerConfig : track.samplerConfig),
+  });
+
+  return syncTrackInstrumentState({
+    trackName: track.trackName,
+    trackType: track.trackType,
+    instrument: instrumentSource,
+    synthPreset: 'synthPreset' in updates ? updates.synthPreset : track.synthPreset,
+    sampler: samplerState.sampler,
+    samplerConfig: samplerState.samplerConfig,
+  });
 }
 
 function buildTrackDisplayName(existingTracks: Track[], trackName: TrackName): string {
@@ -1581,7 +1611,7 @@ function createTrackFromTemplate(
     color: autoColor,
     volume: 0.8,
     laneHeight: trackType === 'sequencer' ? 80 : trackType === 'drumMachine' ? 80 : trackType === 'pianoRoll' ? 88 : undefined,
-    synthPreset: getDefaultTrackSynthPreset(trackName),
+    synthPreset: getDefaultTrackInstrumentPreset(trackName),
     drumKit: trackName === 'drums' || trackType === 'sequencer' || trackType === 'drumMachine' ? '808' : undefined,
     ...trackOverrides,
     id: uuidv4(),
@@ -1626,7 +1656,7 @@ function createTrackFromTemplate(
     }
   }
 
-  Object.assign(track, syncSamplerState(track, {}));
+  Object.assign(track, syncTrackInstrumentFields(track));
   return track;
 }
 
@@ -1676,6 +1706,7 @@ function createTrackPresetSnapshot(track: Track, name: string): TrackPreset {
     color: track.color,
     volume: track.volume,
     laneHeight: track.laneHeight,
+    instrument: track.instrument ? structuredClone(track.instrument) : undefined,
     synthPreset: track.synthPreset,
     sampler: track.sampler ? createDefaultSamplerSettings(track.sampler) : undefined,
     samplerConfig: track.samplerConfig ? createDefaultSamplerConfig(track.samplerConfig.audioKey, track.samplerConfig) : undefined,
@@ -1714,7 +1745,7 @@ function ensureTrackDefaults(track: Track): Track {
   const normalizedTrack: Track = {
     ...track,
     trackName: fixedTrackName,
-    synthPreset: track.synthPreset ?? getDefaultTrackSynthPreset(track.trackName),
+    synthPreset: track.synthPreset ?? getDefaultTrackInstrumentPreset(fixedTrackName),
     effects: track.effects ?? [],
     effectsBypassed: track.effectsBypassed ?? false,
     midiEffects: track.midiEffects ?? [],
@@ -1732,7 +1763,7 @@ function ensureTrackDefaults(track: Track): Track {
 
   return {
     ...normalizedTrack,
-    ...syncSamplerState(normalizedTrack, {}),
+    ...syncTrackInstrumentFields(normalizedTrack),
   };
 }
 
@@ -1845,7 +1876,20 @@ export const useProjectStore = create<ProjectState>()(
     // Migration: backfill trackType for projects created before the field existed
     const migratedBase: Project = {
       ...project,
-      trackPresets: project.trackPresets ?? [],
+      trackPresets: (project.trackPresets ?? []).map((preset) => ({
+        ...preset,
+        settings: {
+          ...preset.settings,
+          ...syncTrackInstrumentState({
+            trackName: preset.trackName,
+            trackType: preset.trackType,
+            instrument: preset.settings.instrument,
+            synthPreset: preset.settings.synthPreset,
+            sampler: preset.settings.sampler,
+            samplerConfig: preset.settings.samplerConfig,
+          }),
+        },
+      })),
       tracks: project.tracks.map((t) => {
         if (t.trackType) return t;
         const inferred: TrackType =
@@ -2361,6 +2405,7 @@ export const useProjectStore = create<ProjectState>()(
                 frozen: false,
                 frozenAudioKey: undefined,
                 sequencerPattern: undefined,
+                instrument: undefined,
                 synthPreset: undefined,
                 sampler: undefined,
                 clips: [newClip],
@@ -2606,9 +2651,15 @@ export const useProjectStore = create<ProjectState>()(
         updatedTrack = {
           ...candidate,
           trackType: 'pianoRoll',
-          synthPreset: 'sampler',
           displayName: input.sampleName || 'Quick Sampler',
-          ...syncSamplerState(candidate, { sampler, samplerConfig }),
+          ...syncTrackInstrumentFields(
+            { ...candidate, trackType: 'pianoRoll' },
+            {
+              sampler,
+              samplerConfig,
+              synthPreset: 'sampler',
+            },
+          ),
         };
         return updatedTrack;
       });
@@ -2823,9 +2874,29 @@ export const useProjectStore = create<ProjectState>()(
                 };
                 return {
                   ...nextTrack,
-                  ...syncSamplerState(nextTrack, { sampler, samplerConfig }),
+                  ...syncTrackInstrumentFields(nextTrack, updates),
                 };
               })(),
+        ),
+      },
+    });
+  },
+
+  setTrackInstrument: (trackId, instrument) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure instrument', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                ...syncTrackInstrumentFields(t, { instrument }),
+              }
+            : t,
         ),
       },
     });
@@ -2845,8 +2916,10 @@ export const useProjectStore = create<ProjectState>()(
                 const nextSampler = createDefaultSamplerSettings({ ...(t.sampler ?? {}), ...sampler });
                 return {
                   ...t,
-                  synthPreset: 'sampler',
-                  ...syncSamplerState(t, { sampler: nextSampler }),
+                  ...syncTrackInstrumentFields(t, {
+                    sampler: nextSampler,
+                    synthPreset: 'sampler',
+                  }),
                 };
               })()
             : t,
@@ -2867,8 +2940,10 @@ export const useProjectStore = create<ProjectState>()(
           t.id === trackId
             ? {
                 ...t,
-                sampler: undefined,
-                samplerConfig: undefined,
+                ...syncTrackInstrumentFields(t, {
+                  sampler: undefined,
+                  samplerConfig: undefined,
+                }),
               }
             : t,
         ),
@@ -2889,13 +2964,17 @@ export const useProjectStore = create<ProjectState>()(
             ? (config
               ? {
                   ...t,
-                  synthPreset: 'sampler',
-                  ...syncSamplerState(t, { samplerConfig: config }),
+                  ...syncTrackInstrumentFields(t, {
+                    samplerConfig: config,
+                    synthPreset: 'sampler',
+                  }),
                 }
               : {
                   ...t,
-                  sampler: undefined,
-                  samplerConfig: undefined,
+                  ...syncTrackInstrumentFields(t, {
+                    sampler: undefined,
+                    samplerConfig: undefined,
+                  }),
                 })
             : t,
         ),
@@ -7294,6 +7373,7 @@ export const useProjectStore = create<ProjectState>()(
       pan: track.pan,
       effects: track.effects ? structuredClone(track.effects) : undefined,
       midiEffects: track.midiEffects ? structuredClone(track.midiEffects) : undefined,
+      instrument: track.instrument ? structuredClone(track.instrument) : undefined,
       synthPreset: track.synthPreset,
       drumKit: track.drumKit,
       localCaption: track.localCaption,
@@ -7337,11 +7417,12 @@ export const useProjectStore = create<ProjectState>()(
       pan: tt.pan,
       effects: tt.effects ? structuredClone(tt.effects).map((e) => ({ ...e, id: uuidv4() })) : undefined,
       midiEffects: tt.midiEffects ? structuredClone(tt.midiEffects).map((e) => ({ ...e, id: uuidv4() })) : undefined,
+      instrument: tt.instrument ? structuredClone(tt.instrument) : undefined,
       synthPreset: tt.synthPreset,
       drumKit: tt.drumKit,
       localCaption: tt.localCaption,
       sequencerPattern: tt.sequencerPattern ? structuredClone(tt.sequencerPattern) : undefined,
-    }));
+    })).map(ensureTrackDefaults);
 
     const project: Project = {
       id: uuidv4(),

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
 import { DEFAULT_MEASURES, MAX_PROJECT_TRACKS } from '../../constants/defaults';
+import type { Project } from '../../types/project';
+import { createDefaultFmInstrument } from '../../utils/trackInstrument';
 
 // Mock projectStorage to prevent IndexedDB calls during testing
 vi.mock('../../services/projectStorage', () => ({
@@ -152,6 +154,10 @@ describe('projectStore', () => {
       const track = useProjectStore.getState().addTrack('keyboard', 'pianoRoll');
       expect(track.trackType).toBe('pianoRoll');
       expect(track.synthPreset).toBe('organ');
+      expect(track.instrument).toMatchObject({
+        kind: 'subtractive',
+        preset: 'organ',
+      });
     });
 
     it('stops adding tracks after the 128-track limit', () => {
@@ -179,6 +185,13 @@ describe('projectStore', () => {
 
       const updated = useProjectStore.getState().project!.tracks[0];
       expect(updated.synthPreset).toBe('sampler');
+      expect(updated.instrument).toMatchObject({
+        kind: 'sampler',
+        settings: {
+          audioKey: 'audio:test:sampler',
+          rootNote: 48,
+        },
+      });
       expect(updated.sampler).toMatchObject({
         audioKey: 'audio:test:sampler',
         sampleName: 'LoFi Keys',
@@ -196,6 +209,31 @@ describe('projectStore', () => {
       });
     });
 
+    it('clears sampler metadata without restoring stale sampler config', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('keyboard', 'pianoRoll');
+
+      store.updateTrack(track.id, { synthPreset: 'sampler' });
+      store.setTrackSampler(track.id, {
+        audioKey: 'audio:test:clear-sampler',
+        sampleName: 'Transient Hit',
+        rootNote: 52,
+        sampleDuration: 0.75,
+      });
+
+      store.updateSamplerConfig(track.id, null);
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      expect(updated.instrument).toMatchObject({
+        kind: 'sampler',
+        settings: {
+          audioKey: undefined,
+        },
+      });
+      expect(updated.sampler).toBeUndefined();
+      expect(updated.samplerConfig).toBeUndefined();
+    });
+
     it('creates a quick sampler track from an audio key via store API', () => {
       const store = useProjectStore.getState();
       const track = store.createQuickSamplerTrack({
@@ -208,6 +246,13 @@ describe('projectStore', () => {
       expect(track).toBeDefined();
       expect(track?.trackType).toBe('pianoRoll');
       expect(track?.synthPreset).toBe('sampler');
+      expect(track?.instrument).toMatchObject({
+        kind: 'sampler',
+        settings: {
+          audioKey: 'audio:test:quick-sampler',
+          rootNote: 57,
+        },
+      });
       expect(track?.sampler).toMatchObject({
         audioKey: 'audio:test:quick-sampler',
         sampleName: 'Quick Vox',
@@ -283,6 +328,81 @@ describe('projectStore', () => {
       useProjectStore.getState().updateTrack(track.id, { soloed: true });
       expect(useProjectStore.getState().project!.tracks[0].soloed).toBe(true);
     });
+
+    it('migrates legacy piano-roll tracks and presets into canonical instrument state', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('keyboard', 'pianoRoll');
+      store.updateTrack(track.id, { synthPreset: 'pad' });
+
+      const legacyProject = structuredClone(useProjectStore.getState().project!) as Project;
+      legacyProject.tracks = legacyProject.tracks.map((candidate) => (
+        candidate.id === track.id
+          ? {
+              ...candidate,
+              instrument: undefined,
+              synthPreset: 'pad',
+            }
+          : candidate
+      ));
+      legacyProject.trackPresets = [{
+        id: 'legacy-preset',
+        name: 'Legacy Pad',
+        trackName: 'keyboard',
+        trackType: 'pianoRoll',
+        settings: {
+          color: '#223344',
+          volume: 0.7,
+          synthPreset: 'pad',
+        },
+        effects: [],
+        midiEffects: [],
+        createdAt: Date.now(),
+      }];
+
+      store.setProject(legacyProject);
+
+      const migratedTrack = useProjectStore.getState().project!.tracks.find((candidate) => candidate.id === track.id)!;
+      const migratedPreset = useProjectStore.getState().project!.trackPresets?.[0];
+
+      expect(migratedTrack.instrument).toMatchObject({
+        kind: 'subtractive',
+        preset: 'pad',
+      });
+      expect(migratedPreset?.settings.instrument).toMatchObject({
+        kind: 'subtractive',
+        preset: 'pad',
+      });
+    });
+
+    it('sets canonical instrument state and preserves legacy fallback fields', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      store.setTrackInstrument(track.id, createDefaultFmInstrument({
+        name: 'FM Bell',
+        fallbackPreset: 'lead',
+        settings: {
+          modulationIndex: 4.5,
+          modulator: {
+            waveform: 'sine',
+            ratio: 3,
+            level: 0.8,
+          },
+        },
+      }));
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      expect(updated.instrument).toMatchObject({
+        kind: 'fm',
+        name: 'FM Bell',
+        settings: {
+          modulationIndex: 4.5,
+        },
+      });
+      expect(updated.synthPreset).toBe('lead');
+      expect(updated.sampler).toBeUndefined();
+      expect(updated.samplerConfig).toBeUndefined();
+    });
   });
 
   describe('track presets', () => {
@@ -328,6 +448,10 @@ describe('projectStore', () => {
       expect(preset.settings).toMatchObject({
         color: '#112233',
         volume: 0.42,
+        instrument: {
+          kind: 'subtractive',
+          preset: 'pad',
+        },
         synthPreset: 'pad',
         pan: -0.35,
         eqLowGain: 3,
@@ -353,6 +477,35 @@ describe('projectStore', () => {
         params: { rate: '1/16', pattern: 'up-down', octaves: 2 },
       });
       expect(useProjectStore.getState().project!.trackPresets).toHaveLength(1);
+    });
+
+    it('preserves FM instrument state when saving and applying a track preset', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      store.setTrackInstrument(track.id, createDefaultFmInstrument({
+        name: 'FM Bell',
+        fallbackPreset: 'lead',
+        settings: {
+          modulationIndex: 6,
+        },
+      }));
+
+      const preset = store.saveTrackPreset(track.id, 'FM Bell');
+      const appliedTrack = store.applyTrackPreset(preset.id);
+
+      expect(preset.settings.instrument).toMatchObject({
+        kind: 'fm',
+        name: 'FM Bell',
+      });
+      expect(appliedTrack?.instrument).toMatchObject({
+        kind: 'fm',
+        name: 'FM Bell',
+        settings: {
+          modulationIndex: 6,
+        },
+      });
+      expect(appliedTrack?.synthPreset).toBe('lead');
     });
 
     it('preserves sampler settings when saving and applying a track preset', () => {

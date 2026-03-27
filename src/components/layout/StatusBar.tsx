@@ -5,6 +5,8 @@ import { useModelStore } from '../../store/modelStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { TIMELINE_ZOOM_LEVELS } from '../../utils/timelineZoom';
+import { SaveStatusIndicator } from './SaveStatusIndicator';
+import type { SaveStatus } from '../../hooks/useAutoSave';
 
 const HEALTH_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_SOURCE_CODE_URL = 'https://github.com/ace-step/ACE-Step-DAW';
@@ -18,7 +20,11 @@ export function _resetLastKnownConnection() {
   lastKnownBackendConnection = false;
 }
 
-export function StatusBar() {
+interface StatusBarProps {
+  saveStatus?: SaveStatus;
+}
+
+export function StatusBar({ saveStatus }: StatusBarProps) {
   const [connected, setConnected] = useState(lastKnownBackendConnection);
   const jobs = useGenerationStore((s) => s.jobs);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
@@ -158,6 +164,9 @@ export function StatusBar() {
               AGPL
             </a>
           </div>
+          {saveStatus && (
+            <SaveStatusIndicator status={saveStatus} />
+          )}
           <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted">
             <button
               type="button"

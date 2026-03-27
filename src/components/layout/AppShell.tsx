@@ -21,6 +21,7 @@ import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { AudioContextOverlay } from './AudioContextOverlay';
+import { useAutoSave } from '../../hooks/useAutoSave';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -93,16 +94,20 @@ function EditorShell() {
     }
   }, [project, setShowNewProjectDialog]);
 
-  // Warn before closing tab with unsaved project
+  // Auto-save to IndexedDB with dirty detection and beforeunload warning
+  const { status: saveStatus, saveNow } = useAutoSave();
+
+  // Cmd/Ctrl+S — immediate save
   useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (project) {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
+        void saveNow();
       }
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [project]);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [saveNow]);
 
   useKeyboardShortcuts();
   useEffectsSync();
@@ -130,7 +135,7 @@ function EditorShell() {
         {project && <LoopBrowser />}
       </div>
 
-      <StatusBar />
+      <StatusBar saveStatus={saveStatus} />
 
       {project && showSmartControls && <SmartControlsPanel />}
       {project && openSequencerTrackId && <Suspense fallback={null}><SequencerEditor /></Suspense>}

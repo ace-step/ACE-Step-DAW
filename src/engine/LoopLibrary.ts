@@ -13,7 +13,7 @@ function toAudioBuffer(buf: any): AudioBuffer {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type LoopCategory = 'Drums' | 'Bass' | 'Keys' | 'Synth';
+export type LoopCategory = 'Drums' | 'Bass' | 'Keys' | 'Synth' | 'FX' | 'Vocals';
 
 export interface LoopDefinition {
   id: string;
@@ -504,6 +504,104 @@ async function generatePluckStab(duration: number): Promise<AudioBuffer> {
   return toAudioBuffer(buffer);
 }
 
+// ─── FX Loop Generators ─────────────────────────────────────────────────────
+
+async function generateRiser(duration: number): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(() => {
+    const filter = new Tone.Filter({ frequency: 200, type: 'lowpass' }).toDestination();
+    const synth = new Tone.Synth({
+      oscillator: { type: 'sawtooth' },
+      envelope: { attack: duration * 0.9, decay: 0.1, sustain: 1, release: 0.1 },
+      volume: -12,
+    }).connect(filter);
+    filter.frequency.linearRampTo(8000, duration * 0.9, T0);
+    synth.triggerAttackRelease('C3', duration * 0.95, T0);
+  }, duration);
+  return toAudioBuffer(buffer);
+}
+
+async function generateImpact(duration: number): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(() => {
+    const noise = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.5 },
+      volume: -4,
+    }).toDestination();
+    const sub = new Tone.MembraneSynth({
+      pitchDecay: 0.2,
+      octaves: 8,
+      envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 0.5 },
+      volume: -2,
+    }).toDestination();
+    noise.triggerAttackRelease('4n', T0);
+    sub.triggerAttackRelease('C1', '2n', T0);
+  }, duration);
+  return toAudioBuffer(buffer);
+}
+
+async function generateSweepDown(duration: number): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(() => {
+    const synth = new Tone.Synth({
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.01, decay: duration * 0.8, sustain: 0, release: 0.2 },
+      volume: -8,
+    }).toDestination();
+    synth.frequency.setValueAtTime(4000, T0);
+    synth.frequency.exponentialRampTo(60, duration * 0.8, T0);
+    synth.triggerAttackRelease(duration * 0.85, T0);
+  }, duration);
+  return toAudioBuffer(buffer);
+}
+
+// ─── Vocal Loop Generators ──────────────────────────────────────────────────
+
+async function generateVocalChop(duration: number): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(() => {
+    // Simulate vocal-like formant sound using FM synthesis
+    const synth = new Tone.FMSynth({
+      harmonicity: 3,
+      modulationIndex: 10,
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2 },
+      modulation: { type: 'square' },
+      modulationEnvelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.2 },
+      volume: -8,
+    }).toDestination();
+
+    const beat = 60 / 120;
+    const notes = ['C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4', 'D4'];
+    for (let bar = 0; bar < 2; bar++) {
+      const o = bar * 4 * beat;
+      for (let i = 0; i < 8; i++) {
+        synth.triggerAttackRelease(notes[i], beat * 0.3, o + i * beat * 0.5);
+      }
+    }
+  }, duration);
+  return toAudioBuffer(buffer);
+}
+
+async function generateVocalPad(duration: number): Promise<AudioBuffer> {
+  const buffer = await Tone.Offline(() => {
+    // Airy vocal-like pad using FM synthesis with slow modulation
+    const synth = new Tone.PolySynth(Tone.FMSynth, {
+      harmonicity: 2,
+      modulationIndex: 3,
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.8, decay: 1.5, sustain: 0.4, release: 1.5 },
+      modulation: { type: 'sine' },
+      modulationEnvelope: { attack: 0.5, decay: 1, sustain: 0.3, release: 1 },
+      volume: -10,
+    }).toDestination();
+    const reverb = new Tone.Reverb({ decay: 4, wet: 0.6 }).toDestination();
+    synth.connect(reverb);
+
+    const beat = 60 / 80;
+    synth.triggerAttackRelease(['C4', 'E4', 'G4'], beat * 8, 0);
+    synth.triggerAttackRelease(['A3', 'C4', 'E4'], beat * 8, beat * 8);
+  }, duration);
+  return toAudioBuffer(buffer);
+}
+
 // ─── Loop Definitions ───────────────────────────────────────────────────────
 
 export const LOOP_DEFINITIONS: LoopDefinition[] = [
@@ -526,6 +624,13 @@ export const LOOP_DEFINITIONS: LoopDefinition[] = [
   { id: 'loop-arp-cascade', name: 'Arp Cascade', category: 'Synth', bpm: 128, bars: 4, key: 'C', description: 'Arpeggiated synth', generate: generateArpCascade },
   { id: 'loop-lead-line', name: 'Lead Line', category: 'Synth', bpm: 120, bars: 4, key: 'Cm', description: 'Melodic synth lead', generate: generateLeadLine },
   { id: 'loop-pluck-stab', name: 'Pluck Stab', category: 'Synth', bpm: 130, bars: 4, key: 'Cm', description: 'Short pluck chords', generate: generatePluckStab },
+  // FX
+  { id: 'loop-riser', name: 'Riser', category: 'FX', bpm: 120, bars: 4, description: 'Building sweep riser', generate: generateRiser },
+  { id: 'loop-impact', name: 'Impact', category: 'FX', bpm: 120, bars: 1, description: 'Cinematic impact hit', generate: generateImpact },
+  { id: 'loop-sweep-down', name: 'Sweep Down', category: 'FX', bpm: 120, bars: 2, description: 'Descending frequency sweep', generate: generateSweepDown },
+  // Vocals
+  { id: 'loop-vocal-chop', name: 'Vocal Chop', category: 'Vocals', bpm: 120, bars: 2, key: 'C', description: 'Chopped vocal pattern', generate: generateVocalChop },
+  { id: 'loop-vocal-pad', name: 'Vocal Pad', category: 'Vocals', bpm: 80, bars: 4, key: 'C', description: 'Airy vocal pad texture', generate: generateVocalPad },
 ];
 
 // ─── Loop Cache & Loading ───────────────────────────────────────────────────

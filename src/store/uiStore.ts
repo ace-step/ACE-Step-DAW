@@ -12,6 +12,7 @@ import { getAssistantSuggestions, streamAssistantResponse } from '../services/ai
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
+import type { LoopCategory } from '../engine/LoopLibrary';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
   TRACK_LIST_COLLAPSED_WIDTH,
@@ -155,9 +156,10 @@ export interface UIState {
 
   // Loop Browser
   loopBrowserOpen: boolean;
-  loopBrowserCategory: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth';
+  loopBrowserCategory: 'All' | LoopCategory;
   loopBrowserSearch: string;
   previewingLoopId: string | null;
+  recentlyUsedLoopIds: string[];
 
   // Unified Enhance Panel (replaces musicEnhancerOpen, coverClipId, repaintClipId, repaintRange)
   enhancerOpen: boolean;
@@ -335,9 +337,10 @@ export interface UIState {
 
   // Loop Browser
   toggleLoopBrowser: () => void;
-  setLoopBrowserCategory: (v: 'All' | 'Drums' | 'Bass' | 'Keys' | 'Synth') => void;
+  setLoopBrowserCategory: (v: 'All' | LoopCategory) => void;
   setLoopBrowserSearch: (v: string) => void;
   setPreviewingLoopId: (id: string | null) => void;
+  addRecentlyUsedLoop: (id: string) => void;
 
   // Unified Enhance Panel
   openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
@@ -585,6 +588,7 @@ export const useUIStore = create<UIState>()(
   loopBrowserOpen: false,
   loopBrowserCategory: 'All',
   loopBrowserSearch: '',
+  recentlyUsedLoopIds: [],
   previewingLoopId: null,
 
   enhancerOpen: false,
@@ -977,6 +981,10 @@ export const useUIStore = create<UIState>()(
   setLoopBrowserCategory: (v) => set({ loopBrowserCategory: v }),
   setLoopBrowserSearch: (v) => set({ loopBrowserSearch: v }),
   setPreviewingLoopId: (id) => set({ previewingLoopId: id }),
+  addRecentlyUsedLoop: (id) => set((s) => {
+    const filtered = s.recentlyUsedLoopIds.filter((x) => x !== id);
+    return { recentlyUsedLoopIds: [id, ...filtered].slice(0, 20) };
+  }),
 
   openEnhancer: (clipId, trackId, range = null) => {
     const clip = useProjectStore.getState().getClipById(clipId);
@@ -1267,6 +1275,7 @@ export const useUIStore = create<UIState>()(
         showSpectrumAnalyzer: state.showSpectrumAnalyzer,
         // Loop Browser preference
         loopBrowserCategory: state.loopBrowserCategory,
+        recentlyUsedLoopIds: state.recentlyUsedLoopIds,
         // Model Library panel
         showModelLibrary: state.showModelLibrary,
         // Generation panel

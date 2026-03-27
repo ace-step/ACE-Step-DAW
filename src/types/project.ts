@@ -471,6 +471,15 @@ export interface PhaserParams {
   wet: number;          // dry/wet mix (0–1)
 }
 
+export type FactoryIRType = 'smallRoom' | 'largeHall' | 'plate' | 'spring';
+
+export interface ConvolverParams {
+  irType: FactoryIRType | 'custom';  // factory preset or custom URL
+  irUrl?: string;                     // URL for custom impulse response
+  wet: number;                        // dry/wet mix (0–1)
+  preDelay: number;                   // pre-delay in ms (0–100)
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -481,7 +490,8 @@ export type TrackEffect =
   | EffectBase<'filter', FilterParams>
   | EffectBase<'chorus', ChorusParams>
   | EffectBase<'flanger', FlangerParams>
-  | EffectBase<'phaser', PhaserParams>;
+  | EffectBase<'phaser', PhaserParams>
+  | EffectBase<'convolver', ConvolverParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1059,7 +1069,8 @@ export type AutomatableEffectTarget =
   | { effectType: 'filter'; param: Exclude<keyof FilterParams, 'filterType' | 'lfoEnabled'> }
   | { effectType: 'chorus'; param: keyof ChorusParams }
   | { effectType: 'flanger'; param: keyof FlangerParams }
-  | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> };
+  | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> }
+  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

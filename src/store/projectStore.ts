@@ -1395,6 +1395,13 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
         enabled: true,
         params: { frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350, wet: 0.5 },
       };
+    case 'convolver':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: { irType: 'largeHall', wet: 0.35, preDelay: 0 },
+      };
   }
 }
 

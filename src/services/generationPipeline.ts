@@ -2197,6 +2197,8 @@ export interface Text2MusicRequest {
   useCotCaption?: boolean;
   /** Vocal language code — "unknown" = server auto-detects via CoT */
   vocalLanguage?: string;
+  /** When true, update project BPM/key/timeSignature from generated result */
+  syncMetaToProject?: boolean;
 }
 
 export interface Text2MusicResult {
@@ -2234,6 +2236,8 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('No project open');
   }
 
+  genStore.setIsGenerating(true);
+
   // Step 1: Ensure text2music model + LM are loaded
   await modelStore.ensureModelForIntent('full-song');
 
@@ -2246,9 +2250,12 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('Failed to create mix track');
   }
 
+  // Use a placeholder duration for the clip when Auto mode (undefined duration).
+  // The actual duration will be updated when the audio comes back.
+  const placeholderDuration = request.durationSeconds ?? 60;
   const clip = store.addClip(mixTrack.id, {
     startTime: 0,
-    duration: request.durationSeconds,
+    duration: placeholderDuration,
     prompt: request.prompt,
     lyrics: request.lyrics,
     globalCaption: request.prompt, // For text2music, the prompt IS the global caption
@@ -2395,14 +2402,17 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
         }
       : undefined;
 
-    // Update clip as ready
+    // Update clip as ready — use actual audio buffer duration, not the request duration
+    const actualDuration = audioBuffer.duration;
     useProjectStore.getState().updateClipStatus(clipId, 'ready', {
       isolatedAudioKey: audioKey,
       waveformPeaks: peaks,
       inferredMetas,
-      audioDuration: request.durationSeconds,
+      audioDuration: actualDuration,
       audioOffset: 0,
     });
+    // Also update the clip's visual duration on the timeline to match actual audio
+    useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
 
     genStore.updateJob(jobId, {
       status: 'done',
@@ -2413,6 +2423,22 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     // Seed project global caption if empty
     if (request.prompt && !project.globalCaption) {
       useProjectStore.getState().updateProject({ globalCaption: request.prompt });
+    }
+
+    // Sync generated metadata back to project settings when requested
+    if (request.syncMetaToProject && inferredMetas) {
+      const updates: Record<string, unknown> = {};
+      if (inferredMetas.bpm && inferredMetas.bpm > 0) updates.bpm = inferredMetas.bpm;
+      if (inferredMetas.keyScale) updates.keyScale = inferredMetas.keyScale;
+      if (inferredMetas.timeSignature) {
+        const ts = Number(inferredMetas.timeSignature);
+        if (Number.isFinite(ts) && ts > 0) updates.timeSignature = ts;
+      }
+      if (Object.keys(updates).length > 0) {
+        useProjectStore.getState().updateProject(updates);
+        const parts = Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ');
+        toastInfo(`Project updated: ${parts}`);
+      }
     }
 
     toastSuccess('Full song generated');
@@ -2466,6 +2492,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       }
     }
 
+    useGenerationStore.getState().setIsGenerating(false);
     return {
       mixTrackId: mixTrack.id,
       mixClipId: clipId,
@@ -2474,6 +2501,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       succeeded: true,
     };
   } catch (error) {
+    useGenerationStore.getState().setIsGenerating(false);
     const message = error instanceof Error ? error.message : 'Unknown error';
     useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
     genStore.updateJob(jobId, { status: 'error', progress: message, error: message });

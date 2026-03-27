@@ -82,8 +82,8 @@ describe('inline regeneration and suggestions', () => {
       expect(suggestions.length).toBeGreaterThan(0);
       // All suggestions should have required fields
       for (const s of suggestions) {
-        expect(s.id).toBeTruthy();
-        expect(s.text).toBeTruthy();
+        expect(s.id.length).toBeGreaterThan(0);
+        expect(s.text.length).toBeGreaterThan(0);
         expect(typeof s.time).toBe('number');
         expect(s.type).toMatch(/^(fill|arrangement|variation|next)$/);
       }
@@ -103,7 +103,7 @@ describe('inline regeneration and suggestions', () => {
       const suggestions = getArrangementSuggestions(context, project);
 
       const nextSuggestion = suggestions.find((s) => s.type === 'next');
-      expect(nextSuggestion).toBeDefined();
+      expect(nextSuggestion).not.toBeUndefined();
       expect(nextSuggestion!.time).toBeGreaterThanOrEqual(30);
     });
   });

@@ -198,8 +198,7 @@ describe('Session keyboard navigation', () => {
       const clip = playableClips[0];
 
       // Verify the clip exists and matches expectations
-      expect(clip).toBeDefined();
-      expect(clip.trackId).toBe(trackId);
+      expect(clip).toEqual(expect.objectContaining({ trackId }));
     });
   });
 });

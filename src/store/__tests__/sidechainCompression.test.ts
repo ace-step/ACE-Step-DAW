@@ -19,7 +19,7 @@ describe('sidechain compression with cross-track routing', () => {
     const bassTrackId = tracks[1].id;
 
     const effectId = store.addTrackEffect(bassTrackId, 'compressor')!;
-    expect(effectId).toBeDefined();
+    expect(effectId).toBeTypeOf('string');
 
     useProjectStore.getState().setSidechainSource(bassTrackId, effectId, kickTrackId);
 

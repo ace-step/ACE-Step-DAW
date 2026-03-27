@@ -291,7 +291,7 @@ describe('projectStore', () => {
     it('creates a default effect automation lane once and removes it when the effect is deleted', () => {
       const track = useProjectStore.getState().addTrack('drums');
       const effectId = useProjectStore.getState().addTrackEffect(track.id, 'filter');
-      expect(effectId).toBeDefined();
+      expect(effectId).toBeTypeOf('string');
 
       const filterParameter = {
         type: 'effect',
@@ -547,7 +547,7 @@ describe('projectStore', () => {
 
       const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
 
-      expect(consolidated).toBeDefined();
+      expect(consolidated).not.toBeUndefined();
       expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
       expect(consolidated?.midiData?.notes).toHaveLength(2);
       expect(consolidated?.midiData?.notes.map((note) => note.startBeat)).toEqual([0, 2.5]);
@@ -590,7 +590,7 @@ describe('projectStore', () => {
 
       const consolidated = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
 
-      expect(consolidated).toBeDefined();
+      expect(consolidated).not.toBeUndefined();
       expect(consolidated?.isolatedAudioKey).toBe('merged-audio-key');
       expect(consolidated?.generationStatus).toBe('ready');
       expect(consolidated?.duration).toBe(1.5);
@@ -612,7 +612,7 @@ describe('projectStore', () => {
 
       const duplicate = useProjectStore.getState().duplicateTrack(original.id);
 
-      expect(duplicate).toBeDefined();
+      expect(duplicate).not.toBeUndefined();
       expect(duplicate!.id).not.toBe(original.id);
       expect(duplicate!.displayName).toBe('Drums (copy)');
       expect(duplicate!.clips).toHaveLength(1);
@@ -712,8 +712,7 @@ describe('track presets', () => {
     const preset = store.saveTrackPreset(track.id, 'Fat Bass');
     const newTrack = useProjectStore.getState().applyTrackPreset(preset.id);
 
-    expect(newTrack).toBeDefined();
-    expect(newTrack!.trackName).toBe('bass');
+    expect(newTrack).toEqual(expect.objectContaining({ trackName: 'bass' }));
     expect(newTrack!.trackType).toBe('pianoRoll');
     expect(newTrack!.volume).toBe(0.4);
     expect(newTrack!.effects).toHaveLength(1);
@@ -797,7 +796,7 @@ describe('track presets', () => {
 
     const preset = store.saveTrackPreset(bass.id, 'SC Bass');
     const compEffect = preset.effects.find((e) => e.type === 'compressor');
-    expect(compEffect).toBeDefined();
+    expect(compEffect).toEqual(expect.objectContaining({ type: 'compressor' }));
     if (compEffect && 'sidechainSourceTrackId' in compEffect) {
       expect(compEffect.sidechainSourceTrackId).toBeUndefined();
     }
@@ -814,8 +813,7 @@ describe('track presets', () => {
     expect(useProjectStore.getState().project!.trackPresets).toHaveLength(2);
 
     const applied = useProjectStore.getState().applyTrackPreset(p2.id);
-    expect(applied).toBeDefined();
-    expect(applied!.trackName).toBe('synth');
+    expect(applied).toEqual(expect.objectContaining({ trackName: 'synth' }));
     expect(applied!.trackType).toBe('pianoRoll');
   });
 });
@@ -943,7 +941,7 @@ describe('setClipFade', () => {
       useProjectStore.getState().applyAudioQuantize(clip.id);
 
       const updated = useProjectStore.getState().project!.tracks[0].clips[0];
-      expect(updated.warpMarkers).toBeDefined();
+      expect(updated.warpMarkers).toBeInstanceOf(Array);
       expect(updated.warpMarkers!.length).toBeGreaterThan(0);
       expect(updated.warpMarkers![0].quantizedTime).toBeCloseTo(0.5, 1);
     });
@@ -982,7 +980,7 @@ describe('setClipFade', () => {
       useProjectStore.getState().applyAudioQuantize(clip.id, { gridDivision: 0.5 });
 
       const updated = useProjectStore.getState().project!.tracks[0].clips[0];
-      expect(updated.warpMarkers).toBeDefined();
+      expect(updated.warpMarkers).toBeInstanceOf(Array);
       if (updated.warpMarkers && updated.warpMarkers.length > 0) {
         expect(updated.warpMarkers[0].quantizedTime).toBeCloseTo(0.25, 1);
       }

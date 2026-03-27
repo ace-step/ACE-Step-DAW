@@ -51,7 +51,7 @@ describe('ClipContextMenu — top-level Enhance entry', () => {
         isMidiClip={false}
       />,
     );
-    expect(screen.getByText('Enhance...')).toBeDefined();
+    expect(screen.getByText('Enhance...')).toBeInTheDocument();
   });
 
   it('does not render Enhance... when onEnhance is undefined', () => {

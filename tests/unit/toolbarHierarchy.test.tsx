@@ -180,8 +180,8 @@ describe('Toolbar visual hierarchy and grouping (#544)', () => {
     const transportBar = screen.getByTestId('transport-bar');
     expect(timingStrip).toBeInTheDocument();
     expect(harmonyStrip).toBeInTheDocument();
-    expect(timingStrip.compareDocumentPosition(transportBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(transportBar.compareDocumentPosition(harmonyStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(timingStrip.compareDocumentPosition(transportBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(transportBar.compareDocumentPosition(harmonyStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(screen.getByLabelText('Project BPM')).toHaveValue('120');
     expect(screen.getByLabelText('Time signature numerator')).toHaveValue('4');
     expect(screen.getByLabelText('Project key root')).toHaveValue('C');

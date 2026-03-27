@@ -6,7 +6,7 @@ describe('Button component', () => {
   describe('rendering', () => {
     it('renders children text', () => {
       render(<Button>Click me</Button>);
-      expect(screen.getByRole('button', { name: 'Click me' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Click me' })).toBeInTheDocument();
     });
 
     it('renders as a button element by default', () => {
@@ -17,7 +17,7 @@ describe('Button component', () => {
 
     it('forwards additional HTML attributes', () => {
       render(<Button title="My tooltip" data-testid="my-btn">Test</Button>);
-      expect(screen.getByTestId('my-btn')).toBeDefined();
+      expect(screen.getByTestId('my-btn')).toBeInTheDocument();
       expect(screen.getByRole('button').getAttribute('title')).toBe('My tooltip');
     });
   });

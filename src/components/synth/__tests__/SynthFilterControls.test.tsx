@@ -7,7 +7,7 @@ describe('SynthFilterControls', () => {
 
   it('renders Filter label', () => {
     render(<SynthFilterControls filter={defaultFilter} onChange={vi.fn()} />);
-    expect(screen.getByText('Filter')).toBeDefined();
+    expect(screen.getByText('Filter')).toBeInTheDocument();
   });
 
   it('renders a canvas element for frequency response', () => {
@@ -17,15 +17,15 @@ describe('SynthFilterControls', () => {
 
   it('renders filter type selector buttons', () => {
     render(<SynthFilterControls filter={defaultFilter} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /LP/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /HP/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /BP/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /LP/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /HP/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /BP/i })).toBeInTheDocument();
   });
 
   it('renders frequency and resonance knobs', () => {
     render(<SynthFilterControls filter={defaultFilter} onChange={vi.fn()} />);
-    expect(screen.getByLabelText('Freq knob')).toBeDefined();
-    expect(screen.getByLabelText('Res knob')).toBeDefined();
+    expect(screen.getByLabelText('Freq knob')).toBeInTheDocument();
+    expect(screen.getByLabelText('Res knob')).toBeInTheDocument();
   });
 
   it('highlights the active filter type', () => {

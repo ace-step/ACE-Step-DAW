@@ -36,7 +36,7 @@ describe('ClipContextMenu split option', () => {
 
   it('renders "Split" button', () => {
     renderMenu();
-    expect(screen.getByText('Split')).toBeTruthy();
+    expect(screen.getByText('Split')).toBeInTheDocument();
   });
 
   it('calls onSplitAtPlayhead when clicked', () => {
@@ -63,7 +63,7 @@ describe('ClipContextMenu inline color swatches', () => {
   it('renders inline color swatches', () => {
     renderMenu();
     const palette = screen.getByTestId('color-swatch-palette');
-    expect(palette).toBeTruthy();
+    expect(palette).toBeInTheDocument();
     const buttons = palette.querySelectorAll('button');
     expect(buttons.length).toBe(TRACK_COLOR_PALETTE.length);
   });
@@ -78,7 +78,7 @@ describe('ClipContextMenu inline color swatches', () => {
   it('shows reset button when clip has custom color', () => {
     renderMenu({ hasCustomColor: true });
     const resetBtn = screen.getByLabelText('Reset to track color');
-    expect(resetBtn).toBeTruthy();
+    expect(resetBtn).toBeInTheDocument();
   });
 
   it('emits reset when reset button clicked', () => {
@@ -101,7 +101,7 @@ describe('ClipContextMenu AI Tools submenu', () => {
 
   it('renders AI Tools submenu trigger', () => {
     renderMenu();
-    expect(screen.getByText('AI Tools')).toBeTruthy();
+    expect(screen.getByText('AI Tools')).toBeInTheDocument();
   });
 
   it('shows AI Tools submenu on hover', () => {
@@ -109,9 +109,9 @@ describe('ClipContextMenu AI Tools submenu', () => {
     const trigger = screen.getByTestId('ai-tools-submenu-trigger');
     fireEvent.mouseEnter(trigger);
     act(() => { vi.advanceTimersByTime(100); });
-    expect(screen.getByText('Inspire Me')).toBeTruthy();
-    expect(screen.getByText('Add a Layer')).toBeTruthy();
-    expect(screen.getByText('Music Enhancer')).toBeTruthy();
+    expect(screen.getByText('Inspire Me')).toBeInTheDocument();
+    expect(screen.getByText('Add a Layer')).toBeInTheDocument();
+    expect(screen.getByText('Music Enhancer')).toBeInTheDocument();
   });
 
   it('shows clip-specific AI tools when clipAIContext is provided', () => {
@@ -126,7 +126,7 @@ describe('ClipContextMenu AI Tools submenu', () => {
     const trigger = screen.getByTestId('ai-tools-submenu-trigger');
     fireEvent.mouseEnter(trigger);
     act(() => { vi.advanceTimersByTime(100); });
-    expect(screen.getByText('Regenerate')).toBeTruthy();
-    expect(screen.getByText('Analyze Audio...')).toBeTruthy();
+    expect(screen.getByText('Regenerate')).toBeInTheDocument();
+    expect(screen.getByText('Analyze Audio...')).toBeInTheDocument();
   });
 });

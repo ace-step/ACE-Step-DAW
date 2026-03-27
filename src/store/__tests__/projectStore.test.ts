@@ -47,7 +47,6 @@ describe('projectStore', () => {
     it('assigns a unique id', () => {
       useProjectStore.getState().createProject();
       const project = useProjectStore.getState().project;
-      expect(project!.id).toBeDefined();
       expect(typeof project!.id).toBe('string');
       expect(project!.id.length).toBeGreaterThan(0);
     });
@@ -138,7 +137,6 @@ describe('projectStore', () => {
 
     it('adds a stems track', () => {
       const track = useProjectStore.getState().addTrack('drums');
-      expect(track).toBeDefined();
       expect(track.trackName).toBe('drums');
       expect(track.trackType).toBe('stems');
       expect(useProjectStore.getState().project!.tracks).toHaveLength(1);
@@ -147,7 +145,7 @@ describe('projectStore', () => {
     it('adds a sequencer track with pattern initialized', () => {
       const track = useProjectStore.getState().addTrack('drums', 'sequencer');
       expect(track.trackType).toBe('sequencer');
-      expect(track.sequencerPattern).toBeDefined();
+      expect(track.sequencerPattern).not.toBeUndefined();
       expect(track.sequencerPattern!.rows.length).toBeGreaterThan(0);
       expect(track.sequencerPattern!.stepsPerBar).toBe(16);
     });
@@ -245,7 +243,7 @@ describe('projectStore', () => {
         rootNote: 57,
       });
 
-      expect(track).toBeDefined();
+      expect(track).not.toBeUndefined();
       expect(track?.trackType).toBe('pianoRoll');
       expect(track?.synthPreset).toBe('sampler');
       expect(track?.instrument).toMatchObject({
@@ -373,7 +371,7 @@ describe('projectStore', () => {
       });
 
       const asset = useProjectStore.getState().project!.assets?.[0];
-      expect(asset).toBeDefined();
+      expect(asset).not.toBeUndefined();
       expect(asset?.originTrackSnapshot).toMatchObject({
         trackName: 'bass',
         trackType: 'stems',
@@ -402,12 +400,12 @@ describe('projectStore', () => {
     it('restores a generated asset as a new AI track after the source track is deleted', () => {
       const store = useProjectStore.getState();
       const { track, asset } = createReadyGeneratedAsset();
-      expect(asset).toBeDefined();
+      expect(asset).not.toBeUndefined();
 
       store.removeTrack(track.id);
       const restoredTrack = store.restoreAssetToNewTrack(asset!.id, 8);
 
-      expect(restoredTrack).toBeDefined();
+      expect(restoredTrack).not.toBeUndefined();
       expect(restoredTrack?.trackType).toBe('stems');
       expect(restoredTrack?.trackName).toBe('synth');
       expect(restoredTrack?.displayName).toBe(track.displayName);
@@ -745,14 +743,14 @@ describe('projectStore', () => {
       store.setTrackReverb(track.id, 0.33, 0.72);
 
       const effectId = store.addTrackEffect(track.id, 'reverb');
-      expect(effectId).toBeDefined();
+      expect(typeof effectId).toBe('string');
       store.updateTrackEffect(track.id, effectId!, {
         enabled: false,
         params: { decay: 8.4, preDelay: 0.2, wet: 0.61 },
       });
 
       const midiEffectId = store.addMidiEffect(track.id, 'arpeggiator');
-      expect(midiEffectId).toBeDefined();
+      expect(typeof midiEffectId).toBe('string');
       store.updateMidiEffect(track.id, midiEffectId!, {
         params: { rate: '1/16', pattern: 'up-down', octaves: 2 },
       });
@@ -871,7 +869,7 @@ describe('projectStore', () => {
         compressorRatio: 8,
       });
       const effectId = store.addTrackEffect(sourceTrack.id, 'compressor');
-      expect(effectId).toBeDefined();
+      expect(typeof effectId).toBe('string');
       store.updateTrackEffect(sourceTrack.id, effectId!, {
         params: {
           threshold: -10,
@@ -883,12 +881,12 @@ describe('projectStore', () => {
         },
       });
       const midiEffectId = store.addMidiEffect(sourceTrack.id, 'scale-lock');
-      expect(midiEffectId).toBeDefined();
+      expect(typeof midiEffectId).toBe('string');
 
       const preset = store.saveTrackPreset(sourceTrack.id, 'Dusty Drums');
       const appliedTrack = useProjectStore.getState().applyTrackPreset(preset.id);
 
-      expect(appliedTrack).toBeDefined();
+      expect(appliedTrack).not.toBeUndefined();
       expect(appliedTrack!.id).not.toBe(sourceTrack.id);
       expect(appliedTrack!.trackName).toBe('drums');
       expect(appliedTrack!.trackType).toBe('sequencer');
@@ -907,7 +905,7 @@ describe('projectStore', () => {
       expect(appliedTrack!.effects?.[0].id).not.toBe(effectId);
       expect(appliedTrack!.midiEffects).toHaveLength(1);
       expect(appliedTrack!.midiEffects?.[0].id).not.toBe(midiEffectId);
-      expect(appliedTrack!.sequencerPattern).toBeDefined();
+      expect(appliedTrack!.sequencerPattern).not.toBeUndefined();
       expect(appliedTrack!.sequencerPattern?.id).not.toBe(sourceTrack.sequencerPattern?.id);
     });
   });
@@ -940,7 +938,6 @@ describe('projectStore', () => {
         prompt: 'energetic drums',
         lyrics: '',
       });
-      expect(clip).toBeDefined();
       expect(clip.trackId).toBe(trackId);
       expect(clip.prompt).toBe('energetic drums');
       expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(1);
@@ -1052,7 +1049,7 @@ describe('projectStore', () => {
         durationBeats: 1,
         velocity: 0.8,
       });
-      expect(noteId).toBeDefined();
+      expect(typeof noteId).toBe('string');
       const clip = useProjectStore.getState().getClipById(clipId);
       expect(clip!.midiData!.notes).toHaveLength(1);
       expect(clip!.midiData!.notes[0].pitch).toBe(60);
@@ -1175,7 +1172,7 @@ describe('projectStore', () => {
 
     it('adds an effect to a track', () => {
       const effectId = useProjectStore.getState().addTrackEffect(trackId, 'reverb');
-      expect(effectId).toBeDefined();
+      expect(typeof effectId).toBe('string');
       const track = useProjectStore.getState().project!.tracks[0];
       expect(track.effects).toHaveLength(1);
       expect(track.effects![0].type).toBe('reverb');

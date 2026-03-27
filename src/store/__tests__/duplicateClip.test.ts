@@ -76,7 +76,7 @@ describe('duplicateClip', () => {
 
   it('returns the new clip object', () => {
     const result = useProjectStore.getState().duplicateClip(clipId);
-    expect(result).toBeDefined();
+    expect(result).not.toBeUndefined();
     expect(result!.id).not.toBe(clipId);
     expect(result!.startTime).toBe(5);
   });

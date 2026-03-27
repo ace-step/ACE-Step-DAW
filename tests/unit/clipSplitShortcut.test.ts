@@ -5,14 +5,14 @@ import { SHORTCUT_PRESETS } from '../../src/constants/shortcutPresets';
 describe('clip split shortcut remapping', () => {
   it('clips.split defaults to KeyS (no modifier)', () => {
     const action = SHORTCUT_ACTIONS.find((a) => a.id === 'clips.split');
-    expect(action).toBeDefined();
+    expect(action).toEqual(expect.objectContaining({ id: 'clips.split' }));
     expect(action!.defaultCombo).toEqual({ code: 'KeyS' });
     expect(action!.contexts).toContain('timeline');
   });
 
   it('tracks.solo defaults to Shift+S', () => {
     const action = SHORTCUT_ACTIONS.find((a) => a.id === 'tracks.solo');
-    expect(action).toBeDefined();
+    expect(action).toEqual(expect.objectContaining({ id: 'tracks.solo' }));
     expect(action!.defaultCombo).toEqual({ code: 'KeyS', shift: true });
   });
 

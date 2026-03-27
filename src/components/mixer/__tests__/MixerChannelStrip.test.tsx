@@ -98,7 +98,7 @@ describe('Channel strip improvements', () => {
       const nameEl = screen.getAllByTestId('channel-name')[0];
       fireEvent.doubleClick(nameEl);
       const input = screen.getByTestId('channel-rename-input');
-      expect(input).toBeDefined();
+      expect(input).toBeInTheDocument();
       expect((input as HTMLInputElement).value).toBe(
         useProjectStore.getState().project!.tracks[0].displayName,
       );
@@ -161,7 +161,7 @@ describe('Channel strip improvements', () => {
       render(<MixerPanel />);
       const strip = screen.getAllByTestId('track-color-strip')[0];
       // backgroundColor is set via inline style; jsdom converts hex to rgb
-      expect(strip.style.backgroundColor).toBeTruthy();
+      expect(strip.style.backgroundColor).not.toBe('');
       // Verify it's actually a color value (not empty)
       expect(strip.style.backgroundColor.length).toBeGreaterThan(0);
     });
@@ -178,7 +178,7 @@ describe('Channel strip improvements', () => {
     function getGroupStrip(trackId: string): HTMLElement {
       const strips = screen.getAllByTestId('channel-strip');
       const strip = strips.find((el) => el.getAttribute('data-track-id') === trackId);
-      expect(strip).toBeDefined();
+      expect(strip).not.toBeUndefined();
       return strip!;
     }
 
@@ -228,20 +228,20 @@ describe('Channel strip improvements', () => {
       setupWithTrack();
       render(<MixerPanel />);
       const masterStrip = screen.getByTestId('master-strip');
-      expect(masterStrip).toBeDefined();
+      expect(masterStrip).toBeInTheDocument();
     });
 
     it('renders master label text', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      expect(screen.getByText('Master')).toBeDefined();
+      expect(screen.getByText('Master')).toBeInTheDocument();
     });
 
     it('renders IN and OUT meter labels', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      expect(screen.getByText('IN')).toBeDefined();
-      expect(screen.getByText('OUT')).toBeDefined();
+      expect(screen.getByText('IN')).toBeInTheDocument();
+      expect(screen.getByText('OUT')).toBeInTheDocument();
     });
   });
 });

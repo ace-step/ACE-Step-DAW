@@ -36,7 +36,7 @@ describe('Minimap', () => {
   it('renders the minimap container when tracks exist', () => {
     useProjectStore.getState().addTrack('custom', 'stems');
     render(<Minimap />);
-    expect(screen.getByTestId('timeline-minimap')).toBeDefined();
+    expect(screen.getByTestId('timeline-minimap')).toBeInTheDocument();
   });
 
   it('has a dark gradient background for contrast', () => {
@@ -123,7 +123,7 @@ describe('Minimap', () => {
   it('renders the viewport indicator', () => {
     useProjectStore.getState().addTrack('custom', 'stems');
     render(<Minimap />);
-    expect(screen.getByTestId('minimap-viewport')).toBeDefined();
+    expect(screen.getByTestId('minimap-viewport')).toBeInTheDocument();
   });
 
   it('renders viewport rectangle with visible border', () => {
@@ -136,8 +136,8 @@ describe('Minimap', () => {
   it('renders dimming overlays outside the viewport', () => {
     useProjectStore.getState().addTrack('custom', 'stems');
     render(<Minimap />);
-    expect(screen.getByTestId('minimap-dim-left')).toBeDefined();
-    expect(screen.getByTestId('minimap-dim-right')).toBeDefined();
+    expect(screen.getByTestId('minimap-dim-left')).toBeInTheDocument();
+    expect(screen.getByTestId('minimap-dim-right')).toBeInTheDocument();
   });
 
   it('viewport rect has a subtle fill', () => {

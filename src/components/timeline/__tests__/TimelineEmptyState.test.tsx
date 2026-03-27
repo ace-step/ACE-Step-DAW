@@ -18,7 +18,7 @@ describe('TimelineEmptyState', () => {
     render(<TimelineEmptyState />);
     expect(
       screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).toBeDefined();
+    ).toBeInTheDocument();
   });
 
   it('renders a music note icon', () => {
@@ -60,6 +60,6 @@ describe('TimelineEmptyState', () => {
     render(<TimelineEmptyState />);
     expect(
       screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).toBeDefined();
+    ).toBeInTheDocument();
   });
 });

@@ -15,17 +15,21 @@ describe('synthPresets', () => {
 
     it('every preset has required fields', () => {
       for (const preset of FACTORY_SYNTH_PRESETS) {
-        expect(preset.id).toBeTruthy();
-        expect(preset.name).toBeTruthy();
+        expect(typeof preset.id).toBe('string');
+        expect(preset.id.length).toBeGreaterThan(0);
+        expect(typeof preset.name).toBe('string');
+        expect(preset.name.length).toBeGreaterThan(0);
         expect(SYNTH_PRESET_CATEGORIES).toContain(preset.category);
         expect(preset.isFactory).toBe(true);
-        expect(preset.waveform).toBeTruthy();
-        expect(preset.envelope).toBeDefined();
+        expect(typeof preset.waveform).toBe('string');
+        expect(preset.waveform.length).toBeGreaterThan(0);
+        expect(preset.envelope).toEqual(expect.objectContaining({ attack: expect.any(Number) }));
         expect(typeof preset.envelope.attack).toBe('number');
         expect(typeof preset.envelope.decay).toBe('number');
         expect(typeof preset.envelope.sustain).toBe('number');
         expect(typeof preset.envelope.release).toBe('number');
-        expect(preset.legacyPreset).toBeTruthy();
+        expect(typeof preset.legacyPreset).toBe('string');
+        expect(preset.legacyPreset.length).toBeGreaterThan(0);
       }
     });
 
@@ -123,7 +127,8 @@ describe('synthPresets', () => {
       for (const preset of FACTORY_SYNTH_PRESETS) {
         if (preset.filter?.enabled) {
           expect(preset.filter.cutoffHz).toBeGreaterThan(0);
-          expect(preset.filter.type).toBeTruthy();
+          expect(typeof preset.filter.type).toBe('string');
+          expect(preset.filter.type.length).toBeGreaterThan(0);
         }
       }
     });

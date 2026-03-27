@@ -7,7 +7,7 @@ describe('LFODisplay', () => {
 
   it('renders LFO label', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByText('LFO')).toBeDefined();
+    expect(screen.getByText('LFO')).toBeInTheDocument();
   });
 
   it('renders a canvas element for the waveform', () => {
@@ -17,15 +17,15 @@ describe('LFODisplay', () => {
 
   it('renders rate and depth knobs', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByLabelText('Rate knob')).toBeDefined();
-    expect(screen.getByLabelText('Depth knob')).toBeDefined();
+    expect(screen.getByLabelText('Rate knob')).toBeInTheDocument();
+    expect(screen.getByLabelText('Depth knob')).toBeInTheDocument();
   });
 
   it('renders shape selector buttons', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /SIN/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /SQR/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /TRI/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /SAW/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /SIN/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /SQR/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /TRI/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /SAW/i })).toBeInTheDocument();
   });
 });

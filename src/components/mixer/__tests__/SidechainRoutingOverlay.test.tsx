@@ -20,7 +20,7 @@ describe('SidechainRoutingOverlay', () => {
     const { container } = render(<SidechainRoutingOverlay containerRef={{ current: null }} />);
     // Should render the SVG but with no path elements
     const svg = container.querySelector('svg');
-    expect(svg).toBeTruthy();
+    expect(svg).toBeInTheDocument();
     const paths = container.querySelectorAll('[data-testid^="sidechain-route-"]');
     expect(paths).toHaveLength(0);
   });

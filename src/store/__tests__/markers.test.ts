@@ -19,8 +19,8 @@ describe('markers', () => {
     expect(markers[0].time).toBe(10);
     expect(markers[1].name).toBe('Verse');
     expect(markers[1].time).toBe(5);
-    expect(markers[0].id).toBeDefined();
-    expect(markers[0].color).toBeTruthy();
+    expect(markers[0].id).toEqual(expect.any(String));
+    expect(markers[0].color).toEqual(expect.any(String));
   });
 
   it('removeMarker deletes a marker by id', () => {

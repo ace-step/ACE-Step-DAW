@@ -83,7 +83,7 @@ describe('VST3PresetManager', () => {
       expect(preset.pluginUid).toBe('com.plugin.synth');
       expect(preset.isFactory).toBe(false);
       expect(preset.stateData).toBe('base64statedata==');
-      expect(preset.id).toBeTruthy();
+      expect(preset.id).toBeTypeOf('string');
       expect(preset.createdAt).toBeTypeOf('number');
       expect(preset.updatedAt).toBeTypeOf('number');
 

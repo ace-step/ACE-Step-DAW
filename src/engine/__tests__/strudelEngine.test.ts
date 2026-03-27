@@ -20,7 +20,6 @@ describe('StrudelEngine', () => {
   describe('evaluateStrudelCode', () => {
     it('T5: evaluates valid mini-notation and returns a pattern', async () => {
       const pattern = await evaluateStrudelCode('bd sd bd sd');
-      expect(pattern).toBeDefined();
       expect(typeof pattern.queryArc).toBe('function');
     });
 

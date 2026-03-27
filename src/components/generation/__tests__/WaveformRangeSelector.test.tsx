@@ -23,25 +23,25 @@ describe('WaveformRangeSelector', () => {
   it('renders the component with waveform and handles', () => {
     render(<WaveformRangeSelector {...defaultProps} />);
     const container = screen.getByTestId('waveform-range-selector');
-    expect(container).toBeDefined();
+    expect(container).toBeInTheDocument();
   });
 
   it('renders empty state when no peaks provided', () => {
     render(<WaveformRangeSelector {...defaultProps} peaks={[]} />);
-    expect(screen.getByText('No waveform data')).toBeDefined();
+    expect(screen.getByText('No waveform data')).toBeInTheDocument();
   });
 
   it('displays timestamp labels for range start and end', () => {
     render(<WaveformRangeSelector {...defaultProps} />);
     // rangeStart=0.2 of 10s = 2.00s, rangeEnd=0.8 of 10s = 8.00s
-    expect(screen.getByText('2.00s')).toBeDefined();
-    expect(screen.getByText('8.00s')).toBeDefined();
+    expect(screen.getByText('2.00s')).toBeInTheDocument();
+    expect(screen.getByText('8.00s')).toBeInTheDocument();
   });
 
   it('renders left and right drag handles', () => {
     render(<WaveformRangeSelector {...defaultProps} />);
-    expect(screen.getByTestId('range-handle-left')).toBeDefined();
-    expect(screen.getByTestId('range-handle-right')).toBeDefined();
+    expect(screen.getByTestId('range-handle-left')).toBeInTheDocument();
+    expect(screen.getByTestId('range-handle-right')).toBeInTheDocument();
   });
 
   it('calls onRangeChange when left handle is dragged', () => {
@@ -85,7 +85,7 @@ describe('WaveformRangeSelector', () => {
     );
 
     // The component should render with full range without errors
-    expect(container).toBeDefined();
+    expect(container).toBeInTheDocument();
   });
 
   it('enforces minimum range width', () => {
@@ -100,14 +100,14 @@ describe('WaveformRangeSelector', () => {
     );
 
     // Component should still render (it should handle edge cases)
-    expect(screen.getByTestId('waveform-range-selector')).toBeDefined();
+    expect(screen.getByTestId('waveform-range-selector')).toBeInTheDocument();
   });
 
   it('shows keep/regenerate zone overlays', () => {
     render(<WaveformRangeSelector {...defaultProps} />);
-    expect(screen.getByTestId('keep-zone-left')).toBeDefined();
-    expect(screen.getByTestId('keep-zone-right')).toBeDefined();
-    expect(screen.getByTestId('regenerate-zone')).toBeDefined();
+    expect(screen.getByTestId('keep-zone-left')).toBeInTheDocument();
+    expect(screen.getByTestId('keep-zone-right')).toBeInTheDocument();
+    expect(screen.getByTestId('regenerate-zone')).toBeInTheDocument();
   });
 
   it('applies snap-to-beat when snapToGrid and bpm are provided', () => {

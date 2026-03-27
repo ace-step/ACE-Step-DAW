@@ -5,7 +5,7 @@ import { LatencyDisplay } from '../LatencyDisplay';
 describe('LatencyDisplay', () => {
   it('renders without a project and shows fallback text', () => {
     const { container } = render(<LatencyDisplay />);
-    expect(container).toBeDefined();
+    expect(container).toBeInstanceOf(HTMLElement);
   });
 
   it('shows ms unit in the display', () => {

@@ -68,7 +68,7 @@ describe('VirtualKeyboard', () => {
     expect(useUIStore.getState().virtualKeyboardPressedPitches).toEqual([]);
 
     const clip = useProjectStore.getState().getTrackById(track.id)?.clips.find((candidate) => candidate.midiData);
-    expect(clip).toBeDefined();
+    expect(clip).toEqual(expect.objectContaining({ trackId: track.id }));
     expect(clip?.midiData?.notes).toHaveLength(1);
     expect(clip?.midiData?.notes[0]).toMatchObject({
       pitch: 60,

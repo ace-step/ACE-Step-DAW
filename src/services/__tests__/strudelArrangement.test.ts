@@ -23,10 +23,10 @@ describe('GENRE_TEMPLATES', () => {
 
   it('each template has 4 roles', () => {
     for (const template of GENRE_TEMPLATES) {
-      expect(template.drums).toBeTruthy();
-      expect(template.bass).toBeTruthy();
-      expect(template.chords).toBeTruthy();
-      expect(template.melody).toBeTruthy();
+      expect(typeof template.drums).toBe('string');
+      expect(typeof template.bass).toBe('string');
+      expect(typeof template.chords).toBe('string');
+      expect(typeof template.melody).toBe('string');
     }
   });
 });
@@ -65,7 +65,7 @@ describe('scaffoldStrudelArrangement store action', () => {
     expect(newTracks).toHaveLength(4);
     for (const track of newTracks) {
       expect(track.trackType).toBe('strudel');
-      expect(track.strudelCode).toBeTruthy();
+      expect(track.strudelCode!.length).toBeGreaterThan(0);
     }
   });
 

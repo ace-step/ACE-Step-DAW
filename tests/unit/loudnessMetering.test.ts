@@ -64,8 +64,8 @@ describe('loudnessMetering', () => {
   describe('kWeightingCoefficients', () => {
     it('returns stage1 and stage2 coefficients', () => {
       const coeffs = kWeightingCoefficients(48000);
-      expect(coeffs.stage1).toBeDefined();
-      expect(coeffs.stage2).toBeDefined();
+      expect(coeffs.stage1).toEqual(expect.objectContaining({ b: expect.any(Array), a: expect.any(Array) }));
+      expect(coeffs.stage2).toEqual(expect.objectContaining({ b: expect.any(Array), a: expect.any(Array) }));
       expect(coeffs.stage1.b).toHaveLength(3);
       expect(coeffs.stage1.a).toHaveLength(3);
       expect(coeffs.stage2.b).toHaveLength(3);

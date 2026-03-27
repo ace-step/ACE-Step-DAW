@@ -7,7 +7,7 @@ describe('ADSREnvelopeEditor', () => {
 
   it('renders ADSR label', () => {
     render(<ADSREnvelopeEditor envelope={defaultEnvelope} onChange={vi.fn()} />);
-    expect(screen.getByText('Envelope')).toBeDefined();
+    expect(screen.getByText('Envelope')).toBeInTheDocument();
   });
 
   it('renders a canvas element for the envelope curve', () => {
@@ -17,18 +17,18 @@ describe('ADSREnvelopeEditor', () => {
 
   it('renders four knobs for A, D, S, R', () => {
     render(<ADSREnvelopeEditor envelope={defaultEnvelope} onChange={vi.fn()} />);
-    expect(screen.getByLabelText('ATK knob')).toBeDefined();
-    expect(screen.getByLabelText('DEC knob')).toBeDefined();
-    expect(screen.getByLabelText('SUS knob')).toBeDefined();
-    expect(screen.getByLabelText('REL knob')).toBeDefined();
+    expect(screen.getByLabelText('ATK knob')).toBeInTheDocument();
+    expect(screen.getByLabelText('DEC knob')).toBeInTheDocument();
+    expect(screen.getByLabelText('SUS knob')).toBeInTheDocument();
+    expect(screen.getByLabelText('REL knob')).toBeInTheDocument();
   });
 
   it('displays formatted parameter values', () => {
     render(<ADSREnvelopeEditor envelope={defaultEnvelope} onChange={vi.fn()} />);
     // Check that the labels exist
-    expect(screen.getByText('ATK')).toBeDefined();
-    expect(screen.getByText('DEC')).toBeDefined();
-    expect(screen.getByText('SUS')).toBeDefined();
-    expect(screen.getByText('REL')).toBeDefined();
+    expect(screen.getByText('ATK')).toBeInTheDocument();
+    expect(screen.getByText('DEC')).toBeInTheDocument();
+    expect(screen.getByText('SUS')).toBeInTheDocument();
+    expect(screen.getByText('REL')).toBeInTheDocument();
   });
 });

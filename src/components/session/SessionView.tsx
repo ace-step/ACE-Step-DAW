@@ -3,7 +3,7 @@ import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
-import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch } from '../../types/project';
+import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
 
 const SESSION_QUANTIZATION_OPTIONS: SessionLaunchQuantization[] = [
   'none', '1/32', '1/16', '1/8', '1/4', '1/2', '1 bar', '2 bars', '4 bars', '8 bars',
@@ -34,11 +34,12 @@ function isClipQueued(
   pendingLaunches: SessionPendingLaunch[],
   trackId: string,
   clipId: string,
+  sceneId?: string,
 ): boolean {
   return pendingLaunches.some((launch) => {
     if (launch.type === 'clip') return launch.trackId === trackId && launch.clipId === clipId;
-    // Scene launches queue all tracks in the scene — mark clips on matching tracks
-    if (launch.type === 'scene') return launch.trackId === undefined || launch.trackId === trackId;
+    // Scene launches only queue clips belonging to the launched scene
+    if (launch.type === 'scene') return sceneId != null && launch.sceneId === sceneId;
     return false;
   });
 }
@@ -70,6 +71,7 @@ export function SessionView() {
   const sessionQuantization = project.session?.quantization ?? '1 bar';
   const sessionSlots = project.session?.slots ?? [];
   const pendingLaunches = project.session?.pendingLaunches ?? [];
+  const scenes = project.session?.scenes ?? [];
 
   return (
     <div className="flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto">
@@ -164,6 +166,7 @@ export function SessionView() {
               sessionClips={sessionClips}
               sessionSlots={sessionSlots}
               sceneCount={sceneCount}
+              scenes={scenes}
               activeClipId={activeLaunch?.clipId ?? null}
               activeLaunchedAt={activeLaunch?.launchedAt ?? null}
               currentTime={currentTime}
@@ -185,6 +188,7 @@ function FragmentRow({
   sessionClips,
   sessionSlots,
   sceneCount,
+  scenes,
   activeClipId,
   activeLaunchedAt,
   currentTime,
@@ -197,6 +201,7 @@ function FragmentRow({
   sessionClips: Clip[];
   sessionSlots: SessionClipSlot[];
   sceneCount: number;
+  scenes: SessionScene[];
   activeClipId: string | null;
   activeLaunchedAt: number | null;
   currentTime: number;
@@ -233,7 +238,8 @@ function FragmentRow({
         const slotQuantization = matchingSlot?.quantization;
         const hasOverride = slotQuantization && slotQuantization !== 'global';
         // Queued blinking & progress ring (from #936)
-        const isQueued = clip ? isClipQueued(pendingLaunches, track.id, clip.id) : false;
+        const sceneId = scenes[sceneIndex]?.id;
+        const isQueued = clip ? isClipQueued(pendingLaunches, track.id, clip.id, sceneId) : false;
 
         let progress = 0;
         let loopCount = 1;

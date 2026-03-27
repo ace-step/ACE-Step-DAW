@@ -1,7 +1,7 @@
 export interface SessionSlotProgress {
   /** Position within current loop, 0–1 */
   progress: number;
-  /** Number of completed loops (1-indexed: 1 = first loop) */
+  /** Current loop number (1-indexed: 1 = first loop) */
   loopCount: number;
 }
 

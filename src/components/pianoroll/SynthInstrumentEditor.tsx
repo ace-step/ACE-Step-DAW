@@ -648,8 +648,8 @@ function renderFmEditor(
           </SelectField>
           <div className="rounded border border-white/8 bg-black/15 px-2 py-2 text-[10px] text-zinc-400">
             <div className="uppercase tracking-[0.14em] text-zinc-500">Playback</div>
-            <div className="mt-1 text-zinc-200">FM parameter shell on canonical state</div>
-            <div className="mt-1 text-zinc-500">Current engine falls back to the selected legacy voice.</div>
+            <div className="mt-1 text-zinc-200">FM parameters drive the live playback voice</div>
+            <div className="mt-1 text-zinc-500">Fallback preset stays as compatibility metadata for legacy paths.</div>
           </div>
         </div>
 

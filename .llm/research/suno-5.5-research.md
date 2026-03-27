@@ -264,9 +264,35 @@ The lack of a public API is a constraint. Integration would require: (a) waiting
 9. **Preference Learning / My Taste** — Learn user style preferences over time
 10. **Audio-to-MIDI Transcription** — Convert generated/imported audio to MIDI
 
+---
+
+## 10. ACE-Step DAW Competitive Positioning
+
+ACE-Step DAW can differentiate from Suno by:
+- Being a **real DAW** (MIDI editing, sequencer, mixer, effects, automation) where Suno Studio is generation-first
+- Supporting **open-source models** (no vendor lock-in, ACE-Step model is open)
+- Offering **full DAW-grade precision** that Suno explicitly does not provide
+- Being **free/open** where Suno gates features behind $10-30/month
+- Providing **API transparency** and extensibility
+- Supporting **LEGO-style multi-track generation** (per-track with context) vs Suno's full-mix generation
+- **Local/self-hosted** option — no cloud dependency, data stays private
+
+The key risk: Suno is rapidly converging toward DAW functionality through the WavTool acquisition. Their Studio already has multi-track timeline, section editing, generative stems, warp markers, and time signature support. ACE-Step DAW must move fast on its generation workflow UX to maintain differentiation.
+
+---
+
 Sources:
-- https://suno.com/blog/v5-5
-- https://help.suno.com/en/articles/11362305
-- https://mpost.io/suno-unveils-v5-5-with-voice-cloning-and-personalized-ai-music-creation-tools/
-- https://ucstrategies.com/news/suno-5-5-is-out-you-can-now-clone-your-own-voice-heres-how-it-actually-works/
-- https://hookgenius.app/learn/suno-v5-complete-guide/
+- [Suno v5.5: More Expressive. More You. (Official Blog)](https://suno.com/blog/v5-5)
+- [Suno Launches v5.5 With Voices — Digital Music News](https://www.digitalmusicnews.com/2026/03/26/suno-launches-version-5-5/)
+- [Suno 5.5 Voice Cloning: How It Works — UCStrategies](https://ucstrategies.com/news/suno-5-5-is-out-you-can-now-clone-your-own-voice-heres-how-it-actually-works/)
+- [Suno v5.5 Features Explained — Jack Righteous](https://jackrighteous.com/en-us/blogs/guides-using-suno-ai-music-creation/suno-v5-5-features-explained-workflow-changes-studio-editing-creator-guide)
+- [Suno Studio Tutorial — HookGenius](https://hookgenius.app/learn/suno-studio-tutorial/)
+- [Suno 5.5 New Features — SoundsSpace](https://soundsspace.com/blog/index.php/component/k2/item/274-suno-5-5-new-features-ai-music-generator)
+- [Suno Acquires WavTool — TechCrunch](https://techcrunch.com/2025/06/26/suno-snaps-up-wavtool-for-its-ai-music-editing-tools-amid-ongoing-dispute-with-music-labels/)
+- [Suno v5.5 Voice Cloning — Metaverse Post](https://mpost.io/suno-unveils-v5-5-with-voice-cloning-and-personalized-ai-music-creation-tools/)
+- [Suno vs Udio 2026 — Solfej](https://www.solfej.io/blog/suno-vs-udio)
+- [Suno v5 Complete Guide — HookGenius](https://hookgenius.app/learn/suno-v5-complete-guide/)
+- [Suno API Documentation](https://docs.sunoapi.org/)
+- [Suno Help Center — Model Timeline](https://help.suno.com/en/articles/5782721)
+- [Suno Acquires WavTool — Billboard](https://www.billboard.com/pro/suno-acquires-wavtool-a-music-editing-tools/)
+- [Suno revenue & valuation — Sacra](https://sacra.com/c/suno/)

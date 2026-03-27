@@ -42,6 +42,13 @@ export class TrackNode {
   private _clipped = false;
   private latencyCompNode: DelayNode | null = null;
 
+  /**
+   * Send gain nodes per return track ID.
+   * Each send has two gain nodes (pre and post fader); only one is non-zero
+   * at a time. This avoids reconnecting the audio graph on pre/post toggle.
+   */
+  private readonly sendGains = new Map<string, { pre: GainNode; post: GainNode }>();
+
   private static readonly CLIP_THRESHOLD = 0.995;
 
   constructor(private ctx: AudioContext, destination: AudioNode) {
@@ -353,6 +360,7 @@ export class TrackNode {
         this.latencyCompNode.disconnect(this.volumeGain);
         this.compressor.connect(this.volumeGain);
         this.latencyCompNode = null;
+        this._reconnectPreFaderSends();
       }
       return;
     }
@@ -370,66 +378,8 @@ export class TrackNode {
       this.compressor.disconnect(this.volumeGain);
       this.compressor.connect(this.latencyCompNode);
       this.latencyCompNode.connect(this.volumeGain);
+      this._reconnectPreFaderSends();
     }
-  }
-
-  // -----------------------------------------------------------------------
-  // Aux Sends (pre/post fader routing)
-  // -----------------------------------------------------------------------
-
-  private readonly _sends = new Map<string, { gain: GainNode; mode: 'pre' | 'post'; destination: AudioNode }>();
-
-  /**
-   * Connect a new aux send from this track to a destination node (e.g. return track inputGain).
-   * Pre-fader taps after compressor (before volumeGain); post-fader taps after volumeGain.
-   */
-  connectSend(sendId: string, destination: AudioNode, amount: number, mode: 'pre' | 'post') {
-    // Remove existing send with same ID if present
-    this.disconnectSend(sendId);
-
-    const sendGain = this.ctx.createGain();
-    sendGain.gain.value = amount;
-
-    const tapPoint = mode === 'pre' ? this.compressor : this.volumeGain;
-    tapPoint.connect(sendGain);
-    sendGain.connect(destination);
-
-    this._sends.set(sendId, { gain: sendGain, mode, destination });
-  }
-
-  /** Disconnect and remove an aux send by ID. */
-  disconnectSend(sendId: string) {
-    const entry = this._sends.get(sendId);
-    if (!entry) return;
-    try { entry.gain.disconnect(); } catch { /* already disconnected */ }
-    // Disconnect tap point — safe to call even if not connected
-    const tapPoint = entry.mode === 'pre' ? this.compressor : this.volumeGain;
-    try { tapPoint.disconnect(entry.gain); } catch { /* already disconnected */ }
-    this._sends.delete(sendId);
-  }
-
-  /** Update the send level (gain amount) of an existing send. */
-  updateSendAmount(sendId: string, amount: number) {
-    const entry = this._sends.get(sendId);
-    if (!entry) return;
-    entry.gain.gain.value = amount;
-  }
-
-  /** Switch a send between pre-fader and post-fader tap point. */
-  updateSendPrePost(sendId: string, mode: 'pre' | 'post') {
-    const entry = this._sends.get(sendId);
-    if (!entry) return;
-    if (entry.mode === mode) return; // no change
-
-    // Disconnect from old tap point
-    const oldTap = entry.mode === 'pre' ? this.compressor : this.volumeGain;
-    try { oldTap.disconnect(entry.gain); } catch { /* already disconnected */ }
-
-    // Connect to new tap point
-    const newTap = mode === 'pre' ? this.compressor : this.volumeGain;
-    newTap.connect(entry.gain);
-
-    entry.mode = mode;
   }
 
   // -----------------------------------------------------------------------
@@ -443,11 +393,107 @@ export class TrackNode {
     this.analyserNode.connect(destination);
   }
 
+  // -----------------------------------------------------------------------
+  // Sends (Pre/Post Fader)
+  // -----------------------------------------------------------------------
+
+  /**
+   * The node just before volumeGain — used as the pre-fader send tap point.
+   * If latency compensation is active, this is the delay node; otherwise the compressor.
+   */
+  get preFaderOutput(): AudioNode {
+    return this.latencyCompNode ?? this.compressor;
+  }
+
+  /**
+   * Connect a send to a return track's input.
+   * Creates two gain nodes (pre + post fader) and connects them.
+   * Only the active tap has non-zero gain; the other is silent.
+   */
+  connectSend(returnTrackId: string, destination: AudioNode, amount: number, preFader: boolean) {
+    // Disconnect existing send if any
+    this.disconnectSend(returnTrackId);
+
+    const preGain = this.ctx.createGain();
+    const postGain = this.ctx.createGain();
+
+    // Set initial gains based on pre/post mode
+    preGain.gain.value = preFader ? amount : 0;
+    postGain.gain.value = preFader ? 0 : amount;
+
+    // Pre-fader: tap after compressor (or latency comp), before volumeGain
+    this.preFaderOutput.connect(preGain);
+    preGain.connect(destination);
+
+    // Post-fader: tap after volumeGain
+    this.volumeGain.connect(postGain);
+    postGain.connect(destination);
+
+    this.sendGains.set(returnTrackId, { pre: preGain, post: postGain });
+  }
+
+  /**
+   * Update send amount and/or pre/post mode with click-free gain ramp.
+   */
+  updateSendAmount(returnTrackId: string, amount: number, preFader: boolean) {
+    const send = this.sendGains.get(returnTrackId);
+    if (!send) return;
+
+    const now = this.ctx.currentTime;
+    const preTarget = preFader ? amount : 0;
+    const postTarget = preFader ? 0 : amount;
+
+    send.pre.gain.cancelScheduledValues(now);
+    send.pre.gain.setValueAtTime(send.pre.gain.value, now);
+    send.pre.gain.linearRampToValueAtTime(preTarget, now + TrackNode.MUTE_FADE_SEC);
+
+    send.post.gain.cancelScheduledValues(now);
+    send.post.gain.setValueAtTime(send.post.gain.value, now);
+    send.post.gain.linearRampToValueAtTime(postTarget, now + TrackNode.MUTE_FADE_SEC);
+  }
+
+  /**
+   * Disconnect and remove a single send.
+   */
+  disconnectSend(returnTrackId: string) {
+    const send = this.sendGains.get(returnTrackId);
+    if (!send) return;
+    try { send.pre.disconnect(); } catch { /* noop */ }
+    try { send.post.disconnect(); } catch { /* noop */ }
+    // Also disconnect the source connections to the gain nodes
+    try { this.preFaderOutput.disconnect(send.pre); } catch { /* noop */ }
+    try { this.volumeGain.disconnect(send.post); } catch { /* noop */ }
+    this.sendGains.delete(returnTrackId);
+  }
+
+  /**
+   * Disconnect all sends (called during cleanup).
+   */
+  disconnectAllSends() {
+    for (const [id] of this.sendGains) {
+      this.disconnectSend(id);
+    }
+  }
+
+  /**
+   * Reconnect pre-fader sends after latency compensation node changes.
+   * Must be called when setLatencyCompensation adds/removes the delay node.
+   */
+  private _reconnectPreFaderSends() {
+    for (const [, send] of this.sendGains) {
+      // Disconnect old pre-fader source (could be compressor or old latencyCompNode)
+      try { this.compressor.disconnect(send.pre); } catch { /* noop */ }
+      if (this.latencyCompNode) {
+        try { this.latencyCompNode.disconnect(send.pre); } catch { /* noop */ }
+      }
+      // Reconnect to current pre-fader output
+      this.preFaderOutput.connect(send.pre);
+    }
+  }
+
   disconnect() {
     // Disconnect all aux sends
-    for (const [sendId] of this._sends) {
-      this.disconnectSend(sendId);
-    }
+    this.disconnectAllSends();
 
     this.inputGain.disconnect();
     this.panNode.disconnect();

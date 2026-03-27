@@ -141,6 +141,7 @@ export function useTransport() {
   const { isPlaying, currentTime } = useTransportStore();
   const isRecording = useTransportStore((s) => s.isRecording);
   const playbackTracks = useProjectStore((s) => s.project?.tracks);
+  const playbackReturnTracks = useProjectStore((s) => s.project?.returnTracks);
   const masterVolume = useProjectStore((s) => s.project?.masterVolume ?? 1.0);
   const playbackLatency = useProjectStore((s) => s.project?.playbackLatency);
   const mastering = useProjectStore((s) => s.project?.mastering);
@@ -315,6 +316,9 @@ export function useTransport() {
     }
 
     engine.updateSoloState();
+
+    // Wire aux sends to return tracks
+    engine.syncSends(proj.tracks, proj.returnTracks ?? []);
 
     let startFrom = fromTime ?? useTransportStore.getState().playStartTime;
 
@@ -870,7 +874,12 @@ export function useTransport() {
       }
     }
     engine.updateSoloState();
-  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks]);
+
+    // Sync aux send routing (handles amount, pre/post, and return track params)
+    if (playbackTracks) {
+      engine.syncSends(playbackTracks, playbackReturnTracks ?? []);
+    }
+  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks, playbackReturnTracks]);
 
   return {
     isPlaying,

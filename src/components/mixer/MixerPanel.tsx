@@ -265,7 +265,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                 <div
                   key={rt.id}
                   data-testid={`send-slot-${i}`}
-                  className="flex items-center gap-1.5"
+                  className="flex items-center gap-1"
                 >
                   {rt ? (
                     <>
@@ -281,10 +281,9 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                         aria-label={`Toggle pre/post fader for send to ${rt.name}`}
                         disabled={isFrozen}
                         onClick={() => {
-                          const sendIdx = sends.findIndex((s) => s.returnTrackId === rt.id);
-                          if (sendIdx >= 0) {
-                            setSendPrePost(track.id, sendIdx, isPre ? 'post' : 'pre');
-                          }
+                          if (!send) updateTrackSend(track.id, rt.id, amount || 0.5);
+                          const idx = sends.findIndex((s) => s.returnTrackId === rt.id);
+                          if (idx >= 0) setSendPrePost(track.id, idx, isPre ? 'post' : 'pre');
                         }}
                       >
                         {isPre ? 'PRE' : 'POST'}
@@ -297,7 +296,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                         value={amount}
                         onChange={(e) => updateTrackSend(track.id, rt.id, parseFloat(e.target.value))}
                         aria-label={`Send ${track.displayName} to ${rt.name}`}
-                        className="w-14 h-3 accent-blue-500"
+                        className="w-10 h-3 accent-blue-500"
                         disabled={isFrozen}
                       />
                       <button
@@ -387,6 +386,65 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
 
 interface MasterStripProps {
   faderHeight: number;
+}
+
+interface ReturnTrackStripProps {
+  returnTrack: ReturnTrack;
+  faderHeight: number;
+}
+
+function ReturnTrackStrip({ returnTrack, faderHeight }: ReturnTrackStripProps) {
+  const updateReturnTrack = useProjectStore((s) => s.updateReturnTrack);
+
+  return (
+    <div
+      data-testid={`return-strip-${returnTrack.id}`}
+      className="flex h-full min-h-0 w-[72px] shrink-0 flex-col items-center border-l border-[#333] bg-[#282828] px-1 py-2 gap-1"
+    >
+      {/* Return track label */}
+      <span className="text-[10px] font-semibold text-teal-400 uppercase tracking-wider truncate w-full text-center" title={returnTrack.name}>
+        {returnTrack.name}
+      </span>
+
+      {/* Pan knob */}
+      <Knob
+        value={returnTrack.pan}
+        min={-1}
+        max={1}
+        defaultValue={0}
+        onChange={(v) => updateReturnTrack(returnTrack.id, { pan: v })}
+        label="Pan"
+        size={28}
+        step={0.01}
+      />
+
+      {/* Effects indicator */}
+      <div className="text-[8px] text-zinc-500">
+        {returnTrack.effects.length > 0
+          ? <span className="text-teal-400">{returnTrack.effects.length} FX</span>
+          : <span>No FX</span>
+        }
+      </div>
+
+      {/* Volume fader + meter */}
+      <div className="flex-1 flex flex-col items-center justify-end min-h-0 gap-1" style={{ height: faderHeight }}>
+        <div className="relative flex justify-center gap-1" style={{ height: faderHeight - 24 }}>
+          <LevelMeter returnTrackId={returnTrack.id} />
+          <VerticalFader
+            value={returnTrack.volume}
+            min={0}
+            max={1}
+            defaultValue={1}
+            onChange={(v) => updateReturnTrack(returnTrack.id, { volume: v })}
+            aria-label={`${returnTrack.name} volume fader`}
+            accentColor="#2dd4bf"
+            width={12}
+          />
+        </div>
+        <span className="text-[10px] font-mono text-zinc-400">{volumeToDb(returnTrack.volume)}</span>
+      </div>
+    </div>
+  );
 }
 
 function MasterStrip({ faderHeight }: MasterStripProps) {
@@ -534,6 +592,14 @@ export function MixerPanel() {
           {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (
             <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} />
           ))}
+          {returnTracks.length > 0 && (
+            <>
+              <div className="w-px self-stretch bg-teal-700/40" />
+              {returnTracks.map((rt) => (
+                <ReturnTrackStrip key={rt.id} returnTrack={rt} faderHeight={faderHeight} />
+              ))}
+            </>
+          )}
           <MasterStrip faderHeight={faderHeight} />
         </div>
       </div>

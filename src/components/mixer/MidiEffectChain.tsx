@@ -227,7 +227,7 @@ function MidiEffectDevice({
       {/* Title bar */}
       <div
         className="flex items-center gap-1 px-1.5 py-1 rounded-t-lg cursor-pointer select-none"
-        style={{ backgroundColor: `${color}15` }}
+        style={{ backgroundColor: `${color}28` }}
       >
         <div
           className="cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80"

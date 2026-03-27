@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Knob } from '../ui/Knob';
+import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 
 // Inline icon components (no lucide-react dependency)
-const GripVertical = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-);
 const ChevronDown = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
 );
@@ -17,9 +15,13 @@ const Plus = ({ className }: { className?: string }) => (
 const Power = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
 );
-const Trash2 = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-);
+
+// Width tiers: compact for simple effects, standard for most, wide for complex visualizations
+const EFFECT_WIDTH: Partial<Record<TrackEffectType, number>> = {
+  parametricEq: 260,
+  compressor: 210,
+};
+const DEFAULT_EFFECT_WIDTH = 185;
 
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -168,6 +170,20 @@ import {
 } from './EffectCards';
 
 
+// Effect display names (cleaner than raw type strings)
+const EFFECT_LABELS: Record<TrackEffectType, string> = {
+  eq3: 'EQ Three',
+  parametricEq: 'Parametric EQ',
+  compressor: 'Compressor',
+  reverb: 'Reverb',
+  delay: 'Delay',
+  distortion: 'Distortion',
+  filter: 'Filter',
+  chorus: 'Chorus',
+  flanger: 'Flanger',
+  phaser: 'Phaser',
+};
+
 function EffectDevice({
   effect, track, index, onDragStart, onDragOver, isDragOver,
 }: {
@@ -181,8 +197,10 @@ function EffectDevice({
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
   const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
+  const width = EFFECT_WIDTH[effect.type] ?? DEFAULT_EFFECT_WIDTH;
 
   const applyPreset = (presetIdx: number) => {
     const preset = presets[presetIdx];
@@ -190,7 +208,6 @@ function EffectDevice({
     updateTrackEffect(track.id, effect.id, { params: preset.params } as Partial<TrackEffect>);
     effectsEngine.updateEffectParams(track.id, effect.id, preset.params, effect.type);
     effectsEngine.rebuildChain(track.id, track.effects ?? [], track.effectsBypassed ?? false);
-    // Wire Tone.js effect chain into the TrackNode audio graph
     const engine = getAudioEngine();
     const trackNode = engine.getOrCreateTrackNode(track.id);
     if (trackNode) {
@@ -203,35 +220,53 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col min-w-[170px] max-w-[200px] rounded-lg border shrink-0 transition-all ${
+      className={`flex flex-col rounded-lg border shrink-0 transition-all ${
         isDragOver ? 'border-l-2 border-l-violet-500' : 'border-white/10'
-      } ${!effect.enabled ? 'opacity-40' : ''}`}
-      style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+      } ${!effect.enabled ? 'opacity-50' : ''}`}
+      style={{ backgroundColor: 'rgba(255,255,255,0.03)', width }}
       onMouseOver={() => onDragOver(index)}
+      data-effect-id={effect.id}
     >
-      {/* Title bar */}
+      {/* Title bar — draggable, right-click for delete */}
       <div
-        className="flex items-center gap-1 px-1.5 py-1 rounded-t-lg cursor-pointer select-none"
-        style={{ backgroundColor: `${color}15` }}
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-t-lg select-none cursor-grab active:cursor-grabbing"
+        style={{ backgroundColor: `${color}28` }}
+        onMouseDown={(e) => {
+          // Only start drag from the title bar background (not from buttons)
+          if ((e.target as HTMLElement).closest('button, select')) return;
+          e.stopPropagation();
+          onDragStart(index);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setCtxMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
-        <div
-          className="cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80"
-          onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
+        {/* Left zone: bypass LED + effect name */}
+        <button
+          className="shrink-0 flex items-center justify-center"
+          onClick={(e) => {
+            e.stopPropagation();
+            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
+          }}
+          title={effect.enabled ? 'Bypass effect' : 'Enable effect'}
         >
-          <GripVertical className="h-3 w-3 text-white/40" />
-        </div>
-
-        <button onClick={() => setCollapsed(!collapsed)} className="text-white/40 hover:text-white/60">
-          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          <div
+            className={`w-2.5 h-2.5 rounded-full border ${
+              effect.enabled
+                ? 'bg-green-400 border-green-300 shadow-[0_0_4px_rgba(74,222,128,0.5)]'
+                : 'bg-transparent border-white/20'
+            }`}
+          />
         </button>
 
-        <span className="text-[10px] font-medium flex-1 truncate capitalize" style={{ color }}>
-          {effect.type}
+        <span className="text-[11px] font-medium flex-1 truncate" style={{ color }}>
+          {EFFECT_LABELS[effect.type]}
         </span>
 
-        {/* Preset selector */}
+        {/* Right zone: preset selector + collapse */}
         <select
-          className="bg-transparent text-white/40 text-[8px] border-none outline-none cursor-pointer max-w-[60px]"
+          className="bg-transparent text-white/50 text-[9px] border-none outline-none cursor-pointer max-w-[64px] hover:text-white/70"
           onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
           value=""
           onClick={(e) => e.stopPropagation()}
@@ -242,29 +277,39 @@ function EffectDevice({
           ))}
         </select>
 
-        {/* Enable/bypass toggle */}
         <button
-          className={`h-4 w-4 flex items-center justify-center ${effect.enabled ? 'text-green-400' : 'text-white/20'}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
-          }}
+          onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
+          className="text-white/40 hover:text-white/60 shrink-0"
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
-          <Power className="h-3 w-3" />
-        </button>
-
-        {/* Delete */}
-        <button
-          className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-red-400"
-          onClick={(e) => { e.stopPropagation(); removeTrackEffect(track.id, effect.id); }}
-        >
-          <Trash2 className="h-2.5 w-2.5" />
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
       </div>
 
+      {/* Context menu (delete + bypass) */}
+      {ctxMenu && (
+        <ContextMenuWrapper x={ctxMenu.x} y={ctxMenu.y} onClose={() => setCtxMenu(null)} minWidth={140}>
+          <ContextMenuItem
+            label={effect.enabled ? 'Bypass Effect' : 'Enable Effect'}
+            onClick={() => {
+              updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
+              setCtxMenu(null);
+            }}
+          />
+          <ContextMenuItem
+            label="Delete Effect"
+            color="#f87171"
+            onClick={() => {
+              removeTrackEffect(track.id, effect.id);
+              setCtxMenu(null);
+            }}
+          />
+        </ContextMenuWrapper>
+      )}
+
       {/* Body */}
       {!collapsed && (
-        <div className="overflow-y-auto max-h-[220px]">
+        <div className="overflow-y-auto">
           {effect.type === 'eq3' && <EQ3Card effect={effect} trackId={track.id} />}
           {effect.type === 'parametricEq' && <ParametricEQCard effect={effect} trackId={track.id} />}
           {effect.type === 'compressor' && <CompressorCard effect={effect} trackId={track.id} />}

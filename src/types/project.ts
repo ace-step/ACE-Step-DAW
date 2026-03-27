@@ -7,6 +7,44 @@ export type TrackName =
 export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
+
+// ─── Synth Parameter Types ────────────────────────────────────────────────────
+
+/** ADSR amplitude envelope for a synth track. */
+export interface SynthEnvelope {
+  /** Attack time in seconds (0.001–5). */
+  attack: number;
+  /** Decay time in seconds (0.001–5). */
+  decay: number;
+  /** Sustain level (0–1). */
+  sustain: number;
+  /** Release time in seconds (0.001–10). */
+  release: number;
+}
+
+export type SynthFilterType = 'lowpass' | 'highpass' | 'bandpass';
+
+/** Filter settings for a synth track. */
+export interface SynthFilter {
+  type: SynthFilterType;
+  /** Cutoff frequency in Hz (20–20000). */
+  frequency: number;
+  /** Resonance / Q factor (0.1–30). */
+  Q: number;
+}
+
+export type LfoShape = 'sine' | 'square' | 'triangle' | 'sawtooth';
+
+/** LFO modulation settings for a synth track. */
+export interface SynthLfo {
+  /** LFO rate in Hz (0.01–50). */
+  rate: number;
+  /** Modulation depth (0–1). */
+  depth: number;
+  /** Waveform shape. */
+  shape: LfoShape;
+}
+
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
 /** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
@@ -674,6 +712,12 @@ export interface Track {
   synthPreset?: SynthPreset;
   /** ID of the active synth preset definition (factory or user). */
   synthPresetDefinitionId?: string;
+  /** Custom ADSR envelope overriding the preset defaults. */
+  synthEnvelope?: SynthEnvelope;
+  /** Synth filter settings (lowpass/highpass/bandpass). */
+  synthFilter?: SynthFilter;
+  /** LFO modulation settings. */
+  synthLfo?: SynthLfo;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];

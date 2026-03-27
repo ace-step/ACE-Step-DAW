@@ -88,6 +88,10 @@ function fmParamsEqual(a: FmInstrumentSettings, b: FmInstrumentSettings): boolea
   );
 }
 
+/**
+ * @deprecated Use {@link InstrumentEngine} via {@link getEngineForInstrument} instead.
+ * This function will be removed once all call-sites migrate to the unified interface.
+ */
 export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
   const synth = new Tone.PolySynth(Tone.Synth);
 
@@ -156,6 +160,10 @@ function computeUnisonOffsets(
   return offsets;
 }
 
+/**
+ * @deprecated Use {@link InstrumentEngine} via {@link getEngineForInstrument} instead.
+ * This class will be removed once all call-sites migrate to the unified interface.
+ */
 class SynthEngine {
   private synths = new Map<string, SynthInstance>();
   private fmSynths = new Map<string, FmSynthInstance>();

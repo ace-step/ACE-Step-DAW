@@ -37,8 +37,8 @@ These items are in TASK_QUEUE.md but have **no GitHub issue**, meaning they're i
 
 | Gap | TASK_QUEUE ref | Impact |
 |-----|---------------|--------|
-| Effects not connected to live audio path | S1-03 | Users hear dry audio despite adding effects |
-| Effects not applied in WAV export | S1-04 | Exported files missing all processing |
+| ~~Effects not connected to live audio path~~ | S1-03 | **Already implemented** — `useEffectsSync` + `spliceEffects()` |
+| ~~Effects not applied in WAV export~~ | S1-04 | **Already implemented** — `buildOfflineEffects()` in exportMix.ts |
 | Audio context resume overlay | S1-01 | No sound on first visit — users think app is broken |
 | Auto-save + crash recovery | S1-06 | Users lose work on browser crash/reload |
 | Recording workflow not wired to UI | S1-08 | Record button non-functional despite engine existing |
@@ -100,8 +100,8 @@ These items are in TASK_QUEUE.md but have **no GitHub issue**, meaning they're i
 
 > Goal: A user can open the DAW, hear effects, record audio, save safely, and export a proper mix.
 
-1. **Effects in live playback** — Without this, the entire effects system is decorative
-2. **Effects in WAV export** — Depends on #1, completes the audio pipeline
+1. ~~**Effects in live playback**~~ — **Already implemented** (closed #1100)
+2. ~~**Effects in WAV export**~~ — **Already implemented** (closed #1101)
 3. **Audio context resume** — First-visit experience; zero effort, high impact
 4. **Auto-save + crash recovery** — Users WILL lose work without this
 5. **Recording workflow wiring** — Engine exists, just needs UI connection
@@ -158,8 +158,8 @@ These items are in TASK_QUEUE.md but have **no GitHub issue**, meaning they're i
 
 Based on this analysis, the following GitHub issues should be created for the highest-priority untracked gaps:
 
-1. `feat: Connect effects engine to live audio playback path`
-2. `feat: Apply effects chain in WAV/stem export via OfflineAudioContext`
+1. ~~`feat: Connect effects engine to live audio playback path`~~ — **Closed: already implemented**
+2. ~~`feat: Apply effects chain in WAV/stem export via OfflineAudioContext`~~ — **Closed: already implemented**
 3. `feat: Audio context resume overlay on first user gesture`
 4. `feat: Auto-save to IndexedDB with crash recovery`
 5. `feat: Wire RecordingEngine to UI (record button, arm, mic permissions)`

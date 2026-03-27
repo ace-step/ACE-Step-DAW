@@ -18,41 +18,26 @@ vi.mock('../../hooks/useToast', () => ({
   toastSuccess: vi.fn(),
 }));
 
-const mockRenderTrackForBounceInPlace = vi.fn();
+const mockBounceTrackToAudioAsset = vi.fn();
 vi.mock('../../services/bounceInPlace', async () => {
   const actual = await vi.importActual<typeof import('../../services/bounceInPlace')>('../../services/bounceInPlace');
   return {
     ...actual,
-    renderTrackForBounceInPlace: (...args: unknown[]) => mockRenderTrackForBounceInPlace(...args),
+    bounceTrackToAudioAsset: (...args: unknown[]) => mockBounceTrackToAudioAsset(...args),
   };
 });
 
 import { useProjectStore } from '../projectStore';
 
-function createMockAudioBuffer(duration = 2): AudioBuffer {
-  const sampleRate = 48000;
-  const length = Math.ceil(duration * sampleRate);
-  const channelData = new Float32Array(length).fill(0.25);
-  return {
-    duration,
-    sampleRate,
-    length,
-    numberOfChannels: 2,
-    getChannelData: () => channelData,
-    copyFromChannel: vi.fn(),
-    copyToChannel: vi.fn(),
-  } as unknown as AudioBuffer;
-}
-
-describe.skip('projectStore bounceInPlace', () => {
+describe('projectStore bounceInPlace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useProjectStore.setState({ project: null });
     useProjectStore.getState().createProject({ name: 'Bounce Project' });
-    mockRenderTrackForBounceInPlace.mockResolvedValue({
+    mockBounceTrackToAudioAsset.mockResolvedValue({
+      audioKey: 'bounced-audio-key',
       startTime: 1,
       duration: 2,
-      buffer: createMockAudioBuffer(2),
       waveformPeaks: [0.2, 0.6, 0.4],
     });
   });

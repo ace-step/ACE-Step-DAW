@@ -1349,8 +1349,7 @@ export function getBottomPanelHeight(state: UIState): number {
     default: break;
   }
   if (state.showMixer) {
-    // Mixer renders at Math.max(mixerHeight, 360) — use the same floor
-    height += Math.max(state.mixerHeight, 360);
+    height += state.mixerHeight;
   }
   return height;
 }

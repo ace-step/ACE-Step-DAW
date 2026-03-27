@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -44,6 +44,7 @@ interface ChannelStripProps {
 
 function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
+  const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
   const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
@@ -52,6 +53,10 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
+
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const vol = track.volume;
   const pan = track.pan ?? 0;
@@ -66,6 +71,30 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const effectsBypassed = track.effectsBypassed ?? false;
   const sends = track.sends ?? [];
   const isSelected = useUIStore((s) => s.keyboardContext.scope === 'mixer' && s.keyboardContext.trackId === track.id);
+
+  const handleDoubleClickName = useCallback(() => {
+    setRenameValue(track.displayName);
+    setIsRenaming(true);
+    // Focus will happen via autoFocus on the input
+  }, [track.displayName]);
+
+  const commitRename = useCallback(() => {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== track.displayName) {
+      renameTrack(track.id, trimmed);
+    }
+    setIsRenaming(false);
+  }, [renameValue, track.displayName, track.id, renameTrack]);
+
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  }, [commitRename]);
 
   return (
     <div
@@ -89,30 +118,57 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
         {/* Track header group */}
         <div data-testid="channel-header" className="flex w-full flex-col items-center gap-1.5 pb-2">
-          <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: track.color }} />
+          {/* Track color strip */}
+          <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
           {track.isGroup && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-[#333] rounded px-1.5 py-0.5">GRP</span>
           )}
-          <span className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide" title={track.displayName}>
-            {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
-            {track.displayName}
-          </span>
 
+          {/* Track name — double-click to rename */}
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              data-testid="channel-rename-input"
+              className="w-full bg-[#333] border border-daw-accent rounded px-1 py-0.5 text-xs text-zinc-100 text-center outline-none"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={handleRenameKeyDown}
+              autoFocus
+              maxLength={32}
+            />
+          ) : (
+            <span
+              data-testid="channel-name"
+              className="text-xs text-zinc-300 font-medium leading-none truncate w-full text-center uppercase tracking-wide cursor-default"
+              title={`${track.displayName} (double-click to rename)`}
+              onDoubleClick={handleDoubleClickName}
+            >
+              {isFrozen && <span className="text-cyan-400 mr-0.5" title="Frozen">*</span>}
+              {track.displayName}
+            </span>
+          )}
+
+          {/* Mute / Solo / FX bypass buttons */}
           <div className="flex gap-1.5 mt-0.5">
             <button
+              data-testid="mute-btn"
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
               aria-label={`Mute ${track.displayName}`}
+              aria-pressed={track.muted}
               className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-colors ${
-                track.muted ? 'bg-amber-500 text-black' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
+                track.muted ? 'bg-red-500 text-white' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
               }`}
             >
               M
             </button>
             <button
+              data-testid="solo-btn"
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
               aria-label={`Solo ${track.displayName}`}
+              aria-pressed={track.soloed}
               className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-colors ${
-                track.soloed ? 'bg-emerald-500 text-black' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
+                track.soloed ? 'bg-yellow-400 text-black' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
               }`}
             >
               S
@@ -248,9 +304,10 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
         </div>
       </div>
 
+      {/* Fader + meter region */}
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
         <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
-          <LevelMeter trackId={track.id} />
+          <LevelMeter trackId={track.id} stereo />
           <VerticalFader
             value={vol}
             min={0}
@@ -281,7 +338,10 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   const handleChange = (v: number) => { updateProject({ masterVolume: v }); getAudioEngine().masterVolume = v; };
 
   return (
-    <div className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2">
+    <div
+      data-testid="master-strip"
+      className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2"
+    >
       <div className="flex w-full shrink-0 items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Master</span>
         <button
@@ -300,9 +360,13 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         <MasteringPanel />
       </div>
       <div data-testid="master-fader-region" className="mt-1 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1 self-stretch pb-1" style={{ height: faderHeight + 24 }}>
+        <div className="flex items-center gap-1 text-[9px] text-zinc-500 uppercase tracking-widest mb-1">
+          <span>IN</span>
+          <span className="mx-2">OUT</span>
+        </div>
         <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
-          <LevelMeter masterStage="input" />
-          <LevelMeter masterStage="output" />
+          <LevelMeter masterStage="input" stereo={false} />
+          <LevelMeter masterStage="output" stereo={false} />
           <VerticalFader
             value={masterVol}
             min={0}

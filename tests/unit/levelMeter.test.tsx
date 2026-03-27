@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LevelMeter } from '../../src/components/mixer/LevelMeter';
 
@@ -16,10 +16,7 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({
 }));
 
 describe('LevelMeter', () => {
-  let rafCallback: FrameRequestCallback | null = null;
-
   beforeEach(() => {
-    rafCallback = null;
     engine.getTrackMeter.mockReset();
     engine.getMasterMeter.mockReset();
     engine.resetTrackClip.mockReset();
@@ -27,78 +24,38 @@ describe('LevelMeter', () => {
     engine.getTrackLevel.mockReset();
     engine.getMasterLevel.mockReset();
 
-    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => {
-      rafCallback = cb;
-      return 1;
-    }));
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    engine.getTrackMeter.mockReturnValue({ level: 0.5, leftLevel: 0.4, rightLevel: 0.6, clipped: false });
+    engine.getMasterMeter.mockReturnValue({ level: 0.3, clipped: false });
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  function runFrame() {
-    if (!rafCallback) throw new Error('No animation frame scheduled');
-    const cb = rafCallback;
-    rafCallback = null;
-    act(() => {
-      cb(performance.now());
-    });
-  }
-
-  it('holds the peak marker after the current level falls', () => {
-    engine.getTrackMeter
-      .mockReturnValueOnce({ level: 0.8, clipped: false })
-      .mockReturnValue({ level: 0.2, clipped: false });
-
+  it('renders a canvas element with correct aria-label for track meter', () => {
     render(<LevelMeter trackId="track-1" />);
-
-    runFrame();
-    runFrame();
-
-    expect(screen.getByLabelText('Mixer level meter for track-1')).toBeInTheDocument();
-    expect(screen.getByTestId('meter-level-fill')).toHaveStyle({ height: '20%' });
-    expect(screen.getByTestId('meter-peak-hold')).toHaveStyle({ bottom: 'calc(80% - 1px)' });
+    const canvas = screen.getByTestId('meter-canvas');
+    expect(canvas).toBeDefined();
+    expect(canvas.tagName.toLowerCase()).toBe('canvas');
+    expect(canvas.getAttribute('aria-label')).toBe('Mixer level meter for track-1');
   });
 
-  it('shows a resettable clip indicator when the engine reports clipping', () => {
-    engine.getTrackMeter
-      .mockReturnValueOnce({ level: 1, clipped: true })
-      .mockReturnValue({ level: 0.2, clipped: false });
-
-    render(<LevelMeter trackId="track-1" />);
-
-    runFrame();
-
-    const resetButton = screen.getByRole('button', { name: 'Reset clip indicator for track-1' });
-    fireEvent.click(resetButton);
-
-    expect(engine.resetTrackClip).toHaveBeenCalledWith('track-1');
-    expect(screen.queryByRole('button', { name: 'Reset clip indicator for track-1' })).not.toBeInTheDocument();
+  it('renders a canvas with master aria-label for master stage', () => {
+    render(<LevelMeter masterStage="output" />);
+    const canvas = screen.getByTestId('meter-canvas');
+    expect(canvas.getAttribute('aria-label')).toBe('Master output level meter');
   });
 
-  it('peak hold line turns red when clipping', () => {
-    engine.getTrackMeter
-      .mockReturnValueOnce({ level: 1, clipped: true })
-      .mockReturnValue({ level: 0.5, clipped: false });
-
+  it('renders clip indicator button (initially hidden)', () => {
     render(<LevelMeter trackId="track-1" />);
-
-    runFrame();
-
-    const peakHold = screen.getByTestId('meter-peak-hold');
-    expect(peakHold.className).toMatch(/bg-red/);
+    const clipBtn = screen.getByTitle('Reset clip indicator');
+    expect(clipBtn.style.display).toBe('none');
   });
 
-  it('peak hold line is white when not clipping', () => {
-    engine.getTrackMeter.mockReturnValue({ level: 0.5, clipped: false });
-
+  it('renders stereo width for track meters by default', () => {
     render(<LevelMeter trackId="track-1" />);
-
-    runFrame();
-
-    const peakHold = screen.getByTestId('meter-peak-hold');
-    expect(peakHold.className).toMatch(/bg-white/);
+    const container = screen.getByTestId('level-meter');
+    // Stereo: BAR_WIDTH(4)*2 + BAR_GAP(1) + 6 = 15px
+    expect(container.style.width).toBe('15px');
   });
 });

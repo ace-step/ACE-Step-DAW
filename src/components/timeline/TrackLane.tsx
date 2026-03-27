@@ -255,13 +255,11 @@ function TrackLaneInner({ track }: TrackLaneProps) {
       // Compute ghost preview position (works for both internal drag payloads and external OS file drags)
       if (hasProject) {
         const payload = getDragPayload();
-        const isExternalFile = !payload && types.includes('Files');
         const laneX = clientXToLaneX(e.clientX);
         const rawTime = laneX / pixelsPerSecond;
         const snappedTime = Math.max(0, snapToGrid(rawTime, bpm, 1, tempoMap));
-        // For external files we don't know the duration — show a narrow drop indicator
-        const ghostDuration = isExternalFile ? 0 : (payload?.duration ?? defaultClipDuration);
-        const ghostName = payload?.name ?? (isExternalFile ? 'Audio file' : 'Audio');
+        const ghostDuration = payload?.duration ?? defaultClipDuration;
+        const ghostName = payload?.name ?? (types.includes('Files') ? 'Audio file' : 'Audio');
         setDropGhost({
           left: snappedTime * pixelsPerSecond,
           width: ghostDuration * pixelsPerSecond,
@@ -423,7 +421,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
         )}
 
         {/* Drop ghost preview — shows where the clip will land */}
-        {dropGhost && dropGhost.width > 0 && (
+        {dropGhost && (
           <div
             className="absolute top-1 bottom-1 rounded-md pointer-events-none z-30 flex items-center overflow-hidden"
             style={{
@@ -434,24 +432,6 @@ function TrackLaneInner({ track }: TrackLaneProps) {
             }}
           >
             <span className="text-[10px] text-white/70 px-2 truncate">{dropGhost.name}</span>
-          </div>
-        )}
-        {/* Drop indicator line for external files (unknown duration) */}
-        {dropGhost && dropGhost.width === 0 && (
-          <div
-            className="absolute top-0 bottom-0 pointer-events-none z-30 flex items-start"
-            style={{ left: dropGhost.left }}
-          >
-            <div
-              className="absolute top-0 bottom-0 w-0.5"
-              style={{ backgroundColor: track.color ?? 'rgb(94, 89, 255)' }}
-            />
-            <span
-              className="text-[10px] text-white/80 whitespace-nowrap ml-2 mt-1 px-1 rounded"
-              style={{ backgroundColor: track.color ? `${track.color}B3` : 'rgba(94, 89, 255, 0.7)' }}
-            >
-              {dropGhost.name}
-            </span>
           </div>
         )}
 

@@ -550,6 +550,8 @@ export interface AudioWarpMarker {
 export interface SequencerStep {
   active: boolean;
   velocity: number;      // 0–1, default 0.8
+  probability: number;   // 0–1, default 1 (100%). Probability the step triggers during playback.
+  stepParams: Record<string, number>;  // Per-step parameter locks (e.g. { pitch: 0.7, decay: 0.3 })
 }
 
 export interface SequencerRow {

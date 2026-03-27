@@ -32,6 +32,7 @@ interface SequencerStepGridProps {
   onSetStepVelocity: (trackId: string, rowId: string, stepIdx: number, velocity: number) => void;
   onBatchSetSteps: (trackId: string, ops: BatchStepOp[]) => void;
   onPreviewSample: (sampleKey: string, velocity: number) => void;
+  onStepContextMenu?: (rowId: string, stepIdx: number, x: number, y: number) => void;
   onAddBar: () => void;
 }
 
@@ -52,6 +53,7 @@ export function SequencerStepGrid({
   onSetStepVelocity,
   onBatchSetSteps,
   onPreviewSample,
+  onStepContextMenu,
   onAddBar,
 }: SequencerStepGridProps) {
   const marqueeRef = useRef<{ anchorRowIdx: number; anchorStepIdx: number; active: boolean } | null>(null);
@@ -273,6 +275,7 @@ export function SequencerStepGrid({
           isSelectedCell={isInSelection}
           onGridMouseDown={handleGridMouseDown}
           onVelocityMouseDown={handleVelocityMouseDown}
+          onStepContextMenu={onStepContextMenu}
           onAddBar={onAddBar}
         />
       ))}

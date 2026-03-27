@@ -23,7 +23,15 @@
 
 ## Priority 2: Feature Gaps (from competitive research)
 
-(populated by @researcher agent)
+### Audio Engine Architecture (from tonejs-alternatives research)
+
+- [ ] As a developer, I want EffectsEngine to use native Web Audio API nodes and AudioWorklet instead of Tone.js wrappers, so that we can load multiple AudioWorklet modules and support WAM 2.0 plugins (P1)
+- [ ] As a developer, I want all offline rendering to use native OfflineAudioContext instead of Tone.Offline(), so that we remove a Tone.js dependency and have consistent rendering across track types (P1)
+- [ ] As a developer, I want an AudioWorklet-based scheduling clock replacing the Tone.js Web Worker clock, so that MIDI and audio events have sample-accurate timing without GC jitter (P2)
+- [ ] As a developer, I want WAM 2.0 (Web Audio Modules) plugin hosting support, so that users can load third-party audio effects and instruments in the DAW (P2)
+- [ ] As a developer, I want Faust-compiled WASM effects (convolution reverb, multiband compressor), so that CPU-intensive DSP runs at near-native speed inside AudioWorklet (P2)
+- [ ] As a developer, I want Rust/WASM AudioWorklet processors for custom DSP (using dasp), so that performance-critical audio processing runs at native speed (P3)
+- [ ] As a developer, I want a Tauri desktop build with native audio backend via cpal, so that the DAW can bypass browser audio limitations for desktop users (P3)
 
 ## Priority 3: Refactoring
 

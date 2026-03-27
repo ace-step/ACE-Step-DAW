@@ -20,6 +20,7 @@ import { useVST3Connection } from '../../hooks/useVST3Connection';
 import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
+import { AudioContextOverlay } from './AudioContextOverlay';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -167,6 +168,7 @@ function EditorShell() {
       </Suspense>
       {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
       {!hasBlockingDialog && <Suspense fallback={null}><AIAssistantPanel /></Suspense>}
+      <AudioContextOverlay />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { SynthInstrumentEditor } from '../../src/components/pianoroll/SynthInstr
 import { createDefaultFmInstrument, createDefaultSubtractiveInstrument } from '../../src/utils/trackInstrument';
 
 describe('SynthInstrumentEditor', () => {
-  it('updates subtractive oscillator waveform and filter cutoff through canonical instrument state', () => {
+  it('updates subtractive oscillator waveform, filter cutoff, and filter envelope through canonical instrument state', () => {
     const onInstrumentChange = vi.fn();
 
     render(
@@ -30,6 +30,28 @@ describe('SynthInstrumentEditor', () => {
       kind: 'subtractive',
       settings: expect.objectContaining({
         filter: expect.objectContaining({ cutoffHz: 3200 }),
+      }),
+    }));
+
+    fireEvent.contextMenu(screen.getByLabelText('Filter Env Amt knob'));
+    fireEvent.change(screen.getByLabelText('Filter Env Amt exact value'), { target: { value: '0.42' } });
+    fireEvent.keyDown(screen.getByLabelText('Filter Env Amt exact value'), { key: 'Enter' });
+
+    expect(onInstrumentChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'subtractive',
+      settings: expect.objectContaining({
+        filterEnvelope: expect.objectContaining({ amount: 0.42 }),
+      }),
+    }));
+
+    fireEvent.contextMenu(screen.getByLabelText('Filt Env Release knob'));
+    fireEvent.change(screen.getByLabelText('Filt Env Release exact value'), { target: { value: '1.8' } });
+    fireEvent.keyDown(screen.getByLabelText('Filt Env Release exact value'), { key: 'Enter' });
+
+    expect(onInstrumentChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'subtractive',
+      settings: expect.objectContaining({
+        filterEnvelope: expect.objectContaining({ release: 1.8 }),
       }),
     }));
   });

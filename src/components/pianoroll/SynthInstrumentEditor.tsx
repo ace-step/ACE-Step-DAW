@@ -135,7 +135,7 @@ function renderSubtractiveEditor(
   instrument: SubtractiveTrackInstrument,
   onInstrumentChange: (instrument: SubtractiveTrackInstrument) => void,
 ) {
-  const { oscillator, ampEnvelope, filter, lfo, unison, glideTime, outputGain } = instrument.settings;
+  const { oscillator, ampEnvelope, filter, filterEnvelope, lfo, unison, glideTime, outputGain } = instrument.settings;
 
   const updateSettings = (settings: SubtractiveTrackInstrument['settings']) => {
     onInstrumentChange({
@@ -311,7 +311,7 @@ function renderSubtractiveEditor(
       </Section>
 
       <Section
-        title="Filter, Modulation, and Width"
+        title="Filter, Envelopes, and Motion"
         eyebrow="Motion"
         action={(
           <div className="flex items-center gap-2">
@@ -486,6 +486,101 @@ function renderSubtractiveEditor(
           />
         </div>
 
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Filter Envelope</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">Per-note cutoff contour</div>
+          </div>
+          <div className={`mt-2 grid grid-cols-3 gap-3 ${filter.enabled ? '' : 'opacity-45'}`}>
+            <EditorKnob
+              value={filterEnvelope.amount}
+              min={0}
+              max={1}
+              defaultValue={0}
+              step={0.01}
+              label="Filter Env Amt"
+              disabled={!filter.enabled}
+              onChange={(value) => updateSettings({
+                ...instrument.settings,
+                filterEnvelope: {
+                  ...filterEnvelope,
+                  amount: value,
+                },
+              })}
+            />
+            <EditorKnob
+              value={filterEnvelope.attack}
+              min={0}
+              max={2}
+              defaultValue={0.01}
+              step={0.01}
+              label="Filt Env Attack"
+              unit="s"
+              disabled={!filter.enabled}
+              onChange={(value) => updateSettings({
+                ...instrument.settings,
+                filterEnvelope: {
+                  ...filterEnvelope,
+                  attack: value,
+                },
+              })}
+            />
+            <EditorKnob
+              value={filterEnvelope.decay}
+              min={0}
+              max={2}
+              defaultValue={0.2}
+              step={0.01}
+              label="Filt Env Decay"
+              unit="s"
+              disabled={!filter.enabled}
+              onChange={(value) => updateSettings({
+                ...instrument.settings,
+                filterEnvelope: {
+                  ...filterEnvelope,
+                  decay: value,
+                },
+              })}
+            />
+          </div>
+          <div className={`mt-3 grid grid-cols-2 gap-3 ${filter.enabled ? '' : 'opacity-45'}`}>
+            <EditorKnob
+              value={filterEnvelope.sustain}
+              min={0}
+              max={1}
+              defaultValue={0.5}
+              step={0.01}
+              label="Filt Env Sustain"
+              disabled={!filter.enabled}
+              onChange={(value) => updateSettings({
+                ...instrument.settings,
+                filterEnvelope: {
+                  ...filterEnvelope,
+                  sustain: value,
+                },
+              })}
+            />
+            <EditorKnob
+              value={filterEnvelope.release}
+              min={0}
+              max={5}
+              defaultValue={0.5}
+              step={0.01}
+              label="Filt Env Release"
+              unit="s"
+              disabled={!filter.enabled}
+              onChange={(value) => updateSettings({
+                ...instrument.settings,
+                filterEnvelope: {
+                  ...filterEnvelope,
+                  release: value,
+                },
+              })}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">LFO and Glide</div>
         <div className="mt-4 grid grid-cols-4 gap-3">
           <EditorKnob
             value={lfo.rateHz}
@@ -551,6 +646,7 @@ function renderSubtractiveEditor(
           />
         </div>
 
+        <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Unison</div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <SelectField
             ariaLabel="Instrument unison voices"

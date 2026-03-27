@@ -7,18 +7,18 @@
 ## 🔥 Sprint 1 — Ready (pick next)
 
 ### Wave 1 (no dependencies — start now)
-- [P0] [feat] **S1-01** Audio context resume overlay on first user gesture — show "Click to enable audio" when AudioContext suspended → `AppShell.tsx`
-- [P0] [feat] **S1-02** Undo/redo system (Cmd+Z / Cmd+Shift+Z) — Zustand temporal middleware on projectStore, 100-action stack, labeled entries → `projectStore.ts`, new `useKeyboardShortcuts.ts`
-- [P0] [feat] **S1-03** Connect EffectsEngine to live audio path — refactor to native Web Audio nodes, insert between TrackNode and master → `EffectsEngine.ts`, `AudioEngine.ts`, `TrackNode.ts`
-- [P0] [feat] **S1-06** Auto-save to IndexedDB every 30s + beforeunload warning — dirty detection, debounced writes, status bar indicator → new `useAutoSave.ts`, `StatusBar.tsx`
+- [P0] [feat] **S1-01** Audio context resume overlay — ✅ **In progress** (issue #1102)
+- [P0] [feat] ~~**S1-02** Undo/redo system~~ — ✅ **Already implemented** (55+ undoable actions, Cmd+Z works)
+- [P0] [feat] ~~**S1-03** Connect EffectsEngine to live audio path~~ — ✅ **Already implemented** (useEffectsSync + spliceEffects)
+- [P0] [feat] **S1-06** Auto-save to IndexedDB — ✅ **In progress** (issue #1103)
 - [P1] [feat] **S1-09** Project archive import UI — "Import" button in ProjectListDialog, wire `importProjectArchive()`, handle duplicates → `ProjectListDialog.tsx`
 - [P0] [feat] **S1-10** DAWState.summary — auto-generated natural language project summary for LLM agents, debounced, <2000 chars → new `projectSummary.ts`, `projectStore.ts`
 
 ### Wave 2 (after Wave 1 dependencies resolve)
-- [P0] [feat] **S1-04** Apply effects in WAV export — rebuild full signal chain in OfflineAudioContext, extract factory from TrackNode → `exportMix.ts`, `TrackNode.ts` *(depends: S1-03)*
-- [P1] [feat] **S1-05** Piano Roll batch ops — quantize to grid button, Delete selected, Shift+Up/Down transpose, selected note visual highlight → `PianoRoll.tsx` *(soft depends: S1-02)*
-- [P0] [feat] **S1-07** Global keyboard shortcuts — Space/R/L/S/M/Cmd+Z/Cmd+S/Delete/Cmd+D, input-aware, browser-conflict-safe → new `useKeyboardShortcuts.ts` *(soft depends: S1-02)*
-- [P1] [feat] **S1-08** Wire up RecordingEngine — enable Record button, track arm buttons, clip creation on stop, mic permission flow → new `useRecording.ts`, `Toolbar.tsx`, `TrackHeader.tsx` *(depends: S1-01)*
+- [P0] [feat] ~~**S1-04** Apply effects in WAV export~~ — ✅ **Already implemented** (buildOfflineEffects in exportMix.ts)
+- [P1] [feat] **S1-05** Piano Roll batch ops — quantize to grid button, Delete selected, Shift+Up/Down transpose, selected note visual highlight → `PianoRoll.tsx`
+- [P0] [feat] ~~**S1-07** Global keyboard shortcuts~~ — ✅ **Already implemented** (25+ shortcuts in KeyboardShortcutsDialog)
+- [P1] [feat] **S1-08** Wire up RecordingEngine — ✅ **In progress** (issue #1104)
 
 ## Backlog — Sprint 2 Candidates
 

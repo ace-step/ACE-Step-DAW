@@ -637,6 +637,7 @@ export interface SequencerRow {
   id: string;
   name: string;           // e.g. "Kick", "Snare", "Hi-Hat"
   sampleKey: string;      // built-in sample id or IndexedDB key for user sample
+  sampleName?: string;    // display name for user-loaded samples (undefined for built-in)
   steps: SequencerStep[];
   volume: number;         // 0–1
   pan: number;            // -1 (full left) to +1 (full right), default 0

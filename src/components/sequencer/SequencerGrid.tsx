@@ -138,7 +138,8 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
     const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
     const key = `user-sample-${Date.now()}-${file.name}`;
     cacheUserSample(key, audioBuffer);
-    setRowSample(track.id, rowId, key);
+    const displayName = file.name.replace(/\.[^.]+$/, '');
+    setRowSample(track.id, rowId, key, displayName);
   }, [track.id, setRowSample]);
 
   const handleRowContextMenu = useCallback((rowId: string, e: React.MouseEvent) => {
@@ -297,25 +298,7 @@ export function SequencerGrid({ track, height }: SequencerGridProps) {
               <SamplePickerDropdown
                 currentKey={pattern.rows.find((r) => r.id === samplePickerRow)?.sampleKey ?? ''}
                 onSelect={(key, name) => {
-                  setRowSample(track.id, samplePickerRow, key);
-                  const state = useProjectStore.getState();
-                  if (state.project) {
-                    const updatedTracks = state.project.tracks.map((t) => {
-                      if (t.id !== track.id || !t.sequencerPattern) return t;
-                      return {
-                        ...t,
-                        sequencerPattern: {
-                          ...t.sequencerPattern,
-                          rows: t.sequencerPattern.rows.map((r) =>
-                            r.id === samplePickerRow ? { ...r, name } : r,
-                          ),
-                        },
-                      };
-                    });
-                    useProjectStore.setState({
-                      project: { ...state.project, tracks: updatedTracks, updatedAt: Date.now() },
-                    });
-                  }
+                  setRowSample(track.id, samplePickerRow, key, name);
                   setSamplePickerRow(null);
                 }}
                 onClose={() => setSamplePickerRow(null)}

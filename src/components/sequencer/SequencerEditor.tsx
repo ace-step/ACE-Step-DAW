@@ -302,22 +302,7 @@ export function SequencerEditor() {
   };
 
   const updateSelectedRowSample = (rowId: string, key: string, name: string) => {
-    setRowSample(track.id, rowId, key);
-    const state = useProjectStore.getState();
-    if (!state.project) return;
-    const updatedTracks = state.project.tracks.map((candidate) => {
-      if (candidate.id !== track.id || !candidate.sequencerPattern) return candidate;
-      return {
-        ...candidate,
-        sequencerPattern: {
-          ...candidate.sequencerPattern,
-          rows: candidate.sequencerPattern.rows.map((row) => (row.id === rowId ? { ...row, name } : row)),
-        },
-      };
-    });
-    useProjectStore.setState({
-      project: { ...state.project, tracks: updatedTracks, updatedAt: Date.now() },
-    });
+    setRowSample(track.id, rowId, key, name);
   };
 
   const renderVelocityLane = () => {

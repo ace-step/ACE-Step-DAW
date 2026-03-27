@@ -751,7 +751,8 @@ export interface ProjectState {
   setSequencerRowVolume: (trackId: string, rowId: string, volume: number) => void;
   setSequencerRowPan: (trackId: string, rowId: string, pan: number) => void;
   toggleSequencerRowMute: (trackId: string, rowId: string) => void;
-  setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string) => void;
+  setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string, sampleName?: string) => void;
+  clearSequencerRowSample: (trackId: string, rowId: string) => void;
   clearSequencerRow: (trackId: string, rowId: string) => void;
   reorderSequencerRows: (trackId: string, fromIndex: number, toIndex: number) => void;
   cloneSequencerRow: (trackId: string, rowId: string) => void;
@@ -5738,7 +5739,7 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  setSequencerRowSample: (trackId, rowId, sampleKey) => {
+  setSequencerRowSample: (trackId, rowId, sampleKey, sampleName) => {
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'track', label: 'Assign sequencer row sample', trackId });
@@ -5752,9 +5753,44 @@ export const useProjectStore = create<ProjectState>()(
             ...t,
             sequencerPattern: {
               ...t.sequencerPattern,
-              rows: t.sequencerPattern.rows.map((r) =>
-                r.id === rowId ? { ...r, sampleKey } : r,
-              ),
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const updated = { ...r, sampleKey };
+                if (sampleName !== undefined) {
+                  updated.sampleName = sampleName;
+                } else {
+                  delete updated.sampleName;
+                }
+                return updated;
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  clearSequencerRowSample: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear sequencer row sample', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r, idx) => {
+                if (r.id !== rowId) return r;
+                const defaultKey = DRUM_PAD_DEFAULTS[idx % DRUM_PAD_DEFAULTS.length].sampleKey;
+                const updated = { ...r, sampleKey: defaultKey };
+                delete updated.sampleName;
+                return updated;
+              }),
             },
           };
         }),

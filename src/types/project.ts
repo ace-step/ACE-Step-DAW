@@ -519,7 +519,19 @@ export interface AssetTrackSnapshot {
   midiEffects: MidiEffect[];
 }
 
-export interface AssetClipSnapshot extends Omit<Clip, 'id' | 'trackId' | 'startTime' | 'generationJobId'> {}
+export interface AssetClipSnapshot extends Omit<
+  Clip,
+  | 'id'
+  | 'trackId'
+  | 'startTime'
+  | 'generationJobId'
+  | 'versions'
+  | 'activeVersionIdx'
+  | 'midiData'
+  | 'takes'
+  | 'warpMarkers'
+  | 'gainEnvelope'
+> {}
 
 export interface Track {
   id: string;

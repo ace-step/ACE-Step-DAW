@@ -298,7 +298,7 @@ export function Timeline() {
       return;
     }
 
-    // Handle asset drop -> create Quick Sampler track
+    // Handle asset drop -> import asset as a new track (may create or restore a generated track)
     const assetId = e.dataTransfer.getData('application/x-asset-id');
     if (assetId) {
       await importAssetAsNewTrack(assetId, startTime);

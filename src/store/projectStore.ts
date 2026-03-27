@@ -1757,6 +1757,12 @@ function buildAssetClipSnapshot(clip: Clip, starred: boolean): AssetClipSnapshot
     trackId: _ignoredTrackId,
     startTime: _ignoredStartTime,
     generationJobId: _ignoredGenerationJobId,
+    versions: _ignoredVersions,
+    activeVersionIdx: _ignoredActiveVersionIdx,
+    midiData: _ignoredMidiData,
+    takes: _ignoredTakes,
+    warpMarkers: _ignoredWarpMarkers,
+    gainEnvelope: _ignoredGainEnvelope,
     ...snapshot
   } = structuredClone(clip);
 
@@ -2870,6 +2876,11 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return undefined;
     const asset = (state.project.assets ?? []).find((candidate) => candidate.id === assetId);
     if (!asset) return undefined;
+    if (_isViewerMode()) return undefined;
+    if (state.project.tracks.length >= MAX_PROJECT_TRACKS) {
+      toastError(`Track limit reached (${MAX_PROJECT_TRACKS} max)`);
+      return undefined;
+    }
 
     _pushHistory(state.project, { scope: 'arrangement', label: 'Restore asset track' });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
+import { useCollaborationStore } from '../collaborationStore';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES, MAX_PROJECT_TRACKS } from '../../constants/defaults';
 
 // Mock projectStorage to prevent IndexedDB calls during testing
@@ -11,6 +12,7 @@ describe('projectStore', () => {
   beforeEach(() => {
     // Reset to a fresh state
     useProjectStore.setState({ project: null });
+    useCollaborationStore.getState().reset();
   });
 
   describe('createProject', () => {
@@ -263,6 +265,40 @@ describe('projectStore', () => {
       useProjectStore.getState().createProject();
     });
 
+    function createReadyGeneratedAsset() {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'stems');
+      store.setTrackLocalCaption(track.id, 'Glass lead');
+
+      const clip = store.addClip(track.id, {
+        startTime: 0,
+        duration: 6,
+        prompt: 'Glass lead hook',
+        globalCaption: 'Neon skyline',
+        lyrics: '',
+        source: 'generated',
+      });
+
+      store.updateClipStatus(clip.id, 'ready', {
+        isolatedAudioKey: 'audio:isolated:lead',
+        cumulativeMixKey: 'audio:cumulative:lead',
+        waveformPeaks: [0.2, 0.6, 0.3],
+        audioDuration: 6,
+        audioOffset: 0,
+        inferredMetas: {
+          bpm: 128,
+          keyScale: 'A minor',
+        },
+        generatedFromContext: true,
+      });
+
+      return {
+        track,
+        clip,
+        asset: useProjectStore.getState().project!.assets![0],
+      };
+    }
+
     it('persists origin snapshots when a generated clip becomes ready', () => {
       const store = useProjectStore.getState();
       const track = store.addTrack('bass', 'stems');
@@ -320,32 +356,7 @@ describe('projectStore', () => {
 
     it('restores a generated asset as a new AI track after the source track is deleted', () => {
       const store = useProjectStore.getState();
-      const track = store.addTrack('synth', 'stems');
-      store.setTrackLocalCaption(track.id, 'Glass lead');
-
-      const clip = store.addClip(track.id, {
-        startTime: 0,
-        duration: 6,
-        prompt: 'Glass lead hook',
-        globalCaption: 'Neon skyline',
-        lyrics: '',
-        source: 'generated',
-      });
-
-      store.updateClipStatus(clip.id, 'ready', {
-        isolatedAudioKey: 'audio:isolated:lead',
-        cumulativeMixKey: 'audio:cumulative:lead',
-        waveformPeaks: [0.2, 0.6, 0.3],
-        audioDuration: 6,
-        audioOffset: 0,
-        inferredMetas: {
-          bpm: 128,
-          keyScale: 'A minor',
-        },
-        generatedFromContext: true,
-      });
-
-      const asset = useProjectStore.getState().project!.assets?.[0];
+      const { track, asset } = createReadyGeneratedAsset();
       expect(asset).toBeDefined();
 
       store.removeTrack(track.id);
@@ -371,6 +382,34 @@ describe('projectStore', () => {
         generatedFromContext: true,
       });
       expect(useProjectStore.getState().project!.assets?.[0]?.clipId).toBe(restoredClip?.id);
+    });
+
+    it('does not restore a generated asset while in viewer mode', () => {
+      const store = useProjectStore.getState();
+      const { track, asset } = createReadyGeneratedAsset();
+
+      store.removeTrack(track.id);
+      useCollaborationStore.getState().setViewerMode(true);
+
+      const restoredTrack = store.restoreAssetToNewTrack(asset.id, 8);
+
+      expect(restoredTrack).toBeUndefined();
+      expect(useProjectStore.getState().project!.tracks).toHaveLength(0);
+    });
+
+    it('does not restore a generated asset beyond the project track limit', () => {
+      const store = useProjectStore.getState();
+      const { track, asset } = createReadyGeneratedAsset();
+
+      store.removeTrack(track.id);
+      for (let index = 0; index < MAX_PROJECT_TRACKS; index += 1) {
+        store.addTrack('drums');
+      }
+
+      const restoredTrack = store.restoreAssetToNewTrack(asset.id, 8);
+
+      expect(restoredTrack).toBeUndefined();
+      expect(useProjectStore.getState().project!.tracks).toHaveLength(MAX_PROJECT_TRACKS);
     });
 
     it('backfills missing origin snapshots for legacy assets when the source clip still exists', () => {

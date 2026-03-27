@@ -48,7 +48,7 @@ describe('TrackHeader fade-in animation', () => {
     useProjectStore.getState().createProject();
   });
 
-  it('applies fadeIn animation class to track header', () => {
+  it('keeps the header row box stable while animating the inner content shell', () => {
     render(
       <TrackHeader
         track={makeTrack()}
@@ -60,6 +60,9 @@ describe('TrackHeader fade-in animation', () => {
       />
     );
     const header = screen.getByRole('button', { name: /Track: Vocals/i });
-    expect(header.className).toContain('animate-[fadeIn_150ms_ease-out]');
+    const motionShell = screen.getByTestId('track-header-motion-shell');
+
+    expect(header.className).not.toContain('animate-[fadeIn_150ms_ease-out]');
+    expect(motionShell.className).toContain('animate-[fadeIn_150ms_ease-out]');
   });
 });

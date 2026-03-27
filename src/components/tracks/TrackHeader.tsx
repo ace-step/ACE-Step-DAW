@@ -211,7 +211,7 @@ export function TrackHeader({
       data-group={track.isGroup ? 'true' : undefined}
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
-      className={`relative flex items-center gap-2 border-b group select-none animate-[fadeIn_150ms_ease-out] ${
+      className={`relative flex items-center gap-2 border-b group select-none ${
         isDragOver ? 'bg-daw-hover-subtle' : ''
       }`}
       style={{
@@ -286,7 +286,10 @@ export function TrackHeader({
       />
 
       {isCollapsed ? (
-        <div className="flex h-full w-full flex-col items-center justify-between py-2">
+        <div
+          data-testid="track-header-motion-shell"
+          className="flex h-full w-full flex-col items-center justify-between py-2 animate-[fadeIn_150ms_ease-out]"
+        >
           {track.isGroup ? (
             <button
               onClick={(e) => { e.stopPropagation(); toggleGroupCollapse(track.id); }}
@@ -338,7 +341,10 @@ export function TrackHeader({
           </div>
         </div>
       ) : (
-        <>
+        <div
+          data-testid="track-header-motion-shell"
+          className="flex h-full min-w-0 flex-1 items-center gap-2 animate-[fadeIn_150ms_ease-out]"
+        >
       {/* Group collapse toggle or drag handle */}
       {track.isGroup ? (
         <button
@@ -519,7 +525,7 @@ export function TrackHeader({
           </div>
         </>
       )}
-        </>
+        </div>
       )}
 
       {/* Bottom-edge height resize handle */}

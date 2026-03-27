@@ -479,18 +479,20 @@ function FragmentRow({
                 <span className="text-zinc-500 text-base leading-none" aria-hidden="true">&#9632;</span>
               </button>
             ) : (
-              <div
+              <button
+                type="button"
                 onClick={() => onSlotClick(sceneIndex)}
                 onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
-                className={`flex h-24 items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d] text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
+                className={`flex h-24 w-full items-center justify-center rounded-xl border border-dashed border-[#2a2a2a] bg-[#1d1d1d] text-[11px] uppercase tracking-[0.16em] text-zinc-600 cursor-pointer ${
                   isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
                 }`}
                 data-testid={`empty-slot-${track.id}-${sceneIndex}`}
                 data-track-id={track.id}
                 data-scene-index={sceneIndex}
+                aria-label={`Empty slot, ${track.displayName} scene ${sceneIndex + 1}`}
               >
                 Empty
-              </div>
+              </button>
             )}
           </div>
         );

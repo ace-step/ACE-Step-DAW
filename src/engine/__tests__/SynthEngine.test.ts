@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createSynthRuntimeSpec } from '../SynthEngine';
-import { createDefaultFmInstrument, createDefaultSubtractiveInstrument } from '../../utils/trackInstrument';
+import { createSynthModulationSpec, createSynthRuntimeSpec } from '../SynthEngine';
+import {
+  createDefaultFmInstrument,
+  createDefaultSamplerInstrument,
+  createDefaultSubtractiveInstrument,
+} from '../../utils/trackInstrument';
 
 describe('createSynthRuntimeSpec', () => {
   it('maps subtractive instruments to MonoSynth runtime options with filter and unison support', () => {
@@ -110,5 +114,133 @@ describe('createSynthRuntimeSpec', () => {
     expect(modulationEnvelope.sustain).toBeCloseTo(0.5, 5);
     expect(spec.options.modulationIndex).toBeCloseTo(3.9, 5);
     expect(spec.gainLevel).toBeCloseTo(0.6924, 4);
+  });
+});
+
+describe('createSynthModulationSpec', () => {
+  it('maps amp modulation to a tremolo rack for subtractive instruments', () => {
+    const instrument = createDefaultSubtractiveInstrument('pad', {
+      settings: {
+        lfo: {
+          enabled: true,
+          waveform: 'triangle',
+          target: 'amp',
+          rateHz: 6.2,
+          depth: 0.64,
+          retrigger: true,
+        },
+      },
+    });
+
+    const spec = createSynthModulationSpec(instrument);
+
+    expect(spec).toMatchObject({
+      target: 'amp',
+      effectType: 'tremolo',
+      frequencyHz: 6.2,
+      depth: 0.64,
+      retrigger: true,
+      options: {
+        frequency: 6.2,
+        depth: 0.64,
+        type: 'triangle',
+        spread: 0,
+      },
+    });
+  });
+
+  it('maps filter cutoff modulation to auto-filter settings when the filter is enabled', () => {
+    const instrument = createDefaultSubtractiveInstrument('lead', {
+      settings: {
+        filter: {
+          enabled: true,
+          type: 'bandpass',
+          cutoffHz: 1800,
+          resonance: 7,
+          drive: 0.2,
+          keyTracking: 0.35,
+        },
+        lfo: {
+          enabled: true,
+          waveform: 'sawtooth',
+          target: 'filterCutoff',
+          rateHz: 3.4,
+          depth: 0.55,
+          retrigger: false,
+        },
+      },
+    });
+
+    const spec = createSynthModulationSpec(instrument);
+
+    expect(spec?.target).toBe('filterCutoff');
+    expect(spec?.effectType).toBe('autoFilter');
+    expect(spec?.options).toMatchObject({
+      frequency: 3.4,
+      depth: 0.55,
+      type: 'sawtooth',
+      filter: {
+        type: 'bandpass',
+        Q: 7,
+      },
+    });
+
+    const options = spec?.options as { baseFrequency: number; octaves: number };
+    expect(options.baseFrequency).toBeLessThan(1800);
+    expect(options.octaves).toBeGreaterThan(2);
+  });
+
+  it('returns null for disabled, unsupported, or non-subtractive modulation sources', () => {
+    const subtractive = createDefaultSubtractiveInstrument('piano', {
+      settings: {
+        lfo: {
+          enabled: false,
+          waveform: 'sine',
+          target: 'amp',
+          rateHz: 5,
+          depth: 0.8,
+          retrigger: true,
+        },
+      },
+    });
+    const fm = createDefaultFmInstrument();
+    const sampler = createDefaultSamplerInstrument({ audioKey: 'audio:test', sampleName: 'Kick' });
+
+    expect(createSynthModulationSpec(subtractive)).toBeNull();
+    expect(createSynthModulationSpec(fm)).toBeNull();
+    expect(createSynthModulationSpec(sampler)).toBeNull();
+    expect(createSynthModulationSpec('lead')).toBeNull();
+  });
+
+  it('maps pitch modulation to vibrato with a tempered depth curve', () => {
+    const instrument = createDefaultSubtractiveInstrument('lead', {
+      settings: {
+        lfo: {
+          enabled: true,
+          waveform: 'square',
+          target: 'pitch',
+          rateHz: 7.5,
+          depth: 1,
+          retrigger: true,
+        },
+      },
+    });
+
+    const spec = createSynthModulationSpec(instrument);
+
+    expect(spec).toMatchObject({
+      target: 'pitch',
+      effectType: 'vibrato',
+      frequencyHz: 7.5,
+      retrigger: true,
+      options: {
+        frequency: 7.5,
+        type: 'square',
+        maxDelay: 0.005,
+      },
+    });
+
+    const options = spec?.options as { depth: number };
+    expect(options.depth).toBeCloseTo(0.85, 5);
   });
 });

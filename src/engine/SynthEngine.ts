@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import type {
   FmTrackInstrument,
+  InstrumentLfoTarget,
   LegacySynthVoicePreset,
   SubtractiveTrackInstrument,
   SynthPreset,
@@ -14,14 +15,23 @@ import {
 type SynthSource = TrackInstrument | SynthPreset;
 type RuntimeInstrument = SubtractiveTrackInstrument | FmTrackInstrument;
 type SynthVoiceType = 'mono' | 'fm';
+type SynthModulationEffectType = 'tremolo' | 'autoPanner' | 'autoFilter' | 'vibrato';
 const DEFAULT_TRACK_GAIN = 0.55;
 const MIN_LINEAR_GAIN = 0.0001;
 const MAX_FAT_SPREAD_CENTS = 120;
+
+interface RuntimeModulationRack {
+  node: Tone.ToneAudioNode;
+  retriggerOnNote: boolean;
+  restart: () => void;
+  dispose: () => void;
+}
 
 interface SynthInstance {
   synth: Tone.PolySynth;
   signature: string;
   gain: Tone.Gain;
+  modulation: RuntimeModulationRack | null;
 }
 
 export interface SynthRuntimeSpec {
@@ -29,6 +39,15 @@ export interface SynthRuntimeSpec {
   voiceType: SynthVoiceType;
   options: Record<string, unknown>;
   gainLevel: number;
+}
+
+export interface SynthModulationSpec {
+  target: Exclude<InstrumentLfoTarget, 'off'>;
+  effectType: SynthModulationEffectType;
+  frequencyHz: number;
+  depth: number;
+  retrigger: boolean;
+  options: Record<string, unknown>;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -68,6 +87,10 @@ function getTrackGainLevel(instrument: RuntimeInstrument, baseGain = DEFAULT_TRA
 
 function getFatOscillatorType(waveform: SubtractiveTrackInstrument['settings']['oscillator']['waveform']) {
   return `fat${waveform}` as const;
+}
+
+function resolveSubtractiveLfoInstrument(source: SynthSource): SubtractiveTrackInstrument | null {
+  return typeof source !== 'string' && source.kind === 'subtractive' ? source : null;
 }
 
 function createSubtractiveRuntimeSpec(instrument: SubtractiveTrackInstrument): SynthRuntimeSpec {
@@ -189,6 +212,90 @@ export function createSynthRuntimeSpec(source: SynthSource): SynthRuntimeSpec {
   return createSubtractiveRuntimeSpec(resolveSubtractiveInstrument(source));
 }
 
+export function createSynthModulationSpec(source: SynthSource): SynthModulationSpec | null {
+  const instrument = resolveSubtractiveLfoInstrument(source);
+  if (!instrument) return null;
+
+  const { lfo, filter } = instrument.settings;
+  if (!lfo.enabled || lfo.target === 'off' || lfo.depth <= 0) return null;
+
+  const frequencyHz = clamp(lfo.rateHz, 0.1, 20);
+  const depth = clamp(lfo.depth, 0, 1);
+  const common = {
+    frequencyHz,
+    depth,
+    retrigger: lfo.retrigger,
+  };
+
+  switch (lfo.target) {
+    case 'amp':
+      return {
+        target: 'amp',
+        effectType: 'tremolo',
+        ...common,
+        options: {
+          frequency: frequencyHz,
+          depth,
+          type: lfo.waveform,
+          spread: 0,
+        },
+      };
+    case 'pan':
+      return {
+        target: 'pan',
+        effectType: 'autoPanner',
+        ...common,
+        options: {
+          frequency: frequencyHz,
+          depth,
+          type: lfo.waveform,
+        },
+      };
+    case 'pitch':
+      return {
+        target: 'pitch',
+        effectType: 'vibrato',
+        ...common,
+        options: {
+          frequency: frequencyHz,
+          depth: clamp(depth * 0.85, 0, 1),
+          type: lfo.waveform,
+          maxDelay: 0.005,
+        },
+      };
+    case 'filterCutoff': {
+      if (!filter.enabled) return null;
+
+      const cutoffHz = clamp(filter.cutoffHz, 80, 16000);
+      const baseFrequency = clamp(
+        cutoffHz * Math.max(0.08, 1 - (depth * 0.85)),
+        40,
+        16000,
+      );
+      const octaves = clamp((depth * 5) + (filter.keyTracking * 2), 0.25, 8);
+
+      return {
+        target: 'filterCutoff',
+        effectType: 'autoFilter',
+        ...common,
+        options: {
+          frequency: frequencyHz,
+          depth,
+          type: lfo.waveform,
+          baseFrequency,
+          octaves,
+          filter: {
+            type: filter.type,
+            Q: clamp(filter.resonance, 0.1, 20),
+          },
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
 export function createSynthForPreset(preset: SynthPreset): Tone.PolySynth {
   return createSynthForSource(preset);
 }
@@ -200,10 +307,105 @@ export function createSynthForSource(source: SynthSource): Tone.PolySynth {
     : new Tone.PolySynth(Tone.MonoSynth, spec.options as never);
 }
 
+function createRuntimeModulationRack(source: SynthSource): RuntimeModulationRack | null {
+  const spec = createSynthModulationSpec(source);
+  if (!spec) return null;
+
+  switch (spec.effectType) {
+    case 'tremolo': {
+      const node = new Tone.Tremolo(spec.options as never);
+      node.start();
+      return {
+        node,
+        retriggerOnNote: spec.retrigger,
+        restart: () => {
+          if (!spec.retrigger) return;
+          const now = Tone.now();
+          node.stop(now);
+          node.start(now + 0.001);
+        },
+        dispose: () => node.dispose(),
+      };
+    }
+    case 'autoPanner': {
+      const node = new Tone.AutoPanner(spec.options as never);
+      node.start();
+      return {
+        node,
+        retriggerOnNote: spec.retrigger,
+        restart: () => {
+          if (!spec.retrigger) return;
+          const now = Tone.now();
+          node.stop(now);
+          node.start(now + 0.001);
+        },
+        dispose: () => node.dispose(),
+      };
+    }
+    case 'autoFilter': {
+      const node = new Tone.AutoFilter(spec.options as never);
+      node.start();
+      return {
+        node,
+        retriggerOnNote: spec.retrigger,
+        restart: () => {
+          if (!spec.retrigger) return;
+          const now = Tone.now();
+          node.stop(now);
+          node.start(now + 0.001);
+        },
+        dispose: () => node.dispose(),
+      };
+    }
+    case 'vibrato': {
+      const node = new Tone.Vibrato(spec.options as never);
+      return {
+        node,
+        retriggerOnNote: false,
+        restart: () => {},
+        dispose: () => node.dispose(),
+      };
+    }
+  }
+}
+
+function connectSynthChain(
+  synth: Tone.PolySynth,
+  modulation: RuntimeModulationRack | null,
+  gain: Tone.Gain,
+  connectTo?: Tone.InputNode,
+) {
+  if (modulation) {
+    synth.connect(modulation.node);
+    modulation.node.connect(gain);
+  } else {
+    synth.connect(gain);
+  }
+
+  if (connectTo) {
+    gain.connect(connectTo);
+  } else {
+    gain.toDestination();
+  }
+}
+
+function restartModulation(instance: SynthInstance | null | undefined) {
+  if (!instance?.modulation?.retriggerOnNote) return;
+  instance.modulation.restart();
+}
+
+function disposeSynthInstance(instance: SynthInstance) {
+  instance.synth.releaseAll();
+  instance.synth.dispose();
+  instance.modulation?.dispose();
+  instance.gain.dispose();
+}
+
 class SynthEngine {
   private synths = new Map<string, SynthInstance>();
   private previewSynth: Tone.PolySynth | null = null;
   private previewGain: Tone.Gain | null = null;
+  private previewModulation: RuntimeModulationRack | null = null;
   private previewSignature: string | null = null;
 
   async ensureStarted() {
@@ -218,21 +420,15 @@ class SynthEngine {
     if (existing && existing.signature === signature) return existing.synth;
 
     if (existing) {
-      existing.synth.releaseAll();
-      existing.synth.dispose();
-      existing.gain.dispose();
+      disposeSynthInstance(existing);
     }
 
     const spec = createSynthRuntimeSpec(source);
     const synth = createSynthForSource(source);
+    const modulation = createRuntimeModulationRack(source);
     const gain = new Tone.Gain(spec.gainLevel);
-    synth.connect(gain);
-    if (connectTo) {
-      gain.connect(connectTo);
-    } else {
-      gain.toDestination();
-    }
-    this.synths.set(trackId, { synth, signature, gain });
+    connectSynthChain(synth, modulation, gain, connectTo);
+    this.synths.set(trackId, { synth, signature, gain, modulation });
     return synth;
   }
 
@@ -246,20 +442,26 @@ class SynthEngine {
 
     if (!this.previewSynth || !this.previewGain || this.previewSignature !== signature) {
       this.previewSynth?.dispose();
+      this.previewModulation?.dispose();
       this.previewGain?.dispose();
       const spec = createSynthRuntimeSpec(source);
       this.previewSynth = createSynthForSource(source);
-      this.previewGain = new Tone.Gain(Math.max(0, Math.min(1, spec.gainLevel * 0.55))).toDestination();
-      this.previewSynth.connect(this.previewGain);
+      this.previewModulation = createRuntimeModulationRack(source);
+      this.previewGain = new Tone.Gain(Math.max(0, Math.min(1, spec.gainLevel * 0.55)));
+      connectSynthChain(this.previewSynth, this.previewModulation, this.previewGain);
       this.previewSignature = signature;
     }
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    if (this.previewModulation?.retriggerOnNote) {
+      this.previewModulation.restart();
+    }
     this.previewSynth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
 
   async playNote(trackId: string, pitch: number, velocity: number, duration: number, source: SynthSource) {
     await this.ensureStarted();
     const synth = this.ensureTrackSynth(trackId, source);
+    restartModulation(this.synths.get(trackId));
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
     synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
@@ -279,6 +481,7 @@ class SynthEngine {
       triggerRelease: (note: number, time?: string | number) => void;
       triggerAttackRelease: (note: number, duration: number, time?: string | number, velocity?: number) => void;
     };
+    restartModulation(this.synths.get(trackId));
     const glideTime = Math.max(0.03, Math.min(0.12, duration * 0.35));
     const fromFreq = Tone.Frequency(fromPitch, 'midi').toFrequency();
     const toFreq = Tone.Frequency(toPitch, 'midi').toFrequency();
@@ -292,6 +495,7 @@ class SynthEngine {
   noteOn(trackId: string, pitch: number, velocity = 100) {
     const instance = this.synths.get(trackId);
     if (!instance) return;
+    restartModulation(instance);
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
     instance.synth.triggerAttack(freq, undefined, velocity / 127);
   }
@@ -314,9 +518,7 @@ class SynthEngine {
   removeTrackSynth(trackId: string) {
     const instance = this.synths.get(trackId);
     if (!instance) return;
-    instance.synth.releaseAll();
-    instance.synth.dispose();
-    instance.gain.dispose();
+    disposeSynthInstance(instance);
     this.synths.delete(trackId);
   }
 
@@ -325,8 +527,10 @@ class SynthEngine {
       this.removeTrackSynth(trackId);
     }
     this.previewSynth?.dispose();
+    this.previewModulation?.dispose();
     this.previewGain?.dispose();
     this.previewSynth = null;
+    this.previewModulation = null;
     this.previewGain = null;
     this.previewSignature = null;
   }

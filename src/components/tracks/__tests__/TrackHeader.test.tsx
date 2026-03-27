@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TrackHeader } from '../TrackHeader';
 import { useProjectStore } from '../../../store/projectStore';
 import type { Track } from '../../../types/project';
+
+const mockToggleArmTrack = vi.fn();
+let mockArmedTrackIds: string[] = [];
 
 // Mock modules that use browser APIs not available in jsdom
 vi.mock('../../../services/projectStorage', () => ({
@@ -10,8 +13,8 @@ vi.mock('../../../services/projectStorage', () => ({
 }));
 vi.mock('../../../hooks/useRecording', () => ({
   useRecording: () => ({
-    armedTrackIds: [],
-    toggleArmTrack: vi.fn(),
+    armedTrackIds: mockArmedTrackIds,
+    toggleArmTrack: mockToggleArmTrack,
   }),
 }));
 vi.mock('../../../services/freezeTrack', () => ({
@@ -129,5 +132,54 @@ describe('TrackHeader icon bar', () => {
     const fxBtn = screen.getByTitle('Effects bypassed (track frozen)');
     expect(fxBtn).toBeInTheDocument();
     expect(fxBtn.className).toContain('cursor-not-allowed');
+  });
+});
+
+describe('TrackHeader arm button', () => {
+  beforeEach(() => {
+    mockArmedTrackIds = [];
+    mockToggleArmTrack.mockClear();
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+  });
+
+  it('renders arm button for non-group tracks', () => {
+    render(<TrackHeader track={makeTrack()} {...defaultProps} />);
+    const armBtn = screen.getByTitle('Record Arm');
+    expect(armBtn).toBeInTheDocument();
+    expect(armBtn).toBeVisible();
+  });
+
+  it('does not render arm button for group tracks', () => {
+    render(<TrackHeader track={makeTrack({ isGroup: true })} {...defaultProps} />);
+    expect(screen.queryByTitle('Record Arm')).not.toBeInTheDocument();
+  });
+
+  it('calls toggleArmTrack when clicked', () => {
+    render(<TrackHeader track={makeTrack({ id: 'track-42' })} {...defaultProps} />);
+    const armBtn = screen.getByTitle('Record Arm');
+    fireEvent.click(armBtn);
+    expect(mockToggleArmTrack).toHaveBeenCalledWith('track-42');
+  });
+
+  it('shows bright red style when track is armed', () => {
+    mockArmedTrackIds = ['track-1'];
+    render(<TrackHeader track={makeTrack({ id: 'track-1', armed: true })} {...defaultProps} />);
+    const armBtn = screen.getByTitle('Record Arm');
+    expect(armBtn.className).toContain('bg-red-500');
+  });
+
+  it('shows muted style when track is not armed', () => {
+    mockArmedTrackIds = [];
+    render(<TrackHeader track={makeTrack({ id: 'track-1', armed: false })} {...defaultProps} />);
+    const armBtn = screen.getByTitle('Record Arm');
+    expect(armBtn.className).not.toContain('bg-red-500');
+  });
+
+  it('arm button is inside the primary actions container', () => {
+    render(<TrackHeader track={makeTrack()} {...defaultProps} />);
+    const armBtn = screen.getByTitle('Record Arm');
+    const primaryRail = armBtn.closest('[data-primary-actions]');
+    expect(primaryRail).not.toBeNull();
   });
 });

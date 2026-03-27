@@ -7,7 +7,22 @@ import { getSessionSlotProgress } from '../../utils/sessionProgress';
 import { getSessionClips } from '../../utils/sessionClips';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
-import type { Clip, Track, SessionLaunchQuantization, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
+import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene } from '../../types/project';
+
+const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
+
+const LAUNCH_MODE_LABELS: Record<SessionLaunchMode, string> = {
+  trigger: 'Trigger',
+  gate: 'Gate',
+  toggle: 'Toggle',
+  repeat: 'Repeat',
+};
+
+/** Short badge letter for non-default launch modes. Trigger shows no badge. */
+function getLaunchModeBadge(mode: SessionLaunchMode | undefined): string | null {
+  if (!mode || mode === 'trigger') return null;
+  return mode[0].toUpperCase(); // G, T, R
+}
 
 const SESSION_QUANTIZATION_OPTIONS: SessionLaunchQuantization[] = [
   'none', '1/32', '1/16', '1/8', '1/4', '1/2', '1 bar', '2 bars', '4 bars', '8 bars',
@@ -40,11 +55,13 @@ function isClipQueued(
 
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 10; // r=10
 
-interface SlotColorMenuState {
+interface SlotContextMenuState {
   x: number;
   y: number;
   slotId: string;
   currentColor: string | null;
+  legato: boolean;
+  currentLaunchMode: SessionLaunchMode;
 }
 
 
@@ -57,6 +74,8 @@ export function SessionView() {
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
+  const setSessionSlotLegato = useProjectStore((s) => s.setSessionSlotLegato);
+  const setSessionSlotLaunchMode = useProjectStore((s) => s.setSessionSlotLaunchMode);
   const selectedSessionSlot = useUIStore((s) => s.selectedSessionSlot);
   const setSelectedSessionSlot = useUIStore((s) => s.setSelectedSessionSlot);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -68,7 +87,7 @@ export function SessionView() {
     toggleSessionArrangementRecording,
   } = useTransport();
 
-  const [colorMenu, setColorMenu] = useState<SlotColorMenuState | null>(null);
+  const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -85,6 +104,13 @@ export function SessionView() {
       setColorMenu(null);
     }
   }, [colorMenu, setSessionSlotColor]);
+
+  const handleSetLaunchMode = useCallback((mode: SessionLaunchMode) => {
+    if (colorMenu) {
+      setSessionSlotLaunchMode(colorMenu.slotId, mode);
+      setColorMenu(null);
+    }
+  }, [colorMenu, setSessionSlotLaunchMode]);
 
   // Set keyboard context to 'session' on mount, restore previous on unmount
   useEffect(() => {
@@ -192,7 +218,6 @@ export function SessionView() {
         {tracks.map((track) => {
           const sessionClips = getSessionClips(track);
           const activeLaunch = launchedSessionClips[track.id];
-
           return (
             <FragmentRow
               key={track.id}
@@ -221,9 +246,21 @@ export function SessionView() {
           x={colorMenu.x}
           y={colorMenu.y}
           onClose={handleCloseColorMenu}
-          testId="session-slot-color-menu"
+          testId="session-slot-context-menu"
           minWidth={180}
         >
+          <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+            Launch Mode
+          </div>
+          <ContextMenuSeparator />
+          {LAUNCH_MODE_OPTIONS.map((mode) => (
+            <ContextMenuItem
+              key={mode}
+              label={`${LAUNCH_MODE_LABELS[mode]}${colorMenu.currentLaunchMode === mode ? ' (active)' : ''}`}
+              onClick={() => handleSetLaunchMode(mode)}
+            />
+          ))}
+          <ContextMenuSeparator />
           <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
             Slot Color
           </div>
@@ -239,6 +276,14 @@ export function SessionView() {
           <ContextMenuItem
             label="Reset Color"
             onClick={handleResetColor}
+          />
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            label={`${colorMenu.legato ? '\u2713 ' : ''}Legato`}
+            onClick={() => {
+              setSessionSlotLegato(colorMenu.slotId, !colorMenu.legato);
+              setColorMenu(null);
+            }}
           />
         </ContextMenuWrapper>
       )}
@@ -283,7 +328,7 @@ function FragmentRow({
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
-  onContextMenuSlot: (state: SlotColorMenuState) => void;
+  onContextMenuSlot: (state: SlotContextMenuState) => void;
   onSlotClick: (sceneIndex: number) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
@@ -365,6 +410,9 @@ function FragmentRow({
         const slotColor = slot?.color ?? null;
         const hasStopButton = slot ? slot.hasStopButton !== false : true;
 
+        const slotLaunchMode: SessionLaunchMode = slot?.launchMode ?? 'trigger';
+        const launchModeBadge = getLaunchModeBadge(slotLaunchMode);
+
         const handleContextMenu = (e: React.MouseEvent) => {
           if (!clip || !slot) return;
           e.preventDefault();
@@ -373,6 +421,8 @@ function FragmentRow({
             y: e.clientY,
             slotId: slot.id,
             currentColor: slotColor,
+            legato: slot.legato ?? false,
+            currentLaunchMode: slotLaunchMode,
           });
         };
 
@@ -383,7 +433,23 @@ function FragmentRow({
                 <button
                   onClick={() => {
                     onSlotClick(sceneIndex);
+                    // Gate and Repeat modes use pointer events, not click
+                    if (slotLaunchMode === 'gate' || slotLaunchMode === 'repeat') return;
                     void onLaunch(clip.id, sceneIndex);
+                  }}
+                  onPointerDown={(e) => {
+                    if (slotLaunchMode !== 'gate' && slotLaunchMode !== 'repeat') return;
+                    // Prevent default to avoid focus issues; capture pointer for reliable up events
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    void onLaunch(clip.id, sceneIndex);
+                  }}
+                  onPointerUp={(e) => {
+                    if (slotLaunchMode !== 'gate' && slotLaunchMode !== 'repeat') return;
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                    // Gate: stop the track on release; Repeat: last trigger continues (no stop)
+                    if (slotLaunchMode === 'gate') {
+                      void onStop();
+                    }
                   }}
                   onContextMenu={handleContextMenu}
                   className={`relative flex h-24 w-full flex-col justify-between rounded-xl border px-3 py-2 text-left transition-all ${
@@ -403,10 +469,11 @@ function FragmentRow({
                           : { backgroundColor: '#262626' }),
                     ...(isQueued && !isActive ? { animation: 'session-blink 500ms ease-in-out infinite' } : {}),
                   }}
-                  aria-label={`Launch ${getClipLabel(clip, sceneIndex)} on ${track.displayName} in scene ${sceneIndex + 1}`}
+                  aria-label={`Launch ${getClipLabel(clip, sceneIndex)} on ${track.displayName} in scene ${sceneIndex + 1}${slotLaunchMode !== 'trigger' ? ` (${slotLaunchMode} mode)` : ''}`}
                   data-slot-id={slot?.id}
                   data-track-id={track.id}
                   data-scene-index={sceneIndex}
+                  data-launch-mode={slotLaunchMode}
                 >
                   <div>
                     <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">
@@ -439,6 +506,15 @@ function FragmentRow({
                     )}
                   </div>
                 </button>
+                {launchModeBadge && (
+                  <span
+                    className="absolute top-1 left-1 rounded bg-violet-600/80 px-1 py-0.5 text-[9px] font-bold text-white leading-none pointer-events-none"
+                    title={`Launch mode: ${LAUNCH_MODE_LABELS[slotLaunchMode]}`}
+                    data-testid={`launch-mode-badge-${slot?.id}`}
+                  >
+                    {launchModeBadge}
+                  </span>
+                )}
                 {hasOverride && (
                   <span
                     className="absolute top-1 right-1 rounded bg-daw-accent/80 px-1 py-0.5 text-[9px] font-semibold text-white leading-none pointer-events-none"

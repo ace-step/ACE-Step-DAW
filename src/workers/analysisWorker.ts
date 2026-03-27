@@ -1,8 +1,16 @@
 /**
  * Web Worker for local audio analysis (BPM/chord detection via ONNX Runtime).
  *
- * Receives Float32Array samples, computes features, runs inference, posts results.
- * ONNX sessions are kept alive for reuse across multiple analyses.
+ * Beat This! pipeline:
+ *   audio → mel spectrogram (n_fft=1024, hop=441, power=1, log1p(1000*mel))
+ *   → ONNX inference → 2 outputs: beat_logits[1,T], downbeat_logits[1,T]
+ *   → peak-picking (max_pool1d kernel=7, logit > 0)
+ *   → BPM from median inter-beat interval
+ *
+ * consonance-ACE pipeline:
+ *   audio → CQT (144 bins, 24 bins/oct, 6 octaves from C1, hop=512)
+ *   → ONNX inference → 3 outputs: root[1,T,13], bass[1,T,13], chord[1,T,12]
+ *   → argmax root/bass, sigmoid chord → chord labels
  */
 import type {
   AnalysisWorkerRequest,
@@ -13,7 +21,8 @@ import type {
   ChordEvent,
   LocalAnalysisResult,
 } from '../types/analysis';
-import { computeMelSpectrogram } from '../utils/melSpectrogram';
+import { computeMelSpectrogram, BEAT_THIS_MEL_OPTIONS } from '../utils/melSpectrogram';
+import { computeCQT, cqtToOnnxInput, CONSONANCE_ACE_CQT_OPTIONS } from '../utils/cqt';
 
 // ONNX Runtime session handles — lazily initialized
 let bpmSession: unknown = null;
@@ -41,68 +50,106 @@ async function loadOnnxSession(modelUrl: string) {
   });
 }
 
+// ---------- Peak-picking for beat detection ----------
+
 /**
- * Run Beat This! small model inference.
- * Input: mel spectrogram [1, n_mels, n_frames]
- * Output: beat activations [1, n_frames, 2] (beat prob, downbeat prob)
+ * 1D max-pooling: for each position, returns the max value in a window of `kernelSize`.
+ * Matches PyTorch's F.max_pool1d with padding=kernelSize//2.
+ */
+function maxPool1d(data: Float32Array, kernelSize: number): Float32Array {
+  const n = data.length;
+  const result = new Float32Array(n);
+  const pad = Math.floor(kernelSize / 2);
+  for (let i = 0; i < n; i++) {
+    let max = -Infinity;
+    for (let j = -pad; j <= pad; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < n) {
+        max = Math.max(max, data[idx]);
+      } else {
+        // Padding with -Infinity (matching Beat This! which uses -1000)
+        max = Math.max(max, -1000);
+      }
+    }
+    result[i] = max;
+  }
+  return result;
+}
+
+/**
+ * Pick local maxima from logits, matching Beat This! minimal postprocessor.
+ * 1. max_pool1d with kernel=7 (±70ms at 50fps) to find local maxima
+ * 2. Keep peaks where logit > 0 (probability > 0.5 after sigmoid)
+ */
+export function peakPick(logits: Float32Array, kernelSize: number = 7): number[] {
+  const pooled = maxPool1d(logits, kernelSize);
+  const peaks: number[] = [];
+  for (let i = 0; i < logits.length; i++) {
+    if (logits[i] === pooled[i] && logits[i] > 0) {
+      peaks.push(i);
+    }
+  }
+  return peaks;
+}
+
+// ---------- BPM inference ----------
+
+/**
+ * Run Beat This! ONNX model inference.
+ *
+ * Model I/O (from beat_this_cpp ONNX):
+ *   Input:  "input_spectrogram" [1, time, 128]  (batch, time_frames, mel_bins)
+ *   Output: "beat" [1, time], "downbeat" [1, time]  (logits, not probabilities)
  */
 async function runBpmInference(
   session: Awaited<ReturnType<typeof loadOnnxSession>>,
   melFrames: Float32Array[],
-  sampleRate: number,
-  hopLength: number,
 ): Promise<{ bpm: number; beats: BeatEvent[] }> {
   const ort = await getOrt();
   const nFrames = melFrames.length;
   const nMels = melFrames[0]?.length ?? 128;
 
-  // Flatten mel spectrogram to [1, nMels, nFrames] (channels-first)
-  const inputData = new Float32Array(nMels * nFrames);
-  for (let m = 0; m < nMels; m++) {
-    for (let f = 0; f < nFrames; f++) {
-      inputData[m * nFrames + f] = melFrames[f][m];
+  // Flatten to [1, nFrames, nMels] — Beat This! expects [batch, time, freq]
+  const inputData = new Float32Array(nFrames * nMels);
+  for (let f = 0; f < nFrames; f++) {
+    for (let m = 0; m < nMels; m++) {
+      inputData[f * nMels + m] = melFrames[f][m];
     }
   }
 
-  const inputTensor = new ort.Tensor('float32', inputData, [1, nMels, nFrames]);
+  const inputTensor = new ort.Tensor('float32', inputData, [1, nFrames, nMels]);
   const feeds: Record<string, InstanceType<typeof ort.Tensor>> = {};
-
-  // Try common input names — model may use 'input', 'audio', 'mel', etc.
-  const inputNames = session.inputNames;
-  feeds[inputNames[0]] = inputTensor;
+  feeds[session.inputNames[0]] = inputTensor;
 
   const results = await session.run(feeds);
+
+  // Beat This! outputs two separate tensors: "beat" and "downbeat"
   const outputNames = session.outputNames;
-  const output = results[outputNames[0]];
-  const outputData = output.data as Float32Array;
+  const beatLogits = results[outputNames[0]].data as Float32Array;
+  const downbeatLogits = results[outputNames[1]].data as Float32Array;
 
-  // Parse output: assume [n_frames, 2] or [1, n_frames, 2]
-  // Column 0 = beat probability, Column 1 = downbeat probability
-  const beats: BeatEvent[] = [];
-  const frameTimeStep = hopLength / sampleRate;
-  const beatThreshold = 0.5;
+  // Peak-picking: max_pool1d(kernel=7) + threshold at logit > 0
+  const beatFrames = peakPick(beatLogits, 7);
+  const downbeatFrames = new Set(peakPick(downbeatLogits, 7));
 
-  const totalOutputFrames = outputData.length / 2;
-  for (let i = 0; i < totalOutputFrames; i++) {
-    const beatProb = outputData[i * 2];
-    const downbeatProb = outputData[i * 2 + 1];
-    if (beatProb > beatThreshold) {
-      beats.push({
-        time: i * frameTimeStep,
-        isDownbeat: downbeatProb > beatThreshold,
-        confidence: beatProb,
-      });
-    }
-  }
+  // Convert frames to time (hop=441 @ 22050Hz = 20ms per frame)
+  const frameTimeStep = 441 / 22050;
 
-  // Estimate BPM from beat intervals
+  const beats: BeatEvent[] = beatFrames.map((frame) => ({
+    time: frame * frameTimeStep,
+    isDownbeat: downbeatFrames.has(frame),
+    confidence: 1 / (1 + Math.exp(-beatLogits[frame])), // sigmoid
+  }));
+
+  // Estimate BPM from median inter-beat interval
   let bpm = 120; // fallback
   if (beats.length >= 2) {
     const intervals: number[] = [];
     for (let i = 1; i < beats.length; i++) {
       intervals.push(beats[i].time - beats[i - 1].time);
     }
-    const medianInterval = intervals.sort((a, b) => a - b)[Math.floor(intervals.length / 2)];
+    intervals.sort((a, b) => a - b);
+    const medianInterval = intervals[Math.floor(intervals.length / 2)];
     if (medianInterval > 0) {
       bpm = Math.round(60 / medianInterval);
     }
@@ -111,44 +158,125 @@ async function runBpmInference(
   return { bpm, beats };
 }
 
-/**
- * Run consonance-ACE model inference.
- * Input: mel/CQT features
- * Output: chord activations (root, bass, notes) → chord labels
- */
-async function runChordInference(
-  session: Awaited<ReturnType<typeof loadOnnxSession>>,
-  melFrames: Float32Array[],
-  sampleRate: number,
-  hopLength: number,
-): Promise<ChordEvent[]> {
-  const ort = await getOrt();
-  const nFrames = melFrames.length;
-  const nMels = melFrames[0]?.length ?? 128;
+// ---------- Chord inference ----------
 
-  // Flatten to [1, nMels, nFrames]
-  const inputData = new Float32Array(nMels * nFrames);
-  for (let m = 0; m < nMels; m++) {
-    for (let f = 0; f < nFrames; f++) {
-      inputData[m * nFrames + f] = melFrames[f][m];
+const ROOT_LABELS = ['N', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/**
+ * Decode chord label from consonance-ACE decomposed outputs.
+ * root: argmax of 13 classes (0=N, 1-12=C..B)
+ * chord: sigmoid of 12 classes (C..B note activations), threshold=0.5
+ */
+function decodeChord(rootIdx: number, _bassIdx: number, chordProbs: number[]): string {
+  if (rootIdx === 0) return 'N';
+
+  const root = ROOT_LABELS[rootIdx];
+  const activeNotes: string[] = [];
+  for (let i = 0; i < chordProbs.length; i++) {
+    if (chordProbs[i] > 0.5) {
+      activeNotes.push(PITCH_CLASSES[i]);
     }
   }
 
-  const inputTensor = new ort.Tensor('float32', inputData, [1, nMels, nFrames]);
+  // Determine quality from active notes relative to root
+  if (activeNotes.length === 0) return root;
+
+  // Simple quality detection based on intervals
+  const rootPitchIdx = rootIdx - 1; // 0-based pitch class
+  const intervals = activeNotes.map((note) => {
+    const noteIdx = PITCH_CLASSES.indexOf(note);
+    return (noteIdx - rootPitchIdx + 12) % 12;
+  });
+
+  const hasMinor3 = intervals.includes(3);
+  const hasMajor3 = intervals.includes(4);
+  const hasDim5 = intervals.includes(6);
+  const hasPerfect5 = intervals.includes(7);
+  const hasMinor7 = intervals.includes(10);
+  const hasMajor7 = intervals.includes(11);
+
+  if (hasDim5 && hasMinor3) return `${root}:dim`;
+  if (hasMajor3 && !hasPerfect5 && !hasDim5) return `${root}:aug`;
+  if (hasMinor3 && hasMinor7) return `${root}:min7`;
+  if (hasMajor3 && hasMinor7) return `${root}:7`;
+  if (hasMajor3 && hasMajor7) return `${root}:maj7`;
+  if (hasMinor3) return `${root}:min`;
+  if (hasMajor3) return `${root}:maj`;
+
+  return root;
+}
+
+/**
+ * Run consonance-ACE ONNX model inference.
+ *
+ * Model I/O:
+ *   Input:  "cqt_features" [1, 1, 144, n_frames]
+ *   Output: "root_logits" [1, T, 13], "bass_logits" [1, T, 13], "chord_logits" [1, T, 12]
+ */
+async function runChordInference(
+  session: Awaited<ReturnType<typeof loadOnnxSession>>,
+  samples: Float32Array,
+): Promise<ChordEvent[]> {
+  const ort = await getOrt();
+
+  // Compute CQT features
+  const { data: cqtData, nBins, nFrames } = computeCQT(samples, CONSONANCE_ACE_CQT_OPTIONS);
+
+  // Flatten to [1, 1, nBins, nFrames]
+  const inputData = cqtToOnnxInput(cqtData, nBins, nFrames);
+  const inputTensor = new ort.Tensor('float32', inputData, [1, 1, nBins, nFrames]);
+
   const feeds: Record<string, InstanceType<typeof ort.Tensor>> = {};
   feeds[session.inputNames[0]] = inputTensor;
 
   const results = await session.run(feeds);
 
-  // Parse chord outputs — consonance-ACE outputs decomposed activations
-  // For now, extract per-frame chord class indices from the first output
+  // consonance-ACE outputs 3 tensors
   const outputNames = session.outputNames;
-  const output = results[outputNames[0]];
-  const outputData = output.data as Float32Array;
+  const rootLogits = results[outputNames[0]].data as Float32Array;   // [1, T, 13]
+  const bassLogits = results[outputNames[1]].data as Float32Array;   // [1, T, 13]
+  const chordLogits = results[outputNames[2]].data as Float32Array;  // [1, T, 12]
 
-  // Interpret as per-frame chord class probabilities or labels
-  const frameTimeStep = hopLength / sampleRate;
-  const chordLabels = decodeChordLabels(outputData, nFrames);
+  // Decode per-frame chord labels
+  const nRootClasses = 13;
+  const nBassClasses = 13;
+  const nChordClasses = 12;
+  const frameTimeStep = CONSONANCE_ACE_CQT_OPTIONS.hopLength / CONSONANCE_ACE_CQT_OPTIONS.sampleRate;
+
+  const frameLabels: { label: string; confidence: number }[] = [];
+  for (let f = 0; f < nFrames; f++) {
+    // Argmax for root
+    let rootIdx = 0, rootMax = -Infinity;
+    for (let c = 0; c < nRootClasses; c++) {
+      const val = rootLogits[f * nRootClasses + c];
+      if (val > rootMax) { rootMax = val; rootIdx = c; }
+    }
+
+    // Argmax for bass
+    let bassIdx = 0, bassMax = -Infinity;
+    for (let c = 0; c < nBassClasses; c++) {
+      const val = bassLogits[f * nBassClasses + c];
+      if (val > bassMax) { bassMax = val; bassIdx = c; }
+    }
+
+    // Sigmoid for chord note activations
+    const chordProbs: number[] = [];
+    for (let c = 0; c < nChordClasses; c++) {
+      const logit = chordLogits[f * nChordClasses + c];
+      chordProbs.push(1 / (1 + Math.exp(-logit)));
+    }
+
+    const label = decodeChord(rootIdx, bassIdx, chordProbs);
+    // Confidence: softmax probability of the root class
+    const rootConfidence = Math.exp(rootMax) / (
+      Array.from({ length: nRootClasses }, (_, c) =>
+        Math.exp(rootLogits[f * nRootClasses + c])
+      ).reduce((a, b) => a + b, 0)
+    );
+
+    frameLabels.push({ label, confidence: rootConfidence });
+  }
 
   // Merge consecutive identical chords
   const chords: ChordEvent[] = [];
@@ -156,8 +284,8 @@ async function runChordInference(
   let startTime = 0;
   let maxConf = 0;
 
-  for (let i = 0; i < chordLabels.length; i++) {
-    const { label, confidence } = chordLabels[i];
+  for (let i = 0; i < frameLabels.length; i++) {
+    const { label, confidence } = frameLabels[i];
     if (label !== currentLabel) {
       if (currentLabel) {
         chords.push({
@@ -178,62 +306,21 @@ async function runChordInference(
   if (currentLabel) {
     chords.push({
       startTime,
-      endTime: chordLabels.length * frameTimeStep,
+      endTime: frameLabels.length * frameTimeStep,
       label: currentLabel,
       confidence: maxConf,
     });
   }
 
-  return chords;
+  // Filter out very short chords (< 0.3s)
+  return chords.filter((c) => c.endTime - c.startTime >= 0.3);
 }
 
-// Basic chord vocabulary for consonance-ACE (170 classes simplified to common labels)
-const ROOT_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const QUALITY_NAMES = ['maj', 'min', 'dim', 'aug', '7', 'maj7', 'min7', 'dim7', 'hdim7', 'sus2', 'sus4', 'N'];
+// ---------- Key and time signature inference ----------
 
-function decodeChordLabels(
-  outputData: Float32Array,
-  nFrames: number,
-): { label: string; confidence: number }[] {
-  const nClasses = Math.floor(outputData.length / nFrames);
-  const labels: { label: string; confidence: number }[] = [];
-
-  for (let f = 0; f < nFrames; f++) {
-    let maxIdx = 0;
-    let maxVal = -Infinity;
-    for (let c = 0; c < nClasses; c++) {
-      const val = outputData[f * nClasses + c];
-      if (val > maxVal) {
-        maxVal = val;
-        maxIdx = c;
-      }
-    }
-
-    // Map class index to chord label
-    const confidence = Math.min(1, Math.max(0, maxVal));
-    if (maxIdx === 0 || nClasses <= 1) {
-      labels.push({ label: 'N', confidence });
-    } else {
-      // Map index to root + quality
-      const adjustedIdx = maxIdx - 1; // 0 = "N" (no chord)
-      const rootIdx = adjustedIdx % 12;
-      const qualityIdx = Math.floor(adjustedIdx / 12) % QUALITY_NAMES.length;
-      const root = ROOT_NAMES[rootIdx];
-      const quality = QUALITY_NAMES[qualityIdx];
-      labels.push({ label: `${root}:${quality}`, confidence });
-    }
-  }
-
-  return labels;
-}
-
-/**
- * Infer key/scale from the most frequent chord roots.
- */
 function inferKeyFromChords(chords: ChordEvent[]): string | null {
   if (chords.length === 0) return null;
 
-  // Weight by duration
   const rootWeights = new Map<string, number>();
   for (const chord of chords) {
     if (chord.label === 'N') continue;
@@ -241,20 +328,14 @@ function inferKeyFromChords(chords: ChordEvent[]): string | null {
     const duration = chord.endTime - chord.startTime;
     rootWeights.set(root, (rootWeights.get(root) ?? 0) + duration);
   }
-
   if (rootWeights.size === 0) return null;
 
-  // Most frequent root is likely the key
   let maxRoot = '';
   let maxWeight = 0;
   for (const [root, weight] of rootWeights) {
-    if (weight > maxWeight) {
-      maxWeight = weight;
-      maxRoot = root;
-    }
+    if (weight > maxWeight) { maxWeight = weight; maxRoot = root; }
   }
 
-  // Check if major or minor chords dominate for that root
   const majorWeight = chords
     .filter((c) => c.label.startsWith(`${maxRoot}:maj`))
     .reduce((sum, c) => sum + (c.endTime - c.startTime), 0);
@@ -265,14 +346,10 @@ function inferKeyFromChords(chords: ChordEvent[]): string | null {
   return `${maxRoot} ${majorWeight >= minorWeight ? 'major' : 'minor'}`;
 }
 
-/**
- * Infer time signature from downbeat spacing.
- */
 function inferTimeSignature(beats: BeatEvent[]): string | null {
   const downbeats = beats.filter((b) => b.isDownbeat);
   if (downbeats.length < 2) return null;
 
-  // Count beats between consecutive downbeats
   const beatsPerBar: number[] = [];
   for (let i = 0; i < downbeats.length - 1; i++) {
     const start = downbeats[i].time;
@@ -281,7 +358,6 @@ function inferTimeSignature(beats: BeatEvent[]): string | null {
     beatsPerBar.push(count);
   }
 
-  // Most frequent beats-per-bar
   const counts = new Map<number, number>();
   for (const c of beatsPerBar) {
     counts.set(c, (counts.get(c) ?? 0) + 1);
@@ -289,10 +365,7 @@ function inferTimeSignature(beats: BeatEvent[]): string | null {
   let bestCount = 4;
   let bestFreq = 0;
   for (const [count, freq] of counts) {
-    if (freq > bestFreq) {
-      bestFreq = freq;
-      bestCount = count;
-    }
+    if (freq > bestFreq) { bestFreq = freq; bestCount = count; }
   }
 
   return `${bestCount}/4`;
@@ -304,32 +377,25 @@ self.onmessage = async (e: MessageEvent<AnalysisWorkerRequest>) => {
   const { samples, sampleRate, tasks } = e.data;
 
   try {
-    // Compute mel spectrogram
-    postProgress('computing-features', 10, 'Computing mel spectrogram...');
-    const hopLength = 441;
-    const melFrames = computeMelSpectrogram(samples, {
-      sampleRate,
-      nFft: 2048,
-      hopLength,
-      nMels: 128,
-      fMin: 30,
-      fMax: 11000,
-    });
-
     let beats: BeatEvent[] = [];
     let bpm = 120;
 
     if (tasks.includes('bpm')) {
+      // Compute mel spectrogram with Beat This! settings
+      postProgress('computing-features', 10, 'Computing mel spectrogram...');
+      const melFrames = computeMelSpectrogram(samples, {
+        ...BEAT_THIS_MEL_OPTIONS,
+        sampleRate,
+      });
+
       postProgress('loading-model', 20, 'Loading BPM model...');
       if (!bpmSession) {
-        bpmSession = await loadOnnxSession('/models/beat-this-small.onnx');
+        bpmSession = await loadOnnxSession('/models/beat-this.onnx');
       }
       postProgress('running-bpm', 40, 'Detecting beats...');
       const bpmResult = await runBpmInference(
         bpmSession as Awaited<ReturnType<typeof loadOnnxSession>>,
         melFrames,
-        sampleRate,
-        hopLength,
       );
       beats = bpmResult.beats;
       bpm = bpmResult.bpm;
@@ -338,6 +404,13 @@ self.onmessage = async (e: MessageEvent<AnalysisWorkerRequest>) => {
     let chords: ChordEvent[] = [];
 
     if (tasks.includes('chords')) {
+      // Normalize audio to [-1, 1] for CQT (matching consonance-ACE preprocessing)
+      const maxVal = samples.reduce((max, v) => Math.max(max, Math.abs(v)), 0);
+      const normalizedSamples = maxVal > 0
+        ? samples.map((v) => v / maxVal)
+        : samples;
+
+      postProgress('computing-features', 50, 'Computing CQT features...');
       postProgress('loading-model', 55, 'Loading chord model...');
       if (!chordSession) {
         chordSession = await loadOnnxSession('/models/consonance-ace.onnx');
@@ -345,9 +418,7 @@ self.onmessage = async (e: MessageEvent<AnalysisWorkerRequest>) => {
       postProgress('running-chords', 70, 'Recognizing chords...');
       chords = await runChordInference(
         chordSession as Awaited<ReturnType<typeof loadOnnxSession>>,
-        melFrames,
-        sampleRate,
-        hopLength,
+        normalizedSamples,
       );
     }
 

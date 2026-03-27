@@ -1,6 +1,10 @@
 /**
  * Pure TypeScript mel spectrogram computation.
  * No external dependencies — suitable for use in Web Workers.
+ *
+ * Supports two log-scaling modes:
+ * - 'db': 10 * log10(mel)  — standard dB scale
+ * - 'log1p': log1p(multiplier * mel) — used by Beat This!
  */
 
 export interface MelSpectrogramOptions {
@@ -10,15 +14,46 @@ export interface MelSpectrogramOptions {
   nMels: number;
   fMin: number;
   fMax: number;
+  /** 'power' (default, |X|²) or 'magnitude' (|X|, power=1). Beat This! uses magnitude. */
+  power: 1 | 2;
+  /** Log scaling: 'db' (default) or 'log1p'. */
+  logScale: 'db' | 'log1p';
+  /** Multiplier for log1p mode. Beat This! uses 1000. */
+  log1pMultiplier: number;
+  /** Normalize by nFft (torchaudio normalized="frame_length"). Beat This! does NOT use this. */
+  normalizeByNfft: boolean;
 }
 
 export const DEFAULT_MEL_OPTIONS: MelSpectrogramOptions = {
   sampleRate: 22050,
   nFft: 2048,
-  hopLength: 441,   // ~10ms at 22050Hz
+  hopLength: 441,   // ~20ms at 22050Hz
   nMels: 128,
   fMin: 30,
   fMax: 11000,
+  power: 2,
+  logScale: 'db',
+  log1pMultiplier: 1000,
+  normalizeByNfft: false,
+};
+
+/**
+ * Beat This! mel spectrogram preset.
+ * Matches: n_fft=1024, hop=441, f_min=30, f_max=11000, power=1,
+ *          mel_scale=slaney, normalized=frame_length,
+ *          output = log1p(1000 * mel)
+ */
+export const BEAT_THIS_MEL_OPTIONS: Partial<MelSpectrogramOptions> = {
+  sampleRate: 22050,
+  nFft: 1024,
+  hopLength: 441,
+  nMels: 128,
+  fMin: 30,
+  fMax: 11000,
+  power: 1,
+  logScale: 'log1p',
+  log1pMultiplier: 1000,
+  normalizeByNfft: false,
 };
 
 // ---------- FFT ----------
@@ -142,10 +177,10 @@ export function hannWindow(size: number): Float32Array {
   return window;
 }
 
-// ---------- Power spectrogram ----------
+// ---------- Spectrogram ----------
 
 /**
- * Compute STFT power spectrogram.
+ * Compute STFT power spectrogram (|X|²).
  * Returns array of frames, each of length `nFft / 2 + 1`.
  */
 export function powerSpectrogram(
@@ -179,21 +214,64 @@ export function powerSpectrogram(
   return frames;
 }
 
+/**
+ * Compute STFT magnitude spectrogram (|X|, power=1).
+ * Returns array of frames, each of length `nFft / 2 + 1`.
+ */
+export function magnitudeSpectrogram(
+  samples: Float32Array,
+  nFft: number,
+  hopLength: number,
+): Float32Array[] {
+  const nBins = nFft / 2 + 1;
+  const window = hannWindow(nFft);
+  const nFrames = Math.max(0, Math.floor((samples.length - nFft) / hopLength) + 1);
+  const frames: Float32Array[] = [];
+
+  for (let i = 0; i < nFrames; i++) {
+    const offset = i * hopLength;
+    const real = new Float32Array(nFft);
+    const imag = new Float32Array(nFft);
+
+    for (let j = 0; j < nFft; j++) {
+      real[j] = (samples[offset + j] ?? 0) * window[j];
+    }
+
+    fft(real, imag);
+
+    const mag = new Float32Array(nBins);
+    for (let k = 0; k < nBins; k++) {
+      mag[k] = Math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
+    }
+    frames.push(mag);
+  }
+
+  return frames;
+}
+
 // ---------- Mel spectrogram ----------
 
 /**
  * Compute a mel spectrogram from raw audio samples.
- * Returns a 2D array: `[nFrames][nMels]` in log-power scale (dB).
+ * Returns a 2D array: `[nFrames][nMels]`.
+ *
+ * Log scaling depends on `logScale` option:
+ * - 'db': 10 * log10(max(val, 1e-10))
+ * - 'log1p': log1p(multiplier * val)  — used by Beat This!
  */
 export function computeMelSpectrogram(
   samples: Float32Array,
   options: Partial<MelSpectrogramOptions> = {},
 ): Float32Array[] {
   const opts = { ...DEFAULT_MEL_OPTIONS, ...options };
-  const { nFft, hopLength, nMels, sampleRate, fMin, fMax } = opts;
+  const { nFft, hopLength, nMels, sampleRate, fMin, fMax, power, logScale, log1pMultiplier } = opts;
 
   const filters = createMelFilterbank(nFft, nMels, sampleRate, fMin, fMax);
-  const specFrames = powerSpectrogram(samples, nFft, hopLength);
+
+  // Compute spectrogram based on power setting
+  const specFrames = power === 1
+    ? magnitudeSpectrogram(samples, nFft, hopLength)
+    : powerSpectrogram(samples, nFft, hopLength);
   const nBins = nFft / 2 + 1;
 
   const melFrames: Float32Array[] = [];
@@ -205,8 +283,13 @@ export function computeMelSpectrogram(
       for (let k = 0; k < nBins; k++) {
         sum += filter[k] * frame[k];
       }
-      // Log scale: 10 * log10(max(sum, 1e-10))
-      melFrame[m] = 10 * Math.log10(Math.max(sum, 1e-10));
+
+      if (logScale === 'log1p') {
+        melFrame[m] = Math.log1p(log1pMultiplier * sum);
+      } else {
+        // dB scale
+        melFrame[m] = 10 * Math.log10(Math.max(sum, 1e-10));
+      }
     }
     melFrames.push(melFrame);
   }

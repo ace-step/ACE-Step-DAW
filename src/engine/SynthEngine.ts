@@ -69,6 +69,10 @@ function linearGainToDb(value: number): number {
   return 20 * Math.log10(Math.max(MIN_LINEAR_GAIN, value));
 }
 
+function getLegacySlidePortamentoSeconds(duration: number): number {
+  return Math.max(0.03, Math.min(0.12, duration * 0.35));
+}
+
 function toLegacySubtractivePreset(preset: SynthPreset): LegacySynthVoicePreset {
   return preset === 'sampler' ? 'piano' : preset;
 }
@@ -221,6 +225,17 @@ export function createSynthRuntimeSpec(source: SynthSource): SynthRuntimeSpec {
   }
 
   return createSubtractiveRuntimeSpec(resolveSubtractiveInstrument(source));
+}
+
+export function resolveSlidePortamentoSeconds(source: SynthSource, duration: number): number {
+  const spec = createSynthRuntimeSpec(source);
+  const configured = typeof spec.options.portamento === 'number'
+    ? Math.max(0, spec.options.portamento)
+    : 0;
+
+  return configured > 0
+    ? configured
+    : getLegacySlidePortamentoSeconds(duration);
 }
 
 export function createSynthModulationSpec(source: SynthSource): SynthModulationSpec | null {
@@ -506,7 +521,7 @@ class SynthEngine {
       triggerAttackRelease: (note: number, duration: number, time?: string | number, velocity?: number) => void;
     };
     restartPlaybackModulation(this.synths.get(trackId));
-    const glideTime = Math.max(0.03, Math.min(0.12, duration * 0.35));
+    const glideTime = resolveSlidePortamentoSeconds(source, duration);
     const fromFreq = Tone.Frequency(fromPitch, 'midi').toFrequency();
     const toFreq = Tone.Frequency(toPitch, 'midi').toFrequency();
     synth.set({ portamento: glideTime });

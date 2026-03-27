@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSynthModulationSpec, createSynthRuntimeSpec } from '../SynthEngine';
+import { createSynthModulationSpec, createSynthRuntimeSpec, resolveSlidePortamentoSeconds } from '../SynthEngine';
 import {
   createDefaultFmInstrument,
   createDefaultSamplerInstrument,
@@ -242,5 +242,30 @@ describe('createSynthModulationSpec', () => {
 
     const options = spec?.options as { depth: number };
     expect(options.depth).toBeCloseTo(0.85, 5);
+  });
+});
+
+describe('resolveSlidePortamentoSeconds', () => {
+  it('uses canonical subtractive glide time when a positive glide value is configured', () => {
+    const instrument = createDefaultSubtractiveInstrument('lead', {
+      settings: {
+        glideTime: 0.48,
+      },
+    });
+
+    expect(resolveSlidePortamentoSeconds(instrument, 0.2)).toBeCloseTo(0.48, 5);
+  });
+
+  it('falls back to the legacy slide heuristic for zero-glide subtractive, FM, and preset sources', () => {
+    const subtractive = createDefaultSubtractiveInstrument('pad', {
+      settings: {
+        glideTime: 0,
+      },
+    });
+    const fm = createDefaultFmInstrument();
+
+    expect(resolveSlidePortamentoSeconds(subtractive, 0.5)).toBeCloseTo(0.12, 5);
+    expect(resolveSlidePortamentoSeconds(fm, 0.4)).toBeCloseTo(0.12, 5);
+    expect(resolveSlidePortamentoSeconds('lead', 0.04)).toBeCloseTo(0.03, 5);
   });
 });

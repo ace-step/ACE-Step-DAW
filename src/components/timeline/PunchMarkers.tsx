@@ -1,6 +1,29 @@
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 
+const TRIANGLE_STYLE: React.CSSProperties = {
+  width: 0,
+  height: 0,
+  borderLeft: '5px solid transparent',
+  borderRight: '5px solid transparent',
+  borderTop: '6px solid #ef4444',
+};
+
+function PunchMarker({ leftPx, label, testId }: { leftPx: number; label: string; testId: string }) {
+  return (
+    <div
+      className="absolute top-0 h-full pointer-events-none"
+      style={{ left: `${leftPx}px` }}
+      data-testid={testId}
+    >
+      <div className="absolute -left-[5px] top-0" style={TRIANGLE_STYLE} />
+      <span className="absolute left-1 top-[7px] text-[8px] font-bold text-red-400 whitespace-nowrap">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 /**
  * Renders punch-in and punch-out markers on the timeline ruler.
  * Shows triangular markers and a semi-transparent region overlay
@@ -37,47 +60,8 @@ export function PunchMarkers() {
         />
       )}
 
-      {/* Punch-in marker */}
-      <div
-        className="absolute top-0 h-full pointer-events-none"
-        style={{ left: `${punchInPx}px` }}
-        data-testid="punch-in-marker"
-      >
-        <div
-          className="absolute -left-[5px] top-0"
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: '5px solid transparent',
-            borderRight: '5px solid transparent',
-            borderTop: '6px solid #ef4444',
-          }}
-        />
-        <span className="absolute left-1 top-[7px] text-[8px] font-bold text-red-400 whitespace-nowrap">
-          IN
-        </span>
-      </div>
-
-      {/* Punch-out marker */}
-      <div
-        className="absolute top-0 h-full pointer-events-none"
-        style={{ left: `${punchOutPx}px` }}
-        data-testid="punch-out-marker"
-      >
-        <div
-          className="absolute -left-[5px] top-0"
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: '5px solid transparent',
-            borderRight: '5px solid transparent',
-            borderTop: '6px solid #ef4444',
-          }}
-        />
-        <span className="absolute left-1 top-[7px] text-[8px] font-bold text-red-400 whitespace-nowrap">
-          OUT
-        </span>
-      </div>
+      <PunchMarker leftPx={punchInPx} label="IN" testId="punch-in-marker" />
+      <PunchMarker leftPx={punchOutPx} label="OUT" testId="punch-out-marker" />
     </>
   );
 }

@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   readAudioContextPlaybackLatency,
   detectPlaybackLatencySettings,
-  createDefaultPlaybackLatencySettings,
-  normalizePlaybackLatencySettings,
 } from '../playbackLatency';
 
 describe('readAudioContextPlaybackLatency', () => {
@@ -45,15 +43,12 @@ describe('detectPlaybackLatencySettings', () => {
     expect(settings.source).toBe('fallback');
     expect(settings.browserSupport).toBe('missing');
   });
-});
 
-describe('formatLatencyDisplay', () => {
-  it('formats latency settings into a display string', () => {
+  it('computes compensationMs as sum of base and output latency', () => {
     const settings = detectPlaybackLatencySettings(null, {
       baseLatency: 0.005,
       outputLatency: 0.01,
     });
-    // Total should be 15ms
     expect(settings.compensationMs).toBe(15);
   });
 });

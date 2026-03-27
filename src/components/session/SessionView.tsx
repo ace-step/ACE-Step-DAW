@@ -45,6 +45,7 @@ interface SlotColorMenuState {
   y: number;
   slotId: string;
   currentColor: string | null;
+  legato: boolean;
 }
 
 
@@ -57,6 +58,7 @@ export function SessionView() {
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
+  const setSessionSlotLegato = useProjectStore((s) => s.setSessionSlotLegato);
   const selectedSessionSlot = useUIStore((s) => s.selectedSessionSlot);
   const setSelectedSessionSlot = useUIStore((s) => s.setSelectedSessionSlot);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -192,7 +194,6 @@ export function SessionView() {
         {tracks.map((track) => {
           const sessionClips = getSessionClips(track);
           const activeLaunch = launchedSessionClips[track.id];
-
           return (
             <FragmentRow
               key={track.id}
@@ -239,6 +240,14 @@ export function SessionView() {
           <ContextMenuItem
             label="Reset Color"
             onClick={handleResetColor}
+          />
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            label={`${colorMenu.legato ? '\u2713 ' : ''}Legato`}
+            onClick={() => {
+              setSessionSlotLegato(colorMenu.slotId, !colorMenu.legato);
+              setColorMenu(null);
+            }}
           />
         </ContextMenuWrapper>
       )}
@@ -373,6 +382,7 @@ function FragmentRow({
             y: e.clientY,
             slotId: slot.id,
             currentColor: slotColor,
+            legato: slot.legato ?? false,
           });
         };
 

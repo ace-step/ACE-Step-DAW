@@ -17,6 +17,12 @@ export default defineConfig(async ({ command }) => {
 
   return {
     plugins,
+    optimizeDeps: {
+      exclude: ['onnxruntime-web'],
+    },
+    worker: {
+      format: 'es',
+    },
     resolve: {
       alias: {
         // Stub out @kabelsalat/web — Strudel's optional modular synth engine

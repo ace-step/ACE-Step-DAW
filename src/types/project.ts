@@ -570,6 +570,12 @@ export interface InferredMetas {
   genres?: string;
   seed?: string;
   ditModel?: string;
+  /** Detected beat positions (local analysis). */
+  beats?: import('./analysis').BeatEvent[];
+  /** Detected chord regions (local analysis). */
+  chords?: import('./analysis').ChordEvent[];
+  /** Whether metas came from server or local ONNX analysis. */
+  analysisSource?: 'server' | 'local';
 }
 
 /** A snapshot of a clip's audio state, stored as part of version history. */

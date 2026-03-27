@@ -43,6 +43,9 @@ import type {
   AudioWarpMarker,
   StretchMode,
   SamplerSettings,
+  SynthEnvelope,
+  SynthFilter,
+  SynthLfo,
   GainEnvelopePoint,
   LoudnessTarget,
   MasteringPreset,
@@ -611,6 +614,12 @@ export interface ProjectState {
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
+  /** Update ADSR envelope on a synth track. */
+  updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
+  /** Update filter settings on a synth track. */
+  updateSynthFilter: (trackId: string, filter: Partial<SynthFilter>) => void;
+  /** Update LFO modulation settings on a synth track. */
+  updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
@@ -3230,6 +3239,57 @@ export const useProjectStore = create<ProjectState>()(
                   synthPreset: presetDef.legacyPreset,
                 }),
               }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSynthEnvelope: (trackId, envelope) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update synth envelope', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, synthEnvelope: { ...(t.synthEnvelope ?? { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 }), ...envelope } }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSynthFilter: (trackId, filter) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update synth filter', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, synthFilter: { ...(t.synthFilter ?? { type: 'lowpass' as const, frequency: 1000, Q: 1 }), ...filter } }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSynthLfo: (trackId, lfo) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update synth LFO', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, synthLfo: { ...(t.synthLfo ?? { rate: 1, depth: 0.5, shape: 'sine' as const }), ...lfo } }
             : t,
         ),
       },

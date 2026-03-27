@@ -688,6 +688,8 @@ export interface ProjectState {
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
   sliceClipToRange: (clipId: string, startTime: number, endTime: number) => Promise<string | null>;
+  /** Convert a sample clip into MIDI-triggered slices based on detected transient positions. */
+  sliceClipToMidi: (clipId: string, slicePoints: number[], sampleRate: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
   snapClipEdgeToZeroCrossing: (clipId: string, edge: 'left' | 'right') => Promise<void>;
@@ -4022,6 +4024,71 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return clipId;
+  },
+
+  sliceClipToMidi: (clipId, slicePoints, sampleRate) => {
+    const state = get();
+    if (!state.project) return;
+
+    const targetClip = state.getClipById(clipId);
+    const track = state.getTrackForClip(clipId);
+    if (!targetClip || !track) return;
+    const trackId = track.id;
+
+    const clipDurationSeconds = targetClip.duration;
+    const bpm = state.project.bpm;
+    const beatsPerSecond = bpm / 60;
+
+    // Build time boundaries from slice points (in seconds)
+    const boundaries: number[] = [0];
+    for (const sp of slicePoints) {
+      const timeSec = sp / sampleRate;
+      if (timeSec > 0 && timeSec < clipDurationSeconds) {
+        boundaries.push(timeSec);
+      }
+    }
+    boundaries.push(clipDurationSeconds);
+
+    // Create MIDI notes — one per slice region, ascending pitch from C3 (48)
+    const notes: import('../types/project').MidiNote[] = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const startSec = boundaries[i];
+      const endSec = boundaries[i + 1];
+      const startBeat = startSec * beatsPerSecond;
+      const durationBeats = (endSec - startSec) * beatsPerSecond;
+      if (durationBeats <= 0) continue;
+      notes.push({
+        id: uuidv4(),
+        pitch: 48 + i, // C3 and up
+        startBeat,
+        durationBeats,
+        velocity: 0.8,
+      });
+    }
+
+    // Update the clip with MIDI data
+    set((s) => {
+      if (!s.project) return s;
+      const newTracks = s.project.tracks.map((track) => {
+        if (track.id !== trackId) return track;
+        return {
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId) return clip;
+            return {
+              ...clip,
+              midiData: {
+                notes,
+                grid: '1/16' as const,
+              },
+            };
+          }),
+        };
+      });
+      return { project: { ...s.project, tracks: newTracks } };
+    });
+
+    _pushHistory(get().project, { scope: 'arrangement', label: 'Slice clip to MIDI', trackId });
   },
 
   splitClip: (clipId, splitTime) => {

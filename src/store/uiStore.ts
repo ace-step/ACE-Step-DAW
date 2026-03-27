@@ -216,6 +216,12 @@ export interface UIState {
   aiAssistantError: string | null;
   workspaceComplexity: 'simple' | 'standard' | 'advanced';
 
+  // Audio Slice Mode
+  /** Clip ID currently in slice editing mode (null = inactive). */
+  sliceModeClipId: string | null;
+  /** Slice marker positions in seconds relative to clip start, keyed by clip ID. */
+  sliceMarkersByClip: Record<string, number[]>;
+
   // Theme
   theme: ThemeId;
 
@@ -418,6 +424,18 @@ export interface UIState {
   clearInlineSuggestions: () => void;
   setSuggestionFrequency: (v: 'off' | 'subtle' | 'active') => void;
   applyWorkspaceComplexity: (tier: 'simple' | 'standard' | 'advanced') => void;
+
+  // Audio Slice Mode actions
+  /** Enter slice mode for a clip (shows slice markers on waveform). */
+  enterSliceMode: (clipId: string) => void;
+  /** Exit slice mode. */
+  exitSliceMode: () => void;
+  /** Add a slice marker at a time position (seconds) for the current slice-mode clip. */
+  addSliceMarker: (clipId: string, timeSec: number) => void;
+  /** Remove a slice marker by index for a clip. */
+  removeSliceMarker: (clipId: string, index: number) => void;
+  /** Set all slice markers for a clip (e.g. from auto-detect). */
+  setSliceMarkers: (clipId: string, markers: number[]) => void;
 
   // Session view keyboard navigation
   setSelectedSessionSlot: (slot: { trackId: string; sceneIndex: number } | null) => void;
@@ -636,6 +654,9 @@ export const useUIStore = create<UIState>()(
   aiAssistantSuggestions: [],
   aiAssistantError: null,
   workspaceComplexity: 'standard',
+
+  sliceModeClipId: null,
+  sliceMarkersByClip: {},
 
   theme: 'ableton',
 
@@ -1229,6 +1250,25 @@ export const useUIStore = create<UIState>()(
   clearInlineSuggestions: () => set({ inlineSuggestions: [] }),
   setSuggestionFrequency: (v) => set({ suggestionFrequency: v }),
   applyWorkspaceComplexity: (tier) => set(getComplexityDefaults(tier)),
+
+  enterSliceMode: (clipId) => set({ sliceModeClipId: clipId }),
+  exitSliceMode: () => set({ sliceModeClipId: null }),
+  addSliceMarker: (clipId, timeSec) =>
+    set((s) => {
+      const existing = s.sliceMarkersByClip[clipId] ?? [];
+      const updated = [...existing, timeSec].sort((a, b) => a - b);
+      return { sliceMarkersByClip: { ...s.sliceMarkersByClip, [clipId]: updated } };
+    }),
+  removeSliceMarker: (clipId, index) =>
+    set((s) => {
+      const existing = s.sliceMarkersByClip[clipId] ?? [];
+      const updated = existing.filter((_, i) => i !== index);
+      return { sliceMarkersByClip: { ...s.sliceMarkersByClip, [clipId]: updated } };
+    }),
+  setSliceMarkers: (clipId, markers) =>
+    set((s) => ({
+      sliceMarkersByClip: { ...s.sliceMarkersByClip, [clipId]: [...markers].sort((a, b) => a - b) },
+    })),
 
   setSelectedSessionSlot: (slot) => set({ selectedSessionSlot: slot }),
   clearSelectedSessionSlot: () => set({ selectedSessionSlot: null }),

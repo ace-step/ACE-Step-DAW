@@ -241,11 +241,17 @@ export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }
       )));
     }
 
-    await generateBatch({
+    // Close panel before generation starts (match Mix mode behavior)
+    useUIStore.getState().setShowGenerationPanel(false);
+
+    // Fire-and-forget — generation runs in the background
+    generateBatch({
       mode,
       globalCaption,
       tracks,
       sharedSeed,
+    }).catch(() => {
+      // errors are handled inside generateBatch via toast
     });
   }, [canGenerate, globalCaption, initialRange?.duration, initialRange?.startTime, mode, selectedRows, sharedSeed]);
 

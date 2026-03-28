@@ -6,6 +6,7 @@ import { toastInfo } from '../../hooks/useToast';
 import {
   clampTimelineScrollLeft,
   clampTimelinePixelsPerSecond,
+  computeAutoScrollAnchor,
   DEFAULT_TIMELINE_PIXELS_PER_SECOND,
   getNextTimelineZoomLevel,
   getTimelineContentWidth,
@@ -46,6 +47,7 @@ export function useTimelineScroll(scrollRef: React.RefObject<HTMLDivElement | nu
   const zoomAnchorRef = useRef<{ time: number; viewportX: number } | null>(null);
   const zoomFrameTimeRef = useRef<number | null>(null);
   const handledTimelineZoomRequestIdRef = useRef<number | null>(null);
+  const autoScrollAnchorRef = useRef<number | null>(null);
 
   const totalWidth = hasProject
     ? getTimelineContentWidth(totalDuration, pixelsPerSecond, viewportWidth)
@@ -143,18 +145,32 @@ export function useTimelineScroll(scrollRef: React.RefObject<HTMLDivElement | nu
     scrollRef,
   ]);
 
+  // Reset auto-scroll anchor when playback stops or auto-scroll is disabled
+  useEffect(() => {
+    if (!isPlaying || !autoScrollEnabled) {
+      autoScrollAnchorRef.current = null;
+    }
+  }, [isPlaying, autoScrollEnabled]);
+
   // --- Auto-scroll during playback ---
   useEffect(() => {
     const container = scrollRef.current;
     if (!container || !hasProject || !isPlaying || !autoScrollEnabled) return;
 
     const timelineViewportWidth = Math.max(1, (container.clientWidth - trackListWidth) || window.innerWidth || 1);
-    const fixedPlayheadViewportX = Math.min(
-      Math.max(120, timelineViewportWidth * 0.35),
-      Math.max(120, timelineViewportWidth - 96),
+
+    // Compute the viewport-x anchor for the playhead. On the first frame
+    // this captures where the playhead currently sits so the view scrolls
+    // immediately instead of waiting for the playhead to walk to 35 %.
+    const playheadViewportX = currentTime * pixelsPerSecond - container.scrollLeft;
+    autoScrollAnchorRef.current = computeAutoScrollAnchor(
+      playheadViewportX,
+      autoScrollAnchorRef.current,
+      timelineViewportWidth,
     );
+
     const nextScrollLeft = clampTimelineScrollLeft(
-      currentTime * pixelsPerSecond - fixedPlayheadViewportX,
+      currentTime * pixelsPerSecond - autoScrollAnchorRef.current,
       totalDuration,
       pixelsPerSecond,
       timelineViewportWidth,

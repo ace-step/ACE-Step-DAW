@@ -6,6 +6,7 @@ import {
   getTimelineZoomAnchor,
   TIMELINE_ZOOM_LEVELS,
   getZoomedTimelineViewport,
+  computeAutoScrollAnchor,
 } from '../timelineZoom';
 
 describe('timelineZoom', () => {
@@ -86,5 +87,38 @@ describe('timelineZoom', () => {
     const maxPps = TIMELINE_ZOOM_LEVELS[TIMELINE_ZOOM_LEVELS.length - 1];
     const beatPxAt120 = maxPps * (60 / 120);
     expect(beatPxAt120).toBeGreaterThanOrEqual(640);
+  });
+});
+
+describe('computeAutoScrollAnchor', () => {
+  const viewportWidth = 1200;
+
+  it('uses playhead current viewport position when left of target (avoids walking-to-center)', () => {
+    const anchor = computeAutoScrollAnchor(100, null, viewportWidth);
+    expect(anchor).toBe(100);
+  });
+
+  it('caps anchor at target position when playhead is right of target', () => {
+    const anchor = computeAutoScrollAnchor(800, null, viewportWidth);
+    const targetX = Math.min(
+      Math.max(120, viewportWidth * 0.35),
+      Math.max(120, viewportWidth - 96),
+    );
+    expect(anchor).toBe(targetX);
+  });
+
+  it('returns existing anchor unchanged when already set (stable during playback)', () => {
+    const anchor = computeAutoScrollAnchor(100, 200, viewportWidth);
+    expect(anchor).toBe(200);
+  });
+
+  it('clamps anchor to 0 minimum when playhead is at negative viewport position', () => {
+    const anchor = computeAutoScrollAnchor(-50, null, viewportWidth);
+    expect(anchor).toBe(0);
+  });
+
+  it('uses small anchor at timeline start so scrolling begins immediately', () => {
+    const anchor = computeAutoScrollAnchor(0, null, viewportWidth);
+    expect(anchor).toBe(0);
   });
 });

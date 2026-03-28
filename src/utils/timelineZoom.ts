@@ -157,6 +157,32 @@ export function getZoomedTimelineViewport(
   };
 }
 
+/**
+ * Compute the auto-scroll viewport anchor for the playhead.
+ *
+ * On the first frame of auto-scrolling (previousAnchor === null), uses the
+ * playhead's *current* viewport position (capped at the 35 % target) so
+ * scrolling starts immediately instead of waiting for the playhead to walk
+ * to the centre of the viewport.
+ *
+ * Once an anchor is established it is returned unchanged — it stays stable
+ * for the entire playback session.
+ */
+export function computeAutoScrollAnchor(
+  playheadViewportX: number,
+  previousAnchor: number | null,
+  viewportWidth: number,
+): number {
+  // Stable: return existing anchor once set
+  if (previousAnchor !== null) return previousAnchor;
+
+  const targetX = Math.min(
+    Math.max(120, viewportWidth * 0.35),
+    Math.max(120, viewportWidth - 96),
+  );
+  return clamp(playheadViewportX, 0, targetX);
+}
+
 export function getTimelineFitViewport(
   range: TimelineZoomRange,
   viewportWidth: number,

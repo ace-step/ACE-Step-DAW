@@ -107,8 +107,8 @@ export function VerticalFader({
   );
 
   const pct = levelToFill(value) * 100;
-  const arrowH = 10;
-  const arrowW = 8;
+  const arrowH = 12;
+  const arrowW = 12;
 
   return (
     <div
@@ -132,7 +132,7 @@ export function VerticalFader({
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          left: 10 - arrowW - 2,
+          left: 10 - arrowW,
         }}
       >
         <svg

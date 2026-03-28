@@ -598,6 +598,32 @@ export interface GainEnvelopePoint {
   gain: number;   // 0–2 (1 = unity, >1 = boost)
 }
 
+export type ClipGenerationType = 'text2music' | 'lego';
+
+/** Persisted generation form values for re-editing and re-generating a clip. */
+export interface ClipGenerationParams {
+  type: ClipGenerationType;
+  prompt: string;
+  lyrics: string;
+  // text2music params
+  durationSeconds?: number;
+  thinking?: boolean;
+  seed?: number;
+  useRandomSeed?: boolean;
+  vocalLanguage?: string;
+  instrumental?: boolean;
+  splitToStems?: boolean;
+  stemCount?: 2 | 4 | 6;
+  useProjectMeta?: boolean;
+  inferenceSteps?: number;
+  guidanceScale?: number;
+  shift?: number;
+  // lego params
+  globalCaption?: string;
+  sampleMode?: boolean;
+  autoExpandPrompt?: boolean;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -660,6 +686,8 @@ export interface Clip {
   gainEnvelope?: GainEnvelopePoint[];
   /** Per-clip mute for A/B variation comparison. */
   muted?: boolean;
+  /** Generation parameters used to create this clip, for edit/regenerate. */
+  generationParams?: ClipGenerationParams;
 }
 
 export interface BounceInPlaceOptions {

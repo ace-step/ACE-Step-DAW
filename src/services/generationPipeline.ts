@@ -192,6 +192,12 @@ export async function generateAllTracks(): Promise<void> {
  * On completion, the new result is also saved as a version.
  */
 export async function regenerateClip(clipId: string): Promise<void> {
+  // Route to text2music regeneration if this is a full-song clip
+  const clip = useProjectStore.getState().getClipById(clipId);
+  if (clip?.generationParams?.type === 'text2music') {
+    return regenerateText2MusicClip(clipId);
+  }
+
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
 
@@ -211,6 +217,110 @@ export async function regenerateClip(clipId: string): Promise<void> {
       useGenerationStore.getState().setIsGenerating(false);
     }
   });
+}
+
+/**
+ * Re-generate a text2music clip in-place using stored generation params.
+ * Saves the current audio as a version, re-submits with a new random seed.
+ */
+async function regenerateText2MusicClip(clipId: string): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  if (genStore.isGenerating) return;
+
+  const store = useProjectStore.getState();
+  const clip = store.getClipById(clipId);
+  if (!clip?.generationParams || clip.generationParams.type !== 'text2music') return;
+
+  const params = clip.generationParams;
+  store.saveClipVersion(clipId);
+  genStore.setIsGenerating(true);
+
+  try {
+    await useModelStore.getState().ensureModelForIntent('full-song');
+    const project = store.project;
+    if (!project) throw new Error('No project open');
+
+    const defaults = project.generationDefaults;
+    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+
+    const taskParams: Text2MusicTaskParams = {
+      task_type: 'text2music',
+      prompt: params.prompt,
+      lyrics: params.lyrics,
+      audio_duration: params.durationSeconds ?? 60,
+      bpm: params.useProjectMeta ? (project.bpm ?? null) : null,
+      key_scale: params.useProjectMeta ? (project.keyScale ?? '') : '',
+      time_signature: params.useProjectMeta ? String(project.timeSignature ?? 4) : '',
+      inference_steps: params.inferenceSteps ?? defaults.inferenceSteps,
+      guidance_scale: params.guidanceScale ?? defaults.guidanceScale,
+      shift: params.shift ?? defaults.shift,
+      batch_size: 1,
+      audio_format: 'wav',
+      thinking: params.thinking ?? defaults.thinking,
+      model: activeModel,
+      use_random_seed: true,
+    };
+    if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+
+    const jobId = uuidv4();
+    genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
+    store.updateClipStatus(clipId, 'generating', { generationJobId: jobId });
+    genStore.updateJob(jobId, { status: 'generating', startedAt: Date.now(), progress: 'Submitting...', stage: 'Submitting request' });
+
+    const silenceBlob = generateSilenceWav(params.durationSeconds ?? 60);
+    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams);
+    const taskId = releaseResp.task_id;
+    genStore.updateJob(jobId, { taskId });
+
+    const startTime = Date.now();
+    let resultAudioPath: string | null = null;
+    let firstResult: TaskResultItem | null = null;
+
+    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+      await sleep(POLL_INTERVAL_MS);
+      const entries = await api.queryResult([taskId]);
+      const entry = entries?.[0];
+      if (!entry) continue;
+      const { stage, progressPercent } = extractProgressMetadata(entry);
+      const currentJob = useGenerationStore.getState().jobs.find((j) => j.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, { ...deriveGenerationJobProgress(currentJob, { status: 'generating', progress: entry.progress_text || 'Generating...', stage, progressPercent }) });
+      if (entry.status === 1) {
+        const resultItems: TaskResultItem[] = JSON.parse(entry.result);
+        firstResult = resultItems?.[0] ?? null;
+        resultAudioPath = firstResult?.file ?? null;
+        break;
+      } else if (entry.status === 2) {
+        throw new Error(`Generation failed: ${entry.result}`);
+      }
+    }
+    if (!resultAudioPath) throw new Error('Generation timed out');
+
+    genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...', stage: 'Downloading audio' });
+    store.updateClipStatus(clipId, 'processing');
+
+    const audioBlob = await api.downloadAudio(resultAudioPath);
+    const audioKey = await saveAudioBlob(project.id, clipId, 'isolated', audioBlob);
+    const engine = getAudioEngine();
+    const audioBuffer = await engine.decodeAudioData(audioBlob);
+    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+
+    const inferredMetas: InferredMetas | undefined = firstResult
+      ? { bpm: firstResult.metas?.bpm, keyScale: firstResult.metas?.keyscale, timeSignature: firstResult.metas?.timesignature, genres: firstResult.metas?.genres, seed: firstResult.seed_value, ditModel: firstResult.dit_model }
+      : undefined;
+
+    const actualDuration = audioBuffer.duration;
+    useProjectStore.getState().updateClipStatus(clipId, 'ready', { isolatedAudioKey: audioKey, waveformPeaks: peaks, inferredMetas, audioDuration: actualDuration, audioOffset: 0 });
+    useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
+    genStore.updateJob(jobId, { status: 'done', progress: 'Done', stage: 'Complete' });
+    useProjectStore.getState().saveClipVersion(clipId);
+    toastSuccess('Clip regenerated');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Regeneration failed';
+    toastError(message);
+    useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
+  } finally {
+    useGenerationStore.getState().setIsGenerating(false);
+  }
 }
 
 /**
@@ -1156,6 +1266,16 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         prompt: opts.localDescription,
         globalCaption: opts.globalCaption,
         lyrics: opts.lyrics,
+      });
+
+      // Persist generation params for edit/regenerate
+      store.updateClip(clip.id, {
+        generationParams: {
+          type: 'lego',
+          prompt: opts.localDescription,
+          lyrics: opts.lyrics,
+          globalCaption: opts.globalCaption,
+        },
       });
 
       if (opts.localDescription) {
@@ -2199,6 +2319,10 @@ export interface Text2MusicRequest {
   vocalLanguage?: string;
   /** When true, update project BPM/key/timeSignature from generated result */
   syncMetaToProject?: boolean;
+  /** Whether the lyrics are instrumental (for persisting generation params) */
+  instrumental?: boolean;
+  /** Whether the generation used project BPM/key/timeSignature (for persisting) */
+  useProjectMeta?: boolean;
 }
 
 export interface Text2MusicResult {
@@ -2264,6 +2388,27 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('Failed to create mix clip');
   }
   const clipId = clip.id;
+
+  // Persist generation params for edit/regenerate
+  store.updateClip(clipId, {
+    generationParams: {
+      type: 'text2music',
+      prompt: request.prompt,
+      lyrics: request.lyrics,
+      durationSeconds: request.durationSeconds,
+      thinking: request.thinking,
+      seed: request.seed,
+      useRandomSeed: request.useRandomSeed,
+      vocalLanguage: request.vocalLanguage,
+      instrumental: request.instrumental,
+      splitToStems: request.splitToStems,
+      stemCount: request.stemCount,
+      useProjectMeta: request.useProjectMeta,
+      inferenceSteps: request.inferenceSteps,
+      guidanceScale: request.guidanceScale,
+      shift: request.shift,
+    },
+  });
 
   // Step 3: Build and submit task
   const jobId = uuidv4();

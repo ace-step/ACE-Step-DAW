@@ -67,6 +67,7 @@ export interface UIState {
   /** Tracks whether the user's last selection was on clips or tracks, for context-aware Cmd+A and Delete. */
   lastSelectionContext: 'tracks' | 'clips' | null;
   editingClipId: string | null;
+  editingText2MusicClipId: string | null;
   showNewProjectDialog: boolean;
   showInstrumentPicker: boolean;
   showExportDialog: boolean;
@@ -256,6 +257,7 @@ export interface UIState {
   deselectAllTracks: () => void;
   deselectAll: () => void;
   setEditingClip: (clipId: string | null) => void;
+  setEditingText2MusicClipId: (clipId: string | null) => void;
   setShowNewProjectDialog: (v: boolean) => void;
   setShowInstrumentPicker: (v: boolean) => void;
   setShowExportDialog: (v: boolean) => void;
@@ -552,6 +554,7 @@ export const useUIStore = create<UIState>()(
   selectedTrackIds: new Set(),
   lastSelectionContext: null,
   editingClipId: null,
+  editingText2MusicClipId: null,
   showNewProjectDialog: false,
   showInstrumentPicker: false,
   showExportDialog: false,
@@ -746,6 +749,7 @@ export const useUIStore = create<UIState>()(
   deselectAll: () => set({ selectedClipIds: new Set(), selectedTrackIds: new Set(), lastSelectionContext: null }),
 
   setEditingClip: (clipId) => set({ editingClipId: clipId }),
+  setEditingText2MusicClipId: (clipId: string | null) => set({ editingText2MusicClipId: clipId }),
   setShowNewProjectDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showNewProjectDialog: true } : { showNewProjectDialog: false }),
   setShowInstrumentPicker: (v) => set(v ? { ...ALL_MODALS_CLOSED, showInstrumentPicker: true } : { showInstrumentPicker: false }),
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),

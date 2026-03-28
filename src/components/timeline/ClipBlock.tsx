@@ -156,8 +156,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       setOpenPianoRoll(track.id, clip.id);
       return;
     }
+    // Text2music clips (explicit params OR mix track type) → open GenerationSidePanel
+    if (clip.generationParams?.type === 'text2music' || (clip.source === 'generated' && track.trackType === 'mix')) {
+      const ui = useUIStore.getState();
+      ui.setEditingText2MusicClipId(clip.id);
+      ui.openGenerationPanelView('textToMusic');
+      return;
+    }
+    // Lego (add layer / stems) clips → open AddLayerModal
+    if (clip.source === 'generated') {
+      setEditModalOpen(true);
+      return;
+    }
     setCtxMenu({ x: e.clientX, y: e.clientY });
-  }, [isMidiClip, setOpenPianoRoll, track.id, clip.id, rangePreviewCommittedRef]);
+  }, [isMidiClip, setOpenPianoRoll, track.id, track.trackType, clip, rangePreviewCommittedRef]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     if (suppressContextMenuRef.current) {
@@ -339,7 +351,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           className="absolute left-1.5 text-[10px] font-medium truncate leading-4 z-10 pointer-events-none"
           style={{
             top: 1,
-            right: totalVersions >= 1 ? '52px' : '6px',
+            right: (totalVersions >= 1 || (clip.source === 'generated' && (clip.generationParams || track.trackType === 'mix'))) ? '52px' : '6px',
             color: clipPresentation.titleColor,
           }}
         >
@@ -354,6 +366,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           generationStatus={clip.generationStatus}
           metaColor={clipPresentation.metaColor}
           hoveredResizeEdge={hoveredResizeEdge}
+          canRegenerate={clip.source === 'generated' && !!(clip.generationParams || track.trackType === 'mix')}
         />
 
         <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} isMidiClip={isMidiClip} />

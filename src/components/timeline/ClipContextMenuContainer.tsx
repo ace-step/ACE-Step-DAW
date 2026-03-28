@@ -116,7 +116,16 @@ export function ClipContextMenuContainer({
         })();
       } : undefined}
       onExportMidi={isMidiClip ? () => { onClose(); exportMidiClip(clip.id); } : undefined}
-      onEdit={() => { onClose(); onEditModalOpen(); }}
+      onEdit={() => {
+        onClose();
+        if (clip.generationParams?.type === 'text2music' || (clip.source === 'generated' && track.trackType === 'mix')) {
+          const ui = useUIStore.getState();
+          ui.setEditingText2MusicClipId(clip.id);
+          ui.openGenerationPanelView('textToMusic');
+        } else {
+          onEditModalOpen();
+        }
+      }}
       onDuplicate={() => { onClose(); duplicateClip(clip.id); }}
       onSplitAtPlayhead={() => {
         onClose();

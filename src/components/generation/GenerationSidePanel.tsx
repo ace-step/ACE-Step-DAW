@@ -35,6 +35,12 @@ export function GenerationSidePanel() {
 
   const [renderPanel, setRenderPanel] = useState(show);
   const [mixSubMode, setMixSubMode] = useState<MixSubMode>('simple');
+  const editingText2MusicClipId = useUIStore((s) => s.editingText2MusicClipId);
+
+  // Force Custom mode when editing a text2music clip
+  useEffect(() => {
+    if (editingText2MusicClipId) setMixSubMode('custom');
+  }, [editingText2MusicClipId]);
 
   // Unified footer state — updated by active form child
   interface FooterState {
@@ -95,9 +101,13 @@ export function GenerationSidePanel() {
       setRenderPanel(true);
       return undefined;
     }
+    // Clear text2music editing state when panel closes
+    if (editingText2MusicClipId) {
+      useUIStore.getState().setEditingText2MusicClipId(null);
+    }
     const timeout = window.setTimeout(() => setRenderPanel(false), 260);
     return () => window.clearTimeout(timeout);
-  }, [show]);
+  }, [show, editingText2MusicClipId]);
 
   const workspaceLeftInset = mainView === 'arrangement' && Number.isFinite(trackListWidth)
     ? trackListWidth

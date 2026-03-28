@@ -6,7 +6,7 @@ import { useModelStore } from '../../store/modelStore';
 import { useUIStore } from '../../store/uiStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
-import { generateText2Music } from '../../services/generationPipeline';
+import { generateText2Music, regenerateClip } from '../../services/generationPipeline';
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
@@ -155,6 +155,49 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     if (initialData.vocalLanguage) setVocalLanguage(initialData.vocalLanguage);
   }, [initialData]);
 
+  // Edit mode: hydrate form from clip's stored generationParams
+  const editingClipId = useUIStore((s) => s.editingText2MusicClipId);
+  const editingClip = useProjectStore((s) =>
+    editingClipId ? s.project?.tracks.flatMap((t) => t.clips).find((c) => c.id === editingClipId) : undefined,
+  );
+  const hydratedClipIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editingClipId || !editingClip || hydratedClipIdRef.current === editingClipId) return;
+    hydratedClipIdRef.current = editingClipId;
+    const p = editingClip.generationParams;
+    if (p) {
+      setPrompt(p.prompt);
+      setLyrics(p.lyrics);
+      if (p.thinking !== undefined) setThinking(p.thinking);
+      if (p.seed !== undefined) { setSeed(p.seed); setUseRandomSeed(false); }
+      if (p.useRandomSeed !== undefined) setUseRandomSeed(p.useRandomSeed);
+      if (p.vocalLanguage) setVocalLanguage(p.vocalLanguage);
+      if (p.instrumental !== undefined) setInstrumental(p.instrumental);
+      if (p.durationSeconds !== undefined && p.durationSeconds > 0) {
+        setDurationSeconds(p.durationSeconds);
+        setDurationAuto(false);
+      } else {
+        setDurationSeconds(-1);
+        setDurationAuto(true);
+      }
+      if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
+      if (p.stemCount !== undefined) setStemCount(p.stemCount);
+      if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+    } else {
+      // Backward compatibility: hydrate from basic clip fields
+      setPrompt(editingClip.prompt || '');
+      setLyrics(editingClip.lyrics || '');
+      if (editingClip.audioDuration && editingClip.audioDuration > 0) {
+        setDurationSeconds(editingClip.audioDuration);
+        setDurationAuto(false);
+      }
+      setInstrumental(editingClip.lyrics === '[Instrumental]');
+    }
+  }, [editingClipId, editingClip]);
+  useEffect(() => {
+    if (!editingClipId) hydratedClipIdRef.current = null;
+  }, [editingClipId]);
+
   // Only disable form during model loading, NOT during generation.
   // Generation runs in background — user should be able to edit/start new tasks.
   const isDisabled = modelLoadingState === 'loading';
@@ -170,13 +213,40 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     // Close the generation panel so user sees the timeline with the loading clip
     useUIStore.getState().setShowGenerationPanel(false);
 
-    // Fire-and-forget: generation runs in background, UI stays interactive.
-    // The pipeline creates track/clip placeholder immediately, then polls.
+    // Edit mode: update stored params on existing clip, then regenerate
+    if (editingClipId) {
+      const store = useProjectStore.getState();
+      store.updateClip(editingClipId, {
+        generationParams: {
+          type: 'text2music',
+          prompt: prompt.trim(),
+          lyrics: instrumental ? '[Instrumental]' : lyrics,
+          durationSeconds: durationSeconds === -1 ? undefined : durationSeconds,
+          thinking,
+          seed: useRandomSeed ? undefined : seed,
+          useRandomSeed,
+          vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+          instrumental,
+          splitToStems,
+          stemCount,
+          useProjectMeta,
+          inferenceSteps: project?.generationDefaults?.inferenceSteps,
+          guidanceScale: project?.generationDefaults?.guidanceScale,
+          shift: project?.generationDefaults?.shift,
+        },
+      });
+      useUIStore.getState().setEditingText2MusicClipId(null);
+      regenerateClip(editingClipId).catch((err) => {
+        setError(err instanceof Error ? err.message : 'Regeneration failed');
+      });
+      return;
+    }
+
+    // New generation: fire-and-forget, runs in background
     generateText2Music({
       prompt: prompt.trim(),
       lyrics: instrumental ? '[Instrumental]' : lyrics,
       durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
-      // Only pass project meta when "Match project" is enabled
       bpm: useProjectMeta ? (project?.bpm ?? null) : null,
       keyScale: useProjectMeta ? (project?.keyScale ?? '') : '',
       timeSignature: useProjectMeta ? String(project?.timeSignature ?? 4) : '',
@@ -189,17 +259,18 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
-      // When not using project meta, optionally sync results back to project
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
+      instrumental,
+      useProjectMeta,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
   onFooterChange({
-    label: isGenerating ? 'Generating...' : 'Generate Full Song',
+    label: isGenerating ? 'Generating...' : (editingClipId ? 'Re-generate' : 'Generate Full Song'),
     disabled: isSubmitDisabled || !prompt.trim(),
     action: footerAction,
     thinkingState: { checked: thinking, onChange: setThinking, disabled: isSubmitDisabled },

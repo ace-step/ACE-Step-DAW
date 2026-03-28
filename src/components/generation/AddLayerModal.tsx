@@ -173,6 +173,14 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
       duration: Math.max(0.5, selEnd - selStart),
       sampleMode,
       autoExpandPrompt,
+      generationParams: {
+        type: 'lego',
+        prompt: localCaption,
+        lyrics: isVocal ? lyrics : '',
+        globalCaption,
+        sampleMode,
+        autoExpandPrompt,
+      },
     });
     if (localCaption !== (track.localCaption ?? '')) {
       setTrackLocalCaption(trackId, localCaption);
@@ -196,6 +204,14 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
         duration: Math.max(0.5, selEnd - selStart),
         sampleMode,
         autoExpandPrompt,
+        generationParams: {
+          type: 'lego',
+          prompt: localCaption,
+          lyrics: isVocal ? lyrics : '',
+          globalCaption,
+          sampleMode,
+          autoExpandPrompt,
+        },
       });
       await generateSingleClip(clipId, parsedSeed !== undefined ? { sharedSeed: parsedSeed } : undefined);
     } else {

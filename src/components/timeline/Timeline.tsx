@@ -344,23 +344,30 @@ export function Timeline() {
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onContextMenu={(e) => {
+          // Guard against re-entrant dispatch from clip fallback below
+          if ((e.nativeEvent as any).__clipFallback) return;
           const target = e.target as HTMLElement;
           if (target.closest?.('[data-track-column-region="true"]')) return;
           if (target.closest?.('[data-clip-block]')) return;
           if (target.closest?.('[data-sequencer-grid]')) return;
-          // Fallback: check visual stacking (handles macOS trackpad two-finger press
-          // where e.target may be the lane even though the clip is visually on top)
-          const elAtPoint = document.elementFromPoint(e.clientX, e.clientY);
-          const clipBlockAtPoint = elAtPoint?.closest?.('[data-clip-block]') as HTMLElement | null;
-          if (clipBlockAtPoint) {
-            // Re-dispatch contextmenu on the clip so ClipBlock handles it
-            e.preventDefault();
-            e.stopPropagation();
-            clipBlockAtPoint.dispatchEvent(new MouseEvent('contextmenu', {
-              bubbles: true, cancelable: true,
-              clientX: e.clientX, clientY: e.clientY, button: 2,
-            }));
-            return;
+          // Fallback: find clip at click position by bounding rect check.
+          // On macOS, two-finger trackpad press may fire contextmenu with e.target
+          // being the lane instead of the clip, so we search all clip blocks.
+          const allClipBlocks = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-clip-block]');
+          for (const clipBlock of allClipBlocks) {
+            const rect = clipBlock.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+              e.preventDefault();
+              e.stopPropagation();
+              const syntheticEvt = new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true,
+                clientX: e.clientX, clientY: e.clientY, button: 2,
+              });
+              (syntheticEvt as any).__clipFallback = true;
+              clipBlock.dispatchEvent(syntheticEvt);
+              return;
+            }
           }
           if (selectWindow) {
             const selEl = target.closest?.('[style]');

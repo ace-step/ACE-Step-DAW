@@ -1,9 +1,12 @@
 /**
  * Vite plugin that provides a WebSocket endpoint for the Claude Code terminal.
  *
- * Uses node-pty to spawn Claude Code in a real pseudo-terminal (PTY), then
- * bridges PTY I/O over WebSocket so xterm.js can render and interact with
- * the full interactive CLI — colors, cursor movement, key handling all work.
+ * Uses node-pty to spawn an interactive shell in a real pseudo-terminal (PTY),
+ * then bridges PTY I/O over WebSocket so xterm.js can render and interact.
+ *
+ * The PTY is NOT spawned until the browser sends its actual terminal dimensions
+ * via a `{ type: 'init', cols, rows }` message. This prevents the shell from
+ * drawing its prompt at the wrong width and leaving garbled output.
  *
  * A separate WebSocket endpoint `/ws/mcp-bridge` is used by the DAW MCP
  * server to relay tool calls to the browser (Zustand store).
@@ -20,8 +23,6 @@ const require_ = createRequire(import.meta.url);
 const pty = require_('node-pty') as typeof import('node-pty');
 
 const GRACE_PERIOD_MS = 300_000; // 5 minutes — Claude Code may be running long tasks
-const DEFAULT_COLS = 100;
-const DEFAULT_ROWS = 30;
 
 interface PtyProcess {
   onData: (callback: (data: string) => void) => void;
@@ -36,10 +37,7 @@ interface SessionState {
   ptyProc: PtyProcess | null;
   ws: WebSocket | null;
   graceTimer: ReturnType<typeof setTimeout> | null;
-}
-
-function createSession(): SessionState {
-  return { ptyProc: null, ws: null, graceTimer: null };
+  cwd: string;
 }
 
 function killSession(session: SessionState) {
@@ -54,10 +52,6 @@ function killSession(session: SessionState) {
 function spawnShell(cwd: string, cols: number, rows: number): PtyProcess {
   const shell = process.platform === 'win32' ? 'cmd.exe' : process.env.SHELL ?? '/bin/zsh';
 
-  // Spawn an interactive login shell in the project directory.
-  // The user types `claude` to start Claude Code — this picks up their
-  // shell aliases (e.g. `claude --dangerously-skip-permissions`) and
-  // ensures all env vars / PATH entries are available.
   const ptyProc = pty.spawn(shell, ['-l'], {
     name: 'xterm-256color',
     cols,
@@ -74,16 +68,39 @@ function spawnShell(cwd: string, cols: number, rows: number): PtyProcess {
   return ptyProc as unknown as PtyProcess;
 }
 
+function attachPty(session: SessionState, ws: WebSocket, cols: number, rows: number) {
+  try {
+    session.ptyProc = spawnShell(session.cwd, cols, rows);
+
+    session.ptyProc.onData((data: string) => {
+      if (session.ws?.readyState === WebSocket.OPEN) {
+        session.ws.send(data);
+      }
+    });
+
+    session.ptyProc.onExit(({ exitCode }) => {
+      const msg = `\r\n\x1b[90m[Shell exited with code ${exitCode}]\x1b[0m\r\n`;
+      if (session.ws?.readyState === WebSocket.OPEN) {
+        session.ws.send(msg);
+      }
+      session.ptyProc = null;
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    ws.send(`\r\n\x1b[31mFailed to start shell: ${errMsg}\x1b[0m\r\n`);
+  }
+}
+
 export function claudeTerminalPlugin(): Plugin {
-  const session = createSession();
+  const session: SessionState = { ptyProc: null, ws: null, graceTimer: null, cwd: '' };
 
   return {
     name: 'vite-plugin-claude-terminal',
     configureServer(server: ViteDevServer) {
+      session.cwd = server.config.root;
+
       const wssTerminal = new WebSocketServer({ noServer: true });
       const wssMcpBridge = new WebSocketServer({ noServer: true });
-
-      // Store MCP bridge connections for the MCP server to use
       const mcpBridgeClients = new Set<WebSocket>();
 
       server.httpServer?.on(
@@ -111,51 +128,36 @@ export function claudeTerminalPlugin(): Plugin {
 
         session.ws = ws;
 
-        // Spawn Claude if not already running
-        if (!session.ptyProc) {
-          const cwd = server.config.root;
-          try {
-            session.ptyProc = spawnShell(cwd, DEFAULT_COLS, DEFAULT_ROWS);
+        // If PTY is already running (reconnect after tab switch), reattach
+        // Otherwise, wait for 'init' message with real dimensions before spawning
 
-            session.ptyProc.onData((data: string) => {
-              if (session.ws?.readyState === WebSocket.OPEN) {
-                session.ws.send(data);
-              }
-            });
-
-            session.ptyProc.onExit(({ exitCode }) => {
-              const msg = `\r\n\x1b[90m[Claude Code exited with code ${exitCode}]\x1b[0m\r\n`;
-              if (session.ws?.readyState === WebSocket.OPEN) {
-                session.ws.send(msg);
-              }
-              session.ptyProc = null;
-            });
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            const msg = errMsg.includes('ENOENT') || errMsg.includes('not found')
-              ? '\r\n\x1b[33mClaude Code not found.\x1b[0m\r\n' +
-                'Install it with: \x1b[1mnpm install -g @anthropic-ai/claude-code\x1b[0m\r\n' +
-                'Then restart the dev server.\r\n'
-              : `\r\n\x1b[31mFailed to start Claude Code: ${errMsg}\x1b[0m\r\n`;
-            ws.send(msg);
-          }
-        }
-
-        // Forward input from xterm.js to PTY
         ws.on('message', (data) => {
           const str = typeof data === 'string' ? data : data.toString();
 
-          // Handle resize messages: { type: 'resize', cols, rows }
-          if (str.startsWith('{"type":"resize"')) {
+          // Handle JSON control messages
+          if (str.startsWith('{')) {
             try {
-              const msg = JSON.parse(str) as { type: string; cols: number; rows: number };
-              if (msg.type === 'resize' && session.ptyProc) {
-                session.ptyProc.resize(msg.cols, msg.rows);
+              const msg = JSON.parse(str) as { type: string; cols?: number; rows?: number };
+
+              if (msg.type === 'init' && msg.cols && msg.rows) {
+                // First message from xterm.js: spawn PTY with exact dimensions
+                if (!session.ptyProc) {
+                  attachPty(session, ws, msg.cols, msg.rows);
+                } else {
+                  // PTY exists (reconnect) — just resize to match
+                  session.ptyProc.resize(msg.cols, msg.rows);
+                }
+                return;
               }
-            } catch { /* ignore bad JSON */ }
-            return;
+
+              if (msg.type === 'resize' && msg.cols && msg.rows && session.ptyProc) {
+                session.ptyProc.resize(msg.cols, msg.rows);
+                return;
+              }
+            } catch { /* not JSON — fall through to PTY write */ }
           }
 
+          // Regular input → PTY
           if (session.ptyProc) {
             session.ptyProc.write(str);
           }
@@ -163,7 +165,6 @@ export function claudeTerminalPlugin(): Plugin {
 
         ws.on('close', () => {
           session.ws = null;
-          // Grace period before killing the process
           session.graceTimer = setTimeout(() => {
             killSession(session);
           }, GRACE_PERIOD_MS);
@@ -176,10 +177,8 @@ export function claudeTerminalPlugin(): Plugin {
         ws.on('close', () => mcpBridgeClients.delete(ws));
       });
 
-      // Expose bridge clients for the MCP server
       (server as unknown as Record<string, unknown>).__mcpBridgeClients = mcpBridgeClients;
 
-      // Clean up on server close
       server.httpServer?.on('close', () => {
         killSession(session);
         wssTerminal.close();

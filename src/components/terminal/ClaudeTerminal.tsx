@@ -31,6 +31,15 @@ export function ClaudeTerminal() {
     ws.onopen = () => {
       setStatus('connected');
       reconnectAttemptRef.current = 0;
+
+      // Send real terminal dimensions so the server spawns the PTY
+      // at the correct size — no garbled initial output
+      const fit = fitAddonRef.current;
+      const term = termInstanceRef.current;
+      if (fit && term) {
+        fit.fit();
+        ws.send(JSON.stringify({ type: 'init', cols: term.cols, rows: term.rows }));
+      }
     };
 
     ws.onmessage = (event) => {

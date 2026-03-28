@@ -109,6 +109,7 @@ function keepPositionIfUnchanged(currentPosition: PanelPosition | null, nextPosi
 export function AddLayerPanel() {
   const isOpen = useUIStore((s) => s.addLayerOpen);
   const setAddLayerOpen = useUIStore((s) => s.setAddLayerOpen);
+  const editingClipId = useUIStore((s) => s.editingLegoClipId);
   const selectWindow = useUIStore((s) => s.selectWindow);
   const contextWindow = useUIStore((s) => s.contextWindow);
 
@@ -116,6 +117,17 @@ export function AddLayerPanel() {
   const addTrack = useProjectStore((s) => s.addTrack);
   const setTrackLocalCaption = useProjectStore((s) => s.setTrackLocalCaption);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
+
+  // Resolve editing clip and its track
+  const editingClip = useMemo(() => {
+    if (!editingClipId || !project) return null;
+    for (const track of project.tracks) {
+      const clip = track.clips.find((c) => c.id === editingClipId);
+      if (clip) return { clip, track };
+    }
+    return null;
+  }, [editingClipId, project]);
+  const isEditMode = editingClip !== null;
 
   const [targetTrackName, setTargetTrackName] = useState<TrackName>('drums');
   const [style, setStyle] = useState('');
@@ -277,21 +289,50 @@ export function AddLayerPanel() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isOpen, handleClose]);
 
-  // Reset form when panel opens
+  // Reset form when panel opens — restore from clip in edit mode
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      setTargetTrackName(project ? getDefaultTargetTrackName(project, selectWindow) : 'drums');
-      setStyle('');
-      setLyrics('');
-      setGlobalCaption(project?.globalCaption ?? '');
-      setSeedValue('');
-      setUseRandomSeed(true);
-      setChunkMaskMode('auto');
+      if (editingClip) {
+        // Edit mode: restore from clip's generation params
+        const { clip, track } = editingClip;
+        const params = clip.generationParams;
+        setTargetTrackName(track.trackName);
+        setStyle(params?.prompt ?? clip.prompt ?? '');
+        setLyrics(params?.lyrics ?? clip.lyrics ?? '');
+        setGlobalCaption(params?.globalCaption ?? clip.globalCaption ?? project?.globalCaption ?? '');
+        setSeedValue(params?.seed !== undefined ? String(params.seed) : '');
+        setUseRandomSeed(params?.useRandomSeed ?? true);
+        setChunkMaskMode('auto');
+        // Restore context window from saved generation params
+        if (params?.contextWindow) {
+          useUIStore.getState().setContextWindow({
+            startTime: params.contextWindow.startTime,
+            endTime: params.contextWindow.endTime,
+            trackIds: [track.id],
+          });
+        }
+        // Set select window to match clip range
+        useUIStore.getState().setSelectWindow({
+          startTime: clip.startTime,
+          endTime: clip.startTime + clip.duration,
+          trackIds: [track.id],
+          primaryTrackId: track.id,
+        });
+      } else {
+        // New layer mode: fresh form
+        setTargetTrackName(project ? getDefaultTargetTrackName(project, selectWindow) : 'drums');
+        setStyle('');
+        setLyrics('');
+        setGlobalCaption(project?.globalCaption ?? '');
+        setSeedValue('');
+        setUseRandomSeed(true);
+        setChunkMaskMode('auto');
+      }
       setSavedSelectionBeforeWholeSong(null);
       setPanelPosition(null);
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, project, selectWindow]);
+  }, [isOpen, project, selectWindow, editingClip]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -557,17 +598,37 @@ export function AddLayerPanel() {
   const handleGenerate = async () => {
     stopPreview();
 
-    let targetTrack = selectedWindowTrack;
-    if (!targetTrack) {
-      targetTrack = addTrack(
-        targetTrackName,
-        'stems',
-        selectedEmptyTrackOrder !== null ? { order: selectedEmptyTrackOrder } : undefined,
-      );
-    }
+    let trackId: string;
 
-    if (style) {
-      setTrackLocalCaption(targetTrack.id, style);
+    if (isEditMode && editingClip) {
+      // Edit mode: reuse existing track, update clip params
+      trackId = editingClip.track.id;
+      if (style) setTrackLocalCaption(trackId, style);
+      // Update clip with new params before regenerating
+      useProjectStore.getState().updateClip(editingClip.clip.id, {
+        prompt: style,
+        globalCaption,
+        lyrics: showLyrics ? lyrics : '',
+        generationParams: {
+          type: 'lego',
+          prompt: style,
+          lyrics: showLyrics ? lyrics : '',
+          globalCaption,
+          contextWindow: hasContext ? { startTime: contextWindow!.startTime, endTime: contextWindow!.endTime } : null,
+        },
+      });
+    } else {
+      // New layer mode: create or find target track
+      let targetTrack = selectedWindowTrack;
+      if (!targetTrack) {
+        targetTrack = addTrack(
+          targetTrackName,
+          'stems',
+          selectedEmptyTrackOrder !== null ? { order: selectedEmptyTrackOrder } : undefined,
+        );
+      }
+      trackId = targetTrack.id;
+      if (style) setTrackLocalCaption(trackId, style);
     }
 
     useUIStore.getState().setSelectWindow(null);
@@ -575,7 +636,7 @@ export function AddLayerPanel() {
     handleClose();
 
     await generateFromAddLayer({
-      trackId: targetTrack.id,
+      trackId,
       startTime,
       duration,
       localDescription: style,
@@ -583,6 +644,7 @@ export function AddLayerPanel() {
       lyrics: showLyrics ? lyrics : '',
       contextWindow: hasContext ? contextWindow : null,
       chunkMaskMode,
+      clipId: isEditMode ? editingClipId ?? undefined : undefined,
     });
   };
 
@@ -622,7 +684,7 @@ export function AddLayerPanel() {
             <span className="block h-1 w-5 rounded-full bg-current/40" />
           </div>
           <div className="min-w-0">
-            <span className="block text-sm font-semibold text-white">Add a Layer</span>
+            <span className="block text-sm font-semibold text-white">{isEditMode ? 'Edit Layer' : 'Add a Layer'}</span>
             <div className="flex items-center gap-2 text-[11px]">
               <span className="text-zinc-500">{fmt(startTime)} - {fmt(endTime)}</span>
               {!selectionCoversWholeSong && (
@@ -894,7 +956,7 @@ export function AddLayerPanel() {
               : 'bg-teal-600 hover:bg-teal-500 text-white'
           }`}
         >
-          {isGenerating ? 'Generating\u2026' : 'Generate'}
+          {isGenerating ? 'Generating\u2026' : isEditMode ? 'Regenerate' : 'Generate'}
         </button>
       </div>
     </div>

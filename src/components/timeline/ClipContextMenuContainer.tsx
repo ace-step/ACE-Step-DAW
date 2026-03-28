@@ -123,7 +123,7 @@ export function ClipContextMenuContainer({
           ui.setEditingText2MusicClipId(clip.id);
           ui.openGenerationPanelView('textToMusic');
         } else {
-          onEditModalOpen();
+          useUIStore.getState().openAddLayerForClip(clip.id);
         }
       }}
       onDuplicate={() => { onClose(); duplicateClip(clip.id); }}

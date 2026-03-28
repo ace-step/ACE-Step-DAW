@@ -156,16 +156,17 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       setOpenPianoRoll(track.id, clip.id);
       return;
     }
-    // Text2music clips (explicit params OR mix track type) → open GenerationSidePanel
+    // Text2music clips (explicit params AND mix track type) → open GenerationSidePanel
     if (clip.generationParams?.type === 'text2music' || (clip.source === 'generated' && track.trackType === 'mix')) {
       const ui = useUIStore.getState();
       ui.setEditingText2MusicClipId(clip.id);
       ui.openGenerationPanelView('textToMusic');
       return;
     }
-    // Lego (add layer / stems) clips → open AddLayerModal
-    if (clip.source === 'generated') {
-      setEditModalOpen(true);
+    // Any other generated clip (lego / stems / add layer) → open AddLayerPanel
+    // Also handle stems-track clips that may not have source set
+    if (clip.source === 'generated' || track.trackType === 'stems') {
+      useUIStore.getState().openAddLayerForClip(clip.id);
       return;
     }
     setCtxMenu({ x: e.clientX, y: e.clientY });

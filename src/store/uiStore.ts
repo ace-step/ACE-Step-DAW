@@ -197,6 +197,7 @@ export interface UIState {
 
   // Add Layer Panel (floating, no backdrop)
   addLayerOpen: boolean;
+  editingLegoClipId: string | null;
 
   // Model Library Panel
   showModelLibrary: boolean;
@@ -385,6 +386,8 @@ export interface UIState {
 
   // Add Layer Panel
   setAddLayerOpen: (v: boolean) => void;
+  setEditingLegoClipId: (id: string | null) => void;
+  openAddLayerForClip: (clipId: string) => void;
 
   // Model Library Panel
   toggleModelLibrary: () => void;
@@ -642,6 +645,7 @@ export const useUIStore = create<UIState>()(
   generatePatternClipId: null,
 
   addLayerOpen: false,
+  editingLegoClipId: null,
 
   showModelLibrary: false,
 
@@ -1124,7 +1128,9 @@ export const useUIStore = create<UIState>()(
   setShowGeneratePatternDialog: (v) => set(v ? { showGeneratePatternDialog: v } : { showGeneratePatternDialog: false, generatePatternClipId: null }),
   openGeneratePatternDialog: (clipId) => set({ showGeneratePatternDialog: true, generatePatternClipId: clipId }),
 
-  setAddLayerOpen: (v) => set({ addLayerOpen: v }),
+  setAddLayerOpen: (v) => set({ addLayerOpen: v, ...(v ? {} : { editingLegoClipId: null }) }),
+  setEditingLegoClipId: (id) => set({ editingLegoClipId: id }),
+  openAddLayerForClip: (clipId) => set({ addLayerOpen: true, editingLegoClipId: clipId }),
 
   toggleModelLibrary: () => set((s) => s.showModelLibrary ? { showModelLibrary: false } : { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true }),
   setShowModelLibrary: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true } : { showModelLibrary: false }),

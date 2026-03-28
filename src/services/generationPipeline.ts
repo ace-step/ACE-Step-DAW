@@ -1248,6 +1248,8 @@ export interface AddLayerOptions {
   contextWindow: { startTime: number; endTime: number } | null;
   /** Chunk mask mode for this single-track generation */
   chunkMaskMode?: 'explicit' | 'auto';
+  /** When set, regenerate into this existing clip instead of creating a new one. */
+  clipId?: string;
 }
 
 export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void> {
@@ -1260,23 +1262,45 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
     try {
       const store = useProjectStore.getState();
 
-      const clip = store.addClip(opts.trackId, {
-        startTime: opts.startTime,
-        duration: opts.duration,
-        prompt: opts.localDescription,
-        globalCaption: opts.globalCaption,
-        lyrics: opts.lyrics,
-      });
+      let clipId: string;
 
-      // Persist generation params for edit/regenerate
-      store.updateClip(clip.id, {
-        generationParams: {
-          type: 'lego',
+      if (opts.clipId) {
+        // Edit mode: reuse existing clip, update its params
+        clipId = opts.clipId;
+        store.updateClip(clipId, {
           prompt: opts.localDescription,
-          lyrics: opts.lyrics,
           globalCaption: opts.globalCaption,
-        },
-      });
+          lyrics: opts.lyrics,
+          generationParams: {
+            type: 'lego',
+            prompt: opts.localDescription,
+            lyrics: opts.lyrics,
+            globalCaption: opts.globalCaption,
+            contextWindow: opts.contextWindow,
+          },
+        });
+      } else {
+        // New layer: create clip
+        const clip = store.addClip(opts.trackId, {
+          startTime: opts.startTime,
+          duration: opts.duration,
+          prompt: opts.localDescription,
+          globalCaption: opts.globalCaption,
+          lyrics: opts.lyrics,
+        });
+        clipId = clip.id;
+
+        // Persist generation params for edit/regenerate
+        store.updateClip(clipId, {
+          generationParams: {
+            type: 'lego',
+            prompt: opts.localDescription,
+            lyrics: opts.lyrics,
+            globalCaption: opts.globalCaption,
+            contextWindow: opts.contextWindow,
+          },
+        });
+      }
 
       if (opts.localDescription) {
         store.setTrackLocalCaption(opts.trackId, opts.localDescription);
@@ -1288,7 +1312,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         contextBlob = await extractContextAudioLazy(opts.contextWindow);
       }
 
-      const outcome = await generateClipInternal(clip.id, contextBlob, {
+      const outcome = await generateClipInternal(clipId, contextBlob, {
         forceSilence: !contextBlob,
         localDescription: opts.localDescription,
         globalCaptionOverride: opts.globalCaption,
@@ -1297,7 +1321,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       });
 
       if (outcome.succeeded) {
-        useProjectStore.getState().saveClipVersion(clip.id);
+        useProjectStore.getState().saveClipVersion(clipId);
       }
 
       return outcome.succeeded;

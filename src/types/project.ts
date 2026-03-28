@@ -622,6 +622,8 @@ export interface ClipGenerationParams {
   globalCaption?: string;
   sampleMode?: boolean;
   autoExpandPrompt?: boolean;
+  /** Context window used for lego generation — persisted for edit/regenerate. */
+  contextWindow?: { startTime: number; endTime: number } | null;
 }
 
 export interface Clip {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { levelToFill, fillToLevel } from '../meter-colors';
 
 interface VerticalFaderProps {
@@ -29,7 +29,6 @@ export function VerticalFader({
 }: VerticalFaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
-  const [focused, setFocused] = useState(false);
 
   const getValueFromY = useCallback(
     (clientY: number) => {
@@ -48,7 +47,6 @@ export function VerticalFader({
     (e: React.PointerEvent) => {
       e.preventDefault();
       dragging.current = true;
-      setFocused(true);
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       onChange(getValueFromY(e.clientY));
     },
@@ -109,8 +107,8 @@ export function VerticalFader({
   );
 
   const pct = levelToFill(value) * 100;
-  const arrowH = 8;
-  const arrowW = 6;
+  const arrowH = 10;
+  const arrowW = 8;
 
   return (
     <div
@@ -121,8 +119,6 @@ export function VerticalFader({
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
-      onFocus={() => setFocused(true)}
-      onBlur={() => { if (!dragging.current) setFocused(false); }}
       role="slider"
       aria-label={ariaLabel}
       aria-valuemin={Math.round(min * 100)}
@@ -136,7 +132,7 @@ export function VerticalFader({
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          left: 8 - arrowW,
+          left: 10 - arrowW - 2,
         }}
       >
         <svg
@@ -151,20 +147,6 @@ export function VerticalFader({
           />
         </svg>
       </div>
-
-      {/* Focus corner brackets (Ableton-style) */}
-      {focused && (
-        <>
-          {/* Top-left */}
-          <span className="absolute top-0 left-0 w-[4px] h-[4px] border-t border-l border-zinc-400 pointer-events-none" />
-          {/* Top-right */}
-          <span className="absolute top-0 right-0 w-[4px] h-[4px] border-t border-r border-zinc-400 pointer-events-none" />
-          {/* Bottom-left */}
-          <span className="absolute bottom-0 left-0 w-[4px] h-[4px] border-b border-l border-zinc-400 pointer-events-none" />
-          {/* Bottom-right */}
-          <span className="absolute bottom-0 right-0 w-[4px] h-[4px] border-b border-r border-zinc-400 pointer-events-none" />
-        </>
-      )}
     </div>
   );
 }

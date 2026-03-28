@@ -188,17 +188,68 @@ const TOOLS: MCPToolDefinition[] = [
     description: 'Open the mixer panel in the DAW UI',
     inputSchema: { type: 'object', properties: {} },
   },
+  // Generation
+  {
+    name: 'daw_generate',
+    description: 'Trigger AI music generation with a text prompt. Sets up the generation form and submits.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Text description of the music to generate (e.g. "upbeat lo-fi hip hop with jazzy piano")' },
+        trackId: { type: 'string', description: 'Optional target track ID. If omitted, uses the currently selected track.' },
+        duration: { type: 'number', description: 'Optional duration in seconds (default uses current form value)' },
+      },
+      required: ['prompt'],
+    },
+  },
 ];
 
 // ── WebSocket Bridge to Browser ──
 
 let bridgeWs: WebSocket | null = null;
+let reconnectAttempts = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY_MS = 1000;
 const pendingCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    process.stderr.write(`[DAW MCP Server] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached. Use a tool call to retry.\n`);
+    return;
+  }
+  const delay = Math.min(BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts), 30_000);
+  reconnectAttempts++;
+  process.stderr.write(`[DAW MCP Server] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...\n`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void connectBridge().catch(() => {
+      // connectBridge already handles scheduling the next reconnect
+    });
+  }, delay);
+}
+
 function connectBridge(): Promise<void> {
+  // Cancel any pending reconnect
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   return new Promise((resolve, reject) => {
-    bridgeWs = new WebSocket(BRIDGE_URL);
-    bridgeWs.on('open', () => resolve());
+    try {
+      bridgeWs = new WebSocket(BRIDGE_URL);
+    } catch (err) {
+      scheduleReconnect();
+      reject(err);
+      return;
+    }
+
+    bridgeWs.on('open', () => {
+      reconnectAttempts = 0; // Reset on successful connection
+      process.stderr.write('[DAW MCP Server] Connected to browser bridge.\n');
+      resolve();
+    });
     bridgeWs.on('error', (err) => reject(err));
     bridgeWs.on('message', (data) => {
       try {
@@ -223,6 +274,8 @@ function connectBridge(): Promise<void> {
         pending.reject(new Error('Bridge connection lost'));
       }
       pendingCalls.clear();
+      // Auto-reconnect with exponential backoff
+      scheduleReconnect();
     });
   });
 }

@@ -11,11 +11,12 @@
 
 import type { Plugin, ViteDevServer } from 'vite';
 import { spawn, type ChildProcess } from 'child_process';
+import { accessSync } from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { Duplex } from 'stream';
 
-const GRACE_PERIOD_MS = 30_000;
+const GRACE_PERIOD_MS = 300_000; // 5 minutes — Claude Code may be running long tasks
 
 interface SessionState {
   proc: ChildProcess | null;
@@ -47,8 +48,7 @@ function spawnClaude(cwd: string): ChildProcess {
   // If an MCP config file exists, pass it
   const mcpConfigPath = `${cwd}/server/mcp-config.json`;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('fs').accessSync(mcpConfigPath);
+    accessSync(mcpConfigPath);
     args.push('--mcp-config', mcpConfigPath);
   } catch {
     // No MCP config yet — that's fine

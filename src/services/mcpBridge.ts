@@ -11,10 +11,12 @@
 
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
+import { useGenerationStore } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
 
 const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws/mcp-bridge`;
 const RECONNECT_DELAY_MS = 3000;
+const IS_DEV = import.meta.env.DEV;
 
 interface ToolRequest {
   id: string;
@@ -41,13 +43,15 @@ function connect() {
   };
 
   ws.onmessage = (event) => {
-    try {
-      const request = JSON.parse(event.data as string) as ToolRequest;
-      const response = handleToolCall(request);
-      ws?.send(JSON.stringify(response));
-    } catch (err) {
-      console.error('[MCP Bridge] Failed to handle message:', err);
-    }
+    void (async () => {
+      try {
+        const request = JSON.parse(event.data as string) as ToolRequest;
+        const response = await handleToolCall(request);
+        ws?.send(JSON.stringify(response));
+      } catch (err) {
+        console.error('[MCP Bridge] Failed to handle message:', err);
+      }
+    })();
   };
 
   ws.onclose = () => {
@@ -60,11 +64,11 @@ function connect() {
   };
 }
 
-function handleToolCall(request: ToolRequest): ToolResponse {
+async function handleToolCall(request: ToolRequest): Promise<ToolResponse> {
   const { id, tool, params } = request;
 
   try {
-    const result = executeTool(tool, params);
+    const result = await executeTool(tool, params);
     return { id, result };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -72,9 +76,10 @@ function handleToolCall(request: ToolRequest): ToolResponse {
   }
 }
 
-function executeTool(tool: string, params: Record<string, unknown>): unknown {
+async function executeTool(tool: string, params: Record<string, unknown>): Promise<unknown> {
   const project = useProjectStore.getState();
   const transport = useTransportStore.getState();
+  const generation = useGenerationStore.getState();
   const ui = useUIStore.getState();
 
   switch (tool) {
@@ -256,6 +261,30 @@ function executeTool(tool: string, params: Record<string, unknown>): unknown {
       return { success: true };
     }
 
+    // ── Generation ──
+    case 'daw_generate': {
+      const prompt = params.prompt as string;
+      if (!prompt) throw new Error('prompt is required');
+      const trackId = params.trackId as string | undefined;
+      const duration = params.duration as number | undefined;
+
+      // Set up generation form
+      if (prompt) generation.setGenerationPrompt(prompt);
+      if (duration) generation.setGenerationLengthSeconds(duration);
+      if (trackId) generation.setGenerationTargetTrack(trackId);
+
+      // Submit the generation request
+      const result = generation.submitGenerationRequest();
+      if (!result) {
+        return { success: false, error: 'Generation request could not be submitted. Check that a target track exists.' };
+      }
+      return {
+        success: true,
+        message: `Generation started with prompt: "${prompt}"`,
+        targetTrack: trackId ?? 'auto',
+      };
+    }
+
     // ── UI ──
     case 'daw_show_mixer': {
       ui.setShowMixer(true);
@@ -268,6 +297,11 @@ function executeTool(tool: string, params: Record<string, unknown>): unknown {
 }
 
 export function startMcpBridge() {
+  if (!IS_DEV) {
+    // MCP bridge only works with Vite dev server WebSocket endpoints.
+    // In production builds, skip connection to avoid console noise.
+    return;
+  }
   connect();
 }
 

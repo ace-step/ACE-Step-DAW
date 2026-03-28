@@ -1,6 +1,9 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { getSidechainRoutes } from '../../utils/sidechainRouting';
+import type { Track } from '../../types/project';
+
+const EMPTY_TRACKS: Track[] = [];
 
 interface RoutePosition {
   sourceX: number;
@@ -19,7 +22,7 @@ export function SidechainRoutingOverlay({
 }: {
   containerRef: RefObject<HTMLElement | null>;
 }) {
-  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? EMPTY_TRACKS);
   const routes = getSidechainRoutes(tracks);
   const [positions, setPositions] = useState<RoutePosition[]>([]);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });

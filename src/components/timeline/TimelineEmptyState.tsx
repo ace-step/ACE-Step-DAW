@@ -1,9 +1,11 @@
 import { useProjectStore } from '../../store/projectStore';
+import type { Track } from '../../types/project';
 
+const EMPTY_TRACKS: Track[] = [];
 const EMPTY_STATE_THRESHOLD = 1;
 
 export function TimelineEmptyState() {
-  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? EMPTY_TRACKS);
 
   if (tracks.length >= EMPTY_STATE_THRESHOLD) {
     return null;

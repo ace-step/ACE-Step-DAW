@@ -15,6 +15,9 @@ import {
   getZoomedTimelineViewport,
 } from '../../utils/timelineZoom';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
+import type { Track } from '../../types/project';
+
+const EMPTY_TRACKS: Track[] = [];
 
 /**
  * Encapsulates timeline zoom, auto-scroll, resize-observer, and wheel handling.
@@ -27,7 +30,7 @@ import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 export function useTimelineScroll(scrollRef: React.RefObject<HTMLDivElement | null>) {
   const hasProject = useProjectStore((s) => Boolean(s.project));
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 0);
-  const tracks = useProjectStore((s) => s.project?.tracks ?? []);
+  const tracks = useProjectStore((s) => s.project?.tracks ?? EMPTY_TRACKS);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setPixelsPerSecond = useUIStore((s) => s.setPixelsPerSecond);
   const setTimelineViewportWidth = useUIStore((s) => s.setTimelineViewportWidth);

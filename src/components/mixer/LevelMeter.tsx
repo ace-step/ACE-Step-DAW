@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { METER_CANVAS_STOPS, METER_DB_TICKS, METER_DB_MIN, METER_DB_MAX, levelToFill } from '../meter-colors';
+import { METER_CANVAS_STOPS, METER_DB_TICKS, dbToFill, levelToFill } from '../meter-colors';
 
 const BAR_WIDTH = 4;
 const BAR_GAP = 1;
@@ -184,7 +184,7 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
     <div
       ref={containerRef}
       className="relative h-full flex"
-      style={{ width: showScale ? totalWidth + 24 : totalWidth + 6 }}
+      style={{ width: showScale ? totalWidth + 32 : totalWidth + 6 }}
       data-testid="level-meter"
     >
       <button
@@ -206,11 +206,11 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
       {showScale && (
         <div
           className="absolute inset-y-0 pointer-events-none"
-          style={{ left: totalWidth + 4, width: 18 }}
+          style={{ left: totalWidth + 12, width: 18 }}
           aria-hidden="true"
         >
           {METER_DB_TICKS.map((db) => {
-            const fill = (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN);
+            const fill = dbToFill(db);
             const topPct = (1 - fill) * 100;
             return (
               <div

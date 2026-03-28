@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { levelToFill, fillToLevel } from '../meter-colors';
 
 interface VerticalFaderProps {
   value: number;
@@ -12,8 +13,8 @@ interface VerticalFaderProps {
 }
 
 /**
- * Custom vertical fader with a slim track and metallic cap.
- * Consistent visual language with the horizontal FaderMeter used in track headers.
+ * Transparent vertical fader overlay — sits on top of LevelMeter.
+ * Arrow indicator positioned on the dB scale to match the meter.
  */
 export function VerticalFader({
   value,
@@ -33,9 +34,13 @@ export function VerticalFader({
       const el = containerRef.current;
       if (!el) return value;
       const rect = el.getBoundingClientRect();
-      // Bottom = min, Top = max
-      const ratio = 1 - (clientY - rect.top) / rect.height;
-      return min + Math.max(0, Math.min(1, ratio)) * (max - min);
+      // Visual position on the dB scale (0 = bottom, 1 = top)
+      const fill = 1 - (clientY - rect.top) / rect.height;
+      const clampedFill = Math.max(0, Math.min(1, fill));
+      // Convert dB-scale position back to linear amplitude
+      const linear = fillToLevel(clampedFill);
+      // Clamp to the fader's min/max range
+      return Math.max(min, Math.min(max, linear));
     },
     [value, min, max],
   );
@@ -103,7 +108,8 @@ export function VerticalFader({
     [value, min, max, onChange],
   );
 
-  const pct = ((value - min) / (max - min)) * 100;
+  // Position arrow on the dB scale (matches the meter's visual mapping)
+  const pct = levelToFill(value) * 100;
   const arrowH = 8;
 
   return (
@@ -123,12 +129,12 @@ export function VerticalFader({
       aria-orientation="vertical"
       tabIndex={0}
     >
-      {/* Arrow indicator — right-pointing triangle riding on the meter */}
+      {/* Arrow indicator — right-pointing triangle next to meter bars */}
       <div
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          right: 0,
+          left: 12,
         }}
       >
         <svg

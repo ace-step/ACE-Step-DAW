@@ -115,7 +115,7 @@ export function VerticalFader({
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 cursor-ns-resize select-none z-10"
+      className="absolute inset-0 cursor-ns-resize select-none z-10 outline-none"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -129,26 +129,24 @@ export function VerticalFader({
       aria-orientation="vertical"
       tabIndex={0}
     >
-      {/* Arrow indicator — right-pointing triangle next to meter bars */}
+      {/* Arrow indicator — right-pointing triangle, same X as scale ticks */}
       <div
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          left: 12,
+          left: 14,
         }}
       >
         <svg
-          width="7"
+          width="6"
           height={arrowH}
-          viewBox={`0 0 7 ${arrowH}`}
+          viewBox={`0 0 6 ${arrowH}`}
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
           <polygon
-            points={`0,0 7,${arrowH / 2} 0,${arrowH}`}
-            fill="#d0d0d4"
-            stroke="#888"
-            strokeWidth="0.5"
+            points={`0,0 6,${arrowH / 2} 0,${arrowH}`}
+            fill="#c8c8cc"
           />
         </svg>
       </div>

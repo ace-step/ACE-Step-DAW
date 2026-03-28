@@ -184,7 +184,7 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
     <div
       ref={containerRef}
       className="relative h-full flex"
-      style={{ width: showScale ? totalWidth + 32 : totalWidth + 6 }}
+      style={{ width: showScale ? totalWidth + 28 : totalWidth + 6 }}
       data-testid="level-meter"
     >
       <button
@@ -206,7 +206,7 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
       {showScale && (
         <div
           className="absolute inset-y-0 pointer-events-none"
-          style={{ left: totalWidth + 12, width: 18 }}
+          style={{ left: totalWidth + 5, width: 22 }}
           aria-hidden="true"
         >
           {METER_DB_TICKS.map((db) => {
@@ -218,8 +218,8 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
                 className="absolute flex items-center"
                 style={{ top: `${topPct}%`, transform: 'translateY(-50%)', left: 0 }}
               >
-                <span className="inline-block w-[3px] h-[1px] bg-zinc-500 mr-[2px]" />
-                <span className="text-[7px] leading-none text-zinc-500 font-mono">
+                <span className="inline-block w-[5px] h-[1px] bg-zinc-500" />
+                <span className="text-[8px] leading-none text-zinc-500 font-mono ml-[2px]">
                   {Math.abs(db)}
                 </span>
               </div>

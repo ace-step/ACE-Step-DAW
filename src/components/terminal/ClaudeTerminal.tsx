@@ -8,6 +8,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws/claude`;
 const RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+const IS_DEV = import.meta.env.DEV;
 
 export function ClaudeTerminal() {
   const show = useUIStore((state) => state.showAIAssistant);
@@ -19,10 +20,12 @@ export function ClaudeTerminal() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedRef = useRef(false);
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
 
   const connectWebSocket = useCallback(() => {
+    if (!IS_DEV) return; // WebSocket endpoints only exist in dev server
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     setStatus('connecting');
@@ -33,15 +36,11 @@ export function ClaudeTerminal() {
       setStatus('connected');
       reconnectAttemptRef.current = 0;
 
-      // Send real terminal dimensions so the server spawns the PTY
-      // at the correct size — no garbled initial output
+      // Send real terminal dimensions so the server spawns/resizes the PTY
       const fit = fitAddonRef.current;
       const term = termInstanceRef.current;
       if (fit && term) {
         fit.fit();
-        // Clear any renderer artifacts before PTY data arrives
-        term.clear();
-        term.write('\x1b[2J\x1b[H'); // ANSI: clear screen + cursor home
         ws.send(JSON.stringify({ type: 'init', cols: term.cols, rows: term.rows }));
       }
     };
@@ -55,6 +54,7 @@ export function ClaudeTerminal() {
 
     ws.onclose = () => {
       setStatus('disconnected');
+      wsRef.current = null;
       if (reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectTimerRef.current = setTimeout(() => {
           reconnectAttemptRef.current += 1;
@@ -68,27 +68,19 @@ export function ClaudeTerminal() {
     };
   }, []);
 
-  // Initialize xterm.js
+  // Initialize xterm.js — runs once, never tears down
   useEffect(() => {
-    if (!show || !terminalRef.current) return;
-
-    let disposed = false;
+    if (initializedRef.current || !terminalRef.current) return;
+    initializedRef.current = true;
 
     const init = async () => {
-      // Wait for fonts to load before initializing xterm — prevents wrong cell measurements
       await document.fonts.ready;
 
       const { Terminal } = await import('xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { WebLinksAddon } = await import('@xterm/addon-web-links');
 
-      if (disposed || !terminalRef.current) return;
-
-      // Don't re-create if already initialized
-      if (termInstanceRef.current) {
-        fitAddonRef.current?.fit();
-        return;
-      }
+      if (!terminalRef.current) return;
 
       const fitAddon = new FitAddon();
       const webLinksAddon = new WebLinksAddon();
@@ -130,7 +122,6 @@ export function ClaudeTerminal() {
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.open(terminalRef.current);
-
       fitAddon.fit();
 
       termInstanceRef.current = term;
@@ -152,22 +143,32 @@ export function ClaudeTerminal() {
         }
       });
 
-      // No welcome message — the interactive shell prompt is the welcome
-
-      // Connect
+      // Connect to server
       connectWebSocket();
     };
 
     void init();
+  }, [connectWebSocket]);
 
-    return () => {
-      disposed = true;
-    };
+  // Re-fit terminal and reconnect when panel becomes visible
+  useEffect(() => {
+    if (!show) return;
+
+    // Re-fit after CSS display changes from none to flex
+    requestAnimationFrame(() => {
+      fitAddonRef.current?.fit();
+    });
+
+    // If disconnected, reset counter and try again
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      reconnectAttemptRef.current = 0;
+      connectWebSocket();
+    }
   }, [show, connectWebSocket]);
 
-  // Handle resize
+  // Handle container resize
   useEffect(() => {
-    if (!show || !terminalRef.current) return;
+    if (!terminalRef.current) return;
 
     const container = terminalRef.current;
     const observer = new ResizeObserver(() => {
@@ -176,20 +177,7 @@ export function ClaudeTerminal() {
     observer.observe(container);
 
     return () => observer.disconnect();
-  }, [show]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      reconnectTimerRef.current && clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
-      termInstanceRef.current?.dispose();
-      termInstanceRef.current = null;
-      fitAddonRef.current = null;
-    };
   }, []);
-
-  if (!show) return null;
 
   const statusColor =
     status === 'connected' ? 'bg-emerald-500'
@@ -201,10 +189,11 @@ export function ClaudeTerminal() {
     : status === 'connecting' ? 'Connecting...'
     : 'Disconnected';
 
+  // Hide with CSS instead of unmounting — preserves xterm, WebSocket, and PTY session
   return (
     <div
-      className="fixed top-11 right-0 bottom-6 flex w-[400px] flex-col border-l border-[#333] bg-[#1a1a2e] shadow-xl"
-      style={{ zIndex: Z.panel }}
+      className="fixed top-11 right-0 bottom-6 w-[400px] flex-col border-l border-[#333] bg-[#1a1a2e] shadow-xl"
+      style={{ zIndex: Z.panel, display: show ? 'flex' : 'none' }}
       data-testid="claude-terminal"
       role="complementary"
       aria-label="Claude Code Terminal"
@@ -224,7 +213,7 @@ export function ClaudeTerminal() {
         <div className="flex items-center gap-1">
           {status === 'disconnected' && (
             <button
-              onClick={connectWebSocket}
+              onClick={() => { reconnectAttemptRef.current = 0; connectWebSocket(); }}
               className="flex h-6 items-center gap-1 rounded px-2 text-[10px] text-zinc-400 transition-colors hover:bg-[#333] hover:text-zinc-300"
               title="Reconnect"
             >

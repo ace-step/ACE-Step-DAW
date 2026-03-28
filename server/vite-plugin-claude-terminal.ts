@@ -89,6 +89,13 @@ function attachPty(session: SessionState, ws: WebSocket, cols: number, rows: num
       }
     });
 
+    // Auto-start Claude Code after shell is ready
+    setTimeout(() => {
+      if (session.ptyProc) {
+        session.ptyProc.write('claude\r');
+      }
+    }, 500);
+
     session.ptyProc.onExit(({ exitCode }) => {
       const msg = `\r\n\x1b[90m[Shell exited with code ${exitCode}]\x1b[0m\r\n`;
       if (session.ws?.readyState === WebSocket.OPEN) {

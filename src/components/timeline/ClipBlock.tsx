@@ -224,6 +224,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
           contain: 'layout style paint',
+          zIndex: 1,
           ...(isSelected ? { '--tw-ring-color': clipPresentation.selectionRingColor } as React.CSSProperties : {}),
         }}
         data-clip-block

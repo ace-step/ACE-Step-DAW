@@ -14,19 +14,11 @@ import {
 const VOCAL_TRACK_NAMES = new Set<string>(['vocals', 'backing_vocals']);
 const TARGET_TRACK_OPTIONS = TRACK_NAMES.map((trackName) => TRACK_CATALOG[trackName]);
 
-const LAYER_TYPES = [
-  { id: 'song', label: 'Song Track', trackName: 'custom' as TrackName },
-  { id: 'vocal', label: 'Vocal', trackName: 'vocals' as TrackName, showLyrics: true },
-  { id: 'backing', label: 'Backing', trackName: 'backing_vocals' as TrackName, showLyrics: true },
-  { id: 'custom', label: 'Custom', trackName: 'custom' as TrackName },
-] as const;
-
-type LayerTypeId = (typeof LAYER_TYPES)[number]['id'];
 type PanelPosition = { left: number; top: number };
 
-const PANEL_WIDTH = 420;
+const PANEL_WIDTH = 480;
 const PANEL_MARGIN = 16;
-const PANEL_BOTTOM_GAP = 60;
+const PANEL_BOTTOM_GAP = 120;
 const FALLBACK_PANEL_HEIGHT = 680;
 
 type SelectWindow = NonNullable<ReturnType<typeof useUIStore.getState>['selectWindow']>;
@@ -79,39 +71,17 @@ function getSelectedEmptyTrackOrder(
 function getDefaultTargetTrackName(
   project: NonNullable<ReturnType<typeof useProjectStore.getState>['project']>,
   selectWindow: SelectWindow | null,
-  layerType: LayerTypeId,
 ) : TrackName {
   const targetTracks = getAudioTargetTracks(project);
-  if (targetTracks.length === 0) {
-    return layerType === 'vocal'
-      ? 'vocals'
-      : layerType === 'backing'
-        ? 'backing_vocals'
-        : 'drums';
-  }
+  if (targetTracks.length === 0) return 'drums';
 
   const selectedTrackIds = selectWindow?.primaryTrackId
     ? [selectWindow.primaryTrackId]
     : (selectWindow?.trackIds ?? []);
   const selectedTracks = targetTracks.filter((track) => selectedTrackIds.includes(track.id));
   const selectedPresetTrack = selectedTracks.find((track) => track.trackName !== 'custom');
-  const preferredTrackName: TrackName | null =
-    layerType === 'vocal'
-      ? 'vocals'
-      : layerType === 'backing'
-        ? 'backing_vocals'
-        : null;
 
   if (selectedPresetTrack) return selectedPresetTrack.trackName;
-
-  if (preferredTrackName) {
-    const matchingSelectedTrack = selectedTracks.find((track) => track.trackName === preferredTrackName);
-    if (matchingSelectedTrack) return matchingSelectedTrack.trackName;
-
-    const matchingTrack = targetTracks.find((track) => track.trackName === preferredTrackName);
-    if (matchingTrack) return matchingTrack.trackName;
-  }
-
   if (selectedTracks.length > 0 && selectedTracks[0].trackName !== 'custom') return selectedTracks[0].trackName;
 
   const firstInstrumentTrack = targetTracks.find((track) => track.trackName !== 'custom' && !VOCAL_TRACK_NAMES.has(track.trackName));
@@ -147,24 +117,22 @@ export function AddLayerPanel() {
   const setTrackLocalCaption = useProjectStore((s) => s.setTrackLocalCaption);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
 
-  const [layerType, setLayerType] = useState<LayerTypeId>('song');
   const [targetTrackName, setTargetTrackName] = useState<TrackName>('drums');
   const [style, setStyle] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [globalCaption, setGlobalCaption] = useState('');
 
-  // Advanced options
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('auto');
-  const [sampleMode, setSampleMode] = useState(false);
-  const [autoExpandPrompt, setAutoExpandPrompt] = useState(true);
   const [seedValue, setSeedValue] = useState('');
+  const [useRandomSeed, setUseRandomSeed] = useState(true);
 
   // Context audio preview
   type PreviewState = 'idle' | 'loading' | 'playing';
   const [previewState, setPreviewState] = useState<PreviewState>('idle');
   const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(0);
+  const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
+  const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const scrubIntervalRef = useRef<number | null>(null);
@@ -312,14 +280,12 @@ export function AddLayerPanel() {
   // Reset form when panel opens
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
-      setLayerType('song');
-      setTargetTrackName(project ? getDefaultTargetTrackName(project, selectWindow, 'song') : 'drums');
+      setTargetTrackName(project ? getDefaultTargetTrackName(project, selectWindow) : 'drums');
       setStyle('');
       setLyrics('');
       setGlobalCaption(project?.globalCaption ?? '');
       setSeedValue('');
-      setSampleMode(false);
-      setAutoExpandPrompt(true);
+      setUseRandomSeed(true);
       setChunkMaskMode('auto');
       setSavedSelectionBeforeWholeSong(null);
       setPanelPosition(null);
@@ -349,15 +315,39 @@ export function AddLayerPanel() {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isOpen, panelPosition, positionPanelNearBottomCenter, showAdvanced, sampleMode, layerType]);
+  }, [isOpen, panelPosition, positionPanelNearBottomCenter, targetTrackName]);
 
   useEffect(() => {
     if (!project || !isOpen) return;
     const hasPresetTarget = TARGET_TRACK_OPTIONS.some((track) => track.name === targetTrackName);
     if (!hasPresetTarget) {
-      setTargetTrackName(getDefaultTargetTrackName(project, selectWindow, layerType));
+      setTargetTrackName(getDefaultTargetTrackName(project, selectWindow));
     }
-  }, [audioTargetTracks, isOpen, layerType, project, selectWindow, targetTrackName]);
+  }, [audioTargetTracks, isOpen, project, selectWindow, targetTrackName]);
+
+  const extractPeaks = useCallback(async (blob: Blob, barCount: number) => {
+    try {
+      const ctx = new AudioContext();
+      const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+      const data = buf.getChannelData(0);
+      const step = Math.max(1, Math.floor(data.length / barCount));
+      const peaks: number[] = [];
+      for (let i = 0; i < barCount; i++) {
+        let max = 0;
+        const start = i * step;
+        const end = Math.min(start + step, data.length);
+        for (let j = start; j < end; j++) {
+          const abs = Math.abs(data[j]);
+          if (abs > max) max = abs;
+        }
+        peaks.push(max);
+      }
+      await ctx.close();
+      return peaks;
+    } catch {
+      return [];
+    }
+  }, []);
 
   const handlePreviewContext = useCallback(async () => {
     if (previewState === 'playing') { stopPreview(); return; }
@@ -366,6 +356,11 @@ export function AddLayerPanel() {
     try {
       const blob = await extractContextAudioLazy(contextWindow);
       if (!blob) { setPreviewState('idle'); return; }
+
+      // Extract waveform peaks for visualization
+      const peaks = await extractPeaks(blob, 80);
+      setWaveformPeaks(peaks);
+
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;
       const audio = new Audio(url);
@@ -381,7 +376,7 @@ export function AddLayerPanel() {
     } catch {
       stopPreview();
     }
-  }, [previewState, contextWindow, stopPreview]);
+  }, [previewState, contextWindow, stopPreview, extractPeaks]);
 
   const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const t = Number(e.target.value);
@@ -389,10 +384,133 @@ export function AddLayerPanel() {
     setPreviewCurrentTime(t);
   }, []);
 
+  const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!previewDuration || previewState === 'idle') return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t = ratio * previewDuration;
+    if (previewAudioRef.current) previewAudioRef.current.currentTime = t;
+    setPreviewCurrentTime(t);
+  }, [previewDuration, previewState]);
+
+  // Draggable selection mask on the context waveform
+  const maskDragRef = useRef<{ edge: 'left' | 'right' | 'move'; startX: number; origStart: number; origEnd: number } | null>(null);
+
+  const handleMaskMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>, edge: 'left' | 'right' | 'move') => {
+    e.stopPropagation();
+    e.preventDefault();
+    const sw = selectWindow;
+    maskDragRef.current = {
+      edge,
+      startX: e.clientX,
+      origStart: sw?.startTime ?? 0,
+      origEnd: sw?.endTime ?? 0,
+    };
+  }, [selectWindow]);
+
+  useEffect(() => {
+    if (!contextWindow) return;
+    const ctxDuration = contextWindow.endTime - contextWindow.startTime;
+    if (ctxDuration <= 0) return;
+
+    const onMove = (e: MouseEvent) => {
+      const drag = maskDragRef.current;
+      if (!drag) return;
+      const container = waveformCanvasRef.current?.parentElement;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const pxPerSec = rect.width / ctxDuration;
+      const deltaSec = (e.clientX - drag.startX) / pxPerSec;
+      const sw = selectWindow;
+
+      let newStart = drag.origStart;
+      let newEnd = drag.origEnd;
+
+      if (drag.edge === 'left') {
+        newStart = Math.max(contextWindow.startTime, Math.min(drag.origEnd - 0.5, drag.origStart + deltaSec));
+      } else if (drag.edge === 'right') {
+        newEnd = Math.min(contextWindow.endTime, Math.max(drag.origStart + 0.5, drag.origEnd + deltaSec));
+      } else {
+        const len = drag.origEnd - drag.origStart;
+        newStart = drag.origStart + deltaSec;
+        newEnd = newStart + len;
+        if (newStart < contextWindow.startTime) { newStart = contextWindow.startTime; newEnd = newStart + len; }
+        if (newEnd > contextWindow.endTime) { newEnd = contextWindow.endTime; newStart = newEnd - len; }
+      }
+
+      const next: SelectWindow = {
+        startTime: Math.round(newStart * 10) / 10,
+        endTime: Math.round(newEnd * 10) / 10,
+        trackIds: sw?.trackIds ?? [],
+      };
+      if (sw?.primaryTrackId !== undefined) next.primaryTrackId = sw.primaryTrackId;
+      if (typeof sw?.targetRowIndex === 'number') next.targetRowIndex = sw.targetRowIndex;
+      useUIStore.getState().setSelectWindow(next);
+    };
+
+    const onUp = () => { maskDragRef.current = null; };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [contextWindow, selectWindow]);
+
+  // Compute selection mask position as ratio within context window
+  const selMaskRatio = useMemo(() => {
+    if (!contextWindow) return null;
+    const ctxDur = contextWindow.endTime - contextWindow.startTime;
+    if (ctxDur <= 0) return null;
+    const sStart = selectWindow?.startTime ?? 0;
+    const sEnd = selectWindow?.endTime ?? 0;
+    return {
+      left: Math.max(0, (sStart - contextWindow.startTime) / ctxDur),
+      right: Math.min(1, (sEnd - contextWindow.startTime) / ctxDur),
+    };
+  }, [contextWindow, selectWindow?.startTime, selectWindow?.endTime]);
+
+  // Draw waveform on canvas
+  useEffect(() => {
+    const canvas = waveformCanvasRef.current;
+    if (!canvas || waveformPeaks.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    const barCount = waveformPeaks.length;
+    const barWidth = Math.max(1, (w / barCount) - 1);
+    const gap = 1;
+    const maxPeak = Math.max(...waveformPeaks, 0.01);
+    const progress = previewDuration > 0 ? previewCurrentTime / previewDuration : 0;
+
+    // Draw dim bars outside selection, bright bars inside
+    for (let i = 0; i < barCount; i++) {
+      const x = i * (barWidth + gap);
+      const barH = Math.max(1, (waveformPeaks[i] / maxPeak) * (h - 4));
+      const y = (h - barH) / 2;
+      const ratio = i / barCount;
+      const inSelection = selMaskRatio ? ratio >= selMaskRatio.left && ratio <= selMaskRatio.right : true;
+      const isPlayed = ratio <= progress;
+      if (inSelection) {
+        ctx.fillStyle = isPlayed ? '#2dd4bf' : '#8ab4ff';
+      } else {
+        ctx.fillStyle = isPlayed ? '#1a6b5a' : '#333';
+      }
+      ctx.fillRect(x, y, barWidth, barH);
+    }
+  }, [waveformPeaks, previewCurrentTime, previewDuration, selMaskRatio]);
+
   if (!isOpen || !project) return null;
 
-  const selectedLayerType = LAYER_TYPES.find((lt) => lt.id === layerType)!;
-  const showLyrics = 'showLyrics' in selectedLayerType && selectedLayerType.showLyrics;
+  const showLyrics = VOCAL_TRACK_NAMES.has(targetTrackName);
   const hasContext = contextWindow !== null;
 
   const startTime = selectWindow?.startTime ?? 0;
@@ -484,7 +602,7 @@ export function AddLayerPanel() {
     <div
       ref={panelRef}
       data-testid="add-layer-panel"
-      className={`fixed w-[420px] max-w-[calc(100vw-32px)] max-h-[70vh] flex flex-col bg-[#1e1e22]/98 border border-[#3a3a3a] rounded-2xl shadow-2xl backdrop-blur-md text-xs text-zinc-200 ${isDragging ? 'cursor-grabbing' : ''}`}
+      className={`fixed w-[480px] max-w-[calc(100vw-32px)] max-h-[70vh] flex flex-col bg-[#1e1e22]/98 border border-[#3a3a3a] rounded-2xl shadow-2xl backdrop-blur-md text-xs text-zinc-200 ${isDragging ? 'cursor-grabbing' : ''}`}
       style={{
         zIndex: 60,
         left: panelPosition?.left ?? PANEL_MARGIN,
@@ -505,9 +623,27 @@ export function AddLayerPanel() {
           </div>
           <div className="min-w-0">
             <span className="block text-sm font-semibold text-white">Add a Layer</span>
-            <span className="block text-[11px] text-zinc-500">
-              Selection {fmt(startTime)} - {fmt(endTime)}
-            </span>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-zinc-500">{fmt(startTime)} - {fmt(endTime)}</span>
+              {!selectionCoversWholeSong && (
+                <button
+                  onClick={handleSelectWholeSong}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className="text-teal-400 hover:text-teal-300 transition-colors"
+                >
+                  Whole song
+                </button>
+              )}
+              {selectionCoversWholeSong && savedSelectionBeforeWholeSong && (
+                <button
+                  onClick={handleRestorePreviousWindow}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className="text-zinc-400 hover:text-white transition-colors"
+                >
+                  Restore
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <button
@@ -522,133 +658,140 @@ export function AddLayerPanel() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
-        {/* Selection display */}
-        <div>
-          <div className="text-zinc-400 text-xs">
-            Selection: {fmt(startTime)} - {fmt(endTime)}
+        {/* Context audio preview — above Target Track */}
+        {hasContext && (
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
+              Context
+            </label>
+            <div className="rounded-lg bg-blue-950/50 border border-blue-800/40 px-3 py-2 space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] font-mono text-blue-300">
+                <span>{fmt(contextWindow.startTime)} — {fmt(contextWindow.endTime)}</span>
+                <span>{fmtTime(previewCurrentTime)} / {fmtTime(previewDuration)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePreviewContext}
+                  disabled={previewState === 'loading'}
+                  className="w-6 h-6 flex items-center justify-center rounded bg-blue-800/60 hover:bg-blue-700/60 text-blue-200 text-[10px] disabled:opacity-50 shrink-0 transition-colors"
+                  title={previewState === 'playing' ? 'Stop preview' : 'Preview context audio'}
+                >
+                  {previewState === 'loading' ? '\u2026' : previewState === 'playing' ? '\u25A0' : '\u25B6'}
+                </button>
+                {waveformPeaks.length > 0 ? (
+                  <div className="relative flex-1" style={{ minWidth: 0 }} onClick={handleWaveformClick}>
+                    <canvas
+                      ref={waveformCanvasRef}
+                      className="w-full h-8 cursor-pointer rounded"
+                    />
+                    {/* Draggable selection mask overlay */}
+                    {selMaskRatio && (
+                      <>
+                        {/* Left edge handle */}
+                        <div
+                          className="absolute top-0 bottom-0 w-1.5 cursor-col-resize z-10 hover:bg-teal-400/40"
+                          style={{ left: `${selMaskRatio.left * 100}%`, transform: 'translateX(-50%)' }}
+                          onMouseDown={(e) => handleMaskMouseDown(e, 'left')}
+                        >
+                          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-teal-400" />
+                        </div>
+                        {/* Center drag area */}
+                        <div
+                          className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing hover:bg-teal-400/10"
+                          style={{ left: `${selMaskRatio.left * 100}%`, width: `${(selMaskRatio.right - selMaskRatio.left) * 100}%` }}
+                          onMouseDown={(e) => handleMaskMouseDown(e, 'move')}
+                        />
+                        {/* Right edge handle */}
+                        <div
+                          className="absolute top-0 bottom-0 w-1.5 cursor-col-resize z-10 hover:bg-teal-400/40"
+                          style={{ left: `${selMaskRatio.right * 100}%`, transform: 'translateX(-50%)' }}
+                          onMouseDown={(e) => handleMaskMouseDown(e, 'right')}
+                        >
+                          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-teal-400" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="range"
+                    min={0}
+                    max={previewDuration || 1}
+                    step={0.01}
+                    value={previewCurrentTime}
+                    onChange={handleScrub}
+                    disabled={previewState !== 'playing'}
+                    className="flex-1 h-1 accent-blue-400 cursor-pointer disabled:opacity-40"
+                  />
+                )}
+              </div>
+              {/* Selection range label under waveform */}
+              {selMaskRatio && (
+                <div className="text-[9px] font-mono text-teal-400/70">
+                  Selection: {fmt(startTime)} — {fmt(endTime)}
+                </div>
+              )}
+            </div>
           </div>
-          {!selectionCoversWholeSong && (
-            <button
-              onClick={handleSelectWholeSong}
-              className="text-teal-400 hover:text-teal-300 text-[11px] mt-0.5 transition-colors"
-            >
-              + Select the whole song
-            </button>
-          )}
-          {selectionCoversWholeSong && savedSelectionBeforeWholeSong && (
-            <button
-              onClick={handleRestorePreviousWindow}
-              className="text-zinc-300 hover:text-white text-[11px] mt-0.5 transition-colors"
-            >
-              Restore previous window
-            </button>
-          )}
-        </div>
+        )}
+        {!hasContext && (
+          <div className="text-[10px] text-zinc-500">
+            Context: none (Alt+drag on timeline to set)
+          </div>
+        )}
 
-        {/* Target track */}
+        {/* Target Track — compact dropdown */}
         <div>
           <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1.5">
             Target Track
           </label>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Target Track">
-            {TARGET_TRACK_OPTIONS.map((track) => {
-              const isActive = targetTrackName === track.name;
-              const existingTrack = audioTargetTracks.find((candidate) => candidate.trackName === track.name);
-
-              return (
-                <button
-                  key={track.name}
-                  type="button"
-                  aria-label={`Target track: ${track.displayName}`}
-                  onClick={() => setTargetTrackName(track.name)}
-                  className={`px-2.5 py-1.5 rounded-full border text-[11px] transition-colors ${
-                    isActive
-                      ? 'border-zinc-200 text-white bg-white/10'
-                      : 'border-[#333] text-zinc-400 hover:text-zinc-200 hover:border-[#555]'
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: track.color }}
-                      aria-hidden="true"
-                    />
-                    <span>{track.displayName}</span>
-                    {!existingTrack && <span className="text-[10px] text-zinc-500">new</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-2">
+          <div className="flex items-center gap-2">
             <span
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: selectedWindowTrack?.color ?? selectedTargetTrackInfo.color }}
+              className="h-3 w-3 rounded-full shrink-0"
+              style={{ backgroundColor: selectedTargetTrackInfo.color }}
               aria-hidden="true"
             />
+            <select
+              value={targetTrackName}
+              onChange={(e) => setTargetTrackName(e.target.value as TrackName)}
+              className="flex-1 bg-[#161618] border border-[#333] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-teal-600 appearance-none cursor-pointer"
+              aria-label="Target track"
+            >
+              {TARGET_TRACK_OPTIONS.map((track) => {
+                const existingTrack = audioTargetTracks.find((candidate) => candidate.trackName === track.name);
+                return (
+                  <option key={track.name} value={track.name}>
+                    {track.displayName}{existingTrack ? '' : ' (new)'}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-1.5">
             <span>
               {selectedWindowTrack
                 ? `Generate into selected row: ${selectedWindowTrack.displayName}`
-                : `Create a new ${selectedTargetTrackInfo.displayName} track in the selected row`}
+                : `Create a new ${selectedTargetTrackInfo.displayName} track`}
             </span>
           </div>
         </div>
 
-        {/* Layer Type */}
+        {/* Stem Description */}
         <div>
-          <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1.5">
-            Layer Type
+          <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
+            Stem Description
           </label>
-          <div className="flex gap-1.5 flex-wrap">
-            {LAYER_TYPES.map((lt) => (
-              <button
-                key={lt.id}
-                onClick={() => setLayerType(lt.id)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors ${
-                  layerType === lt.id
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-[#2a2a2a] text-zinc-400 hover:text-zinc-300 hover:bg-[#333]'
-                }`}
-              >
-                {lt.label}
-              </button>
-            ))}
-          </div>
+          <textarea
+            value={style}
+            onChange={(e) => setStyle(e.target.value)}
+            placeholder="Describe the sound..."
+            rows={2}
+            className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-600"
+          />
         </div>
 
-        {/* Style */}
-        {!sampleMode && (
-          <div>
-            <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
-              Style
-            </label>
-            <textarea
-              value={style}
-              onChange={(e) => setStyle(e.target.value)}
-              placeholder="Describe the sound..."
-              rows={2}
-              className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-600"
-            />
-          </div>
-        )}
-
-        {sampleMode && (
-          <div>
-            <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
-              Description
-            </label>
-            <textarea
-              value={style}
-              onChange={(e) => setStyle(e.target.value)}
-              placeholder="Describe the sample you want..."
-              rows={2}
-              className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-600"
-            />
-          </div>
-        )}
-
-        {/* Lyrics (vocal types only) */}
-        {showLyrics && !sampleMode && (
+        {/* Lyrics (vocal tracks only) */}
+        {showLyrics && (
           <div>
             <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
               Lyrics
@@ -663,131 +806,78 @@ export function AddLayerPanel() {
           </div>
         )}
 
-        {/* Advanced section */}
-        <div className="border-t border-[#3a3a3a] pt-2">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            className="text-zinc-500 hover:text-zinc-300 text-[11px] transition-colors"
-          >
-            {showAdvanced ? '\u25BE' : '\u25B8'} Advanced
-          </button>
-          {showAdvanced && (
-            <div className="mt-2 space-y-2.5">
-              {/* Context window info */}
-              {hasContext && (
-                <div>
-                  <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
-                    Context
-                  </label>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-950/50 border border-blue-800/40">
-                    <button
-                      onClick={handlePreviewContext}
-                      disabled={previewState === 'loading'}
-                      className="w-6 h-6 flex items-center justify-center rounded bg-blue-800/60 hover:bg-blue-700/60 text-blue-200 text-[10px] disabled:opacity-50 shrink-0 transition-colors"
-                      title={previewState === 'playing' ? 'Stop preview' : 'Preview context audio'}
-                    >
-                      {previewState === 'loading' ? '\u2026' : previewState === 'playing' ? '\u25A0' : '\u25B6'}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={previewDuration || 1}
-                      step={0.01}
-                      value={previewCurrentTime}
-                      onChange={handleScrub}
-                      disabled={previewState !== 'playing'}
-                      className="flex-1 h-1 accent-blue-400 cursor-pointer disabled:opacity-40"
-                    />
-                    <span className="text-[10px] font-mono text-blue-300 shrink-0 w-[60px] text-right">
-                      {fmtTime(previewCurrentTime)} / {fmtTime(previewDuration)}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-blue-300 mt-1 block">
-                    {fmt(contextWindow.startTime)} — {fmt(contextWindow.endTime)}
-                  </span>
-                </div>
-              )}
-              {!hasContext && (
-                <div className="text-[10px] text-zinc-500">
-                  Context: none (Alt+drag on timeline to set)
-                </div>
-              )}
+        {/* Mask mode + Seed + Global caption — exposed inline */}
+        <div className="border-t border-[#3a3a3a] pt-2 space-y-2.5">
+          {/* Mask mode + Seed — same row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <label className="text-[10px] text-zinc-500">Mask:</label>
+              <button
+                onClick={() => setChunkMaskMode('auto')}
+                className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  chunkMaskMode === 'auto'
+                    ? 'bg-teal-900/50 border-teal-700/50 text-teal-300'
+                    : 'bg-[#2a2a2a] border-[#3a3a3a] text-zinc-500 hover:text-zinc-400'
+                }`}
+              >
+                Auto
+              </button>
+              <button
+                onClick={() => setChunkMaskMode('explicit')}
+                className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                  chunkMaskMode === 'explicit'
+                    ? 'bg-teal-900/50 border-teal-700/50 text-teal-300'
+                    : 'bg-[#2a2a2a] border-[#3a3a3a] text-zinc-500 hover:text-zinc-400'
+                }`}
+              >
+                Explicit
+              </button>
+            </div>
+            <div className="h-3 border-l border-[#3a3a3a]" />
+            <label className="text-[10px] font-medium uppercase text-zinc-500 shrink-0">Seed</label>
+            <input
+              type="number"
+              value={seedValue}
+              onChange={(e) => { setSeedValue(e.target.value); setUseRandomSeed(false); }}
+              placeholder="Random"
+              min={0}
+              max={2147483647}
+              disabled={useRandomSeed}
+              className="w-[110px] rounded border border-[#444] bg-[#161618] px-1.5 py-0.5 text-[11px] font-mono text-zinc-100 focus:border-teal-600 focus:outline-none disabled:opacity-40"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setSeedValue(String(Math.floor(Math.random() * 2147483647)));
+                setUseRandomSeed(false);
+              }}
+              className="text-[14px] leading-none transition-opacity hover:opacity-80"
+              title="Random seed"
+            >
+              🎲
+            </button>
+            <label className="flex items-center gap-1 cursor-pointer" title="Use random seed each time">
+              <input
+                type="checkbox"
+                checked={useRandomSeed}
+                onChange={(e) => setUseRandomSeed(e.target.checked)}
+                className="h-3 w-3 rounded border-[#444] accent-teal-600"
+              />
+              <span className="text-[9px] text-zinc-600">Rand</span>
+            </label>
+          </div>
 
-              {/* Mask mode */}
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] text-zinc-500">Mask mode:</label>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setChunkMaskMode('auto')}
-                    className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
-                      chunkMaskMode === 'auto'
-                        ? 'bg-teal-900/50 border-teal-700/50 text-teal-300'
-                        : 'bg-[#2a2a2a] border-[#3a3a3a] text-zinc-500 hover:text-zinc-400'
-                    }`}
-                  >
-                    Auto
-                  </button>
-                  <button
-                    onClick={() => setChunkMaskMode('explicit')}
-                    className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
-                      chunkMaskMode === 'explicit'
-                        ? 'bg-teal-900/50 border-teal-700/50 text-teal-300'
-                        : 'bg-[#2a2a2a] border-[#3a3a3a] text-zinc-500 hover:text-zinc-400'
-                    }`}
-                  >
-                    Explicit
-                  </button>
-                </div>
-              </div>
-
-              {/* Checkboxes */}
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={sampleMode}
-                    onChange={(e) => setSampleMode(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-[#444] bg-[#222] accent-teal-600"
-                  />
-                  <span className="text-[10px] text-zinc-400">Sample mode</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoExpandPrompt}
-                    onChange={(e) => setAutoExpandPrompt(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-[#444] bg-[#222] accent-teal-600"
-                  />
-                  <span className="text-[10px] text-zinc-400">Auto-expand prompt</span>
-                </label>
-              </div>
-
-              {/* Seed */}
-              <div>
-                <label className="text-[10px] text-zinc-500 block mb-1">Seed</label>
-                <input
-                  type="number"
-                  value={seedValue}
-                  onChange={(e) => setSeedValue(e.target.value)}
-                  placeholder="Leave empty for random"
-                  className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-teal-600"
-                />
-              </div>
-
-              {/* Global caption */}
-              {!sampleMode && (
-                <div>
-                  <label className="text-[10px] text-zinc-500 block mb-1">Global caption</label>
-                  <textarea
-                    value={globalCaption}
-                    onChange={(e) => setGlobalCaption(e.target.value)}
-                    placeholder="e.g. upbeat pop song with energetic drums..."
-                    rows={2}
-                    className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-600"
-                  />
-                </div>
-              )}
+          {/* Global caption — hidden in chunk mode (partial selection) */}
+          {selectionCoversWholeSong && (
+            <div>
+              <label className="text-[10px] text-zinc-500 block mb-1">Global caption</label>
+              <textarea
+                value={globalCaption}
+                onChange={(e) => setGlobalCaption(e.target.value)}
+                placeholder="e.g. upbeat pop song with energetic drums..."
+                rows={2}
+                className="w-full bg-[#161618] border border-[#333] rounded-lg px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-600"
+              />
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { METER_GRADIENT_HORIZONTAL } from '../meter-colors';
 
 interface StereoMeterProps {
   trackId: string;
@@ -50,7 +51,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
             className="h-full rounded-full transition-[width] duration-75"
             style={{
               width: `${leftFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+              background: METER_GRADIENT_HORIZONTAL,
             }}
           />
         </div>
@@ -75,7 +76,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
             className="h-full rounded-full transition-[width] duration-75"
             style={{
               width: `${rightFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+              background: METER_GRADIENT_HORIZONTAL,
             }}
           />
         </div>

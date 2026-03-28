@@ -1,14 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { METER_CANVAS_STOPS } from '../meter-colors';
 
 const BAR_WIDTH = 4;
 const BAR_GAP = 1;
 const FALL_RATE_PER_FRAME = 0.012;
 const PEAK_HOLD_FRAMES = 18;
 const CLIP_INDICATOR_SIZE = 8;
-
-/** Static 3-stop gradient: green at bottom, yellow at ~75%, red at top. */
-const METER_GRADIENT = 'linear-gradient(to top, #22c55e 0%, #22c55e 60%, #facc15 78%, #ef4444 95%)';
 
 export interface LevelMeterProps {
   trackId?: string;
@@ -66,11 +64,9 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
 
     const ensureGradient = (h: number): CanvasPattern | CanvasGradient => {
       const grad = ctx2d.createLinearGradient(0, h, 0, 0);
-      grad.addColorStop(0, '#22c55e');
-      grad.addColorStop(0.6, '#22c55e');
-      grad.addColorStop(0.78, '#facc15');
-      grad.addColorStop(0.95, '#ef4444');
-      grad.addColorStop(1.0, '#ef4444');
+      for (const [pos, color] of METER_CANVAS_STOPS) {
+        grad.addColorStop(pos, color);
+      }
       return grad;
     };
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { METER_GRADIENT_HORIZONTAL } from '../meter-colors';
 
 interface FaderMeterProps {
   trackId: string;
@@ -133,7 +134,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             className="h-full rounded-[2px]"
             style={{
               width: `${leftFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              background: METER_GRADIENT_HORIZONTAL,
               opacity: 0.75,
             }}
           />
@@ -146,7 +147,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             className="h-full rounded-[2px]"
             style={{
               width: `${rightFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              background: METER_GRADIENT_HORIZONTAL,
               opacity: 0.75,
             }}
           />

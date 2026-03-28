@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
+import 'xterm/css/xterm.css';
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -38,6 +39,9 @@ export function ClaudeTerminal() {
       const term = termInstanceRef.current;
       if (fit && term) {
         fit.fit();
+        // Clear any renderer artifacts before PTY data arrives
+        term.clear();
+        term.write('\x1b[2J\x1b[H'); // ANSI: clear screen + cursor home
         ws.send(JSON.stringify({ type: 'init', cols: term.cols, rows: term.rows }));
       }
     };
@@ -126,14 +130,6 @@ export function ClaudeTerminal() {
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.open(terminalRef.current);
-
-      // Load WebGL renderer for better performance and accurate glyph rendering
-      try {
-        const { WebglAddon } = await import('@xterm/addon-webgl');
-        term.loadAddon(new WebglAddon());
-      } catch {
-        // WebGL not available — fall back to DOM renderer (still works)
-      }
 
       fitAddon.fit();
 

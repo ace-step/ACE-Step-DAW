@@ -50,18 +50,29 @@ function killSession(session: SessionState) {
 }
 
 function spawnShell(cwd: string, cols: number, rows: number): PtyProcess {
-  const shell = process.platform === 'win32' ? 'cmd.exe' : process.env.SHELL ?? '/bin/zsh';
+  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/zsh';
 
-  const ptyProc = pty.spawn(shell, ['-l'], {
+  // Use a minimal ZDOTDIR to avoid loading the user's heavy prompt theme
+  // (powerlevel10k, oh-my-zsh, starship, etc.) which uses Nerd Font glyphs
+  // that don't render in web fonts. The user's PATH and env are inherited
+  // from the Vite dev server process.
+  const zdotdir = `${cwd}/server/terminal-profile`;
+
+  // --no-globalrcs: skip /etc/zshrc and /etc/zshenv which inject macOS-specific
+  // escape sequences (update_terminal_cwd, terminal title) that render as
+  // garbled "WWWWW" text in xterm.js web fonts.
+  const ptyProc = pty.spawn(shell, ['-i', '--no-globalrcs'], {
     name: 'xterm-256color',
     cols,
     rows,
     cwd,
     env: {
       ...process.env,
+      ZDOTDIR: zdotdir,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       FORCE_COLOR: '1',
+      DAW_TERMINAL: '1',
     } as Record<string, string>,
   });
 

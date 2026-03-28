@@ -34,8 +34,18 @@ export const METER_DB_MAX = 0;
  */
 const FADER_GAMMA = 0.75;
 
-/** dB tick marks for the mixer vertical meter (every 12dB, Ableton-style). */
+/** Major dB tick marks (every 12dB, Ableton-style). */
 export const METER_DB_TICKS = [0, -12, -24, -36, -48, -60];
+
+/** Minor dB tick marks (midpoints between major ticks, shown as dimmer lines). */
+export const METER_DB_TICKS_MINOR = [-6, -18, -30, -42, -54];
+
+/**
+ * Top/bottom padding percentage for the meter scale.
+ * 0dB is not at the very top, and -60dB is not at the very bottom,
+ * giving visual breathing room like Ableton.
+ */
+export const METER_PADDING_PCT = 4;
 
 /**
  * Convert a dB value to a 0..1 fill fraction using the non-linear fader curve.

@@ -131,8 +131,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
         {/* Track header group */}
         <div data-testid="channel-header" className="flex w-full flex-col items-center gap-1.5 pb-2">
-          {/* Track color strip */}
-          <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
+            {/* Track color strip moved to bottom of channel strip */}
           {track.isGroup && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-[#333] rounded px-1.5 py-0.5">GRP</span>
           )}
@@ -380,6 +379,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
+        <div className="w-full h-1.5 rounded-full mt-1" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
       </div>
     </div>
   );

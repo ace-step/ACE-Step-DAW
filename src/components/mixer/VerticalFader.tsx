@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { levelToFill, fillToLevel } from '../meter-colors';
+import { levelToFill, fillToLevel, METER_PADDING_PCT } from '../meter-colors';
 
 interface VerticalFaderProps {
   value: number;
@@ -35,9 +35,11 @@ export function VerticalFader({
       const el = containerRef.current;
       if (!el) return value;
       const rect = el.getBoundingClientRect();
-      const fill = 1 - (clientY - rect.top) / rect.height;
-      const clampedFill = Math.max(0, Math.min(1, fill));
-      const linear = fillToLevel(clampedFill);
+      const pad = METER_PADDING_PCT / 100;
+      // Map mouse position to the padded active area
+      const rawRatio = 1 - (clientY - rect.top) / rect.height;
+      const fill = Math.max(0, Math.min(1, (rawRatio - pad) / (1 - 2 * pad)));
+      const linear = fillToLevel(fill);
       return Math.max(min, Math.min(max, linear));
     },
     [value, min, max],
@@ -106,7 +108,10 @@ export function VerticalFader({
     [value, min, max, onChange],
   );
 
-  const pct = levelToFill(value) * 100;
+  // Arrow position with padding (matches LevelMeter's fillToTopPct)
+  const fill = levelToFill(value);
+  const pad = METER_PADDING_PCT;
+  const bottomPct = pad + fill * (100 - 2 * pad);
   const arrowH = 12;
   const arrowW = 12;
 
@@ -131,7 +136,7 @@ export function VerticalFader({
       <div
         className="absolute pointer-events-none"
         style={{
-          bottom: `calc(${pct}% - ${arrowH / 2}px)`,
+          bottom: `calc(${bottomPct}% - ${arrowH / 2}px)`,
           left: 10 - arrowW,
         }}
       >

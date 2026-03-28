@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
 import { generateBatch, type BatchTrackEntry } from '../../services/generationPipeline';
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
 import type { Track } from '../../types/project';
+import type { StemsFormDraft } from '../../store/generationStore';
 
 const VOCAL_TRACKS = new Set(['vocals', 'backing_vocals']);
 const DEFAULT_MULTI_TRACK_NAMES = ['drums', 'bass', 'keyboard', 'vocals'] as const;
@@ -89,19 +90,45 @@ function buildInitialRows(project: NonNullable<ReturnType<typeof useProjectStore
 export function MultiTrackGenerateSection({ mode, onModeChange, onFooterChange }: Props) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
+  const stemsFormDraft = useGenerationStore((s) => s.stemsFormDraft);
+  const setStemsFormDraft = useGenerationStore((s) => s.setStemsFormDraft);
   const initialRange = useUIStore((s) => s.batchGenerateInitialRange);
 
-  const [globalCaption, setGlobalCaption] = useState(() => project?.globalCaption ?? '');
-  const [rows, setRows] = useState<TrackRow[]>([]);
-  const [sharedSeed, setSharedSeed] = useState<number>(randomSeed);
-  const [audioDuration, setAudioDuration] = useState(30);
-  const [durationAuto, setDurationAuto] = useState(false);
-  const [useRandomSeed, setUseRandomSeed] = useState(true);
+  const [globalCaption, setGlobalCaption] = useState(() => stemsFormDraft?.globalCaption ?? project?.globalCaption ?? '');
+  const [rows, setRows] = useState<TrackRow[]>(() => stemsFormDraft?.rows as TrackRow[] ?? []);
+  const [sharedSeed, setSharedSeed] = useState<number>(() => stemsFormDraft?.sharedSeed ?? randomSeed());
+  const [audioDuration, setAudioDuration] = useState(() => stemsFormDraft?.audioDuration ?? 30);
+  const [durationAuto, setDurationAuto] = useState(() => stemsFormDraft?.durationAuto ?? false);
+  const [useRandomSeed, setUseRandomSeed] = useState(() => stemsFormDraft?.useRandomSeed ?? true);
+
+  // Refs to capture latest state for the unmount effect
+  const stateRef = useRef({ globalCaption, rows, sharedSeed, audioDuration, durationAuto, useRandomSeed });
+  stateRef.current = { globalCaption, rows, sharedSeed, audioDuration, durationAuto, useRandomSeed };
+
+  // Save draft to store on unmount
+  useEffect(() => {
+    return () => {
+      const s = stateRef.current;
+      if (s.rows.length > 0) {
+        setStemsFormDraft({
+          globalCaption: s.globalCaption,
+          rows: s.rows,
+          sharedSeed: s.sharedSeed,
+          audioDuration: s.audioDuration,
+          durationAuto: s.durationAuto,
+          useRandomSeed: s.useRandomSeed,
+        });
+      }
+    };
+  }, [setStemsFormDraft]);
 
   useEffect(() => {
     if (!project) return;
-    setGlobalCaption((prev) => prev || project.globalCaption || '');
-    setRows(buildInitialRows(project));
+    // Only build from project if we don't have a saved draft
+    if (rows.length === 0) {
+      setGlobalCaption((prev) => prev || project.globalCaption || '');
+      setRows(buildInitialRows(project));
+    }
   }, [project?.id]);
 
   const toggleRow = useCallback((rowId: string) => {

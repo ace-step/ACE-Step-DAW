@@ -368,7 +368,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       {/* Fader + meter region */}
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
         <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
-          <LevelMeter trackId={track.id} stereo />
+          <LevelMeter trackId={track.id} stereo showScale />
           <VerticalFader
             value={vol}
             min={0}

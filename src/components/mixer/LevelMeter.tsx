@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { METER_CANVAS_STOPS } from '../meter-colors';
+import { METER_CANVAS_STOPS, METER_DB_TICKS, METER_DB_MIN, METER_DB_MAX, levelToFill } from '../meter-colors';
 
 const BAR_WIDTH = 4;
 const BAR_GAP = 1;
@@ -13,6 +13,8 @@ export interface LevelMeterProps {
   masterStage?: 'input' | 'output';
   /** Show stereo L/R bars (default true for tracks, false for master). */
   stereo?: boolean;
+  /** Show dB scale ticks beside the meter (default false). */
+  showScale?: boolean;
 }
 
 interface BarState {
@@ -21,15 +23,11 @@ interface BarState {
   peakHoldFrames: number;
 }
 
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
-}
-
 /**
- * Pro-grade peak level meter with stereo L/R bars, gradient coloring,
- * and peak-hold indicators.
+ * Pro-grade peak level meter with stereo L/R bars, dB-scaled gradient,
+ * peak-hold indicators, and optional dB tick marks.
  */
-export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
+export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMeterProps) {
   const rafRef = useRef<number>(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const leftBar = useRef<BarState>({ level: 0, peakLevel: 0, peakHoldFrames: 0 });
@@ -42,14 +40,16 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
   const totalWidth = isStereo ? BAR_WIDTH * 2 + BAR_GAP : BAR_WIDTH;
 
   const updateBar = useCallback((bar: BarState, nextLevel: number): void => {
-    bar.level = nextLevel;
-    if (nextLevel >= bar.peakLevel) {
-      bar.peakLevel = nextLevel;
+    // Store levels already converted to dB-fill space (0..1)
+    const fill = levelToFill(nextLevel);
+    bar.level = fill;
+    if (fill >= bar.peakLevel) {
+      bar.peakLevel = fill;
       bar.peakHoldFrames = PEAK_HOLD_FRAMES;
     } else if (bar.peakHoldFrames > 0) {
       bar.peakHoldFrames -= 1;
     } else {
-      bar.peakLevel = Math.max(nextLevel, bar.peakLevel - FALL_RATE_PER_FRAME);
+      bar.peakLevel = Math.max(fill, bar.peakLevel - FALL_RATE_PER_FRAME);
     }
   }, []);
 
@@ -59,10 +59,7 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
 
-    // Create gradient once for reuse
-    let gradientCanvas: HTMLCanvasElement | null = null;
-
-    const ensureGradient = (h: number): CanvasPattern | CanvasGradient => {
+    const ensureGradient = (h: number): CanvasGradient => {
       const grad = ctx2d.createLinearGradient(0, h, 0, 0);
       for (const [pos, color] of METER_CANVAS_STOPS) {
         grad.addColorStop(pos, color);
@@ -80,10 +77,9 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
-        gradientCanvas = null;
       }
 
-      // Read levels
+      // Read levels (linear amplitude from engine)
       let leftLevel = 0;
       let rightLevel = 0;
       let clipped = false;
@@ -101,7 +97,6 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
       }
 
       clippedRef.current = clippedRef.current || clipped;
-      // Update DOM clip indicator only when state changes
       if (clippedRef.current !== clippedStateRef.current) {
         clippedStateRef.current = clippedRef.current;
         const container = containerRef.current;
@@ -111,6 +106,7 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
         }
       }
 
+      // updateBar converts linear → dB fill internally
       updateBar(leftBar.current, leftLevel);
       updateBar(rightBar.current, rightLevel);
 
@@ -119,8 +115,8 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
       const grad = ensureGradient(h);
 
       const drawBar = (bar: BarState, x: number, barW: number) => {
-        const levelH = clamp01(bar.level) * h;
-        const peakY = clamp01(bar.peakLevel) * h;
+        const levelH = Math.max(0, Math.min(1, bar.level)) * h;
+        const peakY = Math.max(0, Math.min(1, bar.peakLevel)) * h;
 
         // Background
         ctx2d.fillStyle = '#1a1a1a';
@@ -187,8 +183,8 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
   return (
     <div
       ref={containerRef}
-      className="relative h-full"
-      style={{ width: totalWidth + 6 }}
+      className="relative h-full flex"
+      style={{ width: showScale ? totalWidth + 22 : totalWidth + 6 }}
       data-testid="level-meter"
     >
       <button
@@ -207,6 +203,28 @@ export function LevelMeter({ trackId, masterStage, stereo }: LevelMeterProps) {
         className="absolute inset-y-0 left-[3px] rounded-sm"
         style={{ width: totalWidth, height: '100%' }}
       />
+      {showScale && (
+        <div
+          className="absolute inset-y-0 flex flex-col justify-between pointer-events-none"
+          style={{ left: totalWidth + 5 }}
+          aria-hidden="true"
+        >
+          {METER_DB_TICKS.map((db) => {
+            // Convert dB to percentage position from top (0dB = top, -60dB = bottom)
+            const fill = (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN);
+            const topPct = (1 - fill) * 100;
+            return (
+              <span
+                key={db}
+                className="absolute text-[8px] leading-none text-zinc-500"
+                style={{ top: `${topPct}%`, transform: 'translateY(-50%)' }}
+              >
+                {db === 0 ? '0' : db}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

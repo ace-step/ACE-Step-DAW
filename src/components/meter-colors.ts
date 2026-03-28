@@ -22,3 +22,24 @@ export const METER_CANVAS_STOPS: [number, string][] = [
   [0.98, '#ef4444'],
   [1.0, '#ef4444'],
 ];
+
+/** Meter dB range: the floor (silence) and ceiling. */
+export const METER_DB_MIN = -60;
+export const METER_DB_MAX = 0;
+
+/** dB tick marks for the mixer vertical meter. */
+export const METER_DB_TICKS = [0, -6, -12, -24, -48];
+
+/**
+ * Convert a linear amplitude (0..1+) to a 0..1 fill fraction
+ * using a dB-logarithmic scale mapped from METER_DB_MIN to METER_DB_MAX.
+ *
+ * This gives professional metering behavior: most of the visual range
+ * is dedicated to the -24dB to 0dB region where mixing decisions happen,
+ * while very quiet signals occupy only a small portion at the bottom.
+ */
+export function levelToFill(linear: number): number {
+  if (linear <= 0) return 0;
+  const db = 20 * Math.log10(linear);
+  return Math.max(0, Math.min(1, (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN)));
+}

@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { METER_GRADIENT_HORIZONTAL } from '../meter-colors';
+import { METER_GRADIENT_HORIZONTAL, levelToFill } from '../meter-colors';
 
 interface FaderMeterProps {
   trackId: string;
   volume: number;
   onVolumeChange: (volume: number) => void;
   trackName: string;
-}
-
-/** Convert linear level (0..1+) to a 0..1 fill fraction mapping -60dB..0dB */
-function levelToFill(linear: number): number {
-  if (linear <= 0) return 0;
-  const db = 20 * Math.log10(linear);
-  return Math.max(0, Math.min(1, (db + 60) / 60));
 }
 
 /**

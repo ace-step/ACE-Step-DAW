@@ -208,15 +208,7 @@ export class TrackNode {
   }
 
   getMeter(): { level: number; leftLevel: number; rightLevel: number; clipped: boolean } {
-    this.analyserNode.getByteFrequencyData(this.analyserData);
     this.analyserNode.getFloatTimeDomainData(this.analyserTimeDomainData);
-
-    let spectralPeak = 0;
-    for (let i = 0; i < this.analyserData.length; i++) {
-      if (this.analyserData[i] > spectralPeak) {
-        spectralPeak = this.analyserData[i];
-      }
-    }
 
     let samplePeak = 0;
     for (let i = 0; i < this.analyserTimeDomainData.length; i++) {
@@ -229,8 +221,8 @@ export class TrackNode {
     }
 
     // Per-channel metering
-    const leftLevel = this._getChannelLevel(this.analyserLeft, this.analyserLeftData, this.analyserLeftTimeDomain);
-    const rightLevel = this._getChannelLevel(this.analyserRight, this.analyserRightData, this.analyserRightTimeDomain);
+    const leftLevel = this._getChannelLevel(this.analyserLeft, this.analyserLeftTimeDomain);
+    const rightLevel = this._getChannelLevel(this.analyserRight, this.analyserRightTimeDomain);
 
     // Backward compat: level = max of L/R
     const level = Math.max(leftLevel, rightLevel);
@@ -240,18 +232,9 @@ export class TrackNode {
 
   private _getChannelLevel(
     analyser: AnalyserNode,
-    freqData: Uint8Array<ArrayBuffer>,
     timeDomainData: Float32Array<ArrayBuffer>,
   ): number {
-    analyser.getByteFrequencyData(freqData);
     analyser.getFloatTimeDomainData(timeDomainData);
-
-    let spectralPeak = 0;
-    for (let i = 0; i < freqData.length; i++) {
-      if (freqData[i] > spectralPeak) {
-        spectralPeak = freqData[i];
-      }
-    }
 
     let samplePeak = 0;
     for (let i = 0; i < timeDomainData.length; i++) {
@@ -263,7 +246,7 @@ export class TrackNode {
       this._clipped = true;
     }
 
-    return Math.max(0, Math.min(1, Math.max(spectralPeak / 255, samplePeak)));
+    return Math.max(0, Math.min(1, samplePeak));
   }
 
   resetClip() {

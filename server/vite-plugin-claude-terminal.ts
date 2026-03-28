@@ -83,7 +83,27 @@ function attachPty(session: SessionState, ws: WebSocket, cols: number, rows: num
   try {
     session.ptyProc = spawnShell(session.cwd, cols, rows);
 
+    // Watch early PTY output to detect if `claude` command is missing
+    let detectBuffer = '';
+    let detecting = true;
+
     session.ptyProc.onData((data: string) => {
+      // During detection phase, check for "not found" in output
+      if (detecting) {
+        detectBuffer += data;
+        if (detectBuffer.includes('not found') || detectBuffer.includes('No such file')) {
+          detecting = false;
+          // Don't forward the error output — send control message instead
+          if (session.ws?.readyState === WebSocket.OPEN) {
+            session.ws.send(JSON.stringify({ type: 'claude-not-found' }));
+          }
+          // Kill the shell — client will handle the fallback UI
+          try { session.ptyProc?.kill(); } catch { /* ok */ }
+          session.ptyProc = null;
+          return;
+        }
+      }
+
       if (session.ws?.readyState === WebSocket.OPEN) {
         session.ws.send(data);
       }
@@ -96,6 +116,9 @@ function attachPty(session: SessionState, ws: WebSocket, cols: number, rows: num
       }
     }, 500);
 
+    // End detection window after 3 seconds — claude started successfully
+    setTimeout(() => { detecting = false; }, 3000);
+
     session.ptyProc.onExit(({ exitCode }) => {
       const msg = `\r\n\x1b[90m[Shell exited with code ${exitCode}]\x1b[0m\r\n`;
       if (session.ws?.readyState === WebSocket.OPEN) {
@@ -106,6 +129,38 @@ function attachPty(session: SessionState, ws: WebSocket, cols: number, rows: num
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     ws.send(`\r\n\x1b[31mFailed to start shell: ${errMsg}\x1b[0m\r\n`);
+  }
+}
+
+function installClaude(session: SessionState, ws: WebSocket, cols: number, rows: number) {
+  try {
+    session.ptyProc = spawnShell(session.cwd, cols, rows);
+
+    session.ptyProc.onData((data: string) => {
+      if (session.ws?.readyState === WebSocket.OPEN) {
+        session.ws.send(data);
+      }
+    });
+
+    session.ptyProc.onExit(() => {
+      session.ptyProc = null;
+      // After install completes, spawn a fresh shell and auto-start claude
+      setTimeout(() => {
+        if (session.ws?.readyState === WebSocket.OPEN) {
+          attachPty(session, ws, cols, rows);
+        }
+      }, 500);
+    });
+
+    // Run the install command
+    setTimeout(() => {
+      if (session.ptyProc) {
+        session.ptyProc.write('npm install -g @anthropic-ai/claude-code && exit\r');
+      }
+    }, 300);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    ws.send(`\r\n\x1b[31mInstall failed: ${errMsg}\x1b[0m\r\n`);
   }
 }
 
@@ -158,13 +213,16 @@ export function claudeTerminalPlugin(): Plugin {
               const msg = JSON.parse(str) as { type: string; cols?: number; rows?: number };
 
               if (msg.type === 'init' && msg.cols && msg.rows) {
-                // First message from xterm.js: spawn PTY with exact dimensions
                 if (!session.ptyProc) {
                   attachPty(session, ws, msg.cols, msg.rows);
                 } else {
-                  // PTY exists (reconnect) — just resize to match
                   session.ptyProc.resize(msg.cols, msg.rows);
                 }
+                return;
+              }
+
+              if (msg.type === 'install-claude' && msg.cols && msg.rows) {
+                installClaude(session, ws, msg.cols, msg.rows);
                 return;
               }
 

@@ -674,7 +674,7 @@ async function generateClipInternal(
       shift: options.shiftOverride ?? project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
-      thinking: options.thinkingOverride ?? project.generationDefaults.thinking,
+      thinking: false, // lego is a pure DiT task — LM audio codes are out-of-distribution
       model: project.generationDefaults.model,
     } as LegoTaskParams;
 

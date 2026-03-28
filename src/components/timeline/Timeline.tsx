@@ -12,6 +12,7 @@ import { GridOverlay } from './GridOverlay';
 import { snapToGrid } from '../../utils/time';
 import { RegionRegenerateModal } from '../generation/RegionRegenerateModal';
 import { CanvasContextMenu } from './CanvasContextMenu';
+import { ClipContextMenuFallback } from './ClipContextMenuFallback';
 import { InlineSuggestionBadge } from './InlineSuggestionBadge';
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { clientXToLaneX } from '../../utils/timelineCoords';
@@ -73,7 +74,7 @@ export function Timeline() {
   const trackAreaRef = useRef<HTMLDivElement>(null);
 
   const [regionCtxMenu, setRegionCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const [canvasCtxMenu, setCanvasCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [canvasCtxMenu, setCanvasCtxMenu] = useState<{ x: number; y: number; clipId?: string } | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [dragOverEmptySlotIndex, setDragOverEmptySlotIndex] = useState<number | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after'>('before');
@@ -344,8 +345,6 @@ export function Timeline() {
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onContextMenu={(e) => {
-          // Guard against re-entrant dispatch from clip fallback below
-          if ((e.nativeEvent as any).__clipFallback) return;
           const target = e.target as HTMLElement;
           if (target.closest?.('[data-track-column-region="true"]')) return;
           if (target.closest?.('[data-clip-block]')) return;
@@ -358,15 +357,12 @@ export function Timeline() {
             const rect = clipBlock.getBoundingClientRect();
             if (e.clientX >= rect.left && e.clientX <= rect.right &&
                 e.clientY >= rect.top && e.clientY <= rect.bottom) {
-              e.preventDefault();
-              e.stopPropagation();
-              const syntheticEvt = new MouseEvent('contextmenu', {
-                bubbles: true, cancelable: true,
-                clientX: e.clientX, clientY: e.clientY, button: 2,
-              });
-              (syntheticEvt as any).__clipFallback = true;
-              clipBlock.dispatchEvent(syntheticEvt);
-              return;
+              const clipId = clipBlock.getAttribute('data-clip-id');
+              if (clipId) {
+                e.preventDefault();
+                setCanvasCtxMenu({ x: e.clientX, y: e.clientY, clipId });
+                return;
+              }
             }
           }
           if (selectWindow) {
@@ -612,13 +608,22 @@ export function Timeline() {
       {/* Region regeneration modal */}
       {regionRegenerateTarget && <RegionRegenerateModal />}
 
-      {/* Canvas context menu */}
+      {/* Canvas context menu — or clip context menu when macOS trackpad fallback detected a clip */}
       {canvasCtxMenu && (
-        <CanvasContextMenu
-          x={canvasCtxMenu.x}
-          y={canvasCtxMenu.y}
-          onClose={() => setCanvasCtxMenu(null)}
-        />
+        canvasCtxMenu.clipId ? (
+          <ClipContextMenuFallback
+            x={canvasCtxMenu.x}
+            y={canvasCtxMenu.y}
+            clipId={canvasCtxMenu.clipId}
+            onClose={() => setCanvasCtxMenu(null)}
+          />
+        ) : (
+          <CanvasContextMenu
+            x={canvasCtxMenu.x}
+            y={canvasCtxMenu.y}
+            onClose={() => setCanvasCtxMenu(null)}
+          />
+        )
       )}
     </>
   );

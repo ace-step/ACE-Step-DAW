@@ -140,6 +140,10 @@ window.__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
 window.__midiCaptureService = getMidiCaptureService();
 
+// Start MCP bridge for Claude Code integration
+import { startMcpBridge } from './services/mcpBridge';
+startMcpBridge();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

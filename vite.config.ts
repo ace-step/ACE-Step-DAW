@@ -2,13 +2,14 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import { claudeTerminalPlugin } from './server/vite-plugin-claude-terminal';
 
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8001';
 
 const serverPort = Number(process.env.VITE_PORT) || 5174;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), claudeTerminalPlugin()],
   resolve: {
     alias: {
       // Stub out @kabelsalat/web — Strudel's optional modular synth engine

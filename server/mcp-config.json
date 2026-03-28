@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ace-step-daw": {
+      "command": "npx",
+      "args": ["tsx", "server/mcp-server.ts"],
+      "env": {
+        "DAW_MCP_BRIDGE_URL": "ws://127.0.0.1:5174/ws/mcp-bridge"
+      }
+    }
+  }
+}

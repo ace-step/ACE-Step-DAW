@@ -32,7 +32,7 @@ const CommandPalette = lazy(() => import('../dialogs/CommandPalette').then(m => 
 const BounceInPlaceDialog = lazy(() => import('../dialogs/BounceInPlaceDialog').then(m => ({ default: m.BounceInPlaceDialog })));
 const DeleteTracksConfirmDialog = lazy(() => import('../dialogs/DeleteTracksConfirmDialog').then(m => ({ default: m.DeleteTracksConfirmDialog })));
 const ShareDialog = lazy(() => import('../dialogs/ShareDialog').then(m => ({ default: m.ShareDialog })));
-const AIAssistantPanel = lazy(() => import('../dialogs/AIAssistantPanel').then(m => ({ default: m.AIAssistantPanel })));
+const ClaudeTerminal = lazy(() => import('../terminal/ClaudeTerminal').then(m => ({ default: m.ClaudeTerminal })));
 const EnhancePanel = lazy(() => import('../generation/EnhancePanel').then(m => ({ default: m.EnhancePanel })));
 const Vocal2BGMModal = lazy(() => import('../generation/Vocal2BGMModal').then(m => ({ default: m.Vocal2BGMModal })));
 const AudioAnalysisPanel = lazy(() => import('../generation/AudioAnalysisPanel').then(m => ({ default: m.AudioAnalysisPanel })));
@@ -166,7 +166,7 @@ function EditorShell() {
         <ShareDialog />
       </Suspense>
       {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
-      {!hasBlockingDialog && <Suspense fallback={null}><AIAssistantPanel /></Suspense>}
+      {!hasBlockingDialog && <Suspense fallback={null}><ClaudeTerminal /></Suspense>}
     </div>
   );
 }

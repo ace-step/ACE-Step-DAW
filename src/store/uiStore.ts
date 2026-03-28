@@ -1,14 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { AIChatMessage } from '../types/aiAssistant';
 import type { InlineSuggestion } from '../types/suggestions';
 import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
-import type { AIChatContext } from '../utils/aiAssistantContext';
-import { buildAssistantContext } from '../utils/aiAssistantContext';
-import { getAssistantSuggestions, streamAssistantResponse } from '../services/aiAssistantService';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
@@ -31,15 +27,6 @@ import type { HistoryTarget } from './projectStore';
 import {
   DEFAULT_TIMELINE_PIXELS_PER_SECOND,
 } from '../utils/timelineZoom';
-
-function createAssistantMessage(role: AIChatMessage['role'], content: string): AIChatMessage {
-  return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    role,
-    content,
-    timestamp: Date.now(),
-  };
-}
 
 export type PianoRollChordShape = (typeof CHORD_SHAPES)[number]['abbr'];
 export type GenerationPanelView = 'textToMusic' | 'multiTrack' | 'history' | 'settings';
@@ -208,12 +195,8 @@ export interface UIState {
   // VST3 Plugin Browser Panel
   showVST3Panel: boolean;
 
-  // AI Assistant
+  // AI Assistant (Claude Code terminal)
   showAIAssistant: boolean;
-  aiChatMessages: AIChatMessage[];
-  aiAssistantStreaming: boolean;
-  aiAssistantSuggestions: string[];
-  aiAssistantError: string | null;
   workspaceComplexity: 'simple' | 'standard' | 'advanced';
 
   // Audio Slice Mode
@@ -404,15 +387,9 @@ export interface UIState {
   toggleVST3Panel: () => void;
   setShowVST3Panel: (v: boolean) => void;
 
-  // AI Assistant
+  // AI Assistant (Claude Code terminal)
   toggleAIAssistant: () => void;
   setShowAIAssistant: (v: boolean) => void;
-  addAIChatMessage: (msg: AIChatMessage) => void;
-  clearAIChatMessages: () => void;
-  setAIAssistantStreaming: (v: boolean) => void;
-  updateAIChatMessage: (id: string, updater: (message: AIChatMessage) => AIChatMessage) => void;
-  refreshAIAssistantSuggestions: () => void;
-  askAIAssistant: (question: string, options?: { delayMs?: number }) => Promise<void>;
 
   // Theme
   setTheme: (theme: ThemeId) => void;
@@ -649,10 +626,6 @@ export const useUIStore = create<UIState>()(
   showVST3Panel: false,
 
   showAIAssistant: false,
-  aiChatMessages: [],
-  aiAssistantStreaming: false,
-  aiAssistantSuggestions: [],
-  aiAssistantError: null,
   workspaceComplexity: 'standard',
 
   sliceModeClipId: null,
@@ -1163,85 +1136,14 @@ export const useUIStore = create<UIState>()(
   toggleVST3Panel: () => set((s) => s.showVST3Panel ? { showVST3Panel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true }),
   setShowVST3Panel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true } : { showVST3Panel: false }),
 
-  toggleAIAssistant: () => set((state) => {
-    const nextShow = !state.showAIAssistant;
-    return nextShow
-      ? {
-          ...ALL_RIGHT_PANELS_CLOSED,
-          showAIAssistant: true,
-          aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-          aiAssistantError: null,
-        }
-      : { showAIAssistant: false };
-  }),
-  setShowAIAssistant: (v) => set((state) => (
-    v
-      ? {
-          ...ALL_RIGHT_PANELS_CLOSED,
-          showAIAssistant: true,
-          aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-          aiAssistantError: null,
-        }
-      : { showAIAssistant: false }
+  toggleAIAssistant: () => set((state) => (
+    state.showAIAssistant
+      ? { showAIAssistant: false }
+      : { ...ALL_RIGHT_PANELS_CLOSED, showAIAssistant: true }
   )),
-  addAIChatMessage: (msg) => set((s) => ({ aiChatMessages: [...s.aiChatMessages, msg] })),
-  clearAIChatMessages: () => set((state) => ({
-    aiChatMessages: [],
-    aiAssistantError: null,
-    aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-  })),
-  setAIAssistantStreaming: (v) => set({ aiAssistantStreaming: v }),
-  updateAIChatMessage: (id, updater) => set((state) => ({
-    aiChatMessages: state.aiChatMessages.map((message) => (
-      message.id === id ? updater(message) : message
-    )),
-  })),
-  refreshAIAssistantSuggestions: () => set((state) => ({
-    aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-  })),
-  askAIAssistant: async (question, options) => {
-    const trimmed = question.trim();
-    if (!trimmed) return;
-
-    const userMessage = createAssistantMessage('user', trimmed);
-    const assistantMessage = createAssistantMessage('assistant', '');
-    const context = getAssistantContext(get());
-
-    set((state) => ({
-      showAIAssistant: true,
-      aiAssistantStreaming: true,
-      aiAssistantError: null,
-      aiChatMessages: [...state.aiChatMessages, userMessage, assistantMessage],
-      aiAssistantSuggestions: getAssistantSuggestions(context),
-    }));
-
-    try {
-      for await (const chunk of streamAssistantResponse(trimmed, context, options?.delayMs)) {
-        set((state) => ({
-          aiChatMessages: state.aiChatMessages.map((message) => (
-            message.id === assistantMessage.id
-              ? { ...message, content: `${message.content}${chunk}` }
-              : message
-          )),
-        }));
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Assistant response failed.';
-      set((state) => ({
-        aiAssistantError: message,
-        aiChatMessages: state.aiChatMessages.map((item) => (
-          item.id === assistantMessage.id
-            ? { ...item, content: 'I ran into an error while preparing the reply. Please try again.' }
-            : item
-        )),
-      }));
-    } finally {
-      set((state) => ({
-        aiAssistantStreaming: false,
-        aiAssistantSuggestions: getAssistantSuggestions(getAssistantContext(state)),
-      }));
-    }
-  },
+  setShowAIAssistant: (v) => set(
+    v ? { ...ALL_RIGHT_PANELS_CLOSED, showAIAssistant: true } : { showAIAssistant: false },
+  ),
   setRegionRegenerateTarget: (v) => set({ regionRegenerateTarget: v }),
   setInlineSuggestions: (v) => set({ inlineSuggestions: v }),
   dismissInlineSuggestion: (id) => set((s) => ({
@@ -1372,10 +1274,6 @@ export const useUIStore = create<UIState>()(
     },
   ),
 );
-
-function getAssistantContext(state: UIState): AIChatContext {
-  return buildAssistantContext(useProjectStore.getState().project, state, useTransportStore.getState());
-}
 
 function buildCommandPaletteContext(state: UIState) {
   const projectStore = useProjectStore.getState();

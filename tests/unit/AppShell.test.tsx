@@ -28,7 +28,7 @@ vi.mock('../../src/components/dialogs/CommandPalette', () => ({ CommandPalette: 
 vi.mock('../../src/components/dialogs/BounceInPlaceDialog', () => ({ BounceInPlaceDialog: () => <div>BounceInPlaceDialog</div> }));
 vi.mock('../../src/components/dialogs/DeleteTracksConfirmDialog', () => ({ DeleteTracksConfirmDialog: () => <div>DeleteTracksConfirmDialog</div> }));
 vi.mock('../../src/components/dialogs/ShareDialog', () => ({ ShareDialog: () => <div>ShareDialog</div> }));
-vi.mock('../../src/components/dialogs/AIAssistantPanel', () => ({ AIAssistantPanel: () => <div>AIAssistantPanel</div> }));
+vi.mock('../../src/components/terminal/ClaudeTerminal', () => ({ ClaudeTerminal: () => <div>ClaudeTerminal</div> }));
 vi.mock('../../src/components/mixer/MixerPanel', () => ({ MixerPanel: () => <div>MixerPanel</div> }));
 vi.mock('../../src/components/assets/LoopBrowser', () => ({ LoopBrowser: () => <div>LoopBrowser</div> }));
 vi.mock('../../src/components/sequencer/SequencerEditor', () => ({ SequencerEditor: () => <div>SequencerEditor</div> }));
@@ -62,7 +62,7 @@ describe('AppShell overlay orchestration', () => {
     render(<AppShell />);
 
     expect(screen.queryByText('CommandPalette')).not.toBeInTheDocument();
-    expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
+    expect(screen.queryByText('ClaudeTerminal')).not.toBeInTheDocument();
   });
 });
 
@@ -94,7 +94,7 @@ describe('AppShell dialog lazy loading', () => {
       'BounceInPlaceDialog',
       'DeleteTracksConfirmDialog',
       'ShareDialog',
-      'AIAssistantPanel',
+      'ClaudeTerminal',
       'EnhancePanel',
       'Vocal2BGMModal',
       'AudioAnalysisPanel',

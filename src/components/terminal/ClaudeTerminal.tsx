@@ -117,16 +117,22 @@ export function ClaudeTerminal() {
       fitAddonRef.current = fitAddon;
 
       // Forward input to WebSocket
-      term.onData((data) => {
+      term.onData((data: string) => {
         const ws = wsRef.current;
         if (ws?.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
       });
 
-      // Write welcome message
-      term.writeln('\x1b[1;35m  Claude Code \x1b[0m\x1b[90m— DAW Assistant\x1b[0m');
-      term.writeln('');
+      // Send resize events to PTY
+      term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+        const ws = wsRef.current;
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+        }
+      });
+
+      // No welcome message — the interactive shell prompt is the welcome
 
       // Connect
       connectWebSocket();

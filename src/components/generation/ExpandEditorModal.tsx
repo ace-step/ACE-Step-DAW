@@ -55,8 +55,7 @@ export function ExpandEditorModal({
       }}
     >
       <div
-        className="flex w-[80vw] max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
-        style={{ height: '70vh' }}
+        className="flex max-h-[80vh] min-h-[300px] w-[80vw] max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -94,7 +93,7 @@ export function ExpandEditorModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden p-4">
+        <div className="min-h-0 flex-1 p-4">
           <textarea
             ref={textareaRef}
             value={value}

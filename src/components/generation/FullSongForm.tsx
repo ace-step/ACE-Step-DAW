@@ -226,7 +226,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             getSuggestions={getPromptAutocompleteSuggestions}
             applySuggestion={applyPromptAutocompleteSuggestion}
           />
-          <div className="absolute right-2 top-2 flex items-center gap-0.5">
+          <div className="absolute right-2 bottom-1.5 flex items-center gap-0.5">
             <button
               type="button"
               onClick={() => setExpandCaption(true)}
@@ -303,7 +303,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             disabled={isDisabled || instrumental}
             data-testid="full-song-lyrics"
           />
-          <div className="absolute right-2 top-2 flex items-center gap-0.5">
+          <div className="absolute right-2 bottom-1.5 flex items-center gap-0.5">
             <button
               type="button"
               onClick={() => setExpandLyrics(true)}

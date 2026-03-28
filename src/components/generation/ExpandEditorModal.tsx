@@ -55,7 +55,7 @@ export function ExpandEditorModal({
       }}
     >
       <div
-        className="flex max-h-[80vh] min-h-[300px] w-[80vw] max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
+        className="flex h-[70vh] w-[80vw] max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}

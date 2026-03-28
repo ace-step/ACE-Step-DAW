@@ -226,25 +226,23 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             getSuggestions={getPromptAutocompleteSuggestions}
             applySuggestion={applyPromptAutocompleteSuggestion}
           />
-          <div className="absolute right-2 bottom-1.5 flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => setExpandCaption(true)}
-              className="flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white"
-              title="Expand editor"
-            >
-              <ExpandIcon />
-            </button>
-            <button
-              type="button"
-              onClick={handleEnhanceCaption}
-              disabled={isDisabled || enhancingCaption}
-              className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
-              title="AI enhance caption"
-            >
-              {enhancingCaption ? <span className="animate-spin">...</span> : <MagicPenIcon />}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleEnhanceCaption}
+            disabled={isDisabled || enhancingCaption}
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+            title="AI enhance caption"
+          >
+            {enhancingCaption ? <span className="animate-spin">...</span> : <MagicPenIcon />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpandCaption(true)}
+            className="absolute right-2 bottom-1.5 flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white"
+            title="Expand editor"
+          >
+            <ExpandIcon />
+          </button>
         </div>
         <ExpandEditorModal
           isOpen={expandCaption}
@@ -299,30 +297,28 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             onChange={(e) => setLyrics(e.target.value)}
             rows={5}
             placeholder="[Verse 1]\nYour lyrics here..."
-            className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 pr-16 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+            className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 pr-8 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
             disabled={isDisabled || instrumental}
             data-testid="full-song-lyrics"
           />
-          <div className="absolute right-2 bottom-1.5 flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => setExpandLyrics(true)}
-              disabled={instrumental}
-              className="flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
-              title="Expand editor"
-            >
-              <ExpandIcon />
-            </button>
-            <button
-              type="button"
-              onClick={handleEnhanceLyrics}
-              disabled={isDisabled || enhancingLyrics || instrumental}
-              className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
-              title="AI enhance lyrics"
-            >
-              {enhancingLyrics ? <span className="animate-spin">...</span> : <MagicPenIcon />}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleEnhanceLyrics}
+            disabled={isDisabled || enhancingLyrics || instrumental}
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+            title="AI enhance lyrics"
+          >
+            {enhancingLyrics ? <span className="animate-spin">...</span> : <MagicPenIcon />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpandLyrics(true)}
+            disabled={instrumental}
+            className="absolute right-2 bottom-1.5 flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+            title="Expand editor"
+          >
+            <ExpandIcon />
+          </button>
         </div>
         <ExpandEditorModal
           isOpen={expandLyrics}

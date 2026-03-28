@@ -104,8 +104,7 @@ export function VerticalFader({
   );
 
   const pct = ((value - min) / (max - min)) * 100;
-  const capH = 20;
-  const capW = width + 6;
+  const arrowH = 8;
 
   return (
     <div
@@ -130,8 +129,8 @@ export function VerticalFader({
         className="absolute left-1/2 -translate-x-1/2 rounded-full"
         style={{
           width: 3,
-          top: capH / 2,
-          bottom: capH / 2,
+          top: 0,
+          bottom: 0,
           background: '#333',
         }}
       />
@@ -140,47 +139,34 @@ export function VerticalFader({
         className="absolute left-1/2 -translate-x-1/2 rounded-full"
         style={{
           width: 3,
-          bottom: capH / 2,
-          height: `calc(${pct}% * (1 - ${capH}px / 100%) )`,
-          maxHeight: `calc(100% - ${capH}px)`,
+          bottom: 0,
+          height: `${pct}%`,
+          maxHeight: '100%',
           background: accentColor,
           opacity: 0.7,
         }}
       />
-      {/* Fader cap */}
+      {/* Arrow indicator — right-pointing triangle */}
       <div
-        className="absolute left-1/2 pointer-events-none"
+        className="absolute pointer-events-none"
         style={{
-          bottom: `calc(${pct}% - ${capH / 2}px)`,
-          transform: 'translateX(-50%)',
-          // Clamp so cap doesn't overflow
-          maxHeight: '100%',
+          bottom: `calc(${pct}% - ${arrowH / 2}px)`,
+          right: -2,
         }}
       >
         <svg
-          width={capW}
-          height={capH}
-          viewBox={`0 0 ${capW} ${capH}`}
+          width="7"
+          height={arrowH}
+          viewBox={`0 0 7 ${arrowH}`}
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="drop-shadow-md"
         >
-          <defs>
-            <linearGradient id="vfCapGrad" x1="0" y1="0" x2="0" y2={capH} gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#a0a0a8" />
-              <stop offset="25%" stopColor="#d8d8dc" />
-              <stop offset="50%" stopColor="#ececee" />
-              <stop offset="75%" stopColor="#d8d8dc" />
-              <stop offset="100%" stopColor="#98989e" />
-            </linearGradient>
-          </defs>
-          <rect x="1" y="0.5" width={capW - 2} height={capH - 1} rx="2.5" fill="url(#vfCapGrad)" stroke="#68686e" strokeWidth="0.5" />
-          {/* Horizontal grip lines — indicate vertical drag */}
-          <line x1="4" y1={capH / 2 - 3} x2={capW - 4} y2={capH / 2 - 3} stroke="#999" strokeWidth="0.5" strokeLinecap="round" />
-          <line x1="3" y1={capH / 2} x2={capW - 3} y2={capH / 2} stroke="#999" strokeWidth="0.5" strokeLinecap="round" />
-          <line x1="4" y1={capH / 2 + 3} x2={capW - 4} y2={capH / 2 + 3} stroke="#999" strokeWidth="0.5" strokeLinecap="round" />
-          {/* Left notch highlight */}
-          <line x1="2" y1={capH / 2} x2="2" y2={capH / 2} stroke="#fff" strokeWidth="1.2" strokeLinecap="round" opacity="0.8" />
+          <polygon
+            points={`0,0 7,${arrowH / 2} 0,${arrowH}`}
+            fill="#d0d0d4"
+            stroke="#888"
+            strokeWidth="0.5"
+          />
         </svg>
       </div>
     </div>

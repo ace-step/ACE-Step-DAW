@@ -27,8 +27,8 @@ export const METER_CANVAS_STOPS: [number, string][] = [
 export const METER_DB_MIN = -60;
 export const METER_DB_MAX = 0;
 
-/** dB tick marks for the mixer vertical meter. */
-export const METER_DB_TICKS = [0, -6, -12, -24, -48];
+/** dB tick marks for the mixer vertical meter (every 12dB, Ableton-style). */
+export const METER_DB_TICKS = [0, -12, -24, -36, -48, -60];
 
 /**
  * Convert a linear amplitude (0..1+) to a 0..1 fill fraction

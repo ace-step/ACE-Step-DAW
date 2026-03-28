@@ -184,7 +184,7 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
     <div
       ref={containerRef}
       className="relative h-full flex"
-      style={{ width: showScale ? totalWidth + 22 : totalWidth + 6 }}
+      style={{ width: showScale ? totalWidth + 24 : totalWidth + 6 }}
       data-testid="level-meter"
     >
       <button
@@ -205,22 +205,24 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
       />
       {showScale && (
         <div
-          className="absolute inset-y-0 flex flex-col justify-between pointer-events-none"
-          style={{ left: totalWidth + 5 }}
+          className="absolute inset-y-0 pointer-events-none"
+          style={{ left: totalWidth + 4, width: 18 }}
           aria-hidden="true"
         >
           {METER_DB_TICKS.map((db) => {
-            // Convert dB to percentage position from top (0dB = top, -60dB = bottom)
             const fill = (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN);
             const topPct = (1 - fill) * 100;
             return (
-              <span
+              <div
                 key={db}
-                className="absolute text-[8px] leading-none text-zinc-500"
-                style={{ top: `${topPct}%`, transform: 'translateY(-50%)' }}
+                className="absolute flex items-center"
+                style={{ top: `${topPct}%`, transform: 'translateY(-50%)', left: 0 }}
               >
-                {db === 0 ? '0' : db}
-              </span>
+                <span className="inline-block w-[3px] h-[1px] bg-zinc-500 mr-[2px]" />
+                <span className="text-[7px] leading-none text-zinc-500 font-mono">
+                  {Math.abs(db)}
+                </span>
+              </div>
             );
           })}
         </div>

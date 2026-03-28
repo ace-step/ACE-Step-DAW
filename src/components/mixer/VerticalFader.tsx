@@ -136,7 +136,7 @@ export function VerticalFader({
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          left: 10 - arrowW,
+          left: 8 - arrowW,
         }}
       >
         <svg

@@ -428,7 +428,7 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
         <div className="relative flex gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" stereo={false} />
           <div className="relative">
-            <LevelMeter masterStage="output" stereo={false} />
+            <LevelMeter masterStage="output" stereo={false} showScale />
             <VerticalFader
               value={masterVol}
               min={0}

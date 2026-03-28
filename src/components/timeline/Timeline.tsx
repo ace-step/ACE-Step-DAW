@@ -348,6 +348,20 @@ export function Timeline() {
           if (target.closest?.('[data-track-column-region="true"]')) return;
           if (target.closest?.('[data-clip-block]')) return;
           if (target.closest?.('[data-sequencer-grid]')) return;
+          // Fallback: check visual stacking (handles macOS trackpad two-finger press
+          // where e.target may be the lane even though the clip is visually on top)
+          const elAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+          const clipBlockAtPoint = elAtPoint?.closest?.('[data-clip-block]') as HTMLElement | null;
+          if (clipBlockAtPoint) {
+            // Re-dispatch contextmenu on the clip so ClipBlock handles it
+            e.preventDefault();
+            e.stopPropagation();
+            clipBlockAtPoint.dispatchEvent(new MouseEvent('contextmenu', {
+              bubbles: true, cancelable: true,
+              clientX: e.clientX, clientY: e.clientY, button: 2,
+            }));
+            return;
+          }
           if (selectWindow) {
             const selEl = target.closest?.('[style]');
             if (selEl && (selEl as HTMLElement).style.borderLeft?.includes('175, 82, 222')) return;

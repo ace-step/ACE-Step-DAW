@@ -62,6 +62,9 @@ export function ClaudeTerminal() {
     let disposed = false;
 
     const init = async () => {
+      // Wait for fonts to load before initializing xterm — prevents wrong cell measurements
+      await document.fonts.ready;
+
       const { Terminal } = await import('xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { WebLinksAddon } = await import('@xterm/addon-web-links');
@@ -80,7 +83,10 @@ export function ClaudeTerminal() {
       const term = new Terminal({
         cursorBlink: true,
         fontSize: 13,
-        fontFamily: 'Menlo, Monaco, "Cascadia Code", monospace',
+        lineHeight: 1.2,
+        fontFamily: '"MesloLGS NF", "Fira Code", "Cascadia Code", Menlo, Monaco, monospace',
+        customGlyphs: true,
+        scrollOnUserInput: true,
         theme: {
           background: '#1a1a2e',
           foreground: '#e0e0e0',
@@ -111,6 +117,15 @@ export function ClaudeTerminal() {
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.open(terminalRef.current);
+
+      // Load WebGL renderer for better performance and accurate glyph rendering
+      try {
+        const { WebglAddon } = await import('@xterm/addon-webgl');
+        term.loadAddon(new WebglAddon());
+      } catch {
+        // WebGL not available — fall back to DOM renderer (still works)
+      }
+
       fitAddon.fit();
 
       termInstanceRef.current = term;

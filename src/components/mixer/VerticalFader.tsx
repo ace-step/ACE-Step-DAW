@@ -109,8 +109,7 @@ export function VerticalFader({
   return (
     <div
       ref={containerRef}
-      className="relative cursor-ns-resize select-none"
-      style={{ width, height: '100%' }}
+      className="absolute inset-0 cursor-ns-resize select-none z-10"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -124,34 +123,12 @@ export function VerticalFader({
       aria-orientation="vertical"
       tabIndex={0}
     >
-      {/* Track groove */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full"
-        style={{
-          width: 3,
-          top: 0,
-          bottom: 0,
-          background: '#333',
-        }}
-      />
-      {/* Filled portion */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full"
-        style={{
-          width: 3,
-          bottom: 0,
-          height: `${pct}%`,
-          maxHeight: '100%',
-          background: accentColor,
-          opacity: 0.7,
-        }}
-      />
-      {/* Arrow indicator — right-pointing triangle */}
+      {/* Arrow indicator — right-pointing triangle riding on the meter */}
       <div
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          right: -2,
+          right: 0,
         }}
       >
         <svg

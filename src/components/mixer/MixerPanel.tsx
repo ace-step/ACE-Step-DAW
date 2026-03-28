@@ -367,7 +367,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
 
       {/* Fader + meter region */}
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
-        <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
+        <div className="relative" style={{ height: faderHeight }}>
           <LevelMeter trackId={track.id} stereo showScale />
           <VerticalFader
             value={vol}
@@ -425,19 +425,20 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
           <span>IN</span>
           <span className="mx-2">OUT</span>
         </div>
-        <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
+        <div className="relative flex gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" stereo={false} />
-          <LevelMeter masterStage="output" stereo={false} />
-          <VerticalFader
-            value={masterVol}
-            min={0}
-            max={1.5}
-            defaultValue={1.0}
-            onChange={handleChange}
-            aria-label="Master volume fader"
-            accentColor="#4A5FFF"
-            width={16}
-          />
+          <div className="relative">
+            <LevelMeter masterStage="output" stereo={false} />
+            <VerticalFader
+              value={masterVol}
+              min={0}
+              max={1.5}
+              defaultValue={1.0}
+              onChange={handleChange}
+              aria-label="Master volume fader"
+              accentColor="#4A5FFF"
+            />
+          </div>
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>
       </div>

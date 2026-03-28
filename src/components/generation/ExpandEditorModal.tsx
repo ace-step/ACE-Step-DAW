@@ -48,14 +48,14 @@ export function ExpandEditorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
       data-testid="expand-editor-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="flex h-[70vh] w-[80vw] max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
+        className="absolute inset-6 mx-auto flex max-w-[900px] flex-col rounded-lg border border-[#444] bg-[#1a1a1a] shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}

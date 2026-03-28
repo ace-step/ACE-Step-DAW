@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { levelToFill, fillToLevel } from '../meter-colors';
 
 interface VerticalFaderProps {
@@ -14,7 +14,8 @@ interface VerticalFaderProps {
 
 /**
  * Transparent vertical fader overlay — sits on top of LevelMeter.
- * Arrow indicator positioned on the dB scale to match the meter.
+ * Arrow on the LEFT side pointing RIGHT (tip at the meter bar).
+ * Focus shows corner brackets like Ableton.
  */
 export function VerticalFader({
   value,
@@ -28,18 +29,16 @@ export function VerticalFader({
 }: VerticalFaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const [focused, setFocused] = useState(false);
 
   const getValueFromY = useCallback(
     (clientY: number) => {
       const el = containerRef.current;
       if (!el) return value;
       const rect = el.getBoundingClientRect();
-      // Visual position on the dB scale (0 = bottom, 1 = top)
       const fill = 1 - (clientY - rect.top) / rect.height;
       const clampedFill = Math.max(0, Math.min(1, fill));
-      // Convert dB-scale position back to linear amplitude
       const linear = fillToLevel(clampedFill);
-      // Clamp to the fader's min/max range
       return Math.max(min, Math.min(max, linear));
     },
     [value, min, max],
@@ -49,6 +48,7 @@ export function VerticalFader({
     (e: React.PointerEvent) => {
       e.preventDefault();
       dragging.current = true;
+      setFocused(true);
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       onChange(getValueFromY(e.clientY));
     },
@@ -108,9 +108,9 @@ export function VerticalFader({
     [value, min, max, onChange],
   );
 
-  // Position arrow on the dB scale (matches the meter's visual mapping)
   const pct = levelToFill(value) * 100;
   const arrowH = 8;
+  const arrowW = 6;
 
   return (
     <div
@@ -121,6 +121,8 @@ export function VerticalFader({
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { if (!dragging.current) setFocused(false); }}
       role="slider"
       aria-label={ariaLabel}
       aria-valuemin={Math.round(min * 100)}
@@ -129,27 +131,40 @@ export function VerticalFader({
       aria-orientation="vertical"
       tabIndex={0}
     >
-      {/* Arrow indicator — right-pointing triangle, same X as scale ticks */}
+      {/* Arrow on LEFT side — right-pointing triangle, tip at meter bar */}
       <div
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${pct}% - ${arrowH / 2}px)`,
-          left: 14,
+          left: 10 - arrowW,
         }}
       >
         <svg
-          width="6"
+          width={arrowW}
           height={arrowH}
-          viewBox={`0 0 6 ${arrowH}`}
+          viewBox={`0 0 ${arrowW} ${arrowH}`}
           fill="none"
-          xmlns="http://www.w3.org/2000/svg"
         >
           <polygon
-            points={`0,0 6,${arrowH / 2} 0,${arrowH}`}
+            points={`0,0 ${arrowW},${arrowH / 2} 0,${arrowH}`}
             fill="#c8c8cc"
           />
         </svg>
       </div>
+
+      {/* Focus corner brackets (Ableton-style) */}
+      {focused && (
+        <>
+          {/* Top-left */}
+          <span className="absolute top-0 left-0 w-[4px] h-[4px] border-t border-l border-zinc-400 pointer-events-none" />
+          {/* Top-right */}
+          <span className="absolute top-0 right-0 w-[4px] h-[4px] border-t border-r border-zinc-400 pointer-events-none" />
+          {/* Bottom-left */}
+          <span className="absolute bottom-0 left-0 w-[4px] h-[4px] border-b border-l border-zinc-400 pointer-events-none" />
+          {/* Bottom-right */}
+          <span className="absolute bottom-0 right-0 w-[4px] h-[4px] border-b border-r border-zinc-400 pointer-events-none" />
+        </>
+      )}
     </div>
   );
 }

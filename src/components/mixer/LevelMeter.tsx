@@ -8,12 +8,15 @@ const FALL_RATE_PER_FRAME = 0.012;
 const PEAK_HOLD_FRAMES = 18;
 const CLIP_INDICATOR_SIZE = 8;
 
+/** Left-side tick width + arrow space */
+const SCALE_LEFT_W = 10;
+/** Right-side number width */
+const SCALE_RIGHT_W = 16;
+
 export interface LevelMeterProps {
   trackId?: string;
   masterStage?: 'input' | 'output';
-  /** Show stereo L/R bars (default true for tracks, false for master). */
   stereo?: boolean;
-  /** Show dB scale ticks beside the meter (default false). */
   showScale?: boolean;
 }
 
@@ -23,10 +26,6 @@ interface BarState {
   peakHoldFrames: number;
 }
 
-/**
- * Pro-grade peak level meter with stereo L/R bars, dB-scaled gradient,
- * peak-hold indicators, and optional dB tick marks.
- */
 export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMeterProps) {
   const rafRef = useRef<number>(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -37,10 +36,13 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isStereo = stereo ?? !masterStage;
-  const totalWidth = isStereo ? BAR_WIDTH * 2 + BAR_GAP : BAR_WIDTH;
+  const totalBarWidth = isStereo ? BAR_WIDTH * 2 + BAR_GAP : BAR_WIDTH;
+  const meterLeft = showScale ? SCALE_LEFT_W : 3;
+  const containerWidth = showScale
+    ? SCALE_LEFT_W + totalBarWidth + 2 + SCALE_RIGHT_W
+    : totalBarWidth + 6;
 
   const updateBar = useCallback((bar: BarState, nextLevel: number): void => {
-    // Store levels already converted to dB-fill space (0..1)
     const fill = levelToFill(nextLevel);
     bar.level = fill;
     if (fill >= bar.peakLevel) {
@@ -79,7 +81,6 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
         canvas.height = h;
       }
 
-      // Read levels (linear amplitude from engine)
       let leftLevel = 0;
       let rightLevel = 0;
       let clipped = false;
@@ -106,11 +107,9 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
         }
       }
 
-      // updateBar converts linear → dB fill internally
       updateBar(leftBar.current, leftLevel);
       updateBar(rightBar.current, rightLevel);
 
-      // Draw
       ctx2d.clearRect(0, 0, w, h);
       const grad = ensureGradient(h);
 
@@ -118,11 +117,9 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
         const levelH = Math.max(0, Math.min(1, bar.level)) * h;
         const peakY = Math.max(0, Math.min(1, bar.peakLevel)) * h;
 
-        // Background
         ctx2d.fillStyle = '#1a1a1a';
         ctx2d.fillRect(x, 0, barW, h);
 
-        // Level fill with gradient mask
         if (levelH > 0) {
           ctx2d.save();
           ctx2d.beginPath();
@@ -133,7 +130,6 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
           ctx2d.restore();
         }
 
-        // Peak hold line
         if (bar.peakLevel > 0.005) {
           const peakYPos = h - peakY;
           ctx2d.fillStyle = clippedRef.current ? '#ef4444' : 'rgba(255,255,255,0.9)';
@@ -183,30 +179,25 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
   return (
     <div
       ref={containerRef}
-      className="relative h-full flex"
-      style={{ width: showScale ? totalWidth + 28 : totalWidth + 6 }}
+      className="relative h-full"
+      style={{ width: containerWidth }}
       data-testid="level-meter"
     >
       <button
         type="button"
         data-clip-btn
         aria-label={clipResetLabel}
-        className="absolute left-1/2 top-1 z-10 -translate-x-1/2 rounded-full border border-red-200/40 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.75)]"
-        style={{ width: CLIP_INDICATOR_SIZE, height: CLIP_INDICATOR_SIZE, display: 'none' }}
+        className="absolute top-1 z-10 rounded-full border border-red-200/40 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.75)]"
+        style={{ width: CLIP_INDICATOR_SIZE, height: CLIP_INDICATOR_SIZE, display: 'none', left: meterLeft + totalBarWidth / 2 - CLIP_INDICATOR_SIZE / 2 }}
         onClick={resetClip}
         title="Reset clip indicator"
       />
-      <canvas
-        ref={canvasRef}
-        aria-label={label}
-        data-testid="meter-canvas"
-        className="absolute inset-y-0 left-[3px] rounded-sm"
-        style={{ width: totalWidth, height: '100%' }}
-      />
+
+      {/* LEFT: tick marks extending left from the meter bar */}
       {showScale && (
         <div
           className="absolute inset-y-0 pointer-events-none"
-          style={{ left: totalWidth + 5, width: 22 }}
+          style={{ left: 0, width: SCALE_LEFT_W }}
           aria-hidden="true"
         >
           {METER_DB_TICKS.map((db) => {
@@ -215,14 +206,43 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
             return (
               <div
                 key={db}
-                className="absolute flex items-center"
-                style={{ top: `${topPct}%`, transform: 'translateY(-50%)', left: 0 }}
+                className="absolute right-0 flex items-center"
+                style={{ top: `${topPct}%`, transform: 'translateY(-50%)' }}
               >
                 <span className="inline-block w-[5px] h-[1px] bg-zinc-500" />
-                <span className="text-[8px] leading-none text-zinc-500 font-mono ml-[2px]">
-                  {Math.abs(db)}
-                </span>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CENTER: meter canvas */}
+      <canvas
+        ref={canvasRef}
+        aria-label={label}
+        data-testid="meter-canvas"
+        className="absolute inset-y-0 rounded-sm"
+        style={{ width: totalBarWidth, height: '100%', left: meterLeft }}
+      />
+
+      {/* RIGHT: dB numbers */}
+      {showScale && (
+        <div
+          className="absolute inset-y-0 pointer-events-none"
+          style={{ left: meterLeft + totalBarWidth + 2, width: SCALE_RIGHT_W }}
+          aria-hidden="true"
+        >
+          {METER_DB_TICKS.map((db) => {
+            const fill = dbToFill(db);
+            const topPct = (1 - fill) * 100;
+            return (
+              <span
+                key={db}
+                className="absolute text-[8px] leading-none text-zinc-500 font-mono"
+                style={{ top: `${topPct}%`, transform: 'translateY(-50%)', left: 0 }}
+              >
+                {Math.abs(db)}
+              </span>
             );
           })}
         </div>

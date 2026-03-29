@@ -162,6 +162,9 @@ export function EnhancePanel() {
   // Quick Styles section
   const [quickStylesOpen, setQuickStylesOpen] = useState(false);
 
+  // Local guard against rapid Generate clicks (supplements store-level isGenerating)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Playback
   const playback = useEnhancePlayback();
 
@@ -372,7 +375,8 @@ export function EnhancePanel() {
 
   // Cover generation
   const handleCoverGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
+    if (!enhancerTarget || isGenerating || isSubmitting) return;
+    setIsSubmitting(true);
     const coverStrength = CONSISTENCY_VALUES[consistency];
     const resultId = `result-${Date.now()}`;
     setResults((prev) => [...prev, {
@@ -402,12 +406,15 @@ export function EnhancePanel() {
       setResults((prev) => prev.map((r) =>
         r.id === resultId ? { ...r, status: 'error' as const, error: message } : r,
       ));
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
 
   // Repaint generation
   const handleRepaintGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
+    if (!enhancerTarget || isGenerating || isSubmitting) return;
+    setIsSubmitting(true);
     const resultId = `result-${Date.now()}`;
     setResults((prev) => [...prev, {
       id: resultId,
@@ -437,8 +444,10 @@ export function EnhancePanel() {
       setResults((prev) => prev.map((r) =>
         r.id === resultId ? { ...r, status: 'error' as const, error: message } : r,
       ));
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 
@@ -591,7 +600,7 @@ export function EnhancePanel() {
   const coverSupported = modelSupportsTaskType('cover');
   const repaintSupported = modelSupportsTaskType('repaint');
   const modeSupported = mode === 'cover' ? coverSupported : repaintSupported;
-  const canGenerate = hasAudio && modeSupported && !isGenerating && !!(clip && track);
+  const canGenerate = hasAudio && modeSupported && !isGenerating && !isSubmitting && !!(clip && track);
 
   const clipStart = clip?.startTime ?? 0;
   const clipEnd = (clip?.startTime ?? 0) + (clip?.duration ?? 0);
@@ -1086,7 +1095,7 @@ export function EnhancePanel() {
                 : 'bg-[#2a2a2e] text-zinc-500 cursor-not-allowed'
             }`}
           >
-            {isGenerating
+            {isGenerating || isSubmitting
               ? (mode === 'cover' ? 'Enhancing...' : 'Repainting...')
               : (mode === 'cover' ? 'Enhance' : 'Repaint Selection')
             }

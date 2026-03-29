@@ -4,7 +4,7 @@ import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { generateCoverClip } from '../../services/generationPipeline';
 import { generateRepaintClip } from '../../services/generationPipeline';
-import { modelSupportsTaskType } from '../../services/aceStepApi';
+import { modelSupportsTaskType, isModelInventoryLoaded, isModelReady } from '../../services/aceStepApi';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
 import { Z } from '../../utils/zIndex';
 import { WaveformPreview } from './WaveformPreview';
@@ -19,9 +19,9 @@ const ENHANCER_BASE_BOTTOM = 60;
 
 type ConsistencyLevel = 'low' | 'medium' | 'high';
 const CONSISTENCY_VALUES: Record<ConsistencyLevel, number> = {
-  low: 0.25,
+  low: 0.75,
   medium: 0.5,
-  high: 0.75,
+  high: 0.25,
 };
 
 function fmt(s: number) {
@@ -50,6 +50,8 @@ interface ResultEntry {
   durationSec: number;
   peaks: number[];
   timestamp: number;
+  status: 'generating' | 'ready' | 'error';
+  error?: string;
 }
 
 type ABSide = 'A' | 'B';
@@ -228,15 +230,47 @@ export function EnhancePanel() {
     }
   }, [enhancerOpen, playback.stopPlayback]);
 
-  // Escape to close
+  // Escape to close — only if no higher-level modal is open
   useEffect(() => {
     if (!enhancerOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); closeEnhancer(); }
+      if (e.key !== 'Escape') return;
+      const ui = useUIStore.getState();
+      // Don't close if a modal-level dialog is open on top of us
+      if (ui.showCommandPalette || ui.showSettingsDialog || ui.showQuantizeDialog
+        || ui.showExportDialog || ui.showKeyboardShortcutsDialog || ui.showNewProjectDialog) return;
+      e.stopPropagation();
+      closeEnhancer();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, [enhancerOpen, closeEnhancer]);
+
+  // Focus trap — keep Tab/Shift+Tab within the panel
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!enhancerOpen) return;
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleTab);
+    return () => window.removeEventListener('keydown', handleTab);
+  }, [enhancerOpen]);
 
   const handleNewSession = useCallback(() => {
     sessionCounterRef.current += 1;
@@ -280,17 +314,26 @@ export function EnhancePanel() {
       durationSec: 0,
       peaks: [],
       timestamp: Date.now(),
+      status: 'generating',
     }]);
-    await generateCoverClip({
-      clipId: enhancerTarget.clipId,
-      caption,
-      lyrics,
-      coverStrength,
-      createNew,
-    });
-    // After generation, try to load the result audio to get peaks/duration
-    await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating]);
+    try {
+      await generateCoverClip({
+        clipId: enhancerTarget.clipId,
+        caption,
+        lyrics,
+        coverStrength,
+        createNew,
+        sourceAudioOverride: chainedSourceAudioKey || undefined,
+      });
+      // After generation, try to load the result audio to get peaks/duration
+      await finalizeResult(resultId, enhancerTarget.clipId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Enhancement failed';
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error', error: message } : r,
+      ));
+    }
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey]);
 
   // Repaint generation
   const handleRepaintGenerate = useCallback(async () => {
@@ -305,25 +348,50 @@ export function EnhancePanel() {
       durationSec: 0,
       peaks: [],
       timestamp: Date.now(),
+      status: 'generating',
     }]);
-    await generateRepaintClip({
-      clipId: enhancerTarget.clipId,
-      repaintStart: selStart,
-      repaintEnd: selEnd,
-      prompt,
-      globalCaption: globalCaption || undefined,
-      repaintMode,
-      repaintStrength,
-    });
-    await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating]);
+    try {
+      await generateRepaintClip({
+        clipId: enhancerTarget.clipId,
+        repaintStart: selStart,
+        repaintEnd: selEnd,
+        prompt,
+        globalCaption: globalCaption || undefined,
+        repaintMode,
+        repaintStrength,
+        sourceAudioOverride: chainedSourceAudioKey || undefined,
+      });
+      await finalizeResult(resultId, enhancerTarget.clipId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Repaint failed';
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error', error: message } : r,
+      ));
+    }
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey]);
 
   // After generation, load the new clip's audio to compute peaks and duration
   const finalizeResult = useCallback(async (resultId: string, originalClipId: string) => {
-    // The generation pipeline creates a new clip or updates the existing one
-    // Re-read the clip from the store to get the new audio key
-    const updatedClip = useProjectStore.getState().getClipById(originalClipId);
-    const audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
+    // The generation pipeline may create a new clip (createNew) or update the existing one.
+    // First check the original clip; if it has no new audio, search the track for the newest ready clip.
+    const store = useProjectStore.getState();
+    let updatedClip = store.getClipById(originalClipId);
+    let audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
+
+    if (!audioKey && enhancerTarget) {
+      // When createNew=true, the pipeline creates a new clip on the same track.
+      // Find it by looking for the most recent clip with audio on this track.
+      const track = store.project?.tracks.find((t) => t.id === enhancerTarget.trackId);
+      if (track) {
+        const readyClip = [...track.clips]
+          .reverse()
+          .find((c) => c.id !== originalClipId && (c.isolatedAudioKey || c.cumulativeMixKey));
+        if (readyClip) {
+          updatedClip = readyClip;
+          audioKey = readyClip.isolatedAudioKey || readyClip.cumulativeMixKey || '';
+        }
+      }
+    }
     if (!audioKey) return;
 
     try {
@@ -331,9 +399,10 @@ export function EnhancePanel() {
       if (!buffer) return;
       const peaks = computeWaveformPeaks(buffer, 60);
       const dur = buffer.duration;
+      const finalClipId = updatedClip?.id ?? originalClipId;
       setResults((prev) => prev.map((r) =>
         r.id === resultId
-          ? { ...r, audioKey, peaks, duration: formatDuration(dur), durationSec: dur }
+          ? { ...r, clipId: finalClipId, audioKey, peaks, duration: formatDuration(dur), durationSec: dur, status: 'ready' as const }
           : r,
       ));
       // Auto-select first result
@@ -345,7 +414,7 @@ export function EnhancePanel() {
     } catch {
       // Audio decode failed — leave duration as --:--
     }
-  }, [playback, results.length]);
+  }, [playback, results.length, enhancerTarget]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 
@@ -456,9 +525,20 @@ export function EnhancePanel() {
   // No-selection guidance screen
   if (!enhancerTarget) {
     return (
+      <>
+      {/* Backdrop — prevents interaction with timeline underneath */}
+      <div
+        data-testid="enhance-backdrop"
+        className="fixed inset-0 bg-black/30"
+        style={{ zIndex: Z.panel - 1 }}
+        onClick={closeEnhancer}
+      />
       <div
         data-testid="enhance-panel"
-        className="fixed left-1/2 -translate-x-1/2 w-[780px] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
+        role="dialog"
+        aria-label="AI Enhancer"
+        aria-modal="true"
+        className="fixed left-1/2 -translate-x-1/2 w-[780px] max-w-[95vw] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
         style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
       >
         <div className="flex items-center justify-between mb-6">
@@ -486,10 +566,13 @@ export function EnhancePanel() {
           </button>
         </div>
       </div>
+      </>
     );
   }
 
   const hasAudio = !!(clip?.isolatedAudioKey || clip?.cumulativeMixKey);
+  const inventoryLoaded = isModelInventoryLoaded();
+  const modelReady = isModelReady();
   const coverSupported = modelSupportsTaskType('cover');
   const repaintSupported = modelSupportsTaskType('repaint');
   const modeSupported = mode === 'cover' ? coverSupported : repaintSupported;
@@ -518,9 +601,21 @@ export function EnhancePanel() {
   const miniProgress = miniIsPlaying ? playback.progress : 0;
 
   return (
+    <>
+    {/* Backdrop — prevents interaction with timeline underneath */}
     <div
+      data-testid="enhance-backdrop"
+      className="fixed inset-0 bg-black/30"
+      style={{ zIndex: Z.panel - 1 }}
+      onClick={closeEnhancer}
+    />
+    <div
+      ref={panelRef}
       data-testid="enhance-panel"
-      className="fixed left-1/2 -translate-x-1/2 w-[820px] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
+      role="dialog"
+      aria-label="AI Enhancer"
+      aria-modal="true"
+      className="fixed left-1/2 -translate-x-1/2 w-[820px] max-w-[95vw] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
       style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
     >
       {/* Left Sidebar — Version Tree & Session History */}
@@ -689,7 +784,17 @@ export function EnhancePanel() {
                 No audio generated yet — generate the clip first before enhancing.
               </p>
             )}
-            {!modeSupported && (
+            {!inventoryLoaded && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                Connecting to server...
+              </p>
+            )}
+            {inventoryLoaded && !modelReady && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                No model loaded on server. Load a model in Settings before enhancing.
+              </p>
+            )}
+            {inventoryLoaded && modelReady && !modeSupported && (
               <p className="text-[10px] text-amber-400 mt-2">
                 The currently loaded model does not support {mode} generation.
               </p>
@@ -1014,6 +1119,15 @@ export function EnhancePanel() {
                   }`}
                 >
                   <div className="flex items-center gap-2 px-2 py-2">
+                    {r.status === 'generating' ? (
+                      <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                        <div className="w-4 h-4 border-2 border-zinc-600 border-t-teal-400 rounded-full animate-spin" />
+                      </div>
+                    ) : r.status === 'error' ? (
+                      <div className="w-6 h-6 flex items-center justify-center rounded-full bg-red-900/50 text-red-400 flex-shrink-0">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
+                      </div>
+                    ) : (
                     <button
                       data-testid={`result-play-btn-${idx}`}
                       onClick={(e) => { e.stopPropagation(); handleResultPlay(r.id, r.audioKey); }}
@@ -1030,14 +1144,17 @@ export function EnhancePanel() {
                         <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                       )}
                     </button>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-zinc-300 truncate">
+                      <p className={`text-[11px] truncate ${r.status === 'error' ? 'text-red-400' : 'text-zinc-300'}`}>
                         {r.title}
                         {canAB && isSelected && (
                           <span className={`ml-1 ${abSide === 'B' ? 'text-violet-400 font-bold' : 'text-zinc-600'}`}>B</span>
                         )}
                       </p>
-                      <p className="text-[10px] text-zinc-600">{r.duration}</p>
+                      <p className="text-[10px] text-zinc-600">
+                        {r.status === 'generating' ? 'Generating...' : r.status === 'error' ? (r.error ?? 'Failed') : r.duration}
+                      </p>
                     </div>
                     {r.audioKey && (
                       <button
@@ -1049,16 +1166,6 @@ export function EnhancePanel() {
                         Use as Source
                       </button>
                     )}
-                    <button
-                      className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-opacity"
-                      aria-label="More options"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="5" r="1.5" />
-                        <circle cx="12" cy="12" r="1.5" />
-                        <circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
                   </div>
                   {/* Result waveform */}
                   {r.peaks.length > 0 && (
@@ -1137,5 +1244,6 @@ export function EnhancePanel() {
         )}
       </div>
     </div>
+    </>
   );
 }

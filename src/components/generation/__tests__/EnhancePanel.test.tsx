@@ -17,6 +17,8 @@ vi.mock('../../../services/projectStorage', () => ({
 
 vi.mock('../../../services/aceStepApi', () => ({
   modelSupportsTaskType: vi.fn(() => true),
+  isModelInventoryLoaded: vi.fn(() => true),
+  isModelReady: vi.fn(() => true),
 }));
 
 const mockPlayback = {
@@ -614,6 +616,42 @@ describe('EnhancePanel version tree UI', () => {
     expect(screen.getByTestId('version-tree-original')).toBeInTheDocument();
     expect(screen.getByText(/v0 \(Original\)/)).toBeInTheDocument();
     expect(screen.getByText(/Jazz cover/)).toBeInTheDocument();
+  });
+
+  it('passes correct coverStrength for each consistency level (high=0.25, medium=0.5, low=0.75)', async () => {
+    const { generateCoverClip } = await import('../../../services/generationPipeline');
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    const { unmount } = render(<EnhancePanel />);
+
+    // Default is 'medium' — click Enhance
+    const enhanceBtn = screen.getByTestId('enhance-btn');
+    fireEvent.click(enhanceBtn);
+    expect(generateCoverClip).toHaveBeenLastCalledWith(
+      expect.objectContaining({ coverStrength: 0.5 }),
+    );
+
+    // Switch to 'high' consistency
+    const highBtn = screen.getByText('high');
+    fireEvent.click(highBtn);
+    fireEvent.click(enhanceBtn);
+    expect(generateCoverClip).toHaveBeenLastCalledWith(
+      expect.objectContaining({ coverStrength: 0.25 }),
+    );
+
+    // Switch to 'low' consistency
+    const lowBtn = screen.getByText('low');
+    fireEvent.click(lowBtn);
+    fireEvent.click(enhanceBtn);
+    expect(generateCoverClip).toHaveBeenLastCalledWith(
+      expect.objectContaining({ coverStrength: 0.75 }),
+    );
+
+    unmount();
   });
 
   it('shows chained source indicator when chainedSourceAudioKey is set', () => {

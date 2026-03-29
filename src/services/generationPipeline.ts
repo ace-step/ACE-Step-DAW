@@ -1412,15 +1412,40 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       }
 
       let contextBlob: Blob | null = null;
+      // The effective context window may be auto-padded below
+      let effectiveCtxWindow = opts.contextWindow;
 
-      if (opts.contextWindow) {
+      if (effectiveCtxWindow && opts.chunkMaskMode !== 'auto') {
+        // Auto-pad context window when repainting covers >= 95% of context duration.
+        // The model expects some preserved context around the repainting region;
+        // without padding, explicit mask = all 1s which is out-of-distribution.
+        const ctxDur = effectiveCtxWindow.endTime - effectiveCtxWindow.startTime;
+        const repaintDur = opts.duration;
+        if (ctxDur > 0 && repaintDur / ctxDur >= 0.95) {
+          const PAD_SECONDS = 1.0;
+          const paddedStart = Math.max(0, effectiveCtxWindow.startTime - PAD_SECONDS);
+          const audioDurationFull = useProjectStore.getState().getAudioDuration();
+          const paddedEnd = Math.min(audioDurationFull, effectiveCtxWindow.endTime + PAD_SECONDS);
+          // Only pad if it actually expands the window
+          if (paddedEnd - paddedStart > ctxDur + 0.1) {
+            toastInfo('Context window auto-padded to provide surrounding context for better generation quality');
+            effectiveCtxWindow = {
+              ...effectiveCtxWindow,
+              startTime: paddedStart,
+              endTime: paddedEnd,
+            };
+          }
+        }
+      }
+
+      if (effectiveCtxWindow) {
         // trimToContext: blob spans [0, ctxDuration], no leading silence
-        contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
-        const ctxDur = opts.contextWindow.endTime - opts.contextWindow.startTime;
+        contextBlob = await extractContextAudioLazy(effectiveCtxWindow, { trimToContext: true });
+        const ctxDur = effectiveCtxWindow.endTime - effectiveCtxWindow.startTime;
         console.log(
           `[AddLayer] contextBlob: size=${contextBlob?.size ?? 0}`,
           `expectedDur=${ctxDur.toFixed(1)}s`,
-          `ctx=[${opts.contextWindow.startTime}, ${opts.contextWindow.endTime}]`,
+          `ctx=[${effectiveCtxWindow.startTime}, ${effectiveCtxWindow.endTime}]`,
           `clipStart=${opts.startTime} clipDur=${opts.duration}`,
           `chunkMaskMode=${opts.chunkMaskMode}`,
         );
@@ -1434,7 +1459,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         globalCaptionOverride: opts.globalCaption,
         lyricsOverride: opts.lyrics,
         chunkMaskMode: opts.chunkMaskMode,
-        contextWindow: opts.contextWindow ?? undefined,
+        contextWindow: effectiveCtxWindow ?? undefined,
       });
 
       if (outcome.succeeded) {

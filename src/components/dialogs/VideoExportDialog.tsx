@@ -3,14 +3,19 @@ import { useUIStore } from '../../store/uiStore';
 import { downloadBlob } from '../../services/browserDownload';
 import { formatDurationMSS } from '../../utils/time';
 import { Button } from '../ui/Button';
-import { toastError } from '../../hooks/useToast';
+
+function formatTrimTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildFileName(extension = '.webm'): string {
+function buildFileName(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -18,19 +23,18 @@ function buildFileName(extension = '.webm'): string {
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
-  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}${extension}`;
+  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.webm`;
 }
 
 function formatMimeType(mimeType: string | null): string {
   if (!mimeType) return 'WebM';
-  if (mimeType.includes('mp4')) return 'MP4 (H.264 + AAC)';
   if (mimeType.includes('vp9')) return 'WebM (VP9 + Opus)';
   if (mimeType.includes('vp8')) return 'WebM (VP8 + Opus)';
   if (mimeType.includes('h264')) return 'WebM (H.264 + Opus)';
   return 'WebM';
 }
 
-// ── Trim Bar (perf-optimized: direct DOM updates during drag) ──
+// ── Trim Bar ──────────────────────────────────────────────
 
 function TrimBar({
   duration,
@@ -47,7 +51,6 @@ function TrimBar({
   const isDragging = useRef(false);
   const dragTarget = useRef<'start' | 'end'>('start');
 
-  // Stable refs for current values (avoids stale closures in global listeners)
   const trimStartRef = useRef(trimStart);
   const trimEndRef = useRef(trimEnd);
   trimStartRef.current = trimStart;
@@ -58,7 +61,7 @@ function TrimBar({
       if (!barRef.current) return 0;
       const rect = barRef.current.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return Math.round(ratio * duration);
+      return Math.round(ratio * duration * 10) / 10;
     },
     [duration],
   );
@@ -66,15 +69,14 @@ function TrimBar({
   const onTrimChangeRef = useRef(onTrimChange);
   onTrimChangeRef.current = onTrimChange;
 
-  // Single persistent listener pair — registered once on mount
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
       const t = posToTime(e.clientX);
       if (dragTarget.current === 'start') {
-        onTrimChangeRef.current(Math.min(t, trimEndRef.current - 1), trimEndRef.current);
+        onTrimChangeRef.current(Math.min(t, trimEndRef.current - 0.5), trimEndRef.current);
       } else {
-        onTrimChangeRef.current(trimStartRef.current, Math.max(t, trimStartRef.current + 1));
+        onTrimChangeRef.current(trimStartRef.current, Math.max(t, trimStartRef.current + 0.5));
       }
     };
     const onUp = () => { isDragging.current = false; };
@@ -104,10 +106,7 @@ function TrimBar({
       <div className="flex items-center gap-2 text-[10px] text-zinc-500">
         <span>Trim</span>
         {isTrimmed && (
-          <button
-            className="text-blue-400 hover:text-blue-300"
-            onClick={() => onTrimChange(0, duration)}
-          >
+          <button className="text-blue-400 hover:text-blue-300" onClick={() => onTrimChange(0, duration)}>
             Reset
           </button>
         )}
@@ -132,8 +131,8 @@ function TrimBar({
         />
       </div>
       <div className="flex justify-between text-[10px] tabular-nums text-zinc-500">
-        <span>{formatDurationMSS(trimStart)}</span>
-        <span>{formatDurationMSS(trimEnd)}</span>
+        <span>{formatTrimTime(trimStart)}</span>
+        <span>{formatTrimTime(trimEnd)}</span>
       </div>
     </div>
   );
@@ -151,13 +150,9 @@ export function VideoExportDialog() {
   const [downloaded, setDownloaded] = useState(false);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-  const [exportFormat, setExportFormat] = useState<'native' | 'mp4'>('native');
-  const [converting, setConverting] = useState(false);
-  const [convertProgress, setConvertProgress] = useState(0);
 
   const { status, blob, duration, mimeType } = videoRecording;
   const show = status === 'done' && blob !== null;
-  const nativeExt = mimeType?.includes('mp4') ? '.mp4' : '.webm';
 
   useEffect(() => {
     if (blob) {
@@ -166,7 +161,6 @@ export function VideoExportDialog() {
       setDownloaded(false);
       setTrimStart(0);
       setTrimEnd(duration);
-      setExportFormat('native');
       return () => URL.revokeObjectURL(url);
     } else {
       setVideoUrl(null);
@@ -187,7 +181,6 @@ export function VideoExportDialog() {
     return () => video.removeEventListener('timeupdate', onTimeUpdate);
   }, [trimStart, trimEnd]);
 
-  // All hooks MUST be above this line (React Rules of Hooks)
   const handleTrimChange = useCallback((start: number, end: number) => {
     setTrimStart(start);
     setTrimEnd(end);
@@ -197,36 +190,11 @@ export function VideoExportDialog() {
 
   const isTrimmed = trimStart > 0 || trimEnd < duration;
   const trimmedDuration = trimEnd - trimStart;
-  const wantsMp4 = exportFormat === 'mp4';
-  const needsProcessing = isTrimmed || (wantsMp4 && !mimeType?.includes('mp4'));
-  const downloadExt = wantsMp4 ? '.mp4' : nativeExt;
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!blob) return;
-
-    if (!needsProcessing) {
-      downloadBlob(blob, buildFileName(downloadExt));
-      setDownloaded(true);
-      return;
-    }
-
-    setConverting(true);
-    setConvertProgress(0);
-    try {
-      const { convertVideo } = await import('../../services/videoConverter');
-      const result = await convertVideo(blob, {
-        format: wantsMp4 ? 'mp4' : 'webm',
-        trimStart: isTrimmed ? trimStart : undefined,
-        trimEnd: isTrimmed ? trimEnd : undefined,
-        onProgress: setConvertProgress,
-      });
-      downloadBlob(result, buildFileName(downloadExt));
-      setDownloaded(true);
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Export failed.');
-    } finally {
-      setConverting(false);
-    }
+    downloadBlob(blob, buildFileName());
+    setDownloaded(true);
   };
 
   const handleRecordNew = () => {
@@ -241,11 +209,6 @@ export function VideoExportDialog() {
     }
     dismissVideoRecording();
   };
-
-  let buttonLabel = 'Download';
-  if (converting) buttonLabel = 'Processing...';
-  else if (downloaded) buttonLabel = 'Downloaded';
-  else if (needsProcessing) buttonLabel = isTrimmed && wantsMp4 ? 'Trim & Convert' : isTrimmed ? 'Trim & Download' : 'Convert & Download';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={handleClose}>
@@ -279,49 +242,23 @@ export function VideoExportDialog() {
           <TrimBar duration={duration} trimStart={trimStart} trimEnd={trimEnd} onTrimChange={handleTrimChange} />
         )}
 
-        {/* Info + Format */}
+        {/* Info */}
         <div className="flex items-center gap-4 text-xs text-zinc-400">
           <span>
             Duration: {formatDurationMSS(trimmedDuration)}
             {isTrimmed && <span className="ml-1 text-blue-400">(trimmed)</span>}
           </span>
           {blob && <span>Size: {formatFileSize(blob.size)}</span>}
-          <label className="flex items-center gap-1.5">
-            <span>Export as:</span>
-            <select
-              value={exportFormat}
-              onChange={(e) => setExportFormat(e.target.value as 'native' | 'mp4')}
-              className="rounded bg-white/8 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
-              disabled={converting}
-            >
-              <option value="native">{formatMimeType(mimeType)}</option>
-              {!mimeType?.includes('mp4') && <option value="mp4">MP4 (H.264 + AAC)</option>}
-            </select>
-          </label>
+          <span>Format: {formatMimeType(mimeType)}</span>
         </div>
-
-        {/* Processing progress */}
-        {converting && (
-          <div className="flex flex-col gap-1">
-            <div className="text-[11px] text-zinc-400">
-              {convertProgress < 0.05 ? 'Loading processor...' : `Processing... ${Math.round(convertProgress * 100)}%`}
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-blue-500 transition-all duration-300"
-                style={{ width: `${Math.max(2, convertProgress * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
-          <Button variant="ghost" size="sm" onClick={handleRecordNew} disabled={converting}>
+          <Button variant="ghost" size="sm" onClick={handleRecordNew}>
             Record New
           </Button>
-          <Button variant="primary" size="sm" onClick={() => void handleDownload()} disabled={converting}>
-            {buttonLabel}
+          <Button variant="primary" size="sm" onClick={handleDownload}>
+            {downloaded ? 'Downloaded' : 'Download'}
           </Button>
         </div>
       </div>

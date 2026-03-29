@@ -366,23 +366,17 @@ export function AddLayerPanel() {
     }
   }, [audioTargetTracks, isOpen, project, selectWindow, targetTrackName]);
 
-  const extractPeaks = useCallback(async (blob: Blob, barCount: number, ctxStartTime?: number, ctxEndTime?: number) => {
+  const extractPeaks = useCallback(async (blob: Blob, barCount: number) => {
     try {
       const ctx = new AudioContext();
       const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
       const data = buf.getChannelData(0);
-
-      // Only analyze the context window portion of the blob (blob starts at project time 0)
-      const rangeStartSample = ctxStartTime != null ? Math.floor(ctxStartTime * buf.sampleRate) : 0;
-      const rangeEndSample = ctxEndTime != null ? Math.min(Math.floor(ctxEndTime * buf.sampleRate), data.length) : data.length;
-      const rangeLength = rangeEndSample - rangeStartSample;
-
-      const step = Math.max(1, Math.floor(rangeLength / barCount));
+      const step = Math.max(1, Math.floor(data.length / barCount));
       const peaks: number[] = [];
       for (let i = 0; i < barCount; i++) {
         let max = 0;
-        const start = rangeStartSample + i * step;
-        const end = Math.min(start + step, rangeEndSample);
+        const start = i * step;
+        const end = Math.min(start + step, data.length);
         for (let j = start; j < end; j++) {
           const abs = Math.abs(data[j]);
           if (abs > max) max = abs;
@@ -401,39 +395,22 @@ export function AddLayerPanel() {
     if (!contextWindow) return;
     setPreviewState('loading');
     try {
-      const blob = await extractContextAudioLazy(contextWindow);
+      // trimToContext: blob spans [0, ctxDuration] with no leading silence
+      const blob = await extractContextAudioLazy(contextWindow, { trimToContext: true });
       if (!blob) { setPreviewState('idle'); return; }
 
-      // Extract waveform peaks only for the context window portion (blob starts at time 0)
-      const peaks = await extractPeaks(blob, 80, contextWindow.startTime, contextWindow.endTime);
+      const peaks = await extractPeaks(blob, 80);
       setWaveformPeaks(peaks);
 
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;
       const audio = new Audio(url);
       previewAudioRef.current = audio;
-
-      const ctxDuration = contextWindow.endTime - contextWindow.startTime;
-      audio.onloadedmetadata = () => {
-        // Seek past the leading silence to context window start
-        audio.currentTime = contextWindow.startTime;
-        setPreviewDuration(ctxDuration);
-      };
+      audio.onloadedmetadata = () => setPreviewDuration(audio.duration);
       audio.onended = () => stopPreview();
       audio.onerror = () => stopPreview();
-
-      const ctxEnd = contextWindow.endTime;
-      const ctxStart = contextWindow.startTime;
       scrubIntervalRef.current = window.setInterval(() => {
-        if (!previewAudioRef.current) return;
-        const cur = previewAudioRef.current.currentTime;
-        // Auto-stop when reaching context window end
-        if (cur >= ctxEnd) {
-          stopPreview();
-          return;
-        }
-        // Display time relative to context window start
-        setPreviewCurrentTime(cur - ctxStart);
+        if (previewAudioRef.current) setPreviewCurrentTime(previewAudioRef.current.currentTime);
       }, 100);
       await audio.play();
       setPreviewState('playing');
@@ -444,21 +421,18 @@ export function AddLayerPanel() {
 
   const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const t = Number(e.target.value);
-    // t is context-relative; convert to absolute blob time
-    const absTime = t + (contextWindow?.startTime ?? 0);
-    if (previewAudioRef.current) previewAudioRef.current.currentTime = absTime;
+    if (previewAudioRef.current) previewAudioRef.current.currentTime = t;
     setPreviewCurrentTime(t);
-  }, [contextWindow]);
+  }, []);
 
   const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!previewDuration || previewState === 'idle') return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const relativeT = ratio * previewDuration; // context-relative time
-    const absTime = relativeT + (contextWindow?.startTime ?? 0); // absolute blob time
-    if (previewAudioRef.current) previewAudioRef.current.currentTime = absTime;
+    const relativeT = ratio * previewDuration;
+    if (previewAudioRef.current) previewAudioRef.current.currentTime = relativeT;
     setPreviewCurrentTime(relativeT);
-  }, [previewDuration, previewState, contextWindow]);
+  }, [previewDuration, previewState]);
 
   // Draggable selection mask on the context waveform
   const maskDragRef = useRef<{ edge: 'left' | 'right' | 'move'; startX: number; origStart: number; origEnd: number } | null>(null);

@@ -19,17 +19,30 @@ export interface ContextWindow {
   endTime: number;
 }
 
+export interface ExtractOptions {
+  /**
+   * When true, the returned blob spans [0, ctxDuration] instead of [0, ctxEnd].
+   * Audio is shifted so sample 0 = ctxStart — no leading silence.
+   * Use for preview playback.
+   *
+   * When false (default), the blob spans [0, ctxEnd] with sample 0 = project
+   * time 0, required by the backend for repainting_start/end alignment.
+   */
+  trimToContext?: boolean;
+}
+
 /**
- * Render all ready clips that overlap `contextWindow` into a single mixed WAV blob
- * whose time axis starts at project time 0 (not ctxStart).
+ * Render all ready clips that overlap `contextWindow` into a single mixed WAV blob.
  *
- * The backend assumes src_audio sample 0 = project time 0, so we must produce
- * a blob that spans [0, ctxEnd] to keep repainting_start / repainting_end
- * (which use absolute project times) aligned with the audio content.
+ * By default (trimToContext=false), the blob spans [0, ctxEnd] for backend alignment.
+ * With trimToContext=true, the blob spans [0, ctxDuration] with no leading silence.
  *
  * Returns null if no clips have audio in the context window range.
  */
-export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | null> {
+export async function extractContextAudio(
+  ctx: ContextWindow,
+  options?: ExtractOptions,
+): Promise<Blob | null> {
   const store = useProjectStore.getState();
   const project = store.project;
   if (!project) return null;
@@ -38,8 +51,11 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
   const ctxEnd = ctx.endTime;
   if (ctxEnd <= ctxStart) return null;
 
+  const trimToContext = options?.trimToContext ?? false;
+  const timeOffset = trimToContext ? ctxStart : 0;
+
   const sampleRate = 48000;
-  const frameLength = Math.ceil(ctxEnd * sampleRate);
+  const frameLength = Math.ceil((ctxEnd - timeOffset) * sampleRate);
   const offlineCtx = new OfflineAudioContext(2, frameLength, sampleRate);
 
   const soloActive = project.tracks.some((t) => t.soloed);
@@ -104,7 +120,7 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
           if (overlapStart <= segTimelineStart) {
             // Context includes segment start — schedule normally
             source.start(
-              segTimelineStart,
+              segTimelineStart - timeOffset,
               audioOffset + seg.sourceStart,
               sourceDur,
             );
@@ -114,7 +130,7 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
             const fraction = elapsed / targetDur;
             const sourceSeek = fraction * sourceDur;
             source.start(
-              overlapStart,
+              overlapStart - timeOffset,
               audioOffset + seg.sourceStart + sourceSeek,
               sourceDur - sourceSeek,
             );
@@ -147,7 +163,7 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
           } else {
             srcOffset = audioOffset + clip.startTime * rate;
           }
-          source.start(clip.startTime, srcOffset, bufferDuration);
+          source.start(clip.startTime - timeOffset, srcOffset, bufferDuration);
         } else {
           // Context starts mid-clip — seek into it
           const seekOffset = overlapStart - clip.startTime;
@@ -159,7 +175,7 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
           } else {
             srcOffset = audioOffset + clip.startTime * rate + bufferSeek;
           }
-          source.start(overlapStart, srcOffset, bufferRemaining);
+          source.start(overlapStart - timeOffset, srcOffset, bufferRemaining);
         }
         anyScheduled = true;
       }

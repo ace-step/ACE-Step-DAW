@@ -44,7 +44,8 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task from the t
 - Keep changes focused — don't refactor unrelated code
 - All code must be in English (comments, variable names, docs)
 - Follow existing patterns in the codebase
-- For UI tasks, read `.claude/references/interaction-design.md` first
+- For UI tasks, read `.claude/references/interaction-design.md` AND `.claude/references/design-patterns.md` first
+- For UI tasks, verify design quality: no hardcoded colors, DAW-appropriate density (p-1/p-2 not p-4), correct surface hierarchy
 - For store/API tasks, read `.claude/references/store-api.md` first
 
 ## Return Format

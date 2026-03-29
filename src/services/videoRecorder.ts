@@ -32,11 +32,8 @@ export interface VideoRecorderOptions {
 }
 
 /**
- * Ordered by preference — first supported type wins.
  * WebM (VP9) is preferred because it handles dynamic content (scrolling,
- * animations) more reliably than Chrome's MP4 MediaRecorder, which can
- * produce glitchy output with rapid frame changes. MP4 export is offered
- * as a post-recording conversion option via ffmpeg.wasm.
+ * animations) more reliably than Chrome's MP4 MediaRecorder.
  */
 const MIME_PREFERENCES = [
   'video/webm;codecs=vp9,opus',
@@ -53,7 +50,6 @@ function selectMimeType(): string | null {
   return null;
 }
 
-/** Lazily created, reused across recordings to avoid hitting the browser's AudioContext limit. */
 let _sharedMixCtx: AudioContext | null = null;
 function getOrCreateMixContext(): AudioContext {
   if (!_sharedMixCtx || _sharedMixCtx.state === 'closed') {
@@ -78,10 +74,9 @@ export class VideoRecorderService {
   private _mixNodes: AudioNode[] = [];
   private _durationTimer: ReturnType<typeof setInterval> | null = null;
   private _startTime = 0;
+  private _stopped = false;
 
   onStateChange: ((state: VideoRecorderState) => void) | null = null;
-
-  // ── Public API ─────────────────────────────────────────────
 
   static isSupported(): boolean {
     return (
@@ -96,11 +91,6 @@ export class VideoRecorderService {
     return this._state;
   }
 
-  /**
-   * Start recording.
-   * @param audioStream  MediaStream from AudioEngine.getAudioStream()
-   * @param options      Optional quality settings
-   */
   async startRecording(
     audioStream: MediaStream,
     options: VideoRecorderOptions = {},
@@ -116,15 +106,13 @@ export class VideoRecorderService {
     }
 
     this._setState({ status: 'requesting', duration: 0, blob: null, mimeType: null, error: null });
+    this._stopped = false;
 
     // 1. Request tab capture
     let displayStream: MediaStream;
     try {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          frameRate: options.frameRate ?? 30,
-        },
-        // preferCurrentTab is Chrome-specific; cast to allow it
+        video: { frameRate: options.frameRate ?? 30 },
         preferCurrentTab: true,
         audio: false,
       } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean });
@@ -137,35 +125,31 @@ export class VideoRecorderService {
     this._displayStream = displayStream;
     this._micStream = options.micStream ?? null;
 
-    // 2. Build audio track — mix DAW output + optional mic via Web Audio API
+    // 2. Build audio — mix DAW output + optional mic
     let finalAudioTracks: MediaStreamTrack[];
     if (this._micStream) {
       const mixCtx = getOrCreateMixContext();
       const dest = mixCtx.createMediaStreamDestination();
-
       const dawSource = mixCtx.createMediaStreamSource(audioStream);
       dawSource.connect(dest);
-
       const micSource = mixCtx.createMediaStreamSource(this._micStream);
       const micGain = mixCtx.createGain();
       micGain.gain.value = options.micVolume ?? 1;
       micSource.connect(micGain);
       micGain.connect(dest);
-
-      // Track nodes for cleanup (disconnect, not close the shared context)
       this._mixNodes = [dawSource, micSource, micGain, dest];
       finalAudioTracks = dest.stream.getAudioTracks();
     } else {
       finalAudioTracks = audioStream.getAudioTracks();
     }
 
-    // 3. Combine video + mixed audio
+    // 3. Combine video + audio
     const combinedStream = new MediaStream([
       ...displayStream.getVideoTracks(),
       ...finalAudioTracks,
     ]);
 
-    // 4. Create MediaRecorder
+    // 4. Create MediaRecorder — NO timeslice to ensure a single valid blob
     this._chunks = [];
     const recorder = new MediaRecorder(combinedStream, {
       mimeType,
@@ -178,93 +162,60 @@ export class VideoRecorderService {
     };
 
     recorder.onstop = () => {
-      // Guard: onstop might fire twice (auto-stop from track end + our stop call)
-      if (this._state.status === 'done' || this._state.status === 'idle') return;
+      if (this._stopped) return;
+      this._stopped = true;
+      this._stopDurationTimer();
       const blob = new Blob(this._chunks, { type: mimeType });
       this._chunks = [];
-      this._cleanup();
-      this._setState({ status: 'done', blob, mimeType });
+      this._cleanupStreams();
+      if (blob.size > 0) {
+        this._setState({ status: 'done', blob, mimeType });
+      } else {
+        this._setState({ status: 'error', error: 'Recording produced no data.' });
+      }
     };
 
     recorder.onerror = () => {
-      // Guard: might fire after we already transitioned
-      if (this._state.status === 'done' || this._state.status === 'idle') return;
-      this._finalizeBlobAndDone(mimeType);
+      if (this._stopped) return;
+      this._stopped = true;
+      this._stopDurationTimer();
+      this._cleanupStreams();
+      this._setState({ status: 'error', error: 'Recording failed unexpectedly.' });
     };
 
-    // Handle user stopping screen share via browser UI ("Stop sharing" button).
-    // The track ends immediately — we must flush remaining data before stopping.
-    displayStream.getVideoTracks().forEach((track) => {
-      track.addEventListener('ended', () => {
-        if (this._state.status !== 'recording') return;
-        // Clear timer immediately
-        if (this._durationTimer) {
-          clearInterval(this._durationTimer);
-          this._durationTimer = null;
-        }
-        this._setState({ status: 'stopping' });
-        // Flush any buffered data, then stop
-        try {
-          if (this._recorder?.state === 'recording') {
-            this._recorder.requestData(); // flush last chunk
-            this._recorder.stop();
-          } else {
-            // Recorder already auto-stopped — build blob from what we have
-            this._finalizeBlobAndDone(mimeType);
-          }
-        } catch {
-          this._finalizeBlobAndDone(mimeType);
-        }
-      });
-    });
-
-    // 5. Start
-    recorder.start(1000); // collect data every second
+    // 5. Start — no timeslice argument, data is collected as one chunk on stop()
+    recorder.start();
     this._recorder = recorder;
     this._startTime = Date.now();
     this._startDurationTimer();
     this._setState({ status: 'recording' });
   }
 
-  /** Stop recording and produce the final blob. */
   stopRecording(): void {
-    if (this._state.status !== 'recording') return;
-    if (this._durationTimer) {
-      clearInterval(this._durationTimer);
-      this._durationTimer = null;
-    }
+    if (this._state.status !== 'recording' || this._stopped) return;
     this._setState({ status: 'stopping' });
+    this._stopDurationTimer();
+    // stop() triggers ondataavailable (with all data) then onstop
     try {
-      if (this._recorder?.state === 'recording') {
-        this._recorder.requestData(); // flush buffered data
-        this._recorder.stop();
-      }
+      this._recorder?.stop();
     } catch {
-      // Recorder may already be inactive — finalize from chunks
-      this._finalizeBlobAndDone(this._state.mimeType ?? 'video/webm');
+      // Already inactive — onstop should have/will fire
     }
   }
 
-  /** Reset state back to idle, clearing any recorded blob. */
   dismiss(): void {
-    this._cleanup();
+    this._stopped = true;
+    this._stopDurationTimer();
+    this._cleanupStreams();
+    if (this._recorder) {
+      try { if (this._recorder.state !== 'inactive') this._recorder.stop(); } catch { /* */ }
+      this._recorder = null;
+    }
+    this._chunks = [];
     this._setState({ status: 'idle', duration: 0, blob: null, mimeType: null, error: null });
   }
 
   // ── Private ────────────────────────────────────────────────
-
-  /** Fallback: build blob from whatever chunks we have and transition to done. */
-  private _finalizeBlobAndDone(mimeType: string): void {
-    if (this._state.status === 'done' || this._state.status === 'idle') return;
-    const blob = new Blob(this._chunks, { type: mimeType });
-    this._chunks = [];
-    this._cleanup();
-    if (blob.size > 0) {
-      this._setState({ status: 'done', blob, mimeType });
-    } else {
-      this._setState({ status: 'error', error: 'Recording produced no data.' });
-    }
-  }
 
   private _setState(patch: Partial<VideoRecorderState>): void {
     this._state = { ...this._state, ...patch };
@@ -278,30 +229,22 @@ export class VideoRecorderService {
     }, 1000);
   }
 
-  private _cleanup(): void {
+  private _stopDurationTimer(): void {
     if (this._durationTimer) {
       clearInterval(this._durationTimer);
       this._durationTimer = null;
     }
-    // Ensure the MediaRecorder is stopped so the final dataavailable fires
-    if (this._recorder) {
-      const state = this._recorder.state;
-      if (state === 'recording' || state === 'paused') {
-        try { this._recorder.stop(); } catch { /* already inactive */ }
-      }
-      this._recorder = null;
-    }
-    // Stop all display tracks (removes browser "sharing" indicator)
+  }
+
+  /** Clean up streams and audio nodes — does NOT touch the recorder. */
+  private _cleanupStreams(): void {
     this._displayStream?.getTracks().forEach((t) => t.stop());
     this._displayStream = null;
-    // Stop mic stream tracks
     this._micStream?.getTracks().forEach((t) => t.stop());
     this._micStream = null;
-    // Disconnect mixing nodes (context is reused, not closed)
     for (const node of this._mixNodes) {
-      try { node.disconnect(); } catch { /* already disconnected */ }
+      try { node.disconnect(); } catch { /* */ }
     }
     this._mixNodes = [];
-    this._chunks = [];
   }
 }

@@ -736,13 +736,15 @@ async function generateClipInternal(
       model: project.generationDefaults.model,
     } as LegoTaskParams;
 
-    logger.debug(
-      `[generateClip] params: audio_duration=${audioDuration}`,
+    // Always log critical generation params for debugging
+    console.log(
+      `[generateClip] audio_duration=${audioDuration}`,
       `repainting=[${repaintStart.toFixed(2)}, ${repaintEnd.toFixed(2)}]`,
       `isChunk=${isChunkMode}`,
       `srcBlobSize=${srcAudioBlob.size}`,
       `chunk_mask_mode=${options.chunkMaskMode ?? 'unset'}`,
-      ctxOffset > 0 ? `ctxOffset=${ctxOffset}` : '',
+      `ctxOffset=${ctxOffset}`,
+      `instruction=${instruction}`,
     );
 
     // Per-generation seed override from advanced params
@@ -1405,11 +1407,15 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         // trimToContext: blob spans [0, ctxDuration], no leading silence
         contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
         const ctxDur = opts.contextWindow.endTime - opts.contextWindow.startTime;
-        logger.debug(
+        console.log(
           `[AddLayer] contextBlob: size=${contextBlob?.size ?? 0}`,
-          `expected duration=${ctxDur.toFixed(1)}s`,
+          `expectedDur=${ctxDur.toFixed(1)}s`,
           `ctx=[${opts.contextWindow.startTime}, ${opts.contextWindow.endTime}]`,
+          `clipStart=${opts.startTime} clipDur=${opts.duration}`,
+          `chunkMaskMode=${opts.chunkMaskMode}`,
         );
+      } else {
+        console.log(`[AddLayer] NO contextWindow, forceSilence=true`);
       }
 
       const outcome = await generateClipInternal(clipId, contextBlob, {

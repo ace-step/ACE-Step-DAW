@@ -1,254 +1,393 @@
 ---
 name: music-theory-engine
-version: 2.0.0
+version: 1.0.0
 description: |
-  Process-oriented music theory skill for AI-assisted composition in ACE-Step-DAW.
-  Instead of dumping all theory upfront, this skill teaches Claude HOW to research,
-  analyze, and apply music theory for a specific composition task.
-  Invoke when composing, arranging, or analyzing music.
+  Comprehensive music theory reference for AI-assisted composition in ACE-Step-DAW.
+  Provides scales, chords, progressions, voice leading rules, rhythm patterns, and
+  genre conventions. Load this skill when composing, arranging, or analyzing music.
+  Invoke with /music-theory-engine or reference automatically from compose/jam skills.
 ---
 
-# Music Theory Engine — Process-Oriented
+# Music Theory Engine
 
-> This skill is a **process guide**, not a knowledge dump.
-> It teaches you how to research the right theory for each task,
-> not memorize everything upfront.
+> Reference skill for Claude Code music composition. Use this data when generating
+> melodies, chord progressions, bass lines, drum patterns, or full arrangements.
 
 ---
 
-## Core Principle
+## 1. Pitch Reference
 
-**Real composers don't memorize all theory — they research what they need for each piece.**
+### MIDI Note Numbers (Octave 4 = Middle C region)
 
-Your workflow for any composition task:
+| Note | Oct 0 | Oct 1 | Oct 2 | Oct 3 | Oct 4 | Oct 5 | Oct 6 | Oct 7 |
+|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| C    | 12    | 24    | 36    | 48    | **60**| 72    | 84    | 96    |
+| C#/Db| 13    | 25    | 37    | 49    | 61    | 73    | 85    | 97    |
+| D    | 14    | 26    | 38    | 50    | 62    | 74    | 86    | 98    |
+| D#/Eb| 15    | 27    | 39    | 51    | 63    | 75    | 87    | 99    |
+| E    | 16    | 28    | 40    | 52    | 64    | 76    | 88    | 100   |
+| F    | 17    | 29    | 41    | 53    | 65    | 77    | 89    | 101   |
+| F#/Gb| 18    | 30    | 42    | 54    | 66    | 78    | 90    | 102   |
+| G    | 19    | 31    | 43    | 55    | 67    | 79    | 91    | 103   |
+| G#/Ab| 20    | 32    | 44    | 56    | 68    | 80    | 92    | 104   |
+| A    | 21    | 33    | 45    | 57    | 69    | 81    | 93    | 105   |
+| A#/Bb| 22    | 34    | 46    | 58    | 70    | 82    | 94    | 106   |
+| B    | 23    | 35    | 47    | 59    | 71    | 83    | 95    | 107   |
 
+**Strudel notation**: `c4` = MIDI 60, `a3` = MIDI 57. Sharps: `cs4`, Flats: `db4`.
+
+---
+
+## 2. Scales & Modes
+
+### Interval Formulas (semitones from root)
+
+| Scale | Intervals | Example in C | Character |
+|-------|-----------|-------------|-----------|
+| **Major (Ionian)** | 0 2 4 5 7 9 11 | C D E F G A B | Bright, happy |
+| **Natural Minor (Aeolian)** | 0 2 3 5 7 8 10 | C D Eb F G Ab Bb | Sad, dark |
+| **Harmonic Minor** | 0 2 3 5 7 8 11 | C D Eb F G Ab B | Exotic, tense |
+| **Melodic Minor (asc)** | 0 2 3 5 7 9 11 | C D Eb F G A B | Jazz minor |
+| **Dorian** | 0 2 3 5 7 9 10 | C D Eb F G A Bb | Minor but warm |
+| **Mixolydian** | 0 2 4 5 7 9 10 | C D E F G A Bb | Bluesy major |
+| **Lydian** | 0 2 4 6 7 9 11 | C D E F# G A B | Dreamy, floaty |
+| **Phrygian** | 0 1 3 5 7 8 10 | C Db Eb F G Ab Bb | Spanish, dark |
+| **Locrian** | 0 1 3 5 6 8 10 | C Db Eb F Gb Ab Bb | Unstable, rare |
+| **Pentatonic Major** | 0 2 4 7 9 | C D E G A | Folk, pop, safe |
+| **Pentatonic Minor** | 0 3 5 7 10 | C Eb F G Bb | Blues, rock |
+| **Blues** | 0 3 5 6 7 10 | C Eb F F# G Bb | Blues, rock |
+| **Whole Tone** | 0 2 4 6 8 10 | C D E F# G# A# | Dreamy, Debussy |
+| **Diminished HW** | 0 1 3 4 6 7 9 10 | C Db Eb E F# G A Bb | Jazz tension |
+| **Diminished WH** | 0 2 3 5 6 8 9 11 | C D Eb F Gb Ab A B | Over dim chords |
+| **Bebop Dominant** | 0 2 4 5 7 9 10 11 | C D E F G A Bb B | Jazz lines |
+| **Chromatic** | 0 1 2 3 4 5 6 7 8 9 10 11 | All notes | Passing tones |
+
+### Scale Selection by Genre
+
+| Genre | Primary Scales | Characteristic |
+|-------|---------------|----------------|
+| Pop | Major, Minor, Pentatonic | Stick to diatonic, minimal chromaticism |
+| Rock | Minor Pentatonic, Blues, Mixolydian | Blue notes (b3, b5, b7) |
+| Jazz | Dorian, Mixolydian, Melodic Minor, Diminished | Chromatic approach tones |
+| EDM | Minor, Phrygian, Harmonic Minor | Dark modes for tension |
+| Hip-Hop | Minor Pentatonic, Blues, Dorian | Sparse, pentatonic melodies |
+| R&B/Neo-Soul | Dorian, Mixolydian, Melodic Minor | Extensions, chromaticism |
+| Classical | Major, Minor (all forms), Modes | Full diatonic vocabulary |
+| Lo-Fi | Dorian, Major Pentatonic, Lydian | Warm, jazzy extensions |
+| Latin | Phrygian, Harmonic Minor, Mixolydian | Flamenco = Phrygian dominant |
+| Ambient | Lydian, Whole Tone, Pentatonic | Avoid strong resolutions |
+
+---
+
+## 3. Chord Construction
+
+### Triads
+
+| Quality | Formula | Example (C) | Strudel |
+|---------|---------|-------------|---------|
+| Major | 1 3 5 | C E G | `note("c3 e3 g3")` |
+| Minor | 1 b3 5 | C Eb G | `note("c3 eb3 g3")` |
+| Diminished | 1 b3 b5 | C Eb Gb | `note("c3 eb3 gb3")` |
+| Augmented | 1 3 #5 | C E G# | `note("c3 e3 gs3")` |
+| Sus2 | 1 2 5 | C D G | `note("c3 d3 g3")` |
+| Sus4 | 1 4 5 | C F G | `note("c3 f3 g3")` |
+
+### 7th Chords
+
+| Quality | Formula | Example (C) | Symbol | Strudel |
+|---------|---------|-------------|--------|---------|
+| Major 7 | 1 3 5 7 | C E G B | Cmaj7 | `note("c3 e3 g3 b3")` |
+| Minor 7 | 1 b3 5 b7 | C Eb G Bb | Cm7 | `note("c3 eb3 g3 bb3")` |
+| Dominant 7 | 1 3 5 b7 | C E G Bb | C7 | `note("c3 e3 g3 bb3")` |
+| Half-Dim 7 | 1 b3 b5 b7 | C Eb Gb Bb | Cm7b5 | `note("c3 eb3 gb3 bb3")` |
+| Diminished 7 | 1 b3 b5 bb7 | C Eb Gb A | Cdim7 | `note("c3 eb3 gb3 a3")` |
+| Min/Maj 7 | 1 b3 5 7 | C Eb G B | Cm(maj7) | `note("c3 eb3 g3 b3")` |
+
+### Extensions (add to 7th chords)
+
+| Extension | Interval | Adds | Common Usage |
+|-----------|----------|------|-------------|
+| 9 | 14 semitones (= 2 up octave) | D over C chord | Jazz, R&B, Neo-soul |
+| b9 | 13 semitones | Db over C chord | Altered dominant |
+| #9 | 15 semitones | D# over C chord | Hendrix chord, funk |
+| 11 | 17 semitones (= 5 up octave) | F over C chord | Modal jazz, sus sound |
+| #11 | 18 semitones | F# over C chord | Lydian sound, jazz |
+| 13 | 21 semitones (= 6 up octave) | A over C chord | Smooth jazz |
+| b13 | 20 semitones | Ab over C chord | Altered dominant |
+
+### Voicing Strategies
+
+**Close Position**: Notes within one octave. Dense, full sound.
 ```
-1. RESEARCH   → What does this genre/style actually sound like?
-2. ANALYZE    → What patterns, chords, rhythms define it?
-3. EXTRACT    → What are the 2-3 key principles I need?
-4. COMPOSE    → Apply those principles to create something new
-5. EVALUATE   → Does it sound right? Does it match the reference?
+Cmaj7 close: C3 E3 G3 B3
 ```
 
----
-
-## Phase 1: RESEARCH — Finding the Right Reference
-
-### How to Research a Genre or Style
-
-When asked to compose in a genre you need to understand better:
-
-1. **Search for theory analysis** of that genre:
-   - Search the web: `"{genre}" chord progressions analysis`
-   - Search the web: `"{genre}" song structure common patterns`
-   - Search the web: `"{genre}" rhythm patterns drum programming`
-   - Search the web: `"{genre}" bass line techniques`
-
-2. **Find specific reference songs** the user mentions or that define the genre:
-   - Search the web: `"{song name}" chord progression key BPM`
-   - Search the web: `"{song name}" music analysis breakdown`
-   - Look for sites like Hooktheory, Chordify, Ultimate Guitar for real analyses
-
-3. **Find Strudel/TidalCycles examples** in that style:
-   - Search the web: `site:strudel.cc "{genre}" OR "{style}"`
-   - Search the web: `TidalCycles "{genre}" pattern example`
-   - Search the web: `strudel music pattern "{genre}"`
-
-4. **Read the DAW's existing presets** for genre hints:
-   - Read `src/constants/generationPresets.ts` for genre-specific defaults
-
-### What to Extract from Research
-
-For each genre/style, identify these 5 elements:
-- **Key/Scale**: What key and scale is most common? (e.g., minor pentatonic for blues)
-- **Chord Language**: What chord types and progressions define it? (e.g., 7th chords for jazz)
-- **Rhythmic Feel**: Straight 8ths? Swing? Syncopated? What's the drum backbone?
-- **Texture**: Sparse or dense? What instruments? What register?
-- **Form**: How long are sections? What's the energy curve?
-
----
-
-## Phase 2: ANALYZE — Extracting Patterns from References
-
-### Chord Progression Analysis Process
-
-When you find a reference song's chords:
-
-1. **Identify the key** — what note feels like "home"?
-2. **Convert to Roman numerals** — this reveals the pattern independent of key
-   - In C major: C=I, Dm=ii, Em=iii, F=IV, G=V, Am=vi, Bdim=vii°
-   - In C minor (natural): Cm=i, Ddim=ii°, Eb=III, Fm=iv, Gm=v, Ab=VI, Bb=VII
-   - **Important**: In practice, minor keys use V (major) from harmonic minor for dominant function. In C minor: G major (V), not Gm (v). The raised 7th (B natural) creates the leading tone → tonic resolution.
-3. **Identify the function** of each chord:
-   - **Tonic** (I/i, vi/VI, iii/III): stability, home
-   - **Subdominant** (IV/iv, ii/ii°): movement, departure
-   - **Dominant** (V, vii°): tension, wants to resolve to tonic
-4. **Note the voicing** — are chords simple triads or extended (7ths, 9ths)?
-5. **Note the rhythm** — how many beats per chord? Any syncopation?
-
-### Melody Analysis Process
-
-When analyzing a reference melody:
-
-1. **Identify scale degrees used** — mostly pentatonic? Full diatonic? Chromatic passing tones?
-2. **Map the contour** — does it arch up then down? Descend? Oscillate?
-3. **Identify the motif** — what's the smallest repeating melodic idea (2-4 notes)?
-4. **Note rhythmic patterns** — long notes on strong beats? Syncopation?
-5. **Check chord-tone alignment** — are chord tones on strong beats?
-
-### Rhythm Analysis Process
-
-1. **Identify the pulse** — where do you tap your foot?
-2. **Map the kick pattern** — where are the bass drum hits?
-3. **Map the snare/clap** — typically beats 2 & 4 (backbeat) or elsewhere?
-4. **Map the hi-hat/ride** — what subdivision? (8ths, 16ths, triplets?)
-5. **Identify ghost notes** — soft hits between main beats
-6. **Note swing amount** — straight, light swing, hard swing?
-
----
-
-## Phase 3: EXTRACT — Distilling Principles
-
-### The "2-4 Principles" Rule
-
-For any composition task, distill your research into 2-4 key principles (default: 3).
-More than 4 leads to overconstrained, mechanical output. Fewer than 2 is too vague.
-Simple genres (punk, ambient) may need only 2. Complex genres (jazz, progressive) may need 4.
-
-**Example: Lo-Fi Hip-Hop**
-1. Jazz-influenced chords (7ths, 9ths) with Dorian color
-2. Laid-back drums (slightly behind the beat, ghost notes, 70-90 BPM)
-3. Sparse, pentatonic melody with lots of space and reverb/delay
-
-**Example: EDM Drop**
-1. Four-on-the-floor kick with off-beat hi-hats at 128 BPM
-2. Minor key, simple progression (often just 2 chords), heavy bass
-3. Energy contrast: stripped breakdown → full drop
-
-**Example: Jazz Ballad**
-1. Extended harmony (maj7, m9, 13) with smooth voice leading
-2. Rubato/free timing feel, brushes on drums, walking or pedal bass
-3. Melody uses chromatic approach tones, telling a story with dynamics
-
-### Output: Composition Brief
-
-After research and extraction, write a brief BEFORE composing:
-
+**Open/Drop-2**: Second voice from top dropped an octave. Piano/guitar standard.
 ```
-Genre: Lo-Fi Hip-Hop
-Key: C Dorian (C D Eb F G A Bb)
-BPM: 82
-Feel: Laid-back, nostalgic, warm
+Cmaj7 drop-2: G2 C3 E3 B3
+```
 
-Principle 1: Chord voicings — Cm9, Fm9, Dm7b5, G7b9 (i-iv-iiø-V7 in C minor, jazz extensions)
-Principle 2: Rhythm — Boom-bap kick pattern, ghost snares, lazy hi-hats at 0.2-0.4 velocity
-Principle 3: Texture — Rhodes/piano chords, sparse pentatonic melody, sub bass, vinyl crackle feel
+**Shell Voicing**: Root + 3rd + 7th only. Clean, jazz comping.
+```
+Cmaj7 shell: C3 E3 B3
+```
 
-Reference: Nujabes "Feather", J Dilla "Donuts"
+**Spread Voicing**: Wide intervals, orchestral. Root in bass, others spread.
+```
+Cmaj7 spread: C2 G3 B3 E4
+```
+
+**Rootless Voicing (jazz)**: Omit root (bass plays it). Upper extensions shine.
+```
+Cmaj9 rootless: E3 G3 B3 D4
 ```
 
 ---
 
-## Phase 4: COMPOSE — Applying Principles
+## 4. Chord Progressions by Genre
 
-### Construction Order
+### Pop & Rock
 
-Build from the ground up, each layer informed by research:
+| Name | Numerals | In C Major | Usage |
+|------|----------|-----------|-------|
+| **The Four Chords** | I - V - vi - IV | C G Am F | 80% of pop songs |
+| **Sensitive** | vi - IV - I - V | Am F C G | Emotional ballads |
+| **50s** | I - vi - IV - V | C Am F G | Doo-wop, retro |
+| **Andalusian** | i - VII - VI - V | Am G F E | Rock, flamenco |
+| **Axis** | I - IV - vi - V | C F Am G | Modern pop |
+| **Sad** | i - iv - VII - III | Am Dm G C | Minor pop |
+| **Rock Power** | I - bVII - IV | C Bb F | Classic rock |
 
-1. **Harmonic foundation** — chord progression (from analyzed patterns)
-2. **Rhythmic foundation** — drum pattern (from genre research)
-3. **Bass** — follows chords, uses genre-appropriate movement
-4. **Melody/lead** — uses extracted scale, respects contour principles
-5. **Texture/atmosphere** — pads, effects, fills (from reference analysis)
+### Jazz
 
-### Key Constraints (Always Apply)
+| Name | Numerals | In C Major | Usage |
+|------|----------|-----------|-------|
+| **ii-V-I Major** | Dm7 - G7 - Cmaj7 | ii-V-I | Foundation of jazz |
+| **ii-V-I Minor** | Dm7b5 - G7b9 - Cm7 | iiø-V7-i | Minor jazz |
+| **Turnaround** | Cmaj7 - Am7 - Dm7 - G7 | I-vi-ii-V | Loop/turnaround |
+| **Rhythm Changes** | Bb - Gm - Cm - F7 | I-vi-ii-V (Bb) | Bebop standards |
+| **Coltrane Changes** | Cmaj7 - Eb7 - Abmaj7 - B7 - Emaj7 - G7 | Giant steps pattern | Advanced |
+| **Tritone Sub** | Dm7 - Db7 - Cmaj7 | ii - bII7 - I | Smooth resolution |
+| **Modal Jazz** | Dm7 ×16 bars | One chord, one mode | So What, Maiden Voyage |
+| **Blues** | C7 - F7 - C7 - G7 - F7 - C7 | I7-IV7-I7-V7-IV7-I7 | 12-bar blues |
 
-These are universal — not genre-specific:
+### Electronic / EDM
 
-- **All pitched parts must be in the same key** — verify scale compatibility
-- **Bass notes land on chord roots at strong beats** — minimum harmonic anchor
-- **Bass register**: octave 2-3 (MIDI 36-71). Octave 1 (MIDI 24-35) is too low for most speakers
-- **Velocity must vary** — no flat velocity; use 0.3-0.9 range with natural variation
-  - Drums: 0.3-0.9 (ghost notes low, accents high)
-  - Pads/chords: 0.3-0.5 (sit back in the mix)
-  - Melody: 0.5-0.8 (expressive, varied)
-- **Leave space** — rests are musical; don't fill every beat
-- **Sound sources**: every pitched `note()` needs `.s("instrument")`. For drums, use `s("bd sd hh").bank("KitName")`
-- **Time signature matters**: default is 4/4 (4 beats per cycle). For 3/4 waltz, use 3-beat patterns. For 6/8, subdivide accordingly
+| Name | Numerals | In A Minor | Usage |
+|------|----------|-----------|-------|
+| **EDM Anthem** | i - III - VII - VI | Am C G F | Progressive house |
+| **Dark Trance** | i - VI - III - VII | Am F C G | Trance, dark EDM |
+| **Minimal** | i - iv | Am Dm (loop) | Techno, minimal |
+| **Euphoric** | I - V - vi - IV | (Major key) | Big room, euphoric |
 
-### Strudel Syntax Essentials (Minimum Viable)
+### Hip-Hop & R&B
 
-Only the syntax you need to know to output patterns:
+| Name | Numerals | In C Minor | Usage |
+|------|----------|-----------|-------|
+| **Trap Minor** | i - VI - VII | Cm Ab Bb | Trap, drill |
+| **Boom Bap** | i - iv - VII - III | Cm Fm Bb Eb | 90s hip-hop |
+| **Neo-Soul** | IVmaj7 - iii7 - vi7 - ii7 | Fmaj7 Em7 Am7 Dm7 | Erykah Badu style |
+| **Lo-Fi** | ii7 - V7 - Imaj7 - vi7 | Dm7 G7 Cmaj7 Am7 | Lo-fi hip-hop |
 
-```javascript
-note("c4 e4 g4")           // named notes (sharps: cs4, flats: eb4)
-s("bd sd hh").bank("RolandTR808")  // drum sounds
-stack(part1, part2, part3)  // layer simultaneously
-note("c4 [d4 e4] f4 g4")   // subdivide: d4+e4 share one beat
-note("c4@2 e4 g4")          // c4 held for 2 beats
-note("c4 ~ e4 ~")           // ~ = rest
-note("[c3,e3,g3]")          // comma = chord (simultaneous notes)
-.velocity("0.7 0.5 0.8")   // per-note dynamics
-.lpf(800).room(0.3)         // filter, reverb
-.fast(2) / .slow(2)         // speed transform
+---
+
+## 5. Voice Leading Rules
+
+### Core Principles
+
+1. **Smooth Motion**: Move each voice by the smallest interval possible (step > skip > leap)
+2. **Common Tones**: Keep shared notes between chords in the same voice
+3. **Contrary Motion**: When bass moves up, upper voices move down (and vice versa)
+4. **Resolve Tendency Tones**:
+   - Leading tone (7th degree) → resolves up to tonic
+   - 4th degree → resolves down to 3rd
+   - b7 of dominant → resolves down by half step
+5. **Avoid Parallel 5ths/Octaves**: Two voices moving in parallel perfect 5ths or octaves sounds hollow
+
+### Practical Voice Leading Examples
+
+**C → F (I → IV)**:
+```
+Bad:  C3 E3 G3 → F3 A3 C4  (all voices leap)
+Good: C3 E3 G3 → C3 F3 A3  (C stays, E→F step, G→A step)
 ```
 
-**Critical Strudel gotchas:**
-- `<a b c>` = **alternation** (one per cycle, rotating) — NOT a chord!
-- `[a,b,c]` = **chord** (simultaneous) — use commas
-- `[a b c]` = **subdivision** (squeeze into one beat) — no commas
-- Sharps: `cs4` `fs4` (NOT `c#4`) — Strudel uses `s` suffix
-- Flats: `eb4` `bb4` (NOT `e-flat4`) — Strudel uses `b` suffix
+**Dm7 → G7 → Cmaj7 (ii-V-I)**:
+```
+Voice 1: D3  → D3  → C3   (common tone, then step down)
+Voice 2: F3  → F3  → E3   (common tone, then step down)
+Voice 3: A3  → G3  → G3   (step down, common tone)
+Voice 4: C4  → B3  → B3   (step down, common tone)
+```
 
-For advanced Strudel syntax, **search the docs**:
-- Search the web: `strudel.cc documentation {specific feature}`
+### Bass Motion Patterns
 
-### Key Transposition Process
-
-When transposing to a different key:
-
-1. Calculate the interval in semitones (e.g., C→Eb = +3)
-2. Shift every note name by that interval
-3. Be consistent with enharmonic spelling: in flat keys use flats (eb, bb), in sharp keys use sharps (cs, fs)
-4. Verify: after transposition, check all notes still belong to the target scale
-
----
-
-## Phase 5: EVALUATE — Quality Check
-
-After composing, verify against your 2-4 principles:
-
-1. **Does it match the genre feel?** — Compare against research/reference
-2. **Are the chords voiced correctly?** — Check intervals, no wrong notes
-3. **Does the rhythm groove?** — Imagine it playing; does the kick/snare pattern feel right?
-4. **Is it musical?** — Space, dynamics, contour — not just "correct notes"
-5. **Would the user recognize the genre?** — If asked for lo-fi, does it sound lo-fi?
-6. **Does the code run?** — If Strudel evaluation fails, read the error, fix syntax, re-evaluate
-
-If any check fails, go back to the relevant phase and refine.
+| Pattern | Description | Genre |
+|---------|-------------|-------|
+| **Root Motion** | Play chord root on beat 1 | All genres |
+| **Root-Fifth** | Root on 1, fifth on 3 | Rock, pop |
+| **Walking Bass** | Stepwise through chord tones + approach | Jazz, blues |
+| **Pedal Bass** | Stay on one note regardless of chord | EDM, ambient |
+| **Octave Bounce** | Root low → root high | Disco, funk |
+| **Syncopated** | Off-beat root hits | Funk, hip-hop |
 
 ---
 
-## When You Don't Know Something
+## 6. Rhythm Patterns
 
-**Don't guess — research.**
+### Drum Patterns by Genre
 
-| Situation | Action |
-|-----------|--------|
-| Don't know the genre's typical chords | Search the web: `"{genre}" common chord progressions` |
-| Don't know the right scale | Search the web: `"{genre}" scales modes used` |
-| Don't know the drum pattern | Search the web: `"{genre}" drum pattern programming` |
-| Don't know the BPM range | Search the web: `"{genre}" typical BPM tempo` |
-| User references a specific song | Search the web: `"{song}" chords key BPM analysis` |
-| Don't know a Strudel feature | Search the web: `strudel.cc {feature name}` |
-| Not sure about a voicing | Reason from intervals: root + intervals in semitones |
+**Note**: In Strudel, use `s("bd sd hh oh")` with `.bank("RolandTR808")` or similar.
 
-**The MIDI pitch table is the ONE thing worth memorizing:**
-Middle C = `c4` = MIDI 60. Each octave = 12 semitones. Sharps use `s` (not `#`): `cs4`, `fs4`.
+#### Pop/Rock (4/4, 100-130 BPM)
+```
+Kick:  x . . . | x . . . | x . . . | x . x .
+Snare: . . x . | . . x . | . . x . | . . x .
+HiHat: x x x x | x x x x | x x x x | x x x x
+```
+
+#### Hip-Hop / Boom Bap (4/4, 80-95 BPM)
+```
+Kick:  x . . x | . . x . | x . . x | . . . .
+Snare: . . . . | x . . . | . . . . | x . . .
+HiHat: x . x . | x . x . | x . x . | x . x .
+```
+
+#### Trap (4/4, 130-160 BPM, half-time feel)
+```
+Kick:  x . . . | . . . x | . x . . | . . . .
+Snare: . . . . | x . . . | . . . . | x . . .
+HiHat: xxxxxxxx|xxxxxxxx | xxxx.xxx | xxxxxxxx  (rapid 32nds with gaps)
+```
+
+#### House (4/4, 120-130 BPM)
+```
+Kick:  x . . . | x . . . | x . . . | x . . .  (four on the floor)
+Clap:  . . . . | x . . . | . . . . | x . . .
+HiHat: . . x . | . . x . | . . x . | . . x .  (off-beat)
+```
+
+#### Jazz Swing (4/4, 120-180 BPM, triplet feel)
+```
+Ride:   x . a . | x . a . | x . a . | x . a .  (swing pattern)
+HiHat:  . . x . | . . x . | . . x . | . . x .  (beats 2 & 4, foot)
+Kick:   (feathered, light on 1 and 3)
+Snare:  (comping - irregular accents)
+```
+
+#### Lo-Fi (4/4, 70-90 BPM)
+```
+Kick:  x . . . | . . x . | x . . . | . . x .
+Snare: . . x . | . . . . | . . x . | . . . x  (lazy, slightly behind)
+HiHat: x . x . | x . x . | x . x . | x x x .  (gentle variation)
+```
+
+### Velocity Guidelines
+
+| Dynamic | Velocity (0-1) | Usage |
+|---------|---------------|-------|
+| Ghost note | 0.15 - 0.30 | Subtle texture, hi-hat ghost |
+| Soft (p) | 0.30 - 0.50 | Verse, quiet sections |
+| Medium (mf) | 0.50 - 0.70 | Normal playing |
+| Loud (f) | 0.70 - 0.85 | Chorus, emphasis |
+| Accent (ff) | 0.85 - 1.00 | Hits, downbeats, sforzando |
+
+**Humanization**: Vary velocity by ±0.05-0.10 from target. Snare ghost notes at 0.2, main hits at 0.75.
 
 ---
 
-## Related Skills
+## 7. Song Structure Templates
 
-- **strudel-maestro** — How to write Strudel patterns (syntax, prototyping, refinement)
-- **compose** — Full song composition workflow that orchestrates this skill and strudel-maestro
+### Pop Song (3-4 minutes)
+
+```
+Intro:     4 bars   (establish groove, sparse)
+Verse 1:   8 bars   (melody + lyrics, low energy)
+Pre-Chorus: 4 bars  (build tension, rising energy)
+Chorus:    8 bars   (hook, full energy, memorable melody)
+Verse 2:   8 bars   (same chords, new melody variation)
+Pre-Chorus: 4 bars
+Chorus:    8 bars
+Bridge:    8 bars   (contrast — different chords, mood shift)
+Chorus:    8 bars   (final, biggest energy)
+Outro:     4 bars   (wind down)
+Total:     ~64 bars ≈ 3:30 at 120 BPM
+```
+
+### EDM Track (5-6 minutes)
+
+```
+Intro:     16 bars  (ambient, filtered)
+Build:     16 bars  (add elements, rising filter)
+Drop 1:    16 bars  (full energy, main hook)
+Breakdown: 16 bars  (strip back, atmospheric)
+Build 2:   8 bars   (shorter, more intense)
+Drop 2:    16 bars  (variation of drop 1, extra elements)
+Outro:     16 bars  (strip away elements)
+Total:     ~104 bars ≈ 6:30 at 128 BPM
+```
+
+### Hip-Hop Beat (2-3 minutes)
+
+```
+Intro:     4 bars   (sample or ambient)
+Verse 1:   16 bars  (main beat, sparse melody)
+Hook:      8 bars   (catchy, memorable)
+Verse 2:   16 bars  (beat variation)
+Hook:      8 bars
+Bridge:    8 bars   (half-time or breakdown)
+Hook:      8 bars
+Outro:     4 bars
+Total:     ~72 bars ≈ 3:00 at 90 BPM
+```
+
+### Jazz Standard (head-solo-head)
+
+```
+Head In:   32 bars  (melody statement, AABA or ABAC)
+Solo 1:    32 bars  (over changes, instrument 1)
+Solo 2:    32 bars  (over changes, instrument 2)
+Trading:   32 bars  (4-bar or 8-bar trades)
+Head Out:  32 bars  (melody restatement, ritardando ending)
+```
+
+---
+
+## 8. Key + BPM Defaults by Genre
+
+| Genre | Common Keys | BPM Range | Default |
+|-------|-------------|-----------|---------|
+| Pop | C, G, D, A (major) | 100-130 | 120 |
+| Rock | E, A, D, G (major/minor) | 110-140 | 125 |
+| Jazz | Bb, Eb, F, C | 120-180 (swing) | 140 |
+| EDM / House | Am, Cm, Fm | 124-130 | 128 |
+| Techno | Am, Dm, Em | 130-145 | 138 |
+| Drum & Bass | Am, Dm | 170-180 | 174 |
+| Hip-Hop | Cm, Am, Em (minor) | 80-100 | 90 |
+| Trap | Am, Cm, Bm (minor) | 130-160 (half-time) | 140 |
+| Lo-Fi | C, F, G (major or Dorian) | 70-90 | 80 |
+| R&B | Eb, Ab, Db, Gb | 90-110 | 95 |
+| Classical | C, G, D, F, Bb | 60-140 | Varies |
+| Ambient | Any (Lydian, Pentatonic) | 60-90 | 70 |
+| Reggae | G, C, D | 70-90 | 80 |
+| Funk | E, A (Mixolydian) | 100-120 | 110 |
+| Bossa Nova | C, F, G | 120-140 | 130 |
+
+---
+
+## 9. Interval Ear Training Reference
+
+| Interval | Semitones | Sound | Example Song Start |
+|----------|-----------|-------|-------------------|
+| Minor 2nd | 1 | Tense, dissonant | Jaws theme |
+| Major 2nd | 2 | Stepping, neutral | Happy Birthday |
+| Minor 3rd | 3 | Sad, gentle | Greensleeves |
+| Major 3rd | 4 | Happy, bright | Kumbaya |
+| Perfect 4th | 5 | Open, strong | Here Comes the Bride |
+| Tritone | 6 | Unsettled, devilish | The Simpsons |
+| Perfect 5th | 7 | Pure, powerful | Star Wars |
+| Minor 6th | 8 | Bittersweet | Love Story |
+| Major 6th | 9 | Warm, nostalgic | My Bonnie |
+| Minor 7th | 10 | Bluesy, expectant | Somewhere (West Side Story) |
+| Major 7th | 11 | Dreamy, wide | Take On Me (chorus) |
+| Octave | 12 | Same but higher | Somewhere Over the Rainbow |

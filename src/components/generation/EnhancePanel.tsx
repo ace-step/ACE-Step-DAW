@@ -248,6 +248,10 @@ export function EnhancePanel() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        const ui = useUIStore.getState();
+        // Don't close if a modal-level dialog is open on top of us
+        if (ui.showCommandPalette || ui.showSettingsDialog || ui.showQuantizeDialog
+          || ui.showExportDialog || ui.showKeyboardShortcutsDialog || ui.showNewProjectDialog) return;
         e.stopPropagation();
         closeEnhancer();
         return;
@@ -518,6 +522,8 @@ export function EnhancePanel() {
   // No-selection guidance screen
   if (!enhancerTarget) {
     return (
+      <>
+      <div data-testid="enhance-backdrop" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
       <div
         ref={panelRef}
         data-testid="enhance-panel"
@@ -551,6 +557,7 @@ export function EnhancePanel() {
           </button>
         </div>
       </div>
+      </>
     );
   }
 
@@ -585,6 +592,8 @@ export function EnhancePanel() {
   const miniProgress = miniIsPlaying ? playback.progress : 0;
 
   return (
+    <>
+    <div data-testid="enhance-backdrop" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
     <div
       ref={panelRef}
       data-testid="enhance-panel"
@@ -1207,5 +1216,6 @@ export function EnhancePanel() {
         )}
       </div>
     </div>
+    </>
   );
 }

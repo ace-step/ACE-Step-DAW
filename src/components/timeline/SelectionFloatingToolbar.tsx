@@ -1,5 +1,6 @@
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { Z } from '../../utils/zIndex';
 
 interface SelectionFloatingToolbarProps {
   /** Left edge of the selection in pixels (absolute within trackArea) */
@@ -45,11 +46,12 @@ export function SelectionFloatingToolbar({ selLeft, selWidth, selBottom }: Selec
   return (
     <div
       data-testid="selection-floating-toolbar"
-      className="absolute z-20 flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#444] bg-[#2a2a2a]/95 backdrop-blur-sm shadow-lg transition-opacity duration-150 pointer-events-auto"
+      className="absolute flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#444] bg-[#2a2a2a]/95 backdrop-blur-sm shadow-lg transition-opacity duration-150 pointer-events-auto"
       style={{
         left: centerX,
         top: topY,
         transform: 'translateX(-50%)',
+        zIndex: Z.overlay,
       }}
     >
       {/* Enhance */}

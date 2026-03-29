@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     setOnEndedCallback: vi.fn(),
     trackNodes: new Map(),
     updateSoloState: vi.fn(),
+    syncSends: vi.fn(),
     setPlaybackLatencyCompensation: vi.fn(),
     applyMastering: vi.fn(),
     masterVolume: 1,

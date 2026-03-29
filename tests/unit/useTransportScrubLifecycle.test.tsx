@@ -35,6 +35,7 @@ const engineMock = {
   })),
   setTrackGroupRouting: vi.fn(),
   updateSoloState: vi.fn(),
+  syncSends: vi.fn(),
   playing: false,
   masterVolume: 1,
 };

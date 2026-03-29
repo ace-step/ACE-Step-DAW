@@ -6,6 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
+import { subtractiveEngine } from '../engine/SubtractiveEngine';
 import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
@@ -140,6 +141,7 @@ export function useTransport() {
   const { isPlaying, currentTime } = useTransportStore();
   const isRecording = useTransportStore((s) => s.isRecording);
   const playbackTracks = useProjectStore((s) => s.project?.tracks);
+  const playbackReturnTracks = useProjectStore((s) => s.project?.returnTracks);
   const masterVolume = useProjectStore((s) => s.project?.masterVolume ?? 1.0);
   const playbackLatency = useProjectStore((s) => s.project?.playbackLatency);
   const mastering = useProjectStore((s) => s.project?.mastering);
@@ -154,6 +156,7 @@ export function useTransport() {
     await engine.resume();
     await Tone.start();
     await synthEngine.ensureStarted();
+    await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
     await drumEngine.ensureStarted();
 
@@ -315,6 +318,9 @@ export function useTransport() {
 
     engine.updateSoloState();
 
+    // Wire aux sends to return tracks
+    engine.syncSends(proj.tracks, proj.returnTracks ?? []);
+
     let startFrom = fromTime ?? useTransportStore.getState().playStartTime;
 
     // When loop is enabled, use loop boundaries for playback range
@@ -373,6 +379,7 @@ export function useTransport() {
         const useSampler = !vst3Instrument && !!samplerConfig;
 
         synthEngine.removeTrackSynth(track.id);
+        subtractiveEngine.removeTrackSynth(track.id);
         samplerEngine.removeTrackSampler(track.id);
 
         if (useSampler && samplerConfig) {
@@ -385,6 +392,13 @@ export function useTransport() {
               trackNode.inputGain as unknown as Tone.InputNode,
             );
           }
+        } else if (!vst3Instrument && track.instrument?.kind === 'subtractive') {
+          const trackNode = engine.getOrCreateTrackNode(track.id);
+          subtractiveEngine.ensureTrackSynth(
+            track.id,
+            track.instrument.settings,
+            trackNode.inputGain as unknown as Tone.InputNode,
+          );
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
@@ -455,6 +469,26 @@ export function useTransport() {
               } else if (useSampler) {
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
+              } else if (track.instrument?.kind === 'subtractive') {
+                const previousOverlap = note.isSlide
+                  ? [...notes]
+                      .slice(0, noteIndex)
+                      .reverse()
+                      .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
+                  : undefined;
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  if (previousOverlap) {
+                    subtractiveEngine.playSlideNote(
+                      trackId,
+                      previousOverlap.pitch,
+                      note.pitch,
+                      Math.max(1, Math.round(velocity * 127)),
+                      scheduledDuration,
+                    );
+                    return;
+                  }
+                  subtractiveEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
@@ -615,6 +649,7 @@ export function useTransport() {
     stopAllStrudelTracks();
     engine.stop();
     synthEngine.releaseAll();
+    subtractiveEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
@@ -632,6 +667,7 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     engine.stop();
     synthEngine.releaseAll();
+    subtractiveEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     stopAllStrudelTracks();
@@ -840,7 +876,12 @@ export function useTransport() {
       }
     }
     engine.updateSoloState();
-  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks]);
+
+    // Sync aux send routing (handles amount, pre/post, and return track params)
+    if (playbackTracks) {
+      engine.syncSends(playbackTracks, playbackReturnTracks ?? []);
+    }
+  }, [isPlaying, masterVolume, mastering, playbackLatency, playbackTracks, playbackReturnTracks]);
 
   return {
     isPlaying,

@@ -140,7 +140,7 @@ export class AutomationEngine {
       const engine = getAudioEngine();
       const trackNode = engine.trackNodes.get(trackId);
       if (trackNode) {
-        trackNode.updateSendAmount(send.returnTrackId, normalized);
+        trackNode.updateSendAmount(send.returnTrackId, normalized, (send.prePost ?? 'post') === 'pre');
       }
     }
   }

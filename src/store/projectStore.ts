@@ -833,7 +833,7 @@ export interface ProjectState extends MidiSliceActions {
   addReturnTrack: (name?: string) => ReturnTrack;
   removeReturnTrack: (returnTrackId: string) => void;
   updateReturnTrack: (returnTrackId: string, updates: Partial<Pick<ReturnTrack, 'name' | 'volume' | 'pan' | 'effects'>>) => void;
-  updateTrackSend: (trackId: string, returnTrackId: string, amount: number) => void;
+  updateTrackSend: (trackId: string, returnTrackId: string, amount: number, preFader?: boolean) => void;
   setSendPrePost: (trackId: string, sendIndex: number, mode: 'pre' | 'post') => void;
 
   // Track grouping / folder tracks
@@ -7445,7 +7445,7 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  updateTrackSend: (trackId, returnTrackId, amount) => {
+  updateTrackSend: (trackId, returnTrackId, amount, preFader) => {
     const state = get();
     if (!state.project) return;
 

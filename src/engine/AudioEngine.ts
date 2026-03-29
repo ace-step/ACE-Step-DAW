@@ -1,12 +1,16 @@
 import * as Tone from 'tone';
 import { TrackNode } from './TrackNode';
+import { ReturnTrackNode } from './ReturnTrackNode';
 import type {
   AudioWarpMarker,
   GainEnvelopePoint,
   MasteringState,
+  ReturnTrack,
+  Send,
   SequencerPattern,
   TempoEvent,
   TimeSignatureEvent,
+  Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
 import { applyClipFadeAutomation } from '../utils/clipFade';
@@ -84,6 +88,7 @@ export class AudioEngine {
   ctx: AudioContext;
   masterGain: GainNode;
   trackNodes: Map<string, TrackNode> = new Map();
+  returnTrackNodes: Map<string, ReturnTrackNode> = new Map();
   scheduledSources: ScheduledSource[] = [];
   private readonly masterInputGain: GainNode;
   private readonly masterDryGain: GainNode;
@@ -1127,6 +1132,93 @@ export class AudioEngine {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Return Track Nodes & Send Routing
+  // -----------------------------------------------------------------------
+
+  getOrCreateReturnTrackNode(returnTrackId: string): ReturnTrackNode {
+    let node = this.returnTrackNodes.get(returnTrackId);
+    if (!node) {
+      node = new ReturnTrackNode(this.ctx, this.masterInputGain);
+      this.returnTrackNodes.set(returnTrackId, node);
+    }
+    return node;
+  }
+
+  removeReturnTrackNode(returnTrackId: string) {
+    const node = this.returnTrackNodes.get(returnTrackId);
+    if (node) {
+      node.disconnect();
+      this.returnTrackNodes.delete(returnTrackId);
+    }
+  }
+
+  getReturnTrackMeter(returnTrackId: string): { level: number; leftLevel: number; rightLevel: number; clipped: boolean } {
+    return this.returnTrackNodes.get(returnTrackId)?.getMeter() ?? { level: 0, leftLevel: 0, rightLevel: 0, clipped: false };
+  }
+
+  resetReturnTrackClip(returnTrackId: string) {
+    this.returnTrackNodes.get(returnTrackId)?.resetClip();
+  }
+
+  /**
+   * Synchronize send routing between tracks and return tracks.
+   * Creates/updates ReturnTrackNodes, wires send gain nodes, and cleans up stale connections.
+   */
+  syncSends(tracks: Track[], returnTracks: ReturnTrack[]) {
+    const returnTrackIds = new Set(returnTracks.map(rt => rt.id));
+
+    // 1. Create/update ReturnTrackNodes
+    for (const rt of returnTracks) {
+      const node = this.getOrCreateReturnTrackNode(rt.id);
+      node.volume = rt.volume;
+      node.pan = rt.pan;
+    }
+
+    // 2. Remove ReturnTrackNodes that no longer exist in the data model
+    for (const [id] of this.returnTrackNodes) {
+      if (!returnTrackIds.has(id)) {
+        this.removeReturnTrackNode(id);
+      }
+    }
+
+    // 3. Wire sends for each track
+    const activeSends = new Map<string, Set<string>>();
+
+    for (const track of tracks) {
+      const trackNode = this.trackNodes.get(track.id);
+      if (!trackNode) continue;
+
+      const sends = track.sends ?? [];
+      const activeReturnIds = new Set<string>();
+
+      for (const send of sends) {
+        if (!returnTrackIds.has(send.returnTrackId)) continue;
+        if (send.amount <= 0) continue;
+
+        const returnNode = this.returnTrackNodes.get(send.returnTrackId);
+        if (!returnNode) continue;
+
+        activeReturnIds.add(send.returnTrackId);
+        trackNode.connectSend(send.returnTrackId, returnNode.inputGain, send.amount, (send.prePost ?? 'post') === 'pre');
+      }
+
+      activeSends.set(track.id, activeReturnIds);
+    }
+
+    // 4. Disconnect sends that are no longer active
+    for (const track of tracks) {
+      const trackNode = this.trackNodes.get(track.id);
+      if (!trackNode) continue;
+      const active = activeSends.get(track.id) ?? new Set();
+      for (const send of (track.sends ?? [])) {
+        if (send.amount <= 0 && !active.has(send.returnTrackId)) {
+          trackNode.disconnectSend(send.returnTrackId);
+        }
+      }
+    }
+  }
+
   dispose() {
     this.stop();
     this.disposeAudioStream();
@@ -1134,6 +1226,10 @@ export class AudioEngine {
       node.disconnect();
     }
     this.trackNodes.clear();
+    for (const node of this.returnTrackNodes.values()) {
+      node.disconnect();
+    }
+    this.returnTrackNodes.clear();
     this.ctx.close();
   }
 }

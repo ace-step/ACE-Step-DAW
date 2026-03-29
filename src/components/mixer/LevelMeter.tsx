@@ -16,6 +16,7 @@ const SCALE_RIGHT_W = 16;
 export interface LevelMeterProps {
   trackId?: string;
   masterStage?: 'input' | 'output';
+  returnTrackId?: string;
   stereo?: boolean;
   showScale?: boolean;
 }
@@ -32,7 +33,7 @@ function fillToTopPct(fill: number): number {
   return pad + (1 - fill) * (100 - 2 * pad);
 }
 
-export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMeterProps) {
+export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showScale }: LevelMeterProps) {
   const rafRef = useRef<number>(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const leftBar = useRef<BarState>({ level: 0, peakLevel: 0, peakHoldFrames: 0 });
@@ -93,6 +94,11 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
 
       if (masterStage) {
         const meter = engine.getMasterMeter(masterStage);
+        leftLevel = meter.level;
+        rightLevel = meter.level;
+        clipped = meter.clipped;
+      } else if (returnTrackId) {
+        const meter = engine.getReturnTrackMeter(returnTrackId);
         leftLevel = meter.level;
         rightLevel = meter.level;
         clipped = meter.clipped;
@@ -162,19 +168,25 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [trackId, masterStage, isStereo, updateBar]);
+  }, [trackId, masterStage, returnTrackId, isStereo, updateBar]);
 
   const label = masterStage
     ? `Master ${masterStage} level meter`
-    : `Mixer level meter for ${trackId}`;
+    : returnTrackId
+      ? `Return track level meter for ${returnTrackId}`
+      : `Mixer level meter for ${trackId}`;
   const clipResetLabel = masterStage
     ? `Reset clip indicator for master ${masterStage}`
-    : `Reset clip indicator for ${trackId}`;
+    : returnTrackId
+      ? `Reset clip indicator for return ${returnTrackId}`
+      : `Reset clip indicator for ${trackId}`;
 
   const resetClip = () => {
     const engine = getAudioEngine();
     if (masterStage) {
       engine.resetMasterClip(masterStage);
+    } else if (returnTrackId) {
+      engine.resetReturnTrackClip(returnTrackId);
     } else if (trackId) {
       engine.resetTrackClip(trackId);
     }

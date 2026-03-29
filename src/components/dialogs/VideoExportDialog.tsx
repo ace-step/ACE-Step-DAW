@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { downloadBlob } from '../../services/browserDownload';
+import { canConvertToMp4, convertWebmToMp4 } from '../../services/webCodecsConverter';
 import { formatDurationMSS } from '../../utils/time';
 import { Button } from '../ui/Button';
 
@@ -15,7 +16,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildFileName(): string {
+function buildFileName(format: 'webm' | 'mp4'): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -23,7 +24,7 @@ function buildFileName(): string {
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
-  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.webm`;
+  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.${format}`;
 }
 
 function formatMimeType(mimeType: string | null): string {
@@ -151,8 +152,19 @@ export function VideoExportDialog() {
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
 
+  // MP4 conversion state
+  const [mp4Supported, setMp4Supported] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertProgress, setConvertProgress] = useState(0);
+  const [convertError, setConvertError] = useState<string | null>(null);
+
   const { status, blob, duration, mimeType } = videoRecording;
   const show = status === 'done' && blob !== null;
+
+  // Feature-detect MP4 support on mount
+  useEffect(() => {
+    canConvertToMp4().then(setMp4Supported);
+  }, []);
 
   useEffect(() => {
     if (blob) {
@@ -161,6 +173,7 @@ export function VideoExportDialog() {
       setDownloaded(false);
       setTrimStart(0);
       setTrimEnd(duration);
+      setConvertError(null);
       return () => URL.revokeObjectURL(url);
     } else {
       setVideoUrl(null);
@@ -191,10 +204,32 @@ export function VideoExportDialog() {
   const isTrimmed = trimStart > 0 || trimEnd < duration;
   const trimmedDuration = trimEnd - trimStart;
 
-  const handleDownload = () => {
+  const handleDownloadWebm = () => {
     if (!blob) return;
-    downloadBlob(blob, buildFileName());
+    downloadBlob(blob, buildFileName('webm'));
     setDownloaded(true);
+  };
+
+  const handleDownloadMp4 = async () => {
+    if (!blob) return;
+    setConverting(true);
+    setConvertProgress(0);
+    setConvertError(null);
+
+    try {
+      const mp4Blob = await convertWebmToMp4(blob, {
+        trimStart: isTrimmed ? trimStart : undefined,
+        trimEnd: isTrimmed ? trimEnd : undefined,
+        onProgress: setConvertProgress,
+      });
+      downloadBlob(mp4Blob, buildFileName('mp4'));
+      setDownloaded(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'MP4 conversion failed';
+      setConvertError(msg);
+    } finally {
+      setConverting(false);
+    }
   };
 
   const handleRecordNew = () => {
@@ -203,6 +238,7 @@ export function VideoExportDialog() {
   };
 
   const handleClose = () => {
+    if (converting) return; // Don't close during conversion
     if (!downloaded && blob && blob.size > 0) {
       const confirmed = window.confirm('You haven\'t downloaded the recording yet. Discard it?');
       if (!confirmed) return;
@@ -221,7 +257,8 @@ export function VideoExportDialog() {
           <h2 className="text-base font-semibold text-zinc-100">Video Recording</h2>
           <button
             onClick={handleClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+            disabled={converting}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
             aria-label="Close"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -242,6 +279,31 @@ export function VideoExportDialog() {
           <TrimBar duration={duration} trimStart={trimStart} trimEnd={trimEnd} onTrimChange={handleTrimChange} />
         )}
 
+        {/* Progress Bar (MP4 conversion) */}
+        {converting && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+              </svg>
+              <span>Converting to MP4... {Math.round(convertProgress * 100)}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-blue-500 transition-all duration-200"
+                style={{ width: `${convertProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Conversion Error */}
+        {convertError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {convertError}
+          </div>
+        )}
+
         {/* Info */}
         <div className="flex items-center gap-4 text-xs text-zinc-400">
           <span>
@@ -254,12 +316,17 @@ export function VideoExportDialog() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
-          <Button variant="ghost" size="sm" onClick={handleRecordNew}>
+          <Button variant="ghost" size="sm" onClick={handleRecordNew} disabled={converting}>
             Record New
           </Button>
-          <Button variant="primary" size="sm" onClick={handleDownload}>
-            {downloaded ? 'Downloaded' : 'Download'}
+          <Button variant="ghost" size="sm" onClick={handleDownloadWebm} disabled={converting}>
+            {downloaded ? 'Downloaded' : 'Download WebM'}
           </Button>
+          {mp4Supported && (
+            <Button variant="primary" size="sm" onClick={handleDownloadMp4} disabled={converting}>
+              {converting ? 'Converting...' : 'Download MP4'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

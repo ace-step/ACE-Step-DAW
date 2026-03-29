@@ -9,7 +9,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { KEY_SCALES } from '../../constants/tracks';
 import { CompanionStatus } from '../plugins/CompanionStatus';
-import { formatTime, formatBarsBeats } from '../../utils/time';
+import { formatTime, formatBarsBeats, formatDurationMSS } from '../../utils/time';
 import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
 import { LatencyDisplay } from './LatencyDisplay';
@@ -372,12 +372,6 @@ function MetronomePulseIcon() {
   );
 }
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
 function VideoRecordSettingsPopover({ onClose }: { onClose: () => void }) {
   const settings = useUIStore((s) => s.videoRecordingSettings);
   const update = useUIStore((s) => s.setVideoRecordingSettings);
@@ -474,7 +468,7 @@ function VideoRecordButton() {
         onClick={handleClick}
         onContextMenu={(e) => { e.preventDefault(); if (!isRecording) setShowSettings((s) => !s); }}
         disabled={isRequesting}
-        title={isRecording ? `Stop Video Recording (${formatDuration(duration)})` : 'Record Video (right-click for settings)'}
+        title={isRecording ? `Stop Video Recording (${formatDurationMSS(duration)})` : 'Record Video (right-click for settings)'}
         aria-label={isRecording ? 'Stop video recording' : 'Record video'}
         data-testid="video-record-button"
         className={`flex h-10 items-center justify-center gap-1.5 rounded-lg px-2 transition-all duration-150 active:scale-95 ${
@@ -491,7 +485,7 @@ function VideoRecordButton() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-100" />
             </span>
-            <span className="text-[11px] font-mono font-medium tabular-nums">{formatDuration(duration)}</span>
+            <span className="text-[11px] font-mono font-medium tabular-nums">{formatDurationMSS(duration)}</span>
           </>
         ) : isRequesting ? (
           <svg className="h-5 w-5 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">

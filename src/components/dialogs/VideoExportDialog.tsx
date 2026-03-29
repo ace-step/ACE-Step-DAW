@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { downloadBlob } from '../../services/browserDownload';
+import { formatDurationMSS } from '../../utils/time';
 import { Button } from '../ui/Button';
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -113,7 +108,7 @@ export function VideoExportDialog() {
 
         {/* Info */}
         <div className="flex items-center gap-4 text-xs text-zinc-400">
-          <span>Duration: {formatDuration(duration)}</span>
+          <span>Duration: {formatDurationMSS(duration)}</span>
           {blob && <span>Size: {formatFileSize(blob.size)}</span>}
           <span>Format: {formatMimeType(mimeType)}</span>
         </div>

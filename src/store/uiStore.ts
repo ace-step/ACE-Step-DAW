@@ -541,6 +541,12 @@ const ALL_MODALS_CLOSED = {
 // Module-scope reference for the active video recorder instance (avoids window globals)
 let _activeVideoRecorder: import('../services/videoRecorder').VideoRecorderService | null = null;
 
+/** Typed accessor for the global audio engine — avoids inline casts in every action. */
+function _getAudioEngine(): { getAudioStream: () => MediaStream; disposeAudioStream: () => void } | undefined {
+  const getter = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => unknown) | undefined;
+  return getter?.() as ReturnType<typeof _getAudioEngine>;
+}
+
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
@@ -679,8 +685,7 @@ export const useUIStore = create<UIState>()(
       set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Video recording is not supported in this browser.' } });
       return;
     }
-    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { getAudioStream: () => MediaStream; disposeAudioStream: () => void }) | undefined;
-    const audioEngine = engine?.();
+    const audioEngine = _getAudioEngine();
     if (!audioEngine) {
       set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Audio engine is not initialized.' } });
       return;
@@ -710,15 +715,14 @@ export const useUIStore = create<UIState>()(
     });
   },
   stopVideoRecording: () => {
+    // Do NOT dispose audio stream here — onstop fires asynchronously and
+    // needs the stream alive to flush the final audio data chunk.
     _activeVideoRecorder?.stopRecording();
-    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { disposeAudioStream: () => void }) | undefined;
-    engine?.()?.disposeAudioStream();
   },
   dismissVideoRecording: () => {
     _activeVideoRecorder?.dismiss();
     _activeVideoRecorder = null;
-    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { disposeAudioStream: () => void }) | undefined;
-    engine?.()?.disposeAudioStream();
+    _getAudioEngine()?.disposeAudioStream();
     set({ videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null } });
   },
 

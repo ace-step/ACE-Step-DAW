@@ -47,6 +47,15 @@ function selectMimeType(): string | null {
   return null;
 }
 
+/** Lazily created, reused across recordings to avoid hitting the browser's AudioContext limit. */
+let _sharedMixCtx: AudioContext | null = null;
+function getOrCreateMixContext(): AudioContext {
+  if (!_sharedMixCtx || _sharedMixCtx.state === 'closed') {
+    _sharedMixCtx = new AudioContext();
+  }
+  return _sharedMixCtx;
+}
+
 export class VideoRecorderService {
   private _state: VideoRecorderState = {
     status: 'idle',
@@ -60,7 +69,7 @@ export class VideoRecorderService {
   private _chunks: Blob[] = [];
   private _displayStream: MediaStream | null = null;
   private _micStream: MediaStream | null = null;
-  private _mixCtx: AudioContext | null = null;
+  private _mixNodes: AudioNode[] = [];
   private _durationTimer: ReturnType<typeof setInterval> | null = null;
   private _startTime = 0;
 
@@ -125,8 +134,7 @@ export class VideoRecorderService {
     // 2. Build audio track — mix DAW output + optional mic via Web Audio API
     let finalAudioTracks: MediaStreamTrack[];
     if (this._micStream) {
-      const mixCtx = new AudioContext();
-      this._mixCtx = mixCtx;
+      const mixCtx = getOrCreateMixContext();
       const dest = mixCtx.createMediaStreamDestination();
 
       const dawSource = mixCtx.createMediaStreamSource(audioStream);
@@ -138,6 +146,8 @@ export class VideoRecorderService {
       micSource.connect(micGain);
       micGain.connect(dest);
 
+      // Track nodes for cleanup (disconnect, not close the shared context)
+      this._mixNodes = [dawSource, micSource, micGain, dest];
       finalAudioTracks = dest.stream.getAudioTracks();
     } else {
       finalAudioTracks = audioStream.getAudioTracks();
@@ -149,7 +159,7 @@ export class VideoRecorderService {
       ...finalAudioTracks,
     ]);
 
-    // 3. Create MediaRecorder
+    // 4. Create MediaRecorder
     this._chunks = [];
     const recorder = new MediaRecorder(combinedStream, {
       mimeType,
@@ -182,7 +192,7 @@ export class VideoRecorderService {
       });
     });
 
-    // 4. Start
+    // 5. Start
     recorder.start(1000); // collect data every second
     this._recorder = recorder;
     this._startTime = Date.now();
@@ -241,11 +251,11 @@ export class VideoRecorderService {
     // Stop mic stream tracks
     this._micStream?.getTracks().forEach((t) => t.stop());
     this._micStream = null;
-    // Close mixing AudioContext
-    if (this._mixCtx) {
-      void this._mixCtx.close();
-      this._mixCtx = null;
+    // Disconnect mixing nodes (context is reused, not closed)
+    for (const node of this._mixNodes) {
+      try { node.disconnect(); } catch { /* already disconnected */ }
     }
+    this._mixNodes = [];
     this._chunks = [];
   }
 }

@@ -31,8 +31,8 @@ export function RecordingOverlay() {
 }
 
 function CursorHighlight() {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
   const [ripples, setRipples] = useState<ClickRipple[]>([]);
+  const glowRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
@@ -41,7 +41,7 @@ function CursorHighlight() {
       mouseRef.current = { x: e.clientX, y: e.clientY };
     };
     const onClick = (e: MouseEvent) => {
-      const id = ++rippleIdCounter;
+      const id = (++rippleIdCounter) % 1_000_000;
       setRipples((prev) => [...prev, { id, x: e.clientX, y: e.clientY }]);
       setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 500);
     };
@@ -49,8 +49,12 @@ function CursorHighlight() {
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('mousedown', onClick, true);
 
+    // Direct DOM manipulation for glow position — avoids 60fps React re-renders
     const tick = () => {
-      setPos(mouseRef.current);
+      if (glowRef.current) {
+        glowRef.current.style.left = `${mouseRef.current.x}px`;
+        glowRef.current.style.top = `${mouseRef.current.y}px`;
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -64,12 +68,13 @@ function CursorHighlight() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]" aria-hidden="true">
-      {/* Cursor glow */}
+      {/* Cursor glow — positioned via ref to avoid React re-renders */}
       <div
+        ref={glowRef}
         className="absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{
-          left: pos.x,
-          top: pos.y,
+          left: 0,
+          top: 0,
           background: 'radial-gradient(circle, rgba(99,140,255,0.25) 0%, transparent 70%)',
         }}
       />

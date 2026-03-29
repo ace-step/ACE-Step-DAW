@@ -72,6 +72,9 @@ export interface ClipInternalOptions {
   chunkMaskMode?: 'explicit' | 'auto';
   /** Override the default repainting range (clip.startTime → clip.startTime + clip.duration) */
   repaintRange?: { start: number; end: number };
+  /** Context window time range — when set, repainting_start/end and audio_duration
+   *  are made relative to ctxStart so the backend sees only the context region. */
+  contextWindow?: { startTime: number; endTime: number };
   /** Manual override for the backend guidance scale. */
   guidanceScaleOverride?: number;
   /** Manual override for inference steps. */
@@ -612,8 +615,15 @@ async function generateClipInternal(
   store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
 
   try {
-    // Use actual audio duration (without timeline padding) for generation
-    const audioDuration = useProjectStore.getState().getAudioDuration();
+    // When a context window is provided, all times are relative to ctxStart
+    // so the backend only sees the context region (no leading silence).
+    const ctxOffset = options.contextWindow?.startTime ?? 0;
+    const ctxEnd = options.contextWindow?.endTime;
+
+    // Use context window duration if available, otherwise full project duration
+    const audioDuration = ctxEnd != null
+      ? ctxEnd - ctxOffset
+      : useProjectStore.getState().getAudioDuration();
 
     // Determine src_audio — prefer a server-side path (no upload), then
     // previous cumulative blob, then synthesized silence.
@@ -629,6 +639,7 @@ async function generateClipInternal(
         : `srcAudio: ${srcBlob ? 'previousCumulative' : 'silence'}`,
       `forceSilence=${options.forceSilence ?? false}`,
       `audioDuration=${audioDuration}s`,
+      ctxOffset > 0 ? `ctxOffset=${ctxOffset}s` : '',
     );
 
     // Build instruction — detect chunk vs full mode based on whether the
@@ -636,8 +647,8 @@ async function generateClipInternal(
     // conditioning_text.py checks for "a segment" in the instruction to
     // switch caption formatting (chunk omits Global: prefix).
     const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
-    const repaintStart = options.repaintRange?.start ?? clip.startTime;
-    const repaintEnd = options.repaintRange?.end ?? (clip.startTime + clip.duration);
+    const repaintStart = (options.repaintRange?.start ?? clip.startTime) - ctxOffset;
+    const repaintEnd = (options.repaintRange?.end ?? (clip.startTime + clip.duration)) - ctxOffset;
     const isChunkMode = repaintStart > 0.5 || repaintEnd < audioDuration - 0.5;
     const instruction = isChunkMode
       ? `Generate a segment of the ${trackLabel} track based on the audio context:`
@@ -1309,7 +1320,8 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       let contextBlob: Blob | null = null;
 
       if (opts.contextWindow) {
-        contextBlob = await extractContextAudioLazy(opts.contextWindow);
+        // trimToContext: blob spans [0, ctxDuration], no leading silence
+        contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
       }
 
       const outcome = await generateClipInternal(clipId, contextBlob, {
@@ -1318,6 +1330,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         globalCaptionOverride: opts.globalCaption,
         lyricsOverride: opts.lyrics,
         chunkMaskMode: opts.chunkMaskMode,
+        contextWindow: opts.contextWindow ?? undefined,
       });
 
       if (outcome.succeeded) {
@@ -1492,7 +1505,8 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
       let hasContextAudio = false;
       let contextBlob: Blob | null = null;
       if (opts.contextWindow) {
-        contextBlob = await extractContextAudioLazy(opts.contextWindow);
+        // trimToContext: blob spans [0, ctxDuration], no leading silence
+        contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
         hasContextAudio = contextBlob !== null && contextBlob.size > 44;
       }
       const mode = hasContextAudio ? 'context' : 'silence';
@@ -1548,6 +1562,7 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
           sharedSeed: opts.sharedSeed,
           lyricsOverride: lyrics,
           chunkMaskMode: opts.chunkMaskMode,
+          contextWindow: opts.contextWindow ?? undefined,
         };
         if (prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);

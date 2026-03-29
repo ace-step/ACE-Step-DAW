@@ -238,6 +238,10 @@ export async function regenerateClip(clipId: string): Promise<void> {
       } else {
         previousBlob = await getPreviousCumulativeBlob(clipId);
       }
+      // Restore persisted chunkMaskMode
+      if (clip?.generationParams?.chunkMaskMode) {
+        clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
+      }
       const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
 
       if (outcome.succeeded) {
@@ -376,6 +380,10 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
         clipOpts.forceSilence = !previousBlob;
       } else {
         previousBlob = await getPreviousCumulativeBlob(clipId);
+      }
+      // Restore persisted chunkMaskMode
+      if (clip?.generationParams?.chunkMaskMode) {
+        clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
       }
       logger.debug(`generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
       const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
@@ -688,7 +696,7 @@ async function generateClipInternal(
     const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
     const repaintStart = (options.repaintRange?.start ?? clip.startTime) - ctxOffset;
     const repaintEnd = (options.repaintRange?.end ?? (clip.startTime + clip.duration)) - ctxOffset;
-    const isChunkMode = repaintStart > 0.5 || repaintEnd < audioDuration - 0.5;
+    const isChunkMode = repaintStart >= 0.5 || repaintEnd <= audioDuration - 0.5;
     const instruction = isChunkMode
       ? `Generate a segment of the ${trackLabel} track based on the audio context:`
       : `Generate the ${trackLabel} track based on the audio context:`;
@@ -1096,6 +1104,10 @@ async function runVariationClip(
   } else {
     previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
   }
+  // Restore persisted chunkMaskMode
+  if (clip?.generationParams?.chunkMaskMode) {
+    clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
+  }
   const outcome = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
   return {
     succeeded: outcome.succeeded,
@@ -1356,6 +1368,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             lyrics: opts.lyrics,
             globalCaption: opts.globalCaption,
             contextWindow: savedCtxWindow,
+            chunkMaskMode: opts.chunkMaskMode,
           },
         });
       } else {
@@ -1377,6 +1390,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             lyrics: opts.lyrics,
             globalCaption: opts.globalCaption,
             contextWindow: savedCtxWindow,
+            chunkMaskMode: opts.chunkMaskMode,
           },
         });
       }

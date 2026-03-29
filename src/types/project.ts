@@ -632,6 +632,8 @@ export interface ClipGenerationParams {
     startTime: number;     // legacy absolute format
     endTime: number;
   } | null;
+  /** Chunk mask mode persisted for regeneration. */
+  chunkMaskMode?: 'explicit' | 'auto';
 }
 
 export interface Clip {

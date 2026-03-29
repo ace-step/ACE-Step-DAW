@@ -104,11 +104,11 @@ describe('TrackNode send routing', () => {
     // No throw = success; gain value update happens internally
   });
 
-  it('updateSendAmount switches send to pre-fader', () => {
+  it('updateSendAmount switches send from post to pre-fader', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
     trackNode.connectSend('send-1', sendDest, 0.5, false);
     trackNode.updateSendAmount('send-1', 0.5, true);
-    // No throw = success; pre/post gain swap happens internally
+    // No throw = success; pre/post switching happens via gain crossfade
   });
 
   it('pre-fader send taps before volumeGain', () => {

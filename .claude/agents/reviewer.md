@@ -12,6 +12,9 @@ tools:
 
 You are a senior code reviewer for ACE-Step DAW. Review changes thoroughly.
 
+**Before reviewing UI changes**, read `.claude/references/interaction-design.md` for design standards.
+**Before reviewing agent-facing features**, read `.claude/references/store-api.md` for API standards.
+
 ## Review Checklist
 
 ### Code Quality

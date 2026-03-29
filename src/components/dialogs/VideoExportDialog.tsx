@@ -187,19 +187,19 @@ export function VideoExportDialog() {
     return () => video.removeEventListener('timeupdate', onTimeUpdate);
   }, [trimStart, trimEnd]);
 
+  // All hooks MUST be above this line (React Rules of Hooks)
+  const handleTrimChange = useCallback((start: number, end: number) => {
+    setTrimStart(start);
+    setTrimEnd(end);
+  }, []);
+
   if (!show) return null;
 
   const isTrimmed = trimStart > 0 || trimEnd < duration;
   const trimmedDuration = trimEnd - trimStart;
   const wantsMp4 = exportFormat === 'mp4';
-  // Need ffmpeg if trimming OR converting WebM→MP4
   const needsProcessing = isTrimmed || (wantsMp4 && !mimeType?.includes('mp4'));
   const downloadExt = wantsMp4 ? '.mp4' : nativeExt;
-
-  const handleTrimChange = useCallback((start: number, end: number) => {
-    setTrimStart(start);
-    setTrimEnd(end);
-  }, []);
 
   const handleDownload = async () => {
     if (!blob) return;

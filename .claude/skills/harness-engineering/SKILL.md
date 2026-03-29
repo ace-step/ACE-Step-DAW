@@ -114,13 +114,19 @@ Researcher → PM → Issues → Dev Agent → PR → CI → QA → Merge
     "PreToolCall": [
       {
         "matcher": "Bash(git commit*)",
-        "hooks": [{ "type": "command", "command": "npx tsc --noEmit" }]
+        "hooks": [{
+          "type": "command",
+          "command": "npx tsc --noEmit 2>&1 | tee /dev/stderr | grep -q 'error TS' && exit 1 || exit 0"
+        }]
       }
     ],
     "PostToolCall": [
       {
         "matcher": "Write|Edit",
-        "hooks": [{ "type": "command", "command": "quick-typecheck.sh" }]
+        "hooks": [{
+          "type": "command",
+          "command": "echo 'Reminder: run npx tsc --noEmit before committing.'"
+        }]
       }
     ]
   }

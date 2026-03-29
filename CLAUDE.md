@@ -9,7 +9,7 @@ React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js + Tailwind CSS v4
 
 ## Issue-First Workflow (BLOCKING — do this BEFORE any code)
 
-1. **Create GitHub issue** — English title with `feat:`/`fix:`/`docs:`/`refactor:`/`chore:` prefix, acceptance criteria checklist, label: `bug`/`enhancement`/`docs`/`refactor`
+1. **Create GitHub issue** via `gh issue create` — English title AND body (regardless of conversation language), `feat:`/`fix:`/`docs:`/`refactor:`/`chore:` prefix, acceptance criteria checklist, label: `bug`/`enhancement`/`docs`/`refactor`
 2. **Create branch** — `feat/issue-NUMBER` or `fix/issue-NUMBER`
 3. **Implement** — TDD cycle + quality gates
 4. **Create PR** — `Closes #NUMBER` in body
@@ -46,7 +46,7 @@ npx tsc --noEmit     # Type check only
 
 ## Agentic Work Discipline
 
-- **Done Criteria**: Write checklist in `.llm/todo.md` before coding features touching 3+ files. Each item must be verifiable by test, screenshot, or store assertion.
+- **Done Criteria**: Write checklist in `.llm/todo.md` before coding features touching 3+ files. Include edge cases (non-standard BPMs, undo, keyboard path, scroll offsets). Each item must be verifiable by test, screenshot, or store assertion.
 - **External Evaluation**: Never self-assess. Run `@tester` before every commit.
 - **Context Anxiety**: If re-reading files, adding defensive checks, duplicating utilities, or skipping tests — STOP and compact.
 

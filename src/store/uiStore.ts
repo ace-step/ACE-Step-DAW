@@ -229,6 +229,13 @@ export interface UIState {
     mimeType: string | null;
     error: string | null;
   };
+  videoRecordingSettings: {
+    micEnabled: boolean;
+    micDeviceId: string | null;
+    micVolume: number;
+    quality: 'low' | 'medium' | 'high';
+  };
+  setVideoRecordingSettings: (patch: Partial<UIState['videoRecordingSettings']>) => void;
   startVideoRecording: () => Promise<void>;
   stopVideoRecording: () => void;
   dismissVideoRecording: () => void;
@@ -664,6 +671,8 @@ export const useUIStore = create<UIState>()(
   selectedSessionSlot: null,
 
   videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null },
+  videoRecordingSettings: { micEnabled: false, micDeviceId: null, micVolume: 0.8, quality: 'medium' },
+  setVideoRecordingSettings: (patch) => set((s) => ({ videoRecordingSettings: { ...s.videoRecordingSettings, ...patch } })),
   startVideoRecording: async () => {
     const { VideoRecorderService } = await import('../services/videoRecorder');
     if (!VideoRecorderService.isSupported()) {
@@ -676,10 +685,29 @@ export const useUIStore = create<UIState>()(
       set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Audio engine is not initialized.' } });
       return;
     }
+    const settings = get().videoRecordingSettings;
+    const qualityMap = { low: 1_000_000, medium: 2_500_000, high: 5_000_000 } as const;
+    const audioBrMap = { low: 96_000, medium: 128_000, high: 192_000 } as const;
+    // Get mic stream if enabled
+    let micStream: MediaStream | undefined;
+    if (settings.micEnabled) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: settings.micDeviceId ? { deviceId: { exact: settings.micDeviceId } } : true,
+        });
+      } catch {
+        // Mic unavailable — continue without it
+      }
+    }
     const recorder = new VideoRecorderService();
     _activeVideoRecorder = recorder;
     recorder.onStateChange = (state) => set({ videoRecording: { ...state } });
-    await recorder.startRecording(audioEngine.getAudioStream());
+    await recorder.startRecording(audioEngine.getAudioStream(), {
+      videoBitsPerSecond: qualityMap[settings.quality],
+      audioBitsPerSecond: audioBrMap[settings.quality],
+      micStream,
+      micVolume: settings.micVolume,
+    });
   },
   stopVideoRecording: () => {
     _activeVideoRecorder?.stopRecording();
@@ -1326,6 +1354,8 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         // Synth presets
         userSynthPresets: state.userSynthPresets,
+        // Video recording settings
+        videoRecordingSettings: state.videoRecordingSettings,
       }),
     },
   ),

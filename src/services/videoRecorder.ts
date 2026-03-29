@@ -25,6 +25,10 @@ export interface VideoRecorderOptions {
   frameRate?: number;
   videoBitsPerSecond?: number;
   audioBitsPerSecond?: number;
+  /** Optional microphone stream for voiceover narration */
+  micStream?: MediaStream;
+  /** Microphone volume (0–1), default 1 */
+  micVolume?: number;
 }
 
 /** Ordered by preference — first supported type wins. */
@@ -55,6 +59,8 @@ export class VideoRecorderService {
   private _recorder: MediaRecorder | null = null;
   private _chunks: Blob[] = [];
   private _displayStream: MediaStream | null = null;
+  private _micStream: MediaStream | null = null;
+  private _mixCtx: AudioContext | null = null;
   private _durationTimer: ReturnType<typeof setInterval> | null = null;
   private _startTime = 0;
 
@@ -114,11 +120,33 @@ export class VideoRecorderService {
     }
 
     this._displayStream = displayStream;
+    this._micStream = options.micStream ?? null;
 
-    // 2. Merge video + audio tracks into one stream
+    // 2. Build audio track — mix DAW output + optional mic via Web Audio API
+    let finalAudioTracks: MediaStreamTrack[];
+    if (this._micStream) {
+      const mixCtx = new AudioContext();
+      this._mixCtx = mixCtx;
+      const dest = mixCtx.createMediaStreamDestination();
+
+      const dawSource = mixCtx.createMediaStreamSource(audioStream);
+      dawSource.connect(dest);
+
+      const micSource = mixCtx.createMediaStreamSource(this._micStream);
+      const micGain = mixCtx.createGain();
+      micGain.gain.value = options.micVolume ?? 1;
+      micSource.connect(micGain);
+      micGain.connect(dest);
+
+      finalAudioTracks = dest.stream.getAudioTracks();
+    } else {
+      finalAudioTracks = audioStream.getAudioTracks();
+    }
+
+    // 3. Combine video + mixed audio
     const combinedStream = new MediaStream([
       ...displayStream.getVideoTracks(),
-      ...audioStream.getAudioTracks(),
+      ...finalAudioTracks,
     ]);
 
     // 3. Create MediaRecorder
@@ -210,6 +238,14 @@ export class VideoRecorderService {
     // Stop all display tracks (removes browser "sharing" indicator)
     this._displayStream?.getTracks().forEach((t) => t.stop());
     this._displayStream = null;
+    // Stop mic stream tracks
+    this._micStream?.getTracks().forEach((t) => t.stop());
+    this._micStream = null;
+    // Close mixing AudioContext
+    if (this._mixCtx) {
+      void this._mixCtx.close();
+      this._mixCtx = null;
+    }
     this._chunks = [];
   }
 }

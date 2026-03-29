@@ -34,6 +34,7 @@ const BounceInPlaceDialog = lazy(() => import('../dialogs/BounceInPlaceDialog').
 const DeleteTracksConfirmDialog = lazy(() => import('../dialogs/DeleteTracksConfirmDialog').then(m => ({ default: m.DeleteTracksConfirmDialog })));
 const ShareDialog = lazy(() => import('../dialogs/ShareDialog').then(m => ({ default: m.ShareDialog })));
 const VideoExportDialog = lazy(() => import('../dialogs/VideoExportDialog').then(m => ({ default: m.VideoExportDialog })));
+const RecordingOverlay = lazy(() => import('../recording/RecordingOverlay').then(m => ({ default: m.RecordingOverlay })));
 const ClaudeTerminal = lazy(() => import('../terminal/ClaudeTerminal').then(m => ({ default: m.ClaudeTerminal })));
 const EnhancePanel = lazy(() => import('../generation/EnhancePanel').then(m => ({ default: m.EnhancePanel })));
 const Vocal2BGMModal = lazy(() => import('../generation/Vocal2BGMModal').then(m => ({ default: m.Vocal2BGMModal })));
@@ -171,6 +172,7 @@ function EditorShell() {
         <AudioToMidiModal />
         <ShareDialog />
         <VideoExportDialog />
+        <RecordingOverlay />
       </Suspense>
       {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
       {!hasBlockingDialog && <Suspense fallback={null}><ClaudeTerminal /></Suspense>}

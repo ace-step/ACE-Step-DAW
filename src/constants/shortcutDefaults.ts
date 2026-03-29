@@ -13,6 +13,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'transport.punchIn',     category: 'transport', label: 'Set Punch-In Point',          defaultCombo: { code: 'KeyI' }, contexts: ['global'] },
   { id: 'transport.punchOut',    category: 'transport', label: 'Set Punch-Out Point',         defaultCombo: { code: 'KeyO', shift: true }, contexts: ['global'] },
   { id: 'transport.captureMidi', category: 'transport', label: 'Capture MIDI',                defaultCombo: { code: 'KeyF' }, contexts: ['global'] },
+  { id: 'transport.videoRecord', category: 'transport', label: 'Toggle Video Recording',      defaultCombo: { code: 'KeyV', mod: true, shift: true }, contexts: ['global'] },
 
   { id: 'clips.delete',          category: 'clips',     label: 'Delete Selected Clips',       defaultCombo: { code: 'Backspace' }, contexts: ['timeline'] },
   { id: 'clips.duplicate',       category: 'clips',     label: 'Duplicate Clip',              defaultCombo: { code: 'KeyD', mod: true }, contexts: ['timeline'] },

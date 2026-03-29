@@ -178,6 +178,8 @@ export class VideoRecorderService {
     };
 
     recorder.onstop = () => {
+      // Guard: onstop might fire twice (auto-stop from track end + our stop call)
+      if (this._state.status === 'done' || this._state.status === 'idle') return;
       const blob = new Blob(this._chunks, { type: mimeType });
       this._chunks = [];
       this._cleanup();
@@ -185,15 +187,33 @@ export class VideoRecorderService {
     };
 
     recorder.onerror = () => {
-      this._cleanup();
-      this._setState({ status: 'error', error: 'Recording failed unexpectedly.' });
+      // Guard: might fire after we already transitioned
+      if (this._state.status === 'done' || this._state.status === 'idle') return;
+      this._finalizeBlobAndDone(mimeType);
     };
 
-    // Handle user stopping screen share via browser UI
+    // Handle user stopping screen share via browser UI ("Stop sharing" button).
+    // The track ends immediately — we must flush remaining data before stopping.
     displayStream.getVideoTracks().forEach((track) => {
       track.addEventListener('ended', () => {
-        if (this._state.status === 'recording') {
-          this.stopRecording();
+        if (this._state.status !== 'recording') return;
+        // Clear timer immediately
+        if (this._durationTimer) {
+          clearInterval(this._durationTimer);
+          this._durationTimer = null;
+        }
+        this._setState({ status: 'stopping' });
+        // Flush any buffered data, then stop
+        try {
+          if (this._recorder?.state === 'recording') {
+            this._recorder.requestData(); // flush last chunk
+            this._recorder.stop();
+          } else {
+            // Recorder already auto-stopped — build blob from what we have
+            this._finalizeBlobAndDone(mimeType);
+          }
+        } catch {
+          this._finalizeBlobAndDone(mimeType);
         }
       });
     });
@@ -209,13 +229,20 @@ export class VideoRecorderService {
   /** Stop recording and produce the final blob. */
   stopRecording(): void {
     if (this._state.status !== 'recording') return;
-    // Clear duration timer immediately so it doesn't tick during the stopping phase
     if (this._durationTimer) {
       clearInterval(this._durationTimer);
       this._durationTimer = null;
     }
     this._setState({ status: 'stopping' });
-    this._recorder?.stop();
+    try {
+      if (this._recorder?.state === 'recording') {
+        this._recorder.requestData(); // flush buffered data
+        this._recorder.stop();
+      }
+    } catch {
+      // Recorder may already be inactive — finalize from chunks
+      this._finalizeBlobAndDone(this._state.mimeType ?? 'video/webm');
+    }
   }
 
   /** Reset state back to idle, clearing any recorded blob. */
@@ -225,6 +252,19 @@ export class VideoRecorderService {
   }
 
   // ── Private ────────────────────────────────────────────────
+
+  /** Fallback: build blob from whatever chunks we have and transition to done. */
+  private _finalizeBlobAndDone(mimeType: string): void {
+    if (this._state.status === 'done' || this._state.status === 'idle') return;
+    const blob = new Blob(this._chunks, { type: mimeType });
+    this._chunks = [];
+    this._cleanup();
+    if (blob.size > 0) {
+      this._setState({ status: 'done', blob, mimeType });
+    } else {
+      this._setState({ status: 'error', error: 'Recording produced no data.' });
+    }
+  }
 
   private _setState(patch: Partial<VideoRecorderState>): void {
     this._state = { ...this._state, ...patch };

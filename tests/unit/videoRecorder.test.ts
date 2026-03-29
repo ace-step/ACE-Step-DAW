@@ -41,8 +41,10 @@ class FakeMediaRecorder {
   start = vi.fn(() => {
     this.state = 'recording';
   });
+  requestData = vi.fn(() => {
+    this.ondataavailable?.({ data: new Blob(['flush'], { type: 'video/webm' }) });
+  });
   stop = vi.fn(() => {
-    // Simulate a data chunk then fire onstop asynchronously (matches real MediaRecorder behavior)
     this.ondataavailable?.({ data: new Blob(['fake'], { type: 'video/webm' }) });
     this.state = 'inactive';
     setTimeout(() => this.onstop?.(), 0);

@@ -19,9 +19,9 @@ const ENHANCER_BASE_BOTTOM = 60;
 
 type ConsistencyLevel = 'low' | 'medium' | 'high';
 const CONSISTENCY_VALUES: Record<ConsistencyLevel, number> = {
-  low: 0.25,
+  low: 0.75,
   medium: 0.5,
-  high: 0.75,
+  high: 0.25,
 };
 
 function fmt(s: number) {

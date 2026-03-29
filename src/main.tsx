@@ -18,6 +18,8 @@ import { createProjectShare } from './services/projectSharingService';
 import { generateProjectSummary, generateProjectStructure } from './utils/dawStateSummary';
 import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
+import { useAnalysisStore } from './store/analysisStore';
+import { analyzeClipLocally } from './services/localAnalysisService';
 
 const agentProjectStore = {
   getState: () => ({
@@ -101,6 +103,8 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__transportStore = useTransportStore;
 (window as unknown as Record<string, unknown>).__collaborationStore = useCollaborationStore;
 (window as unknown as Record<string, unknown>).__generationStore = useGenerationStore;
+(window as unknown as Record<string, unknown>).__analysisStore = useAnalysisStore;
+(window as unknown as Record<string, unknown>).__analyzeClipLocally = analyzeClipLocally;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();

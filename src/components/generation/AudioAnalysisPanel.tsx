@@ -2,12 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useGenerationStore } from '../../store/generationStore';
+import { useAnalysisStore } from '../../store/analysisStore';
 import * as api from '../../services/aceStepApi';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
+import { analyzeClipLocally } from '../../services/localAnalysisService';
 import type { TaskResultItem } from '../../types/api';
+import type { LocalAnalysisResult, ChordEvent } from '../../types/analysis';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../../constants/defaults';
 
-interface AnalysisResult {
+type AnalysisMode = 'local' | 'server';
+
+interface ServerAnalysisResult {
   bpm: number | undefined;
   keyScale: string | undefined;
   timeSignature: string | undefined;
@@ -25,14 +30,22 @@ export function AudioAnalysisPanel() {
   const clip = analysisClipId ? getClipById(analysisClipId) : null;
   const track = project?.tracks.find((t) => t.clips.some((c) => c.id === analysisClipId)) ?? null;
 
+  const [mode, setMode] = useState<AnalysisMode>('local');
   const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [serverResult, setServerResult] = useState<ServerAnalysisResult | null>(null);
+  const [localResult, setLocalResult] = useState<LocalAnalysisResult | null>(null);
   const [error, setError] = useState('');
   const [applied, setApplied] = useState(false);
 
+  // Local analysis progress from store
+  const analysisJob = useAnalysisStore((s) =>
+    analysisClipId ? s.getJobForClip(analysisClipId) : undefined,
+  );
+
   // Reset when clip changes
   useEffect(() => {
-    setResult(null);
+    setServerResult(null);
+    setLocalResult(null);
     setError('');
     setApplied(false);
     setAnalyzing(false);
@@ -48,14 +61,31 @@ export function AudioAnalysisPanel() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  const handleAnalyze = useCallback(async () => {
+  // ---------- Local analysis ----------
+  const handleLocalAnalyze = useCallback(async () => {
+    if (!clip || !analysisClipId || analyzing) return;
+    setAnalyzing(true);
+    setError('');
+    setLocalResult(null);
+
+    try {
+      const result = await analyzeClipLocally(analysisClipId);
+      setLocalResult(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Local analysis failed');
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [clip, analysisClipId, analyzing]);
+
+  // ---------- Server analysis ----------
+  const handleServerAnalyze = useCallback(async () => {
     if (!clip || analyzing || isGenerating) return;
     setAnalyzing(true);
     setError('');
-    setResult(null);
+    setServerResult(null);
 
     try {
-      // Load clip audio
       let audioBlob: Blob | null = null;
       if (clip.isolatedAudioKey) {
         audioBlob = (await loadAudioBlobByKey(clip.isolatedAudioKey)) ?? null;
@@ -68,15 +98,13 @@ export function AudioAnalysisPanel() {
         return;
       }
 
-      // Send as a cover task with minimal transformation — we just want the metas back.
-      // The cover task returns inferred BPM, key, etc. in the result metas.
       const coverParams = {
         task_type: 'cover' as const,
         caption: 'analyze audio properties',
         lyrics: '',
-        audio_cover_strength: 0.0, // No transformation — just analyze
+        audio_cover_strength: 0.0,
         audio_duration: clip.duration,
-        inference_steps: 10, // Minimal steps for fast analysis
+        inference_steps: 10,
         guidance_scale: 1.0,
         shift: 1.0,
         batch_size: 1,
@@ -99,7 +127,7 @@ export function AudioAnalysisPanel() {
           const items: TaskResultItem[] = JSON.parse(entry.result);
           const first = items?.[0];
           if (first) {
-            setResult({
+            setServerResult({
               bpm: first.metas?.bpm,
               keyScale: first.metas?.keyscale,
               timeSignature: first.metas?.timesignature,
@@ -123,30 +151,39 @@ export function AudioAnalysisPanel() {
     }
   }, [clip, analyzing, isGenerating, project]);
 
+  const handleAnalyze = mode === 'local' ? handleLocalAnalyze : handleServerAnalyze;
+
   const handleApplyToProject = useCallback(() => {
-    if (!result || !project) return;
+    if (!project) return;
     const updates: Record<string, unknown> = {};
-    if (result.bpm) updates.bpm = Math.round(result.bpm);
-    if (result.keyScale) updates.keyScale = result.keyScale;
+    if (mode === 'local' && localResult) {
+      if (localResult.bpm) updates.bpm = Math.round(localResult.bpm);
+      if (localResult.keyScale) updates.keyScale = localResult.keyScale;
+    } else if (mode === 'server' && serverResult) {
+      if (serverResult.bpm) updates.bpm = Math.round(serverResult.bpm);
+      if (serverResult.keyScale) updates.keyScale = serverResult.keyScale;
+    }
     if (Object.keys(updates).length > 0) {
       useProjectStore.getState().updateProject(updates as { bpm?: number; keyScale?: string });
       setApplied(true);
     }
-  }, [result, project]);
+  }, [mode, localResult, serverResult, project]);
 
   if (!analysisClipId || !clip || !track) return null;
 
   const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
-
-  // If clip already has inferred metas, show them immediately
   const existingMetas = clip.inferredMetas;
+  const hasResult = mode === 'local' ? !!localResult : !!serverResult;
+  const hasBpmOrKey = mode === 'local'
+    ? !!(localResult?.bpm || localResult?.keyScale)
+    : !!(serverResult?.bpm || serverResult?.keyScale);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-daw-surface border border-daw-border rounded-lg shadow-2xl w-[380px] max-h-[70vh] flex flex-col text-xs text-zinc-200">
+      <div className="bg-daw-surface border border-daw-border rounded-lg shadow-2xl w-[420px] max-h-[80vh] flex flex-col text-xs text-zinc-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <div className="flex items-center gap-2">
@@ -165,6 +202,30 @@ export function AudioAnalysisPanel() {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+          {/* Mode selector */}
+          <div className="flex gap-1 p-0.5 bg-[#1a1a1a] rounded-md border border-[#333]">
+            <button
+              onClick={() => setMode('local')}
+              className={`flex-1 px-3 py-1.5 rounded text-[10px] font-medium transition-colors ${
+                mode === 'local'
+                  ? 'bg-cyan-700/60 text-cyan-200'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Local (Browser)
+            </button>
+            <button
+              onClick={() => setMode('server')}
+              className={`flex-1 px-3 py-1.5 rounded text-[10px] font-medium transition-colors ${
+                mode === 'server'
+                  ? 'bg-cyan-700/60 text-cyan-200'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Server
+            </button>
+          </div>
+
           {/* Source clip info */}
           <div className="bg-[#222]/60 rounded px-3 py-2.5 border border-[#3a3a3a] space-y-0.5">
             <p className="text-[10px] text-zinc-400 uppercase tracking-wide">Clip</p>
@@ -175,10 +236,33 @@ export function AudioAnalysisPanel() {
             <p className="text-[10px] text-zinc-400">{clip.duration.toFixed(1)}s</p>
           </div>
 
+          {/* Local analysis progress */}
+          {mode === 'local' && analyzing && analysisJob && (
+            <div className="bg-[#1a1c20]/60 rounded px-3 py-2.5 border border-cyan-900/40 space-y-1.5">
+              <p className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">
+                Analyzing...
+              </p>
+              <div className="w-full h-1.5 bg-[#333] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-300"
+                  style={{ width: `${analysisJob.progress}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-zinc-400">{analysisJob.message}</p>
+            </div>
+          )}
+
           {/* Existing inferred metas */}
           {existingMetas && (
             <div className="bg-[#1a2a1a]/60 rounded px-3 py-2.5 border border-emerald-900/40 space-y-1">
-              <p className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Previously Inferred</p>
+              <p className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">
+                Previously Inferred
+                {existingMetas.analysisSource && (
+                  <span className="ml-1 text-[9px] text-emerald-600">
+                    ({existingMetas.analysisSource})
+                  </span>
+                )}
+              </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                 {existingMetas.bpm && (
                   <div>
@@ -205,42 +289,72 @@ export function AudioAnalysisPanel() {
                   </div>
                 )}
               </div>
+
+              {/* Chord display for local analysis results */}
+              {existingMetas.chords && existingMetas.chords.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-emerald-900/30">
+                  <span className="text-[10px] text-zinc-400">Chords</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {existingMetas.chords.slice(0, 16).map((chord, i) => (
+                      <span
+                        key={i}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-900/40 text-emerald-300 border border-emerald-800/40"
+                        title={`${chord.startTime.toFixed(1)}s - ${chord.endTime.toFixed(1)}s`}
+                      >
+                        {chord.label}
+                      </span>
+                    ))}
+                    {existingMetas.chords.length > 16 && (
+                      <span className="text-[10px] text-zinc-500">
+                        +{existingMetas.chords.length - 16} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Analysis results */}
-          {result && (
+          {/* Local analysis results */}
+          {mode === 'local' && localResult && (
+            <LocalResultDisplay result={localResult} />
+          )}
+
+          {/* Server analysis results */}
+          {mode === 'server' && serverResult && (
             <div className="bg-[#1a1c20]/60 rounded px-3 py-2.5 border border-cyan-900/40 space-y-1">
-              <p className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">Analysis Results</p>
+              <p className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">
+                Server Results
+              </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {result.bpm && (
+                {serverResult.bpm && (
                   <div>
                     <span className="text-[10px] text-zinc-400">BPM</span>
-                    <p className="text-[11px] font-mono text-cyan-300">{Math.round(result.bpm)}</p>
+                    <p className="text-[11px] font-mono text-cyan-300">{Math.round(serverResult.bpm)}</p>
                   </div>
                 )}
-                {result.keyScale && (
+                {serverResult.keyScale && (
                   <div>
                     <span className="text-[10px] text-zinc-400">Key</span>
-                    <p className="text-[11px] font-mono text-cyan-300">{result.keyScale}</p>
+                    <p className="text-[11px] font-mono text-cyan-300">{serverResult.keyScale}</p>
                   </div>
                 )}
-                {result.timeSignature && (
+                {serverResult.timeSignature && (
                   <div>
                     <span className="text-[10px] text-zinc-400">Time Sig</span>
-                    <p className="text-[11px] font-mono text-cyan-300">{result.timeSignature}</p>
+                    <p className="text-[11px] font-mono text-cyan-300">{serverResult.timeSignature}</p>
                   </div>
                 )}
-                {result.genres && (
+                {serverResult.genres && (
                   <div className="col-span-2">
                     <span className="text-[10px] text-zinc-400">Genre</span>
-                    <p className="text-[11px] text-cyan-300">{result.genres}</p>
+                    <p className="text-[11px] text-cyan-300">{serverResult.genres}</p>
                   </div>
                 )}
-                {result.caption && (
+                {serverResult.caption && (
                   <div className="col-span-2">
                     <span className="text-[10px] text-zinc-400">Description</span>
-                    <p className="text-[10px] text-cyan-200 leading-relaxed">{result.caption}</p>
+                    <p className="text-[10px] text-cyan-200 leading-relaxed">{serverResult.caption}</p>
                   </div>
                 )}
               </div>
@@ -258,6 +372,13 @@ export function AudioAnalysisPanel() {
               No audio available — generate the clip first before analyzing.
             </p>
           )}
+
+          {mode === 'local' && !analyzing && !localResult && hasAudio && (
+            <p className="text-[10px] text-zinc-500">
+              Local analysis uses Beat This! for BPM detection and Consonance-ACE for chord recognition.
+              Models are downloaded on first use (~23MB total) and cached locally.
+            </p>
+          )}
         </div>
 
         {/* Footer */}
@@ -269,7 +390,7 @@ export function AudioAnalysisPanel() {
             Close
           </button>
           <div className="flex gap-2">
-            {result && (result.bpm || result.keyScale) && (
+            {hasResult && hasBpmOrKey && (
               <button
                 onClick={handleApplyToProject}
                 disabled={applied}
@@ -284,9 +405,9 @@ export function AudioAnalysisPanel() {
             )}
             <button
               onClick={handleAnalyze}
-              disabled={analyzing || !hasAudio || isGenerating}
+              disabled={analyzing || !hasAudio || (mode === 'server' && isGenerating)}
               className={`px-4 py-1.5 rounded text-xs font-medium transition-colors ${
-                analyzing || !hasAudio || isGenerating
+                analyzing || !hasAudio || (mode === 'server' && isGenerating)
                   ? 'bg-[#444] text-zinc-400 cursor-not-allowed'
                   : 'bg-cyan-600 hover:bg-cyan-500 text-white'
               }`}
@@ -295,6 +416,73 @@ export function AudioAnalysisPanel() {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Local result display component ----------
+
+function LocalResultDisplay({ result }: { result: LocalAnalysisResult }) {
+  return (
+    <div className="bg-[#1a1c20]/60 rounded px-3 py-2.5 border border-cyan-900/40 space-y-1">
+      <p className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">
+        Local Analysis Results
+      </p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+        <div>
+          <span className="text-[10px] text-zinc-400">BPM</span>
+          <p className="text-[11px] font-mono text-cyan-300">{Math.round(result.bpm)}</p>
+        </div>
+        {result.keyScale && (
+          <div>
+            <span className="text-[10px] text-zinc-400">Key</span>
+            <p className="text-[11px] font-mono text-cyan-300">{result.keyScale}</p>
+          </div>
+        )}
+        {result.timeSignature && (
+          <div>
+            <span className="text-[10px] text-zinc-400">Time Sig</span>
+            <p className="text-[11px] font-mono text-cyan-300">{result.timeSignature}</p>
+          </div>
+        )}
+        <div>
+          <span className="text-[10px] text-zinc-400">Beats</span>
+          <p className="text-[11px] font-mono text-cyan-300">{result.beats.length} detected</p>
+        </div>
+      </div>
+
+      {/* Chord timeline */}
+      {result.chords.length > 0 && (
+        <ChordTimeline chords={result.chords} />
+      )}
+    </div>
+  );
+}
+
+function ChordTimeline({ chords }: { chords: ChordEvent[] }) {
+  // Filter out "N" (no chord) for display
+  const displayChords = chords.filter((c) => c.label !== 'N');
+  if (displayChords.length === 0) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-cyan-900/30">
+      <span className="text-[10px] text-zinc-400">Chords ({displayChords.length})</span>
+      <div className="flex flex-wrap gap-1 mt-1">
+        {displayChords.slice(0, 24).map((chord, i) => (
+          <span
+            key={i}
+            className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-900/40 text-cyan-300 border border-cyan-800/40"
+            title={`${chord.startTime.toFixed(1)}s - ${chord.endTime.toFixed(1)}s (${(chord.confidence * 100).toFixed(0)}%)`}
+          >
+            {chord.label}
+          </span>
+        ))}
+        {displayChords.length > 24 && (
+          <span className="text-[10px] text-zinc-500">
+            +{displayChords.length - 24} more
+          </span>
+        )}
       </div>
     </div>
   );

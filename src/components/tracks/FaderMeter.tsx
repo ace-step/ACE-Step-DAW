@@ -81,6 +81,19 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
 
   const faderPct = volume * 100;
 
+  // Meter fill scaled so full-scale audio aligns with fader triangle.
+  // Uses dB curve within the 0..faderPct range for natural dynamics.
+  const scaleMeterFill = (level: number): number => {
+    if (volume <= 0 || level <= 0) return 0;
+    const ratio = level / volume; // 1.0 = full scale relative to gain
+    if (ratio <= 0) return 0;
+    const db = 20 * Math.log10(Math.min(ratio, 2));
+    const dbFill = Math.max(0, Math.min(1, (db + 40) / 40));
+    return volume * dbFill * 100; // scale to fader position
+  };
+  const leftMeterPct = scaleMeterFill(leftFill);
+  const rightMeterPct = scaleMeterFill(rightFill);
+
   return (
     <div
       ref={containerRef}
@@ -107,7 +120,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Left channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              width: `${leftFill * 100}%`,
+              width: `${leftMeterPct}%`,
               backgroundColor: '#4ade80',
               opacity: 0.75,
             }}
@@ -120,7 +133,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Right channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              width: `${rightFill * 100}%`,
+              width: `${rightMeterPct}%`,
               backgroundColor: '#4ade80',
               opacity: 0.75,
             }}

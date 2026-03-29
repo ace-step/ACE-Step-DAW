@@ -17,6 +17,7 @@ export interface VideoRecorderState {
   status: VideoRecordingStatus;
   duration: number;
   blob: Blob | null;
+  mimeType: string | null;
   error: string | null;
 }
 
@@ -47,6 +48,7 @@ export class VideoRecorderService {
     status: 'idle',
     duration: 0,
     blob: null,
+    mimeType: null,
     error: null,
   };
 
@@ -92,7 +94,7 @@ export class VideoRecorderService {
       return;
     }
 
-    this._setState({ status: 'requesting', duration: 0, blob: null, error: null });
+    this._setState({ status: 'requesting', duration: 0, blob: null, mimeType: null, error: null });
 
     // 1. Request tab capture
     let displayStream: MediaStream;
@@ -133,8 +135,9 @@ export class VideoRecorderService {
 
     recorder.onstop = () => {
       const blob = new Blob(this._chunks, { type: mimeType });
+      this._chunks = [];
       this._cleanup();
-      this._setState({ status: 'done', blob });
+      this._setState({ status: 'done', blob, mimeType });
     };
 
     recorder.onerror = () => {
@@ -162,6 +165,11 @@ export class VideoRecorderService {
   /** Stop recording and produce the final blob. */
   stopRecording(): void {
     if (this._state.status !== 'recording') return;
+    // Clear duration timer immediately so it doesn't tick during the stopping phase
+    if (this._durationTimer) {
+      clearInterval(this._durationTimer);
+      this._durationTimer = null;
+    }
     this._setState({ status: 'stopping' });
     this._recorder?.stop();
   }
@@ -169,7 +177,7 @@ export class VideoRecorderService {
   /** Reset state back to idle, clearing any recorded blob. */
   dismiss(): void {
     this._cleanup();
-    this._setState({ status: 'idle', duration: 0, blob: null, error: null });
+    this._setState({ status: 'idle', duration: 0, blob: null, mimeType: null, error: null });
   }
 
   // ── Private ────────────────────────────────────────────────
@@ -191,9 +199,17 @@ export class VideoRecorderService {
       clearInterval(this._durationTimer);
       this._durationTimer = null;
     }
+    // Ensure the MediaRecorder is stopped so the final dataavailable fires
+    if (this._recorder) {
+      const state = this._recorder.state;
+      if (state === 'recording' || state === 'paused') {
+        try { this._recorder.stop(); } catch { /* already inactive */ }
+      }
+      this._recorder = null;
+    }
     // Stop all display tracks (removes browser "sharing" indicator)
     this._displayStream?.getTracks().forEach((t) => t.stop());
     this._displayStream = null;
-    this._recorder = null;
+    this._chunks = [];
   }
 }

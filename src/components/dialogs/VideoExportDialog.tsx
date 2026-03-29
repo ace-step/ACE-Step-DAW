@@ -16,9 +16,21 @@ function formatFileSize(bytes: number): string {
 
 function buildFileName(): string {
   const now = new Date();
-  const date = now.toISOString().slice(0, 10);
-  const time = `${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}`;
-  return `ACE-Step-DAW_Recording_${date}_${time}.webm`;
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const seconds = now.getSeconds().toString().padStart(2, '0');
+  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.webm`;
+}
+
+function formatMimeType(mimeType: string | null): string {
+  if (!mimeType) return 'WebM';
+  if (mimeType.includes('vp9')) return 'WebM (VP9 + Opus)';
+  if (mimeType.includes('vp8')) return 'WebM (VP8 + Opus)';
+  if (mimeType.includes('h264')) return 'WebM (H.264 + Opus)';
+  return 'WebM';
 }
 
 export function VideoExportDialog() {
@@ -30,7 +42,7 @@ export function VideoExportDialog() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [downloaded, setDownloaded] = useState(false);
 
-  const { status, blob, duration } = videoRecording;
+  const { status, blob, duration, mimeType } = videoRecording;
   const show = status === 'done' && blob !== null;
 
   // Create object URL for preview
@@ -103,7 +115,7 @@ export function VideoExportDialog() {
         <div className="flex items-center gap-4 text-xs text-zinc-400">
           <span>Duration: {formatDuration(duration)}</span>
           {blob && <span>Size: {formatFileSize(blob.size)}</span>}
-          <span>Format: WebM (VP9 + Opus)</span>
+          <span>Format: {formatMimeType(mimeType)}</span>
         </div>
 
         {/* Actions */}

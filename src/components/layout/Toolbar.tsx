@@ -382,6 +382,13 @@ function VideoRecordButton() {
   const videoRecording = useUIStore((s) => s.videoRecording);
   const startVideoRecording = useUIStore((s) => s.startVideoRecording);
   const stopVideoRecording = useUIStore((s) => s.stopVideoRecording);
+  const [supported] = useState(() => {
+    try {
+      return typeof navigator !== 'undefined' &&
+        typeof navigator.mediaDevices?.getDisplayMedia === 'function' &&
+        typeof MediaRecorder !== 'undefined';
+    } catch { return false; }
+  });
 
   const { status, duration } = videoRecording;
   const isRecording = status === 'recording';
@@ -394,6 +401,8 @@ function VideoRecordButton() {
       void startVideoRecording();
     }
   };
+
+  if (!supported) return null;
 
   return (
     <button

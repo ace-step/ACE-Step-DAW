@@ -226,6 +226,7 @@ export interface UIState {
     status: 'idle' | 'requesting' | 'recording' | 'stopping' | 'done' | 'error';
     duration: number;
     blob: Blob | null;
+    mimeType: string | null;
     error: string | null;
   };
   startVideoRecording: () => Promise<void>;
@@ -530,6 +531,9 @@ const ALL_MODALS_CLOSED = {
   showCommandPalette: false,
 } as const;
 
+// Module-scope reference for the active video recorder instance (avoids window globals)
+let _activeVideoRecorder: import('../services/videoRecorder').VideoRecorderService | null = null;
+
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
@@ -659,32 +663,35 @@ export const useUIStore = create<UIState>()(
 
   selectedSessionSlot: null,
 
-  videoRecording: { status: 'idle', duration: 0, blob: null, error: null },
+  videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null },
   startVideoRecording: async () => {
     const { VideoRecorderService } = await import('../services/videoRecorder');
     if (!VideoRecorderService.isSupported()) {
-      set({ videoRecording: { status: 'error', duration: 0, blob: null, error: 'Video recording is not supported in this browser.' } });
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Video recording is not supported in this browser.' } });
       return;
     }
-    const engine = (window as any).__getAudioEngine?.();
-    if (!engine) {
-      set({ videoRecording: { status: 'error', duration: 0, blob: null, error: 'Audio engine is not initialized.' } });
+    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { getAudioStream: () => MediaStream; disposeAudioStream: () => void }) | undefined;
+    const audioEngine = engine?.();
+    if (!audioEngine) {
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Audio engine is not initialized.' } });
       return;
     }
     const recorder = new VideoRecorderService();
-    (window as any).__videoRecorder = recorder;
+    _activeVideoRecorder = recorder;
     recorder.onStateChange = (state) => set({ videoRecording: { ...state } });
-    await recorder.startRecording(engine.getAudioStream());
+    await recorder.startRecording(audioEngine.getAudioStream());
   },
   stopVideoRecording: () => {
-    const recorder = (window as any).__videoRecorder as import('../services/videoRecorder').VideoRecorderService | undefined;
-    recorder?.stopRecording();
+    _activeVideoRecorder?.stopRecording();
+    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { disposeAudioStream: () => void }) | undefined;
+    engine?.()?.disposeAudioStream();
   },
   dismissVideoRecording: () => {
-    const recorder = (window as any).__videoRecorder as import('../services/videoRecorder').VideoRecorderService | undefined;
-    recorder?.dismiss();
-    (window as any).__videoRecorder = undefined;
-    set({ videoRecording: { status: 'idle', duration: 0, blob: null, error: null } });
+    _activeVideoRecorder?.dismiss();
+    _activeVideoRecorder = null;
+    const engine = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => { disposeAudioStream: () => void }) | undefined;
+    engine?.()?.disposeAudioStream();
+    set({ videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null } });
   },
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),

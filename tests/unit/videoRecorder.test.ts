@@ -42,10 +42,10 @@ class FakeMediaRecorder {
     this.state = 'recording';
   });
   stop = vi.fn(() => {
-    // Simulate a data chunk then stop
+    // Simulate a data chunk then fire onstop asynchronously (matches real MediaRecorder behavior)
     this.ondataavailable?.({ data: new Blob(['fake'], { type: 'video/webm' }) });
     this.state = 'inactive';
-    this.onstop?.();
+    setTimeout(() => this.onstop?.(), 0);
   });
 }
 
@@ -121,6 +121,7 @@ describe('VideoRecorderService', () => {
     });
 
     it('transitions recording → stopping → done on stopRecording', async () => {
+      vi.useFakeTimers();
       const service = new VideoRecorderService();
       await service.startRecording(makeFakeAudioStream());
 
@@ -128,20 +129,26 @@ describe('VideoRecorderService', () => {
       service.onStateChange = (s) => states.push(s.status);
 
       service.stopRecording();
-
       expect(states).toContain('stopping');
+
+      // onstop fires asynchronously (setTimeout 0)
+      vi.advanceTimersByTime(1);
       expect(states).toContain('done');
       expect(service.getState().status).toBe('done');
+      vi.useRealTimers();
     });
 
     it('produces a non-empty blob on done', async () => {
+      vi.useFakeTimers();
       const service = new VideoRecorderService();
       await service.startRecording(makeFakeAudioStream());
       service.stopRecording();
+      vi.advanceTimersByTime(1);
 
       const blob = service.getState().blob;
       expect(blob).toBeInstanceOf(Blob);
       expect(blob!.size).toBeGreaterThan(0);
+      vi.useRealTimers();
     });
 
     it('transitions to error when permission denied', async () => {
@@ -187,6 +194,7 @@ describe('VideoRecorderService', () => {
     });
 
     it('stops display media tracks on stopRecording', async () => {
+      vi.useFakeTimers();
       const displayStream = makeFakeDisplayStream();
       vi.stubGlobal('navigator', {
         mediaDevices: {
@@ -197,18 +205,22 @@ describe('VideoRecorderService', () => {
       const service = new VideoRecorderService();
       await service.startRecording(makeFakeAudioStream());
       service.stopRecording();
+      vi.advanceTimersByTime(1); // flush async onstop
 
       for (const track of displayStream.getTracks()) {
         expect(track.stop).toHaveBeenCalled();
       }
+      vi.useRealTimers();
     });
   });
 
   describe('dismiss', () => {
     it('resets state to idle and clears blob', async () => {
+      vi.useFakeTimers();
       const service = new VideoRecorderService();
       await service.startRecording(makeFakeAudioStream());
       service.stopRecording();
+      vi.advanceTimersByTime(1); // flush async onstop
       expect(service.getState().status).toBe('done');
 
       service.dismiss();
@@ -216,6 +228,7 @@ describe('VideoRecorderService', () => {
       expect(state.status).toBe('idle');
       expect(state.blob).toBeNull();
       expect(state.duration).toBe(0);
+      vi.useRealTimers();
     });
   });
 

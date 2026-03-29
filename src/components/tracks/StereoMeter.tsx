@@ -35,17 +35,15 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
 
   return (
     <div className="flex flex-col gap-[2px] w-full">
-      {/* Left channel — horizontal bar */}
+      {/* Left channel — gradient on container, mask reveals fill */}
       <div className="flex items-center gap-1 w-full">
-        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
+        <div className="flex-1 h-[4px] rounded-full overflow-hidden relative bg-zinc-800">
+          <div className="absolute inset-0 rounded-full" style={{ background: METER_GRADIENT_HORIZONTAL }} />
           <div
             data-testid="meter-left"
             aria-label={`Left channel level for ${trackId}`}
-            className="h-full rounded-full transition-[width] duration-75"
-            style={{
-              width: `${leftFill * 100}%`,
-              background: METER_GRADIENT_HORIZONTAL,
-            }}
+            className="absolute top-0 right-0 bottom-0 bg-zinc-800 transition-[left] duration-75"
+            style={{ left: `${leftFill * 100}%` }}
           />
         </div>
         {/* Clip indicator */}
@@ -60,17 +58,15 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
           onClick={resetClip}
         />
       </div>
-      {/* Right channel — horizontal bar */}
+      {/* Right channel */}
       <div className="flex items-center gap-1 w-full">
-        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
+        <div className="flex-1 h-[4px] rounded-full overflow-hidden relative bg-zinc-800">
+          <div className="absolute inset-0 rounded-full" style={{ background: METER_GRADIENT_HORIZONTAL }} />
           <div
             data-testid="meter-right"
             aria-label={`Right channel level for ${trackId}`}
-            className="h-full rounded-full transition-[width] duration-75"
-            style={{
-              width: `${rightFill * 100}%`,
-              background: METER_GRADIENT_HORIZONTAL,
-            }}
+            className="absolute top-0 right-0 bottom-0 bg-zinc-800 transition-[left] duration-75"
+            style={{ left: `${rightFill * 100}%` }}
           />
         </div>
         <div className="w-[5px] h-[5px] flex-shrink-0" />

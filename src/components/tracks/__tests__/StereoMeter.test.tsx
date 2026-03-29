@@ -56,18 +56,20 @@ describe('StereoMeter', () => {
     expect(screen.getByLabelText(/right channel/i)).toBeInTheDocument();
   });
 
-  it('reflects left and right levels as bar fill widths', () => {
+  it('reflects left and right levels as bar fill positions', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0.5, 0.25));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    expect(leftBar.style.width).not.toBe('0%');
-    expect(rightBar.style.width).not.toBe('0%');
-    // Left should be wider than right
-    const leftWidth = parseFloat(leftBar.style.width);
-    const rightWidth = parseFloat(rightBar.style.width);
-    expect(leftWidth).toBeGreaterThan(rightWidth);
+    // The mask div uses `left` to reveal the gradient underneath.
+    // Higher level = larger left value = more gradient visible.
+    const leftPos = parseFloat(leftBar.style.left);
+    const rightPos = parseFloat(rightBar.style.left);
+    expect(leftPos).toBeGreaterThan(0);
+    expect(rightPos).toBeGreaterThan(0);
+    // Left (louder) should reveal more gradient than right
+    expect(leftPos).toBeGreaterThan(rightPos);
   });
 
   it('shows clip indicator when clipped', () => {
@@ -91,14 +93,15 @@ describe('StereoMeter', () => {
     expect(screen.getByTestId('clip-indicator').className).not.toMatch(/bg-red/);
   });
 
-  it('bars show zero width when level is silent (-60dB or below)', () => {
+  it('bars show zero fill when level is silent (-60dB or below)', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0, 0));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    expect(leftBar.style.width).toBe('0%');
-    expect(rightBar.style.width).toBe('0%');
+    // Silence = mask starts at 0%, covering the entire gradient
+    expect(leftBar.style.left).toBe('0%');
+    expect(rightBar.style.left).toBe('0%');
   });
 
   it('cleans up animation frame on unmount', () => {

@@ -98,32 +98,34 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
       aria-valuenow={Math.round(volume * 100)}
       data-testid="fader-meter"
     >
-      {/* Meter bars — background for the fader */}
+      {/* Meter bars — gradient on container, fill div clips it */}
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col gap-[1px]">
         {/* Left channel */}
-        <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
+        <div
+          className="h-[5px] rounded-[2px] overflow-hidden relative"
+          style={{ background: 'rgb(39,39,42,0.5)' }}
+        >
+          {/* Full-width gradient layer */}
+          <div className="absolute inset-0 rounded-[2px]" style={{ background: METER_GRADIENT_HORIZONTAL, opacity: 0.75 }} />
+          {/* Dark mask covering unfilled portion */}
           <div
             data-testid="meter-left"
             aria-label={`Left channel level for ${trackId}`}
-            className="h-full rounded-[2px]"
-            style={{
-              width: `${leftFill * 100}%`,
-              background: METER_GRADIENT_HORIZONTAL,
-              opacity: 0.75,
-            }}
+            className="absolute top-0 right-0 bottom-0 bg-zinc-800"
+            style={{ left: `${leftFill * 100}%` }}
           />
         </div>
         {/* Right channel */}
-        <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
+        <div
+          className="h-[5px] rounded-[2px] overflow-hidden relative"
+          style={{ background: 'rgb(39,39,42,0.5)' }}
+        >
+          <div className="absolute inset-0 rounded-[2px]" style={{ background: METER_GRADIENT_HORIZONTAL, opacity: 0.75 }} />
           <div
             data-testid="meter-right"
             aria-label={`Right channel level for ${trackId}`}
-            className="h-full rounded-[2px]"
-            style={{
-              width: `${rightFill * 100}%`,
-              background: METER_GRADIENT_HORIZONTAL,
-              opacity: 0.75,
-            }}
+            className="absolute top-0 right-0 bottom-0 bg-zinc-800"
+            style={{ left: `${rightFill * 100}%` }}
           />
         </div>
       </div>

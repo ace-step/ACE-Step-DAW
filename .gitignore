@@ -15,6 +15,12 @@ scripts/metrics-latest.json
 .claude/worktrees/
 /tmp/daw-worktrees/
 
+# Agent planning artifacts (never commit)
+.claude/plans/
+
+# Agent research notes (never commit)
+.llm/research/
+
 # Reference repos (cloned for study, never commit)
 .claude/references/
 

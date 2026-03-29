@@ -241,7 +241,7 @@ export class AudioEngine {
   }
 
   async resume() {
-    if (this.ctx.state === 'suspended') {
+    if (this.ctx.state !== 'running') {
       await this.ctx.resume();
     }
   }

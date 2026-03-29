@@ -372,8 +372,11 @@ export function AddLayerPanel() {
 
   const extractPeaks = useCallback(async (blob: Blob, barCount: number) => {
     try {
-      const ctx = new AudioContext();
-      const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+      // Use OfflineAudioContext for decoding to avoid creating extra AudioContext
+      // instances that can hit browser limits and cause silent playback (#1188).
+      const arrayBuf = await blob.arrayBuffer();
+      const offCtx = new OfflineAudioContext(1, 1, 48000);
+      const buf = await offCtx.decodeAudioData(arrayBuf);
       const data = buf.getChannelData(0);
       const step = Math.max(1, Math.floor(data.length / barCount));
       const peaks: number[] = [];
@@ -387,7 +390,6 @@ export function AddLayerPanel() {
         }
         peaks.push(max);
       }
-      await ctx.close();
       return peaks;
     } catch {
       return [];

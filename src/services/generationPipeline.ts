@@ -689,14 +689,24 @@ async function generateClipInternal(
       ctxOffset > 0 ? `ctxOffset=${ctxOffset}s` : '',
     );
 
-    // Build instruction — detect chunk vs full mode based on whether the
-    // generation region covers the entire audio duration.  The backend's
-    // conditioning_text.py checks for "a segment" in the instruction to
-    // switch caption formatting (chunk omits Global: prefix).
+    // Build instruction — chunk mode ("a segment of") vs full mode.
+    // The backend's conditioning_text.py checks for "a segment" in the instruction
+    // to switch caption formatting (chunk = Local only, full = Global + Local).
+    //
+    // When a context window is present with explicit mask, always use chunk mode
+    // (the user is generating a segment within context). Only use full mode when
+    // there is no context window or the user explicitly chose "Whole song" (auto mask).
     const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
     const repaintStart = (options.repaintRange?.start ?? clip.startTime) - ctxOffset;
     const repaintEnd = (options.repaintRange?.end ?? (clip.startTime + clip.duration)) - ctxOffset;
-    const isChunkMode = repaintStart >= 0.5 || repaintEnd <= audioDuration - 0.5;
+    // Determine chunk (segment) vs full mode:
+    // - "Whole song" (auto mask, no context) = full mode (needs Global caption)
+    // - Context window + explicit mask = always segment (even if selection covers all context)
+    // - No context + explicit = time-based heuristic (partial = segment, full = full)
+    const hasContextWindow = options.contextWindow != null;
+    const isChunkMode = options.chunkMaskMode === 'auto'
+      ? false  // "Whole song" = full mode
+      : hasContextWindow || (repaintStart >= 0.5 || repaintEnd <= audioDuration - 0.5);
     const instruction = isChunkMode
       ? `Generate a segment of the ${trackLabel} track based on the audio context:`
       : `Generate the ${trackLabel} track based on the audio context:`;

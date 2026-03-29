@@ -1,8 +1,13 @@
-Read the current project state using daw_get_project and daw_get_transport MCP tools.
+Read the current DAW state by running the CLI:
 
-Display a concise summary:
+```bash
+npx tsx server/daw-cli.ts status
+npx tsx server/daw-cli.ts transport
+```
+
+Display the combined output as a concise summary:
 - Project name, BPM, time signature
 - Track count, playing/stopped, current position
-- For each track: name, type, clip count, mute/solo state, volume level
+- Per-track: name, type, clip count, mute/solo, volume
 
-Format as a clean table for readability.
+The CLI returns a pre-formatted table — display it directly.

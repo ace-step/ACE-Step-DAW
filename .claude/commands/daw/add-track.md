@@ -6,5 +6,16 @@ Ask the user what kind of track they want if not specified:
 - **sequencer**: Step sequencer for drum patterns
 - **pianoroll**: MIDI track with piano roll editor
 
-Use the daw_add_track tool with the chosen type.
+Run:
+```bash
+npx tsx server/daw-cli.ts add-track <type> [name]
+```
+
 If the user describes a musical purpose (e.g. "drums", "bass", "vocals"), suggest the appropriate track type and set a matching name.
+
+Examples:
+```bash
+npx tsx server/daw-cli.ts add-track sequencer "Drums"
+npx tsx server/daw-cli.ts add-track pianoroll "Bass Line"
+npx tsx server/daw-cli.ts add-track stems "Vocal Lead"
+```

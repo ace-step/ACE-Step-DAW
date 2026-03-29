@@ -296,6 +296,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             width={width}
             color={clipPresentation.waveformColor}
             opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
+            trackVolume={track.volume}
           />
         </div>
 
@@ -490,6 +491,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           bpm={bpm}
           prompt={clip.prompt}
           displayName={track.displayName}
+          trackVolume={track.volume}
         />
       )}
     </>

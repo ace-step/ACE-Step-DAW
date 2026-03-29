@@ -13,6 +13,8 @@ interface ClipWaveformProps {
   width: number;
   color: string;
   opacityClassName?: string;
+  /** Track volume (0..1). Scales the waveform visually to reflect actual output level. */
+  trackVolume?: number;
 }
 
 export function ClipWaveform({
@@ -26,6 +28,7 @@ export function ClipWaveform({
   width,
   color,
   opacityClassName = 'opacity-60',
+  trackVolume = 1,
 }: ClipWaveformProps) {
   const contentWidth = Math.max(width, 0);
   const clipWindow = {
@@ -58,17 +61,20 @@ export function ClipWaveform({
   // Each channel occupies its own vertical half.
   // Left channel: y = 0..50, center at y = 25
   // Right channel: y = 50..100, center at y = 75
+  // Scale maxAmplitude by track volume so waveform visually reflects output level
+  const scaledAmplitude = 23 * Math.min(1, trackVolume);
+
   const leftPath = buildChannelPath(
     peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
     0, // channelOffset in stride: 0 = Lmax, 1 = Lmin
     25, // centerY for left channel
-    23, // maxAmplitude (px in SVG units, leaves 2px padding)
+    scaledAmplitude,
   );
   const rightPath = buildChannelPath(
     peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
     2, // channelOffset in stride: 2 = Rmax, 3 = Rmin
     75, // centerY for right channel
-    23,
+    scaledAmplitude,
   );
 
   return (

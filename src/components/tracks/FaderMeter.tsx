@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { METER_GRADIENT_HORIZONTAL, levelToMeterFill } from '../meter-colors';
 
 interface FaderMeterProps {
   trackId: string;
@@ -8,37 +9,11 @@ interface FaderMeterProps {
   trackName: string;
 }
 
-/** Convert linear level (0..1+) to a 0..1 fill fraction mapping -60dB..0dB */
-function levelToFill(linear: number): number {
-  if (linear <= 0) return 0;
-  const db = 20 * Math.log10(linear);
-  return Math.max(0, Math.min(1, (db + 60) / 60));
-}
-
-/**
- * Horizontal fader handle SVG — mimics a real mixer fader cap.
- * Metallic look with grip lines, rendered as pure vector.
- */
+/** Downward-pointing triangle arrow — compact fader position indicator. */
 function FaderCap() {
   return (
-    <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-md">
-      {/* Body — rounded rect with metallic gradient */}
-      <defs>
-        <linearGradient id="faderCapGrad" x1="0" y1="0" x2="12" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#b0b0b8" />
-          <stop offset="20%" stopColor="#e0e0e4" />
-          <stop offset="50%" stopColor="#f5f5f7" />
-          <stop offset="80%" stopColor="#e0e0e4" />
-          <stop offset="100%" stopColor="#a8a8b0" />
-        </linearGradient>
-      </defs>
-      <rect x="1" y="0.5" width="10" height="17" rx="2" fill="url(#faderCapGrad)" stroke="#78787e" strokeWidth="0.5" />
-      {/* Center grip lines */}
-      <line x1="4" y1="6" x2="4" y2="12" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
-      <line x1="6" y1="5" x2="6" y2="13" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
-      <line x1="8" y1="6" x2="8" y2="12" stroke="#999" strokeWidth="0.6" strokeLinecap="round" />
-      {/* Center notch line — white highlight */}
-      <line x1="6" y1="1.5" x2="6" y2="3.5" stroke="#fff" strokeWidth="0.8" strokeLinecap="round" opacity="0.9" />
+    <svg width="8" height="7" viewBox="0 0 8 7" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="0,0 8,0 4,7" fill="#d0d0d4" stroke="#888" strokeWidth="0.5" />
     </svg>
   );
 }
@@ -60,8 +35,8 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
     const engine = getAudioEngine();
     const tick = () => {
       const meter = engine.getTrackMeter(trackId);
-      setLeftFill(levelToFill(meter.leftLevel));
-      setRightFill(levelToFill(meter.rightLevel));
+      setLeftFill(levelToMeterFill(meter.leftLevel));
+      setRightFill(levelToMeterFill(meter.rightLevel));
       setClipping((was) => was || meter.clipped);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -106,6 +81,19 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
 
   const faderPct = volume * 100;
 
+  // Meter fill scaled so full-scale audio aligns with fader triangle.
+  // Uses dB curve within the 0..faderPct range for natural dynamics.
+  const scaleMeterFill = (level: number): number => {
+    if (volume <= 0 || level <= 0) return 0;
+    const ratio = level / volume; // 1.0 = full scale relative to gain
+    if (ratio <= 0) return 0;
+    const db = 20 * Math.log10(Math.min(ratio, 2));
+    const dbFill = Math.max(0, Math.min(1, (db + 40) / 40));
+    return volume * dbFill * 100; // scale to fader position
+  };
+  const leftMeterPct = scaleMeterFill(leftFill);
+  const rightMeterPct = scaleMeterFill(rightFill);
+
   return (
     <div
       ref={containerRef}
@@ -123,7 +111,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
       aria-valuenow={Math.round(volume * 100)}
       data-testid="fader-meter"
     >
-      {/* Meter bars — background for the fader */}
+      {/* Meter bars — simple width fill, green solid */}
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col gap-[1px]">
         {/* Left channel */}
         <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
@@ -132,8 +120,8 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Left channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              width: `${leftFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              width: `${leftMeterPct}%`,
+              backgroundColor: '#4ade80',
               opacity: 0.75,
             }}
           />
@@ -145,18 +133,18 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Right channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              width: `${rightFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e 0%, #84cc16 35%, #eab308 65%, #ef4444 95%)',
+              width: `${rightMeterPct}%`,
+              backgroundColor: '#4ade80',
               opacity: 0.75,
             }}
           />
         </div>
       </div>
 
-      {/* Fader cap — SVG mixer knob riding on the meter */}
+      {/* Fader arrow — downward triangle indicating position */}
       <div
         className="absolute top-0 pointer-events-none"
-        style={{ left: `${faderPct}%`, transform: 'translateX(-50%)' }}
+        style={{ left: `${faderPct}%`, transform: 'translateX(-50%)', marginTop: '-1px' }}
       >
         <FaderCap />
       </div>

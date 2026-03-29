@@ -636,16 +636,10 @@ export class AudioEngine {
 
   private _readAnalyserMeter(
     analyser: AnalyserNode,
-    data: Uint8Array<ArrayBuffer>,
+    _data: Uint8Array<ArrayBuffer>,
     timeData: Float32Array<ArrayBuffer>,
   ): { level: number; clipped: boolean } {
-    analyser.getByteFrequencyData(data);
     analyser.getFloatTimeDomainData(timeData);
-
-    let spectralPeak = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > spectralPeak) spectralPeak = data[i];
-    }
 
     let samplePeak = 0;
     for (let i = 0; i < timeData.length; i++) {
@@ -654,7 +648,7 @@ export class AudioEngine {
     }
 
     return {
-      level: Math.max(0, Math.min(1, Math.max(spectralPeak / 255, samplePeak))),
+      level: Math.max(0, Math.min(1, samplePeak)),
       clipped: samplePeak >= 0.995,
     };
   }

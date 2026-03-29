@@ -27,6 +27,7 @@ interface ClipDragGhostProps {
   bpm: number;
   prompt: string | undefined;
   displayName: string;
+  trackVolume?: number;
 }
 
 export function ClipDragGhost({
@@ -48,6 +49,7 @@ export function ClipDragGhost({
   bpm,
   prompt,
   displayName,
+  trackVolume,
 }: ClipDragGhostProps) {
   if (!dragGhost.targetTrackId) return null;
 
@@ -108,6 +110,7 @@ export function ClipDragGhost({
             width={width}
             color={clipPresentation.waveformColor}
             opacityClassName="opacity-85"
+            trackVolume={trackVolume}
           />
         </div>
         {isMidiClip && midiData && (

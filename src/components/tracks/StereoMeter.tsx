@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { METER_GRADIENT_HORIZONTAL, levelToMeterFill } from '../meter-colors';
 
 interface StereoMeterProps {
   trackId: string;
-}
-
-/** Convert linear level (0..1+) to a 0..1 fill fraction mapping -60dB..0dB */
-function levelToFill(linear: number): number {
-  if (linear <= 0) return 0;
-  const db = 20 * Math.log10(linear);
-  return Math.max(0, Math.min(1, (db + 60) / 60));
 }
 
 export function StereoMeter({ trackId }: StereoMeterProps) {
@@ -23,8 +17,8 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
 
     const tick = () => {
       const meter = engine.getTrackMeter(trackId);
-      setLeftFill(levelToFill(meter.leftLevel));
-      setRightFill(levelToFill(meter.rightLevel));
+      setLeftFill(levelToMeterFill(meter.leftLevel));
+      setRightFill(levelToMeterFill(meter.rightLevel));
       setClipping((was) => was || meter.clipped);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -41,7 +35,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
 
   return (
     <div className="flex flex-col gap-[2px] w-full">
-      {/* Left channel — horizontal bar */}
+      {/* Left channel — simple green fill */}
       <div className="flex items-center gap-1 w-full">
         <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
           <div
@@ -50,7 +44,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
             className="h-full rounded-full transition-[width] duration-75"
             style={{
               width: `${leftFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+              backgroundColor: '#4ade80',
             }}
           />
         </div>
@@ -66,7 +60,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
           onClick={resetClip}
         />
       </div>
-      {/* Right channel — horizontal bar */}
+      {/* Right channel */}
       <div className="flex items-center gap-1 w-full">
         <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
           <div
@@ -75,7 +69,7 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
             className="h-full rounded-full transition-[width] duration-75"
             style={{
               width: `${rightFill * 100}%`,
-              background: 'linear-gradient(to right, #22c55e, #facc15 70%, #ef4444 95%)',
+              backgroundColor: '#4ade80',
             }}
           />
         </div>

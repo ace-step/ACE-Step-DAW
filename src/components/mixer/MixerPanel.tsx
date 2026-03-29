@@ -131,8 +131,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
         {/* Track header group */}
         <div data-testid="channel-header" className="flex w-full flex-col items-center gap-1.5 pb-2">
-          {/* Track color strip */}
-          <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
+            {/* Track color strip moved to bottom of channel strip */}
           {track.isGroup && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-[#333] rounded px-1.5 py-0.5">GRP</span>
           )}
@@ -367,8 +366,8 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
 
       {/* Fader + meter region */}
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
-        <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
-          <LevelMeter trackId={track.id} stereo />
+        <div className="relative" style={{ height: faderHeight }}>
+          <LevelMeter trackId={track.id} stereo showScale />
           <VerticalFader
             value={vol}
             min={0}
@@ -380,6 +379,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
+        <div className="w-full h-1.5 rounded-full mt-1" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
       </div>
     </div>
   );
@@ -425,19 +425,20 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
           <span>IN</span>
           <span className="mx-2">OUT</span>
         </div>
-        <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
+        <div className="relative flex gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" stereo={false} />
-          <LevelMeter masterStage="output" stereo={false} />
-          <VerticalFader
-            value={masterVol}
-            min={0}
-            max={1.5}
-            defaultValue={1.0}
-            onChange={handleChange}
-            aria-label="Master volume fader"
-            accentColor="#4A5FFF"
-            width={16}
-          />
+          <div className="relative">
+            <LevelMeter masterStage="output" stereo={false} showScale />
+            <VerticalFader
+              value={masterVol}
+              min={0}
+              max={1.5}
+              defaultValue={1.0}
+              onChange={handleChange}
+              aria-label="Master volume fader"
+              accentColor="#4A5FFF"
+            />
+          </div>
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>
       </div>

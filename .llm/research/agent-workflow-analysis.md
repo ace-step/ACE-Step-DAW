@@ -87,9 +87,9 @@ QA finds bugs → creates issues → dev picks up → fixes → QA re-tests. The
 
 ### W1: CLAUDE.md Information Overload (Critical)
 
-**Problem**: `CLAUDE.md` is ~400 lines and tries to be everything: tech stack reference, quality gates, TDD instructions, interaction design standards, store API docs, git conventions, skill recommendations, and agent rules. `AGENTS.md` adds another ~340 lines with significant overlap.
+**Problem**: `CLAUDE.md` is ~240 lines and tries to be everything: tech stack reference, quality gates, TDD instructions, interaction design standards, store API docs, git conventions, skill recommendations, and agent rules. `AGENTS.md` adds another ~340 lines with significant overlap.
 
-**Impact**: Every agent invocation loads 700+ lines of instructions. Most of it is irrelevant to the specific task. This wastes context tokens, dilutes critical instructions, and increases the chance of agents ignoring important rules.
+**Impact**: Every agent invocation loads 580+ lines of instructions. Most of it is irrelevant to the specific task. This wastes context tokens, dilutes critical instructions, and increases the chance of agents ignoring important rules.
 
 **Evidence**: The "Context Anxiety Checklist" in CLAUDE.md itself acknowledges this is a problem — agents re-read files, add defensive checks, and lose track of modifications.
 

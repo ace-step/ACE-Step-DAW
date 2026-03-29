@@ -131,7 +131,7 @@ Researcher → PM → Issues → Dev Agent → PR → CI → QA → Merge
 - Hooks must be fast (< 10s) — slow hooks frustrate agents and waste tokens
 - Hooks should fail loudly with actionable messages
 - Don't duplicate CI checks in hooks — hooks are for fast, local feedback
-- Test hooks manually before deploying (`claude code --test-hooks`)
+- Test hooks manually before deploying (make a test commit to verify behavior)
 
 ## Audit Checklist
 
@@ -151,7 +151,7 @@ Run this quarterly (every 10 versions) or when agent performance degrades:
 ## Output Format
 
 ```markdown
-# Harness Engineering Audit �� [date]
+# Harness Engineering Audit -- [date]
 
 ## Configuration Health
 | Aspect | Status | Action |

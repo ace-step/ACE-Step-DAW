@@ -52,9 +52,9 @@ Run all three audits and collect metrics:
 npm test 2>&1 | tail -5                              # Pass/fail count
 npx tsc --noEmit 2>&1 | grep -c "error TS" || echo 0 # Type errors
 
-# Codebase health
-find src -name "*.ts" -o -name "*.tsx" | wc -l        # File count
-wc -l src/**/*.ts src/**/*.tsx 2>/dev/null | tail -1   # Total lines
+# Codebase health (use Glob tool, not find)
+# Glob pattern: src/**/*.{ts,tsx} to count files
+# Read individual files to assess size
 
 # Agent health (if git log available)
 git log --oneline --since="2 weeks ago" | wc -l        # Recent commits

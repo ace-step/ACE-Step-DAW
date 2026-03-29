@@ -9,21 +9,23 @@ React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js + Tailwind CSS v4
 
 ## Issue-First Workflow (BLOCKING — do this BEFORE any code)
 
-1. **Create GitHub issue** — English title with `feat:`/`fix:`/`docs:`/`refactor:`/`chore:` prefix, acceptance criteria checklist
+1. **Create GitHub issue** — English title with `feat:`/`fix:`/`docs:`/`refactor:`/`chore:` prefix, acceptance criteria checklist, label: `bug`/`enhancement`/`docs`/`refactor`
 2. **Create branch** — `feat/issue-NUMBER` or `fix/issue-NUMBER`
 3. **Implement** — TDD cycle + quality gates
 4. **Create PR** — `Closes #NUMBER` in body
 5. **Report** — issue URL + PR URL to user
 
-**Skip only for**: pure questions, trivial typos (<3 lines), or existing issues.
+**Skip only for**: pure questions, trivial typos (<3 lines), or existing issues. **When in doubt, create the issue.** It takes 10 seconds.
 
 ## Commands
 
 ```bash
 npm run dev          # Dev server (http://127.0.0.1:5174)
 npm test             # Vitest unit tests
+npm run test:watch   # Vitest in watch mode
 npm run test:e2e     # Playwright E2E tests
 npm run test:all     # Unit + E2E
+npm run test:coverage # Unit tests with coverage report
 npm run build        # TypeScript check + Vite build
 npx tsc --noEmit     # Type check only
 ```
@@ -57,6 +59,8 @@ npx tsc --noEmit     # Type check only
 - Record blockers to `.llm/BLOCKERS.md`
 - Use `@do-todo` for individual tasks, `@tester` after each task
 - Never write tests that only assert truthiness — assert specific values
+- For interactive features, write adversarial test cases in TDD Red phase (weird BPMs, rapid input, undo immediately after action, drag during playback)
+- After completing a logical unit of work, commit immediately
 
 ## When Compacting, Preserve
 

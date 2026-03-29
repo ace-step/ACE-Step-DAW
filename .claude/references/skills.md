@@ -1,9 +1,27 @@
 # Recommended Claude Code Skills
 
-> Install via `npx clawhub@latest install <name> --dir .claude/skills`
+> Two ecosystems exist:
+> - **ClawHub skills**: `npx clawhub@latest install <name> --dir .claude/skills`
+> - **gstack plugins**: `/plugin install <name>` (via gstack CLI)
+>
 > These are recommended but NOT currently installed.
 
-## By Development Step
+## gstack Plugins (UI/UX focus)
+
+```bash
+# Layer 1: Interaction design foundations
+/plugin install bencium-innovative-ux-designer@bencium-marketplace  # Drag/drop, feedback, direct manipulation
+/plugin install interface-design                                      # Design decision memory & consistency
+
+# Layer 2: Quality assurance
+/plugin install frontend-design                                       # Anthropic official — visual quality
+/plugin install web-design-guidelines                                 # 100+ rule UX audit (Vercel)
+
+# Layer 3: Process support
+/plugin install designer-skills                                       # State machines, gestures, feedback design
+```
+
+## ClawHub Skills (by development step)
 
 ### Step 1 — Research
 - `find-skill` — Search for additional skills on ClawHub

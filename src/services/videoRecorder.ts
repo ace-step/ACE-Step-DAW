@@ -183,7 +183,17 @@ export class VideoRecorderService {
       this._setState({ status: 'error', error: 'Recording failed unexpectedly.' });
     };
 
-    // 5. Start — no timeslice argument, data is collected as one chunk on stop()
+    // Handle "Stop sharing" button — track ends, we must call recorder.stop()
+    // so ondataavailable fires with the recorded data.
+    displayStream.getVideoTracks().forEach((track) => {
+      track.addEventListener('ended', () => {
+        if (this._state.status === 'recording' && !this._stopped) {
+          this.stopRecording();
+        }
+      });
+    });
+
+    // 5. Start — no timeslice to produce a single valid blob on stop()
     recorder.start();
     this._recorder = recorder;
     this._startTime = Date.now();

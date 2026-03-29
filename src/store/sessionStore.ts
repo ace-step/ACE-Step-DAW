@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { SessionClipSlot, SessionScene, BufferedMidiEvent } from '../types/session';
+import type { SessionClipSlot, SessionScene, BufferedMidiEvent, SceneFollowActionType } from '../types/session';
 import { MidiCaptureBuffer } from '../utils/midiCaptureBuffer';
 
 const DEFAULT_SCENE_COUNT = 8;
@@ -33,6 +33,8 @@ export interface SessionState {
   stopScene: (sceneIndex: number) => void;
   stopAll: () => void;
   renameScene: (sceneId: string, name: string) => void;
+  updateSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  setSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
   addScene: (trackIds: string[]) => void;
   setRecordingToArrangement: (v: boolean) => void;
   recordSessionEvent: (event: SessionRecordedEvent) => void;
@@ -166,6 +168,31 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set((s) => ({
       scenes: s.scenes.map((scene) =>
         scene.id === sceneId ? { ...scene, name } : scene,
+      ),
+    }));
+  },
+
+  updateSceneProperties: (sceneId, properties) => {
+    set((s) => {
+      if (!s.scenes.some((scene) => scene.id === sceneId)) return s;
+      return {
+        scenes: s.scenes.map((scene) =>
+          scene.id === sceneId ? { ...scene, ...properties } : scene,
+        ),
+      };
+    });
+  },
+
+  setSceneFollowAction: (sceneId, action, bars?) => {
+    set((s) => ({
+      scenes: s.scenes.map((scene) =>
+        scene.id === sceneId
+          ? {
+              ...scene,
+              followAction: action,
+              followActionTime: action === 'none' ? undefined : bars,
+            }
+          : scene,
       ),
     }));
   },

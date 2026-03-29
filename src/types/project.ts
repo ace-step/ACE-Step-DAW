@@ -598,6 +598,34 @@ export interface GainEnvelopePoint {
   gain: number;   // 0–2 (1 = unity, >1 = boost)
 }
 
+export type ClipGenerationType = 'text2music' | 'lego';
+
+/** Persisted generation form values for re-editing and re-generating a clip. */
+export interface ClipGenerationParams {
+  type: ClipGenerationType;
+  prompt: string;
+  lyrics: string;
+  // text2music params
+  durationSeconds?: number;
+  thinking?: boolean;
+  seed?: number;
+  useRandomSeed?: boolean;
+  vocalLanguage?: string;
+  instrumental?: boolean;
+  splitToStems?: boolean;
+  stemCount?: 2 | 4 | 6;
+  useProjectMeta?: boolean;
+  inferenceSteps?: number;
+  guidanceScale?: number;
+  shift?: number;
+  // lego params
+  globalCaption?: string;
+  sampleMode?: boolean;
+  autoExpandPrompt?: boolean;
+  /** Context window used for lego generation — persisted for edit/regenerate. */
+  contextWindow?: { startTime: number; endTime: number } | null;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -660,6 +688,8 @@ export interface Clip {
   gainEnvelope?: GainEnvelopePoint[];
   /** Per-clip mute for A/B variation comparison. */
   muted?: boolean;
+  /** Generation parameters used to create this clip, for edit/regenerate. */
+  generationParams?: ClipGenerationParams;
 }
 
 export interface BounceInPlaceOptions {
@@ -918,10 +948,21 @@ export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4'
 /** Clip launch behavior mode for session view slots. */
 export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 
+/** Action to perform automatically when a scene finishes playing. */
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+
 export interface SessionScene {
   id: string;
   name: string;
   index: number;
+  /** Optional tempo override (BPM) applied when this scene launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this scene launches. */
+  timeSignature?: [number, number];
+  /** Action to trigger after the scene finishes playing. Defaults to 'none'. */
+  followAction?: SceneFollowActionType;
+  /** Duration in bars after which the follow action triggers. */
+  followActionTime?: number;
 }
 
 export interface SessionClipSlot {

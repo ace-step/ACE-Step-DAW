@@ -151,3 +151,17 @@ export function readAudioContextPlaybackLatency(
     outputLatency: typeof ctx.outputLatency === 'number' ? ctx.outputLatency : null,
   };
 }
+
+/**
+ * Convert a latency value in milliseconds to the equivalent number of audio samples.
+ * Returns 0 for null/undefined input. Result is rounded to the nearest integer.
+ */
+export function latencyMsToSamples(
+  latencyMs: number | null | undefined,
+  sampleRate: number,
+): number {
+  if (latencyMs == null || !Number.isFinite(latencyMs) || latencyMs <= 0) {
+    return 0;
+  }
+  return Math.round((latencyMs / 1000) * sampleRate);
+}

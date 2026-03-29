@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ExpandEditorModal } from './ExpandEditorModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useModelStore } from '../../store/modelStore';
 import { useUIStore } from '../../store/uiStore';
 import { MAX_DURATION, MIN_DURATION } from '../../constants/defaults';
 import { VOCAL_LANGUAGES, DEFAULT_VOCAL_LANGUAGE } from '../../constants/languages';
-import { generateText2Music } from '../../services/generationPipeline';
+import { generateText2Music, regenerateClip } from '../../services/generationPipeline';
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
@@ -17,6 +18,15 @@ function MagicPenIcon({ size = 16 }: { size?: number }) {
       <path d="M3.5 20.5l1.5-4.5 3 3-4.5 1.5zM7.5 13.5l3 3 9-9-3-3-9 9z" opacity="0.85" />
       <path d="M17 2l-1.5 3.5L12 7l3.5 1.5L17 12l1.5-3.5L22 7l-3.5-1.5L17 2z" />
       <path d="M7 2L6.25 3.75 4.5 4.5l1.75.75L7 7l.75-1.75L9.5 4.5 7.75 3.75 7 2z" opacity="0.6" />
+    </svg>
+  );
+}
+
+/** Expand/fullscreen icon for textarea expand buttons */
+function ExpandIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
     </svg>
   );
 }
@@ -74,6 +84,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [enhancingCaption, setEnhancingCaption] = useState(false);
   const [enhancingLyrics, setEnhancingLyrics] = useState(false);
   const [loadingExample, setLoadingExample] = useState(false);
+  const [expandCaption, setExpandCaption] = useState(false);
+  const [expandLyrics, setExpandLyrics] = useState(false);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -143,6 +155,49 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     if (initialData.vocalLanguage) setVocalLanguage(initialData.vocalLanguage);
   }, [initialData]);
 
+  // Edit mode: hydrate form from clip's stored generationParams
+  const editingClipId = useUIStore((s) => s.editingText2MusicClipId);
+  const editingClip = useProjectStore((s) =>
+    editingClipId ? s.project?.tracks.flatMap((t) => t.clips).find((c) => c.id === editingClipId) : undefined,
+  );
+  const hydratedClipIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editingClipId || !editingClip || hydratedClipIdRef.current === editingClipId) return;
+    hydratedClipIdRef.current = editingClipId;
+    const p = editingClip.generationParams;
+    if (p) {
+      setPrompt(p.prompt);
+      setLyrics(p.lyrics);
+      if (p.thinking !== undefined) setThinking(p.thinking);
+      if (p.seed !== undefined) { setSeed(p.seed); setUseRandomSeed(false); }
+      if (p.useRandomSeed !== undefined) setUseRandomSeed(p.useRandomSeed);
+      if (p.vocalLanguage) setVocalLanguage(p.vocalLanguage);
+      if (p.instrumental !== undefined) setInstrumental(p.instrumental);
+      if (p.durationSeconds !== undefined && p.durationSeconds > 0) {
+        setDurationSeconds(p.durationSeconds);
+        setDurationAuto(false);
+      } else {
+        setDurationSeconds(-1);
+        setDurationAuto(true);
+      }
+      if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
+      if (p.stemCount !== undefined) setStemCount(p.stemCount);
+      if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+    } else {
+      // Backward compatibility: hydrate from basic clip fields
+      setPrompt(editingClip.prompt || '');
+      setLyrics(editingClip.lyrics || '');
+      if (editingClip.audioDuration && editingClip.audioDuration > 0) {
+        setDurationSeconds(editingClip.audioDuration);
+        setDurationAuto(false);
+      }
+      setInstrumental(editingClip.lyrics === '[Instrumental]');
+    }
+  }, [editingClipId, editingClip]);
+  useEffect(() => {
+    if (!editingClipId) hydratedClipIdRef.current = null;
+  }, [editingClipId]);
+
   // Only disable form during model loading, NOT during generation.
   // Generation runs in background — user should be able to edit/start new tasks.
   const isDisabled = modelLoadingState === 'loading';
@@ -158,13 +213,40 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     // Close the generation panel so user sees the timeline with the loading clip
     useUIStore.getState().setShowGenerationPanel(false);
 
-    // Fire-and-forget: generation runs in background, UI stays interactive.
-    // The pipeline creates track/clip placeholder immediately, then polls.
+    // Edit mode: update stored params on existing clip, then regenerate
+    if (editingClipId) {
+      const store = useProjectStore.getState();
+      store.updateClip(editingClipId, {
+        generationParams: {
+          type: 'text2music',
+          prompt: prompt.trim(),
+          lyrics: instrumental ? '[Instrumental]' : lyrics,
+          durationSeconds: durationSeconds === -1 ? undefined : durationSeconds,
+          thinking,
+          seed: useRandomSeed ? undefined : seed,
+          useRandomSeed,
+          vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+          instrumental,
+          splitToStems,
+          stemCount,
+          useProjectMeta,
+          inferenceSteps: project?.generationDefaults?.inferenceSteps,
+          guidanceScale: project?.generationDefaults?.guidanceScale,
+          shift: project?.generationDefaults?.shift,
+        },
+      });
+      useUIStore.getState().setEditingText2MusicClipId(null);
+      regenerateClip(editingClipId).catch((err) => {
+        setError(err instanceof Error ? err.message : 'Regeneration failed');
+      });
+      return;
+    }
+
+    // New generation: fire-and-forget, runs in background
     generateText2Music({
       prompt: prompt.trim(),
       lyrics: instrumental ? '[Instrumental]' : lyrics,
       durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
-      // Only pass project meta when "Match project" is enabled
       bpm: useProjectMeta ? (project?.bpm ?? null) : null,
       keyScale: useProjectMeta ? (project?.keyScale ?? '') : '',
       timeSignature: useProjectMeta ? String(project?.timeSignature ?? 4) : '',
@@ -177,17 +259,18 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
-      // When not using project meta, optionally sync results back to project
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
+      instrumental,
+      useProjectMeta,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
   onFooterChange({
-    label: isGenerating ? 'Generating...' : 'Generate Full Song',
+    label: isGenerating ? 'Generating...' : (editingClipId ? 'Re-generate' : 'Generate Full Song'),
     disabled: isSubmitDisabled || !prompt.trim(),
     action: footerAction,
     thinkingState: { checked: thinking, onChange: setThinking, disabled: isSubmitDisabled },
@@ -223,7 +306,26 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           >
             {enhancingCaption ? <span className="animate-spin">...</span> : <MagicPenIcon />}
           </button>
+          <button
+            type="button"
+            onClick={() => setExpandCaption(true)}
+            className="absolute right-2 bottom-1.5 flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white"
+            title="Expand editor"
+          >
+            <ExpandIcon />
+          </button>
         </div>
+        <ExpandEditorModal
+          isOpen={expandCaption}
+          title="Music Caption"
+          value={prompt}
+          onChange={setPrompt}
+          onClose={() => setExpandCaption(false)}
+          onEnhance={handleEnhanceCaption}
+          enhancing={enhancingCaption}
+          disabled={isDisabled}
+          placeholder="Describe the music you want to generate..."
+        />
       </section>
 
       {/* Lyrics — with Language + Instrumental inline */}
@@ -279,7 +381,28 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           >
             {enhancingLyrics ? <span className="animate-spin">...</span> : <MagicPenIcon />}
           </button>
+          <button
+            type="button"
+            onClick={() => setExpandLyrics(true)}
+            disabled={instrumental}
+            className="absolute right-2 bottom-1.5 flex h-7 w-7 items-center justify-center rounded text-white/60 transition-colors hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+            title="Expand editor"
+          >
+            <ExpandIcon />
+          </button>
         </div>
+        <ExpandEditorModal
+          isOpen={expandLyrics}
+          title="Lyrics"
+          value={lyrics}
+          onChange={setLyrics}
+          onClose={() => setExpandLyrics(false)}
+          onEnhance={handleEnhanceLyrics}
+          enhancing={enhancingLyrics}
+          mono
+          disabled={isDisabled || instrumental}
+          placeholder="[Verse 1]\nYour lyrics here..."
+        />
       </section>
 
       {/* Random Example */}

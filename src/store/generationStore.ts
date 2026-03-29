@@ -423,6 +423,29 @@ export function getGenerationValidationError(input: GenerationValidationInput): 
   return null;
 }
 
+/** Draft state for the multi-track (Stems) generation form.
+ *  Stored in the generation store so it survives component unmount/remount
+ *  when switching between Mix and Stems tabs. */
+export interface StemsFormDraft {
+  globalCaption: string;
+  rows: StemsFormDraftRow[];
+  sharedSeed: number;
+  audioDuration: number;
+  durationAuto: boolean;
+  useRandomSeed: boolean;
+}
+
+export interface StemsFormDraftRow {
+  rowId: string;
+  linkedTrackId: string | null;
+  trackName: string;
+  localDescription: string;
+  lyrics: string;
+  checked: boolean;
+  firstClipId: string | null;
+  hasExistingAudio: boolean;
+}
+
 export interface GenerationState {
   jobs: GenerationJob[];
   isGenerating: boolean;
@@ -432,6 +455,7 @@ export interface GenerationState {
   variationSession: VariationSession | null;
   generationForm: GenerationFormState;
   lastSubmittedRequest: SubmittedGenerationRequest | null;
+  stemsFormDraft: StemsFormDraft | null;
 
   addJob: (job: GenerationJob) => void;
   updateJob: (jobId: string, updates: Partial<GenerationJob>) => void;
@@ -470,6 +494,9 @@ export interface GenerationState {
   getGenerationValidationError: () => string | null;
   canSubmitGeneration: () => boolean;
   submitGenerationRequest: (context?: { globalCaption?: string | null }) => VariationSessionParams | null;
+
+  setStemsFormDraft: (draft: StemsFormDraft) => void;
+  clearStemsFormDraft: () => void;
 
   setCompareModelsEnabled: (enabled: boolean) => void;
   setCompareModelOverrides: (overrides: ModelOverride[]) => void;
@@ -526,6 +553,7 @@ export const useGenerationStore = create<GenerationState>()(
       variationSession: null,
       generationForm: createDefaultGenerationFormState(),
       lastSubmittedRequest: null,
+      stemsFormDraft: null,
 
       addJob: (job) => set((s) => ({
         jobs: [
@@ -829,6 +857,9 @@ export const useGenerationStore = create<GenerationState>()(
       setGenerationUseRandomSeed: (useRandom) => set((s) => ({
         generationForm: { ...s.generationForm, useRandomSeed: useRandom, requestError: null },
       })),
+
+      setStemsFormDraft: (draft) => set({ stemsFormDraft: draft }),
+      clearStemsFormDraft: () => set({ stemsFormDraft: null }),
 
       setCompareModelsEnabled: (enabled) => set((s) => ({
         generationForm: { ...s.generationForm, compareModelsEnabled: enabled, requestError: null },

@@ -5,13 +5,20 @@
 
 ---
 
+## Current: Issue #1104 — Wire RecordingEngine to UI
+
+- [ ] Write failing tests: arm button renders, toggles, visual state
+- [ ] Add arm button to TrackHeader (non-group tracks only)
+- [ ] Verify toolbar record button works (no regression)
+- [ ] All quality gates pass: tsc, tests, build
+
 ## Priority 1: Test Coverage Foundation
 
 - [x] Write Vitest unit tests for uiStore (panel toggles, selection state)
 - [x] Write Vitest unit tests for generationStore (queue management, status)
 - [x] Write Vitest unit tests for color utilities (src/utils/color.ts)
 - [x] Write Vitest unit tests for WAV export utilities (src/utils/wav.ts)
-- [x] Write Vitest unit tests for waveform peak calculation (src/utils/waveformPeaks.ts)
+- [x] Write Vitest unit tests for waveformPeaks calculation (src/utils/waveformPeaks.ts)
 - [x] Write Vitest unit tests for audio downsample utility (src/utils/audioDownsample.ts)
 - [ ] Write Vitest unit tests for generationPipeline service state machine
 - [x] Write Vitest unit tests for automation types (normalizedToMixerValue, automationParamEquals)

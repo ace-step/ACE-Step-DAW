@@ -71,6 +71,18 @@ export function levelToFill(linear: number): number {
 }
 
 /**
+ * Linear dB mapping for horizontal meter bars (no gamma correction).
+ * Used by StereoMeter and FaderMeter in track headers where the bar width
+ * should honestly represent the dB level without fader taper distortion.
+ */
+export function levelToMeterFill(linear: number): number {
+  if (linear <= 0) return 0;
+  const db = 20 * Math.log10(linear);
+  const dbNorm = Math.max(0, Math.min(1, (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN)));
+  return dbNorm; // No gamma — linear dB
+}
+
+/**
  * Inverse of levelToFill: convert a 0..1 fill position back to linear amplitude.
  * Used by VerticalFader to convert mouse position to gain value.
  */

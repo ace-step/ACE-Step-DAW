@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { METER_GRADIENT_HORIZONTAL, levelToFill } from '../meter-colors';
+import { METER_GRADIENT_HORIZONTAL, levelToMeterFill } from '../meter-colors';
 
 interface FaderMeterProps {
   trackId: string;
@@ -35,8 +35,8 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
     const engine = getAudioEngine();
     const tick = () => {
       const meter = engine.getTrackMeter(trackId);
-      setLeftFill(levelToFill(meter.leftLevel));
-      setRightFill(levelToFill(meter.rightLevel));
+      setLeftFill(levelToMeterFill(meter.leftLevel));
+      setRightFill(levelToMeterFill(meter.rightLevel));
       setClipping((was) => was || meter.clipped);
       rafRef.current = requestAnimationFrame(tick);
     };

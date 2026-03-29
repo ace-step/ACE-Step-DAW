@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore } from '../../store/uiStore';
-import { generateFromAddLayer } from '../../services/generationPipeline';
+import { generateFromAddLayer, resolveContextWindow } from '../../services/generationPipeline';
 import { extractContextAudioLazy } from '../../services/lazyContextAudioExtractor';
 import type { TrackName } from '../../types/project';
 import { TRACK_CATALOG, TRACK_NAMES } from '../../constants/tracks';
@@ -303,12 +303,16 @@ export function AddLayerPanel() {
         setSeedValue(params?.seed !== undefined ? String(params.seed) : '');
         setUseRandomSeed(params?.useRandomSeed ?? true);
         setChunkMaskMode('explicit');
-        // Restore context window from saved generation params
-        if (params?.contextWindow) {
+        // Restore context window from saved generation params (resolved to current clip position)
+        const resolvedCtx = resolveContextWindow(clip);
+        if (resolvedCtx) {
+          const allAudibleTrackIds = project!.tracks
+            .filter((t) => !t.muted && !t.isGroup)
+            .map((t) => t.id);
           useUIStore.getState().setContextWindow({
-            startTime: params.contextWindow.startTime,
-            endTime: params.contextWindow.endTime,
-            trackIds: [track.id],
+            startTime: resolvedCtx.startTime,
+            endTime: resolvedCtx.endTime,
+            trackIds: resolvedCtx.trackIds.length > 0 ? resolvedCtx.trackIds : allAudibleTrackIds,
           });
         }
         // Set select window to match clip range
@@ -607,18 +611,11 @@ export function AddLayerPanel() {
       // Edit mode: reuse existing track, update clip params
       trackId = editingClip.track.id;
       if (style) setTrackLocalCaption(trackId, style);
-      // Update clip with new params before regenerating
+      // Update clip text params — contextWindow is persisted by generateFromAddLayer
       useProjectStore.getState().updateClip(editingClip.clip.id, {
         prompt: style,
         globalCaption,
         lyrics: showLyrics ? lyrics : '',
-        generationParams: {
-          type: 'lego',
-          prompt: style,
-          lyrics: showLyrics ? lyrics : '',
-          globalCaption,
-          contextWindow: hasContext ? { startTime: contextWindow!.startTime, endTime: contextWindow!.endTime } : null,
-        },
       });
     } else {
       // New layer mode: create or find target track

@@ -10,7 +10,7 @@ import {
 import { useModelStore } from '../store/modelStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
-import type { InferredMetas } from '../types/project';
+import type { Clip, InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
@@ -25,6 +25,25 @@ import { computeEta } from '../utils/generationProgress';
 import { createDebugLogger } from '../utils/debugLogger';
 
 const logger = createDebugLogger('ace-step:generation');
+
+/**
+ * Resolve a clip's saved contextWindow to absolute project times.
+ * New format: relative offsets `{ offsetStart, offsetEnd, trackIds }`.
+ * Legacy format: absolute times `{ startTime, endTime }`.
+ */
+export function resolveContextWindow(clip: Clip): { startTime: number; endTime: number; trackIds: string[] } | null {
+  const saved = clip.generationParams?.contextWindow;
+  if (!saved) return null;
+  if ('offsetStart' in saved) {
+    return {
+      startTime: clip.startTime + saved.offsetStart,
+      endTime: clip.startTime + saved.offsetEnd,
+      trackIds: saved.trackIds,
+    };
+  }
+  // Legacy absolute format
+  return { startTime: saved.startTime, endTime: saved.endTime, trackIds: [] };
+}
 
 function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null; progressPercent: number | null } {
   let stage: string | null = null;
@@ -209,12 +228,12 @@ export async function regenerateClip(clipId: string): Promise<void> {
 
     try {
       // If the clip was generated with a context window, re-extract the trimmed context
-      const ctxWindow = clip?.generationParams?.contextWindow;
+      const resolvedCtx = clip ? resolveContextWindow(clip) : null;
       let previousBlob: Blob | null;
       const clipOpts: ClipInternalOptions = {};
-      if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
-        previousBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
-        clipOpts.contextWindow = ctxWindow;
+      if (resolvedCtx) {
+        previousBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+        clipOpts.contextWindow = resolvedCtx;
         clipOpts.forceSilence = !previousBlob;
       } else {
         previousBlob = await getPreviousCumulativeBlob(clipId);
@@ -348,12 +367,12 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
 
     try {
       const clip = useProjectStore.getState().getClipById(clipId);
-      const ctxWindow = clip?.generationParams?.contextWindow;
+      const resolvedCtx = clip ? resolveContextWindow(clip) : null;
       let previousBlob: Blob | null;
       const clipOpts: ClipInternalOptions = options ? { sharedSeed: options.sharedSeed } : {};
-      if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
-        previousBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
-        clipOpts.contextWindow = ctxWindow;
+      if (resolvedCtx) {
+        previousBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+        clipOpts.contextWindow = resolvedCtx;
         clipOpts.forceSilence = !previousBlob;
       } else {
         previousBlob = await getPreviousCumulativeBlob(clipId);
@@ -1067,12 +1086,12 @@ async function runVariationClip(
   _report: (updates: VariationProgressUpdate) => void,
 ): Promise<VariationGenerationResult> {
   const clip = useProjectStore.getState().getClipById(clipId);
-  const ctxWindow = clip?.generationParams?.contextWindow;
+  const resolvedCtx = clip ? resolveContextWindow(clip) : null;
   let previousCumulativeBlob: Blob | null;
   const clipOpts: ClipInternalOptions = {};
-  if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
-    previousCumulativeBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
-    clipOpts.contextWindow = ctxWindow;
+  if (resolvedCtx) {
+    previousCumulativeBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+    clipOpts.contextWindow = resolvedCtx;
     clipOpts.forceSilence = !previousCumulativeBlob;
   } else {
     previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
@@ -1316,6 +1335,14 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
 
       let clipId: string;
 
+      // Convert absolute context window to relative offsets for persistence
+      const clipStartTime = opts.startTime;
+      const savedCtxWindow = opts.contextWindow ? {
+        offsetStart: opts.contextWindow.startTime - clipStartTime,
+        offsetEnd: opts.contextWindow.endTime - clipStartTime,
+        trackIds: (opts.contextWindow as { trackIds?: string[] }).trackIds ?? [],
+      } : null;
+
       if (opts.clipId) {
         // Edit mode: reuse existing clip, update its params
         clipId = opts.clipId;
@@ -1328,7 +1355,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             prompt: opts.localDescription,
             lyrics: opts.lyrics,
             globalCaption: opts.globalCaption,
-            contextWindow: opts.contextWindow,
+            contextWindow: savedCtxWindow,
           },
         });
       } else {
@@ -1349,7 +1376,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             prompt: opts.localDescription,
             lyrics: opts.lyrics,
             globalCaption: opts.globalCaption,
-            contextWindow: opts.contextWindow,
+            contextWindow: savedCtxWindow,
           },
         });
       }

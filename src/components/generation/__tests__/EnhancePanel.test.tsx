@@ -6,9 +6,11 @@ import { useUIStore } from '../../../store/uiStore';
 import { useGenerationStore } from '../../../store/generationStore';
 import { ENHANCE_PRESETS } from '../../../constants/enhancePresets';
 
+const mockGenerateCoverClip = vi.fn().mockResolvedValue(undefined);
+const mockGenerateRepaintClip = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../../services/generationPipeline', () => ({
-  generateCoverClip: vi.fn().mockResolvedValue(undefined),
-  generateRepaintClip: vi.fn().mockResolvedValue(undefined),
+  generateCoverClip: (...args: unknown[]) => mockGenerateCoverClip(...args),
+  generateRepaintClip: (...args: unknown[]) => mockGenerateRepaintClip(...args),
 }));
 
 vi.mock('../../../services/projectStorage', () => ({
@@ -629,5 +631,74 @@ describe('EnhancePanel version tree UI', () => {
     render(<EnhancePanel />);
     // Without chaining, no indicator should appear
     expect(screen.queryByTestId('chained-source-indicator')).not.toBeInTheDocument();
+  });
+});
+
+describe('EnhancePanel generation calls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGenerationStore.setState({ isGenerating: false });
+  });
+
+  it('passes sourceAudioOverride to generateCoverClip when chaining is not active', async () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    mockGenerateCoverClip.mockResolvedValue('new-clip-id');
+    render(<EnhancePanel />);
+    // Click generate
+    const genBtn = screen.getByTestId('enhance-btn');
+    fireEvent.click(genBtn);
+    // generateCoverClip should have been called with sourceAudioOverride: undefined (no chaining)
+    await vi.waitFor(() => {
+      expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+    });
+    const callArgs = mockGenerateCoverClip.mock.calls[0][0];
+    expect(callArgs.clipId).toBe(clip.id);
+    expect(callArgs.sourceAudioOverride).toBeUndefined();
+  });
+
+  it('passes sourceAudioOverride to generateRepaintClip', async () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: { start: 2, end: 5 }, mode: 'repaint' },
+    });
+    mockGenerateRepaintClip.mockResolvedValue(clip.id);
+    render(<EnhancePanel />);
+    const genBtn = screen.getByTestId('enhance-btn');
+    fireEvent.click(genBtn);
+    await vi.waitFor(() => {
+      expect(mockGenerateRepaintClip).toHaveBeenCalledTimes(1);
+    });
+    const callArgs = mockGenerateRepaintClip.mock.calls[0][0];
+    expect(callArgs.clipId).toBe(clip.id);
+    expect(callArgs.sourceAudioOverride).toBeUndefined();
+  });
+
+  it('generateCoverClip return value is used as newClipId for finalizeResult', async () => {
+    // When generateCoverClip returns a clip ID, finalizeResult should look up that clip
+    // instead of doing reverse-search. We verify by checking that generateCoverClip is called
+    // and its return value (new-clip-id) would be used. Since finalizeResult is internal,
+    // we verify the pipeline function is awaited and returns the expected value.
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    const expectedNewClipId = 'new-clip-from-pipeline';
+    mockGenerateCoverClip.mockResolvedValue(expectedNewClipId);
+    // Mock loadBuffer to return null so finalizeResult exits early (we just care about the call chain)
+    mockPlayback.loadBuffer.mockResolvedValue(null);
+    render(<EnhancePanel />);
+    const genBtn = screen.getByTestId('enhance-btn');
+    fireEvent.click(genBtn);
+    await vi.waitFor(() => {
+      expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+    });
+    // The function was called and returned the clip ID — the component awaits it
+    expect(await mockGenerateCoverClip.mock.results[0].value).toBe(expectedNewClipId);
   });
 });

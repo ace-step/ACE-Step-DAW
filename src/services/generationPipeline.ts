@@ -1732,9 +1732,10 @@ export interface GenerateCoverOptions {
   sourceAudioOverride?: string;
 }
 
-export async function generateCoverClip(opts: GenerateCoverOptions): Promise<void> {
+export async function generateCoverClip(opts: GenerateCoverOptions): Promise<string | undefined> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (genStore.isGenerating) return undefined;
+  let resolvedTargetClipId: string | undefined;
   await withGenerationToast('AI generation', async () => {
     genStore.setIsGenerating(true);
 
@@ -1752,6 +1753,9 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
     // Use override audio (from iterative chaining) if provided
     if (sourceAudioOverride) {
       sourceAudioBlob = (await loadAudioBlobByKey(sourceAudioOverride)) ?? null;
+      if (!sourceAudioBlob) {
+        console.warn(`[EnhancePipeline] Chained source audio key "${sourceAudioOverride}" not found in storage, falling back to clip audio`);
+      }
     }
     if (!sourceAudioBlob && sourceClip.isolatedAudioKey) {
       sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
@@ -1780,6 +1784,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
       store.saveClipVersion(clipId);
       targetClipId = clipId;
     }
+    resolvedTargetClipId = targetClipId;
 
     const jobId = uuidv4();
     genStore.addJob({
@@ -1884,6 +1889,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
       genStore.setIsGenerating(false);
     }
   });
+  return resolvedTargetClipId;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2129,9 +2135,10 @@ export interface GenerateRepaintOptions {
   sourceAudioOverride?: string;
 }
 
-export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<void> {
+export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<string | undefined> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (genStore.isGenerating) return undefined;
+  let resolvedTargetClipId: string | undefined;
   await withGenerationToast('AI generation', async () => {
     genStore.setIsGenerating(true);
 
@@ -2141,11 +2148,15 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
       if (!clip) return false;
 
       store.saveClipVersion(opts.clipId);
+      resolvedTargetClipId = opts.clipId;
 
       let srcBlob: Blob | null = null;
       // Use override audio (from iterative chaining) if provided
       if (opts.sourceAudioOverride) {
         srcBlob = (await loadAudioBlobByKey(opts.sourceAudioOverride)) ?? null;
+        if (!srcBlob) {
+          console.warn(`[EnhancePipeline] Chained source audio key "${opts.sourceAudioOverride}" not found in storage, falling back to clip audio`);
+        }
       }
       if (!srcBlob && clip.cumulativeMixKey) {
         srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
@@ -2177,6 +2188,7 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
       genStore.setIsGenerating(false);
     }
   });
+  return resolvedTargetClipId;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

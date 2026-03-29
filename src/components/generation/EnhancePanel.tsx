@@ -266,70 +266,18 @@ export function EnhancePanel() {
     setSelEnd(e);
   }, []);
 
-  // Cover generation
-  const handleCoverGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
-    const coverStrength = CONSISTENCY_VALUES[consistency];
-    const resultId = `result-${Date.now()}`;
-    setResults((prev) => [...prev, {
-      id: resultId,
-      clipId: enhancerTarget.clipId,
-      audioKey: '',
-      title: caption || 'Untitled enhancement',
-      duration: '--:--',
-      durationSec: 0,
-      peaks: [],
-      timestamp: Date.now(),
-    }]);
-    await generateCoverClip({
-      clipId: enhancerTarget.clipId,
-      caption,
-      lyrics,
-      coverStrength,
-      createNew,
-      sourceAudioOverride: chainedSourceAudioKey || undefined,
-    });
-    // After generation, try to load the result audio to get peaks/duration
-    await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey]);
-
-  // Repaint generation
-  const handleRepaintGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
-    const resultId = `result-${Date.now()}`;
-    setResults((prev) => [...prev, {
-      id: resultId,
-      clipId: enhancerTarget.clipId,
-      audioKey: '',
-      title: prompt || 'Untitled repaint',
-      duration: '--:--',
-      durationSec: 0,
-      peaks: [],
-      timestamp: Date.now(),
-    }]);
-    await generateRepaintClip({
-      clipId: enhancerTarget.clipId,
-      repaintStart: selStart,
-      repaintEnd: selEnd,
-      prompt,
-      globalCaption: globalCaption || undefined,
-      repaintMode,
-      repaintStrength,
-      sourceAudioOverride: chainedSourceAudioKey || undefined,
-    });
-    await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey]);
-
   // After generation, load the new clip's audio to compute peaks and duration
-  const finalizeResult = useCallback(async (resultId: string, originalClipId: string) => {
+  const finalizeResult = useCallback(async (resultId: string, originalClipId: string, newClipId?: string) => {
     // The generation pipeline may create a new clip (createNew) or update the existing one.
-    // First check the original clip; if it has no new audio, search the track for the newest ready clip.
+    // When newClipId is provided (returned from the pipeline), use it directly.
+    // Otherwise fall back to searching the track for the newest ready clip.
     const store = useProjectStore.getState();
-    let updatedClip = store.getClipById(originalClipId);
+    const targetId = newClipId ?? originalClipId;
+    let updatedClip = store.getClipById(targetId);
     let audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
 
-    if (!audioKey && enhancerTarget) {
-      // When createNew=true, the pipeline creates a new clip on the same track.
+    if (!audioKey && !newClipId && enhancerTarget) {
+      // Fallback: When createNew=true and no newClipId was returned, search the track.
       const track = store.project?.tracks.find((t) => t.id === enhancerTarget.trackId);
       if (track) {
         const readyClip = [...track.clips]
@@ -364,6 +312,60 @@ export function EnhancePanel() {
       // Audio decode failed — leave duration as --:--
     }
   }, [playback, results.length, enhancerTarget]);
+
+  // Cover generation
+  const handleCoverGenerate = useCallback(async () => {
+    if (!enhancerTarget || isGenerating) return;
+    const coverStrength = CONSISTENCY_VALUES[consistency];
+    const resultId = `result-${Date.now()}`;
+    setResults((prev) => [...prev, {
+      id: resultId,
+      clipId: enhancerTarget.clipId,
+      audioKey: '',
+      title: caption || 'Untitled enhancement',
+      duration: '--:--',
+      durationSec: 0,
+      peaks: [],
+      timestamp: Date.now(),
+    }]);
+    const newClipId = await generateCoverClip({
+      clipId: enhancerTarget.clipId,
+      caption,
+      lyrics,
+      coverStrength,
+      createNew,
+      sourceAudioOverride: chainedSourceAudioKey || undefined,
+    });
+    // After generation, try to load the result audio to get peaks/duration
+    await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey, finalizeResult]);
+
+  // Repaint generation
+  const handleRepaintGenerate = useCallback(async () => {
+    if (!enhancerTarget || isGenerating) return;
+    const resultId = `result-${Date.now()}`;
+    setResults((prev) => [...prev, {
+      id: resultId,
+      clipId: enhancerTarget.clipId,
+      audioKey: '',
+      title: prompt || 'Untitled repaint',
+      duration: '--:--',
+      durationSec: 0,
+      peaks: [],
+      timestamp: Date.now(),
+    }]);
+    const newClipId = await generateRepaintClip({
+      clipId: enhancerTarget.clipId,
+      repaintStart: selStart,
+      repaintEnd: selEnd,
+      prompt,
+      globalCaption: globalCaption || undefined,
+      repaintMode,
+      repaintStrength,
+      sourceAudioOverride: chainedSourceAudioKey || undefined,
+    });
+    await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey, finalizeResult]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 

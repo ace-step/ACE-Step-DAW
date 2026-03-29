@@ -564,6 +564,57 @@ describe('uiStore enhancement session actions', () => {
   });
 });
 
+describe('EnhancePanel accessibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGenerationStore.setState({ isGenerating: false });
+  });
+
+  it('panel has role="dialog" and aria-label="AI Enhancer" when rendered with target', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    render(<EnhancePanel />);
+    const panel = screen.getByTestId('enhance-panel');
+    expect(panel.getAttribute('role')).toBe('dialog');
+    expect(panel.getAttribute('aria-label')).toBe('AI Enhancer');
+    expect(panel.getAttribute('aria-modal')).toBeNull();
+  });
+
+  it('guidance panel has role="dialog" and aria-label="AI Enhancer" when no target', () => {
+    setupProjectWithClip();
+    useUIStore.setState({ enhancerOpen: true, enhancerTarget: null });
+    render(<EnhancePanel />);
+    const panel = screen.getByTestId('enhance-panel');
+    expect(panel.getAttribute('role')).toBe('dialog');
+    expect(panel.getAttribute('aria-label')).toBe('AI Enhancer');
+    expect(panel.getAttribute('aria-modal')).toBeNull();
+  });
+
+  it('does not render a dead "More options" button', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    render(<EnhancePanel />);
+    expect(screen.queryByText('More options')).not.toBeInTheDocument();
+  });
+
+  it('panel has max-w-[95vw] class for viewport safety', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    render(<EnhancePanel />);
+    const panel = screen.getByTestId('enhance-panel');
+    expect(panel.className).toContain('max-w-[95vw]');
+  });
+});
+
 describe('EnhancePanel version tree UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();

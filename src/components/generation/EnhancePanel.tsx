@@ -148,6 +148,7 @@ export function EnhancePanel() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const sessionCounterRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
 
   // A/B comparison
   const [abSide, setAbSide] = useState<ABSide>('A');
@@ -229,40 +230,55 @@ export function EnhancePanel() {
     }
   }, [enhancerOpen, playback.stopPlayback]);
 
-  // Escape to close
+  // Focus management: trap focus, handle Escape, auto-focus on open, restore on close
   useEffect(() => {
     if (!enhancerOpen) return;
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); closeEnhancer(); }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [enhancerOpen, closeEnhancer]);
 
-  // Focus trap — keep Tab/Shift+Tab within the panel
-  useEffect(() => {
-    if (!enhancerOpen) return;
-    const handleTab = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
+    // Save the previously focused element to restore on close
+    previousFocusRef.current = document.activeElement;
+
+    // Auto-focus the first focusable element inside the panel
+    requestAnimationFrame(() => {
+      panelRef.current
+        ?.querySelector<HTMLElement>(
+          'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        )
+        ?.focus();
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeEnhancer();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const focusable = panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
-    window.addEventListener('keydown', handleTab);
-    return () => window.removeEventListener('keydown', handleTab);
-  }, [enhancerOpen]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to the element that was focused before the panel opened
+      if (previousFocusRef.current instanceof HTMLElement) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, [enhancerOpen, closeEnhancer]);
 
   const handleNewSession = useCallback(() => {
     sessionCounterRef.current += 1;
@@ -483,10 +499,10 @@ export function EnhancePanel() {
   if (!enhancerTarget) {
     return (
       <div
+        ref={panelRef}
         data-testid="enhance-panel"
         role="dialog"
         aria-label="AI Enhancer"
-        aria-modal="true"
         className="fixed left-1/2 -translate-x-1/2 w-[780px] max-w-[95vw] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
         style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
       >
@@ -552,7 +568,6 @@ export function EnhancePanel() {
       data-testid="enhance-panel"
       role="dialog"
       aria-label="AI Enhancer"
-      aria-modal="true"
       className="fixed left-1/2 -translate-x-1/2 w-[820px] max-w-[95vw] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
       style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
     >

@@ -25,6 +25,8 @@ import { WebSocket } from 'ws';
 
 const BRIDGE_URL = process.env.DAW_BRIDGE_URL ?? 'ws://127.0.0.1:5174/ws/mcp-bridge';
 const TIMEOUT_MS = 5000;
+const GENERATE_TIMEOUT_MS = 60_000;
+const VALID_TRACK_TYPES = ['stems', 'sample', 'sequencer', 'pianoroll'] as const;
 
 // ── Arg Parsing ──
 
@@ -62,14 +64,15 @@ export function parseArgs(args: string[]): ParsedCommand {
     // Project
     case 'set-bpm': {
       const bpm = Number(rest[0]);
-      if (!rest[0] || isNaN(bpm)) throw new Error('Usage: set-bpm <number>');
+      if (!rest[0] || isNaN(bpm) || bpm < 20 || bpm > 999) throw new Error('Usage: set-bpm <20-999>');
       return { tool: 'daw_set_bpm', params: { bpm } };
     }
 
     // Tracks
     case 'add-track': {
       const type = rest[0];
-      if (!type) throw new Error('Usage: add-track <stems|sample|sequencer|pianoroll> [name]');
+      if (!type || !VALID_TRACK_TYPES.includes(type as typeof VALID_TRACK_TYPES[number]))
+        throw new Error('Usage: add-track <stems|sample|sequencer|pianoroll> [name]');
       const params: Record<string, unknown> = { type };
       if (rest[1]) params.name = rest.slice(1).join(' ');
       return { tool: 'daw_add_track', params };
@@ -84,13 +87,13 @@ export function parseArgs(args: string[]): ParsedCommand {
     case 'volume': {
       const trackId = rest[0];
       const volume = Number(rest[1]);
-      if (!trackId || isNaN(volume)) throw new Error('Usage: volume <trackId> <0-1>');
+      if (!trackId || isNaN(volume) || volume < 0 || volume > 1) throw new Error('Usage: volume <trackId> <0-1>');
       return { tool: 'daw_set_volume', params: { trackId, volume } };
     }
     case 'pan': {
       const trackId = rest[0];
       const pan = Number(rest[1]);
-      if (!trackId || isNaN(pan)) throw new Error('Usage: pan <trackId> <-1 to 1>');
+      if (!trackId || isNaN(pan) || pan < -1 || pan > 1) throw new Error('Usage: pan <trackId> <-1 to 1>');
       return { tool: 'daw_set_pan', params: { trackId, pan } };
     }
     case 'mute': {
@@ -109,13 +112,15 @@ export function parseArgs(args: string[]): ParsedCommand {
       const [clipId, pitch, startBeat, durationBeats, velocity] = rest;
       if (!clipId || !pitch || !startBeat || !durationBeats)
         throw new Error('Usage: add-note <clipId> <pitch> <startBeat> <durationBeats> [velocity]');
-      const params: Record<string, unknown> = {
-        clipId,
-        pitch: Number(pitch),
-        startBeat: Number(startBeat),
-        durationBeats: Number(durationBeats),
-      };
-      if (velocity) params.velocity = Number(velocity);
+      const p = Number(pitch), s = Number(startBeat), d = Number(durationBeats);
+      if (isNaN(p) || isNaN(s) || isNaN(d))
+        throw new Error('Usage: add-note <clipId> <pitch> <startBeat> <durationBeats> [velocity] — numeric args required');
+      const params: Record<string, unknown> = { clipId, pitch: p, startBeat: s, durationBeats: d };
+      if (velocity) {
+        const v = Number(velocity);
+        if (isNaN(v)) throw new Error('velocity must be a number');
+        params.velocity = v;
+      }
       return { tool: 'daw_add_midi_note', params };
     }
 
@@ -229,14 +234,19 @@ export function formatOutput(tool: string, result: unknown): string {
 // ── WebSocket Call ──
 
 function callBridge(tool: string, params: Record<string, unknown>): Promise<unknown> {
+  const timeout = tool === 'daw_generate' ? GENERATE_TIMEOUT_MS : TIMEOUT_MS;
+
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
     const ws = new WebSocket(BRIDGE_URL);
-    const id = `cli-${Date.now()}`;
+    const id = `cli-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     const timer = setTimeout(() => {
       ws.close();
-      reject(new Error('Timeout: DAW did not respond within 5s'));
-    }, TIMEOUT_MS);
+      settle(() => reject(new Error(`Timeout: DAW did not respond within ${timeout / 1000}s`)));
+    }, timeout);
 
     ws.on('open', () => {
       ws.send(JSON.stringify({ id, tool, params }));
@@ -248,21 +258,22 @@ function callBridge(tool: string, params: Record<string, unknown>): Promise<unkn
         const response = JSON.parse(data.toString()) as { id: string; result?: unknown; error?: string };
         if (response.id === id) {
           ws.close();
-          if (response.error) {
-            reject(new Error(response.error));
-          } else {
-            resolve(response.result);
-          }
+          settle(() => response.error ? reject(new Error(response.error)) : resolve(response.result));
         }
       } catch (err) {
         ws.close();
-        reject(err);
+        settle(() => reject(err));
       }
+    });
+
+    ws.on('close', () => {
+      clearTimeout(timer);
+      settle(() => reject(new Error('Connection closed before response received')));
     });
 
     ws.on('error', () => {
       clearTimeout(timer);
-      reject(new Error('Cannot connect to DAW. Is the dev server running? (npm run dev)'));
+      settle(() => reject(new Error('Cannot connect to DAW. Is the dev server running? (npm run dev)')));
     });
   });
 }
@@ -315,7 +326,6 @@ async function main() {
 }
 
 // Only run when executed directly (not when imported for testing)
-const isDirectExecution = process.argv[1]?.endsWith('daw-cli.ts') || process.argv[1]?.includes('daw-cli');
-if (isDirectExecution) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }

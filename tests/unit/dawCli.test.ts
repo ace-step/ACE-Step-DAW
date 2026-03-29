@@ -45,6 +45,18 @@ describe('daw-cli parseArgs', () => {
     expect(() => parseArgs(['set-bpm', 'abc'])).toThrow('Usage: set-bpm');
   });
 
+  it('throws on "set-bpm 0" (out of range)', () => {
+    expect(() => parseArgs(['set-bpm', '0'])).toThrow('Usage: set-bpm');
+  });
+
+  it('throws on "set-bpm -50" (negative)', () => {
+    expect(() => parseArgs(['set-bpm', '-50'])).toThrow('Usage: set-bpm');
+  });
+
+  it('throws on "set-bpm 1000" (too high)', () => {
+    expect(() => parseArgs(['set-bpm', '1000'])).toThrow('Usage: set-bpm');
+  });
+
   // ── add-track ──
   it('parses "add-track stems" → daw_add_track', () => {
     expect(parseArgs(['add-track', 'stems'])).toEqual({ tool: 'daw_add_track', params: { type: 'stems' } });
@@ -59,6 +71,10 @@ describe('daw-cli parseArgs', () => {
 
   it('throws on "add-track" without type', () => {
     expect(() => parseArgs(['add-track'])).toThrow('Usage: add-track');
+  });
+
+  it('throws on "add-track banana" (invalid type)', () => {
+    expect(() => parseArgs(['add-track', 'banana'])).toThrow('Usage: add-track');
   });
 
   // ── delete-track ──
@@ -83,6 +99,26 @@ describe('daw-cli parseArgs', () => {
     expect(parseArgs(['solo', 'tid'])).toEqual({ tool: 'daw_toggle_solo', params: { trackId: 'tid' } });
   });
 
+  it('throws on "volume" without args', () => {
+    expect(() => parseArgs(['volume'])).toThrow('Usage: volume');
+  });
+
+  it('throws on "volume tid 5.0" (out of range)', () => {
+    expect(() => parseArgs(['volume', 'tid', '5.0'])).toThrow('Usage: volume');
+  });
+
+  it('throws on "pan tid -100" (out of range)', () => {
+    expect(() => parseArgs(['pan', 'tid', '-100'])).toThrow('Usage: pan');
+  });
+
+  it('throws on "mute" without trackId', () => {
+    expect(() => parseArgs(['mute'])).toThrow('Usage: mute');
+  });
+
+  it('throws on "delete-track" without trackId', () => {
+    expect(() => parseArgs(['delete-track'])).toThrow('Usage: delete-track');
+  });
+
   // ── MIDI ──
   it('parses "add-note clipX 60 0 1"', () => {
     expect(parseArgs(['add-note', 'clipX', '60', '0', '1'])).toEqual({
@@ -96,6 +132,10 @@ describe('daw-cli parseArgs', () => {
       tool: 'daw_add_midi_note',
       params: { clipId: 'clipX', pitch: 60, startBeat: 0, durationBeats: 1, velocity: 0.5 },
     });
+  });
+
+  it('throws on "add-note clipX abc 0 1" (non-numeric pitch)', () => {
+    expect(() => parseArgs(['add-note', 'clipX', 'abc', '0', '1'])).toThrow('numeric args required');
   });
 
   // ── Sequencer ──

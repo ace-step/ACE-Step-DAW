@@ -221,6 +221,17 @@ export interface UIState {
   // Session view keyboard navigation
   selectedSessionSlot: { trackId: string; sceneIndex: number } | null;
 
+  // Video recording
+  videoRecording: {
+    status: 'idle' | 'requesting' | 'recording' | 'stopping' | 'done' | 'error';
+    duration: number;
+    blob: Blob | null;
+    error: string | null;
+  };
+  startVideoRecording: () => Promise<void>;
+  stopVideoRecording: () => void;
+  dismissVideoRecording: () => void;
+
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
@@ -647,6 +658,34 @@ export const useUIStore = create<UIState>()(
   trackLaneRects: new Map(),
 
   selectedSessionSlot: null,
+
+  videoRecording: { status: 'idle', duration: 0, blob: null, error: null },
+  startVideoRecording: async () => {
+    const { VideoRecorderService } = await import('../services/videoRecorder');
+    if (!VideoRecorderService.isSupported()) {
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, error: 'Video recording is not supported in this browser.' } });
+      return;
+    }
+    const engine = (window as any).__getAudioEngine?.();
+    if (!engine) {
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, error: 'Audio engine is not initialized.' } });
+      return;
+    }
+    const recorder = new VideoRecorderService();
+    (window as any).__videoRecorder = recorder;
+    recorder.onStateChange = (state) => set({ videoRecording: { ...state } });
+    await recorder.startRecording(engine.getAudioStream());
+  },
+  stopVideoRecording: () => {
+    const recorder = (window as any).__videoRecorder as import('../services/videoRecorder').VideoRecorderService | undefined;
+    recorder?.stopRecording();
+  },
+  dismissVideoRecording: () => {
+    const recorder = (window as any).__videoRecorder as import('../services/videoRecorder').VideoRecorderService | undefined;
+    recorder?.dismiss();
+    (window as any).__videoRecorder = undefined;
+    set({ videoRecording: { status: 'idle', duration: 0, blob: null, error: null } });
+  },
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
   toggleMainView: () => set((s) => {

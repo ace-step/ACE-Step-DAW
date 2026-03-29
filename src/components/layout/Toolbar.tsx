@@ -372,6 +372,66 @@ function MetronomePulseIcon() {
   );
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function VideoRecordButton() {
+  const videoRecording = useUIStore((s) => s.videoRecording);
+  const startVideoRecording = useUIStore((s) => s.startVideoRecording);
+  const stopVideoRecording = useUIStore((s) => s.stopVideoRecording);
+
+  const { status, duration } = videoRecording;
+  const isRecording = status === 'recording';
+  const isRequesting = status === 'requesting' || status === 'stopping';
+
+  const handleClick = () => {
+    if (isRecording) {
+      stopVideoRecording();
+    } else if (status === 'idle' || status === 'done' || status === 'error') {
+      void startVideoRecording();
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={isRequesting}
+      title={isRecording ? `Stop Video Recording (${formatDuration(duration)})` : 'Record Video'}
+      aria-label={isRecording ? 'Stop video recording' : 'Record video'}
+      data-testid="video-record-button"
+      className={`flex h-10 items-center justify-center gap-1.5 rounded-lg px-2 transition-all duration-150 active:scale-95 ${
+        isRecording
+          ? 'bg-red-600/90 text-white hover:bg-red-500'
+          : isRequesting
+            ? 'bg-transparent text-white/50 cursor-wait'
+            : 'bg-transparent text-white/90 hover:bg-white/8 hover:text-white'
+      }`}
+    >
+      {isRecording ? (
+        <>
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-100" />
+          </span>
+          <span className="text-[11px] font-mono font-medium tabular-nums">{formatDuration(duration)}</span>
+        </>
+      ) : isRequesting ? (
+        <svg className="h-5 w-5 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="10" cy="10" r="7" strokeDasharray="31 13" />
+        </svg>
+      ) : (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="4" width="11" height="12" rx="1.5" />
+          <path d="M13 8.5l4.5-2.5v8L13 11.5" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function ControlBarButton({
   active,
   onClick,
@@ -748,6 +808,7 @@ export function Toolbar() {
             <path d="M12 2v10" />
           </svg>
         </ControlBarButton>
+        <VideoRecordButton />
       </div>
       </div>
 

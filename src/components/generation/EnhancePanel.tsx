@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
-import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
+import { useUIStore, getBottomPanelHeight, isAnyModalOpen } from '../../store/uiStore';
 import { generateCoverClip } from '../../services/generationPipeline';
 import { generateRepaintClip } from '../../services/generationPipeline';
 import { modelSupportsTaskType, isModelInventoryLoaded, isModelReady } from '../../services/aceStepApi';
@@ -248,10 +248,8 @@ export function EnhancePanel() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        const ui = useUIStore.getState();
         // Don't close if a modal-level dialog is open on top of us
-        if (ui.showCommandPalette || ui.showSettingsDialog || ui.showQuantizeDialog
-          || ui.showExportDialog || ui.showKeyboardShortcutsDialog || ui.showNewProjectDialog) return;
+        if (isAnyModalOpen()) return;
         e.stopPropagation();
         closeEnhancer();
         return;
@@ -523,7 +521,7 @@ export function EnhancePanel() {
   if (!enhancerTarget) {
     return (
       <>
-      <div data-testid="enhance-backdrop" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
+      <div data-testid="enhance-backdrop" role="presentation" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
       <div
         ref={panelRef}
         data-testid="enhance-panel"
@@ -593,7 +591,7 @@ export function EnhancePanel() {
 
   return (
     <>
-    <div data-testid="enhance-backdrop" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
+    <div data-testid="enhance-backdrop" role="presentation" className="fixed inset-0 bg-black/30" style={{ zIndex: Z.panel - 1 }} onClick={closeEnhancer} />
     <div
       ref={panelRef}
       data-testid="enhance-panel"

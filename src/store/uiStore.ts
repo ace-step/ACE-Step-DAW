@@ -538,6 +538,28 @@ const ALL_MODALS_CLOSED = {
   showCommandPalette: false,
 } as const;
 
+/**
+ * Returns true if any modal-level dialog is currently open.
+ * Use this to guard lower-priority keyboard shortcuts (e.g. Escape-to-close on panels).
+ */
+export function isAnyModalOpen(): boolean {
+  const s = useUIStore.getState();
+  return !!(
+    s.showCommandPalette
+    || s.showSettingsDialog
+    || s.showKeyboardShortcutsDialog
+    || s.showShortcutEditorDialog
+    || s.showExportDialog
+    || s.showProjectListDialog
+    || s.showNewProjectDialog
+    || s.showInstrumentPicker
+    || s.showQuantizeDialog
+    || s.showGeneratePatternDialog
+    || s.bounceInPlaceTrackId
+    || s.pendingDeleteTrackIds
+  );
+}
+
 // Module-scope reference for the active video recorder instance (avoids window globals)
 let _activeVideoRecorder: import('../services/videoRecorder').VideoRecorderService | null = null;
 

@@ -671,6 +671,68 @@ describe('EnhancePanel version tree UI', () => {
     expect(screen.getByText(/Jazz cover/)).toBeInTheDocument();
   });
 
+  it('Escape closes the panel when no modal is open', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+      showCommandPalette: false,
+      showSettingsDialog: false,
+      showQuantizeDialog: false,
+      showExportDialog: false,
+      showKeyboardShortcutsDialog: false,
+      showNewProjectDialog: false,
+      showProjectListDialog: false,
+      showShortcutEditorDialog: false,
+      showGeneratePatternDialog: false,
+      showInstrumentPicker: false,
+    });
+    render(<EnhancePanel />);
+    expect(screen.getByTestId('enhance-panel')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(useUIStore.getState().enhancerOpen).toBe(false);
+  });
+
+  it('Escape does NOT close the panel when a modal dialog is open', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+      showCommandPalette: true,
+    });
+    render(<EnhancePanel />);
+    expect(screen.getByTestId('enhance-panel')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    // Panel should still be open because command palette is open
+    expect(useUIStore.getState().enhancerOpen).toBe(true);
+  });
+
+  it('clicking the backdrop closes the panel', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    render(<EnhancePanel />);
+    expect(screen.getByTestId('enhance-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('enhance-backdrop'));
+    expect(useUIStore.getState().enhancerOpen).toBe(false);
+  });
+
+  it('backdrop has role="presentation" for accessibility', () => {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    render(<EnhancePanel />);
+    expect(screen.getByTestId('enhance-backdrop')).toHaveAttribute('role', 'presentation');
+  });
+
   it('passes correct coverStrength for each consistency level (high=0.25, medium=0.5, low=0.75)', async () => {
     const { generateCoverClip } = await import('../../../services/generationPipeline');
     const { track, clip } = setupProjectWithClip();

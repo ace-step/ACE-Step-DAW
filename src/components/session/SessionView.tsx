@@ -8,6 +8,7 @@ import { getSessionClips } from '../../utils/sessionClips';
 import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } from '../../hooks/useSessionDragDrop';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
+import { SessionMixer } from './SessionMixer';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -109,6 +110,7 @@ export function SessionView() {
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
+  const [showSessionMixer, setShowSessionMixer] = useState(false);
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -320,6 +322,11 @@ export function SessionView() {
           );
         })}
       </div>
+
+      <SessionMixer
+        visible={showSessionMixer}
+        onToggle={() => setShowSessionMixer((v) => !v)}
+      />
 
       {colorMenu && (
         <ContextMenuWrapper

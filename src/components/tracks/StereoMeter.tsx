@@ -35,17 +35,16 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
 
   return (
     <div className="flex flex-col gap-[2px] w-full">
-      {/* Left channel — clip-path reveals gradient from the left */}
+      {/* Left channel — simple green fill */}
       <div className="flex items-center gap-1 w-full">
         <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
           <div
             data-testid="meter-left"
             aria-label={`Left channel level for ${trackId}`}
-            className="h-full rounded-full"
+            className="h-full rounded-full transition-[width] duration-75"
             style={{
-              background: METER_GRADIENT_HORIZONTAL,
-              clipPath: `inset(0 ${(1 - leftFill) * 100}% 0 0)`,
-              transition: 'clip-path 75ms',
+              width: `${leftFill * 100}%`,
+              backgroundColor: '#4ade80',
             }}
           />
         </div>
@@ -67,11 +66,10 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
           <div
             data-testid="meter-right"
             aria-label={`Right channel level for ${trackId}`}
-            className="h-full rounded-full"
+            className="h-full rounded-full transition-[width] duration-75"
             style={{
-              background: METER_GRADIENT_HORIZONTAL,
-              clipPath: `inset(0 ${(1 - rightFill) * 100}% 0 0)`,
-              transition: 'clip-path 75ms',
+              width: `${rightFill * 100}%`,
+              backgroundColor: '#4ade80',
             }}
           />
         </div>

@@ -240,14 +240,14 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
               </div>
             );
           })}
-          {/* Minor ticks (no number) */}
+          {/* Minor ticks — right-aligned with major ticks */}
           {METER_DB_TICKS_MINOR.map((db) => (
             <div
               key={db}
-              className="absolute"
-              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)', left: SCALE_LEFT_W - 3 }}
+              className="absolute flex items-center"
+              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)', left: 0, right: 0 }}
             >
-              <span className="inline-block w-[3px] h-[1px] bg-zinc-600" />
+              <span className="inline-block w-[3px] h-[1px] bg-zinc-600" style={{ marginLeft: SCALE_LEFT_W - 3 }} />
             </div>
           ))}
         </div>

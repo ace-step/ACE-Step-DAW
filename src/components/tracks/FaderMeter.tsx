@@ -98,7 +98,7 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
       aria-valuenow={Math.round(volume * 100)}
       data-testid="fader-meter"
     >
-      {/* Meter bars — clip-path reveals gradient from the left */}
+      {/* Meter bars — simple width fill, green solid */}
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col gap-[1px]">
         {/* Left channel */}
         <div className="h-[5px] rounded-[2px] bg-zinc-800/50 overflow-hidden">
@@ -107,9 +107,9 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Left channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              background: METER_GRADIENT_HORIZONTAL,
+              width: `${leftFill * 100}%`,
+              backgroundColor: '#4ade80',
               opacity: 0.75,
-              clipPath: `inset(0 ${(1 - leftFill) * 100}% 0 0)`,
             }}
           />
         </div>
@@ -120,9 +120,9 @@ export function FaderMeter({ trackId, volume, onVolumeChange, trackName }: Fader
             aria-label={`Right channel level for ${trackId}`}
             className="h-full rounded-[2px]"
             style={{
-              background: METER_GRADIENT_HORIZONTAL,
+              width: `${rightFill * 100}%`,
+              backgroundColor: '#4ade80',
               opacity: 0.75,
-              clipPath: `inset(0 ${(1 - rightFill) * 100}% 0 0)`,
             }}
           />
         </div>

@@ -56,21 +56,17 @@ describe('StereoMeter', () => {
     expect(screen.getByLabelText(/right channel/i)).toBeInTheDocument();
   });
 
-  it('reflects left and right levels via clip-path', () => {
+  it('reflects left and right levels as bar widths', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0.5, 0.25));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    // clip-path: inset(0 X% 0 0) — smaller X = more visible
-    const leftClip = leftBar.style.clipPath;
-    const rightClip = rightBar.style.clipPath;
-    expect(leftClip).toContain('inset');
-    expect(rightClip).toContain('inset');
-    // Left (louder) should have less clipping (smaller right inset)
-    const leftInset = parseFloat(leftClip.match(/inset\(0 ([\d.]+)%/)?.[1] ?? '100');
-    const rightInset = parseFloat(rightClip.match(/inset\(0 ([\d.]+)%/)?.[1] ?? '100');
-    expect(leftInset).toBeLessThan(rightInset);
+    const leftWidth = parseFloat(leftBar.style.width);
+    const rightWidth = parseFloat(rightBar.style.width);
+    expect(leftWidth).toBeGreaterThan(0);
+    expect(rightWidth).toBeGreaterThan(0);
+    expect(leftWidth).toBeGreaterThan(rightWidth);
   });
 
   it('shows clip indicator when clipped', () => {
@@ -94,15 +90,14 @@ describe('StereoMeter', () => {
     expect(screen.getByTestId('clip-indicator').className).not.toMatch(/bg-red/);
   });
 
-  it('bars are fully clipped when level is silent', () => {
+  it('bars show zero width when level is silent', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0, 0));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    // Silence = clip-path clips 100% from right
-    expect(leftBar.style.clipPath).toBe('inset(0 100% 0 0)');
-    expect(rightBar.style.clipPath).toBe('inset(0 100% 0 0)');
+    expect(leftBar.style.width).toBe('0%');
+    expect(rightBar.style.width).toBe('0%');
   });
 
   it('cleans up animation frame on unmount', () => {

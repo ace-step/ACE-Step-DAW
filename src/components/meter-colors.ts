@@ -29,10 +29,11 @@ export const METER_DB_MAX = 0;
 
 /**
  * Fader law gamma exponent.
- * < 1.0 = more visual space for the upper (loud) range, matching Ableton.
+ * > 1.0 = more visual space for the upper (loud) range, matching Ableton:
+ *   0→-12dB gets widest gap, 48→-60dB gets narrowest gap.
  * 1.0 = linear dB (equal spacing).
  */
-const FADER_GAMMA = 0.75;
+const FADER_GAMMA = 1.35;
 
 /** Major dB tick marks (every 12dB, Ableton-style). */
 export const METER_DB_TICKS = [0, -12, -24, -36, -48, -60];
@@ -71,15 +72,13 @@ export function levelToFill(linear: number): number {
 }
 
 /**
- * Linear dB mapping for horizontal meter bars (no gamma correction).
- * Used by StereoMeter and FaderMeter in track headers where the bar width
- * should honestly represent the dB level without fader taper distortion.
+ * Linear amplitude mapping for horizontal track header meters.
+ * Uses raw linear level (0..1) directly as the fill fraction.
+ * This ensures the meter bar can never visually exceed the fader position,
+ * since the audio engine applies volume gain before the analyser.
  */
 export function levelToMeterFill(linear: number): number {
-  if (linear <= 0) return 0;
-  const db = 20 * Math.log10(linear);
-  const dbNorm = Math.max(0, Math.min(1, (db - METER_DB_MIN) / (METER_DB_MAX - METER_DB_MIN)));
-  return dbNorm; // No gamma — linear dB
+  return Math.max(0, Math.min(1, linear));
 }
 
 /**

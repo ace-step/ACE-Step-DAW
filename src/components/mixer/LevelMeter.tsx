@@ -204,36 +204,6 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
         title="Reset clip indicator"
       />
 
-      {/* LEFT: tick marks — major + minor */}
-      {showScale && (
-        <div
-          className="absolute inset-y-0 pointer-events-none"
-          style={{ left: 0, width: SCALE_LEFT_W }}
-          aria-hidden="true"
-        >
-          {/* Major ticks */}
-          {METER_DB_TICKS.map((db) => (
-            <div
-              key={db}
-              className="absolute right-0"
-              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)' }}
-            >
-              <span className="inline-block w-[5px] h-[1px] bg-zinc-500" />
-            </div>
-          ))}
-          {/* Minor ticks (dimmer, shorter) */}
-          {METER_DB_TICKS_MINOR.map((db) => (
-            <div
-              key={db}
-              className="absolute right-0"
-              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)' }}
-            >
-              <span className="inline-block w-[3px] h-[1px] bg-zinc-600" />
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* CENTER: meter canvas */}
       <canvas
         ref={canvasRef}
@@ -243,21 +213,42 @@ export function LevelMeter({ trackId, masterStage, stereo, showScale }: LevelMet
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}
       />
 
-      {/* RIGHT: dB numbers */}
+      {/* Unified scale: tick LEFT + number RIGHT, each mark is one element */}
       {showScale && (
         <div
           className="absolute inset-y-0 pointer-events-none"
-          style={{ left: meterLeft + totalBarWidth + 2, width: SCALE_RIGHT_W }}
+          style={{ left: 0, width: containerWidth }}
           aria-hidden="true"
         >
-          {METER_DB_TICKS.map((db) => (
-            <span
+          {/* Major ticks with numbers */}
+          {METER_DB_TICKS.map((db) => {
+            const topPct = fillToTopPct(dbToFill(db));
+            return (
+              <div
+                key={db}
+                className="absolute flex items-center"
+                style={{ top: `${topPct}%`, transform: 'translateY(-50%)', left: 0, right: 0 }}
+              >
+                {/* Left tick mark */}
+                <span className="inline-block w-[5px] h-[1px] bg-zinc-500" style={{ marginLeft: SCALE_LEFT_W - 5 }} />
+                {/* Spacer over meter bar */}
+                <span style={{ width: meterLeft - SCALE_LEFT_W + totalBarWidth + 2, flexShrink: 0 }} />
+                {/* Right number */}
+                <span className="text-[8px] leading-none text-zinc-500 font-mono">
+                  {Math.abs(db)}
+                </span>
+              </div>
+            );
+          })}
+          {/* Minor ticks (no number) */}
+          {METER_DB_TICKS_MINOR.map((db) => (
+            <div
               key={db}
-              className="absolute text-[8px] leading-none text-zinc-500 font-mono"
-              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)', left: 0 }}
+              className="absolute"
+              style={{ top: `${fillToTopPct(dbToFill(db))}%`, transform: 'translateY(-50%)', left: SCALE_LEFT_W - 3 }}
             >
-              {Math.abs(db)}
-            </span>
+              <span className="inline-block w-[3px] h-[1px] bg-zinc-600" />
+            </div>
           ))}
         </div>
       )}

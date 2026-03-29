@@ -35,15 +35,18 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
 
   return (
     <div className="flex flex-col gap-[2px] w-full">
-      {/* Left channel — gradient on container, mask reveals fill */}
+      {/* Left channel — clip-path reveals gradient from the left */}
       <div className="flex items-center gap-1 w-full">
-        <div className="flex-1 h-[4px] rounded-full overflow-hidden relative bg-zinc-800">
-          <div className="absolute inset-0 rounded-full" style={{ background: METER_GRADIENT_HORIZONTAL }} />
+        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
           <div
             data-testid="meter-left"
             aria-label={`Left channel level for ${trackId}`}
-            className="absolute top-0 right-0 bottom-0 bg-zinc-800 transition-[left] duration-75"
-            style={{ left: `${leftFill * 100}%` }}
+            className="h-full rounded-full"
+            style={{
+              background: METER_GRADIENT_HORIZONTAL,
+              clipPath: `inset(0 ${(1 - leftFill) * 100}% 0 0)`,
+              transition: 'clip-path 75ms',
+            }}
           />
         </div>
         {/* Clip indicator */}
@@ -60,13 +63,16 @@ export function StereoMeter({ trackId }: StereoMeterProps) {
       </div>
       {/* Right channel */}
       <div className="flex items-center gap-1 w-full">
-        <div className="flex-1 h-[4px] rounded-full overflow-hidden relative bg-zinc-800">
-          <div className="absolute inset-0 rounded-full" style={{ background: METER_GRADIENT_HORIZONTAL }} />
+        <div className="flex-1 h-[4px] rounded-full bg-zinc-800 overflow-hidden">
           <div
             data-testid="meter-right"
             aria-label={`Right channel level for ${trackId}`}
-            className="absolute top-0 right-0 bottom-0 bg-zinc-800 transition-[left] duration-75"
-            style={{ left: `${rightFill * 100}%` }}
+            className="h-full rounded-full"
+            style={{
+              background: METER_GRADIENT_HORIZONTAL,
+              clipPath: `inset(0 ${(1 - rightFill) * 100}% 0 0)`,
+              transition: 'clip-path 75ms',
+            }}
           />
         </div>
         <div className="w-[5px] h-[5px] flex-shrink-0" />

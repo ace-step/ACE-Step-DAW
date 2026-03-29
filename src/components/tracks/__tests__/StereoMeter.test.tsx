@@ -56,20 +56,21 @@ describe('StereoMeter', () => {
     expect(screen.getByLabelText(/right channel/i)).toBeInTheDocument();
   });
 
-  it('reflects left and right levels as bar fill positions', () => {
+  it('reflects left and right levels via clip-path', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0.5, 0.25));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    // The mask div uses `left` to reveal the gradient underneath.
-    // Higher level = larger left value = more gradient visible.
-    const leftPos = parseFloat(leftBar.style.left);
-    const rightPos = parseFloat(rightBar.style.left);
-    expect(leftPos).toBeGreaterThan(0);
-    expect(rightPos).toBeGreaterThan(0);
-    // Left (louder) should reveal more gradient than right
-    expect(leftPos).toBeGreaterThan(rightPos);
+    // clip-path: inset(0 X% 0 0) — smaller X = more visible
+    const leftClip = leftBar.style.clipPath;
+    const rightClip = rightBar.style.clipPath;
+    expect(leftClip).toContain('inset');
+    expect(rightClip).toContain('inset');
+    // Left (louder) should have less clipping (smaller right inset)
+    const leftInset = parseFloat(leftClip.match(/inset\(0 ([\d.]+)%/)?.[1] ?? '100');
+    const rightInset = parseFloat(rightClip.match(/inset\(0 ([\d.]+)%/)?.[1] ?? '100');
+    expect(leftInset).toBeLessThan(rightInset);
   });
 
   it('shows clip indicator when clipped', () => {
@@ -93,15 +94,15 @@ describe('StereoMeter', () => {
     expect(screen.getByTestId('clip-indicator').className).not.toMatch(/bg-red/);
   });
 
-  it('bars show zero fill when level is silent (-60dB or below)', () => {
+  it('bars are fully clipped when level is silent', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0, 0));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    // Silence = mask starts at 0%, covering the entire gradient
-    expect(leftBar.style.left).toBe('0%');
-    expect(rightBar.style.left).toBe('0%');
+    // Silence = clip-path clips 100% from right
+    expect(leftBar.style.clipPath).toBe('inset(0 100% 0 0)');
+    expect(rightBar.style.clipPath).toBe('inset(0 100% 0 0)');
   });
 
   it('cleans up animation frame on unmount', () => {

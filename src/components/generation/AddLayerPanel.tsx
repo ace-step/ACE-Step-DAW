@@ -134,7 +134,7 @@ export function AddLayerPanel() {
   const [lyrics, setLyrics] = useState('');
   const [globalCaption, setGlobalCaption] = useState('');
 
-  const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('auto');
+  const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('explicit');
   const [seedValue, setSeedValue] = useState('');
   const [useRandomSeed, setUseRandomSeed] = useState(true);
 
@@ -614,12 +614,14 @@ export function AddLayerPanel() {
       wholeSongSelection.targetRowIndex = selectWindow.targetRowIndex;
     }
     useUIStore.getState().setSelectWindow(wholeSongSelection);
+    setChunkMaskMode('auto');
   };
 
   const handleRestorePreviousWindow = () => {
     if (!savedSelectionBeforeWholeSong) return;
     useUIStore.getState().setSelectWindow(savedSelectionBeforeWholeSong);
     setSavedSelectionBeforeWholeSong(null);
+    setChunkMaskMode('explicit');
   };
 
   const handleGenerate = async () => {

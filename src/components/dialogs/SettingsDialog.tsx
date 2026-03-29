@@ -5,7 +5,7 @@ import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
-import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
+import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
 import { THEME_LIST } from '../../themes';
@@ -428,16 +428,18 @@ export function SettingsDialog() {
                 ? `Detected ${playbackLatency.detectedLatencyMs?.toFixed(1) ?? '0.0'} ms from Web Audio (${playbackLatency.detectedBaseLatencyMs?.toFixed(1) ?? '0.0'} ms base + ${playbackLatency.detectedOutputLatencyMs?.toFixed(1) ?? '0.0'} ms output).`
                 : 'Browser latency unavailable. Enter a manual playback compensation value if timing feels late.'}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
               <div>
                 <label className="block text-xs text-zinc-400 mb-1">Detected Latency</label>
-                <div className="rounded border border-daw-border bg-black/20 px-3 py-1.5 text-sm text-zinc-200">
-                  {playbackLatency.detectedLatencyMs !== null ? `${playbackLatency.detectedLatencyMs.toFixed(1)} ms` : 'Unavailable'}
+                <div className="rounded border border-daw-border bg-black/20 px-3 py-1.5 text-sm text-zinc-200 whitespace-nowrap">
+                  {playbackLatency.detectedLatencyMs !== null
+                    ? `${playbackLatency.detectedLatencyMs.toFixed(1)} ms (${latencyMsToSamples(playbackLatency.detectedLatencyMs, getAudioEngine().sampleRate)} smp)`
+                    : 'Unavailable'}
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-zinc-400 mb-1" htmlFor="manual-playback-latency">
-                  Manual Override
+                <label className="block text-xs text-zinc-400 mb-1 whitespace-nowrap" htmlFor="manual-playback-latency">
+                  Override (ms)
                 </label>
                 <input
                   id="manual-playback-latency"
@@ -452,9 +454,28 @@ export function SettingsDialog() {
                   className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent placeholder:text-zinc-600"
                 />
               </div>
+              <button
+                type="button"
+                data-testid="auto-detect-latency"
+                onClick={() => {
+                  const engine = getAudioEngine();
+                  const latency = engine.refreshPlaybackLatencyCompensation();
+                  const store = useProjectStore.getState();
+                  store.detectPlaybackLatency(latency);
+                  engine.setPlaybackLatencyCompensation(
+                    store.project?.playbackLatency?.compensationMs
+                      ? store.project.playbackLatency.compensationMs / 1000
+                      : 0,
+                  );
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-zinc-300 bg-daw-surface-2 border border-daw-border rounded hover:border-daw-accent hover:text-white transition-colors whitespace-nowrap"
+                title="Re-measure audio output latency from Web Audio API"
+              >
+                Re-detect
+              </button>
             </div>
              <p className="text-[10px] text-zinc-400">
-               Active compensation: {playbackLatency.compensationMs.toFixed(1)} ms
+               Active compensation: {playbackLatency.compensationMs.toFixed(1)} ms ({latencyMsToSamples(playbackLatency.compensationMs, getAudioEngine().sampleRate)} samples @ {getAudioEngine().sampleRate} Hz)
              </p>
              {hasPendingManualOverride ? (
                <p className="text-[10px] text-zinc-400">

@@ -10,7 +10,7 @@ import {
 import { useModelStore } from '../store/modelStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
-import type { InferredMetas } from '../types/project';
+import type { Clip, InferredMetas } from '../types/project';
 import * as api from './aceStepApi';
 import { generateSilenceWav } from './silenceGenerator';
 import { saveAudioBlob, loadAudioBlobByKey } from './audioFileManager';
@@ -25,6 +25,25 @@ import { computeEta } from '../utils/generationProgress';
 import { createDebugLogger } from '../utils/debugLogger';
 
 const logger = createDebugLogger('ace-step:generation');
+
+/**
+ * Resolve a clip's saved contextWindow to absolute project times.
+ * New format: relative offsets `{ offsetStart, offsetEnd, trackIds }`.
+ * Legacy format: absolute times `{ startTime, endTime }`.
+ */
+export function resolveContextWindow(clip: Clip): { startTime: number; endTime: number; trackIds: string[] } | null {
+  const saved = clip.generationParams?.contextWindow;
+  if (!saved) return null;
+  if ('offsetStart' in saved) {
+    return {
+      startTime: clip.startTime + saved.offsetStart,
+      endTime: clip.startTime + saved.offsetEnd,
+      trackIds: saved.trackIds,
+    };
+  }
+  // Legacy absolute format
+  return { startTime: saved.startTime, endTime: saved.endTime, trackIds: [] };
+}
 
 function extractProgressMetadata(entry: TaskResultEntry): { stage: string | null; progressPercent: number | null } {
   let stage: string | null = null;
@@ -72,6 +91,9 @@ export interface ClipInternalOptions {
   chunkMaskMode?: 'explicit' | 'auto';
   /** Override the default repainting range (clip.startTime → clip.startTime + clip.duration) */
   repaintRange?: { start: number; end: number };
+  /** Context window time range — when set, repainting_start/end and audio_duration
+   *  are made relative to ctxStart so the backend sees only the context region. */
+  contextWindow?: { startTime: number; endTime: number };
   /** Manual override for the backend guidance scale. */
   guidanceScaleOverride?: number;
   /** Manual override for inference steps. */
@@ -192,6 +214,12 @@ export async function generateAllTracks(): Promise<void> {
  * On completion, the new result is also saved as a version.
  */
 export async function regenerateClip(clipId: string): Promise<void> {
+  // Route to text2music regeneration if this is a full-song clip
+  const clip = useProjectStore.getState().getClipById(clipId);
+  if (clip?.generationParams?.type === 'text2music') {
+    return regenerateText2MusicClip(clipId);
+  }
+
   const genStore = useGenerationStore.getState();
   if (genStore.isGenerating) return;
 
@@ -199,8 +227,22 @@ export async function regenerateClip(clipId: string): Promise<void> {
     genStore.setIsGenerating(true);
 
     try {
-      const previousBlob = await getPreviousCumulativeBlob(clipId);
-      const outcome = await generateClipInternal(clipId, previousBlob, {});
+      // If the clip was generated with a context window, re-extract the trimmed context
+      const resolvedCtx = clip ? resolveContextWindow(clip) : null;
+      let previousBlob: Blob | null;
+      const clipOpts: ClipInternalOptions = {};
+      if (resolvedCtx) {
+        previousBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+        clipOpts.contextWindow = resolvedCtx;
+        clipOpts.forceSilence = !previousBlob;
+      } else {
+        previousBlob = await getPreviousCumulativeBlob(clipId);
+      }
+      // Restore persisted chunkMaskMode
+      if (clip?.generationParams?.chunkMaskMode) {
+        clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
+      }
+      const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
 
       if (outcome.succeeded) {
         useProjectStore.getState().saveClipVersion(clipId);
@@ -214,6 +256,110 @@ export async function regenerateClip(clipId: string): Promise<void> {
 }
 
 /**
+ * Re-generate a text2music clip in-place using stored generation params.
+ * Saves the current audio as a version, re-submits with a new random seed.
+ */
+async function regenerateText2MusicClip(clipId: string): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  if (genStore.isGenerating) return;
+
+  const store = useProjectStore.getState();
+  const clip = store.getClipById(clipId);
+  if (!clip?.generationParams || clip.generationParams.type !== 'text2music') return;
+
+  const params = clip.generationParams;
+  store.saveClipVersion(clipId);
+  genStore.setIsGenerating(true);
+
+  try {
+    await useModelStore.getState().ensureModelForIntent('full-song');
+    const project = store.project;
+    if (!project) throw new Error('No project open');
+
+    const defaults = project.generationDefaults;
+    const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
+
+    const taskParams: Text2MusicTaskParams = {
+      task_type: 'text2music',
+      prompt: params.prompt,
+      lyrics: params.lyrics,
+      audio_duration: params.durationSeconds ?? 60,
+      bpm: params.useProjectMeta ? (project.bpm ?? null) : null,
+      key_scale: params.useProjectMeta ? (project.keyScale ?? '') : '',
+      time_signature: params.useProjectMeta ? String(project.timeSignature ?? 4) : '',
+      inference_steps: params.inferenceSteps ?? defaults.inferenceSteps,
+      guidance_scale: params.guidanceScale ?? defaults.guidanceScale,
+      shift: params.shift ?? defaults.shift,
+      batch_size: 1,
+      audio_format: 'wav',
+      thinking: params.thinking ?? defaults.thinking,
+      model: activeModel,
+      use_random_seed: true,
+    };
+    if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+
+    const jobId = uuidv4();
+    genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
+    store.updateClipStatus(clipId, 'generating', { generationJobId: jobId });
+    genStore.updateJob(jobId, { status: 'generating', startedAt: Date.now(), progress: 'Submitting...', stage: 'Submitting request' });
+
+    const silenceBlob = generateSilenceWav(params.durationSeconds ?? 60);
+    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams);
+    const taskId = releaseResp.task_id;
+    genStore.updateJob(jobId, { taskId });
+
+    const startTime = Date.now();
+    let resultAudioPath: string | null = null;
+    let firstResult: TaskResultItem | null = null;
+
+    while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+      await sleep(POLL_INTERVAL_MS);
+      const entries = await api.queryResult([taskId]);
+      const entry = entries?.[0];
+      if (!entry) continue;
+      const { stage, progressPercent } = extractProgressMetadata(entry);
+      const currentJob = useGenerationStore.getState().jobs.find((j) => j.id === jobId);
+      useGenerationStore.getState().updateJob(jobId, { ...deriveGenerationJobProgress(currentJob, { status: 'generating', progress: entry.progress_text || 'Generating...', stage, progressPercent }) });
+      if (entry.status === 1) {
+        const resultItems: TaskResultItem[] = JSON.parse(entry.result);
+        firstResult = resultItems?.[0] ?? null;
+        resultAudioPath = firstResult?.file ?? null;
+        break;
+      } else if (entry.status === 2) {
+        throw new Error(`Generation failed: ${entry.result}`);
+      }
+    }
+    if (!resultAudioPath) throw new Error('Generation timed out');
+
+    genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...', stage: 'Downloading audio' });
+    store.updateClipStatus(clipId, 'processing');
+
+    const audioBlob = await api.downloadAudio(resultAudioPath);
+    const audioKey = await saveAudioBlob(project.id, clipId, 'isolated', audioBlob);
+    const engine = getAudioEngine();
+    const audioBuffer = await engine.decodeAudioData(audioBlob);
+    const peaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
+
+    const inferredMetas: InferredMetas | undefined = firstResult
+      ? { bpm: firstResult.metas?.bpm, keyScale: firstResult.metas?.keyscale, timeSignature: firstResult.metas?.timesignature, genres: firstResult.metas?.genres, seed: firstResult.seed_value, ditModel: firstResult.dit_model }
+      : undefined;
+
+    const actualDuration = audioBuffer.duration;
+    useProjectStore.getState().updateClipStatus(clipId, 'ready', { isolatedAudioKey: audioKey, waveformPeaks: peaks, inferredMetas, audioDuration: actualDuration, audioOffset: 0 });
+    useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
+    genStore.updateJob(jobId, { status: 'done', progress: 'Done', stage: 'Complete' });
+    useProjectStore.getState().saveClipVersion(clipId);
+    toastSuccess('Clip regenerated');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Regeneration failed';
+    toastError(message);
+    useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
+  } finally {
+    useGenerationStore.getState().setIsGenerating(false);
+  }
+}
+
+/**
  * Generate a single clip (and cascade if needed in the future).
  */
 export async function generateSingleClip(clipId: string, options?: { sharedSeed?: number }): Promise<void> {
@@ -224,9 +370,23 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
     genStore.setIsGenerating(true);
 
     try {
-      const previousBlob = await getPreviousCumulativeBlob(clipId);
+      const clip = useProjectStore.getState().getClipById(clipId);
+      const resolvedCtx = clip ? resolveContextWindow(clip) : null;
+      let previousBlob: Blob | null;
+      const clipOpts: ClipInternalOptions = options ? { sharedSeed: options.sharedSeed } : {};
+      if (resolvedCtx) {
+        previousBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+        clipOpts.contextWindow = resolvedCtx;
+        clipOpts.forceSilence = !previousBlob;
+      } else {
+        previousBlob = await getPreviousCumulativeBlob(clipId);
+      }
+      // Restore persisted chunkMaskMode
+      if (clip?.generationParams?.chunkMaskMode) {
+        clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
+      }
       logger.debug(`generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
-      const outcome = await generateClipInternal(clipId, previousBlob, options ? { sharedSeed: options.sharedSeed } : {});
+      const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
 
       if (outcome.succeeded) {
         useProjectStore.getState().saveClipVersion(clipId);
@@ -502,8 +662,15 @@ async function generateClipInternal(
   store.updateClipStatus(clipId, 'queued', { generationJobId: jobId });
 
   try {
-    // Use actual audio duration (without timeline padding) for generation
-    const audioDuration = useProjectStore.getState().getAudioDuration();
+    // When a context window is provided, all times are relative to ctxStart
+    // so the backend only sees the context region (no leading silence).
+    const ctxOffset = options.contextWindow?.startTime ?? 0;
+    const ctxEnd = options.contextWindow?.endTime;
+
+    // Use context window duration if available, otherwise full project duration
+    const audioDuration = ctxEnd != null
+      ? ctxEnd - ctxOffset
+      : useProjectStore.getState().getAudioDuration();
 
     // Determine src_audio — prefer a server-side path (no upload), then
     // previous cumulative blob, then synthesized silence.
@@ -519,16 +686,27 @@ async function generateClipInternal(
         : `srcAudio: ${srcBlob ? 'previousCumulative' : 'silence'}`,
       `forceSilence=${options.forceSilence ?? false}`,
       `audioDuration=${audioDuration}s`,
+      ctxOffset > 0 ? `ctxOffset=${ctxOffset}s` : '',
     );
 
-    // Build instruction — detect chunk vs full mode based on whether the
-    // generation region covers the entire audio duration.  The backend's
-    // conditioning_text.py checks for "a segment" in the instruction to
-    // switch caption formatting (chunk omits Global: prefix).
+    // Build instruction — chunk mode ("a segment of") vs full mode.
+    // The backend's conditioning_text.py checks for "a segment" in the instruction
+    // to switch caption formatting (chunk = Local only, full = Global + Local).
+    //
+    // When a context window is present with explicit mask, always use chunk mode
+    // (the user is generating a segment within context). Only use full mode when
+    // there is no context window or the user explicitly chose "Whole song" (auto mask).
     const trackLabel = track.trackName.toUpperCase().replace('_', ' ');
-    const repaintStart = options.repaintRange?.start ?? clip.startTime;
-    const repaintEnd = options.repaintRange?.end ?? (clip.startTime + clip.duration);
-    const isChunkMode = repaintStart > 0.5 || repaintEnd < audioDuration - 0.5;
+    const repaintStart = (options.repaintRange?.start ?? clip.startTime) - ctxOffset;
+    const repaintEnd = (options.repaintRange?.end ?? (clip.startTime + clip.duration)) - ctxOffset;
+    // Determine chunk (segment) vs full mode:
+    // - "Whole song" (auto mask, no context) = full mode (needs Global caption)
+    // - Context window + explicit mask = always segment (even if selection covers all context)
+    // - No context + explicit = time-based heuristic (partial = segment, full = full)
+    const hasContextWindow = options.contextWindow != null;
+    const isChunkMode = options.chunkMaskMode === 'auto'
+      ? false  // "Whole song" = full mode
+      : hasContextWindow || (repaintStart >= 0.5 || repaintEnd <= audioDuration - 0.5);
     const instruction = isChunkMode
       ? `Generate a segment of the ${trackLabel} track based on the audio context:`
       : `Generate the ${trackLabel} track based on the audio context:`;
@@ -564,9 +742,20 @@ async function generateClipInternal(
       shift: options.shiftOverride ?? project.generationDefaults.shift,
       batch_size: 1,
       audio_format: 'wav',
-      thinking: options.thinkingOverride ?? project.generationDefaults.thinking,
+      thinking: false, // lego is a pure DiT task — LM audio codes are out-of-distribution
       model: project.generationDefaults.model,
     } as LegoTaskParams;
+
+    // Always log critical generation params for debugging
+    console.log(
+      `[generateClip] audio_duration=${audioDuration}`,
+      `repainting=[${repaintStart.toFixed(2)}, ${repaintEnd.toFixed(2)}]`,
+      `isChunk=${isChunkMode}`,
+      `srcBlobSize=${srcAudioBlob.size}`,
+      `chunk_mask_mode=${options.chunkMaskMode ?? 'unset'}`,
+      `ctxOffset=${ctxOffset}`,
+      `instruction=${instruction}`,
+    );
 
     // Per-generation seed override from advanced params
     if (options.useRandomSeedOverride === false && options.seedOverride !== undefined) {
@@ -748,6 +937,8 @@ async function generateClipInternal(
     // it.  Since clipStart/clipDuration match the generation region, trimming to
     // the clip region extracts exactly the isolated track -- no wave subtraction
     // needed.
+    // When a context window was used, the backend audio spans [0, ctxDuration]
+    // and clip coordinates are relative to ctxStart. Trim using the same offset.
     const engine = getAudioEngine();
     const fullBuffer = await engine.decodeAudioData(cumulativeBlob);
 
@@ -756,9 +947,9 @@ async function generateClipInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round(clipStart * sampleRate);
+    const startSample = Math.round((clipStart - ctxOffset) * sampleRate);
     const endSample = Math.min(
-      Math.round((clipStart + clipDuration) * sampleRate),
+      Math.round((clipStart - ctxOffset + clipDuration) * sampleRate),
       fullBuffer.length,
     );
     const trimmedLength = Math.max(1, endSample - startSample);
@@ -914,8 +1105,22 @@ async function runVariationClip(
   _index: number,
   _report: (updates: VariationProgressUpdate) => void,
 ): Promise<VariationGenerationResult> {
-  const previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
-  const outcome = await generateClipInternal(clipId, previousCumulativeBlob);
+  const clip = useProjectStore.getState().getClipById(clipId);
+  const resolvedCtx = clip ? resolveContextWindow(clip) : null;
+  let previousCumulativeBlob: Blob | null;
+  const clipOpts: ClipInternalOptions = {};
+  if (resolvedCtx) {
+    previousCumulativeBlob = await extractContextAudioLazy(resolvedCtx, { trimToContext: true });
+    clipOpts.contextWindow = resolvedCtx;
+    clipOpts.forceSilence = !previousCumulativeBlob;
+  } else {
+    previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
+  }
+  // Restore persisted chunkMaskMode
+  if (clip?.generationParams?.chunkMaskMode) {
+    clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
+  }
+  const outcome = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
   return {
     succeeded: outcome.succeeded,
     errorMessage: outcome.errorMessage,
@@ -1138,6 +1343,8 @@ export interface AddLayerOptions {
   contextWindow: { startTime: number; endTime: number } | null;
   /** Chunk mask mode for this single-track generation */
   chunkMaskMode?: 'explicit' | 'auto';
+  /** When set, regenerate into this existing clip instead of creating a new one. */
+  clipId?: string;
 }
 
 export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void> {
@@ -1150,34 +1357,113 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
     try {
       const store = useProjectStore.getState();
 
-      const clip = store.addClip(opts.trackId, {
-        startTime: opts.startTime,
-        duration: opts.duration,
-        prompt: opts.localDescription,
-        globalCaption: opts.globalCaption,
-        lyrics: opts.lyrics,
-      });
+      let clipId: string;
+
+      // Convert absolute context window to relative offsets for persistence
+      const clipStartTime = opts.startTime;
+      const savedCtxWindow = opts.contextWindow ? {
+        offsetStart: opts.contextWindow.startTime - clipStartTime,
+        offsetEnd: opts.contextWindow.endTime - clipStartTime,
+        trackIds: (opts.contextWindow as { trackIds?: string[] }).trackIds ?? [],
+      } : null;
+
+      if (opts.clipId) {
+        // Edit mode: reuse existing clip, update its params
+        clipId = opts.clipId;
+        store.updateClip(clipId, {
+          prompt: opts.localDescription,
+          globalCaption: opts.globalCaption,
+          lyrics: opts.lyrics,
+          generationParams: {
+            type: 'lego',
+            prompt: opts.localDescription,
+            lyrics: opts.lyrics,
+            globalCaption: opts.globalCaption,
+            contextWindow: savedCtxWindow,
+            chunkMaskMode: opts.chunkMaskMode,
+          },
+        });
+      } else {
+        // New layer: create clip
+        const clip = store.addClip(opts.trackId, {
+          startTime: opts.startTime,
+          duration: opts.duration,
+          prompt: opts.localDescription,
+          globalCaption: opts.globalCaption,
+          lyrics: opts.lyrics,
+        });
+        clipId = clip.id;
+
+        // Persist generation params for edit/regenerate
+        store.updateClip(clipId, {
+          generationParams: {
+            type: 'lego',
+            prompt: opts.localDescription,
+            lyrics: opts.lyrics,
+            globalCaption: opts.globalCaption,
+            contextWindow: savedCtxWindow,
+            chunkMaskMode: opts.chunkMaskMode,
+          },
+        });
+      }
 
       if (opts.localDescription) {
         store.setTrackLocalCaption(opts.trackId, opts.localDescription);
       }
 
       let contextBlob: Blob | null = null;
+      // The effective context window may be auto-padded below
+      let effectiveCtxWindow = opts.contextWindow;
 
-      if (opts.contextWindow) {
-        contextBlob = await extractContextAudioLazy(opts.contextWindow);
+      if (effectiveCtxWindow && opts.chunkMaskMode !== 'auto') {
+        // Auto-pad context window when repainting covers >= 95% of context duration.
+        // The model expects some preserved context around the repainting region;
+        // without padding, explicit mask = all 1s which is out-of-distribution.
+        const ctxDur = effectiveCtxWindow.endTime - effectiveCtxWindow.startTime;
+        const repaintDur = opts.duration;
+        if (ctxDur > 0 && repaintDur / ctxDur >= 0.95) {
+          const PAD_SECONDS = 1.0;
+          const paddedStart = Math.max(0, effectiveCtxWindow.startTime - PAD_SECONDS);
+          const audioDurationFull = useProjectStore.getState().getAudioDuration();
+          const paddedEnd = Math.min(audioDurationFull, effectiveCtxWindow.endTime + PAD_SECONDS);
+          // Only pad if it actually expands the window
+          if (paddedEnd - paddedStart > ctxDur + 0.1) {
+            toastInfo('Context window auto-padded to provide surrounding context for better generation quality');
+            effectiveCtxWindow = {
+              ...effectiveCtxWindow,
+              startTime: paddedStart,
+              endTime: paddedEnd,
+            };
+          }
+        }
       }
 
-      const outcome = await generateClipInternal(clip.id, contextBlob, {
+      if (effectiveCtxWindow) {
+        // trimToContext: blob spans [0, ctxDuration], no leading silence
+        contextBlob = await extractContextAudioLazy(effectiveCtxWindow, { trimToContext: true });
+        const ctxDur = effectiveCtxWindow.endTime - effectiveCtxWindow.startTime;
+        console.log(
+          `[AddLayer] contextBlob: size=${contextBlob?.size ?? 0}`,
+          `expectedDur=${ctxDur.toFixed(1)}s`,
+          `ctx=[${effectiveCtxWindow.startTime}, ${effectiveCtxWindow.endTime}]`,
+          `clipStart=${opts.startTime} clipDur=${opts.duration}`,
+          `chunkMaskMode=${opts.chunkMaskMode}`,
+        );
+      } else {
+        console.log(`[AddLayer] NO contextWindow, forceSilence=true`);
+      }
+
+      const outcome = await generateClipInternal(clipId, contextBlob, {
         forceSilence: !contextBlob,
         localDescription: opts.localDescription,
         globalCaptionOverride: opts.globalCaption,
         lyricsOverride: opts.lyrics,
         chunkMaskMode: opts.chunkMaskMode,
+        contextWindow: effectiveCtxWindow ?? undefined,
       });
 
       if (outcome.succeeded) {
-        useProjectStore.getState().saveClipVersion(clip.id);
+        useProjectStore.getState().saveClipVersion(clipId);
       }
 
       return outcome.succeeded;
@@ -1348,7 +1634,8 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
       let hasContextAudio = false;
       let contextBlob: Blob | null = null;
       if (opts.contextWindow) {
-        contextBlob = await extractContextAudioLazy(opts.contextWindow);
+        // trimToContext: blob spans [0, ctxDuration], no leading silence
+        contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
         hasContextAudio = contextBlob !== null && contextBlob.size > 44;
       }
       const mode = hasContextAudio ? 'context' : 'silence';
@@ -1404,6 +1691,7 @@ export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): P
           sharedSeed: opts.sharedSeed,
           lyricsOverride: lyrics,
           chunkMaskMode: opts.chunkMaskMode,
+          contextWindow: opts.contextWindow ?? undefined,
         };
         if (prevClipId) {
           const prevClip = useProjectStore.getState().getClipById(prevClipId);
@@ -2197,6 +2485,12 @@ export interface Text2MusicRequest {
   useCotCaption?: boolean;
   /** Vocal language code — "unknown" = server auto-detects via CoT */
   vocalLanguage?: string;
+  /** When true, update project BPM/key/timeSignature from generated result */
+  syncMetaToProject?: boolean;
+  /** Whether the lyrics are instrumental (for persisting generation params) */
+  instrumental?: boolean;
+  /** Whether the generation used project BPM/key/timeSignature (for persisting) */
+  useProjectMeta?: boolean;
 }
 
 export interface Text2MusicResult {
@@ -2234,6 +2528,8 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('No project open');
   }
 
+  genStore.setIsGenerating(true);
+
   // Step 1: Ensure text2music model + LM are loaded
   await modelStore.ensureModelForIntent('full-song');
 
@@ -2246,9 +2542,12 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('Failed to create mix track');
   }
 
+  // Use a placeholder duration for the clip when Auto mode (undefined duration).
+  // The actual duration will be updated when the audio comes back.
+  const placeholderDuration = request.durationSeconds ?? 60;
   const clip = store.addClip(mixTrack.id, {
     startTime: 0,
-    duration: request.durationSeconds,
+    duration: placeholderDuration,
     prompt: request.prompt,
     lyrics: request.lyrics,
     globalCaption: request.prompt, // For text2music, the prompt IS the global caption
@@ -2257,6 +2556,27 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('Failed to create mix clip');
   }
   const clipId = clip.id;
+
+  // Persist generation params for edit/regenerate
+  store.updateClip(clipId, {
+    generationParams: {
+      type: 'text2music',
+      prompt: request.prompt,
+      lyrics: request.lyrics,
+      durationSeconds: request.durationSeconds,
+      thinking: request.thinking,
+      seed: request.seed,
+      useRandomSeed: request.useRandomSeed,
+      vocalLanguage: request.vocalLanguage,
+      instrumental: request.instrumental,
+      splitToStems: request.splitToStems,
+      stemCount: request.stemCount,
+      useProjectMeta: request.useProjectMeta,
+      inferenceSteps: request.inferenceSteps,
+      guidanceScale: request.guidanceScale,
+      shift: request.shift,
+    },
+  });
 
   // Step 3: Build and submit task
   const jobId = uuidv4();
@@ -2395,14 +2715,17 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
         }
       : undefined;
 
-    // Update clip as ready
+    // Update clip as ready — use actual audio buffer duration, not the request duration
+    const actualDuration = audioBuffer.duration;
     useProjectStore.getState().updateClipStatus(clipId, 'ready', {
       isolatedAudioKey: audioKey,
       waveformPeaks: peaks,
       inferredMetas,
-      audioDuration: request.durationSeconds,
+      audioDuration: actualDuration,
       audioOffset: 0,
     });
+    // Also update the clip's visual duration on the timeline to match actual audio
+    useProjectStore.getState().updateClip(clipId, { duration: actualDuration });
 
     genStore.updateJob(jobId, {
       status: 'done',
@@ -2413,6 +2736,22 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     // Seed project global caption if empty
     if (request.prompt && !project.globalCaption) {
       useProjectStore.getState().updateProject({ globalCaption: request.prompt });
+    }
+
+    // Sync generated metadata back to project settings when requested
+    if (request.syncMetaToProject && inferredMetas) {
+      const updates: Record<string, unknown> = {};
+      if (inferredMetas.bpm && inferredMetas.bpm > 0) updates.bpm = inferredMetas.bpm;
+      if (inferredMetas.keyScale) updates.keyScale = inferredMetas.keyScale;
+      if (inferredMetas.timeSignature) {
+        const ts = Number(inferredMetas.timeSignature);
+        if (Number.isFinite(ts) && ts > 0) updates.timeSignature = ts;
+      }
+      if (Object.keys(updates).length > 0) {
+        useProjectStore.getState().updateProject(updates);
+        const parts = Object.entries(updates).map(([k, v]) => `${k}=${v}`).join(', ');
+        toastInfo(`Project updated: ${parts}`);
+      }
     }
 
     toastSuccess('Full song generated');
@@ -2466,6 +2805,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       }
     }
 
+    useGenerationStore.getState().setIsGenerating(false);
     return {
       mixTrackId: mixTrack.id,
       mixClipId: clipId,
@@ -2474,6 +2814,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       succeeded: true,
     };
   } catch (error) {
+    useGenerationStore.getState().setIsGenerating(false);
     const message = error instanceof Error ? error.message : 'Unknown error';
     useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: message });
     genStore.updateJob(jobId, { status: 'error', progress: message, error: message });

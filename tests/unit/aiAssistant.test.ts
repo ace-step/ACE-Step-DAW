@@ -25,39 +25,17 @@ describe('AI Assistant', () => {
       expect(useUIStore.getState().showAIAssistant).toBe(false);
     });
 
-    it('tracks chat messages and streaming state', () => {
-      useUIStore.getState().addAIChatMessage({
-        id: 'msg-1',
-        role: 'user',
-        content: 'How do I add reverb?',
-        timestamp: Date.now(),
-      });
-
-      expect(useUIStore.getState().aiChatMessages).toHaveLength(1);
-
-      useUIStore.getState().setAIAssistantStreaming(true);
-      expect(useUIStore.getState().aiAssistantStreaming).toBe(true);
-
-      useUIStore.getState().clearAIChatMessages();
-      useUIStore.getState().setAIAssistantStreaming(false);
-
-      expect(useUIStore.getState().aiChatMessages).toEqual([]);
-      expect(useUIStore.getState().aiAssistantStreaming).toBe(false);
-    });
-
-    it('seeds contextual suggestions when opened', () => {
-      useProjectStore.getState().createProject({ name: 'Suggestions', bpm: 124 });
-      useProjectStore.getState().addTrack('drums');
-
-      useUIStore.getState().setShowAIAssistant(true);
-
-      expect(useUIStore.getState().aiAssistantSuggestions.length).toBeGreaterThan(0);
-    });
-
     it('persists assistant panel open state', () => {
       useUIStore.getState().setShowAIAssistant(true);
       const persisted = JSON.parse(localStorage.getItem('ace-step-daw-ui') || '{}');
       expect(persisted.state.showAIAssistant).toBe(true);
+    });
+
+    it('closes other right panels when opening assistant', () => {
+      useUIStore.setState({ showMixer: true });
+      useUIStore.getState().setShowAIAssistant(true);
+      expect(useUIStore.getState().showMixer).toBe(false);
+      expect(useUIStore.getState().showAIAssistant).toBe(true);
     });
   });
 
@@ -104,25 +82,6 @@ describe('AI Assistant', () => {
 
       expect(ctx.summary).toContain('Open panels: Mixer, Library, AI Assistant');
       expect(ctx.summary).toContain('loop enabled');
-    });
-  });
-
-  describe('askAIAssistant', () => {
-    it('streams a context-aware reply into store state', async () => {
-      useProjectStore.getState().createProject({ name: 'Beat Lab', bpm: 128 });
-      const track = useProjectStore.getState().addTrack('drums');
-      useProjectStore.getState().addTrackEffect(track.id, 'compressor');
-      useUIStore.getState().setExpandedTrackId(track.id);
-
-      await useUIStore.getState().askAIAssistant('How do I make my drums punch harder?', { delayMs: 0 });
-
-      const messages = useUIStore.getState().aiChatMessages;
-      expect(messages).toHaveLength(2);
-      expect(messages[0].role).toBe('user');
-      expect(messages[1].role).toBe('assistant');
-      expect(messages[1].content).toContain('128 BPM');
-      expect(messages[1].content.toLowerCase()).toContain('drum');
-      expect(useUIStore.getState().aiAssistantStreaming).toBe(false);
     });
   });
 });

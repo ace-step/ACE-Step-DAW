@@ -219,7 +219,9 @@ export function createDefaultFmInstrument(
         level: settings?.modulator?.level ?? 0.75,
       },
       modulationIndex: settings?.modulationIndex ?? 2,
+      harmonicity: settings?.harmonicity ?? 2,
       feedback: settings?.feedback ?? 0,
+      algorithm: settings?.algorithm ?? 'serial',
       ampEnvelope: cloneEnvelope(DEFAULT_AMP_ENVELOPE, settings?.ampEnvelope),
       outputGain: settings?.outputGain ?? 0,
     },
@@ -293,6 +295,8 @@ export function getLegacySynthPresetFromInstrument(instrument: TrackInstrument):
       return 'sampler';
     case 'fm':
       return instrument.fallbackPreset;
+    case 'wavetable':
+      return instrument.fallbackPreset;
     case 'subtractive':
     default:
       return instrument.preset;
@@ -312,6 +316,8 @@ function normalizeExistingInstrument(
       });
     case 'fm':
       return createDefaultFmInstrument(instrument);
+    case 'wavetable':
+      return instrument;
     case 'subtractive':
     default:
       return createDefaultSubtractiveInstrument(instrument.preset, instrument);

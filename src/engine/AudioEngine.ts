@@ -141,6 +141,9 @@ export class AudioEngine {
   private readonly decodedBufferPromises = new Map<string, Promise<AudioBuffer | null>>();
   private scrubTrackStateHash = '';
 
+  // Video recording: MediaStream tap from master output
+  private _mediaStreamDest: MediaStreamAudioDestinationNode | null = null;
+
   constructor() {
     this.ctx = new AudioContext({ sampleRate: 48000 });
     this._playbackLatencyCompensation = (this.ctx.outputLatency ?? 0) + (this.ctx.baseLatency ?? 0);
@@ -636,16 +639,10 @@ export class AudioEngine {
 
   private _readAnalyserMeter(
     analyser: AnalyserNode,
-    data: Uint8Array<ArrayBuffer>,
+    _data: Uint8Array<ArrayBuffer>,
     timeData: Float32Array<ArrayBuffer>,
   ): { level: number; clipped: boolean } {
-    analyser.getByteFrequencyData(data);
     analyser.getFloatTimeDomainData(timeData);
-
-    let spectralPeak = 0;
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > spectralPeak) spectralPeak = data[i];
-    }
 
     let samplePeak = 0;
     for (let i = 0; i < timeData.length; i++) {
@@ -654,7 +651,7 @@ export class AudioEngine {
     }
 
     return {
-      level: Math.max(0, Math.min(1, Math.max(spectralPeak / 255, samplePeak))),
+      level: Math.max(0, Math.min(1, samplePeak)),
       clipped: samplePeak >= 0.995,
     };
   }
@@ -1104,8 +1101,35 @@ export class AudioEngine {
     return this.ctx.decodeAudioData(arrayBuffer);
   }
 
+  /**
+   * Returns a MediaStream carrying the master audio output.
+   * Used by the video recorder to capture DAW audio alongside screen video.
+   * Lazily creates a MediaStreamAudioDestinationNode connected in parallel
+   * to the existing output — no impact on playback volume or routing.
+   */
+  getAudioStream(): MediaStream {
+    if (!this._mediaStreamDest) {
+      this._mediaStreamDest = this.ctx.createMediaStreamDestination();
+      this.masterOutputGain.connect(this._mediaStreamDest);
+    }
+    return this._mediaStreamDest.stream;
+  }
+
+  /** Disconnects the media stream tap created by getAudioStream(). */
+  disposeAudioStream(): void {
+    if (this._mediaStreamDest) {
+      try {
+        this.masterOutputGain.disconnect(this._mediaStreamDest);
+      } catch {
+        // already disconnected
+      }
+      this._mediaStreamDest = null;
+    }
+  }
+
   dispose() {
     this.stop();
+    this.disposeAudioStream();
     for (const node of this.trackNodes.values()) {
       node.disconnect();
     }

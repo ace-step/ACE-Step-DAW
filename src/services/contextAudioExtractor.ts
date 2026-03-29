@@ -4,27 +4,45 @@
  *
  * This blob is then passed as `src_audio` (the context audio) when generating
  * a new clip with "from context" mode.
+ *
+ * IMPORTANT: This must match AudioEngine's playback behaviour — applying
+ * timeStretchRate, audioOffset, and warpMarkers so the context preview
+ * sounds identical to timeline playback.
  */
 import { useProjectStore } from '../store/projectStore';
 import { loadAudioBlobByKey } from './audioFileManager';
 import { audioBufferToWavBlob } from '../utils/wav';
+import { computeWarpedSegments } from '../utils/audioWarp';
 
 export interface ContextWindow {
   startTime: number;
   endTime: number;
 }
 
+export interface ExtractOptions {
+  /**
+   * When true, the returned blob spans [0, ctxDuration] instead of [0, ctxEnd].
+   * Audio is shifted so sample 0 = ctxStart — no leading silence.
+   * Use for preview playback.
+   *
+   * When false (default), the blob spans [0, ctxEnd] with sample 0 = project
+   * time 0, required by the backend for repainting_start/end alignment.
+   */
+  trimToContext?: boolean;
+}
+
 /**
- * Render all ready clips that overlap `contextWindow` into a single mixed WAV blob
- * whose time axis starts at project time 0 (not ctxStart).
+ * Render all ready clips that overlap `contextWindow` into a single mixed WAV blob.
  *
- * The backend assumes src_audio sample 0 = project time 0, so we must produce
- * a blob that spans [0, ctxEnd] to keep repainting_start / repainting_end
- * (which use absolute project times) aligned with the audio content.
+ * By default (trimToContext=false), the blob spans [0, ctxEnd] for backend alignment.
+ * With trimToContext=true, the blob spans [0, ctxDuration] with no leading silence.
  *
  * Returns null if no clips have audio in the context window range.
  */
-export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | null> {
+export async function extractContextAudio(
+  ctx: ContextWindow,
+  options?: ExtractOptions,
+): Promise<Blob | null> {
   const store = useProjectStore.getState();
   const project = store.project;
   if (!project) return null;
@@ -33,8 +51,11 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
   const ctxEnd = ctx.endTime;
   if (ctxEnd <= ctxStart) return null;
 
+  const trimToContext = options?.trimToContext ?? false;
+  const timeOffset = trimToContext ? ctxStart : 0;
+
   const sampleRate = 48000;
-  const frameLength = Math.ceil(ctxEnd * sampleRate);
+  const frameLength = Math.ceil((ctxEnd - timeOffset) * sampleRate);
   const offlineCtx = new OfflineAudioContext(2, frameLength, sampleRate);
 
   const soloActive = project.tracks.some((t) => t.soloed);
@@ -68,48 +89,96 @@ export async function extractContextAudio(ctx: ContextWindow): Promise<Blob | nu
       const arrayBuffer = await blob.arrayBuffer();
       const buffer = await offlineCtx.decodeAudioData(arrayBuffer);
 
-      // Compute the overlap between this clip and the context window.
-      // isolatedAudioKey buffers start at sample 0 = clip.startTime;
-      // cumulativeMixKey buffers start at sample 0 = project time 0.
-      const overlapStart = Math.max(clip.startTime, ctxStart);
-      const overlapEnd = Math.min(clipEnd, ctxEnd);
-      if (overlapEnd <= overlapStart) continue;
+      const audioOffset = clip.audioOffset ?? 0;
+      const rate = clip.timeStretchRate ?? 1;
+      const hasWarpMarkers = clip.warpMarkers && clip.warpMarkers.length > 0;
 
-      let srcStartSample: number;
-      let srcEndSample: number;
-      if (alreadyTrimmed) {
-        srcStartSample = Math.floor((overlapStart - clip.startTime) * sampleRate);
-        srcEndSample = Math.min(
-          Math.floor((overlapEnd - clip.startTime) * sampleRate),
-          buffer.length,
-        );
-      } else {
-        srcStartSample = Math.floor(overlapStart * sampleRate);
-        srcEndSample = Math.min(
-          Math.floor(overlapEnd * sampleRate),
-          buffer.length,
-        );
-      }
-      if (srcEndSample <= srcStartSample) continue;
+      if (hasWarpMarkers) {
+        // Schedule warped segments — mirrors AudioEngine._scheduleWarpedClip
+        const segments = computeWarpedSegments(clip.warpMarkers!, clip.duration);
 
-      const cropLength = srcEndSample - srcStartSample;
-      const cropped = offlineCtx.createBuffer(buffer.numberOfChannels, cropLength, sampleRate);
-      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-        const src = buffer.getChannelData(ch);
-        const dst = cropped.getChannelData(ch);
-        for (let i = 0; i < cropLength; i++) {
-          dst[i] = src[srcStartSample + i] ?? 0;
+        for (const seg of segments) {
+          const segTimelineStart = clip.startTime + seg.targetStart;
+          const segTimelineEnd = clip.startTime + seg.targetEnd;
+
+          // Skip segments entirely outside context window
+          if (segTimelineEnd <= ctxStart || segTimelineStart >= ctxEnd) continue;
+
+          // Clamp to context window
+          const overlapStart = Math.max(segTimelineStart, ctxStart);
+          const overlapEnd = Math.min(segTimelineEnd, ctxEnd);
+          if (overlapEnd <= overlapStart) continue;
+
+          const source = offlineCtx.createBufferSource();
+          source.buffer = buffer;
+          source.playbackRate.value = seg.playbackRate;
+          source.connect(offlineCtx.destination);
+
+          const sourceDur = seg.sourceEnd - seg.sourceStart;
+          const targetDur = seg.targetEnd - seg.targetStart;
+
+          if (overlapStart <= segTimelineStart) {
+            // Context includes segment start — schedule normally
+            source.start(
+              segTimelineStart - timeOffset,
+              audioOffset + seg.sourceStart,
+              sourceDur,
+            );
+          } else {
+            // Context starts mid-segment — seek into it
+            const elapsed = overlapStart - segTimelineStart;
+            const fraction = elapsed / targetDur;
+            const sourceSeek = fraction * sourceDur;
+            source.start(
+              overlapStart - timeOffset,
+              audioOffset + seg.sourceStart + sourceSeek,
+              sourceDur - sourceSeek,
+            );
+          }
+          anyScheduled = true;
         }
-      }
+      } else {
+        // Standard clip — mirrors AudioEngine._scheduleStandardClip
+        // For isolatedAudioKey: buffer starts at clip.startTime
+        // For cumulativeMixKey: buffer starts at project time 0
+        const overlapStart = Math.max(clip.startTime, ctxStart);
+        const overlapEnd = Math.min(clipEnd, ctxEnd);
+        if (overlapEnd <= overlapStart) continue;
 
-      // Schedule at absolute project time so the blob's time axis matches
-      // the repainting_start / repainting_end coordinates sent to the backend
-      const scheduleTime = overlapStart;
-      const source = offlineCtx.createBufferSource();
-      source.buffer = cropped;
-      source.connect(offlineCtx.destination);
-      source.start(scheduleTime);
-      anyScheduled = true;
+        const source = offlineCtx.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = rate;
+        source.connect(offlineCtx.destination);
+
+        // Calculate buffer duration adjusted for stretch rate:
+        // timeline duration = buffer duration / rate, so buffer duration = timeline duration * rate
+        const timelineDuration = clip.duration;
+        const bufferDuration = timelineDuration * rate;
+
+        if (overlapStart <= clip.startTime) {
+          // Context includes clip start — schedule from beginning
+          let srcOffset: number;
+          if (alreadyTrimmed) {
+            srcOffset = audioOffset;
+          } else {
+            srcOffset = audioOffset + clip.startTime * rate;
+          }
+          source.start(clip.startTime - timeOffset, srcOffset, bufferDuration);
+        } else {
+          // Context starts mid-clip — seek into it
+          const seekOffset = overlapStart - clip.startTime;
+          const bufferSeek = seekOffset * rate;
+          const bufferRemaining = (clipEnd - overlapStart) * rate;
+          let srcOffset: number;
+          if (alreadyTrimmed) {
+            srcOffset = audioOffset + bufferSeek;
+          } else {
+            srcOffset = audioOffset + clip.startTime * rate + bufferSeek;
+          }
+          source.start(overlapStart - timeOffset, srcOffset, bufferRemaining);
+        }
+        anyScheduled = true;
+      }
     }
   }
 

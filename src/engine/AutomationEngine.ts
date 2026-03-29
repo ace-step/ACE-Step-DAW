@@ -2,6 +2,7 @@ import type { AutomationLane, AutomationParameter } from '../types/project';
 import { automationParamEquals, normalizedToMixerValue } from '../types/project';
 import { getAudioEngine } from '../hooks/useAudioEngine';
 import { effectsEngine } from './EffectsEngine';
+import { useProjectStore } from '../store/projectStore';
 
 /**
  * Automation playback engine.
@@ -14,6 +15,7 @@ export class AutomationEngine {
   private trackVolumes: Map<string, number> = new Map();
   private trackPans: Map<string, number> = new Map();
   private effectValues: Map<string, number> = new Map();
+  private sendValues: Map<string, number> = new Map();
 
   /**
    * Start applying automation during playback
@@ -27,6 +29,7 @@ export class AutomationEngine {
     this.trackVolumes.clear();
     this.trackPans.clear();
     this.effectValues.clear();
+    this.sendValues.clear();
     this.tick();
   }
 
@@ -42,6 +45,7 @@ export class AutomationEngine {
     this.trackVolumes.clear();
     this.trackPans.clear();
     this.effectValues.clear();
+    this.sendValues.clear();
   }
 
   /**
@@ -118,6 +122,26 @@ export class AutomationEngine {
       if (last !== undefined && Math.abs(last - normalized) < 0.001) return;
       this.effectValues.set(key, normalized);
       effectsEngine.applyAutomationValue(trackId, param.effectId, param, normalized);
+      return;
+    }
+
+    if (param.type === 'send') {
+      const key = `${trackId}:send:${param.sendIndex}`;
+      const last = this.sendValues.get(key);
+      if (last !== undefined && Math.abs(last - normalized) < 0.001) return;
+      this.sendValues.set(key, normalized);
+
+      // Look up the returnTrackId from the project store to use as the engine send ID
+      const project = useProjectStore.getState().project;
+      const track = project?.tracks.find((t) => t.id === trackId);
+      const send = track?.sends?.[param.sendIndex];
+      if (!send) return;
+
+      const engine = getAudioEngine();
+      const trackNode = engine.trackNodes.get(trackId);
+      if (trackNode) {
+        trackNode.updateSendAmount(send.returnTrackId, normalized);
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { createMidiSlice, appendMidiNotesToClip, type MidiSliceActions } from './slices/midiSlice';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
   BounceInPlaceOptions,
@@ -46,6 +47,8 @@ import type {
   SynthEnvelope,
   SynthFilter,
   SynthLfo,
+  FilterEnvelope,
+  UnisonSettings,
   GainEnvelopePoint,
   LoudnessTarget,
   MasteringPreset,
@@ -58,12 +61,16 @@ import type {
   SessionLaunchMode,
   SessionLaunchQuantization,
   SessionPendingLaunch,
+  SceneFollowActionType,
   SessionScene,
   SessionState,
   PlaybackLatencySettings,
   StrudelFromMidiOptions,
   StrudelFromMidiResult,
   TrackInstrument,
+  FmInstrumentSettings,
+  WavetableSettings,
+  VelocityLayer,
 } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
@@ -78,6 +85,7 @@ import {
   estimateMasteredLufs,
 } from '../utils/mastering';
 import { TRACK_CATALOG, TRACK_TYPE_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
+import { DEFAULT_FILTER_ENVELOPE } from '../components/synth/filterEnvelopeDefaults';
 import {
   DEFAULT_BPM,
   DEFAULT_KEY_SCALE,
@@ -88,6 +96,7 @@ import {
   DEFAULT_GENERATION,
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
+import { stripHeavyDataForPersist } from './projectPersistUtils';
 import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
@@ -95,6 +104,7 @@ import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager'
 import * as audioEngineHooks from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
+import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
@@ -107,6 +117,7 @@ import { getSynthPresetById } from '../data/synthPresets';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
+import { buildRoutingGraph, wouldCreateCycle } from '../utils/routingGraph';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
@@ -126,6 +137,7 @@ import {
 } from '../utils/playbackLatency';
 import {
   createDefaultSubtractiveInstrument,
+  createDefaultFmInstrument,
   getDefaultTrackInstrumentPreset,
   syncTrackInstrumentState,
 } from '../utils/trackInstrument';
@@ -460,26 +472,8 @@ function _pushHistory(project: Project | null, options: HistoryOptions = {}) {
   _future[entry.scope][key] = [];
 }
 
-function _appendMidiNotesToClip(project: Project, clipId: string, newNotes: MidiNote[]): Project {
-  return {
-    ...project,
-    updatedAt: Date.now(),
-    tracks: project.tracks.map((track) => ({
-      ...track,
-      clips: track.clips.map((clip) =>
-        clip.id === clipId
-          ? {
-              ...clip,
-              midiData: {
-                notes: [...(clip.midiData?.notes ?? []), ...newNotes],
-                grid: clip.midiData?.grid ?? '1/16',
-              },
-            }
-          : clip,
-      ),
-    })),
-  };
-}
+/** @deprecated Use appendMidiNotesToClip from slices/midiSlice instead */
+const _appendMidiNotesToClip = appendMidiNotesToClip;
 
 /** Call before starting a drag/continuous operation. Captures undo snapshot once. */
 function _beginDrag(project: Project | null, options: HistoryOptions = {}) {
@@ -563,7 +557,7 @@ function _applyHistorySnapshot(current: Project | null, snapshot: Project, entry
   }
 }
 
-export interface ProjectState {
+export interface ProjectState extends MidiSliceActions {
   project: Project | null;
 
   setProject: (project: Project) => void;
@@ -612,18 +606,32 @@ export interface ProjectState {
   duplicateTrack: (trackId: string) => Track | undefined;
   updateTrack: (trackId: string, updates: Partial<Pick<Track, 'displayName' | 'volume' | 'muted' | 'soloed' | 'armed' | 'laneHeight' | 'trackType' | 'instrument' | 'synthPreset' | 'sampler' | 'samplerConfig' | 'drumKit' | 'color'>>) => void;
   setTrackInstrument: (trackId: string, instrument: TrackInstrument) => void;
+  /** Configure FM synthesis parameters on a track, creating or updating the FM instrument. */
+  setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
   /** Update ADSR envelope on a synth track. */
   updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
   /** Update filter settings on a synth track. */
   updateSynthFilter: (trackId: string, filter: Partial<SynthFilter>) => void;
+  /** Update filter envelope (ADSR on filter cutoff) on a synth track. */
+  updateFilterEnvelope: (trackId: string, envelope: Partial<FilterEnvelope>) => void;
   /** Update LFO modulation settings on a synth track. */
   updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
+  /** Update unison / detune voice-stacking settings on a synth track. */
+  updateUnisonSettings: (trackId: string, settings: Partial<UnisonSettings>) => void;
+  /** Update wavetable synthesis settings on a track with undo support. */
+  updateWavetableSettings: (trackId: string, settings: Partial<WavetableSettings>) => void;
   setTrackSampler: (trackId: string, sampler: Partial<SamplerSettings>) => void;
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
   updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
+  /** Add a velocity layer to a track's samplerConfig. */
+  addVelocityLayer: (trackId: string, layer: VelocityLayer) => void;
+  /** Remove a velocity layer by index from a track's samplerConfig. */
+  removeVelocityLayer: (trackId: string, index: number) => void;
+  /** Partially update a velocity layer at the given index. */
+  updateVelocityLayer: (trackId: string, index: number, partial: Partial<VelocityLayer>) => void;
   createQuickSamplerTrack: (input: {
     audioKey: string;
     sampleName?: string;
@@ -688,6 +696,8 @@ export interface ProjectState {
   /** Slip-edit: shift audioOffset by deltaSeconds without changing startTime/duration. */
   slipClip: (clipId: string, deltaSeconds: number) => void;
   sliceClipToRange: (clipId: string, startTime: number, endTime: number) => Promise<string | null>;
+  /** Convert a sample clip into MIDI-triggered slices based on detected transient positions. */
+  sliceClipToMidi: (clipId: string, slicePoints: number[], sampleRate: number) => void;
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtZeroCrossing: (clipId: string, splitTime: number) => Promise<void>;
   snapClipEdgeToZeroCrossing: (clipId: string, edge: 'left' | 'right') => Promise<void>;
@@ -717,6 +727,8 @@ export interface ProjectState {
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -733,7 +745,8 @@ export interface ProjectState {
   setSequencerRowVolume: (trackId: string, rowId: string, volume: number) => void;
   setSequencerRowPan: (trackId: string, rowId: string, pan: number) => void;
   toggleSequencerRowMute: (trackId: string, rowId: string) => void;
-  setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string) => void;
+  setSequencerRowSample: (trackId: string, rowId: string, sampleKey: string, sampleName?: string) => void;
+  clearSequencerRowSample: (trackId: string, rowId: string) => void;
   clearSequencerRow: (trackId: string, rowId: string) => void;
   reorderSequencerRows: (trackId: string, fromIndex: number, toIndex: number) => void;
   cloneSequencerRow: (trackId: string, rowId: string) => void;
@@ -778,22 +791,8 @@ export interface ProjectState {
   setDrumPadPan: (trackId: string, padIndex: number, pan: number) => void;
   renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
-  addMidiNote: (clipId: string, note: Omit<MidiNote, 'id'> & { id?: string }) => string | undefined;
-  updateMidiNote: (clipId: string, noteId: string, updates: Partial<MidiNote>) => void;
-  resizeMidiNote: (clipId: string, noteId: string, input: {
-    edge: 'left' | 'right';
-    startBeat?: number;
-    endBeat?: number;
-    minDurationBeats?: number;
-  }) => void;
-  removeMidiNote: (clipId: string, noteId: string) => void;
-  /** Set a single note's velocity, clamped to 1–127. */
-  setNoteVelocity: (clipId: string, noteId: string, velocity: number) => void;
-  quantizeMidiNotes: (clipId: string, noteIds: string[], gridBeatsOrOptions: number | QuantizeOptions) => void;
-  stampChord: (clipId: string, rootPitch: number, intervals: number[], startBeat: number, durationBeats: number, velocity?: number) => string[];
-  populateMidiPattern: (clipId: string, options: PatternOptions) => string[];
-  setMidiGrid: (clipId: string, grid: PianoRollGrid) => void;
-  transformMidiNotes: (clipId: string, noteIds: string[], transform: TransformOptions) => void;
+  // MIDI actions: inherited from MidiSliceActions via extends
+
   addTrackEffect: (trackId: string, type: TrackEffectType) => string | undefined;
   updateTrackEffect: (trackId: string, effectId: string, updates: Partial<TrackEffect>) => void;
   removeTrackEffect: (trackId: string, effectId: string) => void;
@@ -835,6 +834,7 @@ export interface ProjectState {
   removeReturnTrack: (returnTrackId: string) => void;
   updateReturnTrack: (returnTrackId: string, updates: Partial<Pick<ReturnTrack, 'name' | 'volume' | 'pan' | 'effects'>>) => void;
   updateTrackSend: (trackId: string, returnTrackId: string, amount: number) => void;
+  setSendPrePost: (trackId: string, sendIndex: number, mode: 'pre' | 'post') => void;
 
   // Track grouping / folder tracks
   createGroupTrack: (name: string) => Track;
@@ -945,6 +945,7 @@ function computeTotalDuration(
   }
   return Math.max(measuredDuration, maxEnd + TIMELINE_PADDING);
 }
+
 
 function buildBouncedClip(trackId: string, input: {
   startTime: number;
@@ -1374,6 +1375,13 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
         type,
         enabled: true,
         params: { frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350, wet: 0.5 },
+      };
+    case 'convolver':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: { irType: 'largeHall', wet: 0.35, preDelay: 0 },
       };
   }
 }
@@ -3187,6 +3195,37 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure FM synth', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const existing = t.instrument?.kind === 'fm' ? t.instrument : createDefaultFmInstrument();
+          const merged: FmInstrumentSettings = {
+            ...existing.settings,
+            ...params,
+            carrier: { ...existing.settings.carrier, ...params.carrier },
+            modulator: { ...existing.settings.modulator, ...params.modulator },
+            ampEnvelope: { ...existing.settings.ampEnvelope, ...params.ampEnvelope },
+          };
+          const instrument = createDefaultFmInstrument({
+            ...existing,
+            settings: merged,
+          });
+          return {
+            ...t,
+            ...syncTrackInstrumentFields(t, { instrument }),
+          };
+        }),
+      },
+    });
+  },
+
   loadSynthPreset: (trackId, presetId) => {
     const state = get();
     if (_isViewerMode()) return;
@@ -3262,6 +3301,23 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateFilterEnvelope: (trackId, envelope) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update filter envelope', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, filterEnvelope: { ...(t.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE), ...envelope } }
+            : t,
+        ),
+      },
+    });
+  },
+
   updateSynthFilter: (trackId, filter) => {
     const state = get();
     if (!state.project) return;
@@ -3292,6 +3348,63 @@ export const useProjectStore = create<ProjectState>()(
             ? { ...t, synthLfo: { ...(t.synthLfo ?? { rate: 1, depth: 0.5, shape: 'sine' as const }), ...lfo } }
             : t,
         ),
+      },
+    });
+  },
+
+  updateUnisonSettings: (trackId, settings) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update unison settings', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                unisonSettings: {
+                  ...(t.unisonSettings ?? { voices: 1, detune: 0, spread: 0 }),
+                  ...settings,
+                  ...(settings.voices != null ? { voices: Math.max(1, Math.min(8, Math.round(settings.voices))) } : {}),
+                  ...(settings.detune != null ? { detune: Math.max(0, Math.min(100, settings.detune)) } : {}),
+                  ...(settings.spread != null ? { spread: Math.max(0, Math.min(1, settings.spread)) } : {}),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateWavetableSettings: (trackId, settings) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update wavetable settings', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const existing: WavetableSettings = t.wavetableSettings ?? {
+            ...DEFAULT_WAVETABLE_SETTINGS,
+            waveforms: [...DEFAULT_WAVETABLE_SETTINGS.waveforms],
+            ampEnvelope: { ...DEFAULT_WAVETABLE_SETTINGS.ampEnvelope },
+          };
+          return {
+            ...t,
+            wavetableSettings: {
+              ...existing,
+              ...settings,
+              waveforms: settings.waveforms ?? existing.waveforms,
+              ampEnvelope: settings.ampEnvelope
+                ? { ...existing.ampEnvelope, ...settings.ampEnvelope }
+                : existing.ampEnvelope,
+            },
+          };
+        }),
       },
     });
   },
@@ -3370,6 +3483,85 @@ export const useProjectStore = create<ProjectState>()(
                     samplerConfig: undefined,
                   }),
                 })
+            : t,
+        ),
+      },
+    });
+  },
+
+  addVelocityLayer: (trackId, layer) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Add velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: [...(t.samplerConfig!.velocityLayers ?? []), layer],
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  removeVelocityLayer: (trackId, index) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.velocityLayers) return;
+    if (index < 0 || index >= track.samplerConfig.velocityLayers.length) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Remove velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: t.samplerConfig!.velocityLayers!.filter((_, i) => i !== index),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateVelocityLayer: (trackId, index, partial) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.velocityLayers) return;
+    if (index < 0 || index >= track.samplerConfig.velocityLayers.length) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update velocity layer', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  velocityLayers: t.samplerConfig!.velocityLayers!.map((l, i) =>
+                    i === index ? { ...l, ...partial } : l,
+                  ),
+                },
+              }
             : t,
         ),
       },
@@ -4022,6 +4214,71 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return clipId;
+  },
+
+  sliceClipToMidi: (clipId, slicePoints, sampleRate) => {
+    const state = get();
+    if (!state.project) return;
+
+    const targetClip = state.getClipById(clipId);
+    const track = state.getTrackForClip(clipId);
+    if (!targetClip || !track) return;
+    const trackId = track.id;
+
+    const clipDurationSeconds = targetClip.duration;
+    const bpm = state.project.bpm;
+    const beatsPerSecond = bpm / 60;
+
+    // Build time boundaries from slice points (in seconds)
+    const boundaries: number[] = [0];
+    for (const sp of slicePoints) {
+      const timeSec = sp / sampleRate;
+      if (timeSec > 0 && timeSec < clipDurationSeconds) {
+        boundaries.push(timeSec);
+      }
+    }
+    boundaries.push(clipDurationSeconds);
+
+    // Create MIDI notes — one per slice region, ascending pitch from C3 (48)
+    const notes: import('../types/project').MidiNote[] = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const startSec = boundaries[i];
+      const endSec = boundaries[i + 1];
+      const startBeat = startSec * beatsPerSecond;
+      const durationBeats = (endSec - startSec) * beatsPerSecond;
+      if (durationBeats <= 0) continue;
+      notes.push({
+        id: uuidv4(),
+        pitch: 48 + i, // C3 and up
+        startBeat,
+        durationBeats,
+        velocity: 0.8,
+      });
+    }
+
+    // Update the clip with MIDI data
+    set((s) => {
+      if (!s.project) return s;
+      const newTracks = s.project.tracks.map((track) => {
+        if (track.id !== trackId) return track;
+        return {
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId) return clip;
+            return {
+              ...clip,
+              midiData: {
+                notes,
+                grid: '1/16' as const,
+              },
+            };
+          }),
+        };
+      });
+      return { project: { ...s.project, tracks: newTracks } };
+    });
+
+    _pushHistory(get().project, { scope: 'arrangement', label: 'Slice clip to MIDI', trackId });
   },
 
   splitClip: (clipId, splitTime) => {
@@ -5098,6 +5355,47 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateSessionSceneProperties: (sceneId, properties) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.scenes.some((scene) => scene.id === sceneId)) return;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId ? { ...scene, ...properties } : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  setSessionSceneFollowAction: (sceneId, action, bars?) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    _pushHistory(state.project);
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followAction: action, followActionTime: action === 'none' ? undefined : bars }
+              : scene,
+          ),
+        },
+      },
+    });
+  },
+
   removeAsset: (assetId) => {
     const state = get();
     if (!state.project) return;
@@ -5526,7 +5824,7 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  setSequencerRowSample: (trackId, rowId, sampleKey) => {
+  setSequencerRowSample: (trackId, rowId, sampleKey, sampleName) => {
     const state = get();
     if (!state.project) return;
     _pushHistory(state.project, { scope: 'track', label: 'Assign sequencer row sample', trackId });
@@ -5540,9 +5838,44 @@ export const useProjectStore = create<ProjectState>()(
             ...t,
             sequencerPattern: {
               ...t.sequencerPattern,
-              rows: t.sequencerPattern.rows.map((r) =>
-                r.id === rowId ? { ...r, sampleKey } : r,
-              ),
+              rows: t.sequencerPattern.rows.map((r) => {
+                if (r.id !== rowId) return r;
+                const updated = { ...r, sampleKey };
+                if (sampleName !== undefined) {
+                  updated.sampleName = sampleName;
+                } else {
+                  delete updated.sampleName;
+                }
+                return updated;
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  clearSequencerRowSample: (trackId, rowId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear sequencer row sample', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.sequencerPattern) return t;
+          return {
+            ...t,
+            sequencerPattern: {
+              ...t.sequencerPattern,
+              rows: t.sequencerPattern.rows.map((r, idx) => {
+                if (r.id !== rowId) return r;
+                const defaultKey = DRUM_PAD_DEFAULTS[idx % DRUM_PAD_DEFAULTS.length].sampleKey;
+                const updated = { ...r, sampleKey: defaultKey };
+                delete updated.sampleName;
+                return updated;
+              }),
             },
           };
         }),
@@ -6368,294 +6701,11 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
-  addMidiNote: (clipId, note) => {
-    const state = get();
-    if (_isViewerMode()) return undefined;
-    if (!state.project) return undefined;
-    const noteId = note.id ?? uuidv4();
-    const noteWithId: MidiNote = { ...note, id: noteId };
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Add MIDI note', clipId });
-    set({ project: _appendMidiNotesToClip(state.project, clipId, [noteWithId]) });
-    return noteId;
-  },
-
-  updateMidiNote: (clipId, noteId, updates) => {
-    const state = get();
-    if (_isViewerMode()) return;
-    if (!state.project) return;
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Edit MIDI note', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: clip.midiData.notes.map((note) =>
-                      note.id === noteId ? { ...note, ...updates } : note,
-                    ),
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-  },
-
-  resizeMidiNote: (clipId, noteId, input) => {
-    const state = get();
-    if (_isViewerMode()) return;
-    if (!state.project) return;
-    const minDurationBeats = Math.max(0.001, input.minDurationBeats ?? 0.125);
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Resize MIDI note', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) => {
-            if (clip.id !== clipId || !clip.midiData) {
-              return clip;
-            }
-
-            return {
-              ...clip,
-              midiData: {
-                ...clip.midiData,
-                notes: clip.midiData.notes.map((note) => {
-                  if (note.id !== noteId) {
-                    return note;
-                  }
-
-                  const originalEndBeat = note.startBeat + note.durationBeats;
-                  if (input.edge === 'left') {
-                    const requestedStartBeat = Math.max(0, input.startBeat ?? note.startBeat);
-                    const nextStartBeat = Math.min(requestedStartBeat, originalEndBeat - minDurationBeats);
-                    return {
-                      ...note,
-                      startBeat: nextStartBeat,
-                      durationBeats: Math.max(minDurationBeats, originalEndBeat - nextStartBeat),
-                    };
-                  }
-
-                  const requestedEndBeat = input.endBeat ?? originalEndBeat;
-                  return {
-                    ...note,
-                    durationBeats: Math.max(minDurationBeats, requestedEndBeat - note.startBeat),
-                  };
-                }),
-              },
-            };
-          }),
-        })),
-      },
-    });
-  },
-
-  removeMidiNote: (clipId, noteId) => {
-    const state = get();
-    if (_isViewerMode()) return;
-    if (!state.project) return;
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Delete MIDI note', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: clip.midiData.notes.filter((note) => note.id !== noteId),
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-  },
-
-  setNoteVelocity: (clipId, noteId, velocity) => {
-    const state = get();
-    if (_isViewerMode()) return;
-    if (!state.project) return;
-    const clampedVelocity = Math.round(Math.max(1, Math.min(127, velocity)));
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Set note velocity', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: clip.midiData.notes.map((note) =>
-                      note.id === noteId ? { ...note, velocity: clampedVelocity } : note,
-                    ),
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-  },
-
-  quantizeMidiNotes: (clipId, noteIds, gridBeatsOrOptions) => {
-    const state = get();
-    const options: QuantizeOptions =
-      typeof gridBeatsOrOptions === 'number'
-        ? { gridBeats: gridBeatsOrOptions, strength: 100, swing: 0, scope: 'start' }
-        : gridBeatsOrOptions;
-    if (!state.project || options.gridBeats <= 0) return;
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Quantize MIDI notes', clipId });
-    const noteIdSet = new Set(noteIds);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: applyQuantize(clip.midiData.notes, noteIdSet, options),
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-  },
-
-  stampChord: (clipId, rootPitch, intervals, startBeat, durationBeats, velocity = 100) => {
-    const state = get();
-    if (_isViewerMode()) return [];
-    if (!state.project) return [];
-    const newNotes: MidiNote[] = intervals
-      .map((interval) => rootPitch + interval)
-      .filter((pitch) => pitch >= 0 && pitch <= 127)
-      .map((pitch) => ({
-        id: crypto.randomUUID(),
-        pitch,
-        startBeat,
-        durationBeats,
-        velocity,
-      }));
-
-    if (newNotes.length === 0) return [];
-
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Stamp chord', clipId });
-    set({ project: _appendMidiNotesToClip(state.project, clipId, newNotes) });
-    return newNotes.map((note) => note.id);
-  },
-
-  populateMidiPattern: (clipId, options) => {
-    const state = get();
-    if (!state.project) return [];
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Generate MIDI pattern', clipId });
-
-    const generated = generatePattern(options);
-    const noteIds: string[] = [];
-    const newNotes: MidiNote[] = generated.map((g) => {
-      const id = crypto.randomUUID();
-      noteIds.push(id);
-      return { id, ...g };
-    });
-
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId && clip.midiData
-              ? {
-                  ...clip,
-                  midiData: {
-                    ...clip.midiData,
-                    notes: newNotes, // Replace all notes with generated pattern
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-    return noteIds;
-  },
-
-  setMidiGrid: (clipId, grid) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Set MIDI grid', clipId });
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) =>
-            clip.id === clipId
-              ? {
-                  ...clip,
-                  midiData: {
-                    notes: clip.midiData?.notes ?? [],
-                    grid,
-                  },
-                }
-              : clip,
-          ),
-        })),
-      },
-    });
-  },
-
-  transformMidiNotes: (clipId, noteIds, transform) => {
-    const state = get();
-    if (!state.project) return;
-    _pushHistory(state.project, { scope: 'pianoRoll', label: 'Transform MIDI notes', clipId });
-    const noteIdSet = new Set(noteIds);
-    set({
-      project: {
-        ...state.project,
-        updatedAt: Date.now(),
-        tracks: state.project.tracks.map((track) => ({
-          ...track,
-          clips: track.clips.map((clip) => {
-            if (clip.id !== clipId || !clip.midiData) return clip;
-            const selected = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
-            const unselected = clip.midiData.notes.filter((n) => !noteIdSet.has(n.id));
-            const transformed = applyTransform(selected, transform);
-            return {
-              ...clip,
-              midiData: { ...clip.midiData, notes: [...unselected, ...transformed] },
-            };
-          }),
-        })),
-      },
-    });
-  },
+  // ── MIDI actions (delegated to midiSlice) ──
+  ...createMidiSlice(set, get, {
+    isViewerMode: _isViewerMode,
+    pushHistory: _pushHistory,
+  }),
 
   addTrackEffect: (trackId, type) => {
     const state = get();
@@ -6743,6 +6793,16 @@ export const useProjectStore = create<ProjectState>()(
   setSidechainSource: (trackId, effectId, sourceTrackId) => {
     const state = get();
     if (!state.project) return;
+
+    // Validate: setting a sidechain source must not create a routing cycle
+    if (sourceTrackId !== undefined) {
+      const graph = buildRoutingGraph(state.project.tracks, state.project.returnTracks ?? []);
+      if (wouldCreateCycle(graph, sourceTrackId, trackId)) {
+        toastError('Cannot set sidechain source: it would create a feedback loop in the routing graph');
+        return;
+      }
+    }
+
     _pushHistory(state.project);
     set({
       project: {
@@ -7388,6 +7448,20 @@ export const useProjectStore = create<ProjectState>()(
   updateTrackSend: (trackId, returnTrackId, amount) => {
     const state = get();
     if (!state.project) return;
+
+    // Validate: adding a new send with amount > 0 must not create a routing cycle
+    if (amount > 0) {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      const isNewSend = !(track?.sends ?? []).some((s) => s.returnTrackId === returnTrackId);
+      if (isNewSend) {
+        const graph = buildRoutingGraph(state.project.tracks, state.project.returnTracks ?? []);
+        if (wouldCreateCycle(graph, trackId, returnTrackId)) {
+          toastError('Cannot add send: it would create a feedback loop in the routing graph');
+          return;
+        }
+      }
+    }
+
     _pushHistory(state.project);
     set({
       project: {
@@ -7403,8 +7477,27 @@ export const useProjectStore = create<ProjectState>()(
           } else if (existingIdx >= 0) {
             sends[existingIdx] = { ...sends[existingIdx], amount };
           } else {
-            sends.push({ returnTrackId, amount });
+            sends.push({ returnTrackId, amount, prePost: 'post' });
           }
+          return { ...track, sends };
+        }),
+      },
+    });
+  },
+
+  setSendPrePost: (trackId, sendIndex, mode) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Toggle send pre/post fader', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((track) => {
+          if (track.id !== trackId) return track;
+          const sends = [...(track.sends ?? [])];
+          if (sendIndex < 0 || sendIndex >= sends.length) return track;
+          sends[sendIndex] = { ...sends[sendIndex], prePost: mode };
           return { ...track, sends };
         }),
       },
@@ -8437,12 +8530,21 @@ export const useProjectStore = create<ProjectState>()(
     {
       name: PROJECT_PERSIST_STORAGE_KEY,
       storage: projectPersistStorage,
-      partialize: (state) => ({ project: state.project }),
+      partialize: (state) => ({
+        project: state.project ? stripHeavyDataForPersist(state.project) : null,
+      }),
     },
   ),
 );
 
-// Auto-save to project library (IDB) on changes, debounced
+// Auto-save to project library (IDB) on changes, debounced.
+// Uses requestIdleCallback to defer the IDB write until the browser is idle,
+// keeping it off the critical interaction path (fixes #856).
+const _scheduleIdle: (cb: () => void) => void =
+  typeof requestIdleCallback === 'function'
+    ? (cb) => requestIdleCallback(cb, { timeout: 3000 })
+    : (cb) => setTimeout(cb, 0);
+
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 let _queuedProjectForLibrarySave: Project | null = null;
 let _lastSavedProjectRef: Project | null = null;
@@ -8452,10 +8554,14 @@ useProjectStore.subscribe((state) => {
   _queuedProjectForLibrarySave = state.project;
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    const proj = useProjectStore.getState().project;
-    if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
-    _lastSavedProjectRef = proj;
-    _lastSavedProjectUpdatedAt = proj.updatedAt;
-    void saveProjectToIDB(proj);
+    // Defer the actual IDB write to an idle callback so it doesn't block
+    // drag, scroll, or other high-priority interactions.
+    _scheduleIdle(() => {
+      const proj = useProjectStore.getState().project;
+      if (!proj || (proj === _lastSavedProjectRef && proj.updatedAt === _lastSavedProjectUpdatedAt)) return;
+      _lastSavedProjectRef = proj;
+      _lastSavedProjectUpdatedAt = proj.updatedAt;
+      void saveProjectToIDB(proj);
+    });
   }, PROJECT_LIBRARY_AUTOSAVE_DEBOUNCE_MS);
 });

@@ -38,6 +38,7 @@ import type {
   ChorusParams,
   FlangerParams,
   PhaserParams,
+  ConvolverParams,
   Track,
 } from '../../types/project';
 
@@ -138,6 +139,12 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Deep', params: { frequency: 0.2, octaves: 5, stages: 12, Q: 15, baseFrequency: 200, wet: 0.6 } as PhaserParams },
     { name: 'Fast', params: { frequency: 4, octaves: 2, stages: 6, Q: 8, baseFrequency: 500, wet: 0.5 } as PhaserParams },
   ],
+  convolver: [
+    { name: 'Small Room', params: { irType: 'smallRoom', wet: 0.3, preDelay: 0 } as ConvolverParams },
+    { name: 'Large Hall', params: { irType: 'largeHall', wet: 0.35, preDelay: 0 } as ConvolverParams },
+    { name: 'Plate', params: { irType: 'plate', wet: 0.4, preDelay: 5 } as ConvolverParams },
+    { name: 'Spring', params: { irType: 'spring', wet: 0.3, preDelay: 0 } as ConvolverParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -164,6 +171,7 @@ import {
   ChorusCard,
   FlangerCard,
   PhaserCard,
+  ConvolverCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -275,6 +283,7 @@ function EffectDevice({
           {effect.type === 'chorus' && <ChorusCard effect={effect} trackId={track.id} />}
           {effect.type === 'flanger' && <FlangerCard effect={effect} trackId={track.id} />}
           {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
+          {effect.type === 'convolver' && <ConvolverCard effect={effect} trackId={track.id} />}
         </div>
       )}
     </div>
@@ -298,6 +307,7 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'chorus', label: 'Chorus', icon: '🎵' },
     { type: 'flanger', label: 'Flanger', icon: '🌀' },
     { type: 'phaser', label: 'Phaser', icon: '🔮' },
+    { type: 'convolver', label: 'Convolution Reverb', icon: '🏛️' },
   ];
 
   return (

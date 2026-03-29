@@ -56,17 +56,16 @@ describe('StereoMeter', () => {
     expect(screen.getByLabelText(/right channel/i)).toBeInTheDocument();
   });
 
-  it('reflects left and right levels as bar fill widths', () => {
+  it('reflects left and right levels as bar widths', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0.5, 0.25));
 
     const leftBar = screen.getByTestId('meter-left');
     const rightBar = screen.getByTestId('meter-right');
-    expect(leftBar.style.width).not.toBe('0%');
-    expect(rightBar.style.width).not.toBe('0%');
-    // Left should be wider than right
     const leftWidth = parseFloat(leftBar.style.width);
     const rightWidth = parseFloat(rightBar.style.width);
+    expect(leftWidth).toBeGreaterThan(0);
+    expect(rightWidth).toBeGreaterThan(0);
     expect(leftWidth).toBeGreaterThan(rightWidth);
   });
 
@@ -91,7 +90,7 @@ describe('StereoMeter', () => {
     expect(screen.getByTestId('clip-indicator').className).not.toMatch(/bg-red/);
   });
 
-  it('bars show zero width when level is silent (-60dB or below)', () => {
+  it('bars show zero width when level is silent', () => {
     render(<StereoMeter trackId="track-1" />);
     act(() => tickFrame(0, 0));
 

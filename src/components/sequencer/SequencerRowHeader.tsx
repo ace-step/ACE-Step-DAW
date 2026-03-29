@@ -177,7 +177,7 @@ export function SequencerRowHeader({
             padding: '0 3px',
             lineHeight: 1.2,
           }}
-          title={`${row.name} — click to select, double-click to rename`}
+          title={`${row.name}${row.sampleName ? ` (${row.sampleName})` : ''} — click to select, double-click to rename`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSamplePicker(samplePickerRow === row.id ? '' : row.id);

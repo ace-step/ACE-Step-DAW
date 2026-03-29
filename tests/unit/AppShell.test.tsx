@@ -28,7 +28,7 @@ vi.mock('../../src/components/dialogs/CommandPalette', () => ({ CommandPalette: 
 vi.mock('../../src/components/dialogs/BounceInPlaceDialog', () => ({ BounceInPlaceDialog: () => <div>BounceInPlaceDialog</div> }));
 vi.mock('../../src/components/dialogs/DeleteTracksConfirmDialog', () => ({ DeleteTracksConfirmDialog: () => <div>DeleteTracksConfirmDialog</div> }));
 vi.mock('../../src/components/dialogs/ShareDialog', () => ({ ShareDialog: () => <div>ShareDialog</div> }));
-vi.mock('../../src/components/dialogs/AIAssistantPanel', () => ({ AIAssistantPanel: () => <div>AIAssistantPanel</div> }));
+vi.mock('../../src/components/terminal/ClaudeTerminal', () => ({ ClaudeTerminal: () => <div>ClaudeTerminal</div> }));
 vi.mock('../../src/components/mixer/MixerPanel', () => ({ MixerPanel: () => <div>MixerPanel</div> }));
 vi.mock('../../src/components/assets/LoopBrowser', () => ({ LoopBrowser: () => <div>LoopBrowser</div> }));
 vi.mock('../../src/components/sequencer/SequencerEditor', () => ({ SequencerEditor: () => <div>SequencerEditor</div> }));
@@ -44,6 +44,7 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({ useAudioEngine: () => ({ resu
 vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('../../src/hooks/useEffectsSync', () => ({ useEffectsSync: vi.fn() }));
 vi.mock('../../src/hooks/useShareLink', () => ({ useShareLink: vi.fn() }));
+vi.mock('../../src/components/layout/AudioContextOverlay', () => ({ AudioContextOverlay: () => null }));
 
 describe('AppShell overlay orchestration', () => {
   beforeEach(() => {
@@ -62,7 +63,7 @@ describe('AppShell overlay orchestration', () => {
     render(<AppShell />);
 
     expect(screen.queryByText('CommandPalette')).not.toBeInTheDocument();
-    expect(screen.queryByText('AIAssistantPanel')).not.toBeInTheDocument();
+    expect(screen.queryByText('ClaudeTerminal')).not.toBeInTheDocument();
   });
 });
 
@@ -94,7 +95,7 @@ describe('AppShell dialog lazy loading', () => {
       'BounceInPlaceDialog',
       'DeleteTracksConfirmDialog',
       'ShareDialog',
-      'AIAssistantPanel',
+      'ClaudeTerminal',
       'EnhancePanel',
       'Vocal2BGMModal',
       'AudioAnalysisPanel',

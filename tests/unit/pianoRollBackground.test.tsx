@@ -67,9 +67,9 @@ describe('Piano roll background colors (#554)', () => {
 
 describe('PianoRollCanvas background fill', () => {
   it('uses neutral gray (#1a1a1e) as the canvas background fill color', async () => {
-    // Verify the source code uses the correct color by importing the module
-    // We read the actual source to confirm the canvas fill color
-    const source = await import('../../src/components/pianoroll/PianoRollCanvas?raw');
+    // Verify the source code uses the correct color by importing the renderer module
+    // (canvas drawing was extracted from PianoRollCanvas into PianoRollRenderer)
+    const source = await import('../../src/components/pianoroll/PianoRollRenderer?raw');
     const code = typeof source === 'string' ? source : source.default;
     expect(code).toContain("'#1a1a1e'");
     expect(code).not.toContain("'#0a0a1e'");

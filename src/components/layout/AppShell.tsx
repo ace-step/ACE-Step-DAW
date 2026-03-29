@@ -20,6 +20,7 @@ import { useVST3Connection } from '../../hooks/useVST3Connection';
 import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
+import { useAutoSave } from '../../hooks/useAutoSave';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -32,7 +33,9 @@ const CommandPalette = lazy(() => import('../dialogs/CommandPalette').then(m => 
 const BounceInPlaceDialog = lazy(() => import('../dialogs/BounceInPlaceDialog').then(m => ({ default: m.BounceInPlaceDialog })));
 const DeleteTracksConfirmDialog = lazy(() => import('../dialogs/DeleteTracksConfirmDialog').then(m => ({ default: m.DeleteTracksConfirmDialog })));
 const ShareDialog = lazy(() => import('../dialogs/ShareDialog').then(m => ({ default: m.ShareDialog })));
-const AIAssistantPanel = lazy(() => import('../dialogs/AIAssistantPanel').then(m => ({ default: m.AIAssistantPanel })));
+const VideoExportDialog = lazy(() => import('../dialogs/VideoExportDialog').then(m => ({ default: m.VideoExportDialog })));
+const RecordingOverlay = lazy(() => import('../recording/RecordingOverlay').then(m => ({ default: m.RecordingOverlay })));
+const ClaudeTerminal = lazy(() => import('../terminal/ClaudeTerminal').then(m => ({ default: m.ClaudeTerminal })));
 const EnhancePanel = lazy(() => import('../generation/EnhancePanel').then(m => ({ default: m.EnhancePanel })));
 const Vocal2BGMModal = lazy(() => import('../generation/Vocal2BGMModal').then(m => ({ default: m.Vocal2BGMModal })));
 const AudioAnalysisPanel = lazy(() => import('../generation/AudioAnalysisPanel').then(m => ({ default: m.AudioAnalysisPanel })));
@@ -92,16 +95,20 @@ function EditorShell() {
     }
   }, [project, setShowNewProjectDialog]);
 
-  // Warn before closing tab with unsaved project
+  // Auto-save to IndexedDB with dirty detection and beforeunload warning
+  const { status: saveStatus, saveNow } = useAutoSave();
+
+  // Cmd/Ctrl+S — immediate save
   useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (project) {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
+        void saveNow();
       }
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [project]);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [saveNow]);
 
   useKeyboardShortcuts();
   useEffectsSync();
@@ -129,7 +136,7 @@ function EditorShell() {
         {project && <LoopBrowser />}
       </div>
 
-      <StatusBar />
+      <StatusBar saveStatus={saveStatus} />
 
       {project && showSmartControls && <SmartControlsPanel />}
       {project && openSequencerTrackId && <Suspense fallback={null}><SequencerEditor /></Suspense>}
@@ -164,9 +171,11 @@ function EditorShell() {
         <StemSeparationModal />
         <AudioToMidiModal />
         <ShareDialog />
+        <VideoExportDialog />
+        <RecordingOverlay />
       </Suspense>
       {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
-      {!hasBlockingDialog && <Suspense fallback={null}><AIAssistantPanel /></Suspense>}
+      {!hasBlockingDialog && <Suspense fallback={null}><ClaudeTerminal /></Suspense>}
     </div>
   );
 }

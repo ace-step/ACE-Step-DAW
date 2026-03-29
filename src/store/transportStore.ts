@@ -38,6 +38,7 @@ export interface TransportState {
   punchInTime: number | null;
   punchOutTime: number | null;
   punchEnabled: boolean;
+  countInBars: number;
   loopRecordingEnabled: boolean;
   loopCycleCount: number;
   launchedSessionClips: Record<string, SessionLaunchState>;
@@ -68,6 +69,7 @@ export interface TransportState {
   setPunchOut: (time: number) => void;
   togglePunch: () => void;
   setPunchRange: (inTime: number, outTime: number) => void;
+  setCountInBars: (bars: number) => void;
   toggleLoopRecording: () => void;
   setLoopCycleCount: (count: number) => void;
   incrementLoopCycle: () => void;
@@ -100,6 +102,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   punchInTime: null,
   punchOutTime: null,
   punchEnabled: false,
+  countInBars: 1,
   loopRecordingEnabled: false,
   loopCycleCount: 0,
   launchedSessionClips: {},
@@ -171,6 +174,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   setPunchOut: (time) => set({ punchOutTime: time }),
   togglePunch: () => set((s) => ({ punchEnabled: !s.punchEnabled })),
   setPunchRange: (inTime, outTime) => set({ punchInTime: inTime, punchOutTime: outTime, punchEnabled: true }),
+  setCountInBars: (bars) => set({ countInBars: Math.max(0, Math.min(4, bars)) }),
   toggleLoopRecording: () =>
     set((s) => {
       const next = !s.loopRecordingEnabled;

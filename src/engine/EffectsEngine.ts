@@ -13,10 +13,13 @@ import type {
   ChorusParams,
   FlangerParams,
   PhaserParams,
+  ConvolverParams,
+  FactoryIRType,
 } from '../types/project';
 import { denormalizeEffectParamValue } from '../utils/effectAutomation';
 import { useProjectStore } from '../store/projectStore';
 import { SidechainFollower } from './sidechainFollower';
+import { FACTORY_IR_PRESETS, generateImpulseResponse } from '../utils/factoryImpulseResponses';
 
 type EffectNode = {
   id: string;
@@ -29,6 +32,14 @@ type EffectNode = {
     input: Tone.Gain;
     output: Tone.Gain;
     filters: Tone.Filter[];
+  };
+  convolverRuntime?: {
+    input: Tone.Gain;
+    output: Tone.Gain;
+    dryGain: Tone.Gain;
+    wetGain: Tone.Gain;
+    convolver: Tone.Convolver;
+    preDelayNode: Tone.Gain;
   };
   dispose?: () => void;
 };
@@ -223,6 +234,59 @@ function createNode(effect: TrackEffect): EffectNode {
         }),
       };
     }
+    case 'convolver': {
+      const p = effect.params as ConvolverParams;
+      const input = new Tone.Gain();
+      const output = new Tone.Gain();
+      const dryGain = new Tone.Gain(1 - p.wet);
+      const wetGain = new Tone.Gain(p.wet);
+      const preDelayNode = new Tone.Gain();
+      const convolver = new Tone.Convolver();
+
+      if (p.irType !== 'custom') {
+        const preset = FACTORY_IR_PRESETS[p.irType as FactoryIRType];
+        if (preset) {
+          try {
+            const sampleRate = Tone.getContext?.()?.sampleRate ?? 44100;
+            const irData = generateImpulseResponse(preset, sampleRate);
+            const ctx = Tone.getContext?.();
+            const audioBuffer = ctx?.createBuffer?.(1, irData.length, sampleRate);
+            if (audioBuffer) {
+              audioBuffer.copyToChannel(irData as Float32Array<ArrayBuffer>, 0);
+              convolver.buffer = new Tone.ToneAudioBuffer(audioBuffer);
+            }
+          } catch {
+            // IR loading may fail in test/non-audio contexts
+          }
+        }
+      } else if (p.irUrl) {
+        convolver.load(p.irUrl).catch(() => {});
+      }
+
+      input.connect(dryGain);
+      input.connect(preDelayNode);
+      preDelayNode.connect(convolver);
+      convolver.connect(wetGain);
+      dryGain.connect(output);
+      wetGain.connect(output);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: (input as unknown as { input?: AudioNode }).input,
+        outputNode: (output as unknown as { output?: AudioNode }).output,
+        convolverRuntime: { input, output, dryGain, wetGain, convolver, preDelayNode },
+        dispose: () => {
+          input.dispose();
+          output.dispose();
+          dryGain.dispose();
+          wetGain.dispose();
+          convolver.dispose();
+          preDelayNode.dispose();
+        },
+      };
+    }
   }
 }
 
@@ -371,6 +435,14 @@ class EffectsEngine {
         phaser.wet.value = p.wet;
         break;
       }
+      case 'convolver': {
+        const p = params as ConvolverParams;
+        const rt = effectNode.convolverRuntime;
+        if (!rt) break;
+        rt.wetGain.gain.value = p.wet;
+        rt.dryGain.gain.value = 1 - p.wet;
+        break;
+      }
     }
   }
 
@@ -486,6 +558,15 @@ class EffectsEngine {
         if (target.param === 'Q') phaser.Q.value = value;
         if (target.param === 'baseFrequency') phaser.baseFrequency = value;
         if (target.param === 'wet') phaser.wet.value = value;
+        break;
+      }
+      case 'convolver': {
+        const rt = effectNode.convolverRuntime;
+        if (!rt) break;
+        if (target.param === 'wet') {
+          rt.wetGain.gain.value = value;
+          rt.dryGain.gain.value = 1 - value;
+        }
         break;
       }
     }

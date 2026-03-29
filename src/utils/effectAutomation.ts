@@ -69,6 +69,10 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     baseFrequency: { label: 'Base Freq', min: 100, max: 4000, color: '#fb923c' },
     wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#fb923c' },
   },
+  convolver: {
+    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#c084fc' },
+    preDelay: { label: 'Pre-Delay', min: 0, max: 100, color: '#c084fc' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -113,6 +117,10 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }
+    case 'convolver': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
     case 'parametricEq':
       return null;
   }
@@ -128,6 +136,9 @@ export function getEffectAutomationSpec(
 export function getEffectAutomationColor(parameter: AutomationParameter): string {
   if (parameter.type === 'mixer') {
     return parameter.param === 'volume' ? '#22c55e' : '#3b82f6';
+  }
+  if (parameter.type === 'send') {
+    return '#f97316'; // orange for sends
   }
   return getEffectAutomationSpec(parameter.effectType, parameter.param)?.color ?? '#8b5cf6';
 }

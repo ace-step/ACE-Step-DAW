@@ -15,8 +15,6 @@ const MIXER_RESIZE_HANDLE_HEIGHT = 6;
 const CHANNEL_STRIP_RESERVED_HEIGHT = 380;
 const CHANNEL_STRIP_BOTTOM_PADDING = 12;
 const FADER_MIN_HEIGHT = 96;
-const MAX_INSERT_SLOTS = 4;
-const MAX_SEND_SLOTS = 2;
 
 const EFFECT_SHORT_NAMES: Record<string, string> = {
   eq3: 'EQ3',
@@ -30,6 +28,16 @@ const EFFECT_SHORT_NAMES: Record<string, string> = {
   flanger: 'Flanger',
   phaser: 'Phaser',
 };
+
+/** Small "X" icon used for remove buttons in insert/send slots. */
+function SlotRemoveIcon() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="1" y1="1" x2="7" y2="7" />
+      <line x1="7" y1="1" x2="1" y2="7" />
+    </svg>
+  );
+}
 
 function volumeToDb(v: number): string {
   if (v <= 0) return '-inf';
@@ -48,8 +56,12 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
   const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const updateTrackSend = useProjectStore((s) => s.updateTrackSend);
+  const setSendPrePost = useProjectStore((s) => s.setSendPrePost);
+  const addReturnTrack = useProjectStore((s) => s.addReturnTrack);
+  const removeReturnTrack = useProjectStore((s) => s.removeReturnTrack);
   const setGroupMuted = useProjectStore((s) => s.setGroupMuted);
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
@@ -119,8 +131,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
         {/* Track header group */}
         <div data-testid="channel-header" className="flex w-full flex-col items-center gap-1.5 pb-2">
-          {/* Track color strip */}
-          <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
+            {/* Track color strip moved to bottom of channel strip */}
           {track.isGroup && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-[#333] rounded px-1.5 py-0.5">GRP</span>
           )}
@@ -174,19 +185,17 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
             >
               S
             </button>
-            {!track.isGroup && (
-              <button
-                onClick={() => toggleTrackEffectsBypass(track.id)}
-                aria-label={`FX bypass ${track.displayName}`}
-                aria-keyshortcuts="P"
-                title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
-                className={`flex h-[18px] min-w-[26px] items-center justify-center rounded-sm px-1.5 text-[9px] font-semibold leading-none transition-colors ${
-                  effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
-                }`}
-              >
-                FX
-              </button>
-            )}
+            <button
+              onClick={() => toggleTrackEffectsBypass(track.id)}
+              aria-label={`FX bypass ${track.displayName}`}
+              aria-keyshortcuts="P"
+              title={`Bypass all track effects (P)${effectsBypassed ? ' — active' : ''}`}
+              className={`flex h-[18px] min-w-[26px] items-center justify-center rounded-sm px-1.5 text-[9px] font-semibold leading-none transition-colors ${
+                effectsBypassed ? 'bg-orange-500 text-black' : 'bg-[#444] text-zinc-400 hover:bg-[#484848]'
+              }`}
+            >
+              FX
+            </button>
           </div>
         </div>
 
@@ -198,58 +207,88 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
         {/* Section separator */}
         <div className="w-4/5 border-t border-[#3a3a3a]" />
 
-        {/* Inserts section — 4 effect slots */}
+        {/* Inserts section — dynamic effect slots */}
         <div data-testid="inserts-section" className={`w-full py-1 transition-opacity ${effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
           <div className="text-[10px] text-zinc-400 uppercase tracking-widest mb-1">Inserts</div>
           <div className="flex flex-col gap-1">
-            {Array.from({ length: MAX_INSERT_SLOTS }).map((_, i) => {
-              const effect = effects[i];
+            {effects.map((effect, i) => {
+              const label = EFFECT_SHORT_NAMES[effect.type] ?? effect.type;
               return (
-                <button
-                  key={i}
+                <div
+                  key={effect.id}
                   data-testid={`insert-slot-${i}`}
-                  className={`text-[10px] w-full rounded px-1.5 py-1 text-left truncate transition-colors ${
-                    effect
-                      ? effect.enabled
-                        ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
-                        : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
-                      : 'bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]'
+                  className={`flex items-center gap-0.5 text-[10px] w-full rounded px-1.5 py-1 text-left truncate transition-colors ${
+                    effect.enabled
+                      ? 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444]'
+                      : 'bg-[#3a3a3a] text-zinc-300 hover:bg-[#444] opacity-50'
                   }`}
-                  title={effect ? `${EFFECT_SHORT_NAMES[effect.type] ?? effect.type}${effect.enabled ? '' : ' (bypassed)'}` : 'Add insert effect'}
-                  onClick={() => {
-                    if (!effect && !isFrozen) {
-                      addTrackEffect(track.id, 'reverb' as TrackEffectType);
-                    }
-                  }}
-                  disabled={isFrozen}
+                  title={`${label}${effect.enabled ? '' : ' (bypassed)'}`}
                 >
-                  {effect ? (EFFECT_SHORT_NAMES[effect.type] ?? effect.type) : '+'}
-                </button>
+                  <span className="flex-1 truncate">{label}</span>
+                  <button
+                    data-testid={`remove-insert-btn-${i}`}
+                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    aria-label={`Remove ${label} insert`}
+                    title="Remove insert"
+                    onClick={() => removeTrackEffect(track.id, effect.id)}
+                    disabled={isFrozen}
+                  >
+                    <SlotRemoveIcon />
+                  </button>
+                </div>
               );
             })}
+            <button
+              data-testid="add-insert-btn"
+              className="text-[10px] w-full rounded px-1.5 py-1 text-center transition-colors bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]"
+              title="Add insert effect"
+              onClick={() => addTrackEffect(track.id, 'reverb' as TrackEffectType)}
+              disabled={isFrozen}
+            >
+              +
+            </button>
           </div>
         </div>
 
         {/* Section separator */}
         <div className="w-4/5 border-t border-[#3a3a3a]" />
 
-        {/* Sends section — 2 send slots */}
+        {/* Sends section — dynamic send slots */}
         <div data-testid="sends-section" className="w-full py-1">
           <div className="text-[10px] text-zinc-400 uppercase tracking-widest mb-1">Sends</div>
           <div className="flex flex-col gap-1">
-            {Array.from({ length: MAX_SEND_SLOTS }).map((_, i) => {
-              const rt = returnTracks[i];
-              const send = rt ? sends.find((s) => s.returnTrackId === rt.id) : undefined;
+            {returnTracks.map((rt, i) => {
+              const send = sends.find((s) => s.returnTrackId === rt.id);
               const amount = send?.amount ?? 0;
+              const isPre = (send?.prePost ?? 'post') === 'pre';
               return (
                 <div
-                  key={i}
+                  key={rt.id}
                   data-testid={`send-slot-${i}`}
                   className="flex items-center gap-1.5"
                 >
                   {rt ? (
                     <>
                       <span className="text-[10px] text-zinc-400 truncate flex-1" title={rt.name}>{rt.name}</span>
+                      <button
+                        type="button"
+                        data-testid={`send-prepost-${i}`}
+                        className={`h-4 rounded px-1 text-[8px] font-bold uppercase leading-none transition-colors ${
+                          isPre
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-[#333] text-zinc-500 hover:bg-[#3a3a3a]'
+                        }`}
+                        aria-label={`Toggle pre/post fader for send to ${rt.name}`}
+                        disabled={isFrozen}
+                        onClick={() => {
+                          const sendIdx = sends.findIndex((s) => s.returnTrackId === rt.id);
+                          if (sendIdx >= 0) {
+                            setSendPrePost(track.id, sendIdx, isPre ? 'post' : 'pre');
+                          }
+                        }}
+                      >
+                        {isPre ? 'PRE' : 'POST'}
+                      </button>
                       <input
                         type="range"
                         min={0}
@@ -261,6 +300,15 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                         className="w-14 h-3 accent-blue-500"
                         disabled={isFrozen}
                       />
+                      <button
+                        data-testid={`remove-send-btn-${i}`}
+                        className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                        aria-label={`Remove send to ${rt.name}`}
+                        title="Remove send"
+                        onClick={() => removeReturnTrack(rt.id)}
+                      >
+                        <SlotRemoveIcon />
+                      </button>
                     </>
                   ) : (
                     <span className="text-[10px] text-zinc-600 w-full text-center">&mdash;</span>
@@ -268,6 +316,17 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
                 </div>
               );
             })}
+            <button
+              data-testid="add-send-btn"
+              className="text-[10px] w-full rounded px-1.5 py-1 text-center transition-colors bg-[#333] text-zinc-600 hover:bg-[#3a3a3a]"
+              title="Add send bus"
+              onClick={() => {
+                const idx = returnTracks.length + 1;
+                addReturnTrack(`FX ${idx}`);
+              }}
+            >
+              +
+            </button>
           </div>
         </div>
 
@@ -307,8 +366,8 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
 
       {/* Fader + meter region */}
       <div data-testid="fader-region" className="mt-2 flex shrink-0 min-h-[96px] flex-col items-center justify-end gap-1.5 self-stretch border-t border-[#3a3a3a] pt-2 pb-1" style={{ height: faderHeight + 24 }}>
-        <div className="relative flex items-stretch justify-center gap-2" style={{ height: faderHeight }}>
-          <LevelMeter trackId={track.id} stereo />
+        <div className="relative" style={{ height: faderHeight }}>
+          <LevelMeter trackId={track.id} stereo showScale />
           <VerticalFader
             value={vol}
             min={0}
@@ -320,6 +379,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
+        <div className="w-full h-1.5 rounded-full mt-1" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
       </div>
     </div>
   );
@@ -365,19 +425,20 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
           <span>IN</span>
           <span className="mx-2">OUT</span>
         </div>
-        <div className="relative flex justify-center gap-2" style={{ height: faderHeight }}>
+        <div className="relative flex gap-2" style={{ height: faderHeight }}>
           <LevelMeter masterStage="input" stereo={false} />
-          <LevelMeter masterStage="output" stereo={false} />
-          <VerticalFader
-            value={masterVol}
-            min={0}
-            max={1.5}
-            defaultValue={1.0}
-            onChange={handleChange}
-            aria-label="Master volume fader"
-            accentColor="#4A5FFF"
-            width={16}
-          />
+          <div className="relative">
+            <LevelMeter masterStage="output" stereo={false} showScale />
+            <VerticalFader
+              value={masterVol}
+              min={0}
+              max={1.5}
+              defaultValue={1.0}
+              onChange={handleChange}
+              aria-label="Master volume fader"
+              accentColor="#4A5FFF"
+            />
+          </div>
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(masterVol)}</span>
       </div>

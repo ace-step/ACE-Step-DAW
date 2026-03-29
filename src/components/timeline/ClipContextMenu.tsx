@@ -73,6 +73,9 @@ export function ClipContextMenu({
 
   return (
     <ContextMenuWrapper x={x} y={y} onClose={onClose} minWidth={190}>
+      {/* Edit Clip — first item for quick access */}
+      <ContextMenuItem label="Edit Clip" onClick={onEdit} />
+
       {/* Top-level Enhance entry */}
       {onEnhance && (
         <ContextMenuItem label="Enhance..." onClick={onEnhance} color="#6ee7b7" shortcut="⇧E" />
@@ -109,10 +112,6 @@ export function ClipContextMenu({
       <ContextMenuSeparator />
       <ContextMenuItem label="Split" onClick={onSplitAtPlayhead} shortcut="⌘E" />
       <ContextMenuItem label="Consolidate" onClick={onConsolidate} shortcut="⌘J" disabled={!canConsolidate} />
-
-      {/* Edit */}
-      <ContextMenuSeparator />
-      <ContextMenuItem label="Edit Clip" onClick={onEdit} />
 
       {/* Delete */}
       <ContextMenuSeparator />

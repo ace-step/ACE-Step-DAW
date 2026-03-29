@@ -47,16 +47,13 @@ describe('AddLayerPanel', () => {
     expect(screen.getByText('Add a Layer')).toBeInTheDocument();
   });
 
-  it('renders a target track selector', () => {
+  it('renders a target track dropdown', () => {
     render(<AddLayerPanel />);
-    expect(screen.getByRole('group', { name: 'Target Track' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Target track: Drums' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Target track: Vocals' })).toBeInTheDocument();
-  });
-
-  it('shows all 12 preset target tracks', () => {
-    render(<AddLayerPanel />);
-    expect(screen.getAllByRole('button', { name: /Target track:/i })).toHaveLength(12);
+    const select = screen.getByRole('combobox', { name: 'Target track' });
+    expect(select).toBeInTheDocument();
+    // Should have all 12 preset tracks as options
+    const options = select.querySelectorAll('option');
+    expect(options).toHaveLength(12);
   });
 
   it('defaults target track to the first selected preset track in the select window', () => {
@@ -69,8 +66,8 @@ describe('AddLayerPanel', () => {
     });
 
     render(<AddLayerPanel />);
-    const bassButton = screen.getByRole('button', { name: 'Target track: Bass' });
-    expect(bassButton.className).toContain('bg-white/10');
+    const select = screen.getByRole('combobox', { name: 'Target track' }) as HTMLSelectElement;
+    expect(select.value).toBe('bass');
     expect(screen.getByText(`Generate into selected row: ${bassTrack!.displayName}`)).toBeInTheDocument();
   });
 
@@ -148,65 +145,52 @@ describe('AddLayerPanel', () => {
     expect(screen.getAllByText(/7\.0s/).length).toBeGreaterThan(0);
   });
 
-  it('renders layer type buttons', () => {
-    render(<AddLayerPanel />);
-    expect(screen.getByText('Song Track')).toBeInTheDocument();
-    expect(screen.getByText('Vocal')).toBeInTheDocument();
-    expect(screen.getByText('Backing')).toBeInTheDocument();
-    expect(screen.getByText('Custom')).toBeInTheDocument();
-  });
-
-  it('shows lyrics textarea when Vocal layer type is selected', () => {
+  it('shows lyrics textarea when vocals track is selected', () => {
     render(<AddLayerPanel />);
     expect(screen.queryByPlaceholderText('Song lyrics...')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Vocal'));
+    // Select vocals track via dropdown
+    const select = screen.getByRole('combobox', { name: 'Target track' });
+    fireEvent.change(select, { target: { value: 'vocals' } });
     expect(screen.getByPlaceholderText('Song lyrics...')).toBeInTheDocument();
   });
 
-  it('shows lyrics textarea when Backing layer type is selected', () => {
+  it('shows lyrics textarea when backing_vocals track is selected', () => {
     render(<AddLayerPanel />);
-    fireEvent.click(screen.getByText('Backing'));
+    const select = screen.getByRole('combobox', { name: 'Target track' });
+    fireEvent.change(select, { target: { value: 'backing_vocals' } });
     expect(screen.getByPlaceholderText('Song lyrics...')).toBeInTheDocument();
   });
 
-  it('hides lyrics textarea when Song Track layer type is selected', () => {
+  it('hides lyrics textarea when non-vocal track is selected', () => {
     render(<AddLayerPanel />);
-    fireEvent.click(screen.getByText('Vocal'));
+    const select = screen.getByRole('combobox', { name: 'Target track' });
+
+    fireEvent.change(select, { target: { value: 'vocals' } });
     expect(screen.getByPlaceholderText('Song lyrics...')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Song Track'));
+    fireEvent.change(select, { target: { value: 'drums' } });
     expect(screen.queryByPlaceholderText('Song lyrics...')).not.toBeInTheDocument();
   });
 
-  it('has a collapsed Advanced section by default', () => {
+  it('shows seed and mask mode controls inline (no Advanced fold)', () => {
     render(<AddLayerPanel />);
-    expect(screen.getByText(/Advanced/)).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Leave empty for random')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Random seed')).toBeInTheDocument();
+    expect(screen.getByText(/Mask/)).toBeInTheDocument();
+    expect(screen.getByText('Rand')).toBeInTheDocument();
   });
 
-  it('expands Advanced section on click', () => {
-    render(<AddLayerPanel />);
-    fireEvent.click(screen.getByText(/Advanced/));
-    expect(screen.getByPlaceholderText('Leave empty for random')).toBeInTheDocument();
-    expect(screen.getByText('Sample mode')).toBeInTheDocument();
-    expect(screen.getByText('Auto-expand prompt')).toBeInTheDocument();
-    expect(screen.getByText(/Mask mode/)).toBeInTheDocument();
-  });
-
-  it('shows context info in Advanced when contextWindow is set', () => {
+  it('shows context info when contextWindow is set', () => {
     useUIStore.setState({
       contextWindow: { startTime: 1, endTime: 5, trackIds: [] },
     });
     render(<AddLayerPanel />);
-    fireEvent.click(screen.getByText(/Advanced/));
     expect(screen.getByText(/1\.0s/)).toBeInTheDocument();
     expect(screen.getByText(/5\.0s/)).toBeInTheDocument();
   });
 
   it('shows "none" context message when no contextWindow', () => {
     render(<AddLayerPanel />);
-    fireEvent.click(screen.getByText(/Advanced/));
     expect(screen.getByText(/Context: none/)).toBeInTheDocument();
   });
 
@@ -240,9 +224,9 @@ describe('AddLayerPanel', () => {
     expect(btn).toBeDisabled();
   });
 
-  it('shows "Select the whole song" button when selection is partial', () => {
+  it('shows "Whole song" button in header when selection is partial', () => {
     render(<AddLayerPanel />);
-    expect(screen.getByText('+ Select the whole song')).toBeInTheDocument();
+    expect(screen.getByText('Whole song')).toBeInTheDocument();
   });
 
   it('preserves typed style when selecting the whole song', () => {
@@ -250,7 +234,7 @@ describe('AddLayerPanel', () => {
     const styleInput = screen.getByPlaceholderText('Describe the sound...');
     fireEvent.change(styleInput, { target: { value: 'wide cinematic pads' } });
 
-    fireEvent.click(screen.getByText('+ Select the whole song'));
+    fireEvent.click(screen.getByText('Whole song'));
 
     expect(screen.getByDisplayValue('wide cinematic pads')).toBeInTheDocument();
   });
@@ -258,12 +242,12 @@ describe('AddLayerPanel', () => {
   it('offers a way to restore the previous window after selecting the whole song', () => {
     render(<AddLayerPanel />);
 
-    fireEvent.click(screen.getByText('+ Select the whole song'));
+    fireEvent.click(screen.getByText('Whole song'));
 
-    expect(screen.getByText('Restore previous window')).toBeInTheDocument();
+    expect(screen.getByText('Restore')).toBeInTheDocument();
     expect(useUIStore.getState().selectWindow).toMatchObject({ startTime: 0 });
 
-    fireEvent.click(screen.getByText('Restore previous window'));
+    fireEvent.click(screen.getByText('Restore'));
 
     expect(useUIStore.getState().selectWindow).toEqual({
       startTime: 3,
@@ -272,27 +256,19 @@ describe('AddLayerPanel', () => {
     });
   });
 
-  it('does not show "Select the whole song" when selection covers full song', () => {
+  it('does not show "Whole song" when selection covers full song', () => {
     const totalDuration = useProjectStore.getState().project!.totalDuration;
     useUIStore.setState({
       selectWindow: { startTime: 0, endTime: totalDuration, trackIds: [] },
     });
     render(<AddLayerPanel />);
-    expect(screen.queryByText('+ Select the whole song')).not.toBeInTheDocument();
+    expect(screen.queryByText('Whole song')).not.toBeInTheDocument();
   });
 
-  it('renders style textarea', () => {
+  it('renders stem description textarea', () => {
     render(<AddLayerPanel />);
     expect(screen.getByPlaceholderText('Describe the sound...')).toBeInTheDocument();
-  });
-
-  it('applies active styling to selected layer type pill', () => {
-    render(<AddLayerPanel />);
-    const songBtn = screen.getByText('Song Track');
-    expect(songBtn.className).toContain('bg-teal-600');
-
-    const vocalBtn = screen.getByText('Vocal');
-    expect(vocalBtn.className).not.toContain('bg-teal-600');
+    expect(screen.getByText('Stem Description')).toBeInTheDocument();
   });
 
   it('moves the panel when dragging the header', () => {
@@ -336,5 +312,20 @@ describe('AddLayerPanel', () => {
     await waitFor(() => {
       expect(useUIStore.getState().selectWindow).toBeNull();
     });
+  });
+
+  it('hides global caption in chunk mode (partial selection)', () => {
+    render(<AddLayerPanel />);
+    // Partial selection (3-7s), should NOT show global caption
+    expect(screen.queryByPlaceholderText(/upbeat pop song/)).not.toBeInTheDocument();
+  });
+
+  it('shows global caption for full song selection', () => {
+    const totalDuration = useProjectStore.getState().project!.totalDuration;
+    useUIStore.setState({
+      selectWindow: { startTime: 0, endTime: totalDuration, trackIds: [] },
+    });
+    render(<AddLayerPanel />);
+    expect(screen.getByPlaceholderText(/upbeat pop song/)).toBeInTheDocument();
   });
 });

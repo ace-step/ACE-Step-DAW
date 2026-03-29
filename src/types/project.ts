@@ -22,6 +22,22 @@ export interface SynthEnvelope {
   release: number;
 }
 
+/** Filter envelope (ADSR applied to filter cutoff frequency). */
+export interface FilterEnvelope {
+  /** Attack time in seconds (0.001–5). */
+  attack: number;
+  /** Decay time in seconds (0.001–5). */
+  decay: number;
+  /** Sustain level (0–1, fraction of the frequency range). */
+  sustain: number;
+  /** Release time in seconds (0.001–10). */
+  release: number;
+  /** Base frequency in Hz (20–20000) — the resting cutoff when envelope is at 0. */
+  baseFrequency: number;
+  /** Number of octaves the envelope sweeps above baseFrequency (0–8). */
+  octaves: number;
+}
+
 export type SynthFilterType = 'lowpass' | 'highpass' | 'bandpass';
 
 /** Filter settings for a synth track. */
@@ -43,6 +59,16 @@ export interface SynthLfo {
   depth: number;
   /** Waveform shape. */
   shape: LfoShape;
+}
+
+/** Unison / detune voice-stacking settings for a synth track. */
+export interface UnisonSettings {
+  /** Number of stacked voices (1–8). 1 = no unison. */
+  voices: number;
+  /** Detune amount in cents spread across voices (0–100). */
+  detune: number;
+  /** Stereo spread of detuned voices (0–1). 0 = mono, 1 = full stereo. */
+  spread: number;
 }
 
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
@@ -116,10 +142,24 @@ export interface SamplerConfig {
   sustain: number;
   /** ADSR release time in seconds. */
   release: number;
+  /** Optional velocity layers for multi-sample velocity switching and crossfading. */
+  velocityLayers?: VelocityLayer[];
+}
+
+/** A single velocity layer in a sampler instrument zone. */
+export interface VelocityLayer {
+  /** Minimum velocity that triggers this layer (0–127). */
+  minVelocity: number;
+  /** Maximum velocity that triggers this layer (0–127). */
+  maxVelocity: number;
+  /** IndexedDB audio key for the layer's sample. */
+  sampleUrl: string;
+  /** Output gain multiplier for this layer (0–1, default 1). */
+  gain: number;
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -210,11 +250,22 @@ export interface FmOperatorSettings {
   level: number;
 }
 
+/**
+ * FM synthesis routing algorithm.
+ * - `serial`   -- Modulator -> Carrier (classic 2-op FM).
+ * - `parallel` -- Both operators output as independent carriers.
+ * - `stack`    -- Two modulators feed a single carrier (thick modulation).
+ * - `feedback` -- Modulator feeds back into itself, then into the carrier.
+ */
+export type FmAlgorithm = 'serial' | 'parallel' | 'stack' | 'feedback';
+
 export interface FmInstrumentSettings {
   carrier: FmOperatorSettings;
   modulator: FmOperatorSettings;
   modulationIndex: number;
+  harmonicity: number;
   feedback: number;
+  algorithm: FmAlgorithm;
   ampEnvelope: InstrumentEnvelope;
   outputGain: number;
 }
@@ -227,10 +278,43 @@ export interface FmTrackInstrument {
   settings: FmInstrumentSettings;
 }
 
+// ─── Wavetable Synthesis Types ──────────────────────────────────────────────
+
+/** Description of a single waveform in a wavetable — stored as an array of harmonic partial amplitudes. */
+export interface WavetableWaveform {
+  /** Human-readable label (e.g. "Saw", "Square", "Formant A"). */
+  name: string;
+  /** Harmonic partial amplitudes. Index 0 = fundamental, 1 = 2nd harmonic, etc. */
+  partials: number[];
+}
+
+/** Settings for wavetable synthesis on a track. */
+export interface WavetableSettings {
+  /** Ordered array of waveforms in the wavetable (minimum 2). */
+  waveforms: WavetableWaveform[];
+  /** Crossfade position between waveforms (0–1). 0 = first waveform, 1 = last. */
+  position: number;
+  /** Speed of automatic morphing in Hz (0 = static, no modulation). */
+  morphSpeed: number;
+  /** ADSR amplitude envelope. */
+  ampEnvelope: InstrumentEnvelope;
+  /** Output gain multiplier (0–2, default 0.55). */
+  outputGain: number;
+}
+
+export interface WavetableTrackInstrument {
+  kind: 'wavetable';
+  preset: 'wavetable';
+  name: string;
+  fallbackPreset: LegacySynthVoicePreset;
+  settings: WavetableSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
-  | FmTrackInstrument;
+  | FmTrackInstrument
+  | WavetableTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -430,6 +514,15 @@ export interface PhaserParams {
   wet: number;          // dry/wet mix (0–1)
 }
 
+export type FactoryIRType = 'smallRoom' | 'largeHall' | 'plate' | 'spring';
+
+export interface ConvolverParams {
+  irType: FactoryIRType | 'custom';  // factory preset or custom URL
+  irUrl?: string;                     // URL for custom impulse response
+  wet: number;                        // dry/wet mix (0–1)
+  preDelay: number;                   // pre-delay in ms (0–100)
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -440,7 +533,8 @@ export type TrackEffect =
   | EffectBase<'filter', FilterParams>
   | EffectBase<'chorus', ChorusParams>
   | EffectBase<'flanger', FlangerParams>
-  | EffectBase<'phaser', PhaserParams>;
+  | EffectBase<'phaser', PhaserParams>
+  | EffectBase<'convolver', ConvolverParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -502,6 +596,44 @@ export interface Take {
 export interface GainEnvelopePoint {
   time: number;   // seconds relative to clip start
   gain: number;   // 0–2 (1 = unity, >1 = boost)
+}
+
+export type ClipGenerationType = 'text2music' | 'lego';
+
+/** Persisted generation form values for re-editing and re-generating a clip. */
+export interface ClipGenerationParams {
+  type: ClipGenerationType;
+  prompt: string;
+  lyrics: string;
+  // text2music params
+  durationSeconds?: number;
+  thinking?: boolean;
+  seed?: number;
+  useRandomSeed?: boolean;
+  vocalLanguage?: string;
+  instrumental?: boolean;
+  splitToStems?: boolean;
+  stemCount?: 2 | 4 | 6;
+  useProjectMeta?: boolean;
+  inferenceSteps?: number;
+  guidanceScale?: number;
+  shift?: number;
+  // lego params
+  globalCaption?: string;
+  sampleMode?: boolean;
+  autoExpandPrompt?: boolean;
+  /** Context window used for lego generation — persisted for edit/regenerate.
+   *  New format stores relative offsets + trackIds; legacy format has absolute startTime/endTime. */
+  contextWindow?: {
+    offsetStart: number;   // ctxStart - clip.startTime (typically negative)
+    offsetEnd: number;     // ctxEnd - clip.startTime
+    trackIds: string[];    // tracks that were in the context (for timeline visualization)
+  } | {
+    startTime: number;     // legacy absolute format
+    endTime: number;
+  } | null;
+  /** Chunk mask mode persisted for regeneration. */
+  chunkMaskMode?: 'explicit' | 'auto';
 }
 
 export interface Clip {
@@ -566,6 +698,8 @@ export interface Clip {
   gainEnvelope?: GainEnvelopePoint[];
   /** Per-clip mute for A/B variation comparison. */
   muted?: boolean;
+  /** Generation parameters used to create this clip, for edit/regenerate. */
+  generationParams?: ClipGenerationParams;
 }
 
 export interface BounceInPlaceOptions {
@@ -596,6 +730,7 @@ export interface SequencerRow {
   id: string;
   name: string;           // e.g. "Kick", "Snare", "Hi-Hat"
   sampleKey: string;      // built-in sample id or IndexedDB key for user sample
+  sampleName?: string;    // display name for user-loaded samples (undefined for built-in)
   steps: SequencerStep[];
   volume: number;         // 0–1
   pan: number;            // -1 (full left) to +1 (full right), default 0
@@ -615,6 +750,8 @@ export interface SequencerPattern {
 export interface Send {
   returnTrackId: string;
   amount: number;  // 0–1
+  /** Pre-fader sends tap before the channel fader; post-fader sends tap after. Default: 'post'. */
+  prePost: 'pre' | 'post';
 }
 
 export interface ReturnTrack {
@@ -716,8 +853,14 @@ export interface Track {
   synthEnvelope?: SynthEnvelope;
   /** Synth filter settings (lowpass/highpass/bandpass). */
   synthFilter?: SynthFilter;
+  /** Filter envelope (ADSR modulating filter cutoff). */
+  filterEnvelope?: FilterEnvelope;
   /** LFO modulation settings. */
   synthLfo?: SynthLfo;
+  /** Unison / detune voice-stacking settings. */
+  unisonSettings?: UnisonSettings;
+  /** Wavetable synthesis settings (only for wavetable instruments). */
+  wavetableSettings?: WavetableSettings;
   /** Legacy sampler metadata mirrored from `instrument.kind === 'sampler'`. */
   sampler?: SamplerSettings;
   effects?: TrackEffect[];
@@ -815,10 +958,21 @@ export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4'
 /** Clip launch behavior mode for session view slots. */
 export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 
+/** Action to perform automatically when a scene finishes playing. */
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+
 export interface SessionScene {
   id: string;
   name: string;
   index: number;
+  /** Optional tempo override (BPM) applied when this scene launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this scene launches. */
+  timeSignature?: [number, number];
+  /** Action to trigger after the scene finishes playing. Defaults to 'none'. */
+  followAction?: SceneFollowActionType;
+  /** Duration in bars after which the follow action triggers. */
+  followActionTime?: number;
 }
 
 export interface SessionClipSlot {
@@ -1014,11 +1168,13 @@ export type AutomatableEffectTarget =
   | { effectType: 'filter'; param: Exclude<keyof FilterParams, 'filterType' | 'lfoEnabled'> }
   | { effectType: 'chorus'; param: keyof ChorusParams }
   | { effectType: 'flanger'; param: keyof FlangerParams }
-  | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> };
+  | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> }
+  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }
-  | ({ type: 'effect'; effectId: string } & AutomatableEffectTarget);
+  | ({ type: 'effect'; effectId: string } & AutomatableEffectTarget)
+  | { type: 'send'; sendIndex: number; param: 'amount' };
 
 export interface AutomationLane {
   id: string;
@@ -1036,6 +1192,9 @@ export function automationParamEquals(a: AutomationParameter, b: AutomationParam
   }
   if (a.type === 'effect' && b.type === 'effect') {
     return a.effectId === b.effectId && a.effectType === b.effectType && a.param === b.param;
+  }
+  if (a.type === 'send' && b.type === 'send') {
+    return a.sendIndex === b.sendIndex && a.param === b.param;
   }
   return false;
 }

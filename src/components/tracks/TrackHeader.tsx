@@ -475,6 +475,20 @@ export function TrackHeader({
                   aria-label={`Effects for ${track.displayName}`}
                 >FX</button>
               )}
+              {!track.isGroup && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleArmTrack(track.id); }}
+                  className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                    isArmed
+                      ? 'bg-red-500 text-white'
+                      : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
+                  }`}
+                  title="Record Arm"
+                  aria-label={`Record arm ${track.displayName}`}
+                >
+                  <div className={`w-[8px] h-[8px] rounded-full ${isArmed ? 'bg-white' : 'bg-zinc-500'}`} />
+                </button>
+              )}
             </div>
           </div>
 

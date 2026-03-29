@@ -628,6 +628,100 @@ describe('projectStore', () => {
     });
   });
 
+  describe('setTrackFmSynth', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('creates an FM instrument on a track that had no instrument', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      store.setTrackFmSynth(track.id, {
+        modulationIndex: 5,
+        harmonicity: 3,
+        algorithm: 'serial',
+      });
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      expect(updated.instrument?.kind).toBe('fm');
+      if (updated.instrument?.kind === 'fm') {
+        expect(updated.instrument.settings.modulationIndex).toBe(5);
+        expect(updated.instrument.settings.harmonicity).toBe(3);
+        expect(updated.instrument.settings.algorithm).toBe('serial');
+      }
+    });
+
+    it('merges partial params into existing FM instrument', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      // First set up FM
+      store.setTrackFmSynth(track.id, {
+        modulationIndex: 2,
+        harmonicity: 2,
+        algorithm: 'serial',
+      });
+      // Then update just algorithm
+      store.setTrackFmSynth(track.id, {
+        algorithm: 'parallel',
+      });
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      if (updated.instrument?.kind === 'fm') {
+        expect(updated.instrument.settings.algorithm).toBe('parallel');
+        expect(updated.instrument.settings.modulationIndex).toBe(2);
+      }
+    });
+
+    it('updates carrier and modulator operator settings independently', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      store.setTrackFmSynth(track.id, {
+        carrier: { waveform: 'triangle', ratio: 1, level: 0.9 },
+        modulator: { waveform: 'sawtooth', ratio: 3, level: 0.6 },
+      });
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      if (updated.instrument?.kind === 'fm') {
+        expect(updated.instrument.settings.carrier.waveform).toBe('triangle');
+        expect(updated.instrument.settings.modulator.waveform).toBe('sawtooth');
+        expect(updated.instrument.settings.modulator.ratio).toBe(3);
+      }
+    });
+
+    it('preserves legacy synthPreset fallback from FM instrument', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      store.setTrackFmSynth(track.id, { modulationIndex: 4 });
+
+      const updated = useProjectStore.getState().project!.tracks[0];
+      // FM instruments use fallbackPreset for legacy synthPreset
+      expect(updated.synthPreset).toBe('lead'); // default fallbackPreset
+    });
+
+    it('supports all four FM algorithms', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('synth', 'pianoRoll');
+
+      for (const algo of ['serial', 'parallel', 'stack', 'feedback'] as const) {
+        store.setTrackFmSynth(track.id, { algorithm: algo });
+        const updated = useProjectStore.getState().project!.tracks[0];
+        if (updated.instrument?.kind === 'fm') {
+          expect(updated.instrument.settings.algorithm).toBe(algo);
+        }
+      }
+    });
+
+    it('is a no-op when project is null', () => {
+      useProjectStore.setState({ project: null });
+      // Should not throw
+      useProjectStore.getState().setTrackFmSynth('nonexistent', { modulationIndex: 5 });
+    });
+  });
+
   describe('track presets', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

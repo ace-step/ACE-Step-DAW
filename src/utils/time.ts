@@ -42,6 +42,13 @@ export function formatTime(seconds: number): string {
   return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
 }
 
+/** Format seconds as "M:SS" (whole seconds, for video recording display). */
+export function formatDurationMSS(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export function formatBarsBeats(
   seconds: number,
   bpm: number,
@@ -76,4 +83,23 @@ export function getBarDuration(bpm: number, timeSignature: number, timeSignature
 
 export function getBeatDuration(bpm: number): number {
   return 60 / bpm;
+}
+
+/**
+ * Compute the effective measures for rendering grid/ruler.
+ * If totalDuration exceeds the configured measures boundary, expand to fit
+ * (rounded up to the next multiple of 8 bars).
+ */
+export function getEffectiveMeasures(
+  configuredMeasures: number,
+  totalDuration: number,
+  bpm: number,
+  timeSignature: number,
+  timeSignatureDenominator: number = 4,
+): number {
+  const barDur = getBarDuration(bpm, timeSignature, timeSignatureDenominator);
+  const configuredDuration = configuredMeasures * barDur;
+  if (totalDuration <= configuredDuration) return configuredMeasures;
+  const required = Math.ceil(totalDuration / barDur) + 4;
+  return Math.ceil(required / 8) * 8;
 }

@@ -31,8 +31,15 @@ export interface VideoRecorderOptions {
   micVolume?: number;
 }
 
-/** Ordered by preference — first supported type wins. */
+/**
+ * Ordered by preference — first supported type wins.
+ * MP4 (H.264+AAC) is preferred when available (Chrome 107+) because it's
+ * universally playable and avoids slow WASM re-encoding for export.
+ * Falls back to WebM for older browsers.
+ */
 const MIME_PREFERENCES = [
+  'video/mp4;codecs=avc1,mp4a.40.2',
+  'video/mp4',
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm;codecs=h264,opus',

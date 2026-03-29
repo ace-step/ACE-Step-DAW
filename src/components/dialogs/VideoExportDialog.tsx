@@ -10,7 +10,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildFileName(): string {
+function buildFileName(extension = '.webm'): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -18,15 +18,24 @@ function buildFileName(): string {
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
-  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.webm`;
+  return `ACE-Step-DAW_Recording_${year}-${month}-${day}_${hours}-${minutes}-${seconds}${extension}`;
 }
 
 function formatMimeType(mimeType: string | null): string {
   if (!mimeType) return 'WebM';
+  if (mimeType.includes('mp4')) return 'MP4 (H.264 + AAC)';
   if (mimeType.includes('vp9')) return 'WebM (VP9 + Opus)';
   if (mimeType.includes('vp8')) return 'WebM (VP8 + Opus)';
   if (mimeType.includes('h264')) return 'WebM (H.264 + Opus)';
   return 'WebM';
+}
+
+function isNativeMp4(mimeType: string | null): boolean {
+  return mimeType?.includes('mp4') === true;
+}
+
+function nativeFileExtension(mimeType: string | null): string {
+  return isNativeMp4(mimeType) ? '.mp4' : '.webm';
 }
 
 // ── Trim Bar ────────────────────────────────────────────────
@@ -146,7 +155,6 @@ export function VideoExportDialog() {
   const [downloaded, setDownloaded] = useState(false);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-  const [exportFormat, setExportFormat] = useState<'webm' | 'mp4'>('webm');
   const [converting, setConverting] = useState(false);
   const [convertProgress, setConvertProgress] = useState(0);
 
@@ -186,6 +194,8 @@ export function VideoExportDialog() {
 
   const isTrimmed = trimStart > 0 || trimEnd < duration;
   const trimmedDuration = trimEnd - trimStart;
+  const recordedAsMp4 = isNativeMp4(mimeType);
+  const ext = nativeFileExtension(mimeType);
 
   const handleTrimChange = (start: number, end: number) => {
     setTrimStart(start);
@@ -195,34 +205,31 @@ export function VideoExportDialog() {
     }
   };
 
-  const needsConversion = exportFormat === 'mp4' || isTrimmed;
-
   const handleDownload = async () => {
     if (!blob) return;
 
-    if (!needsConversion) {
-      // Direct download — no conversion needed
-      downloadBlob(blob, buildFileName().replace('.webm', '.webm'));
+    if (!isTrimmed) {
+      // Direct download — no conversion needed (already MP4 or WebM natively)
+      downloadBlob(blob, buildFileName(ext));
       setDownloaded(true);
       return;
     }
 
-    // Use ffmpeg.wasm for conversion/trim
+    // Use ffmpeg.wasm for trim only (stream copy, no re-encoding = fast)
     setConverting(true);
     setConvertProgress(0);
     try {
       const { convertVideo } = await import('../../services/videoConverter');
       const result = await convertVideo(blob, {
-        format: exportFormat,
-        trimStart: isTrimmed ? trimStart : undefined,
-        trimEnd: isTrimmed ? trimEnd : undefined,
+        format: recordedAsMp4 ? 'mp4' : 'webm',
+        trimStart,
+        trimEnd,
         onProgress: setConvertProgress,
       });
-      const ext = exportFormat === 'mp4' ? '.mp4' : '.webm';
-      downloadBlob(result, buildFileName().replace('.webm', ext));
+      downloadBlob(result, buildFileName(ext));
       setDownloaded(true);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Video conversion failed.');
+      toastError(err instanceof Error ? err.message : 'Trim failed.');
     } finally {
       setConverting(false);
     }
@@ -284,32 +291,21 @@ export function VideoExportDialog() {
           />
         )}
 
-        {/* Info + Format */}
+        {/* Info */}
         <div className="flex items-center gap-4 text-xs text-zinc-400">
           <span>
             Duration: {formatDurationMSS(trimmedDuration)}
             {isTrimmed && <span className="ml-1 text-blue-400">(trimmed)</span>}
           </span>
           {blob && <span>Size: {formatFileSize(blob.size)}</span>}
-          <label className="flex items-center gap-1.5">
-            <span>Format:</span>
-            <select
-              value={exportFormat}
-              onChange={(e) => setExportFormat(e.target.value as 'webm' | 'mp4')}
-              className="rounded bg-white/8 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
-              disabled={converting}
-            >
-              <option value="webm">{formatMimeType(mimeType)}</option>
-              <option value="mp4">MP4 (H.264 + AAC)</option>
-            </select>
-          </label>
+          <span>Format: {formatMimeType(mimeType)}</span>
         </div>
 
-        {/* Conversion progress */}
+        {/* Trim progress */}
         {converting && (
           <div className="flex flex-col gap-1">
             <div className="text-[11px] text-zinc-400">
-              {convertProgress < 0.05 ? 'Loading encoder...' : `Converting... ${Math.round(convertProgress * 100)}%`}
+              {convertProgress < 0.05 ? 'Loading trimmer...' : `Trimming... ${Math.round(convertProgress * 100)}%`}
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
               <div
@@ -326,7 +322,7 @@ export function VideoExportDialog() {
             Record New
           </Button>
           <Button variant="primary" size="sm" onClick={() => void handleDownload()} disabled={converting}>
-            {converting ? 'Converting...' : downloaded ? 'Downloaded' : needsConversion ? 'Convert & Download' : 'Download'}
+            {converting ? 'Trimming...' : downloaded ? 'Downloaded' : isTrimmed ? 'Trim & Download' : 'Download'}
           </Button>
         </div>
       </div>

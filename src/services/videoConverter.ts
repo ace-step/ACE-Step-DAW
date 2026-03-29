@@ -68,12 +68,25 @@ export async function convertVideo(
     args.push('-t', duration.toString());
   }
 
-  // Always use stream copy (no re-encoding) for maximum speed.
-  // This works for both MP4 and WebM trim since we're just cutting, not transcoding.
-  args.push('-c:v', 'copy', '-c:a', 'copy');
+  const inputIsMp4 = inputBlob.type.includes('mp4');
+  const outputIsMp4 = options.format === 'mp4';
+  const needsTranscode = inputIsMp4 !== outputIsMp4;
 
-  if (options.format === 'mp4') {
-    args.push('-movflags', '+faststart');
+  if (needsTranscode) {
+    // Cross-format: must re-encode (WebM VP9→MP4 H.264 or vice versa)
+    if (outputIsMp4) {
+      args.push(
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+      );
+    } else {
+      args.push('-c:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', '-c:a', 'libopus');
+    }
+  } else {
+    // Same format: stream copy (instant, no quality loss)
+    args.push('-c:v', 'copy', '-c:a', 'copy');
+    if (outputIsMp4) args.push('-movflags', '+faststart');
   }
 
   args.push(outputName);

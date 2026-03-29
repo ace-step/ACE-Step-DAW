@@ -30,15 +30,7 @@ function formatMimeType(mimeType: string | null): string {
   return 'WebM';
 }
 
-function isNativeMp4(mimeType: string | null): boolean {
-  return mimeType?.includes('mp4') === true;
-}
-
-function nativeFileExtension(mimeType: string | null): string {
-  return isNativeMp4(mimeType) ? '.mp4' : '.webm';
-}
-
-// ── Trim Bar ────────────────────────────────────────────────
+// ── Trim Bar (perf-optimized: direct DOM updates during drag) ──
 
 function TrimBar({
   duration,
@@ -52,7 +44,14 @@ function TrimBar({
   onTrimChange: (start: number, end: number) => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<'start' | 'end' | null>(null);
+  const isDragging = useRef(false);
+  const dragTarget = useRef<'start' | 'end'>('start');
+
+  // Stable refs for current values (avoids stale closures in global listeners)
+  const trimStartRef = useRef(trimStart);
+  const trimEndRef = useRef(trimEnd);
+  trimStartRef.current = trimStart;
+  trimEndRef.current = trimEnd;
 
   const posToTime = useCallback(
     (clientX: number) => {
@@ -64,24 +63,35 @@ function TrimBar({
     [duration],
   );
 
+  const onTrimChangeRef = useRef(onTrimChange);
+  onTrimChangeRef.current = onTrimChange;
+
+  // Single persistent listener pair — registered once on mount
   useEffect(() => {
-    if (!dragging.current) return;
     const onMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
       const t = posToTime(e.clientX);
-      if (dragging.current === 'start') {
-        onTrimChange(Math.min(t, trimEnd - 1), trimEnd);
+      if (dragTarget.current === 'start') {
+        onTrimChangeRef.current(Math.min(t, trimEndRef.current - 1), trimEndRef.current);
       } else {
-        onTrimChange(trimStart, Math.max(t, trimStart + 1));
+        onTrimChangeRef.current(trimStartRef.current, Math.max(t, trimStartRef.current + 1));
       }
     };
-    const onUp = () => { dragging.current = null; };
+    const onUp = () => { isDragging.current = false; };
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  });
+  }, [posToTime]);
+
+  const startDrag = (target: 'start' | 'end') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    dragTarget.current = target;
+  };
 
   if (duration <= 0) return null;
 
@@ -103,36 +113,22 @@ function TrimBar({
         )}
       </div>
       <div ref={barRef} className="relative h-5 rounded bg-white/5 cursor-pointer select-none">
-        {/* Greyed-out left region */}
         {trimStart > 0 && (
-          <div
-            className="absolute inset-y-0 left-0 rounded-l bg-black/40"
-            style={{ width: `${startPct}%` }}
-          />
+          <div className="absolute inset-y-0 left-0 rounded-l bg-black/40" style={{ width: `${startPct}%` }} />
         )}
-        {/* Greyed-out right region */}
         {trimEnd < duration && (
-          <div
-            className="absolute inset-y-0 right-0 rounded-r bg-black/40"
-            style={{ width: `${100 - endPct}%` }}
-          />
+          <div className="absolute inset-y-0 right-0 rounded-r bg-black/40" style={{ width: `${100 - endPct}%` }} />
         )}
-        {/* Active region */}
-        <div
-          className="absolute inset-y-0 border-y border-blue-500/40"
-          style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
-        />
-        {/* Start handle */}
+        <div className="absolute inset-y-0 border-y border-blue-500/40" style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }} />
         <div
           className="absolute top-0 bottom-0 w-1.5 cursor-col-resize rounded-l bg-blue-500 hover:bg-blue-400"
           style={{ left: `${startPct}%` }}
-          onMouseDown={(e) => { e.preventDefault(); dragging.current = 'start'; }}
+          onMouseDown={startDrag('start')}
         />
-        {/* End handle */}
         <div
           className="absolute top-0 bottom-0 w-1.5 cursor-col-resize rounded-r bg-blue-500 hover:bg-blue-400"
           style={{ left: `calc(${endPct}% - 6px)` }}
-          onMouseDown={(e) => { e.preventDefault(); dragging.current = 'end'; }}
+          onMouseDown={startDrag('end')}
         />
       </div>
       <div className="flex justify-between text-[10px] tabular-nums text-zinc-500">
@@ -155,13 +151,14 @@ export function VideoExportDialog() {
   const [downloaded, setDownloaded] = useState(false);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
+  const [exportFormat, setExportFormat] = useState<'native' | 'mp4'>('native');
   const [converting, setConverting] = useState(false);
   const [convertProgress, setConvertProgress] = useState(0);
 
   const { status, blob, duration, mimeType } = videoRecording;
   const show = status === 'done' && blob !== null;
+  const nativeExt = mimeType?.includes('mp4') ? '.mp4' : '.webm';
 
-  // Create object URL for preview
   useEffect(() => {
     if (blob) {
       const url = URL.createObjectURL(blob);
@@ -169,13 +166,13 @@ export function VideoExportDialog() {
       setDownloaded(false);
       setTrimStart(0);
       setTrimEnd(duration);
+      setExportFormat('native');
       return () => URL.revokeObjectURL(url);
     } else {
       setVideoUrl(null);
     }
   }, [blob, duration]);
 
-  // Constrain video playback to trim region
   useEffect(() => {
     const video = videoRef.current;
     if (!video || trimEnd <= 0) return;
@@ -194,42 +191,39 @@ export function VideoExportDialog() {
 
   const isTrimmed = trimStart > 0 || trimEnd < duration;
   const trimmedDuration = trimEnd - trimStart;
-  const recordedAsMp4 = isNativeMp4(mimeType);
-  const ext = nativeFileExtension(mimeType);
+  const wantsMp4 = exportFormat === 'mp4';
+  // Need ffmpeg if trimming OR converting WebM→MP4
+  const needsProcessing = isTrimmed || (wantsMp4 && !mimeType?.includes('mp4'));
+  const downloadExt = wantsMp4 ? '.mp4' : nativeExt;
 
-  const handleTrimChange = (start: number, end: number) => {
+  const handleTrimChange = useCallback((start: number, end: number) => {
     setTrimStart(start);
     setTrimEnd(end);
-    if (videoRef.current && videoRef.current.currentTime < start) {
-      videoRef.current.currentTime = start;
-    }
-  };
+  }, []);
 
   const handleDownload = async () => {
     if (!blob) return;
 
-    if (!isTrimmed) {
-      // Direct download — no conversion needed (already MP4 or WebM natively)
-      downloadBlob(blob, buildFileName(ext));
+    if (!needsProcessing) {
+      downloadBlob(blob, buildFileName(downloadExt));
       setDownloaded(true);
       return;
     }
 
-    // Use ffmpeg.wasm for trim only (stream copy, no re-encoding = fast)
     setConverting(true);
     setConvertProgress(0);
     try {
       const { convertVideo } = await import('../../services/videoConverter');
       const result = await convertVideo(blob, {
-        format: recordedAsMp4 ? 'mp4' : 'webm',
-        trimStart,
-        trimEnd,
+        format: wantsMp4 ? 'mp4' : 'webm',
+        trimStart: isTrimmed ? trimStart : undefined,
+        trimEnd: isTrimmed ? trimEnd : undefined,
         onProgress: setConvertProgress,
       });
-      downloadBlob(result, buildFileName(ext));
+      downloadBlob(result, buildFileName(downloadExt));
       setDownloaded(true);
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'Trim failed.');
+      toastError(err instanceof Error ? err.message : 'Export failed.');
     } finally {
       setConverting(false);
     }
@@ -247,6 +241,11 @@ export function VideoExportDialog() {
     }
     dismissVideoRecording();
   };
+
+  let buttonLabel = 'Download';
+  if (converting) buttonLabel = 'Processing...';
+  else if (downloaded) buttonLabel = 'Downloaded';
+  else if (needsProcessing) buttonLabel = isTrimmed && wantsMp4 ? 'Trim & Convert' : isTrimmed ? 'Trim & Download' : 'Convert & Download';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={handleClose}>
@@ -271,41 +270,41 @@ export function VideoExportDialog() {
         {/* Video Preview */}
         {videoUrl && (
           <div className="overflow-hidden rounded-lg border border-white/5 bg-black">
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              className="w-full"
-              style={{ maxHeight: '400px' }}
-            />
+            <video ref={videoRef} src={videoUrl} controls className="w-full" style={{ maxHeight: '400px' }} />
           </div>
         )}
 
         {/* Trim Bar */}
         {duration > 1 && (
-          <TrimBar
-            duration={duration}
-            trimStart={trimStart}
-            trimEnd={trimEnd}
-            onTrimChange={handleTrimChange}
-          />
+          <TrimBar duration={duration} trimStart={trimStart} trimEnd={trimEnd} onTrimChange={handleTrimChange} />
         )}
 
-        {/* Info */}
+        {/* Info + Format */}
         <div className="flex items-center gap-4 text-xs text-zinc-400">
           <span>
             Duration: {formatDurationMSS(trimmedDuration)}
             {isTrimmed && <span className="ml-1 text-blue-400">(trimmed)</span>}
           </span>
           {blob && <span>Size: {formatFileSize(blob.size)}</span>}
-          <span>Format: {formatMimeType(mimeType)}</span>
+          <label className="flex items-center gap-1.5">
+            <span>Export as:</span>
+            <select
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as 'native' | 'mp4')}
+              className="rounded bg-white/8 px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+              disabled={converting}
+            >
+              <option value="native">{formatMimeType(mimeType)}</option>
+              {!mimeType?.includes('mp4') && <option value="mp4">MP4 (H.264 + AAC)</option>}
+            </select>
+          </label>
         </div>
 
-        {/* Trim progress */}
+        {/* Processing progress */}
         {converting && (
           <div className="flex flex-col gap-1">
             <div className="text-[11px] text-zinc-400">
-              {convertProgress < 0.05 ? 'Loading trimmer...' : `Trimming... ${Math.round(convertProgress * 100)}%`}
+              {convertProgress < 0.05 ? 'Loading processor...' : `Processing... ${Math.round(convertProgress * 100)}%`}
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
               <div
@@ -322,7 +321,7 @@ export function VideoExportDialog() {
             Record New
           </Button>
           <Button variant="primary" size="sm" onClick={() => void handleDownload()} disabled={converting}>
-            {converting ? 'Trimming...' : downloaded ? 'Downloaded' : isTrimmed ? 'Trim & Download' : 'Download'}
+            {buttonLabel}
           </Button>
         </div>
       </div>

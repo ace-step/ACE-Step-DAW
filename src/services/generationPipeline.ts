@@ -898,6 +898,8 @@ async function generateClipInternal(
     // it.  Since clipStart/clipDuration match the generation region, trimming to
     // the clip region extracts exactly the isolated track -- no wave subtraction
     // needed.
+    // When a context window was used, the backend audio spans [0, ctxDuration]
+    // and clip coordinates are relative to ctxStart. Trim using the same offset.
     const engine = getAudioEngine();
     const fullBuffer = await engine.decodeAudioData(cumulativeBlob);
 
@@ -906,9 +908,9 @@ async function generateClipInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round(clipStart * sampleRate);
+    const startSample = Math.round((clipStart - ctxOffset) * sampleRate);
     const endSample = Math.min(
-      Math.round((clipStart + clipDuration) * sampleRate),
+      Math.round((clipStart - ctxOffset + clipDuration) * sampleRate),
       fullBuffer.length,
     );
     const trimmedLength = Math.max(1, endSample - startSample);

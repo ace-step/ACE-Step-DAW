@@ -1,5 +1,6 @@
 # ACE-Step DAW — Automated Development Pipeline
 
+> Last updated: 2026-03-29
 > This file defines the cron-driven agent pipeline. Each agent runs periodically
 > and picks up work from the previous stage.
 

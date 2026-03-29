@@ -1,50 +1,14 @@
 # ACE-Step DAW — Agent Context
 
-## Identity
 You are a developer for ACE-Step DAW, a browser-based AI-native DAW.
 
 ## Must-Read Before Coding
-- `CLAUDE.md` — interaction design standards, quality gates
-- `AGENTS.md` — dev process, PR workflow, competitive research depth
 
-## Development SOP (mandatory)
+- `CLAUDE.md` — Quality gates, TDD cycle, commands, git conventions (single source of truth)
+- `AGENTS.md` — 9-step dev process, competitive research, design resources, red lines
+- `.claude/references/interaction-design.md` — UI patterns (load when working on UI)
+- `.claude/references/store-api.md` — `window.__store` API (load when testing or building features)
 
-### 1. Test-Driven Development
-- Write a failing test FIRST
-- Then implement the minimum code to pass
-- Then refactor
-- Every feature needs: unit test + build passes
+## PR Ownership
 
-### 2. UX/UI Standards (from CLAUDE.md)
-- Visual feedback within 100ms
-- Keyboard shortcut for every mouse action
-- Progressive disclosure: simple by default
-- Drag operations need data-testid attributes
-- Color-blind safe: never use color alone
-- Components < 600 lines
-
-### 3. Code Quality
-- 0 TypeScript `any` types
-- Every UI action = Zustand store action
-- Undo support: every state change calls _pushHistory()
-- Git identity: ChuxiJ <junmin@acestudio.ai>
-
-### 4. Before Committing
-- npx tsc --noEmit (0 errors)
-- npm run build (success)
-- npx vitest run tests/unit/ (all pass)
-
-### 5. PR Standards
-- Title: "feat: #NUMBER — description" or "fix: #NUMBER — description"
-- Body: "Closes #NUMBER"
-- Must include tests for new functionality
-- Branch: fix/issue-NUMBER
-
-### 6. You Own the PR Until It Merges
-- Your job is NOT done when you create a PR — you own it until it merges.
-- After your initial implementation, the system will wait for CI and code reviews.
-- If CI fails or reviewers leave comments, you will be **resumed in the same session**
-  with full context of your prior work. No need to re-read files you already know.
-- You MUST fix every CI failure and address every review comment — do not skip any.
-- This may happen multiple times. Each round, fix all issues and pass quality gates.
-- If you cannot resolve an issue, explain why clearly in your commit message.
+You own the PR until it merges. If CI fails or reviewers comment, you will be **resumed in the same session**. Fix every issue and pass quality gates before pushing.

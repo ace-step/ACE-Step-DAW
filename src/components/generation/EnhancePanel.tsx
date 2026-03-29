@@ -287,10 +287,11 @@ export function EnhancePanel() {
       lyrics,
       coverStrength,
       createNew,
+      sourceAudioOverride: chainedSourceAudioKey || undefined,
     });
     // After generation, try to load the result audio to get peaks/duration
     await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey]);
 
   // Repaint generation
   const handleRepaintGenerate = useCallback(async () => {
@@ -314,16 +315,32 @@ export function EnhancePanel() {
       globalCaption: globalCaption || undefined,
       repaintMode,
       repaintStrength,
+      sourceAudioOverride: chainedSourceAudioKey || undefined,
     });
     await finalizeResult(resultId, enhancerTarget.clipId);
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating]);
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey]);
 
   // After generation, load the new clip's audio to compute peaks and duration
   const finalizeResult = useCallback(async (resultId: string, originalClipId: string) => {
-    // The generation pipeline creates a new clip or updates the existing one
-    // Re-read the clip from the store to get the new audio key
-    const updatedClip = useProjectStore.getState().getClipById(originalClipId);
-    const audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
+    // The generation pipeline may create a new clip (createNew) or update the existing one.
+    // First check the original clip; if it has no new audio, search the track for the newest ready clip.
+    const store = useProjectStore.getState();
+    let updatedClip = store.getClipById(originalClipId);
+    let audioKey = updatedClip?.isolatedAudioKey || updatedClip?.cumulativeMixKey || '';
+
+    if (!audioKey && enhancerTarget) {
+      // When createNew=true, the pipeline creates a new clip on the same track.
+      const track = store.project?.tracks.find((t) => t.id === enhancerTarget.trackId);
+      if (track) {
+        const readyClip = [...track.clips]
+          .reverse()
+          .find((c) => c.id !== originalClipId && (c.isolatedAudioKey || c.cumulativeMixKey));
+        if (readyClip) {
+          updatedClip = readyClip;
+          audioKey = readyClip.isolatedAudioKey || readyClip.cumulativeMixKey || '';
+        }
+      }
+    }
     if (!audioKey) return;
 
     try {
@@ -331,9 +348,10 @@ export function EnhancePanel() {
       if (!buffer) return;
       const peaks = computeWaveformPeaks(buffer, 60);
       const dur = buffer.duration;
+      const finalClipId = updatedClip?.id ?? originalClipId;
       setResults((prev) => prev.map((r) =>
         r.id === resultId
-          ? { ...r, audioKey, peaks, duration: formatDuration(dur), durationSec: dur }
+          ? { ...r, clipId: finalClipId, audioKey, peaks, duration: formatDuration(dur), durationSec: dur }
           : r,
       ));
       // Auto-select first result
@@ -345,7 +363,7 @@ export function EnhancePanel() {
     } catch {
       // Audio decode failed — leave duration as --:--
     }
-  }, [playback, results.length]);
+  }, [playback, results.length, enhancerTarget]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 

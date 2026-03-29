@@ -1728,6 +1728,8 @@ export interface GenerateCoverOptions {
   coverStrength: number;
   /** true = add a new clip on the same track; false = replace the source clip */
   createNew: boolean;
+  /** Optional IDB audio key to use as source instead of the clip's own audio (for iterative chaining) */
+  sourceAudioOverride?: string;
 }
 
 export async function generateCoverClip(opts: GenerateCoverOptions): Promise<void> {
@@ -1736,7 +1738,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
   await withGenerationToast('AI generation', async () => {
     genStore.setIsGenerating(true);
 
-    const { clipId, caption, lyrics, coverStrength, createNew } = opts;
+    const { clipId, caption, lyrics, coverStrength, createNew, sourceAudioOverride } = opts;
     const store = useProjectStore.getState();
 
     const sourceClip = store.getClipById(clipId);
@@ -1747,7 +1749,11 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<voi
     }
 
     let sourceAudioBlob: Blob | null = null;
-    if (sourceClip.isolatedAudioKey) {
+    // Use override audio (from iterative chaining) if provided
+    if (sourceAudioOverride) {
+      sourceAudioBlob = (await loadAudioBlobByKey(sourceAudioOverride)) ?? null;
+    }
+    if (!sourceAudioBlob && sourceClip.isolatedAudioKey) {
       sourceAudioBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
     }
     if (!sourceAudioBlob && sourceClip.cumulativeMixKey) {
@@ -2119,6 +2125,8 @@ export interface GenerateRepaintOptions {
   globalCaption?: string;
   repaintMode?: RepaintMode;
   repaintStrength?: number;
+  /** Optional IDB audio key to use as source instead of the clip's own audio (for iterative chaining) */
+  sourceAudioOverride?: string;
 }
 
 export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<void> {
@@ -2135,7 +2143,11 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
       store.saveClipVersion(opts.clipId);
 
       let srcBlob: Blob | null = null;
-      if (clip.cumulativeMixKey) {
+      // Use override audio (from iterative chaining) if provided
+      if (opts.sourceAudioOverride) {
+        srcBlob = (await loadAudioBlobByKey(opts.sourceAudioOverride)) ?? null;
+      }
+      if (!srcBlob && clip.cumulativeMixKey) {
         srcBlob = (await loadAudioBlobByKey(clip.cumulativeMixKey)) ?? null;
       }
       if (!srcBlob) {

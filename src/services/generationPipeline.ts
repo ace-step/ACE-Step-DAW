@@ -208,8 +208,18 @@ export async function regenerateClip(clipId: string): Promise<void> {
     genStore.setIsGenerating(true);
 
     try {
-      const previousBlob = await getPreviousCumulativeBlob(clipId);
-      const outcome = await generateClipInternal(clipId, previousBlob, {});
+      // If the clip was generated with a context window, re-extract the trimmed context
+      const ctxWindow = clip?.generationParams?.contextWindow;
+      let previousBlob: Blob | null;
+      const clipOpts: ClipInternalOptions = {};
+      if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
+        previousBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
+        clipOpts.contextWindow = ctxWindow;
+        clipOpts.forceSilence = !previousBlob;
+      } else {
+        previousBlob = await getPreviousCumulativeBlob(clipId);
+      }
+      const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
 
       if (outcome.succeeded) {
         useProjectStore.getState().saveClipVersion(clipId);
@@ -337,9 +347,19 @@ export async function generateSingleClip(clipId: string, options?: { sharedSeed?
     genStore.setIsGenerating(true);
 
     try {
-      const previousBlob = await getPreviousCumulativeBlob(clipId);
+      const clip = useProjectStore.getState().getClipById(clipId);
+      const ctxWindow = clip?.generationParams?.contextWindow;
+      let previousBlob: Blob | null;
+      const clipOpts: ClipInternalOptions = options ? { sharedSeed: options.sharedSeed } : {};
+      if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
+        previousBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
+        clipOpts.contextWindow = ctxWindow;
+        clipOpts.forceSilence = !previousBlob;
+      } else {
+        previousBlob = await getPreviousCumulativeBlob(clipId);
+      }
       logger.debug(`generateSingleClip: clip=${clipId}, previousBlob=${previousBlob ? `${previousBlob.size} bytes` : 'null'}`);
-      const outcome = await generateClipInternal(clipId, previousBlob, options ? { sharedSeed: options.sharedSeed } : {});
+      const outcome = await generateClipInternal(clipId, previousBlob, clipOpts);
 
       if (outcome.succeeded) {
         useProjectStore.getState().saveClipVersion(clipId);
@@ -1044,8 +1064,18 @@ async function runVariationClip(
   _index: number,
   _report: (updates: VariationProgressUpdate) => void,
 ): Promise<VariationGenerationResult> {
-  const previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
-  const outcome = await generateClipInternal(clipId, previousCumulativeBlob);
+  const clip = useProjectStore.getState().getClipById(clipId);
+  const ctxWindow = clip?.generationParams?.contextWindow;
+  let previousCumulativeBlob: Blob | null;
+  const clipOpts: ClipInternalOptions = {};
+  if (ctxWindow && ctxWindow.startTime != null && ctxWindow.endTime != null) {
+    previousCumulativeBlob = await extractContextAudioLazy(ctxWindow, { trimToContext: true });
+    clipOpts.contextWindow = ctxWindow;
+    clipOpts.forceSilence = !previousCumulativeBlob;
+  } else {
+    previousCumulativeBlob = await getPreviousCumulativeBlob(clipId);
+  }
+  const outcome = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
   return {
     succeeded: outcome.succeeded,
     errorMessage: outcome.errorMessage,

@@ -6,6 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import { getAudioEngine } from './useAudioEngine';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
+import { subtractiveEngine } from '../engine/SubtractiveEngine';
 import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { automationEngine } from '../engine/AutomationEngine';
@@ -154,6 +155,7 @@ export function useTransport() {
     await engine.resume();
     await Tone.start();
     await synthEngine.ensureStarted();
+    await subtractiveEngine.ensureStarted();
     await samplerEngine.ensureStarted();
     await drumEngine.ensureStarted();
 
@@ -373,6 +375,7 @@ export function useTransport() {
         const useSampler = !vst3Instrument && !!samplerConfig;
 
         synthEngine.removeTrackSynth(track.id);
+        subtractiveEngine.removeTrackSynth(track.id);
         samplerEngine.removeTrackSampler(track.id);
 
         if (useSampler && samplerConfig) {
@@ -385,6 +388,13 @@ export function useTransport() {
               trackNode.inputGain as unknown as Tone.InputNode,
             );
           }
+        } else if (!vst3Instrument && track.instrument?.kind === 'subtractive') {
+          const trackNode = engine.getOrCreateTrackNode(track.id);
+          subtractiveEngine.ensureTrackSynth(
+            track.id,
+            track.instrument.settings,
+            trackNode.inputGain as unknown as Tone.InputNode,
+          );
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
@@ -455,6 +465,26 @@ export function useTransport() {
               } else if (useSampler) {
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
+              } else if (track.instrument?.kind === 'subtractive') {
+                const previousOverlap = note.isSlide
+                  ? [...notes]
+                      .slice(0, noteIndex)
+                      .reverse()
+                      .find((candidate) => candidate.startBeat + candidate.durationBeats >= note.startBeat)
+                  : undefined;
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  if (previousOverlap) {
+                    subtractiveEngine.playSlideNote(
+                      trackId,
+                      previousOverlap.pitch,
+                      note.pitch,
+                      Math.max(1, Math.round(velocity * 127)),
+                      scheduledDuration,
+                    );
+                    return;
+                  }
+                  subtractiveEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
@@ -615,6 +645,7 @@ export function useTransport() {
     stopAllStrudelTracks();
     engine.stop();
     synthEngine.releaseAll();
+    subtractiveEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
@@ -632,6 +663,7 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     engine.stop();
     synthEngine.releaseAll();
+    subtractiveEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     stopAllStrudelTracks();

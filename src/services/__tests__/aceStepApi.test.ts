@@ -128,3 +128,88 @@ describe('healthCheck', () => {
     expect(fetchMock).toHaveBeenLastCalledWith('http://127.0.0.1:9000/health');
   });
 });
+
+describe('modelSupportsTaskType / isModelInventoryLoaded / isModelReady', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal('fetch', vi.fn());
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it('returns false when no inventory is cached', async () => {
+    const { modelSupportsTaskType, isModelInventoryLoaded, isModelReady } = await import('../aceStepApi');
+    expect(isModelInventoryLoaded()).toBe(false);
+    expect(isModelReady()).toBe(false);
+    expect(modelSupportsTaskType('cover')).toBe(false);
+    expect(modelSupportsTaskType('repaint')).toBe(false);
+  });
+
+  it('returns false when inventory exists but no model is loaded', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        data: {
+          models: [{ name: 'test-model', is_loaded: false, supported_task_types: ['cover'] }],
+          default_model: null,
+          lm_models: [],
+        },
+      }),
+    } as Response);
+
+    const { listModels, modelSupportsTaskType, isModelInventoryLoaded, isModelReady } = await import('../aceStepApi');
+    await listModels();
+
+    expect(isModelInventoryLoaded()).toBe(true);
+    expect(isModelReady()).toBe(false);
+    expect(modelSupportsTaskType('cover')).toBe(false);
+  });
+
+  it('returns true for supported task types when model is loaded', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        data: {
+          models: [{ name: 'test-model', is_loaded: true, supported_task_types: ['cover', 'repaint'] }],
+          default_model: 'test-model',
+          lm_models: [],
+        },
+      }),
+    } as Response);
+
+    const { listModels, modelSupportsTaskType, isModelReady } = await import('../aceStepApi');
+    await listModels();
+
+    expect(isModelReady()).toBe(true);
+    expect(modelSupportsTaskType('cover')).toBe(true);
+    expect(modelSupportsTaskType('repaint')).toBe(true);
+    expect(modelSupportsTaskType('unknown')).toBe(false);
+  });
+
+  it('returns true for any task when model has no supported_task_types metadata', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        data: {
+          models: [{ name: 'old-model', is_loaded: true }],
+          default_model: 'old-model',
+          lm_models: [],
+        },
+      }),
+    } as Response);
+
+    const { listModels, modelSupportsTaskType } = await import('../aceStepApi');
+    await listModels();
+
+    // Backward compat: no task type metadata → assume all supported
+    expect(modelSupportsTaskType('cover')).toBe(true);
+    expect(modelSupportsTaskType('repaint')).toBe(true);
+  });
+});

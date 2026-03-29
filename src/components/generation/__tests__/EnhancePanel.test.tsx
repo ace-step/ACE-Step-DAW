@@ -17,6 +17,8 @@ vi.mock('../../../services/projectStorage', () => ({
 
 vi.mock('../../../services/aceStepApi', () => ({
   modelSupportsTaskType: vi.fn(() => true),
+  isModelInventoryLoaded: vi.fn(() => true),
+  isModelReady: vi.fn(() => true),
 }));
 
 const mockPlayback = {

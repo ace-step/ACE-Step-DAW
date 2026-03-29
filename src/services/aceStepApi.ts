@@ -169,14 +169,31 @@ export async function listModels(): Promise<ModelsListResponse> {
 let _cachedInventory: ModelsListResponse | null = null;
 
 /**
+ * Check whether the model inventory has been fetched from the server.
+ */
+export function isModelInventoryLoaded(): boolean {
+  return _cachedInventory !== null;
+}
+
+/**
+ * Check whether any model is currently loaded on the server.
+ */
+export function isModelReady(): boolean {
+  if (!_cachedInventory) return false;
+  return _cachedInventory.models.some((m) => m.is_loaded);
+}
+
+/**
  * Check whether the currently loaded (or default) model supports a given task type.
  * Uses the cached model inventory from the last `listModels()` call.
- * Returns true if the information is unavailable (optimistic fallback).
+ * Returns false if no inventory is cached or no model is loaded — callers should
+ * show appropriate guidance instead of silently enabling unsupported actions.
  */
 export function modelSupportsTaskType(taskType: string): boolean {
-  if (!_cachedInventory) return true;
+  if (!_cachedInventory) return false;
   const loaded = _cachedInventory.models.find((m) => m.is_loaded);
-  if (!loaded) return true;
+  if (!loaded) return false;
+  // If model has no task type metadata, assume it supports everything (backward compat)
   if (!loaded.supported_task_types || loaded.supported_task_types.length === 0) return true;
   return loaded.supported_task_types.includes(taskType);
 }

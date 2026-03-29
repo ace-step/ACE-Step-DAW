@@ -4,7 +4,7 @@ import { useGenerationStore } from '../../store/generationStore';
 import { useUIStore, getBottomPanelHeight } from '../../store/uiStore';
 import { generateCoverClip } from '../../services/generationPipeline';
 import { generateRepaintClip } from '../../services/generationPipeline';
-import { modelSupportsTaskType } from '../../services/aceStepApi';
+import { modelSupportsTaskType, isModelInventoryLoaded, isModelReady } from '../../services/aceStepApi';
 import { DualRangeSlider } from '../ui/DualRangeSlider';
 import { Z } from '../../utils/zIndex';
 import { WaveformPreview } from './WaveformPreview';
@@ -490,6 +490,8 @@ export function EnhancePanel() {
   }
 
   const hasAudio = !!(clip?.isolatedAudioKey || clip?.cumulativeMixKey);
+  const inventoryLoaded = isModelInventoryLoaded();
+  const modelReady = isModelReady();
   const coverSupported = modelSupportsTaskType('cover');
   const repaintSupported = modelSupportsTaskType('repaint');
   const modeSupported = mode === 'cover' ? coverSupported : repaintSupported;
@@ -689,7 +691,17 @@ export function EnhancePanel() {
                 No audio generated yet — generate the clip first before enhancing.
               </p>
             )}
-            {!modeSupported && (
+            {!inventoryLoaded && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                Connecting to server...
+              </p>
+            )}
+            {inventoryLoaded && !modelReady && (
+              <p className="text-[10px] text-amber-400 mt-2">
+                No model loaded on server. Load a model in Settings before enhancing.
+              </p>
+            )}
+            {inventoryLoaded && modelReady && !modeSupported && (
               <p className="text-[10px] text-amber-400 mt-2">
                 The currently loaded model does not support {mode} generation.
               </p>

@@ -233,6 +233,17 @@ class SamplerEngine {
     this.removeTrackSampler(trackId);
   }
 
+  /**
+   * Set a named parameter on the sampler for a track.
+   *
+   * This is a stub that will be wired up when real-time parameter automation
+   * is added to the sampler engine. For now, parameter changes should go
+   * through {@link ensureTrackSampler} with an updated config.
+   */
+  setParameter(_trackId: string, _name: string, _value: number | string | boolean): void {
+    // No-op stub — see InstrumentEngine interface.
+  }
+
   stopAll() {
     this.releaseAll();
   }

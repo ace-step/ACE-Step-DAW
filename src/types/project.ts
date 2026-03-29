@@ -961,6 +961,25 @@ export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 /** Action to perform automatically when a scene finishes playing. */
 export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
 
+// ─── Follow Action Types ─────────────────────────────────────────────────────
+
+/** The type of follow action to perform when a clip finishes playing. */
+export type FollowActionType = 'stop' | 'again' | 'previous' | 'next' | 'first' | 'last' | 'any' | 'other';
+
+/** Configuration for a follow action on a session clip slot. */
+export interface FollowActionConfig {
+  /** Primary follow action. */
+  actionA: FollowActionType;
+  /** Secondary follow action. */
+  actionB: FollowActionType;
+  /** Probability of action A (0-1). Action B probability = 1 - chanceA. */
+  chanceA: number;
+  /** Follow action trigger time in beats (e.g., 4 = 1 bar in 4/4). */
+  time: number;
+  /** Whether this follow action is enabled. */
+  enabled: boolean;
+}
+
 export interface SessionScene {
   id: string;
   name: string;
@@ -990,11 +1009,13 @@ export interface SessionClipSlot {
   legato?: boolean;
   /** Clip launch behavior: trigger (default), gate, toggle, or repeat. */
   launchMode?: SessionLaunchMode;
+  /** Follow action configuration for this clip slot. */
+  followAction?: FollowActionConfig;
 }
 
 export interface SessionPendingLaunch {
   id: string;
-  type: 'clip' | 'scene' | 'stop-track' | 'stop-all';
+  type: 'clip' | 'scene' | 'stop-track' | 'stop-all' | 'follow-action';
   executeAt: number;
   requestedAt: number;
   trackId?: string;
@@ -1024,6 +1045,8 @@ export interface SessionState {
   recordedLaunches: SessionLaunchEvent[];
   lastLaunchedSceneId: string | null;
   lastLaunchAt: number | null;
+  /** Global toggle for follow actions. When false, no follow actions fire. Default true. */
+  followActionsEnabled?: boolean;
 }
 
 /** A saved project template — a snapshot of project settings and track layout (without audio). */

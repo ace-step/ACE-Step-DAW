@@ -302,7 +302,7 @@ export function AddLayerPanel() {
         setGlobalCaption(params?.globalCaption ?? clip.globalCaption ?? project?.globalCaption ?? '');
         setSeedValue(params?.seed !== undefined ? String(params.seed) : '');
         setUseRandomSeed(params?.useRandomSeed ?? true);
-        setChunkMaskMode('auto');
+        setChunkMaskMode('explicit');
         // Restore context window from saved generation params
         if (params?.contextWindow) {
           useUIStore.getState().setContextWindow({
@@ -326,7 +326,7 @@ export function AddLayerPanel() {
         setGlobalCaption(project?.globalCaption ?? '');
         setSeedValue('');
         setUseRandomSeed(true);
-        setChunkMaskMode('auto');
+        setChunkMaskMode('explicit');
       }
       setSavedSelectionBeforeWholeSong(null);
       setPanelPosition(null);

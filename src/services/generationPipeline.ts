@@ -689,6 +689,15 @@ async function generateClipInternal(
       model: project.generationDefaults.model,
     } as LegoTaskParams;
 
+    logger.debug(
+      `[generateClip] params: audio_duration=${audioDuration}`,
+      `repainting=[${repaintStart.toFixed(2)}, ${repaintEnd.toFixed(2)}]`,
+      `isChunk=${isChunkMode}`,
+      `srcBlobSize=${srcAudioBlob.size}`,
+      `chunk_mask_mode=${options.chunkMaskMode ?? 'unset'}`,
+      ctxOffset > 0 ? `ctxOffset=${ctxOffset}` : '',
+    );
+
     // Per-generation seed override from advanced params
     if (options.useRandomSeedOverride === false && options.seedOverride !== undefined) {
       params.seed = options.seedOverride;
@@ -1322,6 +1331,12 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       if (opts.contextWindow) {
         // trimToContext: blob spans [0, ctxDuration], no leading silence
         contextBlob = await extractContextAudioLazy(opts.contextWindow, { trimToContext: true });
+        const ctxDur = opts.contextWindow.endTime - opts.contextWindow.startTime;
+        logger.debug(
+          `[AddLayer] contextBlob: size=${contextBlob?.size ?? 0}`,
+          `expected duration=${ctxDur.toFixed(1)}s`,
+          `ctx=[${opts.contextWindow.startTime}, ${opts.contextWindow.endTime}]`,
+        );
       }
 
       const outcome = await generateClipInternal(clipId, contextBlob, {

@@ -9,7 +9,7 @@ import { useTransport } from '../../hooks/useTransport';
 import { useRecording } from '../../hooks/useRecording';
 import { KEY_SCALES } from '../../constants/tracks';
 import { CompanionStatus } from '../plugins/CompanionStatus';
-import { formatTime, formatBarsBeats } from '../../utils/time';
+import { formatTime, formatBarsBeats, formatDurationMSS } from '../../utils/time';
 import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
 import { LatencyDisplay } from './LatencyDisplay';
@@ -368,6 +368,144 @@ function MetronomePulseIcon() {
           />
         );
       })}
+    </div>
+  );
+}
+
+function VideoRecordSettingsPopover({ onClose }: { onClose: () => void }) {
+  const settings = useUIStore((s) => s.videoRecordingSettings);
+  const update = useUIStore((s) => s.setVideoRecordingSettings);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={popoverRef} className="absolute top-full right-0 z-50 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2024] p-3 shadow-2xl">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Recording Settings</div>
+
+      {/* Quality */}
+      <label className="mb-2 flex items-center justify-between text-xs text-zinc-300">
+        <span>Quality</span>
+        <select
+          value={settings.quality}
+          onChange={(e) => update({ quality: e.target.value as 'low' | 'medium' | 'high' })}
+          className="rounded bg-white/8 px-2 py-0.5 text-[11px] text-zinc-200 outline-none"
+        >
+          <option value="low">Low (1 Mbps)</option>
+          <option value="medium">Medium (2.5 Mbps)</option>
+          <option value="high">High (5 Mbps)</option>
+        </select>
+      </label>
+
+      {/* Mic toggle */}
+      <label className="mb-1 flex items-center gap-2 text-xs text-zinc-300">
+        <input
+          type="checkbox"
+          checked={settings.micEnabled}
+          onChange={(e) => update({ micEnabled: e.target.checked })}
+          className="accent-blue-500"
+        />
+        <span>Microphone (voiceover)</span>
+      </label>
+
+      {/* Mic volume */}
+      {settings.micEnabled && (
+        <label className="flex items-center gap-2 pl-5 text-[11px] text-zinc-400">
+          <span>Vol</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={settings.micVolume}
+            onChange={(e) => update({ micVolume: parseFloat(e.target.value) })}
+            className="h-1 flex-1 accent-blue-500"
+          />
+          <span className="w-7 text-right tabular-nums">{Math.round(settings.micVolume * 100)}%</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function VideoRecordButton() {
+  const videoRecording = useUIStore((s) => s.videoRecording);
+  const startVideoRecording = useUIStore((s) => s.startVideoRecording);
+  const stopVideoRecording = useUIStore((s) => s.stopVideoRecording);
+  const micEnabled = useUIStore((s) => s.videoRecordingSettings.micEnabled);
+  const [showSettings, setShowSettings] = useState(false);
+  const [supported] = useState(() => {
+    try {
+      return typeof navigator !== 'undefined' &&
+        typeof navigator.mediaDevices?.getDisplayMedia === 'function' &&
+        typeof MediaRecorder !== 'undefined';
+    } catch { return false; }
+  });
+
+  const { status, duration } = videoRecording;
+  const isRecording = status === 'recording';
+  const isRequesting = status === 'requesting' || status === 'stopping';
+
+  const handleClick = () => {
+    if (isRecording) {
+      stopVideoRecording();
+    } else if (status === 'idle' || status === 'done' || status === 'error') {
+      void startVideoRecording();
+    }
+  };
+
+  if (!supported) return null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleClick}
+        onContextMenu={(e) => { e.preventDefault(); if (!isRecording) setShowSettings((s) => !s); }}
+        disabled={isRequesting}
+        title={isRecording ? `Stop Video Recording (${formatDurationMSS(duration)})` : 'Record Video (right-click for settings)'}
+        aria-label={isRecording ? 'Stop video recording' : 'Record video'}
+        data-testid="video-record-button"
+        className={`flex h-10 items-center justify-center gap-1.5 rounded-lg px-2 transition-all duration-150 active:scale-95 ${
+          isRecording
+            ? 'bg-red-600/90 text-white hover:bg-red-500'
+            : isRequesting
+              ? 'bg-transparent text-white/50 cursor-wait'
+              : 'bg-transparent text-white/90 hover:bg-white/8 hover:text-white'
+        }`}
+      >
+        {isRecording ? (
+          <>
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-100" />
+            </span>
+            <span className="text-[11px] font-mono font-medium tabular-nums">{formatDurationMSS(duration)}</span>
+          </>
+        ) : isRequesting ? (
+          <svg className="h-5 w-5 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="10" cy="10" r="7" strokeDasharray="31 13" />
+          </svg>
+        ) : (
+          <div className="relative">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="11" height="12" rx="1.5" />
+              <path d="M13 8.5l4.5-2.5v8L13 11.5" />
+            </svg>
+            {micEnabled && (
+              <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-400" />
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+      {showSettings && <VideoRecordSettingsPopover onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
@@ -748,6 +886,7 @@ export function Toolbar() {
             <path d="M12 2v10" />
           </svg>
         </ControlBarButton>
+        <VideoRecordButton />
       </div>
       </div>
 

@@ -221,6 +221,25 @@ export interface UIState {
   // Session view keyboard navigation
   selectedSessionSlot: { trackId: string; sceneIndex: number } | null;
 
+  // Video recording
+  videoRecording: {
+    status: 'idle' | 'requesting' | 'recording' | 'stopping' | 'done' | 'error';
+    duration: number;
+    blob: Blob | null;
+    mimeType: string | null;
+    error: string | null;
+  };
+  videoRecordingSettings: {
+    micEnabled: boolean;
+    micDeviceId: string | null;
+    micVolume: number;
+    quality: 'low' | 'medium' | 'high';
+  };
+  setVideoRecordingSettings: (patch: Partial<UIState['videoRecordingSettings']>) => void;
+  startVideoRecording: () => Promise<void>;
+  stopVideoRecording: () => void;
+  dismissVideoRecording: () => void;
+
   setMainView: (view: 'arrangement' | 'session') => void;
   toggleMainView: () => void;
   setPixelsPerSecond: (pps: number) => void;
@@ -519,6 +538,15 @@ const ALL_MODALS_CLOSED = {
   showCommandPalette: false,
 } as const;
 
+// Module-scope reference for the active video recorder instance (avoids window globals)
+let _activeVideoRecorder: import('../services/videoRecorder').VideoRecorderService | null = null;
+
+/** Typed accessor for the global audio engine — avoids inline casts in every action. */
+function _getAudioEngine(): { getAudioStream: () => MediaStream; disposeAudioStream: () => void } | undefined {
+  const getter = (window as unknown as Record<string, unknown>).__getAudioEngine as (() => unknown) | undefined;
+  return getter?.() as ReturnType<typeof _getAudioEngine>;
+}
+
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
@@ -647,6 +675,56 @@ export const useUIStore = create<UIState>()(
   trackLaneRects: new Map(),
 
   selectedSessionSlot: null,
+
+  videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null },
+  videoRecordingSettings: { micEnabled: false, micDeviceId: null, micVolume: 0.8, quality: 'medium' },
+  setVideoRecordingSettings: (patch) => set((s) => ({ videoRecordingSettings: { ...s.videoRecordingSettings, ...patch } })),
+  startVideoRecording: async () => {
+    const { VideoRecorderService } = await import('../services/videoRecorder');
+    if (!VideoRecorderService.isSupported()) {
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Video recording is not supported in this browser.' } });
+      return;
+    }
+    const audioEngine = _getAudioEngine();
+    if (!audioEngine) {
+      set({ videoRecording: { status: 'error', duration: 0, blob: null, mimeType: null, error: 'Audio engine is not initialized.' } });
+      return;
+    }
+    const settings = get().videoRecordingSettings;
+    const qualityMap = { low: 1_000_000, medium: 2_500_000, high: 5_000_000 } as const;
+    const audioBrMap = { low: 96_000, medium: 128_000, high: 192_000 } as const;
+    // Get mic stream if enabled
+    let micStream: MediaStream | undefined;
+    if (settings.micEnabled) {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: settings.micDeviceId ? { deviceId: { exact: settings.micDeviceId } } : true,
+        });
+      } catch {
+        // Mic unavailable — continue without it
+      }
+    }
+    const recorder = new VideoRecorderService();
+    _activeVideoRecorder = recorder;
+    recorder.onStateChange = (state) => set({ videoRecording: { ...state } });
+    await recorder.startRecording(audioEngine.getAudioStream(), {
+      videoBitsPerSecond: qualityMap[settings.quality],
+      audioBitsPerSecond: audioBrMap[settings.quality],
+      micStream,
+      micVolume: settings.micVolume,
+    });
+  },
+  stopVideoRecording: () => {
+    // Do NOT dispose audio stream here — onstop fires asynchronously and
+    // needs the stream alive to flush the final audio data chunk.
+    _activeVideoRecorder?.stopRecording();
+  },
+  dismissVideoRecording: () => {
+    _activeVideoRecorder?.dismiss();
+    _activeVideoRecorder = null;
+    _getAudioEngine()?.disposeAudioStream();
+    set({ videoRecording: { status: 'idle', duration: 0, blob: null, mimeType: null, error: null } });
+  },
 
   setMainView: (mainView) => set({ mainView, arrangementView: mainView }),
   toggleMainView: () => set((s) => {
@@ -1280,6 +1358,8 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         // Synth presets
         userSynthPresets: state.userSynthPresets,
+        // Video recording settings
+        videoRecordingSettings: state.videoRecordingSettings,
       }),
     },
   ),

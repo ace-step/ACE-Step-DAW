@@ -465,6 +465,14 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      if (matches('transport.videoRecord')) {
+        event.preventDefault();
+        const vr = ui.videoRecording;
+        if (vr.status === 'recording') ui.stopVideoRecording();
+        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording();
+        return;
+      }
+
       if (matches('panels.mixer')) { event.preventDefault(); ui.setShowMixer(!ui.showMixer); return; }
       if (matches('panels.smartControls')) { event.preventDefault(); ui.setShowSmartControls(!ui.showSmartControls); return; }
       if (matches('panels.library')) { event.preventDefault(); ui.setShowLibrary(!ui.showLibrary); return; }

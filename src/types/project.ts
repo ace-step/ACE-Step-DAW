@@ -506,6 +506,46 @@ export interface StereoImagerParams {
   pan: number;
 }
 
+export type AlgorithmicReverbType = 'plate' | 'hall' | 'room' | 'chamber' | 'spring';
+
+export interface AlgorithmicReverbParams {
+  /** Reverb algorithm character */
+  reverbType: AlgorithmicReverbType;
+  /** Decay time in seconds (0.1–20) */
+  decay: number;
+  /** Pre-delay in ms (0–200) */
+  preDelay: number;
+  /** High-frequency damping factor (0–1, higher = more damping = darker) */
+  damping: number;
+  /** Size / diffusion (0–1, controls echo density) */
+  size: number;
+  /** Modulation rate for chorus in reverb tail (0–1) */
+  modRate: number;
+  /** Modulation depth (0–1) */
+  modDepth: number;
+  /** Early reflections level relative to tail (-12 to +12 dB) */
+  erLevel: number;
+  /** Low-cut frequency on reverb input (20–1000 Hz) */
+  lowCut: number;
+  /** High-cut frequency on reverb input (1000–20000 Hz) */
+  highCut: number;
+  /** Dry/wet mix (0–1) */
+  mix: number;
+}
+
+export interface NoiseGateReductionParams {
+  /** Noise reduction amount (0–1, 0 = off, 1 = maximum) */
+  amount: number;
+  /** Noise floor threshold in dB (-80 to -20) */
+  threshold: number;
+  /** Reduction speed: 'fast' for transient material, 'smooth' for sustained */
+  mode: 'fast' | 'smooth';
+  /** High-frequency emphasis for noise reduction (0–1) */
+  hfEmphasis: number;
+  /** Dry/wet mix (0–1) */
+  mix: number;
+}
+
 export type SaturationType = 'tape' | 'tube' | 'transistor' | 'soft' | 'hard';
 
 export interface SaturationParams {
@@ -642,7 +682,9 @@ export type TrackEffect =
   | EffectBase<'transientShaper', TransientShaperParams>
   | EffectBase<'limiter', LimiterParams>
   | EffectBase<'saturation', SaturationParams>
-  | EffectBase<'stereoImager', StereoImagerParams>;
+  | EffectBase<'stereoImager', StereoImagerParams>
+  | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1273,7 +1315,9 @@ export type AutomatableEffectTarget =
   | { effectType: 'transientShaper'; param: keyof TransientShaperParams }
   | { effectType: 'limiter'; param: Exclude<keyof LimiterParams, 'style'> }
   | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
-  | { effectType: 'stereoImager'; param: keyof StereoImagerParams };
+  | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
+  | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

@@ -678,6 +678,124 @@ function createNode(effect: TrackEffect): EffectNode {
         _saturationOutputGain: outputGain,
       } as EffectNode;
     }
+    case 'algorithmicReverb': {
+      const p = effect.params as import('../types/project').AlgorithmicReverbParams;
+      // Use Tone.Reverb as the base with additional filtering for damping/cut
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+      const dryGain = new Tone.Gain(1 - p.mix);
+      const wetGain = new Tone.Gain(p.mix);
+
+      const reverb = new Tone.Reverb({ decay: p.decay, preDelay: p.preDelay / 1000 });
+      reverb.wet.value = 1; // fully wet — we handle mix ourselves
+
+      // Damping: low-pass filter on reverb output
+      const dampingFilter = new Tone.Filter({
+        type: 'lowpass',
+        frequency: 20000 - p.damping * 18000, // damping 0=bright, 1=dark
+        Q: 0.5,
+      });
+
+      // Low/high cut on reverb input
+      const lowCut = new Tone.Filter({ type: 'highpass', frequency: p.lowCut, Q: 0.7 });
+      const highCut = new Tone.Filter({ type: 'lowpass', frequency: p.highCut, Q: 0.7 });
+
+      // Dry path
+      input.connect(dryGain);
+      dryGain.connect(output);
+
+      // Wet path: input → lowCut → highCut → reverb → dampingFilter → wetGain → output
+      input.connect(lowCut);
+      lowCut.connect(highCut);
+      highCut.connect(reverb);
+      reverb.connect(dampingFilter);
+      dampingFilter.connect(wetGain);
+      wetGain.connect(output);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          input.dispose(); output.dispose();
+          dryGain.dispose(); wetGain.dispose();
+          reverb.dispose(); dampingFilter.dispose();
+          lowCut.dispose(); highCut.dispose();
+        },
+        _algoReverbReverb: reverb,
+        _algoReverbDryGain: dryGain,
+        _algoReverbWetGain: wetGain,
+        _algoReverbDamping: dampingFilter,
+        _algoReverbLowCut: lowCut,
+        _algoReverbHighCut: highCut,
+      } as EffectNode;
+    }
+    case 'noiseReduction': {
+      // Simple noise gate with high-frequency emphasis
+      const p = effect.params as import('../types/project').NoiseGateReductionParams;
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+      const nrGain = new Tone.Gain(1);
+
+      const analyser = Tone.getContext().createAnalyser();
+      analyser.fftSize = 256;
+      const analyserBuffer = new Float32Array(analyser.fftSize);
+
+      input.connect(nrGain);
+      nrGain.connect(output);
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(analyser);
+
+      const nrState = {
+        currentGain: 1,
+        rafId: 0,
+        params: { ...p },
+      };
+
+      const tick = () => {
+        analyser.getFloatTimeDomainData(analyserBuffer);
+        let sumSq = 0;
+        for (let i = 0; i < analyserBuffer.length; i++) sumSq += analyserBuffer[i] * analyserBuffer[i];
+        const rms = Math.sqrt(sumSq / analyserBuffer.length);
+        const inputDb = rms > 0 ? 20 * Math.log10(rms) : -120;
+
+        const sp = nrState.params;
+        let targetGain = 1;
+        if (inputDb < sp.threshold) {
+          // Below threshold: reduce by amount
+          targetGain = 1 - sp.amount;
+        }
+
+        const dt = 1 / 60;
+        const speed = sp.mode === 'fast' ? 0.005 : 0.05;
+        const coeff = targetGain < nrState.currentGain
+          ? 1 - Math.exp(-dt / speed)
+          : 1 - Math.exp(-dt / (speed * 4));
+        nrState.currentGain += (targetGain - nrState.currentGain) * coeff;
+
+        const nativeGain = unwrapToNative(nrGain, 'input') as GainNode;
+        nativeGain.gain.value = nrState.currentGain;
+
+        nrState.rafId = requestAnimationFrame(tick);
+      };
+      nrState.rafId = requestAnimationFrame(tick);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          cancelAnimationFrame(nrState.rafId);
+          input.dispose(); output.dispose(); nrGain.dispose();
+          analyser.disconnect();
+        },
+        _nrState: nrState,
+      } as EffectNode;
+    }
     case 'stereoImager': {
       // Stereo width via M/S matrix: width controls side level relative to mid
       const p = effect.params as import('../types/project').StereoImagerParams;
@@ -1019,6 +1137,28 @@ class EffectsEngine {
         }
         break;
       }
+      case 'algorithmicReverb': {
+        const p = params as import('../types/project').AlgorithmicReverbParams;
+        const rev = (effectNode as Record<string, unknown>)._algoReverbReverb as Tone.Reverb | undefined;
+        const dg = (effectNode as Record<string, unknown>)._algoReverbDryGain as Tone.Gain | undefined;
+        const wg = (effectNode as Record<string, unknown>)._algoReverbWetGain as Tone.Gain | undefined;
+        const df = (effectNode as Record<string, unknown>)._algoReverbDamping as Tone.Filter | undefined;
+        const lc = (effectNode as Record<string, unknown>)._algoReverbLowCut as Tone.Filter | undefined;
+        const hc = (effectNode as Record<string, unknown>)._algoReverbHighCut as Tone.Filter | undefined;
+        if (rev) { rev.decay = p.decay; rev.preDelay = p.preDelay / 1000; }
+        if (dg) dg.gain.value = 1 - p.mix;
+        if (wg) wg.gain.value = p.mix;
+        if (df) df.frequency.value = 20000 - p.damping * 18000;
+        if (lc) lc.frequency.value = p.lowCut;
+        if (hc) hc.frequency.value = p.highCut;
+        break;
+      }
+      case 'noiseReduction': {
+        const p = params as import('../types/project').NoiseGateReductionParams;
+        const state = (effectNode as Record<string, unknown>)._nrState as { params: import('../types/project').NoiseGateReductionParams } | undefined;
+        if (state) Object.assign(state.params, p);
+        break;
+      }
     }
   }
 
@@ -1218,6 +1358,28 @@ class EffectsEngine {
             gains.rrGain.gain.value = (1 + w) / 2;
           }
         }
+        break;
+      }
+      case 'algorithmicReverb': {
+        if (target.param === 'mix') {
+          const dg = (effectNode as Record<string, unknown>)._algoReverbDryGain as Tone.Gain | undefined;
+          const wg = (effectNode as Record<string, unknown>)._algoReverbWetGain as Tone.Gain | undefined;
+          if (dg) dg.gain.value = 1 - value;
+          if (wg) wg.gain.value = value;
+        }
+        if (target.param === 'damping') {
+          const df = (effectNode as Record<string, unknown>)._algoReverbDamping as Tone.Filter | undefined;
+          if (df) df.frequency.value = 20000 - value * 18000;
+        }
+        if (target.param === 'decay') {
+          const rev = (effectNode as Record<string, unknown>)._algoReverbReverb as Tone.Reverb | undefined;
+          if (rev) rev.decay = value;
+        }
+        break;
+      }
+      case 'noiseReduction': {
+        const state = (effectNode as Record<string, unknown>)._nrState as { params: Record<string, number | string> } | undefined;
+        if (state) (state.params as Record<string, number>)[target.param] = value;
         break;
       }
     }

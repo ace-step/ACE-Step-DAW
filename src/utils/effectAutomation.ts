@@ -119,6 +119,24 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     monoFreq: { label: 'Mono Freq', min: 0, max: 500, color: '#7a8ab4' },
     pan: { label: 'Pan', min: -1, max: 1, color: '#7a8ab4' },
   },
+  algorithmicReverb: {
+    decay: { label: 'Decay', min: 0.1, max: 20, color: '#7a6fb8' },
+    preDelay: { label: 'Pre-Delay', min: 0, max: 200, color: '#7a6fb8' },
+    damping: { label: 'Damping', min: 0, max: 1, color: '#7a6fb8' },
+    size: { label: 'Size', min: 0, max: 1, color: '#7a6fb8' },
+    modRate: { label: 'Mod Rate', min: 0, max: 1, color: '#7a6fb8' },
+    modDepth: { label: 'Mod Depth', min: 0, max: 1, color: '#7a6fb8' },
+    erLevel: { label: 'ER Level', min: -12, max: 12, color: '#7a6fb8' },
+    lowCut: { label: 'Low Cut', min: 20, max: 1000, color: '#7a6fb8' },
+    highCut: { label: 'High Cut', min: 1000, max: 20000, color: '#7a6fb8' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#7a6fb8' },
+  },
+  noiseReduction: {
+    amount: { label: 'Amount', min: 0, max: 1, color: '#8a8a8a' },
+    threshold: { label: 'Threshold', min: -80, max: -20, color: '#8a8a8a' },
+    hfEmphasis: { label: 'HF Focus', min: 0, max: 1, color: '#8a8a8a' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#8a8a8a' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -190,6 +208,14 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'stereoImager': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'algorithmicReverb': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'noiseReduction': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

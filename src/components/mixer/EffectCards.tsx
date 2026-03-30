@@ -36,6 +36,9 @@ import type {
   SaturationParams,
   SaturationType,
   StereoImagerParams,
+  AlgorithmicReverbParams,
+  AlgorithmicReverbType,
+  NoiseGateReductionParams,
 } from '../../types/project';
 import {
   PARAMETRIC_EQ_MAX_FREQUENCY,
@@ -1356,6 +1359,95 @@ export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { 
   );
 }
 
+// ─── Algorithmic Reverb Card ────────────────────────────────────────────────
+
+const REVERB_TYPE_LABELS: Record<AlgorithmicReverbType, string> = {
+  plate: 'Plate', hall: 'Hall', room: 'Room', chamber: 'Chamber', spring: 'Spring',
+};
+
+export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect & { type: 'algorithmicReverb' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+  const update = (updates: Partial<AlgorithmicReverbParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'algorithmicReverb');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#7a6fb8"
+      mode={
+        <>
+          {(Object.keys(REVERB_TYPE_LABELS) as AlgorithmicReverbType[]).map((rt) => (
+            <button key={rt} className={`px-1.5 py-0.5 text-[8px] rounded capitalize ${p.reverbType === rt ? 'bg-purple-500/30 text-purple-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+              onClick={() => update({ reverbType: rt })}>{REVERB_TYPE_LABELS[rt]}</button>
+          ))}
+        </>
+      }
+      footer={
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'mix' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'mix', p.mix) ?? 0.25}>
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#7a6fb8" />
+        </AutomationControlShell>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'decay' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'decay', p.decay) ?? 0.5}>
+        <Knob value={p.decay} onChange={(v) => update({ decay: v })} min={0.1} max={20} defaultValue={2.5} label="Decay" unit="s" size={32} step={0.1} color="#7a6fb8" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'size' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'size', p.size) ?? 0.5}>
+        <Knob value={p.size} onChange={(v) => update({ size: v })} min={0} max={1} defaultValue={0.6} label="Size" size={32} step={0.01} color="#7a6fb8" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'damping' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'damping', p.damping) ?? 0.5}>
+        <Knob value={p.damping} onChange={(v) => update({ damping: v })} min={0} max={1} defaultValue={0.4} label="Damping" size={28} step={0.01} color="#7a6fb8" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'preDelay' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'preDelay', p.preDelay) ?? 0.5}>
+        <Knob value={p.preDelay} onChange={(v) => update({ preDelay: v })} min={0} max={200} defaultValue={20} label="Pre-Dly" unit="ms" size={28} step={1} color="#7a6fb8" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
+// ─── Noise Reduction Card ───────────────────────────────────────────────────
+
+export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & { type: 'noiseReduction' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+  const update = (updates: Partial<NoiseGateReductionParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'noiseReduction');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#8a8a8a"
+      mode={
+        <>
+          {(['fast', 'smooth'] as NoiseGateReductionParams['mode'][]).map((m) => (
+            <button key={m} className={`px-2 py-0.5 text-[8px] rounded capitalize ${p.mode === m ? 'bg-gray-500/30 text-gray-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+              onClick={() => update({ mode: m })}>{m}</button>
+          ))}
+        </>
+      }
+      footer={
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'noiseReduction', param: 'mix' }} normalizedValue={normalizeEffectParamValue('noiseReduction', 'mix', p.mix) ?? 1}>
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#8a8a8a" />
+        </AutomationControlShell>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'noiseReduction', param: 'amount' }} normalizedValue={normalizeEffectParamValue('noiseReduction', 'amount', p.amount) ?? 0.5}>
+        <Knob value={p.amount} onChange={(v) => update({ amount: v })} min={0} max={1} defaultValue={0.5} label="Amount" size={36} step={0.01} color="#8a8a8a" formatValue={(v) => `${Math.round(v * 100)}%`} />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'noiseReduction', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('noiseReduction', 'threshold', p.threshold) ?? 0.5}>
+        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-80} max={-20} defaultValue={-50} label="Threshold" unit=" dB" size={32} step={1} color="#8a8a8a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'noiseReduction', param: 'hfEmphasis' }} normalizedValue={normalizeEffectParamValue('noiseReduction', 'hfEmphasis', p.hfEmphasis) ?? 0.5}>
+        <Knob value={p.hfEmphasis} onChange={(v) => update({ hfEmphasis: v })} min={0} max={1} defaultValue={0.5} label="HF Focus" size={28} step={0.01} color="#8a8a8a" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
 /**
  * Effect colors — desaturated, category-grouped.
  * CSS custom properties are defined in src/styles/effect-colors.css.
@@ -1379,6 +1471,8 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   limiter: '#d4a040',
   saturation: '#c46454',
   stereoImager: '#7a8ab4',
+  algorithmicReverb: '#7a6fb8',
+  noiseReduction: '#8a8a8a',
 };
 
 /** Resolve a CSS custom property to its computed hex value (for canvas drawing contexts). */
@@ -1402,6 +1496,8 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     limiter: '--fx-limiter',
     saturation: '--fx-distortion',
     stereoImager: '--fx-filter',
+    algorithmicReverb: '--fx-reverb',
+    noiseReduction: '--fx-filter',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

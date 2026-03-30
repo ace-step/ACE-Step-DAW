@@ -45,6 +45,8 @@ import type {
   LimiterParams,
   SaturationParams,
   StereoImagerParams,
+  AlgorithmicReverbParams,
+  NoiseGateReductionParams,
   Track,
 } from '../../types/project';
 
@@ -186,6 +188,17 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Mono Bass', params: { width: 1.2, midGain: 0, sideGain: 0, monoFreq: 200, pan: 0 } as StereoImagerParams },
     { name: 'Narrow', params: { width: 0.5, midGain: 2, sideGain: -3, monoFreq: 0, pan: 0 } as StereoImagerParams },
   ],
+  algorithmicReverb: [
+    { name: 'Small Room', params: { reverbType: 'room', decay: 0.8, preDelay: 5, damping: 0.5, size: 0.3, modRate: 0.2, modDepth: 0.1, erLevel: 3, lowCut: 100, highCut: 10000, mix: 0.2 } as AlgorithmicReverbParams },
+    { name: 'Large Hall', params: { reverbType: 'hall', decay: 4, preDelay: 30, damping: 0.3, size: 0.8, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 60, highCut: 14000, mix: 0.3 } as AlgorithmicReverbParams },
+    { name: 'Plate', params: { reverbType: 'plate', decay: 1.8, preDelay: 10, damping: 0.2, size: 0.5, modRate: 0.4, modDepth: 0.15, erLevel: -3, lowCut: 200, highCut: 16000, mix: 0.35 } as AlgorithmicReverbParams },
+    { name: 'Dark Chamber', params: { reverbType: 'chamber', decay: 2.2, preDelay: 15, damping: 0.7, size: 0.5, modRate: 0.2, modDepth: 0.1, erLevel: 2, lowCut: 80, highCut: 6000, mix: 0.25 } as AlgorithmicReverbParams },
+  ],
+  noiseReduction: [
+    { name: 'Light', params: { amount: 0.3, threshold: -55, mode: 'smooth', hfEmphasis: 0.3, mix: 1 } as NoiseGateReductionParams },
+    { name: 'Medium', params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } as NoiseGateReductionParams },
+    { name: 'Heavy', params: { amount: 0.8, threshold: -40, mode: 'fast', hfEmphasis: 0.7, mix: 1 } as NoiseGateReductionParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -219,6 +232,8 @@ import {
   LimiterCard,
   SaturationCard,
   StereoImagerCard,
+  AlgorithmicReverbCard,
+  NoiseReductionCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -242,6 +257,8 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   limiter: 'Limiter',
   saturation: 'Saturation',
   stereoImager: 'Stereo Imager',
+  algorithmicReverb: 'Algo Reverb',
+  noiseReduction: 'Noise Reduce',
 };
 
 // ─── More menu icon ─────────────────────────────────────────────────────────
@@ -421,6 +438,8 @@ function EffectDevice({
           {effect.type === 'limiter' && <LimiterCard effect={effect} trackId={track.id} />}
           {effect.type === 'saturation' && <SaturationCard effect={effect} trackId={track.id} />}
           {effect.type === 'stereoImager' && <StereoImagerCard effect={effect} trackId={track.id} />}
+          {effect.type === 'algorithmicReverb' && <AlgorithmicReverbCard effect={effect} trackId={track.id} />}
+          {effect.type === 'noiseReduction' && <NoiseReductionCard effect={effect} trackId={track.id} />}
         </div>
       </div>
     </div>
@@ -451,6 +470,8 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'limiter', label: 'Limiter', icon: '🧱' },
     { type: 'saturation', label: 'Saturation', icon: '🔥' },
     { type: 'stereoImager', label: 'Stereo Imager', icon: '🔊' },
+    { type: 'algorithmicReverb', label: 'Algorithmic Reverb', icon: '🏔️' },
+    { type: 'noiseReduction', label: 'Noise Reduction', icon: '🔇' },
   ];
 
   return (

@@ -1466,6 +1466,38 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
           pan: 0,
         },
       };
+    case 'algorithmicReverb':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          reverbType: 'hall',
+          decay: 2.5,
+          preDelay: 20,
+          damping: 0.4,
+          size: 0.6,
+          modRate: 0.3,
+          modDepth: 0.2,
+          erLevel: 0,
+          lowCut: 80,
+          highCut: 12000,
+          mix: 0.25,
+        },
+      };
+    case 'noiseReduction':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          amount: 0.5,
+          threshold: -50,
+          mode: 'smooth',
+          hfEmphasis: 0.5,
+          mix: 1,
+        },
+      };
   }
 }
 

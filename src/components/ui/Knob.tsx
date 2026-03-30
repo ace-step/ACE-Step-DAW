@@ -65,14 +65,13 @@ export function Knob({
     e.stopPropagation();
     dragStart.current = { y: e.clientY, value };
     setIsDragging(true);
-    knobRef.current?.requestPointerLock?.();
 
     const onMove = (mv: MouseEvent) => {
       if (!dragStart.current) return;
       const range = max - min;
-      const movementY = mv.movementY || (dragStart.current.y - mv.clientY);
+      const dy = dragStart.current.y - mv.clientY;
       const sensitivity = mv.altKey ? range / 2000 : range / 200;
-      const delta = movementY * sensitivity;
+      const delta = dy * sensitivity;
       const newVal = applyStep(dragStart.current.value + delta);
       dragStart.current = { y: mv.clientY, value: newVal };
       onChange(newVal);
@@ -81,7 +80,6 @@ export function Knob({
     const onUp = () => {
       dragStart.current = null;
       setIsDragging(false);
-      document.exitPointerLock?.();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };

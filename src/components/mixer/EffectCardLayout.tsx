@@ -1,10 +1,8 @@
 /**
  * EffectCardLayout — Shared layout component for all effect cards.
  *
- * Provides consistent zones: mode (optional), visualization (optional),
- * params (horizontal flex), and footer (dry/wet).
- *
- * In full-width mode (Ableton-style), params spread across the panel.
+ * Full-width Ableton-style: params spread horizontally, centered,
+ * with mode selector and footer properly aligned.
  */
 import type { ReactNode } from 'react';
 
@@ -23,11 +21,11 @@ interface EffectCardLayoutProps {
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-4 w-full">
-      {/* Constrained content area — prevents full-width stretching */}
-      <div className="w-full max-w-[700px] flex flex-col gap-3">
+    <div className="flex flex-col items-center w-full px-6 py-3">
+      {/* Constrained content — prevents full-width stretching */}
+      <div className="w-full max-w-[800px] flex flex-col items-center gap-4">
         {mode && (
-          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5 self-start">{mode}</div>
+          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">{mode}</div>
         )}
         {visualization && (
           <div
@@ -37,12 +35,12 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
             {visualization}
           </div>
         )}
-        {/* Parameters — horizontal flex, wrapping, centered */}
-        <div className="flex flex-wrap items-start justify-center gap-x-10 gap-y-4 py-2">
+        {/* Parameters — evenly spaced horizontal row */}
+        <div className="flex flex-wrap items-start justify-center gap-x-6 gap-y-3 py-1">
           {children}
         </div>
         {footer && (
-          <div className="pt-2 border-t border-white/[0.06] w-full max-w-[280px]">{footer}</div>
+          <div className="pt-2 border-t border-white/[0.06] w-full max-w-[280px] mx-auto">{footer}</div>
         )}
       </div>
     </div>
@@ -62,7 +60,7 @@ export function ParamGroup({ label, children }: ParamGroupProps) {
       {label && (
         <span className="text-[9px] text-white/25 uppercase tracking-wider font-medium">{label}</span>
       )}
-      <div className="flex items-center gap-5">{children}</div>
+      <div className="flex items-center gap-4">{children}</div>
     </div>
   );
 }

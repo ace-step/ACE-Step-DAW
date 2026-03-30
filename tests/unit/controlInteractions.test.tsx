@@ -51,7 +51,7 @@ describe('control interaction standards', () => {
     expect(screen.queryByRole('spinbutton', { name: 'Gain exact value' })).not.toBeInTheDocument();
   });
 
-  it('uses pointer lock during Knob drag and releases it on mouse up', () => {
+  it('tracks vertical drag on Knob and updates value on mouse up', () => {
     const onChange = vi.fn();
     render(
       <Knob
@@ -65,12 +65,10 @@ describe('control interaction standards', () => {
     );
 
     fireEvent.mouseDown(screen.getByLabelText('Pan knob'), { clientY: 200 });
-    fireEvent.mouseMove(window, { movementY: -20, clientY: 180 });
+    fireEvent.mouseMove(window, { clientY: 180 });
     fireEvent.mouseUp(window);
 
-    expect(requestPointerLock).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalled();
-    expect(exitPointerLock).toHaveBeenCalledTimes(1);
   });
 
   it('opens a precision input for MiniKnob, supports wheel adjust, and uses pointer lock', () => {

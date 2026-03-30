@@ -25,7 +25,7 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-4 w-full">
       {/* Constrained content area — prevents full-width stretching */}
-      <div className="w-full max-w-[600px] flex flex-col gap-3">
+      <div className="w-full max-w-[700px] flex flex-col gap-3">
         {mode && (
           <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5 self-start">{mode}</div>
         )}

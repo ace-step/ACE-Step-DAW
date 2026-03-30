@@ -481,6 +481,8 @@ function EffectCardBody({ effect, trackId }: { effect: TrackEffect; trackId: str
 function AddEffectButton({ trackId }: { trackId: string }) {
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; bottom: number } | null>(null);
 
   const effectTypes: { type: TrackEffectType; label: string; icon: string }[] = [
     { type: 'parametricEq', label: 'Parametric EQ', icon: '🎚️' },
@@ -504,18 +506,39 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'noiseReduction', label: 'Noise Reduction', icon: '🔇' },
   ];
 
+  const handleToggle = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+    }
+    setOpen(!open);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [open]);
+
   return (
-    <div className="relative shrink-0">
+    <div className="shrink-0">
       <button
+        ref={buttonRef}
         className="flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-white/10 rounded-md hover:border-white/20 hover:bg-white/5 transition-colors"
-        onClick={() => setOpen(!open)}
+        onClick={(e) => { e.stopPropagation(); handleToggle(); }}
       >
         <Plus className="h-3 w-3 text-white/30" />
         <span className="text-[9px] text-white/25">Add</span>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
+      {open && menuPos && (
+        <div
+          className="fixed bg-[#1a1a36] border border-white/10 rounded-lg shadow-2xl py-1 min-w-[170px] max-h-[400px] overflow-y-auto"
+          style={{ left: menuPos.left, bottom: menuPos.bottom, zIndex: 9999 }}
+          onClick={(e) => e.stopPropagation()}
+        >
           {effectTypes.map(({ type, label, icon }) => (
             <button
               key={type}

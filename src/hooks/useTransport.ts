@@ -8,6 +8,7 @@ import { loadAudioBlobByKey } from '../services/audioFileManager';
 import { synthEngine } from '../engine/SynthEngine';
 import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
+import { wavetableEngine } from '../engine/WavetableEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import {
   stopAllStrudelTracks,
@@ -155,6 +156,7 @@ export function useTransport() {
     await synthEngine.ensureStarted();
     await samplerEngine.ensureStarted();
     await drumEngine.ensureStarted();
+    // Wavetable engine starts via Tone context which is already active after synthEngine.ensureStarted()
 
     const proj = useProjectStore.getState().project;
     if (!proj) return;
@@ -372,6 +374,8 @@ export function useTransport() {
         const useSampler = !vst3Instrument && !!samplerConfig;
 
         synthEngine.removeTrackSynth(track.id);
+        synthEngine.removeFmSynth(track.id);
+        wavetableEngine.removeTrackSynth(track.id);
         samplerEngine.removeTrackSampler(track.id);
 
         if (useSampler && samplerConfig) {
@@ -384,6 +388,18 @@ export function useTransport() {
               trackNode.inputGain as unknown as Tone.InputNode,
             );
           }
+        } else if (track.instrument?.kind === 'fm') {
+          const trackNode = engine.getOrCreateTrackNode(track.id);
+          synthEngine.ensureFmSynth(
+            track.id, track.instrument.settings,
+            trackNode.inputGain as unknown as Tone.InputNode,
+          );
+        } else if (track.instrument?.kind === 'wavetable') {
+          const trackNode = engine.getOrCreateTrackNode(track.id);
+          wavetableEngine.ensureTrackSynth(
+            track.id, track.instrument.settings,
+            trackNode.inputGain as unknown as Tone.InputNode,
+          );
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
@@ -454,6 +470,22 @@ export function useTransport() {
               } else if (useSampler) {
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   samplerEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
+              } else if (track.instrument?.kind === 'fm') {
+                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  const fmSynth = synthEngine.getFmSynth(trackId);
+                  if (fmSynth) {
+                    fmSynth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
+                  }
+                });
+              } else if (track.instrument?.kind === 'wavetable') {
+                const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  const wtSynth = wavetableEngine.getSynth(trackId);
+                  if (wtSynth) {
+                    wtSynth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
+                  }
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();

@@ -23,25 +23,28 @@ interface EffectCardLayoutProps {
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
   return (
-    <div className="flex flex-col gap-3 px-4 py-3">
-      {mode && (
-        <div className="flex items-center gap-0.5 rounded-md bg-white/[0.03] p-0.5 self-start">{mode}</div>
-      )}
-      {visualization && (
-        <div
-          className="w-full min-h-[60px] rounded-md overflow-hidden border border-white/[0.04]"
-          style={{ borderColor: color ? `${color}18` : undefined }}
-        >
-          {visualization}
+    <div className="flex flex-col items-center gap-3 px-6 py-4 w-full">
+      {/* Constrained content area — prevents full-width stretching */}
+      <div className="w-full max-w-[600px] flex flex-col gap-3">
+        {mode && (
+          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5 self-start">{mode}</div>
+        )}
+        {visualization && (
+          <div
+            className="w-full min-h-[60px] rounded-md overflow-hidden border border-white/[0.04]"
+            style={{ borderColor: color ? `${color}18` : undefined }}
+          >
+            {visualization}
+          </div>
+        )}
+        {/* Parameters — horizontal flex, wrapping, centered */}
+        <div className="flex flex-wrap items-start justify-center gap-x-10 gap-y-4 py-2">
+          {children}
         </div>
-      )}
-      {/* Parameters — horizontal flex, wrapping, evenly spaced */}
-      <div className="flex flex-wrap items-start justify-center gap-x-8 gap-y-3 py-1">
-        {children}
+        {footer && (
+          <div className="pt-2 border-t border-white/[0.06] w-full max-w-[280px]">{footer}</div>
+        )}
       </div>
-      {footer && (
-        <div className="pt-2 border-t border-white/[0.06] max-w-[300px]">{footer}</div>
-      )}
     </div>
   );
 }

@@ -681,71 +681,69 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
   };
 
   return (
-    <div className="flex flex-col gap-2 p-2">
-      <div className="flex gap-2 justify-center">
-        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('compressor', 'threshold', p.threshold) ?? 0.5}>
-          <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-60} max={0} defaultValue={-24} label="Thresh" unit="dB" size={28} step={1} />
-        </AutomationControlShell>
-        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'ratio' }} normalizedValue={normalizeEffectParamValue('compressor', 'ratio', p.ratio) ?? 0.5}>
-          <Knob value={p.ratio} onChange={(v) => update({ ratio: v })} min={1} max={20} defaultValue={4} label="Ratio" size={28} step={0.5} />
-        </AutomationControlShell>
-        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'attack' }} normalizedValue={normalizeEffectParamValue('compressor', 'attack', p.attack) ?? 0.5}>
-          <Knob value={p.attack} onChange={(v) => update({ attack: v })} min={0.001} max={0.1} defaultValue={0.02} label="Attack" size={28} step={0.001} />
-        </AutomationControlShell>
-        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'release' }} normalizedValue={normalizeEffectParamValue('compressor', 'release', p.release) ?? 0.5}>
-          <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={28} step={0.01} />
-        </AutomationControlShell>
-      </div>
-      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'knee' }} normalizedValue={normalizeEffectParamValue('compressor', 'knee', p.knee) ?? 0.5}>
-        <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" size={24} step={1} />
-      </AutomationControlShell>
-
-      {/* Sidechain source dropdown */}
-      <div className="border-t border-white/5 pt-1.5 mt-0.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[7px] text-white/30 uppercase w-6">SC</span>
-          <select
-            data-testid="sidechain-source-select"
-            className="flex-1 text-[10px] bg-white/5 border border-white/10 rounded px-1 py-0.5 text-white/70 outline-none focus:border-amber-500/50"
-            value={p.sidechainSourceTrackId ?? ''}
-            onChange={(e) => handleSidechainChange(e.target.value)}
-          >
-            <option value="">None</option>
-            {otherTracks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName || `Track ${tracks.indexOf(t) + 1}`}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Compressor GR meter */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-[7px] text-white/30 w-6">GR</span>
-        <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden relative">
-          <div
-            className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-full transition-all"
-            style={{ width: `${Math.min(100, Math.abs(reduction) * 100 / 30)}%` }}
-          />
-        </div>
-        <span className="text-[8px] text-white/40 font-mono w-10 text-right">{reduction.toFixed(1)} dB</span>
-      </div>
-
-      {/* Sidechain GR meter (only shown when sidechain is active) */}
-      {hasSidechain && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[7px] text-amber-400/50 w-6">SC</span>
-          <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden relative">
-            <div
-              className="absolute right-0 top-0 bottom-0 bg-amber-400/40 rounded-full transition-all"
-              style={{ width: `${Math.min(100, Math.abs(scReduction) * 100 / 30)}%` }}
-            />
+    <EffectCardLayout
+      color={EFFECT_COLORS.compressor}
+      footer={
+        <div className="flex flex-col gap-2">
+          {/* Sidechain source */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-white/40 uppercase w-8">SC</span>
+            <select
+              data-testid="sidechain-source-select"
+              className="w-[180px] text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-white/70 outline-none focus:border-amber-500/50"
+              value={p.sidechainSourceTrackId ?? ''}
+              onChange={(e) => handleSidechainChange(e.target.value)}
+            >
+              <option value="">None</option>
+              {otherTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName || `Track ${tracks.indexOf(t) + 1}`}
+                </option>
+              ))}
+            </select>
           </div>
-          <span className="text-[8px] text-amber-400/40 font-mono w-10 text-right">{scReduction.toFixed(1)} dB</span>
+          {/* GR meter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-white/30 w-8">GR</span>
+            <div className="w-[180px] h-3 bg-white/5 rounded-full overflow-hidden relative">
+              <div
+                className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-full transition-all"
+                style={{ width: `${Math.min(100, Math.abs(reduction) * 100 / 30)}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-white/40 font-mono w-12 text-right">{reduction.toFixed(1)} dB</span>
+          </div>
+          {hasSidechain && (
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] text-amber-400/50 w-8">SC</span>
+              <div className="w-[180px] h-3 bg-white/5 rounded-full overflow-hidden relative">
+                <div
+                  className="absolute right-0 top-0 bottom-0 bg-amber-400/40 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, Math.abs(scReduction) * 100 / 30)}%` }}
+                />
+              </div>
+              <span className="text-[9px] text-amber-400/40 font-mono w-12 text-right">{scReduction.toFixed(1)} dB</span>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('compressor', 'threshold', p.threshold) ?? 0.5}>
+        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-60} max={0} defaultValue={-24} label="Thresh" unit="dB" size={40} step={1} color={EFFECT_COLORS.compressor} />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'ratio' }} normalizedValue={normalizeEffectParamValue('compressor', 'ratio', p.ratio) ?? 0.5}>
+        <Knob value={p.ratio} onChange={(v) => update({ ratio: v })} min={1} max={20} defaultValue={4} label="Ratio" size={40} step={0.5} color={EFFECT_COLORS.compressor} />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'attack' }} normalizedValue={normalizeEffectParamValue('compressor', 'attack', p.attack) ?? 0.5}>
+        <Knob value={p.attack} onChange={(v) => update({ attack: v })} min={0.001} max={0.1} defaultValue={0.02} label="Attack" size={36} step={0.001} color={EFFECT_COLORS.compressor} />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'release' }} normalizedValue={normalizeEffectParamValue('compressor', 'release', p.release) ?? 0.5}>
+        <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={36} step={0.01} color={EFFECT_COLORS.compressor} />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'knee' }} normalizedValue={normalizeEffectParamValue('compressor', 'knee', p.knee) ?? 0.5}>
+        <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" size={32} step={1} color={EFFECT_COLORS.compressor} />
+      </AutomationControlShell>
+    </EffectCardLayout>
   );
 }
 

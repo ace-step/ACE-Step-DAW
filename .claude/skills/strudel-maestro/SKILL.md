@@ -73,18 +73,18 @@ note("[c3,e3,g3]")                    // comma = chord (simultaneous)
 When you need a pattern you haven't written before:
 
 1. **Search the Strudel docs and examples**:
-   - WebSearch: `site:strudel.cc {technique or genre}`
-   - WebSearch: `strudel.cc workshop {topic}`
-   - WebSearch: `strudel music pattern example {what you need}`
+   - Search the web: `site:strudel.cc {technique or genre}`
+   - Search the web: `strudel.cc workshop {topic}`
+   - Search the web: `strudel music pattern example {what you need}`
 
 2. **Search TidalCycles community** (syntax is very similar):
-   - WebSearch: `TidalCycles "{pattern type}" example`
-   - WebSearch: `tidalcycles.org tutorial {technique}`
+   - Search the web: `TidalCycles "{pattern type}" example`
+   - Search the web: `tidalcycles.org tutorial {technique}`
    - TidalCycles patterns translate to Strudel with minor syntax changes
 
 3. **Search GitHub for real compositions**:
-   - WebSearch: `github strudel composition "{genre}"`
-   - WebSearch: `github tidalcycles live coding "{genre}"`
+   - Search the web: `github strudel composition "{genre}"`
+   - Search the web: `github tidalcycles live coding "{genre}"`
 
 4. **Read the DAW's own Strudel integration** for what's available:
    - `src/engine/strudelEngine.ts` — available functions
@@ -103,8 +103,8 @@ When you find a reference pattern:
 ### When Syntax is Unclear
 
 Don't guess syntax. Instead:
-- WebSearch: `strudel.cc documentation {function name}`
-- WebSearch: `strudel "{function}" example usage`
+- Search the web: `strudel.cc documentation {function name}`
+- Search the web: `strudel "{function}" example usage`
 - Read: `src/engine/strudelEngine.ts` for what's actually available
 
 ---
@@ -219,3 +219,20 @@ A pattern is done when:
 5. **Don't make all layers equally loud** — drums and melody louder, pads quieter
 6. **Don't skip rests** — space is what makes music breathe
 7. **Don't generate all layers at once** — build iteratively, one layer at a time
+
+---
+
+## Error Handling
+
+If `evaluateStrudelCode()` fails:
+1. Read the error message from the Strudel engine (`lastError` in strudelEngine.ts)
+2. Common causes: misspelled note names, missing `.s()`, invalid function call
+3. Fix the syntax error and re-evaluate
+4. If the error is unclear, search the web: `strudel error "{error message}"`
+
+---
+
+## Related Skills
+
+- **music-theory-engine** — How to research genre theory, analyze references, extract composition principles
+- **compose** — Full song composition workflow that orchestrates this skill and music-theory-engine

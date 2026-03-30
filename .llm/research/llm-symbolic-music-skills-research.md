@@ -171,7 +171,7 @@ Claude (without any special skills) can already:
 - Best practices for readable Strudel code
 - Common patterns and idioms
 
-### 3.3 Layer 2: Composition Skills (Task-Specific)
+### 3.3 Layer 2: Composition Skills (Task-Specific, Planned — Not Yet Implemented)
 
 #### compose-melody
 - Input: key, scale, BPM, style, bar count, reference melody (optional)
@@ -230,7 +230,7 @@ stack(
   // Melody
   note("c5 e5 g5 c6").s("piano").velocity("0.8 0.7 0.9 1.0"),
   // Chords
-  note("<c3 e3 g3> <d3 f3 a3> <g2 b2 d3> <c3 e3 g3>")
+  note("[c3,e3,g3] [d3,f3,a3] [g2,b2,d3] [c3,e3,g3]")
     .s("piano").velocity(0.5),
   // Bass
   note("c2 c2 d2 d2 g1 g1 c2 c2").s("sawtooth")
@@ -314,6 +314,9 @@ Requires abc2midi conversion (can be done client-side with abcjs library).
 | **BandLab SongStarter** | ML suggestions | Partial | Limited | Basic patterns only |
 | **Ableton Max4Live ChatGPT** | LLM → M4L code | Yes | Conversational | Requires Max, slow |
 | **ACE-Step + Claude (ours)** | LLM + skills + Strudel | **Yes** | **Full conversation** | Needs good skills |
+
+> **Note**: This competitive landscape evolves rapidly. Verify current feature sets
+> before using for positioning. Some tools may have added MIDI/stem export since this analysis.
 
 ### 6.2 Our Differentiator
 - **Only DAW with a conversational AI that understands music theory AND controls the DAW**

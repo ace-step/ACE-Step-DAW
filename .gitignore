@@ -40,3 +40,4 @@ test-results/
 /companion/target/
 # ONNX models (too large for git, download via script)
 public/models/*.onnx
+.gstack/

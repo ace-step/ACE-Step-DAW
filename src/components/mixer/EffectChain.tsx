@@ -327,21 +327,29 @@ function EffectDevice({
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
-      {/* ── Header bar (hidden in full-width mode — info is in tab strip) ── */}
-      {!fullWidth && <div
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-t-lg select-none"
+      {/* ── Device header bar ── */}
+      <div
+        className={`flex items-center select-none shrink-0 ${
+          fullWidth
+            ? 'gap-2 px-4 py-1.5'
+            : 'gap-1.5 px-2 py-1.5 rounded-t-lg'
+        }`}
         style={{
-          background: `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
-          borderBottom: `1px solid ${color}25`,
+          background: fullWidth
+            ? `linear-gradient(90deg, ${color}15 0%, transparent 50%)`
+            : `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
+          borderBottom: `1px solid ${color}${fullWidth ? '18' : '25'}`,
         }}
       >
-        {/* Drag handle */}
-        <div
-          className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
-          onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
-        >
-          <GripVertical className="h-3 w-3 text-white/50" />
-        </div>
+        {/* Drag handle (compact view only) */}
+        {!fullWidth && (
+          <div
+            className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
+            onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
+          >
+            <GripVertical className="h-3 w-3 text-white/50" />
+          </div>
+        )}
 
         {/* Color dot */}
         <div
@@ -349,10 +357,12 @@ function EffectDevice({
           style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
         />
 
-        {/* Effect name — click to toggle expand */}
+        {/* Effect name */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="text-[10px] font-semibold flex-1 truncate text-left transition-colors"
+          onClick={() => !fullWidth && setCollapsed(!collapsed)}
+          className={`font-semibold flex-1 truncate text-left transition-colors ${
+            fullWidth ? 'text-[12px]' : 'text-[10px]'
+          }`}
           style={{ color: `${color}dd` }}
         >
           {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
@@ -425,7 +435,7 @@ function EffectDevice({
             </div>
           )}
         </div>
-      </div>}
+      </div>
 
       {/* ── Body ── */}
       <div
@@ -676,7 +686,7 @@ export function EffectChain() {
                 className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${
                   isSelected
                     ? 'text-white/90'
-                    : 'text-white/35 hover:text-white/55 hover:bg-white/[0.03]'
+                    : 'text-white/45 hover:text-white/70 hover:bg-white/[0.04]'
                 } ${!effect.enabled ? 'opacity-40' : ''}`}
                 style={isSelected ? {
                   backgroundColor: `${c}18`,

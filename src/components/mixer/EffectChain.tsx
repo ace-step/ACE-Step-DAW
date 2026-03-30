@@ -267,7 +267,7 @@ const MoreVertical = ({ className }: { className?: string }) => (
 );
 
 function EffectDevice({
-  effect, track, index, onDragStart, onDragOver, isDragOver,
+  effect, track, index, onDragStart, onDragOver, isDragOver, fullWidth = false,
 }: {
   effect: TrackEffect;
   track: Track;
@@ -275,6 +275,7 @@ function EffectDevice({
   onDragStart: (idx: number) => void;
   onDragOver: (idx: number) => void;
   isDragOver: boolean;
+  fullWidth?: boolean;
 }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
   const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
@@ -315,17 +316,19 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col min-w-[180px] max-w-[240px] rounded-lg shrink-0 transition-all ${
-        isDragOver ? 'ring-1 ring-violet-500' : ''
+      className={`flex flex-col transition-all ${
+        fullWidth
+          ? 'w-full h-full'
+          : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
       } ${!effect.enabled ? 'opacity-40' : ''}`}
-      style={{
+      style={fullWidth ? undefined : {
         backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
         border: `1px solid ${color}22`,
       }}
-      onMouseOver={() => onDragOver(index)}
+      onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
-      {/* ── Header bar ── */}
-      <div
+      {/* ── Header bar (hidden in full-width mode — info is in tab strip) ── */}
+      {!fullWidth && <div
         className="flex items-center gap-1.5 px-2 py-1.5 rounded-t-lg select-none"
         style={{
           background: `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
@@ -422,37 +425,45 @@ function EffectDevice({
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
-      {/* ── Body — expandable with smooth transition ── */}
+      {/* ── Body ── */}
       <div
-        className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
-        style={{ maxHeight: collapsed ? '0px' : '280px' }}
+        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'}
+        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
       >
-        <div className="overflow-y-auto max-h-[280px]">
-          {effect.type === 'eq3' && <EQ3Card effect={effect} trackId={track.id} />}
-          {effect.type === 'parametricEq' && <ParametricEQCard effect={effect} trackId={track.id} />}
-          {effect.type === 'compressor' && <CompressorCard effect={effect} trackId={track.id} />}
-          {effect.type === 'reverb' && <ReverbCard effect={effect} trackId={track.id} />}
-          {effect.type === 'delay' && <DelayCard effect={effect} trackId={track.id} />}
-          {effect.type === 'distortion' && <DistortionCard effect={effect} trackId={track.id} />}
-          {effect.type === 'filter' && <FilterCard effect={effect} trackId={track.id} />}
-          {effect.type === 'chorus' && <ChorusCard effect={effect} trackId={track.id} />}
-          {effect.type === 'flanger' && <FlangerCard effect={effect} trackId={track.id} />}
-          {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
-          {effect.type === 'convolver' && <ConvolverCard effect={effect} trackId={track.id} />}
-          {effect.type === 'gate' && <GateCard effect={effect} trackId={track.id} />}
-          {effect.type === 'deesser' && <DeEsserCard effect={effect} trackId={track.id} />}
-          {effect.type === 'transientShaper' && <TransientShaperCard effect={effect} trackId={track.id} />}
-          {effect.type === 'limiter' && <LimiterCard effect={effect} trackId={track.id} />}
-          {effect.type === 'saturation' && <SaturationCard effect={effect} trackId={track.id} />}
-          {effect.type === 'stereoImager' && <StereoImagerCard effect={effect} trackId={track.id} />}
-          {effect.type === 'algorithmicReverb' && <AlgorithmicReverbCard effect={effect} trackId={track.id} />}
-          {effect.type === 'noiseReduction' && <NoiseReductionCard effect={effect} trackId={track.id} />}
+        <div className={fullWidth ? 'h-full' : 'overflow-y-auto max-h-[280px]'}>
+          <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>
     </div>
   );
+}
+
+/** Renders the correct card component for a given effect type */
+function EffectCardBody({ effect, trackId }: { effect: TrackEffect; trackId: string }) {
+  switch (effect.type) {
+    case 'eq3': return <EQ3Card effect={effect} trackId={trackId} />;
+    case 'parametricEq': return <ParametricEQCard effect={effect} trackId={trackId} />;
+    case 'compressor': return <CompressorCard effect={effect} trackId={trackId} />;
+    case 'reverb': return <ReverbCard effect={effect} trackId={trackId} />;
+    case 'delay': return <DelayCard effect={effect} trackId={trackId} />;
+    case 'distortion': return <DistortionCard effect={effect} trackId={trackId} />;
+    case 'filter': return <FilterCard effect={effect} trackId={trackId} />;
+    case 'chorus': return <ChorusCard effect={effect} trackId={trackId} />;
+    case 'flanger': return <FlangerCard effect={effect} trackId={trackId} />;
+    case 'phaser': return <PhaserCard effect={effect} trackId={trackId} />;
+    case 'convolver': return <ConvolverCard effect={effect} trackId={trackId} />;
+    case 'gate': return <GateCard effect={effect} trackId={trackId} />;
+    case 'deesser': return <DeEsserCard effect={effect} trackId={trackId} />;
+    case 'transientShaper': return <TransientShaperCard effect={effect} trackId={trackId} />;
+    case 'limiter': return <LimiterCard effect={effect} trackId={trackId} />;
+    case 'saturation': return <SaturationCard effect={effect} trackId={trackId} />;
+    case 'stereoImager': return <StereoImagerCard effect={effect} trackId={trackId} />;
+    case 'algorithmicReverb': return <AlgorithmicReverbCard effect={effect} trackId={trackId} />;
+    case 'noiseReduction': return <NoiseReductionCard effect={effect} trackId={trackId} />;
+    default: return null;
+  }
 }
 
 // ─── Add Effect Button ───────────────────────────────────────────────────────
@@ -486,11 +497,11 @@ function AddEffectButton({ trackId }: { trackId: string }) {
   return (
     <div className="relative shrink-0">
       <button
-        className="flex flex-col items-center justify-center w-12 h-full min-h-[80px] border border-dashed border-white/10 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors"
+        className="flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-white/10 rounded-md hover:border-white/20 hover:bg-white/5 transition-colors"
         onClick={() => setOpen(!open)}
       >
-        <Plus className="h-4 w-4 text-white/30" />
-        <span className="text-[8px] text-white/20 mt-1">Add</span>
+        <Plus className="h-3 w-3 text-white/30" />
+        <span className="text-[9px] text-white/25">Add</span>
       </button>
 
       {open && (
@@ -575,9 +586,25 @@ export function EffectChain() {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  // ── Selected effect (local state — Ableton-style single-device view) ──
+  const [selectedEffectIdx, setSelectedEffectIdx] = useState(0);
+
+  // Auto-select last effect when a new one is added
+  const prevEffectsLenRef = useRef(0);
+  useEffect(() => {
+    const len = track?.effects?.length ?? 0;
+    if (len > prevEffectsLenRef.current && len > 0) {
+      setSelectedEffectIdx(len - 1);
+    }
+    prevEffectsLenRef.current = len;
+  }, [track?.effects?.length]);
+
   if (!track) return null;
 
   const effects = track.effects ?? [];
+  const clampedIdx = Math.min(selectedEffectIdx, effects.length - 1);
+  const selectedEffect = effects[clampedIdx] ?? null;
+  const selectedColor = selectedEffect ? EFFECT_COLORS[selectedEffect.type] : '#555';
 
   return (
     <div
@@ -586,46 +613,88 @@ export function EffectChain() {
       onMouseDownCapture={() => setHistoryFocusScope('mixer')}
       onFocusCapture={() => setHistoryFocusScope('mixer')}
     >
-      {/* Resize handle */}
+      {/* ── Resize handle ── */}
       <div
-        className="h-1.5 w-full cursor-ns-resize bg-[#444] hover:bg-violet-500 transition-colors flex-shrink-0"
+        className="h-1.5 w-full cursor-ns-resize bg-[#333] hover:bg-violet-500 transition-colors flex-shrink-0"
         onMouseDown={handleResizeMouseDown}
       />
 
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0e0e24] border-b border-white/5 shrink-0">
-        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: track.color }} />
-        <span className="text-[11px] text-white/70 font-medium">{track.displayName}</span>
-        <span className="text-[10px] text-white/30 ml-1">
-          — {effects.length} effect{effects.length !== 1 ? 's' : ''}
-        </span>
-        {track.effectsBypassed && (
-          <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-orange-200">
-            Bypassed
-          </span>
+      {/* ── Full-width selected effect view ── */}
+      <div className={`flex-1 overflow-y-auto transition-opacity ${track.effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
+        {selectedEffect ? (
+          <div className="h-full">
+            {/* Device header — integrated into the full-width view */}
+            <EffectDevice
+              effect={selectedEffect}
+              track={track}
+              index={clampedIdx}
+              onDragStart={() => {}}
+              onDragOver={() => {}}
+              isDragOver={false}
+              fullWidth
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-white/20 text-sm">
+            No effects — click + to add one
+          </div>
         )}
-        <button
-          onClick={() => setOpenEffectChainTrackId(null)}
-          className="ml-auto text-xs text-zinc-400 hover:text-zinc-200"
-        >
-          Close
-        </button>
       </div>
 
-      {/* Effect devices row */}
-      <div className={`flex-1 overflow-x-auto overflow-y-hidden flex items-start gap-2 p-3 transition-opacity ${track.effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
-        {effects.map((effect, idx) => (
-          <EffectDevice
-            key={effect.id}
-            effect={effect}
-            track={track}
-            index={idx}
-            onDragStart={handleDragStart}
-            onDragOver={(i) => { setDragOverIdx(i); dragOverIdxRef.current = i; }}
-            isDragOver={dragOverIdx === idx && dragIdx !== null && dragIdx !== idx}
-          />
-        ))}
-        <AddEffectButton trackId={track.id} />
+      {/* ── Bottom tab strip — Ableton-style device chain ── */}
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#0c0c1e]">
+        {/* Track info + controls */}
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-white/[0.04]">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.color }} />
+          <span className="text-[10px] text-white/50 font-medium">{track.displayName}</span>
+          <span className="text-[9px] text-white/20">
+            {effects.length} fx
+          </span>
+          {track.effectsBypassed && (
+            <span className="rounded bg-orange-500/20 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-widest text-orange-200">
+              Bypassed
+            </span>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={() => setOpenEffectChainTrackId(null)}
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+
+        {/* Effect tabs row */}
+        <div className="flex items-stretch gap-0 overflow-x-auto px-1 py-1">
+          {effects.map((effect, idx) => {
+            const c = EFFECT_COLORS[effect.type];
+            const isSelected = idx === clampedIdx;
+            return (
+              <button
+                key={effect.id}
+                onClick={() => setSelectedEffectIdx(idx)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${
+                  isSelected
+                    ? 'text-white/90'
+                    : 'text-white/35 hover:text-white/55 hover:bg-white/[0.03]'
+                } ${!effect.enabled ? 'opacity-40' : ''}`}
+                style={isSelected ? {
+                  backgroundColor: `${c}18`,
+                  boxShadow: `inset 0 -2px 0 ${c}80`,
+                } : undefined}
+              >
+                <div
+                  className="w-[5px] h-[5px] rounded-full shrink-0"
+                  style={{ backgroundColor: c, opacity: isSelected ? 1 : 0.4 }}
+                />
+                <span className="truncate max-w-[80px]">
+                  {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
+                </span>
+              </button>
+            );
+          })}
+          <AddEffectButton trackId={track.id} />
+        </div>
       </div>
     </div>
   );

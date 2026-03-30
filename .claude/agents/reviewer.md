@@ -6,6 +6,8 @@ tools:
   - Grep
   - Glob
   - Bash
+  - WebSearch
+  - WebFetch
 ---
 
 # Code Reviewer Agent
@@ -29,6 +31,11 @@ You are a senior code reviewer for ACE-Step DAW. Review changes thoroughly.
 - [ ] Visual feedback within 100ms
 - [ ] Keyboard shortcut added if applicable
 - [ ] Follows progressive disclosure pattern
+
+### DAW Convention Compliance (use WebSearch to verify)
+- [ ] Feature behavior matches professional DAW conventions (Ableton, FL Studio, Logic)
+- [ ] Keyboard shortcuts follow industry norms (e.g., Space=play, R=record, M=mute, S=solo)
+- [ ] If the implementation deviates from convention, the deviation is justified
 
 ### Testing
 - [ ] New feature has unit tests

@@ -113,6 +113,40 @@ Every plan (`docs/plans/*.md`) must contain: Problem → Root Cause → Solution
 
 ---
 
+## Proactive Research & Exploration
+
+### Principle: External Knowledge > Internal Rules
+
+Rules and principles have limits. An unlimited external knowledge base doesn't. Every agent should
+use WebSearch/WebFetch as a natural tool during development — not as a separate "research phase."
+
+### When to Research (Quick Research)
+
+Any agent hitting uncertainty should pause and search (2-5 min, not 30):
+- **Unfamiliar UI pattern** — how do pro DAWs handle this?
+- **Multiple valid approaches** — which is idiomatic for DAWs?
+- **Performance concern** — what's the right technique?
+- **API/library uncertainty** — how does Tone.js / Web Audio handle this?
+
+Protocol: `.claude/skills/quick-research/SKILL.md`
+
+### When to Explore (Brainstorm)
+
+Depth alone finds local optima. Breadth finds the global optimum. Combine both:
+- **Non-trivial tasks** (3+ files) → list 3 approaches, compare, pick one
+- **Stuck for 10+ minutes** → step back, brainstorm alternatives
+- **Performance-sensitive or user-facing** → explore before committing
+
+Protocol: `.claude/skills/brainstorm/SKILL.md`
+
+### Anti-Patterns
+- Research as procrastination (searching for things you already know)
+- Rabbit holes (>3 queries without returning to code)
+- Analysis paralysis (10 options instead of 3)
+- Ignoring local context (always check codebase BEFORE searching externally)
+
+---
+
 ## Red Lines (absolute prohibitions)
 
 - Never push directly to main

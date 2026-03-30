@@ -370,7 +370,7 @@ function EffectDevice({
 
         {/* Preset selector */}
         <select
-          className="bg-transparent text-white/30 text-[8px] border-none outline-none cursor-pointer max-w-[50px] hover:text-white/50"
+          className="bg-transparent text-white/40 text-[9px] border-none outline-none cursor-pointer hover:text-white/60"
           onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
           value=""
           onClick={(e) => e.stopPropagation()}
@@ -383,7 +383,7 @@ function EffectDevice({
 
         {/* Bypass toggle */}
         <button
-          className={`h-4 w-4 flex items-center justify-center transition-colors ${effect.enabled ? 'text-green-400' : 'text-white/20 hover:text-white/40'}`}
+          className={`h-5 w-5 flex items-center justify-center transition-colors rounded ${effect.enabled ? 'text-green-400 hover:text-green-300' : 'text-white/20 hover:text-white/40'}`}
           onClick={(e) => {
             e.stopPropagation();
             updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);

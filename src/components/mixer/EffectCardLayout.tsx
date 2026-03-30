@@ -21,7 +21,7 @@ interface EffectCardLayoutProps {
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
   return (
-    <div className="flex flex-col items-center w-full px-6 py-3">
+    <div className="flex flex-col items-center w-full px-6 pt-2 pb-3">
       {/* Constrained content — prevents full-width stretching */}
       <div className="w-full max-w-[800px] flex flex-col items-center gap-4">
         {mode && (

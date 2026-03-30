@@ -729,19 +729,19 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('compressor', 'threshold', p.threshold) ?? 0.5}>
-        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-60} max={0} defaultValue={-24} label="Thresh" unit="dB" size={40} step={1} color={EFFECT_COLORS.compressor} />
+        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-60} max={0} defaultValue={-24} label="Thresh" unit=" dB" size={40} step={1} color={EFFECT_COLORS.compressor} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'ratio' }} normalizedValue={normalizeEffectParamValue('compressor', 'ratio', p.ratio) ?? 0.5}>
-        <Knob value={p.ratio} onChange={(v) => update({ ratio: v })} min={1} max={20} defaultValue={4} label="Ratio" size={40} step={0.5} color={EFFECT_COLORS.compressor} />
+        <Knob value={p.ratio} onChange={(v) => update({ ratio: v })} min={1} max={20} defaultValue={4} label="Ratio" size={40} step={0.5} color={EFFECT_COLORS.compressor} formatValue={(v) => `${v.toFixed(1)}:1`} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'attack' }} normalizedValue={normalizeEffectParamValue('compressor', 'attack', p.attack) ?? 0.5}>
-        <Knob value={p.attack} onChange={(v) => update({ attack: v })} min={0.001} max={0.1} defaultValue={0.02} label="Attack" size={44} step={0.001} color={EFFECT_COLORS.compressor} />
+        <Knob value={p.attack} onChange={(v) => update({ attack: v })} min={0.001} max={0.1} defaultValue={0.02} label="Attack" size={44} step={0.001} color={EFFECT_COLORS.compressor} formatValue={(v) => `${(v * 1000).toFixed(1)} ms`} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'release' }} normalizedValue={normalizeEffectParamValue('compressor', 'release', p.release) ?? 0.5}>
-        <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={44} step={0.01} color={EFFECT_COLORS.compressor} />
+        <Knob value={p.release} onChange={(v) => update({ release: v })} min={0.01} max={1} defaultValue={0.2} label="Release" size={44} step={0.01} color={EFFECT_COLORS.compressor} formatValue={(v) => v >= 1 ? `${v.toFixed(1)} s` : `${(v * 1000).toFixed(0)} ms`} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'compressor', param: 'knee' }} normalizedValue={normalizeEffectParamValue('compressor', 'knee', p.knee) ?? 0.5}>
-        <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" size={40} step={1} color={EFFECT_COLORS.compressor} />
+        <Knob value={p.knee} onChange={(v) => update({ knee: v })} min={0} max={40} defaultValue={6} label="Knee" unit=" dB" size={40} step={1} color={EFFECT_COLORS.compressor} />
       </AutomationControlShell>
     </EffectCardLayout>
   );

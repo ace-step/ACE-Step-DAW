@@ -288,7 +288,7 @@ export function Knob({
         />
       )}
       {label && (
-        <span className="text-[10px] text-zinc-400 leading-none tracking-wider uppercase">
+        <span className="text-[10px] text-zinc-400 leading-none tracking-wide">
           {label}
         </span>
       )}

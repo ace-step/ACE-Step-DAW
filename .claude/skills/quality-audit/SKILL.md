@@ -42,34 +42,41 @@ npx tsc --noEmit --noUnusedLocals 2>&1 | head -20  # Dead code indicator
 
 ### Dimension 2: UI/UX Aesthetics & Interaction Quality
 
-**Reference**: `.claude/references/interaction-design.md`
+**References**: `.claude/references/design-patterns.md` (principles), `.claude/skills/design-review/SKILL.md` (full workflow)
 
-**Visual Quality Checklist**:
-- [ ] **Color consistency**: Track colors from palette, state indicators match conventions (green=active, red=error, yellow=warning, blue=selected)
-- [ ] **Dark theme**: No bright spots, no unreadable text, consistent surface hierarchy
-- [ ] **WCAG AA contrast**: All text meets 4.5:1 ratio against backgrounds
-- [ ] **Color-blind safe**: No information conveyed by color alone
-- [ ] **Spacing rhythm**: Consistent use of spacing scale (4px grid)
-- [ ] **Typography hierarchy**: Clear visual hierarchy (headers, labels, values, secondary text)
-- [ ] **Loading states**: All async operations show progress (spinner, skeleton, progress bar)
-- [ ] **Empty states**: Meaningful messages and CTAs when no data exists
+> IMPORTANT: Language models cannot "see" visual quality. This dimension MUST be evaluated
+> through mechanical code checks, comparison against hand-tuned reference components, and
+> screenshot verification — never by self-assessment.
 
-**Interaction Quality Checklist**:
+**Automated Checks** (catch theme-breaking issues):
+- [ ] **Token compliance**: Search for hardcoded `#hex` colors in `src/components/` — new code should use theme tokens
+- [ ] **Font compliance**: No `fontFamily` overrides — use `font-sans` (Inter) / `font-mono` (JetBrains Mono)
+- [ ] **Cross-theme safe**: Run the app in 2+ themes, check for hardcoded colors bleeding through
+
+**Principle-Based Evaluation** (compare against existing hand-tuned components):
+- [ ] **Harmonizes with existing**: New components match the spacing, density, and feel of adjacent components (read the reference first — see design-patterns.md Gold Standard table)
+- [ ] **Surface hierarchy**: Nested containers use different depth levels (daw-bg → daw-surface → daw-surface-2 → daw-surface-3)
+- [ ] **Accent for state only**: `daw-accent` used only to communicate state (selected, active, focused), not as decoration
+- [ ] **State colors conventional**: Green=active, Red=error/recording, Yellow=solo/warning, Blue=selected
+- [ ] **Monospaced numbers**: BPM, dB, time, note values use `font-mono` for alignment
+- [ ] **No seesaw changes**: No "fixing" hand-tuned design that already works — check with user before changing existing component aesthetics
+
+**Interaction Quality**:
 - [ ] **< 100ms feedback**: Every click, drag start, and hover has immediate visual response
-- [ ] **< 16ms audio params**: Volume/pan/effect changes update within one animation frame
 - [ ] **Keyboard-first**: Every mouse action has keyboard equivalent
 - [ ] **Drag feedback**: Ghost preview at snap position, valid/invalid zone indicators
-- [ ] **Double-click reset**: All knobs/sliders reset to default on double-click
-- [ ] **Right-click precision**: Context menus on knobs/faders for exact value entry
 - [ ] **Undo works everywhere**: Ctrl+Z reverses any action
-- [ ] **Progressive disclosure**: Advanced features behind toggles/menus, not cluttering default view
-- [ ] **Toast notifications**: Success auto-dismiss 3s, errors persist until dismissed
+- [ ] **Empty states handled**: Meaningful messages when no data exists
+
+**Screenshot Verification** (mandatory for UI changes):
+- [ ] Start dev server and verify the changed component visually
+- [ ] Spot-check in at least 2 themes (ace-studio + one other)
 
 **Scoring** (0-10):
-- 10: Comparable to Ableton/Logic in polish, all interactions feel native
-- 7-9: Good overall, minor interaction gaps (some missing keyboard shortcuts)
-- 4-6: Functional but rough (inconsistent feedback, missing empty states)
-- 0-3: Significant UX debt (broken interactions, no keyboard support)
+- 10: Harmonizes with existing design, all automated checks pass, screenshot verified across themes
+- 7-9: Good overall, minor gaps (some arbitrary values, 1-2 unchecked themes)
+- 4-6: Functional but doesn't match existing feel. Hardcoded colors, inconsistent density
+- 0-3: Breaks visual harmony. Wrong density, broken themes, no screenshot verification
 
 ### Dimension 3: Feature Completeness (vs. Competitors)
 

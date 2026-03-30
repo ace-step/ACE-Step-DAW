@@ -91,6 +91,7 @@ npx tsc --noEmit     # Type check only
 ## References (load when relevant to your task)
 
 - **Interaction Design**: `.claude/references/interaction-design.md` — UI patterns, drag/drop, keyboard, feedback
+- **Design Patterns**: `.claude/references/design-patterns.md` — Concrete sizing, color, spacing, typography rules for DAW UI
 - **Store API**: `.claude/references/store-api.md` — `window.__store` API, CLI-first mandate, testing standard
 - **Skills**: `.claude/references/skills.md` — Recommended Claude Code skills by development step
 - **openDAW Patterns**: `.claude/skills/refer_opendaw_design/SKILL.md` — Architecture reference

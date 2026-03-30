@@ -1,11 +1,48 @@
 import { useEffect, useRef } from 'react';
+import * as Tone from 'tone';
 import { synthEngine } from '../../engine/SynthEngine';
+import { wavetableEngine } from '../../engine/WavetableEngine';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { isEditableShortcutTarget } from '../../services/coreDawShortcuts';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import type { Track } from '../../types/project';
+
+/** Start a note on the appropriate engine based on the track's instrument kind. */
+function instrumentNoteOn(track: Track, pitch: number, velocity: number): void {
+  const instrument = track.instrument;
+  if (instrument?.kind === 'fm') {
+    synthEngine.ensureFmSynth(track.id, instrument.settings);
+    const fmSynth = synthEngine.getFmSynth(track.id);
+    if (fmSynth) {
+      const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+      fmSynth.triggerAttack(freq, undefined, velocity / 127);
+    }
+  } else if (instrument?.kind === 'wavetable') {
+    wavetableEngine.ensureTrackSynth(track.id, instrument.settings);
+    wavetableEngine.noteOn(track.id, pitch, velocity);
+  } else {
+    synthEngine.ensureTrackSynth(track.id, track.synthPreset ?? 'piano');
+    synthEngine.noteOn(track.id, pitch, velocity);
+  }
+}
+
+/** Stop a note on the appropriate engine based on the track's instrument kind. */
+function instrumentNoteOff(track: Track | undefined, trackId: string, pitch: number): void {
+  const instrument = track?.instrument;
+  if (instrument?.kind === 'fm') {
+    const fmSynth = synthEngine.getFmSynth(trackId);
+    if (fmSynth) {
+      const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+      fmSynth.triggerRelease(freq);
+    }
+  } else if (instrument?.kind === 'wavetable') {
+    wavetableEngine.noteOff(trackId, pitch);
+  } else {
+    synthEngine.noteOff(trackId, pitch);
+  }
+}
 
 const WHITE_KEY_BINDINGS = [
   { code: 'KeyA', semitone: 0, label: 'A' },
@@ -103,9 +140,11 @@ export function VirtualKeyboard() {
     const releaseHeldNotes = () => {
       const transport = useTransportStore.getState();
       const captureService = getMidiCaptureService();
+      const project = useProjectStore.getState().project;
       for (const [code, note] of heldNotesRef.current.entries()) {
         if (note.trackId) {
-          synthEngine.noteOff(note.trackId, note.pitch);
+          const track = project?.tracks.find((t) => t.id === note.trackId);
+          instrumentNoteOff(track, note.trackId, note.pitch);
           captureService.noteOff(note.trackId, note.pitch, transport.currentTime);
         }
         useUIStore.getState().releaseVirtualKeyboardPitch(note.pitch);
@@ -158,8 +197,7 @@ export function VirtualKeyboard() {
       let clipStartTime = 0;
 
       if (targetTrack) {
-        synthEngine.ensureTrackSynth(targetTrack.id, targetTrack.synthPreset ?? 'piano');
-        synthEngine.noteOn(targetTrack.id, pitch, nextVelocity);
+        instrumentNoteOn(targetTrack, pitch, nextVelocity);
         captureService.noteOn(targetTrack.id, pitch, velocityNormalized, startTime);
 
         if (shouldRecordIntoPianoRoll(targetTrack)) {
@@ -193,7 +231,8 @@ export function VirtualKeyboard() {
       const captureService = getMidiCaptureService();
 
       if (held.trackId) {
-        synthEngine.noteOff(held.trackId, held.pitch);
+        const heldTrack = project.project?.tracks.find((t) => t.id === held.trackId);
+        instrumentNoteOff(heldTrack, held.trackId, held.pitch);
         captureService.noteOff(held.trackId, held.pitch, transport.currentTime);
       }
 

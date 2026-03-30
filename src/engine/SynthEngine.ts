@@ -446,7 +446,7 @@ class SynthEngine {
     }
   }
 
-  /** Release all currently sounding notes on all track synths. */
+  /** Release all currently sounding notes on all track synths (subtractive + FM). */
   releaseAll() {
     for (const instance of this.synths.values()) {
       instance.filterEnvelope?.triggerRelease();
@@ -456,6 +456,9 @@ class SynthEngine {
       for (const voice of voices) {
         voice.synth.releaseAll();
       }
+    }
+    for (const instance of this.fmSynths.values()) {
+      instance.synth.triggerRelease();
     }
   }
 

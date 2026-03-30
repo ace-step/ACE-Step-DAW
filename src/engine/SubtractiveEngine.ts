@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import type {
   SubtractiveInstrumentSettings,
 } from '../types/project';
+import type { ModulationTargets } from './ModulationEngine';
 
 interface SubtractiveInstance {
   synth: Tone.PolySynth;
@@ -121,6 +122,25 @@ class SubtractiveEngine {
     for (const instance of this.instances.values()) {
       instance.synth.releaseAll();
     }
+  }
+
+  /**
+   * Return AudioParam references for the modulation engine to connect to.
+   * Returns null if no synth exists for the track.
+   */
+  getModulationTargets(trackId: string): ModulationTargets | null {
+    const instance = this.instances.get(trackId);
+    if (!instance) return null;
+
+    return {
+      amp: instance.output.gain as unknown as Tone.InputNode,
+      filterCutoff: instance.filter
+        ? (instance.filter.frequency as unknown as Tone.InputNode)
+        : undefined,
+      filterResonance: instance.filter
+        ? (instance.filter.Q as unknown as Tone.InputNode)
+        : undefined,
+    };
   }
 
   removeTrackSynth(trackId: string) {

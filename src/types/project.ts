@@ -199,6 +199,68 @@ export interface InstrumentLfoSettings {
   retrigger: boolean;
 }
 
+// ─── Modulation Matrix Types ───────────────────────────────────────────────
+
+export type ModulationSource =
+  | 'lfo1'
+  | 'lfo2'
+  | 'ampEnv'
+  | 'filterEnv'
+  | 'modEnv'
+  | 'velocity'
+  | 'modWheel'
+  | 'macro1'
+  | 'macro2'
+  | 'macro3'
+  | 'macro4';
+
+export type ModulationDestination =
+  | 'pitch'
+  | 'filterCutoff'
+  | 'filterResonance'
+  | 'amp'
+  | 'pan'
+  | 'oscLevel'
+  | 'lfo1Rate'
+  | 'lfo2Rate'
+  | 'fmIndex'
+  | 'wtPosition';
+
+export interface ModulationSlot {
+  source: ModulationSource;
+  destination: ModulationDestination;
+  /** Modulation amount (-1 to 1 for bipolar, 0 to 1 for unipolar). */
+  amount: number;
+  /** If true, source range is -1..1. If false, source range is 0..1. */
+  bipolar: boolean;
+}
+
+export interface ModulationLfo {
+  waveform: InstrumentWaveform;
+  rateHz: number;
+  /** Whether LFO resets phase on note-on. */
+  retrigger: boolean;
+}
+
+export interface ModulationSettings {
+  lfo1: ModulationLfo;
+  lfo2: ModulationLfo;
+  /** Additional ADSR envelope for modulation routing. */
+  modEnvelope: InstrumentEnvelope;
+  /** Up to 8 modulation routing slots. */
+  slots: ModulationSlot[];
+  /** 4 macro knob values (0-1), routed via slots with macro1-4 sources. */
+  macros: [number, number, number, number];
+}
+
+export const DEFAULT_MODULATION_SETTINGS: ModulationSettings = {
+  lfo1: { waveform: 'sine', rateHz: 1, retrigger: false },
+  lfo2: { waveform: 'triangle', rateHz: 0.5, retrigger: false },
+  modEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.5 },
+  slots: [],
+  macros: [0, 0, 0, 0],
+};
+
 export interface InstrumentUnisonSettings {
   voices: number;
   detuneCents: number;
@@ -215,6 +277,8 @@ export interface SubtractiveInstrumentSettings {
   unison: InstrumentUnisonSettings;
   glideTime: number;
   outputGain: number;
+  /** Modulation matrix — optional for backward compat with existing instruments. */
+  modulation?: ModulationSettings;
 }
 
 export interface SubtractiveTrackInstrument {

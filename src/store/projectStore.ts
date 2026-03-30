@@ -49,6 +49,7 @@ import type {
   SynthLfo,
   FilterEnvelope,
   UnisonSettings,
+  ModulationSettings,
   GainEnvelopePoint,
   LoudnessTarget,
   MasteringPreset,
@@ -119,6 +120,7 @@ import { getPresetById, type InstrumentPreset } from '../data/instrumentPresets'
 import { detectClipGroups, resolveFollowAction, rollFollowAction } from '../utils/followActions';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
+import { DEFAULT_MODULATION_SETTINGS } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
 import { buildRoutingGraph, wouldCreateCycle } from '../utils/routingGraph';
 import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateClipConsolidation } from '../services/clipConsolidation';
@@ -621,6 +623,8 @@ export interface ProjectState extends MidiSliceActions {
   updateFilterEnvelope: (trackId: string, envelope: Partial<FilterEnvelope>) => void;
   /** Update LFO modulation settings on a synth track. */
   updateSynthLfo: (trackId: string, lfo: Partial<SynthLfo>) => void;
+  /** Update modulation matrix settings on a synth track. */
+  updateModulation: (trackId: string, modulation: Partial<ModulationSettings>) => void;
   /** Update unison / detune voice-stacking settings on a synth track. */
   updateUnisonSettings: (trackId: string, settings: Partial<UnisonSettings>) => void;
   /** Update wavetable synthesis settings on a track with undo support. */
@@ -3389,6 +3393,36 @@ export const useProjectStore = create<ProjectState>()(
             ? { ...t, synthLfo: { ...(t.synthLfo ?? { rate: 1, depth: 0.5, shape: 'sine' as const }), ...lfo } }
             : t,
         ),
+      },
+    });
+  },
+
+  updateModulation: (trackId, modulation) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update modulation matrix', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const inst = t.instrument;
+          if (!inst || inst.kind !== 'subtractive') return t;
+          return {
+            ...t,
+            instrument: {
+              ...inst,
+              settings: {
+                ...inst.settings,
+                modulation: {
+                  ...(inst.settings.modulation ?? DEFAULT_MODULATION_SETTINGS),
+                  ...modulation,
+                },
+              },
+            },
+          };
+        }),
       },
     });
   },

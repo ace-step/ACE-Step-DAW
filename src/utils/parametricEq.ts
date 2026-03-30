@@ -173,6 +173,18 @@ function getBandCoefficients(
         a1: 2 * ((a - 1) - (a + 1) * cosOmega),
         a2: (a + 1) - (a - 1) * cosOmega - twoSqrtAAlpha,
       };
+    case 'bandpass':
+      return { b0: alpha, b1: 0, b2: -alpha, a0: 1 + alpha, a1: -2 * cosOmega, a2: 1 - alpha };
+    case 'allpass':
+      return { b0: 1 - alpha, b1: -2 * cosOmega, b2: 1 + alpha, a0: 1 + alpha, a1: -2 * cosOmega, a2: 1 - alpha };
+    case 'tiltshelf': {
+      const tiltA = Math.pow(10, gain / 20);
+      const tiltAlpha = sinOmega / (2 * q);
+      return {
+        b0: 1 + tiltAlpha * tiltA, b1: -2 * cosOmega, b2: 1 - tiltAlpha * tiltA,
+        a0: 1 + tiltAlpha / tiltA, a1: -2 * cosOmega, a2: 1 - tiltAlpha / tiltA,
+      };
+    }
   }
 }
 
@@ -224,5 +236,11 @@ export function getBandControlLabel(type: ParametricEQBandType): string {
       return 'High Pass';
     case 'lowpass':
       return 'Low Pass';
+    case 'tiltshelf':
+      return 'Tilt';
+    case 'bandpass':
+      return 'Band Pass';
+    case 'allpass':
+      return 'All Pass';
   }
 }

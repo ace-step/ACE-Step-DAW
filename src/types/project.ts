@@ -396,7 +396,10 @@ export type ParametricEQBandType =
   | 'highshelf'
   | 'notch'
   | 'highpass'
-  | 'lowpass';
+  | 'lowpass'
+  | 'tiltshelf'
+  | 'bandpass'
+  | 'allpass';
 
 export interface ParametricEQBand {
   id: string;
@@ -405,6 +408,8 @@ export interface ParametricEQBand {
   frequency: number;
   gain: number;
   q: number;
+  solo?: boolean;
+  bypass?: boolean;
 }
 
 export interface ParametricEQParams {
@@ -419,6 +424,91 @@ export interface CompressorParams {
   release: number;
   knee: number;
   sidechainSourceTrackId?: string;
+  detectionMode?: 'peak' | 'rms';
+  lookahead?: number;
+  autoMakeupGain?: boolean;
+  sidechainHpf?: number;
+  sidechainLpf?: number;
+  mix?: number;
+}
+
+export interface GateParams {
+  threshold: number;
+  range: number;
+  attack: number;
+  hold: number;
+  release: number;
+  hysteresis: number;
+  mode: 'gate' | 'expander';
+  sidechainHpf: number;
+  sidechainLpf: number;
+}
+
+export interface DeEsserParams {
+  frequency: number;
+  bandwidth: number;
+  threshold: number;
+  mode: 'wideband' | 'split';
+  listen: boolean;
+  range: number;
+}
+
+export interface TransientShaperParams {
+  attack: number;
+  sustain: number;
+  mix: number;
+  output: number;
+}
+
+export interface LimiterParams {
+  ceiling: number;
+  release: number;
+  lookahead: number;
+  gain: number;
+  style: 'transparent' | 'aggressive' | 'warm';
+}
+
+export type SaturationType = 'tape' | 'tube' | 'transistor' | 'soft' | 'hard';
+
+export interface SaturationParams {
+  drive: number;
+  saturationType: SaturationType;
+  harmonicMix: number;
+  inputGain: number;
+  outputGain: number;
+  mix: number;
+}
+
+export interface StereoImagerParams {
+  width: number;
+  midGain: number;
+  sideGain: number;
+  monoFreq: number;
+  pan: number;
+}
+
+export type AlgorithmicReverbType = 'plate' | 'hall' | 'room' | 'chamber' | 'spring';
+
+export interface AlgorithmicReverbParams {
+  reverbType: AlgorithmicReverbType;
+  decay: number;
+  preDelay: number;
+  damping: number;
+  size: number;
+  modRate: number;
+  modDepth: number;
+  erLevel: number;
+  lowCut: number;
+  highCut: number;
+  mix: number;
+}
+
+export interface NoiseGateReductionParams {
+  amount: number;
+  threshold: number;
+  mode: 'fast' | 'smooth';
+  hfEmphasis: number;
+  mix: number;
 }
 
 export interface ReverbParams {
@@ -534,7 +624,15 @@ export type TrackEffect =
   | EffectBase<'chorus', ChorusParams>
   | EffectBase<'flanger', FlangerParams>
   | EffectBase<'phaser', PhaserParams>
-  | EffectBase<'convolver', ConvolverParams>;
+  | EffectBase<'convolver', ConvolverParams>
+  | EffectBase<'gate', GateParams>
+  | EffectBase<'deesser', DeEsserParams>
+  | EffectBase<'transientShaper', TransientShaperParams>
+  | EffectBase<'limiter', LimiterParams>
+  | EffectBase<'saturation', SaturationParams>
+  | EffectBase<'stereoImager', StereoImagerParams>
+  | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1190,7 +1288,7 @@ export interface AutomationPoint {
 
 export type AutomatableEffectTarget =
   | { effectType: 'eq3'; param: keyof EQ3Params }
-  | { effectType: 'compressor'; param: Exclude<keyof CompressorParams, 'sidechainSourceTrackId'> }
+  | { effectType: 'compressor'; param: Exclude<keyof CompressorParams, 'sidechainSourceTrackId' | 'detectionMode' | 'autoMakeupGain'> }
   | { effectType: 'reverb'; param: keyof ReverbParams }
   | { effectType: 'delay'; param: keyof DelayParams }
   | { effectType: 'distortion'; param: Exclude<keyof DistortionParams, 'distortionType'> }
@@ -1198,7 +1296,15 @@ export type AutomatableEffectTarget =
   | { effectType: 'chorus'; param: keyof ChorusParams }
   | { effectType: 'flanger'; param: keyof FlangerParams }
   | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> }
-  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> };
+  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> }
+  | { effectType: 'gate'; param: Exclude<keyof GateParams, 'mode'> }
+  | { effectType: 'deesser'; param: Exclude<keyof DeEsserParams, 'mode' | 'listen'> }
+  | { effectType: 'transientShaper'; param: keyof TransientShaperParams }
+  | { effectType: 'limiter'; param: Exclude<keyof LimiterParams, 'style'> }
+  | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
+  | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
+  | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

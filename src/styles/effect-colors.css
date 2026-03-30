@@ -1,0 +1,44 @@
+/*
+ * Effect Color System — desaturated, category-grouped
+ *
+ * Categories:
+ *   EQ        → cool blue (analytical, precise)
+ *   Dynamics  → warm amber/gold (energy, power)
+ *   Time      → deep purple/violet (space, depth)
+ *   Modulation→ teal/cyan (movement, shimmer)
+ *   Distortion→ warm red/coral (heat, intensity)
+ *   Utility   → neutral slate (clean, functional)
+ */
+
+:root {
+  /* ── EQ family (cool blue) ── */
+  --fx-eq3: #5b8ac4;
+  --fx-parametric-eq: #6b9fd4;
+  --fx-linear-phase-eq: #5e8fbe;
+  --fx-dynamic-eq: #7aaad4;
+  --fx-ms-eq: #5885b8;
+  --fx-match-eq: #6894c4;
+
+  /* ── Dynamics family (warm amber/gold) ── */
+  --fx-compressor: #c4993b;
+  --fx-gate: #b8903a;
+  --fx-deesser: #c4a654;
+  --fx-transient-shaper: #b89340;
+  --fx-multiband-comp: #c49e42;
+  --fx-limiter: #d4a040;
+
+  /* ── Time-based family (deep purple/violet) ── */
+  --fx-reverb: #8b6fc0;
+  --fx-delay: #9478c4;
+  --fx-convolver: #a07cc8;
+
+  /* ── Modulation family (teal/cyan) ── */
+  --fx-filter: #4a9da8;
+  --fx-chorus: #5aa8b4;
+  --fx-flanger: #4dab94;
+  --fx-phaser: #c48a54;
+
+  /* ── Distortion family (warm red/coral) ── */
+  --fx-distortion: #c46454;
+  --fx-saturation: #c46454;
+}

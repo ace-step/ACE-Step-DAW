@@ -31,8 +31,8 @@ describe('Toast slide-in animation', () => {
   });
 });
 
-describe('Knob hover animation', () => {
-  it('applies transition-transform duration-150 and hover:scale-110 classes', () => {
+describe('Knob interaction classes', () => {
+  it('applies cursor-ns-resize class when enabled', () => {
     render(
       <Knob
         value={0.5}
@@ -44,12 +44,10 @@ describe('Knob hover animation', () => {
       />
     );
     const knobEl = screen.getByLabelText('Test knob');
-    expect(knobEl.className).toContain('transition-transform');
-    expect(knobEl.className).toContain('duration-150');
-    expect(knobEl.className).toContain('hover:scale-110');
+    expect(knobEl.className).toContain('cursor-ns-resize');
   });
 
-  it('does not apply hover:scale-110 when disabled', () => {
+  it('applies cursor-not-allowed when disabled', () => {
     render(
       <Knob
         value={0.5}
@@ -62,6 +60,7 @@ describe('Knob hover animation', () => {
       />
     );
     const knobEl = screen.getByLabelText('Disabled knob');
-    expect(knobEl.className).not.toContain('hover:scale-110');
+    expect(knobEl.className).toContain('cursor-not-allowed');
+    expect(knobEl.className).not.toContain('cursor-ns-resize');
   });
 });

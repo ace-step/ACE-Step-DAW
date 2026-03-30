@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Knob } from '../ui/Knob';
 
 // Inline icon components (no lucide-react dependency)
 const GripVertical = ({ className }: { className?: string }) => (
@@ -38,6 +39,14 @@ import type {
   FlangerParams,
   PhaserParams,
   ConvolverParams,
+  GateParams,
+  DeEsserParams,
+  TransientShaperParams,
+  LimiterParams,
+  SaturationParams,
+  StereoImagerParams,
+  AlgorithmicReverbParams,
+  NoiseGateReductionParams,
   Track,
 } from '../../types/project';
 
@@ -144,7 +153,66 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Plate', params: { irType: 'plate', wet: 0.4, preDelay: 5 } as ConvolverParams },
     { name: 'Spring', params: { irType: 'spring', wet: 0.3, preDelay: 0 } as ConvolverParams },
   ],
+  gate: [
+    { name: 'Soft Gate', params: { threshold: -40, range: -30, attack: 0.001, hold: 0.01, release: 0.05, hysteresis: 4, mode: 'gate', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+    { name: 'Tight Gate', params: { threshold: -30, range: -80, attack: 0.0005, hold: 0.005, release: 0.02, hysteresis: 6, mode: 'gate', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+    { name: 'Drum Gate', params: { threshold: -25, range: -60, attack: 0.0001, hold: 0.02, release: 0.08, hysteresis: 8, mode: 'gate', sidechainHpf: 80, sidechainLpf: 0 } as GateParams },
+    { name: 'Expander', params: { threshold: -35, range: -20, attack: 0.005, hold: 0.01, release: 0.1, hysteresis: 3, mode: 'expander', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+  ],
+  deesser: [
+    { name: 'Gentle', params: { frequency: 7000, bandwidth: 2, threshold: -15, mode: 'split', listen: false, range: 6 } as DeEsserParams },
+    { name: 'Vocal', params: { frequency: 6500, bandwidth: 2.5, threshold: -20, mode: 'split', listen: false, range: 10 } as DeEsserParams },
+    { name: 'Aggressive', params: { frequency: 8000, bandwidth: 3, threshold: -25, mode: 'wideband', listen: false, range: 15 } as DeEsserParams },
+  ],
+  transientShaper: [
+    { name: 'Punchy', params: { attack: 50, sustain: -20, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Soft', params: { attack: -40, sustain: 20, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Tight', params: { attack: 0, sustain: -60, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Full', params: { attack: 30, sustain: 40, mix: 1, output: 0 } as TransientShaperParams },
+  ],
+  limiter: [
+    { name: 'Transparent', params: { ceiling: -0.3, release: 0.1, lookahead: 0.005, gain: 0, style: 'transparent' } as LimiterParams },
+    { name: 'Loud', params: { ceiling: -0.1, release: 0.05, lookahead: 0.003, gain: 6, style: 'aggressive' } as LimiterParams },
+    { name: 'Broadcast', params: { ceiling: -1.0, release: 0.2, lookahead: 0.01, gain: 3, style: 'warm' } as LimiterParams },
+    { name: 'Mastering', params: { ceiling: -0.3, release: 0.15, lookahead: 0.005, gain: 2, style: 'transparent' } as LimiterParams },
+  ],
+  saturation: [
+    { name: 'Tape Warmth', params: { drive: 0.25, saturationType: 'tape', harmonicMix: 0, inputGain: 0, outputGain: 0, mix: 0.4 } as SaturationParams },
+    { name: 'Tube Glow', params: { drive: 0.35, saturationType: 'tube', harmonicMix: 0.3, inputGain: 0, outputGain: -2, mix: 0.5 } as SaturationParams },
+    { name: 'Console Drive', params: { drive: 0.2, saturationType: 'transistor', harmonicMix: 0.1, inputGain: 3, outputGain: -3, mix: 0.6 } as SaturationParams },
+    { name: 'Crunch', params: { drive: 0.7, saturationType: 'hard', harmonicMix: -0.5, inputGain: 0, outputGain: -4, mix: 0.5 } as SaturationParams },
+  ],
+  stereoImager: [
+    { name: 'Default', params: { width: 1, midGain: 0, sideGain: 0, monoFreq: 0, pan: 0 } as StereoImagerParams },
+    { name: 'Wide', params: { width: 1.5, midGain: 0, sideGain: 2, monoFreq: 0, pan: 0 } as StereoImagerParams },
+    { name: 'Mono Bass', params: { width: 1.2, midGain: 0, sideGain: 0, monoFreq: 200, pan: 0 } as StereoImagerParams },
+    { name: 'Narrow', params: { width: 0.5, midGain: 2, sideGain: -3, monoFreq: 0, pan: 0 } as StereoImagerParams },
+  ],
+  algorithmicReverb: [
+    { name: 'Small Room', params: { reverbType: 'room', decay: 0.8, preDelay: 5, damping: 0.5, size: 0.3, modRate: 0.2, modDepth: 0.1, erLevel: 3, lowCut: 100, highCut: 10000, mix: 0.2 } as AlgorithmicReverbParams },
+    { name: 'Large Hall', params: { reverbType: 'hall', decay: 4, preDelay: 30, damping: 0.3, size: 0.8, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 60, highCut: 14000, mix: 0.3 } as AlgorithmicReverbParams },
+    { name: 'Plate', params: { reverbType: 'plate', decay: 1.8, preDelay: 10, damping: 0.2, size: 0.5, modRate: 0.4, modDepth: 0.15, erLevel: -3, lowCut: 200, highCut: 16000, mix: 0.35 } as AlgorithmicReverbParams },
+    { name: 'Dark Chamber', params: { reverbType: 'chamber', decay: 2.2, preDelay: 15, damping: 0.7, size: 0.5, modRate: 0.2, modDepth: 0.1, erLevel: 2, lowCut: 80, highCut: 6000, mix: 0.25 } as AlgorithmicReverbParams },
+  ],
+  noiseReduction: [
+    { name: 'Light', params: { amount: 0.3, threshold: -55, mode: 'smooth', hfEmphasis: 0.3, mix: 1 } as NoiseGateReductionParams },
+    { name: 'Medium', params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } as NoiseGateReductionParams },
+    { name: 'Heavy', params: { amount: 0.8, threshold: -40, mode: 'fast', hfEmphasis: 0.7, mix: 1 } as NoiseGateReductionParams },
+  ],
 };
+
+// ─── Horizontal Slider ───────────────────────────────────────────────────────
+
+interface HSliderProps {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  label?: string;
+  displayValue?: string;
+  color?: string;
+  width?: number;
+}
 
 import {
   EQ3Card,
@@ -158,12 +226,20 @@ import {
   FlangerCard,
   PhaserCard,
   ConvolverCard,
+  GateCard,
+  DeEsserCard,
+  TransientShaperCard,
+  LimiterCard,
+  SaturationCard,
+  StereoImagerCard,
+  AlgorithmicReverbCard,
+  NoiseReductionCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
-// ─── Effect Display Names ────────────────────────────────────────────────────
 
-const EFFECT_DISPLAY_NAMES: Record<string, string> = {
+// ─── Effect type display names ──────────────────────────────────────────────
+const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   eq3: 'EQ Three',
   parametricEq: 'Parametric EQ',
   compressor: 'Compressor',
@@ -175,90 +251,23 @@ const EFFECT_DISPLAY_NAMES: Record<string, string> = {
   flanger: 'Flanger',
   phaser: 'Phaser',
   convolver: 'Convolver',
+  gate: 'Gate',
+  deesser: 'De-esser',
+  transientShaper: 'Transient',
+  limiter: 'Limiter',
+  saturation: 'Saturation',
+  stereoImager: 'Stereo Imager',
+  algorithmicReverb: 'Algo Reverb',
+  noiseReduction: 'Noise Reduce',
 };
 
-// ─── Categorized Effect Browser ──────────────────────────────────────────────
-
-/** Build a category entry deriving label from EFFECT_DISPLAY_NAMES to avoid duplication. */
-function categoryEntry(type: TrackEffectType) {
-  return { type, label: EFFECT_DISPLAY_NAMES[type] ?? type };
-}
-
-interface EffectCategory {
-  name: string;
-  effects: { type: TrackEffectType; label: string }[];
-}
-
-const EFFECT_CATEGORIES: EffectCategory[] = [
-  { name: 'EQ', effects: [categoryEntry('parametricEq'), categoryEntry('eq3')] },
-  { name: 'Dynamics', effects: [categoryEntry('compressor')] },
-  { name: 'Time', effects: [categoryEntry('reverb'), categoryEntry('delay'), categoryEntry('convolver')] },
-  { name: 'Modulation', effects: [categoryEntry('chorus'), categoryEntry('flanger'), categoryEntry('phaser')] },
-  { name: 'Distortion', effects: [categoryEntry('distortion')] },
-  { name: 'Filter', effects: [categoryEntry('filter')] },
-];
-
-// ─── Signal Flow Wire ────────────────────────────────────────────────────────
-
-function SignalWire({ bypassed }: { bypassed?: boolean }) {
-  return (
-    <div
-      className="flex items-center shrink-0 self-stretch"
-      data-testid="signal-wire"
-      aria-hidden="true"
-    >
-      <svg width="24" height="40" viewBox="0 0 24 40" className="shrink-0">
-        <line
-          x1="0" y1="20" x2="24" y2="20"
-          stroke={bypassed ? '#555' : '#4A5FFF'}
-          strokeWidth="2"
-          strokeDasharray={bypassed ? '3 2' : 'none'}
-        />
-        {/* Signal direction arrow */}
-        <polygon
-          points="18,16 24,20 18,24"
-          fill={bypassed ? '#555' : '#4A5FFF'}
-          opacity={bypassed ? 0.5 : 0.7}
-        />
-      </svg>
-    </div>
-  );
-}
-
-// ─── Signal Terminal (Input / Output) ────────────────────────────────────────
-
-function SignalTerminal({ label, side }: { label: string; side: 'input' | 'output' }) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center shrink-0 gap-1 px-2"
-      data-testid={`signal-terminal-${side}`}
-    >
-      <div className={`w-2.5 h-2.5 rounded-full border-2 ${
-        side === 'input' ? 'border-green-500 bg-green-500/20' : 'border-blue-500 bg-blue-500/20'
-      }`} />
-      <span className="text-[8px] uppercase tracking-widest text-white/30 font-semibold">{label}</span>
-    </div>
-  );
-}
-
-// ─── Drop Zone Indicator ─────────────────────────────────────────────────────
-
-function DropZoneIndicator({ active }: { active: boolean }) {
-  if (!active) return null;
-  return (
-    <div
-      className="flex items-stretch shrink-0 self-stretch"
-      data-testid="drop-zone-indicator"
-    >
-      <div className="w-0.5 bg-violet-500 rounded-full mx-1 shadow-[0_0_6px_rgba(139,92,246,0.5)]" />
-    </div>
-  );
-}
-
-// ─── Effect Device Panel ─────────────────────────────────────────────────────
+// ─── More menu icon ─────────────────────────────────────────────────────────
+const MoreVertical = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+);
 
 function EffectDevice({
-  effect, track, index, onDragStart, onDragOver, isDragOver,
+  effect, track, index, onDragStart, onDragOver, isDragOver, fullWidth = false,
 }: {
   effect: TrackEffect;
   track: Track;
@@ -266,12 +275,28 @@ function EffectDevice({
   onDragStart: (idx: number) => void;
   onDragOver: (idx: number) => void;
   isDragOver: boolean;
+  fullWidth?: boolean;
 }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
   const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
+  const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
+  const effects = track.effects ?? [];
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
   const applyPreset = (presetIdx: number) => {
     const preset = presets[presetIdx];
@@ -290,235 +315,207 @@ function EffectDevice({
   };
 
   return (
-    <>
-      {/* Drop zone before this device */}
-      <DropZoneIndicator active={isDragOver} />
-
-      <div
-        data-testid={`effect-device-${index}`}
-        data-effect-id={effect.id}
-        data-effect-type={effect.type}
-        className={`flex flex-col min-w-[180px] max-w-[210px] rounded-md shrink-0 transition-all overflow-hidden ${
-          !effect.enabled ? 'opacity-40 grayscale-[30%]' : ''
-        }`}
-        style={{ backgroundColor: '#1a1a2e' }}
-        onMouseOver={() => onDragOver(index)}
+    <div
+      className={`flex flex-col transition-all ${
+        fullWidth
+          ? 'w-full h-full'
+          : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
+      } ${!effect.enabled ? 'opacity-40' : ''}`}
+      style={fullWidth ? undefined : {
+        backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
+        border: `1px solid ${color}22`,
+      }}
+      onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
+    >
+      {/* ── Header bar (hidden in full-width mode — info is in tab strip) ── */}
+      {!fullWidth && <div
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-t-lg select-none"
+        style={{
+          background: `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
+          borderBottom: `1px solid ${color}25`,
+        }}
       >
-        {/* Colored accent strip -- Ableton-style top border */}
+        {/* Drag handle */}
         <div
-          className="h-[3px] w-full shrink-0"
-          style={{ backgroundColor: effect.enabled ? color : '#444' }}
+          className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
+          onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
+        >
+          <GripVertical className="h-3 w-3 text-white/50" />
+        </div>
+
+        {/* Color dot */}
+        <div
+          className="w-[7px] h-[7px] rounded-full shrink-0"
+          style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
         />
 
-        {/* Title bar */}
-        <div
-          className="flex items-center gap-1 px-2 py-1.5 cursor-pointer select-none border-b border-white/5"
-          style={{ backgroundColor: `${color}08` }}
+        {/* Effect name — click to toggle expand */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="text-[10px] font-semibold flex-1 truncate text-left transition-colors"
+          style={{ color: `${color}dd` }}
         >
-          {/* Drag handle */}
-          <div
-            className="cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80 shrink-0"
-            onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
-            title="Drag to reorder"
-          >
-            <GripVertical className="h-3.5 w-3.5 text-white/40" />
-          </div>
+          {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
+        </button>
 
-          {/* Collapse toggle */}
+        {/* Preset selector */}
+        <select
+          className="bg-transparent text-white/30 text-[8px] border-none outline-none cursor-pointer max-w-[50px] hover:text-white/50"
+          onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
+          value=""
+          onClick={(e) => e.stopPropagation()}
+        >
+          <option value="" className="bg-[#1a1a2e]">Presets</option>
+          {presets.map((preset, i) => (
+            <option key={i} value={i} className="bg-[#1a1a2e]">{preset.name}</option>
+          ))}
+        </select>
+
+        {/* Bypass toggle */}
+        <button
+          className={`h-4 w-4 flex items-center justify-center transition-colors ${effect.enabled ? 'text-green-400' : 'text-white/20 hover:text-white/40'}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
+          }}
+          title={effect.enabled ? 'Bypass' : 'Enable'}
+        >
+          <Power className="h-3 w-3" />
+        </button>
+
+        {/* More menu */}
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-white/40 hover:text-white/60 shrink-0"
-            aria-label={collapsed ? 'Expand device' : 'Collapse device'}
+            className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-white/50"
+            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
           >
-            {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            <MoreVertical className="h-3 w-3" />
           </button>
-
-          {/* Device name */}
-          <span className="text-[11px] font-semibold flex-1 truncate" style={{ color: effect.enabled ? color : '#888' }}>
-            {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
-          </span>
-
-          {/* Preset selector */}
-          <select
-            className="bg-transparent text-white/40 text-[9px] border-none outline-none cursor-pointer max-w-[60px] shrink-0"
-            onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
-            value=""
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`${EFFECT_DISPLAY_NAMES[effect.type]} presets`}
-          >
-            <option value="" className="bg-[#1a1a2e]">Presets</option>
-            {presets.map((preset, i) => (
-              <option key={i} value={i} className="bg-[#1a1a2e]">{preset.name}</option>
-            ))}
-          </select>
-
-          {/* Power / bypass toggle */}
-          <button
-            data-testid={`effect-bypass-${index}`}
-            className={`h-5 w-5 flex items-center justify-center rounded-sm transition-colors shrink-0 ${
-              effect.enabled
-                ? 'text-green-400 bg-green-400/10 hover:bg-green-400/20'
-                : 'text-white/20 bg-white/5 hover:bg-white/10'
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
-            }}
-            aria-label={effect.enabled ? `Bypass ${EFFECT_DISPLAY_NAMES[effect.type]}` : `Enable ${EFFECT_DISPLAY_NAMES[effect.type]}`}
-            title={effect.enabled ? 'Bypass' : 'Enable'}
-          >
-            <Power className="h-3 w-3" />
-          </button>
-
-          {/* Delete */}
-          <button
-            data-testid={`effect-remove-${index}`}
-            className="h-5 w-5 flex items-center justify-center rounded-sm text-white/20 hover:text-red-400 hover:bg-red-400/10 transition-colors shrink-0"
-            onClick={(e) => { e.stopPropagation(); removeTrackEffect(track.id, effect.id); }}
-            aria-label={`Remove ${EFFECT_DISPLAY_NAMES[effect.type]}`}
-            title="Remove device"
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+              <button
+                className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                onClick={() => { addTrackEffect(track.id, effect.type); setShowMenu(false); }}
+              >
+                Duplicate
+              </button>
+              {index > 0 && (
+                <button
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                  onClick={() => { reorderTrackEffect(track.id, index, index - 1); setShowMenu(false); }}
+                >
+                  Move Left
+                </button>
+              )}
+              {index < effects.length - 1 && (
+                <button
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                  onClick={() => { reorderTrackEffect(track.id, index, index + 1); setShowMenu(false); }}
+                >
+                  Move Right
+                </button>
+              )}
+              <div className="border-t border-white/5 my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
+                onClick={() => { removeTrackEffect(track.id, effect.id); setShowMenu(false); }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
         </div>
+      </div>}
 
-        {/* Device body -- parameter cards */}
-        {!collapsed && (
-          <div className="overflow-y-auto max-h-[220px]">
-            {effect.type === 'eq3' && <EQ3Card effect={effect} trackId={track.id} />}
-            {effect.type === 'parametricEq' && <ParametricEQCard effect={effect} trackId={track.id} />}
-            {effect.type === 'compressor' && <CompressorCard effect={effect} trackId={track.id} />}
-            {effect.type === 'reverb' && <ReverbCard effect={effect} trackId={track.id} />}
-            {effect.type === 'delay' && <DelayCard effect={effect} trackId={track.id} />}
-            {effect.type === 'distortion' && <DistortionCard effect={effect} trackId={track.id} />}
-            {effect.type === 'filter' && <FilterCard effect={effect} trackId={track.id} />}
-            {effect.type === 'chorus' && <ChorusCard effect={effect} trackId={track.id} />}
-            {effect.type === 'flanger' && <FlangerCard effect={effect} trackId={track.id} />}
-            {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
-            {effect.type === 'convolver' && <ConvolverCard effect={effect} trackId={track.id} />}
-          </div>
-        )}
-
-        {/* Chain position footer */}
-        <div className="flex items-center justify-between px-2 py-0.5 border-t border-white/5 bg-white/[0.02]">
-          <span className="text-[8px] text-white/20 font-mono tabular-nums">
-            {index + 1}
-          </span>
+      {/* ── Body ── */}
+      <div
+        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'}
+        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
+      >
+        <div className={fullWidth ? 'h-full' : 'overflow-y-auto max-h-[280px]'}>
+          <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
-// ─── Add Effect Button (Categorized + Searchable) ────────────────────────────
+/** Renders the correct card component for a given effect type */
+function EffectCardBody({ effect, trackId }: { effect: TrackEffect; trackId: string }) {
+  switch (effect.type) {
+    case 'eq3': return <EQ3Card effect={effect} trackId={trackId} />;
+    case 'parametricEq': return <ParametricEQCard effect={effect} trackId={trackId} />;
+    case 'compressor': return <CompressorCard effect={effect} trackId={trackId} />;
+    case 'reverb': return <ReverbCard effect={effect} trackId={trackId} />;
+    case 'delay': return <DelayCard effect={effect} trackId={trackId} />;
+    case 'distortion': return <DistortionCard effect={effect} trackId={trackId} />;
+    case 'filter': return <FilterCard effect={effect} trackId={trackId} />;
+    case 'chorus': return <ChorusCard effect={effect} trackId={trackId} />;
+    case 'flanger': return <FlangerCard effect={effect} trackId={trackId} />;
+    case 'phaser': return <PhaserCard effect={effect} trackId={trackId} />;
+    case 'convolver': return <ConvolverCard effect={effect} trackId={trackId} />;
+    case 'gate': return <GateCard effect={effect} trackId={trackId} />;
+    case 'deesser': return <DeEsserCard effect={effect} trackId={trackId} />;
+    case 'transientShaper': return <TransientShaperCard effect={effect} trackId={trackId} />;
+    case 'limiter': return <LimiterCard effect={effect} trackId={trackId} />;
+    case 'saturation': return <SaturationCard effect={effect} trackId={trackId} />;
+    case 'stereoImager': return <StereoImagerCard effect={effect} trackId={trackId} />;
+    case 'algorithmicReverb': return <AlgorithmicReverbCard effect={effect} trackId={trackId} />;
+    case 'noiseReduction': return <NoiseReductionCard effect={effect} trackId={trackId} />;
+    default: return null;
+  }
+}
+
+// ─── Add Effect Button ───────────────────────────────────────────────────────
 
 function AddEffectButton({ trackId }: { trackId: string }) {
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  // Focus search input when dropdown opens
-  useEffect(() => {
-    if (open && searchRef.current) {
-      searchRef.current.focus();
-    }
-  }, [open]);
-
-  const lowerSearch = search.toLowerCase();
-  const filteredCategories = EFFECT_CATEGORIES.map((cat) => ({
-    ...cat,
-    effects: cat.effects.filter((e) =>
-      e.label.toLowerCase().includes(lowerSearch) ||
-      cat.name.toLowerCase().includes(lowerSearch)
-    ),
-  })).filter((cat) => cat.effects.length > 0);
+  const effectTypes: { type: TrackEffectType; label: string; icon: string }[] = [
+    { type: 'parametricEq', label: 'Parametric EQ', icon: '🎚️' },
+    { type: 'eq3', label: 'EQ Three', icon: '📊' },
+    { type: 'compressor', label: 'Compressor', icon: '🔧' },
+    { type: 'reverb', label: 'Reverb', icon: '🌊' },
+    { type: 'delay', label: 'Delay', icon: '🔁' },
+    { type: 'distortion', label: 'Distortion', icon: '⚡' },
+    { type: 'filter', label: 'Filter', icon: '🎛' },
+    { type: 'chorus', label: 'Chorus', icon: '🎵' },
+    { type: 'flanger', label: 'Flanger', icon: '🌀' },
+    { type: 'phaser', label: 'Phaser', icon: '🔮' },
+    { type: 'convolver', label: 'Convolution Reverb', icon: '🏛️' },
+    { type: 'gate', label: 'Gate / Expander', icon: '🚪' },
+    { type: 'deesser', label: 'De-esser', icon: '🎤' },
+    { type: 'transientShaper', label: 'Transient Shaper', icon: '⚡' },
+    { type: 'limiter', label: 'Limiter', icon: '🧱' },
+    { type: 'saturation', label: 'Saturation', icon: '🔥' },
+    { type: 'stereoImager', label: 'Stereo Imager', icon: '🔊' },
+    { type: 'algorithmicReverb', label: 'Algorithmic Reverb', icon: '🏔️' },
+    { type: 'noiseReduction', label: 'Noise Reduction', icon: '🔇' },
+  ];
 
   return (
-    <div className="relative shrink-0 self-stretch flex items-center" ref={dropdownRef}>
+    <div className="relative shrink-0">
       <button
-        data-testid="add-effect-button"
-        className="flex flex-col items-center justify-center w-14 h-full min-h-[80px] border border-dashed border-white/10 rounded-md hover:border-violet-500/40 hover:bg-violet-500/5 transition-colors gap-1"
+        className="flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-white/10 rounded-md hover:border-white/20 hover:bg-white/5 transition-colors"
         onClick={() => setOpen(!open)}
-        aria-label="Add effect device"
-        title="Add effect device"
       >
-        <Plus className="h-5 w-5 text-white/30" />
-        <span className="text-[9px] text-white/25 font-medium">Add</span>
+        <Plus className="h-3 w-3 text-white/30" />
+        <span className="text-[9px] text-white/25">Add</span>
       </button>
 
       {open && (
-        <div
-          data-testid="add-effect-dropdown"
-          className="absolute left-0 top-full mt-1 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-2xl z-50 min-w-[200px]"
-        >
-          {/* Search input */}
-          <div className="px-2 pt-2 pb-1">
-            <input
-              ref={searchRef}
-              data-testid="effect-search-input"
-              type="text"
-              placeholder="Search effects..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-[11px] text-white/80 placeholder-white/25 outline-none focus:border-violet-500/50"
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  setOpen(false);
-                  setSearch('');
-                }
-              }}
-            />
-          </div>
-
-          {/* Categorized list */}
-          <div className="max-h-[300px] overflow-y-auto py-1">
-            {filteredCategories.map((cat) => (
-              <div key={cat.name}>
-                <div className="px-3 py-1 text-[9px] text-white/30 uppercase tracking-widest font-semibold border-t border-white/5 first:border-t-0">
-                  {cat.name}
-                </div>
-                {cat.effects.map(({ type, label }) => {
-                  const c = EFFECT_COLORS[type];
-                  return (
-                    <button
-                      key={type}
-                      data-testid={`add-effect-${type}`}
-                      className="w-full text-left px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 flex items-center gap-2 transition-colors"
-                      onClick={() => {
-                        addTrackEffect(trackId, type);
-                        setOpen(false);
-                        setSearch('');
-                      }}
-                    >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c }} />
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-
-            {filteredCategories.length === 0 && (
-              <div className="px-3 py-3 text-[11px] text-white/25 text-center">
-                No effects match "{search}"
-              </div>
-            )}
-          </div>
+        <div className="absolute left-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
+          {effectTypes.map(({ type, label, icon }) => (
+            <button
+              key={type}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 flex items-center gap-2"
+              onClick={() => { addTrackEffect(trackId, type); setOpen(false); }}
+            >
+              <span>{icon}</span>
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -530,7 +527,6 @@ function AddEffectButton({ trackId }: { trackId: string }) {
 export function EffectChain() {
   const project = useProjectStore((s) => s.project);
   const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
-  const toggleTrackEffectsBypass = useProjectStore((s) => s.toggleTrackEffectsBypass);
   const openTrackId = useUIStore((s) => s.openEffectChainTrackId);
   const effectChainHeight = useUIStore((s) => s.effectChainHeight);
   const setEffectChainHeight = useUIStore((s) => s.setEffectChainHeight);
@@ -549,6 +545,7 @@ export function EffectChain() {
   useEffect(() => {
     if (!track) return;
     effectsEngine.rebuildChain(track.id, track.effects ?? [], track.effectsBypassed ?? false);
+    // Wire rebuilt Tone.js chain into TrackNode audio graph
     const engine = getAudioEngine();
     const trackNode = engine.getOrCreateTrackNode(track.id);
     if (trackNode) {
@@ -589,137 +586,116 @@ export function EffectChain() {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  // ── Selected effect (local state — Ableton-style single-device view) ──
+  const [selectedEffectIdx, setSelectedEffectIdx] = useState(0);
+
+  // Auto-select last effect when a new one is added
+  const prevEffectsLenRef = useRef(0);
+  useEffect(() => {
+    const len = track?.effects?.length ?? 0;
+    if (len > prevEffectsLenRef.current && len > 0) {
+      setSelectedEffectIdx(len - 1);
+    }
+    prevEffectsLenRef.current = len;
+  }, [track?.effects?.length]);
+
   if (!track) return null;
 
   const effects = track.effects ?? [];
-  const isBypassed = track.effectsBypassed ?? false;
+  const clampedIdx = Math.min(selectedEffectIdx, effects.length - 1);
+  const selectedEffect = effects[clampedIdx] ?? null;
+  const selectedColor = selectedEffect ? EFFECT_COLORS[selectedEffect.type] : '#555';
 
   return (
     <div
-      data-testid="effect-chain-panel"
-      className="border-t border-[#1a1a1a] bg-[#0d0d1e] flex flex-col select-none shrink-0"
+      className="border-t border-[#1a1a1a] bg-[#0e0e24] flex flex-col select-none shrink-0"
       style={{ height: effectChainHeight }}
       onMouseDownCapture={() => setHistoryFocusScope('mixer')}
       onFocusCapture={() => setHistoryFocusScope('mixer')}
     >
-      {/* Resize handle */}
+      {/* ── Resize handle ── */}
       <div
         className="h-1.5 w-full cursor-ns-resize bg-[#333] hover:bg-violet-500 transition-colors flex-shrink-0"
         onMouseDown={handleResizeMouseDown}
-        title="Drag to resize"
-        data-testid="effect-chain-resize-handle"
       />
 
-      {/* Header bar */}
-      <div
-        className="flex items-center gap-2 px-3 py-1.5 bg-[#111128] border-b border-white/5 shrink-0"
-        data-testid="effect-chain-header"
-      >
-        {/* Track color dot */}
-        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: track.color }} />
-
-        {/* Track name */}
-        <span className="text-[11px] text-white/80 font-semibold">{track.displayName}</span>
-
-        {/* Separator */}
-        <div className="w-px h-3 bg-white/10" />
-
-        {/* Chain label */}
-        <span className="text-[10px] text-white/30">
-          Device Chain
-        </span>
-
-        {/* Effect count */}
-        <span className="text-[10px] text-white/20 font-mono tabular-nums">
-          ({effects.length})
-        </span>
-
-        {/* Global bypass badge */}
-        {isBypassed && (
-          <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-orange-300">
-            Bypassed
-          </span>
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Bypass all toggle */}
-        <button
-          data-testid="effect-chain-bypass-all"
-          onClick={() => toggleTrackEffectsBypass(track.id)}
-          className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${
-            isBypassed
-              ? 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
-              : 'bg-white/5 text-white/40 hover:bg-white/10'
-          }`}
-          title={isBypassed ? 'Enable all effects' : 'Bypass all effects'}
-        >
-          FX {isBypassed ? 'OFF' : 'ON'}
-        </button>
-
-        {/* Close button */}
-        <button
-          data-testid="effect-chain-close"
-          onClick={() => setOpenEffectChainTrackId(null)}
-          className="ml-1 flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-white/10 hover:text-zinc-200 transition-colors"
-          aria-label="Close effect chain"
-          title="Close"
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Device chain row with signal routing */}
-      <div
-        className={`flex-1 overflow-x-auto overflow-y-hidden flex items-center px-3 py-2 transition-opacity ${
-          isBypassed ? 'opacity-45' : 'opacity-100'
-        }`}
-        data-testid="effect-chain-devices"
-      >
-        {/* Input terminal */}
-        <SignalTerminal label="In" side="input" />
-
-        {/* Wire from input to first device (or output) */}
-        <SignalWire bypassed={isBypassed} />
-
-        {/* Devices with routing wires between them */}
-        {effects.map((effect, idx) => (
-          <div key={effect.id} className="contents">
+      {/* ── Full-width selected effect view ── */}
+      <div className={`flex-1 overflow-y-auto transition-opacity ${track.effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
+        {selectedEffect ? (
+          <div className="h-full">
+            {/* Device header — integrated into the full-width view */}
             <EffectDevice
-              effect={effect}
+              effect={selectedEffect}
               track={track}
-              index={idx}
-              onDragStart={handleDragStart}
-              onDragOver={(i) => { setDragOverIdx(i); dragOverIdxRef.current = i; }}
-              isDragOver={dragOverIdx === idx && dragIdx !== null && dragIdx !== idx}
+              index={clampedIdx}
+              onDragStart={() => {}}
+              onDragOver={() => {}}
+              isDragOver={false}
+              fullWidth
             />
-
-            {/* Wire after device */}
-            <SignalWire bypassed={isBypassed || !effect.enabled} />
           </div>
-        ))}
-
-        {/* Add effect button */}
-        <AddEffectButton trackId={track.id} />
-
-        {/* Wire to output */}
-        <SignalWire bypassed={isBypassed} />
-
-        {/* Output terminal */}
-        <SignalTerminal label="Out" side="output" />
+        ) : (
+          <div className="flex items-center justify-center h-full text-white/20 text-sm">
+            No effects — click + to add one
+          </div>
+        )}
       </div>
 
-      {/* Empty state */}
-      {effects.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ top: '80px' }}>
-          <span className="text-[11px] text-white/15">
-            No effects -- click + to add a device
+      {/* ── Bottom tab strip — Ableton-style device chain ── */}
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#0c0c1e]">
+        {/* Track info + controls */}
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-white/[0.04]">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.color }} />
+          <span className="text-[10px] text-white/50 font-medium">{track.displayName}</span>
+          <span className="text-[9px] text-white/20">
+            {effects.length} fx
           </span>
+          {track.effectsBypassed && (
+            <span className="rounded bg-orange-500/20 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-widest text-orange-200">
+              Bypassed
+            </span>
+          )}
+          <div className="flex-1" />
+          <button
+            onClick={() => setOpenEffectChainTrackId(null)}
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Close
+          </button>
         </div>
-      )}
+
+        {/* Effect tabs row */}
+        <div className="flex items-stretch gap-0 overflow-x-auto px-1 py-1">
+          {effects.map((effect, idx) => {
+            const c = EFFECT_COLORS[effect.type];
+            const isSelected = idx === clampedIdx;
+            return (
+              <button
+                key={effect.id}
+                onClick={() => setSelectedEffectIdx(idx)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${
+                  isSelected
+                    ? 'text-white/90'
+                    : 'text-white/35 hover:text-white/55 hover:bg-white/[0.03]'
+                } ${!effect.enabled ? 'opacity-40' : ''}`}
+                style={isSelected ? {
+                  backgroundColor: `${c}18`,
+                  boxShadow: `inset 0 -2px 0 ${c}80`,
+                } : undefined}
+              >
+                <div
+                  className="w-[5px] h-[5px] rounded-full shrink-0"
+                  style={{ backgroundColor: c, opacity: isSelected ? 1 : 0.4 }}
+                />
+                <span className="truncate max-w-[80px]">
+                  {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
+                </span>
+              </button>
+            );
+          })}
+          <AddEffectButton trackId={track.id} />
+        </div>
+      </div>
     </div>
   );
 }

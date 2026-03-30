@@ -1382,12 +1382,23 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
         params: { frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350, wet: 0.5 },
       };
     case 'convolver':
-      return {
-        id,
-        type,
-        enabled: true,
-        params: { irType: 'largeHall', wet: 0.35, preDelay: 0 },
-      };
+      return { id, type, enabled: true, params: { irType: 'largeHall', wet: 0.35, preDelay: 0 } };
+    case 'gate':
+      return { id, type, enabled: true, params: { threshold: -40, range: -80, attack: 0.001, hold: 0.01, release: 0.05, hysteresis: 4, mode: 'gate', sidechainHpf: 0, sidechainLpf: 0 } };
+    case 'deesser':
+      return { id, type, enabled: true, params: { frequency: 7000, bandwidth: 2, threshold: -20, mode: 'split', listen: false, range: 10 } };
+    case 'transientShaper':
+      return { id, type, enabled: true, params: { attack: 0, sustain: 0, mix: 1, output: 0 } };
+    case 'limiter':
+      return { id, type, enabled: true, params: { ceiling: -0.3, release: 0.1, lookahead: 0.005, gain: 0, style: 'transparent' } };
+    case 'saturation':
+      return { id, type, enabled: true, params: { drive: 0.3, saturationType: 'tape', harmonicMix: 0, inputGain: 0, outputGain: 0, mix: 0.5 } };
+    case 'stereoImager':
+      return { id, type, enabled: true, params: { width: 1, midGain: 0, sideGain: 0, monoFreq: 0, pan: 0 } };
+    case 'algorithmicReverb':
+      return { id, type, enabled: true, params: { reverbType: 'hall', decay: 2.5, preDelay: 20, damping: 0.4, size: 0.6, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 80, highCut: 12000, mix: 0.25 } };
+    case 'noiseReduction':
+      return { id, type, enabled: true, params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } };
   }
 }
 

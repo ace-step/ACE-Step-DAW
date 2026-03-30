@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EnhancePanel } from '../EnhancePanel';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -8,6 +8,7 @@ import { ENHANCE_PRESETS } from '../../../constants/enhancePresets';
 
 const mockGenerateCoverClip = vi.fn().mockResolvedValue(undefined);
 const mockGenerateRepaintClip = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('../../../services/generationPipeline', () => ({
   generateCoverClip: (...args: unknown[]) => mockGenerateCoverClip(...args),
   generateRepaintClip: (...args: unknown[]) => mockGenerateRepaintClip(...args),
@@ -851,5 +852,64 @@ describe('EnhancePanel generation calls', () => {
     });
     // The function was called and returned the clip ID — the component awaits it
     expect(await mockGenerateCoverClip.mock.results[0].value).toBe(expectedNewClipId);
+  });
+});
+
+describe('EnhancePanel result entry states', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGenerationStore.setState({ isGenerating: false });
+    mockGenerateCoverClip.mockReset().mockResolvedValue(undefined);
+  });
+
+  function renderCoverPanelAndClickGenerate() {
+    const { track, clip } = setupProjectWithClip();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+    });
+    const result = render(<EnhancePanel />);
+    // Click Generate — it creates a result entry with status 'generating'
+    fireEvent.click(screen.getByTestId('enhance-btn'));
+    return { result, track, clip };
+  }
+
+  it('shows a spinner when result status is generating', async () => {
+    // Make generateCoverClip hang so finalizeResult never runs
+    mockGenerateCoverClip.mockReturnValue(new Promise(() => {}));
+    renderCoverPanelAndClickGenerate();
+
+    await waitFor(() => {
+      const resultItem = screen.getByTestId('result-item-0');
+      // The spinner is a div with animate-spin class
+      const spinner = resultItem.querySelector('.animate-spin');
+      expect(spinner).not.toBeNull();
+    });
+    // Also verify the "Generating..." text
+    expect(screen.getByText('Generating...')).toBeInTheDocument();
+  });
+
+  it('shows an error icon and message when result status is error', async () => {
+    mockGenerateCoverClip.mockRejectedValue(new Error('Server timeout'));
+    renderCoverPanelAndClickGenerate();
+
+    await waitFor(() => {
+      expect(screen.getByText('Server timeout')).toBeInTheDocument();
+    });
+    // The error icon container should have red styling
+    const resultItem = screen.getByTestId('result-item-0');
+    const errorIcon = resultItem.querySelector('.bg-red-900\\/50');
+    expect(errorIcon).not.toBeNull();
+  });
+
+  it('displays the specific error message text from a failed generation', async () => {
+    mockGenerateCoverClip.mockRejectedValue(new Error('Model capacity exceeded'));
+    renderCoverPanelAndClickGenerate();
+
+    await waitFor(() => {
+      const errorText = screen.getByText('Model capacity exceeded');
+      expect(errorText).toBeInTheDocument();
+      expect(errorText.textContent).toBe('Model capacity exceeded');
+    });
   });
 });

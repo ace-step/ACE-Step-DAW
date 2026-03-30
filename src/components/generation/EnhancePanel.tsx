@@ -50,6 +50,8 @@ interface ResultEntry {
   durationSec: number;
   peaks: number[];
   timestamp: number;
+  status: 'generating' | 'ready' | 'error';
+  error?: string;
 }
 
 type ABSide = 'A' | 'B';
@@ -159,6 +161,9 @@ export function EnhancePanel() {
 
   // Quick Styles section
   const [quickStylesOpen, setQuickStylesOpen] = useState(false);
+
+  // Local guard against rapid Generate clicks (supplements store-level isGenerating)
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Playback
   const playback = useEnhancePlayback();
@@ -333,17 +338,27 @@ export function EnhancePanel() {
         }
       }
     }
-    if (!audioKey) return;
+    if (!audioKey) {
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error' as const, error: 'No audio key found for result' } : r,
+      ));
+      return;
+    }
 
     try {
       const buffer = await playback.loadBuffer(audioKey);
-      if (!buffer) return;
+      if (!buffer) {
+        setResults((prev) => prev.map((r) =>
+          r.id === resultId ? { ...r, status: 'error' as const, error: 'Failed to load audio buffer' } : r,
+        ));
+        return;
+      }
       const peaks = computeWaveformPeaks(buffer, 60);
       const dur = buffer.duration;
       const finalClipId = updatedClip?.id ?? originalClipId;
       setResults((prev) => prev.map((r) =>
         r.id === resultId
-          ? { ...r, clipId: finalClipId, audioKey, peaks, duration: formatDuration(dur), durationSec: dur }
+          ? { ...r, clipId: finalClipId, audioKey, peaks, duration: formatDuration(dur), durationSec: dur, status: 'ready' as const }
           : r,
       ));
       // Auto-select first result
@@ -352,14 +367,18 @@ export function EnhancePanel() {
         if (prev === 0) return Math.max(0, results.length); // point to new entry
         return prev;
       });
-    } catch {
-      // Audio decode failed — leave duration as --:--
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Audio decode failed';
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error' as const, error: message } : r,
+      ));
     }
   }, [playback, results.length, enhancerTarget]);
 
   // Cover generation
   const handleCoverGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
+    if (!enhancerTarget || isGenerating || isSubmitting) return;
+    setIsSubmitting(true);
     const coverStrength = CONSISTENCY_VALUES[consistency];
     const resultId = `result-${Date.now()}`;
     setResults((prev) => [...prev, {
@@ -371,22 +390,33 @@ export function EnhancePanel() {
       durationSec: 0,
       peaks: [],
       timestamp: Date.now(),
+      status: 'generating',
     }]);
-    const newClipId = await generateCoverClip({
-      clipId: enhancerTarget.clipId,
-      caption,
-      lyrics,
-      coverStrength,
-      createNew,
-      sourceAudioOverride: chainedSourceAudioKey || undefined,
-    });
-    // After generation, try to load the result audio to get peaks/duration
-    await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, chainedSourceAudioKey, finalizeResult]);
+    try {
+      const newClipId = await generateCoverClip({
+        clipId: enhancerTarget.clipId,
+        caption,
+        lyrics,
+        coverStrength,
+        createNew,
+        sourceAudioOverride: chainedSourceAudioKey || undefined,
+      });
+      // After generation, try to load the result audio to get peaks/duration
+      await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Enhancement failed';
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error' as const, error: message } : r,
+      ));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
 
   // Repaint generation
   const handleRepaintGenerate = useCallback(async () => {
-    if (!enhancerTarget || isGenerating) return;
+    if (!enhancerTarget || isGenerating || isSubmitting) return;
+    setIsSubmitting(true);
     const resultId = `result-${Date.now()}`;
     setResults((prev) => [...prev, {
       id: resultId,
@@ -397,19 +427,29 @@ export function EnhancePanel() {
       durationSec: 0,
       peaks: [],
       timestamp: Date.now(),
+      status: 'generating',
     }]);
-    const newClipId = await generateRepaintClip({
-      clipId: enhancerTarget.clipId,
-      repaintStart: selStart,
-      repaintEnd: selEnd,
-      prompt,
-      globalCaption: globalCaption || undefined,
-      repaintMode,
-      repaintStrength,
-      sourceAudioOverride: chainedSourceAudioKey || undefined,
-    });
-    await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, chainedSourceAudioKey, finalizeResult]);
+    try {
+      const newClipId = await generateRepaintClip({
+        clipId: enhancerTarget.clipId,
+        repaintStart: selStart,
+        repaintEnd: selEnd,
+        prompt,
+        globalCaption: globalCaption || undefined,
+        repaintMode,
+        repaintStrength,
+        sourceAudioOverride: chainedSourceAudioKey || undefined,
+      });
+      await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Repaint failed';
+      setResults((prev) => prev.map((r) =>
+        r.id === resultId ? { ...r, status: 'error' as const, error: message } : r,
+      ));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 
@@ -565,7 +605,7 @@ export function EnhancePanel() {
   const coverSupported = modelSupportsTaskType('cover');
   const repaintSupported = modelSupportsTaskType('repaint');
   const modeSupported = mode === 'cover' ? coverSupported : repaintSupported;
-  const canGenerate = hasAudio && modeSupported && !isGenerating && !!(clip && track);
+  const canGenerate = hasAudio && modeSupported && !isGenerating && !isSubmitting && !!(clip && track);
 
   const clipStart = clip?.startTime ?? 0;
   const clipEnd = (clip?.startTime ?? 0) + (clip?.duration ?? 0);
@@ -1062,7 +1102,7 @@ export function EnhancePanel() {
                 : 'bg-[#2a2a2e] text-zinc-500 cursor-not-allowed'
             }`}
           >
-            {isGenerating
+            {isGenerating || isSubmitting
               ? (mode === 'cover' ? 'Enhancing...' : 'Repainting...')
               : (mode === 'cover' ? 'Enhance' : 'Repaint Selection')
             }
@@ -1101,6 +1141,15 @@ export function EnhancePanel() {
                   }`}
                 >
                   <div className="flex items-center gap-2 px-2 py-2">
+                    {r.status === 'generating' ? (
+                      <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                        <div className="w-4 h-4 border-2 border-zinc-600 border-t-teal-400 rounded-full animate-spin" />
+                      </div>
+                    ) : r.status === 'error' ? (
+                      <div className="w-6 h-6 flex items-center justify-center rounded-full bg-red-900/50 text-red-400 flex-shrink-0">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
+                      </div>
+                    ) : (
                     <button
                       data-testid={`result-play-btn-${idx}`}
                       onClick={(e) => { e.stopPropagation(); handleResultPlay(r.id, r.audioKey); }}
@@ -1117,14 +1166,17 @@ export function EnhancePanel() {
                         <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                       )}
                     </button>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-zinc-300 truncate">
+                      <p className={`text-[11px] truncate ${r.status === 'error' ? 'text-red-400' : 'text-zinc-300'}`}>
                         {r.title}
                         {canAB && isSelected && (
                           <span className={`ml-1 ${abSide === 'B' ? 'text-violet-400 font-bold' : 'text-zinc-600'}`}>B</span>
                         )}
                       </p>
-                      <p className="text-[10px] text-zinc-600">{r.duration}</p>
+                      <p className="text-[10px] text-zinc-600">
+                        {r.status === 'generating' ? 'Generating...' : r.status === 'error' ? (r.error ?? 'Failed') : r.duration}
+                      </p>
                     </div>
                     {r.audioKey && (
                       <button

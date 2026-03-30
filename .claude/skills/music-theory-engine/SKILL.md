@@ -1,254 +1,124 @@
 ---
 name: music-theory-engine
-version: 2.0.0
+version: 3.1.0
 description: |
-  Process-oriented music theory skill for AI-assisted composition in ACE-Step-DAW.
-  Instead of dumping all theory upfront, this skill teaches Claude HOW to research,
-  analyze, and apply music theory for a specific composition task.
-  Invoke when composing, arranging, or analyzing music.
+  Process guide for researching and applying music theory in composition tasks.
+  Teaches the research flow and key analytical techniques.
+  Load when composing, arranging, or analyzing music.
 ---
 
-# Music Theory Engine — Process-Oriented
+# Music Theory Engine
 
-> This skill is a **process guide**, not a knowledge dump.
-> It teaches you how to research the right theory for each task,
-> not memorize everything upfront.
+> Research what you need for each task. Don't guess — search for genre conventions,
+> reference analyses, and specific theory you're unsure about.
 
----
-
-## Core Principle
-
-**Real composers don't memorize all theory — they research what they need for each piece.**
-
-Your workflow for any composition task:
+## The Composition Research Process
 
 ```
-1. RESEARCH   → What does this genre/style actually sound like?
-2. ANALYZE    → What patterns, chords, rhythms define it?
-3. EXTRACT    → What are the 2-3 key principles I need?
-4. COMPOSE    → Apply those principles to create something new
-5. EVALUATE   → Does it sound right? Does it match the reference?
+RESEARCH → ANALYZE → EXTRACT PRINCIPLES → COMPOSE → EVALUATE
 ```
 
----
+### Phase 1: RESEARCH
 
-## Phase 1: RESEARCH — Finding the Right Reference
+For any composition task, start by researching the target genre/style:
 
-### How to Research a Genre or Style
+- Search for the genre's **chord progressions**, **scales**, **rhythm patterns**, **song structures**
+- If the user named a reference song or artist, search for its specific analysis — this is the highest-value input
+- Search for Strudel or TidalCycles examples in that style
+- Read `src/constants/generationPresets.ts` for built-in genre defaults
+- Look for Hooktheory, Chordify, music theory blog analyses
 
-When asked to compose in a genre you need to understand better:
+### Phase 2: ANALYZE
 
-1. **Search for theory analysis** of that genre:
-   - Search the web: `"{genre}" chord progressions analysis`
-   - Search the web: `"{genre}" song structure common patterns`
-   - Search the web: `"{genre}" rhythm patterns drum programming`
-   - Search the web: `"{genre}" bass line techniques`
+From references found, apply these analytical techniques:
 
-2. **Find specific reference songs** the user mentions or that define the genre:
-   - Search the web: `"{song name}" chord progression key BPM`
-   - Search the web: `"{song name}" music analysis breakdown`
-   - Look for sites like Hooktheory, Chordify, Ultimate Guitar for real analyses
-
-3. **Find Strudel/TidalCycles examples** in that style:
-   - Search the web: `site:strudel.cc "{genre}" OR "{style}"`
-   - Search the web: `TidalCycles "{genre}" pattern example`
-   - Search the web: `strudel music pattern "{genre}"`
-
-4. **Read the DAW's existing presets** for genre hints:
-   - Read `src/constants/generationPresets.ts` for genre-specific defaults
-
-### What to Extract from Research
-
-For each genre/style, identify these 5 elements:
-- **Key/Scale**: What key and scale is most common? (e.g., minor pentatonic for blues)
-- **Chord Language**: What chord types and progressions define it? (e.g., 7th chords for jazz)
-- **Rhythmic Feel**: Straight 8ths? Swing? Syncopated? What's the drum backbone?
-- **Texture**: Sparse or dense? What instruments? What register?
-- **Form**: How long are sections? What's the energy curve?
-
----
-
-## Phase 2: ANALYZE — Extracting Patterns from References
-
-### Chord Progression Analysis Process
-
-When you find a reference song's chords:
+#### Chord Progression Analysis
 
 1. **Identify the key** — what note feels like "home"?
-2. **Convert to Roman numerals** — this reveals the pattern independent of key
-   - In C major: C=I, Dm=ii, Em=iii, F=IV, G=V, Am=vi, Bdim=vii°
-   - In C minor (natural): Cm=i, Ddim=ii°, Eb=III, Fm=iv, Gm=v, Ab=VI, Bb=VII
-   - **Important**: In practice, minor keys use V (major) from harmonic minor for dominant function. In C minor: G major (V), not Gm (v). The raised 7th (B natural) creates the leading tone → tonic resolution.
-3. **Identify the function** of each chord:
-   - **Tonic** (I/i, vi/VI, iii/III): stability, home
-   - **Subdominant** (IV/iv, ii/ii°): movement, departure
-   - **Dominant** (V, vii°): tension, wants to resolve to tonic
-4. **Note the voicing** — are chords simple triads or extended (7ths, 9ths)?
-5. **Note the rhythm** — how many beats per chord? Any syncopation?
+2. **Convert to Roman numerals** — reveals the pattern independent of key
+   - Major: I, ii, iii, IV, V, vi, vii°
+   - Minor (natural): i, ii°, III, iv, v, VI, VII
+   - In practice, minor keys often use major V (from harmonic minor) for strong dominant pull
+3. **Identify functional roles**:
+   - Tonic (I/i, vi/VI): home, stability
+   - Subdominant (IV/iv, ii): departure, movement
+   - Dominant (V, vii°): tension that resolves to tonic
+4. **Note the voicing complexity** — simple triads? 7ths? Extensions (9, 11, 13)?
 
-### Melody Analysis Process
+#### Melody Analysis
 
-When analyzing a reference melody:
+1. **What scale degrees are used?** — pentatonic (safe, catchy) vs full diatonic vs chromatic
+2. **What's the contour?** — arch (up then down), wave, ascending, descending
+3. **What's the motif?** — the 2-4 note idea that repeats and develops
+4. **Chord-tone alignment** — strong beats should land on chord tones; passing tones between
 
-1. **Identify scale degrees used** — mostly pentatonic? Full diatonic? Chromatic passing tones?
-2. **Map the contour** — does it arch up then down? Descend? Oscillate?
-3. **Identify the motif** — what's the smallest repeating melodic idea (2-4 notes)?
-4. **Note rhythmic patterns** — long notes on strong beats? Syncopation?
-5. **Check chord-tone alignment** — are chord tones on strong beats?
+#### Rhythm Analysis
 
-### Rhythm Analysis Process
+1. **Kick pattern** — defines the groove (four-on-floor, boom-bap, syncopated)
+2. **Snare/clap placement** — typically beats 2 & 4 (backbeat) but varies by genre
+3. **Hi-hat subdivision** — 8ths, 16ths, triplets? This defines the energy level
+4. **Swing vs straight** — critical distinction between genres
+5. **Ghost notes** — soft hits that add texture between main beats
 
-1. **Identify the pulse** — where do you tap your foot?
-2. **Map the kick pattern** — where are the bass drum hits?
-3. **Map the snare/clap** — typically beats 2 & 4 (backbeat) or elsewhere?
-4. **Map the hi-hat/ride** — what subdivision? (8ths, 16ths, triplets?)
-5. **Identify ghost notes** — soft hits between main beats
-6. **Note swing amount** — straight, light swing, hard swing?
+### Phase 3: EXTRACT PRINCIPLES
 
----
+Distill research into **2-4 composition principles** (default 3):
+- One for **harmonic character** (what chords, what voicing style)
+- One for **rhythmic character** (what drum pattern, what feel, what tempo)
+- One for **textural character** (what instruments, what density, what space)
 
-## Phase 3: EXTRACT — Distilling Principles
+More than 4 = overconstrained output. Fewer than 2 = too vague.
 
-### The "2-4 Principles" Rule
-
-For any composition task, distill your research into 2-4 key principles (default: 3).
-More than 4 leads to overconstrained, mechanical output. Fewer than 2 is too vague.
-Simple genres (punk, ambient) may need only 2. Complex genres (jazz, progressive) may need 4.
-
-**Example: Lo-Fi Hip-Hop**
-1. Jazz-influenced chords (7ths, 9ths) with Dorian color
-2. Laid-back drums (slightly behind the beat, ghost notes, 70-90 BPM)
-3. Sparse, pentatonic melody with lots of space and reverb/delay
-
-**Example: EDM Drop**
-1. Four-on-the-floor kick with off-beat hi-hats at 128 BPM
-2. Minor key, simple progression (often just 2 chords), heavy bass
-3. Energy contrast: stripped breakdown → full drop
-
-**Example: Jazz Ballad**
-1. Extended harmony (maj7, m9, 13) with smooth voice leading
-2. Rubato/free timing feel, brushes on drums, walking or pedal bass
-3. Melody uses chromatic approach tones, telling a story with dynamics
-
-### Output: Composition Brief
-
-After research and extraction, write a brief BEFORE composing:
+Write a **Composition Brief** before any code:
 
 ```
-Genre: Lo-Fi Hip-Hop
-Key: C Dorian (C D Eb F G A Bb)
-BPM: 82
-Feel: Laid-back, nostalgic, warm
-
-Principle 1: Chord voicings — Cm9, Fm9, Dm7b5, G7b9 (i-iv-iiø-V7 in C minor, jazz extensions)
-Principle 2: Rhythm — Boom-bap kick pattern, ghost snares, lazy hi-hats at 0.2-0.4 velocity
-Principle 3: Texture — Rhodes/piano chords, sparse pentatonic melody, sub bass, vinyl crackle feel
-
-Reference: Nujabes "Feather", J Dilla "Donuts"
+Genre: [genre]
+Key: [key + scale]
+BPM: [tempo]
+Feel: [mood/energy description]
+Principles:
+  1. [harmonic] — e.g., "jazz extensions (7th/9th chords), Dorian color, smooth voice leading"
+  2. [rhythmic] — e.g., "boom-bap pattern, lazy ghost snares, 80 BPM"
+  3. [textural] — e.g., "sparse pentatonic melody, Rhodes keys, sub bass, space and reverb"
+Reference: [songs/artists that informed the principles]
+Structure: [section layout with bar counts]
 ```
 
----
+### Phase 4: COMPOSE
 
-## Phase 4: COMPOSE — Applying Principles
+Build layer by layer, each informed by your principles:
+1. **Chord progression** — from analyzed harmonic patterns
+2. **Drum pattern** — from genre rhythm research
+3. **Bass line** — follows chord roots, uses genre-appropriate movement style
+4. **Melody** — uses the scale, favors chord tones on strong beats, develops a motif
+5. **Texture** — pads, effects, atmosphere from reference analysis
 
-### Construction Order
+**Voice leading between chords**: move each voice by the smallest interval. Keep common tones.
+Resolve the leading tone (7th scale degree) upward. Avoid all voices leaping in the same direction.
 
-Build from the ground up, each layer informed by research:
+**Melody construction**: start with a short motif (2-4 notes), then develop it — repeat, sequence (same rhythm at different pitch), invert, augment/diminish. Leave rests. Verse melody should be simpler/lower, chorus should be catchier/higher.
 
-1. **Harmonic foundation** — chord progression (from analyzed patterns)
-2. **Rhythmic foundation** — drum pattern (from genre research)
-3. **Bass** — follows chords, uses genre-appropriate movement
-4. **Melody/lead** — uses extracted scale, respects contour principles
-5. **Texture/atmosphere** — pads, effects, fills (from reference analysis)
+### Phase 5: EVALUATE
 
-### Key Constraints (Always Apply)
-
-These are universal — not genre-specific:
-
-- **All pitched parts must be in the same key** — verify scale compatibility
-- **Bass notes land on chord roots at strong beats** — minimum harmonic anchor
-- **Bass register**: octave 2-3 (MIDI 36-71). Octave 1 (MIDI 24-35) is too low for most speakers
-- **Velocity must vary** — no flat velocity; use 0.3-0.9 range with natural variation
-  - Drums: 0.3-0.9 (ghost notes low, accents high)
-  - Pads/chords: 0.3-0.5 (sit back in the mix)
-  - Melody: 0.5-0.8 (expressive, varied)
-- **Leave space** — rests are musical; don't fill every beat
-- **Sound sources**: every pitched `note()` needs `.s("instrument")`. For drums, use `s("bd sd hh").bank("KitName")`
-- **Time signature matters**: default is 4/4 (4 beats per cycle). For 3/4 waltz, use 3-beat patterns. For 6/8, subdivide accordingly
-
-### Strudel Syntax Essentials (Minimum Viable)
-
-Only the syntax you need to know to output patterns:
-
-```javascript
-note("c4 e4 g4")           // named notes (sharps: cs4, flats: eb4)
-s("bd sd hh").bank("RolandTR808")  // drum sounds
-stack(part1, part2, part3)  // layer simultaneously
-note("c4 [d4 e4] f4 g4")   // subdivide: d4+e4 share one beat
-note("c4@2 e4 g4")          // c4 held for 2 beats
-note("c4 ~ e4 ~")           // ~ = rest
-note("[c3,e3,g3]")          // comma = chord (simultaneous notes)
-.velocity("0.7 0.5 0.8")   // per-note dynamics
-.lpf(800).room(0.3)         // filter, reverb
-.fast(2) / .slow(2)         // speed transform
-```
-
-**Critical Strudel gotchas:**
-- `<a b c>` = **alternation** (one per cycle, rotating) — NOT a chord!
-- `[a,b,c]` = **chord** (simultaneous) — use commas
-- `[a b c]` = **subdivision** (squeeze into one beat) — no commas
-- Sharps: `cs4` `fs4` (NOT `c#4`) — Strudel uses `s` suffix
-- Flats: `eb4` `bb4` (NOT `e-flat4`) — Strudel uses `b` suffix
-
-For advanced Strudel syntax, **search the docs**:
-- Search the web: `strudel.cc documentation {specific feature}`
-
-### Key Transposition Process
-
-When transposing to a different key:
-
-1. Calculate the interval in semitones (e.g., C→Eb = +3)
-2. Shift every note name by that interval
-3. Be consistent with enharmonic spelling: in flat keys use flats (eb, bb), in sharp keys use sharps (cs, fs)
-4. Verify: after transposition, check all notes still belong to the target scale
-
----
-
-## Phase 5: EVALUATE — Quality Check
-
-After composing, verify against your 2-4 principles:
-
-1. **Does it match the genre feel?** — Compare against research/reference
-2. **Are the chords voiced correctly?** — Check intervals, no wrong notes
-3. **Does the rhythm groove?** — Imagine it playing; does the kick/snare pattern feel right?
-4. **Is it musical?** — Space, dynamics, contour — not just "correct notes"
-5. **Would the user recognize the genre?** — If asked for lo-fi, does it sound lo-fi?
-6. **Does the code run?** — If Strudel evaluation fails, read the error, fix syntax, re-evaluate
-
-If any check fails, go back to the relevant phase and refine.
-
----
+1. Does it match the genre feel from your research?
+2. Are all pitched parts in the same key?
+3. Do chords follow the progression you planned?
+4. Does the rhythm groove? Is the kick-snare relationship right?
+5. Is there dynamic variation (not flat velocity)?
+6. Is there space (rests, not every beat filled)?
+7. Does the code actually run? If evaluation fails, read the error and fix it.
 
 ## When You Don't Know Something
 
-**Don't guess — research.**
+Search the web for the specific thing you need:
+- Genre conventions: `"{genre}" chord progressions` / `"{genre}" drum patterns`
+- Reference songs: `"{song}" chords key BPM analysis`
+- Strudel syntax: search the Strudel docs at `strudel.cc`
+- Music theory: `"{concept}" music theory explanation`
 
-| Situation | Action |
-|-----------|--------|
-| Don't know the genre's typical chords | Search the web: `"{genre}" common chord progressions` |
-| Don't know the right scale | Search the web: `"{genre}" scales modes used` |
-| Don't know the drum pattern | Search the web: `"{genre}" drum pattern programming` |
-| Don't know the BPM range | Search the web: `"{genre}" typical BPM tempo` |
-| User references a specific song | Search the web: `"{song}" chords key BPM analysis` |
-| Don't know a Strudel feature | Search the web: `strudel.cc {feature name}` |
-| Not sure about a voicing | Reason from intervals: root + intervals in semitones |
-
-**The MIDI pitch table is the ONE thing worth memorizing:**
-Middle C = `c4` = MIDI 60. Each octave = 12 semitones. Sharps use `s` (not `#`): `cs4`, `fs4`.
-
----
+The one fact to keep in mind: Middle C = `c4` = MIDI 60. Strudel sharps use `s` suffix (`cs4`), flats use `b` suffix (`eb4`).
 
 ## Related Skills
 
-- **strudel-maestro** — How to write Strudel patterns (syntax, prototyping, refinement)
-- **compose** — Full song composition workflow that orchestrates this skill and strudel-maestro
+- **strudel-maestro** — How to research and write Strudel patterns
+- **compose** — Full composition workflow orchestrating both skills

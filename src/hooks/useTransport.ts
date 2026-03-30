@@ -646,6 +646,7 @@ export function useTransport() {
     stopAllStrudelTracks();
     engine.stop();
     synthEngine.releaseAll();
+    wavetableEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
@@ -663,6 +664,7 @@ export function useTransport() {
     stopStrudelEditorPlayback();
     engine.stop();
     synthEngine.releaseAll();
+    wavetableEngine.releaseAll();
     samplerEngine.stopAll();
     automationEngine.stop();
     stopAllStrudelTracks();
@@ -676,6 +678,7 @@ export function useTransport() {
     if (engine.playing) {
       engine.stop();
       synthEngine.releaseAll();
+      wavetableEngine.releaseAll();
       samplerEngine.stopAll();
       useTransportStore.getState().seek(time);
       play(time);

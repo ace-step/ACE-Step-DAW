@@ -82,7 +82,7 @@ describe('TrackNode send routing', () => {
 
   it('connectSend creates a gain node and connects to destination', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.5, 'post');
+    trackNode.connectSend('send-1', sendDest, 0.5, false);
 
     // Should have created a gain node for the send
     expect(ctx.createGain).toHaveBeenCalled();
@@ -90,30 +90,30 @@ describe('TrackNode send routing', () => {
 
   it('disconnectSend removes the send connection', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.7, 'post');
+    trackNode.connectSend('send-1', sendDest, 0.7, false);
     trackNode.disconnectSend('send-1');
 
     // After disconnect, reconnecting with same ID should work without error
-    trackNode.connectSend('send-1', sendDest, 0.3, 'pre');
+    trackNode.connectSend('send-1', sendDest, 0.3, true);
   });
 
   it('updateSendAmount changes the gain of an existing send', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.5, 'post');
-    trackNode.updateSendAmount('send-1', 0.8);
+    trackNode.connectSend('send-1', sendDest, 0.5, false);
+    trackNode.updateSendAmount('send-1', 0.8, false);
     // No throw = success; gain value update happens internally
   });
 
-  it('updateSendPrePost switches send tap point', () => {
+  it('updateSendAmount switches send to pre-fader', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.5, 'post');
-    trackNode.updateSendPrePost('send-1', 'pre');
-    // No throw = success; reconnection happens internally
+    trackNode.connectSend('send-1', sendDest, 0.5, false);
+    trackNode.updateSendAmount('send-1', 0.5, true);
+    // No throw = success; pre/post gain swap happens internally
   });
 
   it('pre-fader send taps before volumeGain', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.5, 'pre');
+    trackNode.connectSend('send-1', sendDest, 0.5, true);
 
     // The pre-fader tap point should be the sumGain (before volumeGain)
     // Verify by checking that sumGain.connect was called (for the send gain node)
@@ -122,8 +122,8 @@ describe('TrackNode send routing', () => {
 
   it('disconnect cleans up all sends', () => {
     const sendDest = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
-    trackNode.connectSend('send-1', sendDest, 0.5, 'post');
-    trackNode.connectSend('send-2', sendDest, 0.3, 'pre');
+    trackNode.connectSend('send-1', sendDest, 0.5, false);
+    trackNode.connectSend('send-2', sendDest, 0.3, true);
 
     // Full disconnect should not throw
     trackNode.disconnect();

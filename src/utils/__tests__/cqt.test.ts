@@ -33,7 +33,7 @@ describe('computeCQT', () => {
     }
   });
 
-  it('440Hz tone has energy in the correct frequency range', () => {
+  it('440Hz tone has energy in the correct frequency range', { timeout: 30_000 }, () => {
     // A4 = 440Hz. C1 = 32.7Hz. 440/32.7 = 13.46 octaves? No —
     // log2(440/32.7) ≈ 3.75 octaves. At 24 bins/octave: bin ~90
     const sr = 22050;

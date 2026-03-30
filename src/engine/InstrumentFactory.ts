@@ -131,6 +131,9 @@ export function getEngineForInstrument(instrument: TrackInstrument): InstrumentE
       return samplerAdapter;
     case 'fm':
       return fmAdapter;
+    case 'wavetable':
+      // Wavetable falls back to subtractive adapter for now
+      return subtractiveAdapter;
   }
 }
 

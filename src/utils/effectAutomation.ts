@@ -21,11 +21,15 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     highFrequency: { label: 'High Frequency', min: 1000, max: 8000, color: '#22c55e' },
   },
   compressor: {
-    threshold: { label: 'Threshold', min: -60, max: 0, color: '#f59e0b' },
-    ratio: { label: 'Ratio', min: 1, max: 20, color: '#f59e0b' },
-    attack: { label: 'Attack', min: 0.001, max: 0.1, color: '#f59e0b' },
-    release: { label: 'Release', min: 0.01, max: 1, color: '#f59e0b' },
-    knee: { label: 'Knee', min: 0, max: 40, color: '#f59e0b' },
+    threshold: { label: 'Threshold', min: -60, max: 0, color: '#c4993b' },
+    ratio: { label: 'Ratio', min: 1, max: 20, color: '#c4993b' },
+    attack: { label: 'Attack', min: 0.001, max: 0.1, color: '#c4993b' },
+    release: { label: 'Release', min: 0.01, max: 1, color: '#c4993b' },
+    knee: { label: 'Knee', min: 0, max: 40, color: '#c4993b' },
+    lookahead: { label: 'Lookahead', min: 0, max: 0.005, color: '#c4993b' },
+    sidechainHpf: { label: 'SC HPF', min: 0, max: 500, color: '#c4993b' },
+    sidechainLpf: { label: 'SC LPF', min: 0, max: 20000, color: '#c4993b' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#c4993b' },
   },
   reverb: {
     decay: { label: 'Decay', min: 0.1, max: 10, color: '#8b5cf6' },
@@ -70,8 +74,30 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#fb923c' },
   },
   convolver: {
-    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#c084fc' },
-    preDelay: { label: 'Pre-Delay', min: 0, max: 100, color: '#c084fc' },
+    wet: { label: 'Dry/Wet', min: 0, max: 1, color: '#a07cc8' },
+    preDelay: { label: 'Pre-Delay', min: 0, max: 100, color: '#a07cc8' },
+  },
+  gate: {
+    threshold: { label: 'Threshold', min: -80, max: 0, color: '#b8903a' },
+    range: { label: 'Range', min: -80, max: 0, color: '#b8903a' },
+    attack: { label: 'Attack', min: 0.0001, max: 0.05, color: '#b8903a' },
+    hold: { label: 'Hold', min: 0, max: 0.5, color: '#b8903a' },
+    release: { label: 'Release', min: 0.005, max: 4, color: '#b8903a' },
+    hysteresis: { label: 'Hysteresis', min: 0, max: 12, color: '#b8903a' },
+    sidechainHpf: { label: 'SC HPF', min: 0, max: 500, color: '#b8903a' },
+    sidechainLpf: { label: 'SC LPF', min: 0, max: 20000, color: '#b8903a' },
+  },
+  deesser: {
+    frequency: { label: 'Frequency', min: 2000, max: 16000, color: '#c4a654' },
+    bandwidth: { label: 'Bandwidth', min: 0.5, max: 8, color: '#c4a654' },
+    threshold: { label: 'Threshold', min: -60, max: 0, color: '#c4a654' },
+    range: { label: 'Range', min: 0, max: 20, color: '#c4a654' },
+  },
+  transientShaper: {
+    attack: { label: 'Attack', min: -100, max: 100, color: '#b89340' },
+    sustain: { label: 'Sustain', min: -100, max: 100, color: '#b89340' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#b89340' },
+    output: { label: 'Output', min: -12, max: 12, color: '#b89340' },
   },
 };
 
@@ -123,6 +149,18 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
     }
     case 'parametricEq':
       return null;
+    case 'gate': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'deesser': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'transientShaper': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
   }
 }
 

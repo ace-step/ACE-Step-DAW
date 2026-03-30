@@ -287,6 +287,278 @@ function createNode(effect: TrackEffect): EffectNode {
         },
       };
     }
+    case 'gate': {
+      // Gate/expander: use a GainNode controlled by an envelope follower
+      // The actual gating is applied via requestAnimationFrame, similar to sidechain
+      const p = effect.params as import('../types/project').GateParams;
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+      const gateGain = new Tone.Gain(1);
+      const analyser = Tone.getContext().createAnalyser();
+      analyser.fftSize = 256;
+
+      input.connect(gateGain);
+      gateGain.connect(output);
+      // Tap the input for level detection
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(analyser);
+
+      // Gate state
+      const gateState = {
+        currentGain: 1,
+        isOpen: true,
+        holdCounter: 0,
+        rafId: 0,
+        params: { ...p },
+      };
+
+      const analyserBuffer = new Float32Array(analyser.fftSize);
+
+      const tick = () => {
+        analyser.getFloatTimeDomainData(analyserBuffer);
+        // Compute RMS
+        let sumSq = 0;
+        for (let i = 0; i < analyserBuffer.length; i++) sumSq += analyserBuffer[i] * analyserBuffer[i];
+        const rms = Math.sqrt(sumSq / analyserBuffer.length);
+        const inputDb = rms > 0 ? 20 * Math.log10(rms) : -120;
+
+        const sp = gateState.params;
+        const openThreshold = sp.threshold;
+        const closeThreshold = sp.threshold - sp.hysteresis;
+        const dt = 1 / 60;
+
+        if (inputDb >= openThreshold) {
+          gateState.isOpen = true;
+          gateState.holdCounter = sp.hold;
+        } else if (inputDb < closeThreshold) {
+          if (gateState.holdCounter > 0) {
+            gateState.holdCounter = Math.max(0, gateState.holdCounter - dt);
+          } else {
+            gateState.isOpen = false;
+          }
+        }
+
+        let targetGain: number;
+        if (gateState.isOpen) {
+          targetGain = 1;
+        } else if (sp.mode === 'gate') {
+          // Hard gate: range determines floor
+          targetGain = Math.pow(10, sp.range / 20);
+        } else {
+          // Expander: ratio-based below threshold
+          const belowDb = openThreshold - inputDb;
+          const reductionDb = Math.min(belowDb * 0.5, Math.abs(sp.range));
+          targetGain = Math.pow(10, -reductionDb / 20);
+        }
+
+        // Smooth gain with attack/release
+        const coeff = targetGain > gateState.currentGain
+          ? 1 - Math.exp(-dt / Math.max(0.0001, sp.attack))
+          : 1 - Math.exp(-dt / Math.max(0.005, sp.release));
+        gateState.currentGain += (targetGain - gateState.currentGain) * coeff;
+
+        const nativeGateGain = unwrapToNative(gateGain, 'input') as GainNode;
+        nativeGateGain.gain.value = gateState.currentGain;
+
+        gateState.rafId = requestAnimationFrame(tick);
+      };
+      gateState.rafId = requestAnimationFrame(tick);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          cancelAnimationFrame(gateState.rafId);
+          input.dispose();
+          output.dispose();
+          gateGain.dispose();
+          analyser.disconnect();
+        },
+        // Store state for parameter updates
+        _gateState: gateState,
+      } as EffectNode;
+    }
+    case 'deesser': {
+      // De-esser: bandpass detection → level → gain reduction on main signal or band
+      const p = effect.params as import('../types/project').DeEsserParams;
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+      const deessGain = new Tone.Gain(1);
+
+      // Detection band
+      const ctx = Tone.getContext().rawContext;
+      const detectionFilter = ctx.createBiquadFilter();
+      detectionFilter.type = 'bandpass';
+      detectionFilter.frequency.value = p.frequency;
+      detectionFilter.Q.value = p.bandwidth;
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      const analyserBuffer = new Float32Array(analyser.fftSize);
+
+      // Connect: input → deessGain → output (main path)
+      //          input → detectionFilter → analyser (detection path)
+      input.connect(deessGain);
+      deessGain.connect(output);
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(detectionFilter);
+      detectionFilter.connect(analyser);
+
+      const deesserState = {
+        currentGain: 1,
+        rafId: 0,
+        params: { ...p },
+      };
+
+      const tick = () => {
+        analyser.getFloatTimeDomainData(analyserBuffer);
+        let sumSq = 0;
+        for (let i = 0; i < analyserBuffer.length; i++) sumSq += analyserBuffer[i] * analyserBuffer[i];
+        const rms = Math.sqrt(sumSq / analyserBuffer.length);
+        const detectionDb = rms > 0 ? 20 * Math.log10(rms) : -120;
+
+        const sp = deesserState.params;
+        let targetGain = 1;
+        if (detectionDb > sp.threshold) {
+          const excessDb = detectionDb - sp.threshold;
+          const reductionDb = Math.min(excessDb, sp.range);
+          targetGain = Math.pow(10, -reductionDb / 20);
+        }
+
+        // Smooth
+        const dt = 1 / 60;
+        const coeff = targetGain < deesserState.currentGain
+          ? 1 - Math.exp(-dt / 0.002) // fast attack
+          : 1 - Math.exp(-dt / 0.05); // slow release
+        deesserState.currentGain += (targetGain - deesserState.currentGain) * coeff;
+
+        const nativeGain = unwrapToNative(deessGain, 'input') as GainNode;
+        nativeGain.gain.value = deesserState.currentGain;
+
+        deesserState.rafId = requestAnimationFrame(tick);
+      };
+      deesserState.rafId = requestAnimationFrame(tick);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          cancelAnimationFrame(deesserState.rafId);
+          input.dispose();
+          output.dispose();
+          deessGain.dispose();
+          detectionFilter.disconnect();
+          analyser.disconnect();
+        },
+        _deesserState: deesserState,
+        _deesserFilter: detectionFilter,
+      } as EffectNode;
+    }
+    case 'transientShaper': {
+      // Transient shaper: dual envelope follower
+      const p = effect.params as import('../types/project').TransientShaperParams;
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+      const dryGain = new Tone.Gain(1);
+      const wetGain = new Tone.Gain(p.mix);
+      const shaperGain = new Tone.Gain(1);
+      const outputGain = new Tone.Gain(Math.pow(10, p.output / 20));
+
+      const analyser = Tone.getContext().createAnalyser();
+      analyser.fftSize = 256;
+      const analyserBuffer = new Float32Array(analyser.fftSize);
+
+      // Dry path
+      input.connect(dryGain);
+      dryGain.gain.value = 1 - p.mix;
+
+      // Wet path: input → shaperGain → wetGain → output
+      input.connect(shaperGain);
+      shaperGain.connect(wetGain);
+
+      dryGain.connect(outputGain);
+      wetGain.connect(outputGain);
+      outputGain.connect(output);
+
+      // Tap input for envelope detection
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(analyser);
+
+      const transientState = {
+        fastEnv: 0,
+        slowEnv: 0,
+        rafId: 0,
+        params: { ...p },
+      };
+
+      const tick = () => {
+        analyser.getFloatTimeDomainData(analyserBuffer);
+        let peak = 0;
+        for (let i = 0; i < analyserBuffer.length; i++) {
+          const abs = Math.abs(analyserBuffer[i]);
+          if (abs > peak) peak = abs;
+        }
+
+        const dt = 1 / 60;
+        const sp = transientState.params;
+
+        // Fast envelope: 0.3ms attack, 5ms release
+        const fastAttack = 1 - Math.exp(-dt / 0.0003);
+        const fastRelease = 1 - Math.exp(-dt / 0.005);
+        const fastCoeff = peak > transientState.fastEnv ? fastAttack : fastRelease;
+        transientState.fastEnv += (peak - transientState.fastEnv) * fastCoeff;
+
+        // Slow envelope: 20ms attack, 200ms release
+        const slowAttack = 1 - Math.exp(-dt / 0.02);
+        const slowRelease = 1 - Math.exp(-dt / 0.2);
+        const slowCoeff = peak > transientState.slowEnv ? slowAttack : slowRelease;
+        transientState.slowEnv += (peak - transientState.slowEnv) * slowCoeff;
+
+        // Transient = fast - slow (clamped to 0)
+        const transient = Math.max(0, transientState.fastEnv - transientState.slowEnv);
+        const body = transientState.slowEnv;
+
+        // Apply shaping
+        const attackMul = sp.attack / 100; // -1 to +1
+        const sustainMul = sp.sustain / 100; // -1 to +1
+        const gain = 1 + attackMul * transient * 4 + sustainMul * body * 2;
+        const clampedGain = Math.max(0.01, Math.min(4, gain));
+
+        const nativeGain = unwrapToNative(shaperGain, 'input') as GainNode;
+        nativeGain.gain.value = clampedGain;
+
+        transientState.rafId = requestAnimationFrame(tick);
+      };
+      transientState.rafId = requestAnimationFrame(tick);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          cancelAnimationFrame(transientState.rafId);
+          input.dispose();
+          output.dispose();
+          dryGain.dispose();
+          wetGain.dispose();
+          shaperGain.dispose();
+          outputGain.dispose();
+          analyser.disconnect();
+        },
+        _transientState: transientState,
+        _transientDryGain: dryGain,
+        _transientWetGain: wetGain,
+        _transientOutputGain: outputGain,
+      } as EffectNode;
+    }
   }
 }
 
@@ -443,6 +715,35 @@ class EffectsEngine {
         rt.dryGain.gain.value = 1 - p.wet;
         break;
       }
+      case 'gate': {
+        const p = params as import('../types/project').GateParams;
+        const state = (effectNode as Record<string, unknown>)._gateState as { params: import('../types/project').GateParams } | undefined;
+        if (state) Object.assign(state.params, p);
+        break;
+      }
+      case 'deesser': {
+        const p = params as import('../types/project').DeEsserParams;
+        const state = (effectNode as Record<string, unknown>)._deesserState as { params: import('../types/project').DeEsserParams } | undefined;
+        if (state) Object.assign(state.params, p);
+        const filter = (effectNode as Record<string, unknown>)._deesserFilter as BiquadFilterNode | undefined;
+        if (filter) {
+          filter.frequency.value = p.frequency;
+          filter.Q.value = p.bandwidth;
+        }
+        break;
+      }
+      case 'transientShaper': {
+        const p = params as import('../types/project').TransientShaperParams;
+        const state = (effectNode as Record<string, unknown>)._transientState as { params: import('../types/project').TransientShaperParams } | undefined;
+        if (state) Object.assign(state.params, p);
+        const dryGain = (effectNode as Record<string, unknown>)._transientDryGain as Tone.Gain | undefined;
+        const wetGain = (effectNode as Record<string, unknown>)._transientWetGain as Tone.Gain | undefined;
+        const outputGain = (effectNode as Record<string, unknown>)._transientOutputGain as Tone.Gain | undefined;
+        if (dryGain) dryGain.gain.value = 1 - p.mix;
+        if (wetGain) wetGain.gain.value = p.mix;
+        if (outputGain) outputGain.gain.value = Math.pow(10, p.output / 20);
+        break;
+      }
     }
   }
 
@@ -566,6 +867,36 @@ class EffectsEngine {
         if (target.param === 'wet') {
           rt.wetGain.gain.value = value;
           rt.dryGain.gain.value = 1 - value;
+        }
+        break;
+      }
+      case 'gate': {
+        const state = (effectNode as Record<string, unknown>)._gateState as { params: Record<string, number | string> } | undefined;
+        if (state) (state.params as Record<string, number>)[target.param] = value;
+        break;
+      }
+      case 'deesser': {
+        const state = (effectNode as Record<string, unknown>)._deesserState as { params: Record<string, number | string | boolean> } | undefined;
+        if (state) (state.params as Record<string, number>)[target.param] = value;
+        const filter = (effectNode as Record<string, unknown>)._deesserFilter as BiquadFilterNode | undefined;
+        if (filter) {
+          if (target.param === 'frequency') filter.frequency.value = value;
+          if (target.param === 'bandwidth') filter.Q.value = value;
+        }
+        break;
+      }
+      case 'transientShaper': {
+        const state = (effectNode as Record<string, unknown>)._transientState as { params: Record<string, number> } | undefined;
+        if (state) state.params[target.param] = value;
+        if (target.param === 'mix') {
+          const dryGain = (effectNode as Record<string, unknown>)._transientDryGain as Tone.Gain | undefined;
+          const wetGain = (effectNode as Record<string, unknown>)._transientWetGain as Tone.Gain | undefined;
+          if (dryGain) dryGain.gain.value = 1 - value;
+          if (wetGain) wetGain.gain.value = value;
+        }
+        if (target.param === 'output') {
+          const outputGain = (effectNode as Record<string, unknown>)._transientOutputGain as Tone.Gain | undefined;
+          if (outputGain) outputGain.gain.value = Math.pow(10, value / 20);
         }
         break;
       }

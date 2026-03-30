@@ -29,6 +29,9 @@ import type {
   PhaserParams,
   ConvolverParams,
   FactoryIRType,
+  GateParams,
+  DeEsserParams,
+  TransientShaperParams,
 } from '../../types/project';
 import {
   PARAMETRIC_EQ_MAX_FREQUENCY,
@@ -1066,6 +1069,148 @@ export function ConvolverCard({ effect, trackId }: { effect: TrackEffect & { typ
 
 // ─── Effect Device Card ──────────────────────────────────────────────────────
 
+// ─── Gate Card ──────────────────────────────────────────────────────────────
+
+export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'gate' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<GateParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'gate');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#b8903a"
+      mode={
+        <>
+          {(['gate', 'expander'] as GateParams['mode'][]).map((m) => (
+            <button
+              key={m}
+              className={`px-2 py-0.5 text-[8px] rounded capitalize ${
+                p.mode === m ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+              }`}
+              onClick={() => update({ mode: m })}
+            >
+              {m}
+            </button>
+          ))}
+        </>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('gate', 'threshold', p.threshold) ?? 0.5}>
+        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-80} max={0} defaultValue={-40} label="Thresh" unit=" dB" size={32} step={0.5} color="#b8903a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'range' }} normalizedValue={normalizeEffectParamValue('gate', 'range', p.range) ?? 0.5}>
+        <Knob value={p.range} onChange={(v) => update({ range: v })} min={-80} max={0} defaultValue={-80} label="Range" unit=" dB" size={32} step={1} color="#b8903a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'attack' }} normalizedValue={normalizeEffectParamValue('gate', 'attack', p.attack) ?? 0.5}>
+        <Knob value={p.attack * 1000} onChange={(v) => update({ attack: v / 1000 })} min={0.1} max={50} defaultValue={1} label="Attack" unit=" ms" size={28} step={0.1} color="#b8903a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'hold' }} normalizedValue={normalizeEffectParamValue('gate', 'hold', p.hold) ?? 0.5}>
+        <Knob value={p.hold * 1000} onChange={(v) => update({ hold: v / 1000 })} min={0} max={500} defaultValue={10} label="Hold" unit=" ms" size={28} step={1} color="#b8903a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'release' }} normalizedValue={normalizeEffectParamValue('gate', 'release', p.release) ?? 0.5}>
+        <Knob value={p.release * 1000} onChange={(v) => update({ release: v / 1000 })} min={5} max={4000} defaultValue={50} label="Release" unit=" ms" size={28} step={1} color="#b8903a" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'hysteresis' }} normalizedValue={normalizeEffectParamValue('gate', 'hysteresis', p.hysteresis) ?? 0.5}>
+        <Knob value={p.hysteresis} onChange={(v) => update({ hysteresis: v })} min={0} max={12} defaultValue={4} label="Hyst" unit=" dB" size={28} step={0.5} color="#b8903a" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
+// ─── De-esser Card ──────────────────────────────────────────────────────────
+
+export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type: 'deesser' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<DeEsserParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'deesser');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#c4a654"
+      mode={
+        <>
+          {(['wideband', 'split'] as DeEsserParams['mode'][]).map((m) => (
+            <button
+              key={m}
+              className={`px-2 py-0.5 text-[8px] rounded capitalize ${
+                p.mode === m ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+              }`}
+              onClick={() => update({ mode: m })}
+            >
+              {m}
+            </button>
+          ))}
+          <button
+            className={`px-2 py-0.5 text-[8px] rounded ${
+              p.listen ? 'bg-green-500/30 text-green-300' : 'text-white/30 hover:bg-white/5'
+            }`}
+            onClick={() => update({ listen: !p.listen })}
+          >
+            Listen
+          </button>
+        </>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'deesser', param: 'frequency' }} normalizedValue={normalizeEffectParamValue('deesser', 'frequency', p.frequency) ?? 0.5}>
+        <Knob value={p.frequency} onChange={(v) => update({ frequency: v })} min={2000} max={16000} defaultValue={7000} label="Freq" unit=" Hz" size={32} step={100} color="#c4a654" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'deesser', param: 'bandwidth' }} normalizedValue={normalizeEffectParamValue('deesser', 'bandwidth', p.bandwidth) ?? 0.5}>
+        <Knob value={p.bandwidth} onChange={(v) => update({ bandwidth: v })} min={0.5} max={8} defaultValue={2} label="Width" size={32} step={0.1} color="#c4a654" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'deesser', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('deesser', 'threshold', p.threshold) ?? 0.5}>
+        <Knob value={p.threshold} onChange={(v) => update({ threshold: v })} min={-60} max={0} defaultValue={-20} label="Thresh" unit=" dB" size={32} step={0.5} color="#c4a654" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'deesser', param: 'range' }} normalizedValue={normalizeEffectParamValue('deesser', 'range', p.range) ?? 0.5}>
+        <Knob value={p.range} onChange={(v) => update({ range: v })} min={0} max={20} defaultValue={10} label="Range" unit=" dB" size={28} step={0.5} color="#c4a654" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
+// ─── Transient Shaper Card ──────────────────────────────────────────────────
+
+export function TransientShaperCard({ effect, trackId }: { effect: TrackEffect & { type: 'transientShaper' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<TransientShaperParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'transientShaper');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#b89340"
+      footer={
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'mix' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'mix', p.mix) ?? 1}>
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#b89340" />
+        </AutomationControlShell>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'attack' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'attack', p.attack) ?? 0.5}>
+        <Knob value={p.attack} onChange={(v) => update({ attack: v })} min={-100} max={100} defaultValue={0} label="Attack" unit="%" size={36} step={1} color="#b89340" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'sustain' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'sustain', p.sustain) ?? 0.5}>
+        <Knob value={p.sustain} onChange={(v) => update({ sustain: v })} min={-100} max={100} defaultValue={0} label="Sustain" unit="%" size={36} step={1} color="#b89340" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'output' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'output', p.output) ?? 0.5}>
+        <Knob value={p.output} onChange={(v) => update({ output: v })} min={-12} max={12} defaultValue={0} label="Output" unit=" dB" size={28} step={0.5} color="#b89340" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
 /**
  * Effect colors — desaturated, category-grouped.
  * CSS custom properties are defined in src/styles/effect-colors.css.
@@ -1083,6 +1228,9 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   flanger: '#4dab94',
   phaser: '#c48a54',
   convolver: '#a07cc8',
+  gate: '#b8903a',
+  deesser: '#c4a654',
+  transientShaper: '#b89340',
 };
 
 /** Resolve a CSS custom property to its computed hex value (for canvas drawing contexts). */
@@ -1100,6 +1248,9 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     flanger: '--fx-flanger',
     phaser: '--fx-phaser',
     convolver: '--fx-convolver',
+    gate: '--fx-gate',
+    deesser: '--fx-deesser',
+    transientShaper: '--fx-transient-shaper',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

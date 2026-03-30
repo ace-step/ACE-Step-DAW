@@ -419,6 +419,65 @@ export interface CompressorParams {
   release: number;
   knee: number;
   sidechainSourceTrackId?: string;
+  /** RMS (musical) or peak (aggressive) detection mode */
+  detectionMode?: 'peak' | 'rms';
+  /** Lookahead in seconds (0–0.005) — delays input for transient-aware compression */
+  lookahead?: number;
+  /** Auto-compensate output level for gain reduction */
+  autoMakeupGain?: boolean;
+  /** High-pass filter on sidechain key signal (Hz, 0 = off) */
+  sidechainHpf?: number;
+  /** Low-pass filter on sidechain key signal (Hz, 0 = off) */
+  sidechainLpf?: number;
+  /** Dry/wet mix for parallel (NY-style) compression (0–1) */
+  mix?: number;
+}
+
+export interface GateParams {
+  /** Level below which gain reduction applies (dB) */
+  threshold: number;
+  /** Maximum attenuation (dB, negative value e.g. -80) */
+  range: number;
+  /** How fast gate opens (seconds, 0.0001–0.05) */
+  attack: number;
+  /** Minimum time gate stays open (seconds, 0–0.5) */
+  hold: number;
+  /** How fast gate closes (seconds, 0.005–4) */
+  release: number;
+  /** Separate open/close threshold gap (dB, 0–12) */
+  hysteresis: number;
+  /** Gate = hard cut, Expander = ratio-based below threshold */
+  mode: 'gate' | 'expander';
+  /** Sidechain high-pass filter cutoff (Hz, 0 = off) */
+  sidechainHpf: number;
+  /** Sidechain low-pass filter cutoff (Hz, 0 = off) */
+  sidechainLpf: number;
+}
+
+export interface DeEsserParams {
+  /** Center frequency for sibilance detection (Hz) */
+  frequency: number;
+  /** Bandwidth (Q) of detection band */
+  bandwidth: number;
+  /** Level at which de-essing engages (dB) */
+  threshold: number;
+  /** Wideband = entire signal ducked, split = only sibilant band */
+  mode: 'wideband' | 'split';
+  /** Audition only the detected sibilance */
+  listen: boolean;
+  /** Maximum gain reduction (dB) */
+  range: number;
+}
+
+export interface TransientShaperParams {
+  /** Transient emphasis: -100 to +100 (negative = softer, positive = punchier) */
+  attack: number;
+  /** Sustain emphasis: -100 to +100 (negative = tighter, positive = longer) */
+  sustain: number;
+  /** Dry/wet mix (0–1) */
+  mix: number;
+  /** Output gain (dB, -12 to +12) */
+  output: number;
 }
 
 export interface ReverbParams {
@@ -534,7 +593,10 @@ export type TrackEffect =
   | EffectBase<'chorus', ChorusParams>
   | EffectBase<'flanger', FlangerParams>
   | EffectBase<'phaser', PhaserParams>
-  | EffectBase<'convolver', ConvolverParams>;
+  | EffectBase<'convolver', ConvolverParams>
+  | EffectBase<'gate', GateParams>
+  | EffectBase<'deesser', DeEsserParams>
+  | EffectBase<'transientShaper', TransientShaperParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1151,7 +1213,7 @@ export interface AutomationPoint {
 
 export type AutomatableEffectTarget =
   | { effectType: 'eq3'; param: keyof EQ3Params }
-  | { effectType: 'compressor'; param: Exclude<keyof CompressorParams, 'sidechainSourceTrackId'> }
+  | { effectType: 'compressor'; param: Exclude<keyof CompressorParams, 'sidechainSourceTrackId' | 'detectionMode' | 'autoMakeupGain'> }
   | { effectType: 'reverb'; param: keyof ReverbParams }
   | { effectType: 'delay'; param: keyof DelayParams }
   | { effectType: 'distortion'; param: Exclude<keyof DistortionParams, 'distortionType'> }
@@ -1159,7 +1221,10 @@ export type AutomatableEffectTarget =
   | { effectType: 'chorus'; param: keyof ChorusParams }
   | { effectType: 'flanger'; param: keyof FlangerParams }
   | { effectType: 'phaser'; param: Exclude<keyof PhaserParams, 'stages'> }
-  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> };
+  | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> }
+  | { effectType: 'gate'; param: Exclude<keyof GateParams, 'mode'> }
+  | { effectType: 'deesser'; param: Exclude<keyof DeEsserParams, 'mode' | 'listen'> }
+  | { effectType: 'transientShaper'; param: keyof TransientShaperParams };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

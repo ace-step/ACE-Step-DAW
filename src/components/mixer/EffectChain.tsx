@@ -39,6 +39,9 @@ import type {
   FlangerParams,
   PhaserParams,
   ConvolverParams,
+  GateParams,
+  DeEsserParams,
+  TransientShaperParams,
   Track,
 } from '../../types/project';
 
@@ -145,6 +148,23 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Plate', params: { irType: 'plate', wet: 0.4, preDelay: 5 } as ConvolverParams },
     { name: 'Spring', params: { irType: 'spring', wet: 0.3, preDelay: 0 } as ConvolverParams },
   ],
+  gate: [
+    { name: 'Soft Gate', params: { threshold: -40, range: -30, attack: 0.001, hold: 0.01, release: 0.05, hysteresis: 4, mode: 'gate', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+    { name: 'Tight Gate', params: { threshold: -30, range: -80, attack: 0.0005, hold: 0.005, release: 0.02, hysteresis: 6, mode: 'gate', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+    { name: 'Drum Gate', params: { threshold: -25, range: -60, attack: 0.0001, hold: 0.02, release: 0.08, hysteresis: 8, mode: 'gate', sidechainHpf: 80, sidechainLpf: 0 } as GateParams },
+    { name: 'Expander', params: { threshold: -35, range: -20, attack: 0.005, hold: 0.01, release: 0.1, hysteresis: 3, mode: 'expander', sidechainHpf: 0, sidechainLpf: 0 } as GateParams },
+  ],
+  deesser: [
+    { name: 'Gentle', params: { frequency: 7000, bandwidth: 2, threshold: -15, mode: 'split', listen: false, range: 6 } as DeEsserParams },
+    { name: 'Vocal', params: { frequency: 6500, bandwidth: 2.5, threshold: -20, mode: 'split', listen: false, range: 10 } as DeEsserParams },
+    { name: 'Aggressive', params: { frequency: 8000, bandwidth: 3, threshold: -25, mode: 'wideband', listen: false, range: 15 } as DeEsserParams },
+  ],
+  transientShaper: [
+    { name: 'Punchy', params: { attack: 50, sustain: -20, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Soft', params: { attack: -40, sustain: 20, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Tight', params: { attack: 0, sustain: -60, mix: 1, output: 0 } as TransientShaperParams },
+    { name: 'Full', params: { attack: 30, sustain: 40, mix: 1, output: 0 } as TransientShaperParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -172,6 +192,9 @@ import {
   FlangerCard,
   PhaserCard,
   ConvolverCard,
+  GateCard,
+  DeEsserCard,
+  TransientShaperCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -189,6 +212,9 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   flanger: 'Flanger',
   phaser: 'Phaser',
   convolver: 'Convolver',
+  gate: 'Gate',
+  deesser: 'De-esser',
+  transientShaper: 'Transient',
 };
 
 // ─── More menu icon ─────────────────────────────────────────────────────────
@@ -362,6 +388,9 @@ function EffectDevice({
           {effect.type === 'flanger' && <FlangerCard effect={effect} trackId={track.id} />}
           {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
           {effect.type === 'convolver' && <ConvolverCard effect={effect} trackId={track.id} />}
+          {effect.type === 'gate' && <GateCard effect={effect} trackId={track.id} />}
+          {effect.type === 'deesser' && <DeEsserCard effect={effect} trackId={track.id} />}
+          {effect.type === 'transientShaper' && <TransientShaperCard effect={effect} trackId={track.id} />}
         </div>
       </div>
     </div>
@@ -386,6 +415,9 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'flanger', label: 'Flanger', icon: '🌀' },
     { type: 'phaser', label: 'Phaser', icon: '🔮' },
     { type: 'convolver', label: 'Convolution Reverb', icon: '🏛️' },
+    { type: 'gate', label: 'Gate / Expander', icon: '🚪' },
+    { type: 'deesser', label: 'De-esser', icon: '🎤' },
+    { type: 'transientShaper', label: 'Transient Shaper', icon: '⚡' },
   ];
 
   return (

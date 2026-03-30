@@ -1242,8 +1242,8 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
           {(['transparent', 'aggressive', 'warm'] as LimiterParams['style'][]).map((s) => (
             <button
               key={s}
-              className={`px-2 py-0.5 text-[8px] rounded capitalize ${
-                p.style === s ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+              className={`px-3 py-1 text-[9px] rounded-md capitalize transition-colors ${
+                p.style === s ? 'bg-amber-500/25 text-amber-200 font-medium' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
               }`}
               onClick={() => update({ style: s })}
             >
@@ -1254,10 +1254,10 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'gain' }} normalizedValue={normalizeEffectParamValue('limiter', 'gain', p.gain) ?? 0.5}>
-        <Knob value={p.gain} onChange={(v) => update({ gain: v })} min={-12} max={24} defaultValue={0} label="Gain" unit=" dB" size={36} step={0.5} color="#d4a040" />
+        <Knob value={p.gain} onChange={(v) => update({ gain: v })} min={-12} max={24} defaultValue={0} label="Gain" unit=" dB" size={42} step={0.5} color="#d4a040" />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'ceiling' }} normalizedValue={normalizeEffectParamValue('limiter', 'ceiling', p.ceiling) ?? 0.5}>
-        <Knob value={p.ceiling} onChange={(v) => update({ ceiling: v })} min={-12} max={0} defaultValue={-0.3} label="Ceiling" unit=" dB" size={36} step={0.1} color="#d4a040" />
+        <Knob value={p.ceiling} onChange={(v) => update({ ceiling: v })} min={-12} max={0} defaultValue={-0.3} label="Ceiling" unit=" dB" size={42} step={0.1} color="#d4a040" />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'release' }} normalizedValue={normalizeEffectParamValue('limiter', 'release', p.release) ?? 0.5}>
         <Knob value={p.release * 1000} onChange={(v) => update({ release: v / 1000 })} min={1} max={1000} defaultValue={100} label="Release" unit=" ms" size={28} step={1} color="#d4a040" />

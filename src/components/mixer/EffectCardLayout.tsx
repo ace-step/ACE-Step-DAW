@@ -2,7 +2,9 @@
  * EffectCardLayout — Shared layout component for all effect cards.
  *
  * Provides consistent zones: mode (optional), visualization (optional),
- * params grid, and footer (dry/wet).
+ * params (horizontal flex), and footer (dry/wet).
+ *
+ * In full-width mode (Ableton-style), params spread across the panel.
  */
 import type { ReactNode } from 'react';
 
@@ -11,7 +13,7 @@ interface EffectCardLayoutProps {
   mode?: ReactNode;
   /** Optional visualization area (e.g., EQ curve, GR meter, spectrum) */
   visualization?: ReactNode;
-  /** Main parameter controls — rendered in a CSS grid */
+  /** Main parameter controls */
   children: ReactNode;
   /** Optional footer row (typically Dry/Wet slider) */
   footer?: ReactNode;
@@ -21,9 +23,9 @@ interface EffectCardLayoutProps {
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
   return (
-    <div className="flex flex-col gap-2 px-2.5 py-2">
+    <div className="flex flex-col gap-3 px-4 py-3">
       {mode && (
-        <div className="flex items-center gap-0.5 rounded-md bg-white/[0.03] p-0.5">{mode}</div>
+        <div className="flex items-center gap-0.5 rounded-md bg-white/[0.03] p-0.5 self-start">{mode}</div>
       )}
       {visualization && (
         <div
@@ -33,14 +35,12 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
           {visualization}
         </div>
       )}
-      <div
-        className="grid gap-x-4 gap-y-2.5 justify-items-center py-0.5"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(44px, 1fr))' }}
-      >
+      {/* Parameters — horizontal flex, wrapping, evenly spaced */}
+      <div className="flex flex-wrap items-start justify-center gap-x-8 gap-y-3 py-1">
         {children}
       </div>
       {footer && (
-        <div className="pt-1.5 mt-0.5 border-t border-white/[0.06]">{footer}</div>
+        <div className="pt-2 border-t border-white/[0.06] max-w-[300px]">{footer}</div>
       )}
     </div>
   );
@@ -59,7 +59,7 @@ export function ParamGroup({ label, children }: ParamGroupProps) {
       {label && (
         <span className="text-[9px] text-white/25 uppercase tracking-wider font-medium">{label}</span>
       )}
-      <div className="flex items-center gap-3">{children}</div>
+      <div className="flex items-center gap-5">{children}</div>
     </div>
   );
 }

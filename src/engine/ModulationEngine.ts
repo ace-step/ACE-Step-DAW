@@ -129,9 +129,23 @@ class ModulationEngine {
       const target = this.resolveTarget(slot.destination, targets);
       if (!target) continue;
 
+      // For unipolar (bipolar=false) LFO sources, remap LFO output from [-1,1] to [0,1]
+      // using Tone.Scale before the amount scaler.
+      const isLfoSource = slot.source === 'lfo1' || slot.source === 'lfo2';
+      let upstream: Tone.ToneAudioNode = source.node as unknown as Tone.ToneAudioNode;
+      if (!slot.bipolar && isLfoSource) {
+        const scaleNode = new Tone.Scale(0, 1); // maps [-1,1] → [0,1]
+        (source.node as unknown as Tone.ToneAudioNode).connect(scaleNode as unknown as Tone.InputNode);
+        upstream = scaleNode as unknown as Tone.ToneAudioNode;
+        connections.push({
+          scaler: scaleNode as unknown as Tone.Multiply,
+          dispose: () => scaleNode.dispose(),
+        });
+      }
+
       // Create scaling node: source * amount → destination
       const scaler = new Tone.Multiply(slot.amount);
-      source.node.connect(scaler);
+      upstream.connect(scaler);
       scaler.connect(target);
 
       connections.push({

@@ -692,6 +692,7 @@ export function useTransport() {
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
     samplerEngine.stopAll();
+    modulationEngine.releaseAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
     // Only update currentTime, not playStartTime — the anchor stays put
@@ -711,6 +712,7 @@ export function useTransport() {
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
     samplerEngine.stopAll();
+    modulationEngine.releaseAll();
     automationEngine.stop();
     stopAllStrudelTracks();
     useTransportStore.getState().stop();
@@ -726,6 +728,7 @@ export function useTransport() {
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
       samplerEngine.stopAll();
+      modulationEngine.releaseAll();
       useTransportStore.getState().seek(time);
       play(time);
     } else {

@@ -13,6 +13,9 @@ let mockSignalValue = 0;
 const mockMultiplyConnect = vi.fn();
 const mockMultiplyDispose = vi.fn();
 
+const mockScaleConnect = vi.fn();
+const mockScaleDispose = vi.fn();
+
 vi.mock('tone', () => {
   return {
     LFO: class MockLFO {
@@ -33,6 +36,11 @@ vi.mock('tone', () => {
       constructor(public factor: number) {}
       connect = mockMultiplyConnect;
       dispose = mockMultiplyDispose;
+    },
+    Scale: class MockScale {
+      constructor(public outputMin: number, public outputMax: number) {}
+      connect = mockScaleConnect;
+      dispose = mockScaleDispose;
     },
     Param: class MockParam {},
   };
@@ -64,6 +72,7 @@ describe('ModulationEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSignalValue = 0;
+    // re-assign arrow fn refs so vi.clearAllMocks doesn't break them
   });
 
   afterEach(() => {

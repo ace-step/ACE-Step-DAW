@@ -155,6 +155,32 @@ function _isViewerMode(): boolean {
   return useCollaborationStore.getState().isViewerMode;
 }
 
+/**
+ * Convert legacy absolute contextWindow to relative offsets.
+ * The new relative format is move-proof: resolveContextWindow() dynamically
+ * adds clip.startTime, so offsets stay correct after any move.
+ *
+ * Legacy format: { startTime, endTime }
+ * New format: { offsetStart, offsetEnd, trackIds }
+ *
+ * @param clip The clip whose generationParams.contextWindow to migrate
+ * @returns Updated generationParams (or original if no migration needed)
+ */
+function _migrateLegacyContextWindow(clip: Clip): Clip['generationParams'] {
+  const params = clip.generationParams;
+  const ctx = params?.contextWindow;
+  if (!ctx || !params || 'offsetStart' in ctx) return params;
+  // Legacy absolute → relative offsets based on current startTime
+  return {
+    ...params,
+    contextWindow: {
+      offsetStart: ctx.startTime - clip.startTime,
+      offsetEnd: ctx.endTime - clip.startTime,
+      trackIds: [],
+    },
+  };
+}
+
 function getBarDurationSec(bpm: number, timeSig: number, timeSigDenominator: number = 4): number {
   return (60 / bpm) * timeSig * (4 / Math.max(1, timeSigDenominator));
 }
@@ -4759,10 +4785,12 @@ export const useProjectStore = create<ProjectState>()(
     const clip = srcTrack.clips.find((c) => c.id === clipId);
     if (!clip) return;
     _pushHistory(state.project);
+    const migratedParams = _migrateLegacyContextWindow(clip);
     const movedClip = {
       ...clip,
       trackId: targetTrackId,
       ...(startTime !== undefined ? { startTime } : {}),
+      ...(migratedParams !== clip.generationParams ? { generationParams: migratedParams } : {}),
     };
     set({
       project: {
@@ -4882,7 +4910,11 @@ export const useProjectStore = create<ProjectState>()(
       ...t,
       clips: t.clips.map((c) =>
         idSet.has(c.id)
-          ? { ...c, startTime: Math.max(0, c.startTime + timeOffset) }
+          ? {
+              ...c,
+              startTime: Math.max(0, c.startTime + timeOffset),
+              generationParams: _migrateLegacyContextWindow(c) ?? c.generationParams,
+            }
           : c,
       ),
     }));

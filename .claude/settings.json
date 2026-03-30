@@ -34,7 +34,7 @@
     ]
   },
   "hooks": {
-    "PreToolCall": [
+    "PreToolUse": [
       {
         "matcher": "Bash(git commit*)",
         "hooks": [
@@ -45,7 +45,7 @@
         ]
       }
     ],
-    "PostToolCall": [
+    "PostToolUse": [
       {
         "matcher": "Write|Edit",
         "hooks": [

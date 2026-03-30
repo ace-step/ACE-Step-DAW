@@ -11,6 +11,7 @@ import { PianoRollEmptyState } from './PianoRollEmptyState';
 import { QuantizeDialog } from './QuantizeDialog';
 import { SynthPresetBrowser } from './SynthPresetBrowser';
 import { getSynthPresetById, type SynthPresetCategory } from '../../data/synthPresets';
+import { createUserPreset, getPresetById, type InstrumentPresetCategory } from '../../data/instrumentPresets';
 import { TransformMenu } from './TransformMenu';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 
@@ -49,6 +50,9 @@ export function PianoRoll() {
   const userSynthPresets = useUIStore((s) => s.userSynthPresets);
   const saveSynthPreset = useUIStore((s) => s.saveSynthPreset);
   const deleteUserSynthPreset = useUIStore((s) => s.deleteUserSynthPreset);
+  const userInstrumentPresets = useUIStore((s) => s.userInstrumentPresets);
+  const saveInstrumentPreset = useUIStore((s) => s.saveInstrumentPreset);
+  const deleteInstrumentPreset = useUIStore((s) => s.deleteInstrumentPreset);
   const openTrackId = useUIStore((s) => s.openPianoRollTrackId);
   const openClipId = useUIStore((s) => s.openPianoRollClipId);
   const selectedPianoRollNoteIds = useUIStore((s) => s.selectedPianoRollNoteIds);
@@ -214,35 +218,22 @@ export function PianoRoll() {
     if (!track) return;
     const name = window.prompt('Preset name:');
     if (!name) return;
-    const legacyPreset = track.synthPreset && track.synthPreset !== 'sampler'
-      ? track.synthPreset
-      : 'piano';
-    // Infer category from current preset if available, else default to 'Keys'.
-    const currentDef = track.synthPresetDefinitionId
+    const inst = track.instrument;
+    if (!inst) return;
+
+    // Infer category from current preset or default.
+    const currentUnified = track.synthPresetDefinitionId
+      ? getPresetById(track.synthPresetDefinitionId, userInstrumentPresets)
+      : null;
+    const currentLegacy = track.synthPresetDefinitionId
       ? getSynthPresetById(track.synthPresetDefinitionId, userSynthPresets)
       : null;
-    const category: SynthPresetCategory = currentDef?.category ?? 'Keys';
-    const inst = track.instrument;
-    if (inst?.kind === 'subtractive') {
-      saveSynthPreset(name, category, {
-        waveform: inst.settings.oscillator.waveform,
-        envelope: { ...inst.settings.ampEnvelope },
-        filter: inst.settings.filter.enabled
-          ? { enabled: true, type: inst.settings.filter.type, cutoffHz: inst.settings.filter.cutoffHz, resonance: inst.settings.filter.resonance }
-          : undefined,
-        detuneCents: inst.settings.oscillator.detuneCents,
-        glideTime: inst.settings.glideTime,
-        outputGain: inst.settings.outputGain,
-        legacyPreset,
-      });
-    } else {
-      saveSynthPreset(name, category, {
-        waveform: 'sine',
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.3 },
-        legacyPreset,
-      });
-    }
-  }, [track, saveSynthPreset, userSynthPresets]);
+    const category: InstrumentPresetCategory =
+      currentUnified?.category ?? currentLegacy?.category ?? 'Keys';
+
+    const preset = createUserPreset(name, category, inst);
+    saveInstrumentPreset(preset);
+  }, [track, saveInstrumentPreset, userInstrumentPresets, userSynthPresets]);
 
   if (!track) return null;
 
@@ -356,7 +347,11 @@ export function PianoRoll() {
           onSelectPreset={(presetId) => loadSynthPreset(track.id, presetId)}
           onSavePreset={handleSavePreset}
           userPresets={userSynthPresets}
-          onDeleteUserPreset={deleteUserSynthPreset}
+          userInstrumentPresets={userInstrumentPresets}
+          onDeleteUserPreset={(presetId) => {
+            deleteUserSynthPreset(presetId);
+            deleteInstrumentPreset(presetId);
+          }}
         />
 
         {/* Legacy preset dropdown (Quick Sampler toggle) */}

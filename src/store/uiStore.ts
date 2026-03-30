@@ -9,6 +9,7 @@ import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
 import type { SynthPresetDefinition, SynthPresetCategory } from '../data/synthPresets';
+import type { InstrumentPreset, InstrumentPresetCategory } from '../data/instrumentPresets';
 import type { LoopCategory } from '../engine/LoopLibrary';
 import { CHORD_SHAPES } from '../utils/chords';
 import {
@@ -454,6 +455,11 @@ export interface UIState {
     params: Pick<SynthPresetDefinition, 'waveform' | 'envelope' | 'filter' | 'detuneCents' | 'glideTime' | 'outputGain' | 'legacyPreset'>,
   ) => SynthPresetDefinition;
   deleteUserSynthPreset: (presetId: string) => void;
+
+  // Unified instrument presets (all instrument kinds)
+  userInstrumentPresets: InstrumentPreset[];
+  saveInstrumentPreset: (preset: InstrumentPreset) => void;
+  deleteInstrumentPreset: (presetId: string) => void;
 }
 
 const MIN_VIRTUAL_KEYBOARD_OCTAVE = 1;
@@ -1301,6 +1307,15 @@ export const useUIStore = create<UIState>()(
     set((s) => ({
       userSynthPresets: s.userSynthPresets.filter((p) => p.id !== presetId),
     })),
+
+  // Unified instrument presets
+  userInstrumentPresets: [],
+  saveInstrumentPreset: (preset) =>
+    set((s) => ({ userInstrumentPresets: [...s.userInstrumentPresets, preset] })),
+  deleteInstrumentPreset: (presetId) =>
+    set((s) => ({
+      userInstrumentPresets: s.userInstrumentPresets.filter((p) => p.id !== presetId),
+    })),
 }),
     {
       name: 'ace-step-daw-ui',
@@ -1358,6 +1373,7 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         // Synth presets
         userSynthPresets: state.userSynthPresets,
+        userInstrumentPresets: state.userInstrumentPresets,
         // Video recording settings
         videoRecordingSettings: state.videoRecordingSettings,
       }),

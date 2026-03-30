@@ -114,6 +114,7 @@ import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { getSynthPresetById } from '../data/synthPresets';
+import { getPresetById, type InstrumentPreset } from '../data/instrumentPresets';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { toastError, toastSuccess } from '../hooks/useToast';
@@ -3230,16 +3231,51 @@ export const useProjectStore = create<ProjectState>()(
     const state = get();
     if (_isViewerMode()) return;
     if (!state.project) return;
+
     // Dynamic import to avoid circular dependency at module scope.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useUIStore: _uiStore } = require('./uiStore') as {
-      useUIStore: { getState: () => { userSynthPresets: import('../data/synthPresets').SynthPresetDefinition[] } };
+      useUIStore: { getState: () => {
+        userSynthPresets: import('../data/synthPresets').SynthPresetDefinition[];
+        userInstrumentPresets: InstrumentPreset[];
+      } };
     };
-    const userPresets = _uiStore.getState().userSynthPresets;
-    const presetDef = getSynthPresetById(presetId, userPresets);
+    const uiState = _uiStore.getState();
+
+    // Try unified preset system first (covers all instrument kinds).
+    const unifiedPreset = getPresetById(presetId, uiState.userInstrumentPresets);
+    if (unifiedPreset) {
+      _pushHistory(state.project, { scope: 'track', label: `Load preset: ${unifiedPreset.name}`, trackId });
+      const legacyPreset =
+        unifiedPreset.instrument.kind === 'subtractive' ? unifiedPreset.instrument.preset
+        : unifiedPreset.instrument.kind === 'fm' ? unifiedPreset.instrument.fallbackPreset
+        : unifiedPreset.instrument.kind === 'wavetable' ? unifiedPreset.instrument.fallbackPreset
+        : 'piano';
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          tracks: state.project.tracks.map((t) =>
+            t.id === trackId
+              ? {
+                  ...t,
+                  synthPresetDefinitionId: presetId,
+                  ...syncTrackInstrumentFields(t, {
+                    instrument: structuredClone(unifiedPreset.instrument),
+                    synthPreset: legacyPreset,
+                  }),
+                }
+              : t,
+          ),
+        },
+      });
+      return;
+    }
+
+    // Fallback: legacy SynthPresetDefinition (subtractive-only).
+    const presetDef = getSynthPresetById(presetId, uiState.userSynthPresets);
     if (!presetDef) return;
     _pushHistory(state.project, { scope: 'track', label: `Load synth preset: ${presetDef.name}`, trackId });
-    // Build a full SubtractiveTrackInstrument from the preset definition.
     const base = createDefaultSubtractiveInstrument(presetDef.legacyPreset, { name: presetDef.name });
     const instrument = {
       ...base,

@@ -176,6 +176,26 @@ import {
 } from './EffectCards';
 
 
+// ─── Effect type display names ──────────────────────────────────────────────
+const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
+  eq3: 'EQ Three',
+  parametricEq: 'Parametric EQ',
+  compressor: 'Compressor',
+  reverb: 'Reverb',
+  delay: 'Delay',
+  distortion: 'Distortion',
+  filter: 'Filter',
+  chorus: 'Chorus',
+  flanger: 'Flanger',
+  phaser: 'Phaser',
+  convolver: 'Convolver',
+};
+
+// ─── More menu icon ─────────────────────────────────────────────────────────
+const MoreVertical = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+);
+
 function EffectDevice({
   effect, track, index, onDragStart, onDragOver, isDragOver,
 }: {
@@ -188,9 +208,24 @@ function EffectDevice({
 }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
   const removeTrackEffect = useProjectStore((s) => s.removeTrackEffect);
+  const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
+  const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
+  const effects = track.effects ?? [];
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
   const applyPreset = (presetIdx: number) => {
     const preset = presets[presetIdx];
@@ -198,7 +233,6 @@ function EffectDevice({
     updateTrackEffect(track.id, effect.id, { params: preset.params } as Partial<TrackEffect>);
     effectsEngine.updateEffectParams(track.id, effect.id, preset.params, effect.type);
     effectsEngine.rebuildChain(track.id, track.effects ?? [], track.effectsBypassed ?? false);
-    // Wire Tone.js effect chain into the TrackNode audio graph
     const engine = getAudioEngine();
     const trackNode = engine.getOrCreateTrackNode(track.id);
     if (trackNode) {
@@ -211,17 +245,18 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col min-w-[170px] max-w-[200px] rounded-lg border shrink-0 transition-all ${
+      className={`flex flex-col min-w-[170px] max-w-[220px] rounded-lg border shrink-0 transition-all ${
         isDragOver ? 'border-l-2 border-l-violet-500' : 'border-white/10'
       } ${!effect.enabled ? 'opacity-40' : ''}`}
       style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
       onMouseOver={() => onDragOver(index)}
     >
-      {/* Title bar */}
+      {/* ── Header bar ── */}
       <div
-        className="flex items-center gap-1 px-1.5 py-1 rounded-t-lg cursor-pointer select-none"
-        style={{ backgroundColor: `${color}15` }}
+        className="flex items-center gap-1 px-1.5 py-1 rounded-t-lg select-none"
+        style={{ backgroundColor: `${color}18`, borderBottom: `1px solid ${color}20` }}
       >
+        {/* Drag handle */}
         <div
           className="cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80"
           onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
@@ -229,17 +264,21 @@ function EffectDevice({
           <GripVertical className="h-3 w-3 text-white/40" />
         </div>
 
-        <button onClick={() => setCollapsed(!collapsed)} className="text-white/40 hover:text-white/60">
-          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </button>
+        {/* Color dot */}
+        <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ backgroundColor: color }} />
 
-        <span className="text-[10px] font-medium flex-1 truncate capitalize" style={{ color }}>
-          {effect.type}
-        </span>
+        {/* Effect name — click to toggle expand */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="text-[10px] font-semibold flex-1 truncate text-left hover:text-white/90"
+          style={{ color: `${color}cc` }}
+        >
+          {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
+        </button>
 
         {/* Preset selector */}
         <select
-          className="bg-transparent text-white/40 text-[8px] border-none outline-none cursor-pointer max-w-[60px]"
+          className="bg-transparent text-white/30 text-[8px] border-none outline-none cursor-pointer max-w-[50px] hover:text-white/50"
           onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
           value=""
           onClick={(e) => e.stopPropagation()}
@@ -250,29 +289,68 @@ function EffectDevice({
           ))}
         </select>
 
-        {/* Enable/bypass toggle */}
+        {/* Bypass toggle */}
         <button
-          className={`h-4 w-4 flex items-center justify-center ${effect.enabled ? 'text-green-400' : 'text-white/20'}`}
+          className={`h-4 w-4 flex items-center justify-center transition-colors ${effect.enabled ? 'text-green-400' : 'text-white/20 hover:text-white/40'}`}
           onClick={(e) => {
             e.stopPropagation();
             updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
           }}
+          title={effect.enabled ? 'Bypass' : 'Enable'}
         >
           <Power className="h-3 w-3" />
         </button>
 
-        {/* Delete */}
-        <button
-          className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-red-400"
-          onClick={(e) => { e.stopPropagation(); removeTrackEffect(track.id, effect.id); }}
-        >
-          <Trash2 className="h-2.5 w-2.5" />
-        </button>
+        {/* More menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-white/50"
+            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+          >
+            <MoreVertical className="h-3 w-3" />
+          </button>
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+              <button
+                className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                onClick={() => { addTrackEffect(track.id, effect.type); setShowMenu(false); }}
+              >
+                Duplicate
+              </button>
+              {index > 0 && (
+                <button
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                  onClick={() => { reorderTrackEffect(track.id, index, index - 1); setShowMenu(false); }}
+                >
+                  Move Left
+                </button>
+              )}
+              {index < effects.length - 1 && (
+                <button
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                  onClick={() => { reorderTrackEffect(track.id, index, index + 1); setShowMenu(false); }}
+                >
+                  Move Right
+                </button>
+              )}
+              <div className="border-t border-white/5 my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
+                onClick={() => { removeTrackEffect(track.id, effect.id); setShowMenu(false); }}
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Body */}
-      {!collapsed && (
-        <div className="overflow-y-auto max-h-[220px]">
+      {/* ── Body — expandable with smooth transition ── */}
+      <div
+        className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
+        style={{ maxHeight: collapsed ? '0px' : '280px' }}
+      >
+        <div className="overflow-y-auto max-h-[280px]">
           {effect.type === 'eq3' && <EQ3Card effect={effect} trackId={track.id} />}
           {effect.type === 'parametricEq' && <ParametricEQCard effect={effect} trackId={track.id} />}
           {effect.type === 'compressor' && <CompressorCard effect={effect} trackId={track.id} />}
@@ -285,7 +363,7 @@ function EffectDevice({
           {effect.type === 'phaser' && <PhaserCard effect={effect} trackId={track.id} />}
           {effect.type === 'convolver' && <ConvolverCard effect={effect} trackId={track.id} />}
         </div>
-      )}
+      </div>
     </div>
   );
 }

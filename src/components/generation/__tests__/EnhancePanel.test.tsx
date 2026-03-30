@@ -735,7 +735,6 @@ describe('EnhancePanel version tree UI', () => {
   });
 
   it('passes correct coverStrength for each consistency level (high=0.25, medium=0.5, low=0.75)', async () => {
-    const { generateCoverClip } = await import('../../../services/generationPipeline');
     const { track, clip } = setupProjectWithClip();
     useUIStore.setState({
       enhancerOpen: true,
@@ -744,30 +743,45 @@ describe('EnhancePanel version tree UI', () => {
     });
     const { unmount } = render(<EnhancePanel />);
 
-    // Default is 'medium' — click Enhance
-    const enhanceBtn = screen.getByTestId('enhance-btn');
-    fireEvent.click(enhanceBtn);
-    expect(generateCoverClip).toHaveBeenLastCalledWith(
+    // Test medium (default): coverStrength = 0.5
+    fireEvent.click(screen.getByTestId('enhance-btn'));
+    expect(mockGenerateCoverClip).toHaveBeenLastCalledWith(
       expect.objectContaining({ coverStrength: 0.5 }),
     );
+    // Wait for generation to complete so isSubmitting resets
+    await waitFor(() => expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1));
+    unmount();
 
-    // Switch to 'high' consistency — should map to LOW deviation (0.25)
-    const highBtn = screen.getByText('high');
-    fireEvent.click(highBtn);
-    fireEvent.click(enhanceBtn);
-    expect(generateCoverClip).toHaveBeenLastCalledWith(
+    // Test high: coverStrength = 0.25
+    mockGenerateCoverClip.mockClear();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    const { unmount: unmount2 } = render(<EnhancePanel />);
+    fireEvent.click(screen.getByText('high'));
+    fireEvent.click(screen.getByTestId('enhance-btn'));
+    expect(mockGenerateCoverClip).toHaveBeenLastCalledWith(
       expect.objectContaining({ coverStrength: 0.25 }),
     );
+    await waitFor(() => expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1));
+    unmount2();
 
-    // Switch to 'low' consistency — should map to HIGH deviation (0.75)
-    const lowBtn = screen.getByText('low');
-    fireEvent.click(lowBtn);
-    fireEvent.click(enhanceBtn);
-    expect(generateCoverClip).toHaveBeenLastCalledWith(
+    // Test low: coverStrength = 0.75
+    mockGenerateCoverClip.mockClear();
+    useUIStore.setState({
+      enhancerOpen: true,
+      enhancerTarget: { clipId: clip.id, trackId: track.id, range: null, mode: 'cover' },
+      enhancementSession: null,
+    });
+    const { unmount: unmount3 } = render(<EnhancePanel />);
+    fireEvent.click(screen.getByText('low'));
+    fireEvent.click(screen.getByTestId('enhance-btn'));
+    expect(mockGenerateCoverClip).toHaveBeenLastCalledWith(
       expect.objectContaining({ coverStrength: 0.75 }),
     );
-
-    unmount();
+    unmount3();
   });
 
   it('shows chained source indicator when chainedSourceAudioKey is set', () => {

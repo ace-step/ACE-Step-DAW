@@ -35,6 +35,7 @@ import type {
   LimiterParams,
   SaturationParams,
   SaturationType,
+  StereoImagerParams,
 } from '../../types/project';
 import {
   PARAMETRIC_EQ_MAX_FREQUENCY,
@@ -1321,6 +1322,40 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
   );
 }
 
+// ─── Stereo Imager Card ─────────────────────────────────────────────────────
+
+export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { type: 'stereoImager' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<StereoImagerParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'stereoImager');
+  };
+
+  return (
+    <EffectCardLayout color="#7a8ab4">
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'width' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'width', p.width) ?? 0.5}>
+        <Knob value={p.width} onChange={(v) => update({ width: v })} min={0} max={2} defaultValue={1} label="Width" size={36} step={0.01} color="#7a8ab4"
+          formatValue={(v) => v === 0 ? 'Mono' : v === 1 ? '100%' : `${Math.round(v * 100)}%`}
+        />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'midGain' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'midGain', p.midGain) ?? 0.5}>
+        <Knob value={p.midGain} onChange={(v) => update({ midGain: v })} min={-12} max={12} defaultValue={0} label="Mid" unit=" dB" size={32} step={0.5} color="#7a8ab4" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'sideGain' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'sideGain', p.sideGain) ?? 0.5}>
+        <Knob value={p.sideGain} onChange={(v) => update({ sideGain: v })} min={-12} max={12} defaultValue={0} label="Side" unit=" dB" size={32} step={0.5} color="#7a8ab4" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'monoFreq' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'monoFreq', p.monoFreq) ?? 0}>
+        <Knob value={p.monoFreq} onChange={(v) => update({ monoFreq: v })} min={0} max={500} defaultValue={0} label="Mono Bass" unit=" Hz" size={28} step={5} color="#7a8ab4"
+          formatValue={(v) => v === 0 ? 'Off' : `${Math.round(v)} Hz`}
+        />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
 /**
  * Effect colors — desaturated, category-grouped.
  * CSS custom properties are defined in src/styles/effect-colors.css.
@@ -1343,6 +1378,7 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   transientShaper: '#b89340',
   limiter: '#d4a040',
   saturation: '#c46454',
+  stereoImager: '#7a8ab4',
 };
 
 /** Resolve a CSS custom property to its computed hex value (for canvas drawing contexts). */
@@ -1365,6 +1401,7 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     transientShaper: '--fx-transient-shaper',
     limiter: '--fx-limiter',
     saturation: '--fx-distortion',
+    stereoImager: '--fx-filter',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

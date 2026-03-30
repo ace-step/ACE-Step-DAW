@@ -678,10 +678,69 @@ function createNode(effect: TrackEffect): EffectNode {
         _saturationOutputGain: outputGain,
       } as EffectNode;
     }
+    case 'stereoImager': {
+      // Stereo width via M/S matrix: width controls side level relative to mid
+      const p = effect.params as import('../types/project').StereoImagerParams;
+      const input = new Tone.Gain(1);
+      const output = new Tone.Gain(1);
+
+      // Use channel splitter/merger for M/S processing
+      const ctx = Tone.getContext().rawContext;
+      const splitter = ctx.createChannelSplitter(2);
+      const merger = ctx.createChannelMerger(2);
+
+      // Simplified L/R width matrix:
+      // L_out = L*(1+w)/2 + R*(1-w)/2
+      // R_out = R*(1+w)/2 + L*(1-w)/2
+      const llGain = ctx.createGain();
+      const lrGain = ctx.createGain();
+      const rlGain = ctx.createGain();
+      const rrGain = ctx.createGain();
+
+      const w = Math.max(0, Math.min(2, p.width));
+      llGain.gain.value = (1 + w) / 2;
+      lrGain.gain.value = (1 - w) / 2;
+      rlGain.gain.value = (1 - w) / 2;
+      rrGain.gain.value = (1 + w) / 2;
+
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(splitter);
+
+      splitter.connect(llGain, 0);
+      splitter.connect(lrGain, 1);
+      splitter.connect(rlGain, 0);
+      splitter.connect(rrGain, 1);
+
+      llGain.connect(merger, 0, 0);
+      lrGain.connect(merger, 0, 0);
+      rlGain.connect(merger, 0, 1);
+      rrGain.connect(merger, 0, 1);
+
+      const outputNative = unwrapToNative(output, 'input');
+      merger.connect(outputNative);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          input.dispose();
+          output.dispose();
+          splitter.disconnect();
+          merger.disconnect();
+          llGain.disconnect();
+          lrGain.disconnect();
+          rlGain.disconnect();
+          rrGain.disconnect();
+        },
+        _stereoGains: { llGain, lrGain, rlGain, rrGain },
+      } as EffectNode;
+    }
   }
 }
 
-/** Compute saturation curve sample for given parameters */
 function applySaturationCurve(
   x: number,
   drive: number,
@@ -929,7 +988,6 @@ class EffectsEngine {
         const p = params as import('../types/project').SaturationParams;
         const ws = (effectNode as Record<string, unknown>)._saturationWaveshaper as Tone.WaveShaper | undefined;
         if (ws) {
-          // Rebuild waveshaper curve with new params
           const curve = new Float32Array(4096);
           for (let i = 0; i < 4096; i++) {
             const x = (i / 4095) * 2 - 1;
@@ -945,6 +1003,20 @@ class EffectsEngine {
         if (wg) wg.gain.value = p.mix;
         if (ig) ig.gain.value = Math.pow(10, p.inputGain / 20);
         if (og) og.gain.value = Math.pow(10, p.outputGain / 20);
+        break;
+      }
+      case 'stereoImager': {
+        const p = params as import('../types/project').StereoImagerParams;
+        const gains = (effectNode as Record<string, unknown>)._stereoGains as {
+          llGain: GainNode; lrGain: GainNode; rlGain: GainNode; rrGain: GainNode;
+        } | undefined;
+        if (gains) {
+          const w = Math.max(0, Math.min(2, p.width));
+          gains.llGain.gain.value = (1 + w) / 2;
+          gains.lrGain.gain.value = (1 - w) / 2;
+          gains.rlGain.gain.value = (1 - w) / 2;
+          gains.rrGain.gain.value = (1 + w) / 2;
+        }
         break;
       }
     }
@@ -1130,6 +1202,21 @@ class EffectsEngine {
         if (target.param === 'outputGain') {
           const og = (effectNode as Record<string, unknown>)._saturationOutputGain as Tone.Gain | undefined;
           if (og) og.gain.value = Math.pow(10, value / 20);
+        }
+        break;
+      }
+      case 'stereoImager': {
+        if (target.param === 'width') {
+          const gains = (effectNode as Record<string, unknown>)._stereoGains as {
+            llGain: GainNode; lrGain: GainNode; rlGain: GainNode; rrGain: GainNode;
+          } | undefined;
+          if (gains) {
+            const w = Math.max(0, Math.min(2, value));
+            gains.llGain.gain.value = (1 + w) / 2;
+            gains.lrGain.gain.value = (1 - w) / 2;
+            gains.rlGain.gain.value = (1 - w) / 2;
+            gains.rrGain.gain.value = (1 + w) / 2;
+          }
         }
         break;
       }

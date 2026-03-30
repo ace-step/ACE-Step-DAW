@@ -493,6 +493,19 @@ export interface LimiterParams {
   style: 'transparent' | 'aggressive' | 'warm';
 }
 
+export interface StereoImagerParams {
+  /** Stereo width: 0 = mono, 1 = original, 2 = extra wide */
+  width: number;
+  /** Mid channel gain in dB (-12 to +12) */
+  midGain: number;
+  /** Side channel gain in dB (-12 to +12) */
+  sideGain: number;
+  /** Frequency below which signal is collapsed to mono (Hz, 0 = off) */
+  monoFreq: number;
+  /** Stereo pan position (-1 to +1, 0 = center) */
+  pan: number;
+}
+
 export type SaturationType = 'tape' | 'tube' | 'transistor' | 'soft' | 'hard';
 
 export interface SaturationParams {
@@ -628,7 +641,8 @@ export type TrackEffect =
   | EffectBase<'deesser', DeEsserParams>
   | EffectBase<'transientShaper', TransientShaperParams>
   | EffectBase<'limiter', LimiterParams>
-  | EffectBase<'saturation', SaturationParams>;
+  | EffectBase<'saturation', SaturationParams>
+  | EffectBase<'stereoImager', StereoImagerParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1258,7 +1272,8 @@ export type AutomatableEffectTarget =
   | { effectType: 'deesser'; param: Exclude<keyof DeEsserParams, 'mode' | 'listen'> }
   | { effectType: 'transientShaper'; param: keyof TransientShaperParams }
   | { effectType: 'limiter'; param: Exclude<keyof LimiterParams, 'style'> }
-  | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> };
+  | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
+  | { effectType: 'stereoImager'; param: keyof StereoImagerParams };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

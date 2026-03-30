@@ -112,6 +112,13 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     outputGain: { label: 'Output', min: -12, max: 12, color: '#c46454' },
     mix: { label: 'Mix', min: 0, max: 1, color: '#c46454' },
   },
+  stereoImager: {
+    width: { label: 'Width', min: 0, max: 2, color: '#7a8ab4' },
+    midGain: { label: 'Mid', min: -12, max: 12, color: '#7a8ab4' },
+    sideGain: { label: 'Side', min: -12, max: 12, color: '#7a8ab4' },
+    monoFreq: { label: 'Mono Freq', min: 0, max: 500, color: '#7a8ab4' },
+    pan: { label: 'Pan', min: -1, max: 1, color: '#7a8ab4' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -179,6 +186,10 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'saturation': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'stereoImager': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

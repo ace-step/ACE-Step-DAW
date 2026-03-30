@@ -1453,6 +1453,19 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
           mix: 0.5,
         },
       };
+    case 'stereoImager':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          width: 1,
+          midGain: 0,
+          sideGain: 0,
+          monoFreq: 0,
+          pan: 0,
+        },
+      };
   }
 }
 

@@ -44,6 +44,7 @@ import type {
   TransientShaperParams,
   LimiterParams,
   SaturationParams,
+  StereoImagerParams,
   Track,
 } from '../../types/project';
 
@@ -179,6 +180,12 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Console Drive', params: { drive: 0.2, saturationType: 'transistor', harmonicMix: 0.1, inputGain: 3, outputGain: -3, mix: 0.6 } as SaturationParams },
     { name: 'Crunch', params: { drive: 0.7, saturationType: 'hard', harmonicMix: -0.5, inputGain: 0, outputGain: -4, mix: 0.5 } as SaturationParams },
   ],
+  stereoImager: [
+    { name: 'Default', params: { width: 1, midGain: 0, sideGain: 0, monoFreq: 0, pan: 0 } as StereoImagerParams },
+    { name: 'Wide', params: { width: 1.5, midGain: 0, sideGain: 2, monoFreq: 0, pan: 0 } as StereoImagerParams },
+    { name: 'Mono Bass', params: { width: 1.2, midGain: 0, sideGain: 0, monoFreq: 200, pan: 0 } as StereoImagerParams },
+    { name: 'Narrow', params: { width: 0.5, midGain: 2, sideGain: -3, monoFreq: 0, pan: 0 } as StereoImagerParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -211,6 +218,7 @@ import {
   TransientShaperCard,
   LimiterCard,
   SaturationCard,
+  StereoImagerCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -233,6 +241,7 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   transientShaper: 'Transient',
   limiter: 'Limiter',
   saturation: 'Saturation',
+  stereoImager: 'Stereo Imager',
 };
 
 // ─── More menu icon ─────────────────────────────────────────────────────────
@@ -411,6 +420,7 @@ function EffectDevice({
           {effect.type === 'transientShaper' && <TransientShaperCard effect={effect} trackId={track.id} />}
           {effect.type === 'limiter' && <LimiterCard effect={effect} trackId={track.id} />}
           {effect.type === 'saturation' && <SaturationCard effect={effect} trackId={track.id} />}
+          {effect.type === 'stereoImager' && <StereoImagerCard effect={effect} trackId={track.id} />}
         </div>
       </div>
     </div>
@@ -440,6 +450,7 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'transientShaper', label: 'Transient Shaper', icon: '⚡' },
     { type: 'limiter', label: 'Limiter', icon: '🧱' },
     { type: 'saturation', label: 'Saturation', icon: '🔥' },
+    { type: 'stereoImager', label: 'Stereo Imager', icon: '🔊' },
   ];
 
   return (

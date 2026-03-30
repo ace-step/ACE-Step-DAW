@@ -44,11 +44,12 @@ Before writing, find the right Strudel constructs:
 - Dynamics (velocity, gain, envelope)
 - Chord and arpeggio patterns
 
-**Critical syntax to verify** (common sources of errors):
-- How does Strudel notate sharps and flats? → look it up
-- How does Strudel notate chords (simultaneous notes)? → look it up
-- What's the difference between `<>`, `[]`, and `[,]`? → look it up
-- What sample banks are available? → look it up
+**Critical syntax (these cause the most errors — know them cold):**
+- Sharps: `cs4` `fs4` (suffix `s`). Flats: `eb4` `bb4` (suffix `b`). Never use `#`.
+- Chord (simultaneous): `[c3,e3,g3]` — **commas** inside brackets
+- Subdivision (squeeze into one beat): `[c4 d4 e4]` — **spaces**, no commas
+- Alternation (one per cycle, rotating): `<c4 e4 g4>` — angle brackets. **NOT a chord!**
+- Look up sample banks in the Strudel docs — they change across versions
 
 ### 2. PROTOTYPE
 

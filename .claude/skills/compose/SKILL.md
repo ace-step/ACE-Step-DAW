@@ -17,6 +17,9 @@ description: |
 > - **Incremental commits** — present each layer to the user as you go (like committing code)
 > - **Done criteria first** — write acceptance criteria before composing
 > - **Research before coding** — deep genre research (like competitive research in AGENTS.md Step 1)
+>
+> **Prerequisites**: This skill orchestrates `music-theory-engine` (research/analysis)
+> and `strudel-maestro` (pattern generation). Both should be available.
 
 ## Core Loop: Draft → Evaluate → Refine → Commit
 
@@ -73,22 +76,14 @@ Done when:
 - [ ] Overall: feels like [genre], matches [reference] character
 ```
 
-Then distill research into 2-4 composition principles. Present the full brief for user approval:
+Then distill research into 2-4 composition principles and write a **Composition Brief**
+(see music-theory-engine Phase 3 for the template). Add these compose-specific fields:
 
-```
-Genre: [genre]
-Reference: [what was researched]
-Key: [key + scale]
-BPM: [tempo]
-Principles:
-  1. [harmonic character]
-  2. [rhythmic character]
-  3. [textural character]
-Structure: [sections with bar counts]
-Tracks: [instruments/roles planned]
-```
+- **Structure**: sections with bar counts (e.g., Intro 4 → Verse 8 → Chorus 8 → ...)
+- **Tracks**: instruments/roles planned (e.g., Drums TR-808, Bass sub synth, Keys piano, Melody triangle)
+- **Done Criteria**: the checklist above
 
-**Wait for user approval.** The brief is cheap to change; rewriting a full composition is not.
+**Present the brief and wait for user approval.** Changing a brief is cheap; rewriting a composition is not.
 
 ### Step 4: Incremental Composition Loop
 
@@ -103,10 +98,11 @@ Tracks: [instruments/roles planned]
 **4b. External evaluation — NEVER self-assess**
 
 Like CLAUDE.md says: "Never self-assess. Run @tester before every commit."
-For composition: **never judge your own output. Launch an evaluator subagent.**
+For composition: **never judge your own output. Launch an evaluator subagent
+via the Agent tool** (subagent_type: "reviewer" or general-purpose).
 
 ```
-Subagent prompt:
+Evaluator subagent prompt:
 "Evaluate this Strudel pattern for a [genre] composition in [key] at [BPM].
 Composition principles: [your 2-4 principles].
 
@@ -141,7 +137,7 @@ Be concrete — say which notes, which beats, what to change."
 After all layers are combined, do a holistic evaluation:
 
 ```
-Subagent prompt:
+Evaluator subagent prompt:
 "Evaluate this complete [genre] arrangement in [key] at [BPM].
 Principles: [your 2-4 principles].
 

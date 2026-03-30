@@ -351,12 +351,6 @@ function EffectDevice({
           </div>
         )}
 
-        {/* Color dot */}
-        <div
-          className="w-[7px] h-[7px] rounded-full shrink-0"
-          style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
-        />
-
         {/* Effect name */}
         <button
           onClick={() => !fullWidth && setCollapsed(!collapsed)}
@@ -526,11 +520,11 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     <div className="shrink-0">
       <button
         ref={buttonRef}
-        className="flex items-center justify-center gap-1 px-2 py-1.5 border border-dashed border-white/10 rounded-md hover:border-white/20 hover:bg-white/5 transition-colors"
+        className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-white/40 hover:text-white/60 hover:bg-white/[0.06] transition-colors"
         onClick={(e) => { e.stopPropagation(); handleToggle(); }}
       >
-        <Plus className="h-3 w-3 text-white/30" />
-        <span className="text-[9px] text-white/25">Add</span>
+        <Plus className="h-3 w-3" />
+        <span className="text-[9px]">Add</span>
       </button>
 
       {open && menuPos && (
@@ -648,7 +642,7 @@ export function EffectChain() {
     >
       {/* ── Resize handle ── */}
       <div
-        className="h-1.5 w-full cursor-ns-resize bg-[#333] hover:bg-violet-500 transition-colors flex-shrink-0"
+        className="h-[2px] w-full cursor-ns-resize bg-white/[0.06] hover:bg-daw-accent transition-colors flex-shrink-0"
         onMouseDown={handleResizeMouseDown}
       />
 
@@ -706,15 +700,14 @@ export function EffectChain() {
               <button
                 key={effect.id}
                 onClick={() => setSelectedEffectIdx(idx)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium transition-all border-r border-white/[0.04] last:border-r-0 ${
                   isSelected
-                    ? 'text-white/90'
-                    : 'text-white/45 hover:text-white/70 hover:bg-white/[0.04]'
+                    ? 'text-white/90 bg-white/[0.06]'
+                    : 'text-white/40 hover:text-white/65 hover:bg-white/[0.03]'
                 } ${!effect.enabled ? 'opacity-40' : ''}`}
                 style={isSelected ? {
-                  backgroundColor: `${c}18`,
-                  boxShadow: `inset 0 -2px 0 ${c}80`,
-                } : undefined}
+                  borderBottom: `2px solid ${c}`,
+                } : { borderBottom: '2px solid transparent' }}
               >
                 <div
                   className="w-[5px] h-[5px] rounded-full shrink-0"

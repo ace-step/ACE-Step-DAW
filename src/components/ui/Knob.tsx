@@ -27,7 +27,6 @@ interface KnobProps {
 
 const VARIANT_SIZES: Record<string, number> = { sm: 24, md: 32, lg: 48 };
 
-/** Maps a value in [min,max] to a rotation angle in degrees. */
 function valueToAngle(value: number, min: number, max: number, arc: number): number {
   const pct = (value - min) / (max - min);
   return -arc / 2 + pct * arc;
@@ -65,13 +64,13 @@ export function Knob({
     e.stopPropagation();
     dragStart.current = { y: e.clientY, value };
     setIsDragging(true);
+    knobRef.current?.requestPointerLock?.();
 
     const onMove = (mv: MouseEvent) => {
       if (!dragStart.current) return;
       const range = max - min;
-      const dy = dragStart.current.y - mv.clientY;
       const sensitivity = mv.altKey ? range / 2000 : range / 200;
-      const delta = dy * sensitivity;
+      const delta = mv.movementY * sensitivity;
       const newVal = applyStep(dragStart.current.value + delta);
       dragStart.current = { y: mv.clientY, value: newVal };
       onChange(newVal);
@@ -80,6 +79,7 @@ export function Knob({
     const onUp = () => {
       dragStart.current = null;
       setIsDragging(false);
+      document.exitPointerLock?.();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -117,10 +117,10 @@ export function Knob({
     setShowPrecisionInput(true);
   }, [disabled]);
 
-  // SVG geometry
+  // SVG geometry — Ableton-flat style: arc + center dot only
   const s = actualSize;
   const radius = s / 2;
-  const strokeWidth = Math.max(2.5, s / 10); // thicker arcs for better visibility
+  const strokeWidth = Math.max(2.5, s / 10);
   const startAngle = -arc / 2 - 90;
   const endAngle = arc / 2 - 90;
   const angle = valueToAngle(value, min, max, arc);
@@ -141,12 +141,9 @@ export function Knob({
   const trackPath = `M ${arcStart.x} ${arcStart.y} A ${trackR} ${trackR} 0 ${largeArc} 1 ${arcEnd.x} ${arcEnd.y}`;
   const fillPath = `M ${arcStart.x} ${arcStart.y} A ${trackR} ${trackR} 0 ${fillLarge} 1 ${fillEnd.x} ${fillEnd.y}`;
 
-  // Pointer tick — extends from center toward edge
-  const tickInner = polarToXY(angle - 90, radius * 0.15);
-  const tickOuter = polarToXY(angle - 90, radius * 0.46);
-
-  // Body radius — larger for more surface area
-  const bodyR = radius * 0.56;
+  // Pointer position — small dot at current angle
+  const pointerPos = polarToXY(angle - 90, trackR);
+  const pointerR = Math.max(1.5, strokeWidth * 0.4);
 
   // Value display
   const defaultDisplayValue = step !== undefined && step >= 1
@@ -154,12 +151,9 @@ export function Knob({
     : value.toFixed(1);
   const displayValue = formatValue ? formatValue(value) : defaultDisplayValue;
 
-  // Unique IDs for SVG defs
-  const uid = useRef(`knob-${Math.random().toString(36).slice(2, 8)}`).current;
-
   return (
     <div
-      className={`flex flex-col items-center gap-[3px] select-none ${disabled ? 'opacity-40' : ''}`}
+      className={`flex flex-col items-center gap-[2px] select-none ${disabled ? 'opacity-40' : ''}`}
       title={`${label ?? ''}: ${displayValue}${unit && !formatValue ? unit : ''} (double-click to reset)`}
     >
       <div className="relative">
@@ -174,88 +168,46 @@ export function Knob({
         >
           <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
             <defs>
-              {/* Drop shadow — subtle depth */}
-              <filter id={`${uid}-shadow`} x="-25%" y="-15%" width="150%" height="160%">
-                <feDropShadow dx="0" dy={s > 30 ? 1.5 : 1} stdDeviation={s > 30 ? 2.5 : 1.5} floodColor="#000" floodOpacity="0.6" />
+              <filter id="knob-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
-              {/* Radial gradient — brighter metallic feel with off-center highlight */}
-              <radialGradient id={`${uid}-body`} cx="42%" cy="38%" r="55%">
-                <stop offset="0%" stopColor="#6a6a6a" />
-                <stop offset="45%" stopColor="#4a4a4a" />
-                <stop offset="80%" stopColor="#353535" />
-                <stop offset="100%" stopColor="#282828" />
-              </radialGradient>
-              {/* Active glow — brighter, wider */}
-              {isDragging && (
-                <filter id={`${uid}-glow`} x="-60%" y="-60%" width="220%" height="220%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                  <feFlood floodColor={color} floodOpacity="0.4" result="color" />
-                  <feComposite in="color" in2="blur" operator="in" result="glow" />
-                  <feMerge>
-                    <feMergeNode in="glow" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              )}
             </defs>
 
-            {/* Track arc — darker background ring */}
+            {/* Track arc — dark background ring */}
             <path
               d={trackPath}
               fill="none"
-              stroke="#252525"
+              stroke="rgba(255,255,255,0.08)"
               strokeWidth={strokeWidth}
               strokeLinecap="round"
             />
 
-            {/* Value fill arc — colored, brighter */}
+            {/* Value fill arc — colored */}
             <path
               d={fillPath}
               fill="none"
               stroke={color}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
-              opacity={isDragging ? 1 : 0.85}
+              opacity={isDragging ? 1 : 0.8}
+              filter={isDragging ? 'url(#knob-glow)' : undefined}
             />
 
-            {/* Knob body — layered for depth */}
-            <g filter={isDragging ? `url(#${uid}-glow)` : `url(#${uid}-shadow)`}>
-              {/* Outer edge ring — dark bevel */}
-              <circle
-                cx={radius}
-                cy={radius}
-                r={bodyR + 1.5}
-                fill="none"
-                stroke="#1a1a1a"
-                strokeWidth={1}
-              />
-              {/* Main body — metallic gradient */}
-              <circle
-                cx={radius}
-                cy={radius}
-                r={bodyR}
-                fill={`url(#${uid}-body)`}
-              />
-              {/* Top highlight — convex surface simulation */}
-              <circle
-                cx={radius}
-                cy={radius}
-                r={bodyR - 1}
-                fill="none"
-                stroke="rgba(255,255,255,0.1)"
-                strokeWidth={0.7}
-              />
-            </g>
+            {/* Center dot — small reference point */}
+            <circle
+              cx={radius}
+              cy={radius}
+              r={Math.max(2, s / 12)}
+              fill="rgba(255,255,255,0.12)"
+            />
 
-            {/* Pointer tick — bright indicator line */}
-            <line
-              x1={tickInner.x}
-              y1={tickInner.y}
-              x2={tickOuter.x}
-              y2={tickOuter.y}
-              stroke={isDragging ? '#fff' : '#ddd'}
-              strokeWidth={Math.max(1.5, strokeWidth * 0.45)}
-              strokeLinecap="round"
+            {/* Pointer dot at current position on the arc */}
+            <circle
+              cx={pointerPos.x}
+              cy={pointerPos.y}
+              r={pointerR}
+              fill={isDragging ? '#fff' : 'rgba(255,255,255,0.7)'}
             />
           </svg>
         </div>
@@ -264,9 +216,9 @@ export function Knob({
         {showTooltip && isDragging && (
           <div
             className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap
-                        rounded-md bg-black/90 px-2 py-0.5 text-[10px] font-mono text-white shadow-lg
+                        rounded bg-black/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow-lg
                         border border-white/10"
-            style={{ bottom: s + 6 }}
+            style={{ bottom: s + 4 }}
           >
             {displayValue}{unit && !formatValue ? unit : ''}
           </div>
@@ -287,12 +239,14 @@ export function Knob({
           onCancel={() => setShowPrecisionInput(false)}
         />
       )}
+      {/* Label — dim, small */}
       {label && (
-        <span className="text-[10px] text-zinc-400 leading-none tracking-wide">
+        <span className="text-[10px] text-white/30 leading-none tracking-wide">
           {label}
         </span>
       )}
-      <span className="text-[10px] text-zinc-300 leading-none font-mono">
+      {/* Value — prominent */}
+      <span className="text-[11px] text-white/70 leading-none font-mono font-medium">
         {displayValue}{unit && !formatValue ? unit : ''}
       </span>
     </div>

@@ -315,33 +315,42 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col min-w-[170px] max-w-[220px] rounded-lg border shrink-0 transition-all ${
-        isDragOver ? 'border-l-2 border-l-violet-500' : 'border-white/10'
+      className={`flex flex-col min-w-[180px] max-w-[240px] rounded-lg shrink-0 transition-all ${
+        isDragOver ? 'ring-1 ring-violet-500' : ''
       } ${!effect.enabled ? 'opacity-40' : ''}`}
-      style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+      style={{
+        backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
+        border: `1px solid ${color}22`,
+      }}
       onMouseOver={() => onDragOver(index)}
     >
       {/* ── Header bar ── */}
       <div
-        className="flex items-center gap-1 px-1.5 py-1 rounded-t-lg select-none"
-        style={{ backgroundColor: `${color}18`, borderBottom: `1px solid ${color}20` }}
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-t-lg select-none"
+        style={{
+          background: `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
+          borderBottom: `1px solid ${color}25`,
+        }}
       >
         {/* Drag handle */}
         <div
-          className="cursor-grab active:cursor-grabbing opacity-40 hover:opacity-80"
+          className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
           onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
         >
-          <GripVertical className="h-3 w-3 text-white/40" />
+          <GripVertical className="h-3 w-3 text-white/50" />
         </div>
 
         {/* Color dot */}
-        <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ backgroundColor: color }} />
+        <div
+          className="w-[7px] h-[7px] rounded-full shrink-0"
+          style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}60` }}
+        />
 
         {/* Effect name — click to toggle expand */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="text-[10px] font-semibold flex-1 truncate text-left hover:text-white/90"
-          style={{ color: `${color}cc` }}
+          className="text-[10px] font-semibold flex-1 truncate text-left transition-colors"
+          style={{ color: `${color}dd` }}
         >
           {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
         </button>

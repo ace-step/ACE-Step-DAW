@@ -100,17 +100,17 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
   const norm = (value - min) / (max - min);
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       {label && (
         <div className="flex justify-between items-center">
-          <span className="text-[7px] text-white/30 uppercase">{label}</span>
-          {displayValue && <span className="text-[8px] text-white/50 font-mono">{displayValue}</span>}
+          <span className="text-[8px] text-white/40 uppercase tracking-wider">{label}</span>
+          {displayValue && <span className="text-[9px] text-white/60 font-mono">{displayValue}</span>}
         </div>
       )}
       <div
         ref={trackRef}
         className="relative cursor-pointer rounded-full"
-        style={{ width, height: 6 }}
+        style={{ width, height: 8 }}
         onMouseDown={handleMouseDown}
         onDoubleClick={(e) => {
           e.preventDefault();
@@ -124,14 +124,18 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
         }}
         aria-label={`${label ?? 'Control'} slider`}
       >
-        <div className="absolute inset-0 rounded-full bg-white/5 border border-white/10" />
+        <div className="absolute inset-0 rounded-full bg-white/[0.06]" />
         <div
-          className="absolute left-0 top-0 bottom-0 rounded-full"
-          style={{ width: `${norm * 100}%`, backgroundColor: color, opacity: 0.7 }}
+          className="absolute left-0 top-0 bottom-0 rounded-full transition-[width] duration-75"
+          style={{ width: `${norm * 100}%`, backgroundColor: color, opacity: 0.6 }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#2a2a4a] border border-white/20 shadow"
-          style={{ left: `calc(${norm * 100}% - 6px)` }}
+          className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full shadow-md transition-[left] duration-75"
+          style={{
+            left: `calc(${norm * 100}% - 7px)`,
+            backgroundColor: color,
+            border: '2px solid rgba(255,255,255,0.2)',
+          }}
         />
       </div>
       {showPrecisionInput && (

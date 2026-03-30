@@ -1426,6 +1426,33 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
           output: 0,
         },
       };
+    case 'limiter':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          ceiling: -0.3,
+          release: 0.1,
+          lookahead: 0.005,
+          gain: 0,
+          style: 'transparent',
+        },
+      };
+    case 'saturation':
+      return {
+        id,
+        type,
+        enabled: true,
+        params: {
+          drive: 0.3,
+          saturationType: 'tape',
+          harmonicMix: 0,
+          inputGain: 0,
+          outputGain: 0,
+          mix: 0.5,
+        },
+      };
   }
 }
 

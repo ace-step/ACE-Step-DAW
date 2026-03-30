@@ -99,6 +99,19 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     mix: { label: 'Mix', min: 0, max: 1, color: '#b89340' },
     output: { label: 'Output', min: -12, max: 12, color: '#b89340' },
   },
+  limiter: {
+    ceiling: { label: 'Ceiling', min: -12, max: 0, color: '#d4a040' },
+    release: { label: 'Release', min: 0.001, max: 1, color: '#d4a040' },
+    lookahead: { label: 'Lookahead', min: 0, max: 0.02, color: '#d4a040' },
+    gain: { label: 'Gain', min: -12, max: 24, color: '#d4a040' },
+  },
+  saturation: {
+    drive: { label: 'Drive', min: 0, max: 1, color: '#c46454' },
+    harmonicMix: { label: 'Harmonics', min: -1, max: 1, color: '#c46454' },
+    inputGain: { label: 'Input', min: -12, max: 12, color: '#c46454' },
+    outputGain: { label: 'Output', min: -12, max: 12, color: '#c46454' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#c46454' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -158,6 +171,14 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'transientShaper': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'limiter': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'saturation': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

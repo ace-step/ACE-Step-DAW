@@ -480,6 +480,36 @@ export interface TransientShaperParams {
   output: number;
 }
 
+export interface LimiterParams {
+  /** Output ceiling in dBTP (typically -0.1 to -3.0) */
+  ceiling: number;
+  /** Release time in seconds (0.001–1.0) */
+  release: number;
+  /** Lookahead in seconds (0–0.02) */
+  lookahead: number;
+  /** Input gain in dB (-12 to +24) — drives signal into limiter */
+  gain: number;
+  /** Limiter algorithm style */
+  style: 'transparent' | 'aggressive' | 'warm';
+}
+
+export type SaturationType = 'tape' | 'tube' | 'transistor' | 'soft' | 'hard';
+
+export interface SaturationParams {
+  /** Drive amount (0–1) */
+  drive: number;
+  /** Saturation character type */
+  saturationType: SaturationType;
+  /** Harmonic balance: -1 = odd only, 0 = balanced, +1 = even only */
+  harmonicMix: number;
+  /** Input gain in dB (-12 to +12) */
+  inputGain: number;
+  /** Output gain in dB (-12 to +12) */
+  outputGain: number;
+  /** Dry/wet mix (0–1) */
+  mix: number;
+}
+
 export interface ReverbParams {
   decay: number;
   preDelay: number;
@@ -596,7 +626,9 @@ export type TrackEffect =
   | EffectBase<'convolver', ConvolverParams>
   | EffectBase<'gate', GateParams>
   | EffectBase<'deesser', DeEsserParams>
-  | EffectBase<'transientShaper', TransientShaperParams>;
+  | EffectBase<'transientShaper', TransientShaperParams>
+  | EffectBase<'limiter', LimiterParams>
+  | EffectBase<'saturation', SaturationParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1224,7 +1256,9 @@ export type AutomatableEffectTarget =
   | { effectType: 'convolver'; param: Exclude<keyof ConvolverParams, 'irType' | 'irUrl'> }
   | { effectType: 'gate'; param: Exclude<keyof GateParams, 'mode'> }
   | { effectType: 'deesser'; param: Exclude<keyof DeEsserParams, 'mode' | 'listen'> }
-  | { effectType: 'transientShaper'; param: keyof TransientShaperParams };
+  | { effectType: 'transientShaper'; param: keyof TransientShaperParams }
+  | { effectType: 'limiter'; param: Exclude<keyof LimiterParams, 'style'> }
+  | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

@@ -42,6 +42,8 @@ import type {
   GateParams,
   DeEsserParams,
   TransientShaperParams,
+  LimiterParams,
+  SaturationParams,
   Track,
 } from '../../types/project';
 
@@ -165,6 +167,18 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Tight', params: { attack: 0, sustain: -60, mix: 1, output: 0 } as TransientShaperParams },
     { name: 'Full', params: { attack: 30, sustain: 40, mix: 1, output: 0 } as TransientShaperParams },
   ],
+  limiter: [
+    { name: 'Transparent', params: { ceiling: -0.3, release: 0.1, lookahead: 0.005, gain: 0, style: 'transparent' } as LimiterParams },
+    { name: 'Loud', params: { ceiling: -0.1, release: 0.05, lookahead: 0.003, gain: 6, style: 'aggressive' } as LimiterParams },
+    { name: 'Broadcast', params: { ceiling: -1.0, release: 0.2, lookahead: 0.01, gain: 3, style: 'warm' } as LimiterParams },
+    { name: 'Mastering', params: { ceiling: -0.3, release: 0.15, lookahead: 0.005, gain: 2, style: 'transparent' } as LimiterParams },
+  ],
+  saturation: [
+    { name: 'Tape Warmth', params: { drive: 0.25, saturationType: 'tape', harmonicMix: 0, inputGain: 0, outputGain: 0, mix: 0.4 } as SaturationParams },
+    { name: 'Tube Glow', params: { drive: 0.35, saturationType: 'tube', harmonicMix: 0.3, inputGain: 0, outputGain: -2, mix: 0.5 } as SaturationParams },
+    { name: 'Console Drive', params: { drive: 0.2, saturationType: 'transistor', harmonicMix: 0.1, inputGain: 3, outputGain: -3, mix: 0.6 } as SaturationParams },
+    { name: 'Crunch', params: { drive: 0.7, saturationType: 'hard', harmonicMix: -0.5, inputGain: 0, outputGain: -4, mix: 0.5 } as SaturationParams },
+  ],
 };
 
 // ─── Horizontal Slider ───────────────────────────────────────────────────────
@@ -195,6 +209,8 @@ import {
   GateCard,
   DeEsserCard,
   TransientShaperCard,
+  LimiterCard,
+  SaturationCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -215,6 +231,8 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   gate: 'Gate',
   deesser: 'De-esser',
   transientShaper: 'Transient',
+  limiter: 'Limiter',
+  saturation: 'Saturation',
 };
 
 // ─── More menu icon ─────────────────────────────────────────────────────────
@@ -391,6 +409,8 @@ function EffectDevice({
           {effect.type === 'gate' && <GateCard effect={effect} trackId={track.id} />}
           {effect.type === 'deesser' && <DeEsserCard effect={effect} trackId={track.id} />}
           {effect.type === 'transientShaper' && <TransientShaperCard effect={effect} trackId={track.id} />}
+          {effect.type === 'limiter' && <LimiterCard effect={effect} trackId={track.id} />}
+          {effect.type === 'saturation' && <SaturationCard effect={effect} trackId={track.id} />}
         </div>
       </div>
     </div>
@@ -418,6 +438,8 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'gate', label: 'Gate / Expander', icon: '🚪' },
     { type: 'deesser', label: 'De-esser', icon: '🎤' },
     { type: 'transientShaper', label: 'Transient Shaper', icon: '⚡' },
+    { type: 'limiter', label: 'Limiter', icon: '🧱' },
+    { type: 'saturation', label: 'Saturation', icon: '🔥' },
   ];
 
   return (

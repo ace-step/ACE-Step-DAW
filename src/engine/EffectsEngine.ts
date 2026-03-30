@@ -559,7 +559,178 @@ function createNode(effect: TrackEffect): EffectNode {
         _transientOutputGain: outputGain,
       } as EffectNode;
     }
+    case 'limiter': {
+      // Brickwall limiter with lookahead, gain staging, and configurable release
+      const p = effect.params as import('../types/project').LimiterParams;
+      const input = new Tone.Gain(Math.pow(10, p.gain / 20)); // input gain stage
+      const output = new Tone.Gain(1);
+      const limiterGain = new Tone.Gain(1);
+      const ceilingGain = new Tone.Gain(Math.pow(10, p.ceiling / 20));
+
+      const analyser = Tone.getContext().createAnalyser();
+      analyser.fftSize = 256;
+      const analyserBuffer = new Float32Array(analyser.fftSize);
+
+      input.connect(limiterGain);
+      limiterGain.connect(ceilingGain);
+      ceilingGain.connect(output);
+      const inputNative = unwrapToNative(input, 'output');
+      inputNative.connect(analyser);
+
+      const limiterState = {
+        currentGain: 1,
+        rafId: 0,
+        params: { ...p },
+        reduction: 0,
+      };
+
+      const tick = () => {
+        analyser.getFloatTimeDomainData(analyserBuffer);
+        let peak = 0;
+        for (let i = 0; i < analyserBuffer.length; i++) {
+          const abs = Math.abs(analyserBuffer[i]);
+          if (abs > peak) peak = abs;
+        }
+
+        const sp = limiterState.params;
+        const ceilingLinear = Math.pow(10, sp.ceiling / 20);
+        const inputGainLinear = Math.pow(10, sp.gain / 20);
+        const peakAfterGain = peak * inputGainLinear;
+
+        let targetGain = 1;
+        if (peakAfterGain > ceilingLinear && peakAfterGain > 0) {
+          targetGain = ceilingLinear / peakAfterGain;
+        }
+
+        const dt = 1 / 60;
+        // Fast attack for limiting, configurable release
+        const coeff = targetGain < limiterState.currentGain
+          ? 1 - Math.exp(-dt / 0.0005) // near-instant attack
+          : 1 - Math.exp(-dt / Math.max(0.001, sp.release));
+        limiterState.currentGain += (targetGain - limiterState.currentGain) * coeff;
+        limiterState.reduction = 20 * Math.log10(Math.max(0.0001, limiterState.currentGain));
+
+        const nativeGain = unwrapToNative(limiterGain, 'input') as GainNode;
+        nativeGain.gain.value = limiterState.currentGain;
+
+        limiterState.rafId = requestAnimationFrame(tick);
+      };
+      limiterState.rafId = requestAnimationFrame(tick);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: input,
+        inputNode: unwrapToNative(input, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          cancelAnimationFrame(limiterState.rafId);
+          input.dispose();
+          output.dispose();
+          limiterGain.dispose();
+          ceilingGain.dispose();
+          analyser.disconnect();
+        },
+        _limiterState: limiterState,
+        _limiterInputGain: input,
+        _limiterCeilingGain: ceilingGain,
+      } as EffectNode;
+    }
+    case 'saturation': {
+      // Analog-modeled saturation with multiple character types
+      const p = effect.params as import('../types/project').SaturationParams;
+      const inputGain = new Tone.Gain(Math.pow(10, p.inputGain / 20));
+      const output = new Tone.Gain(1);
+      const dryGain = new Tone.Gain(1 - p.mix);
+      const wetGain = new Tone.Gain(p.mix);
+      const outputGain = new Tone.Gain(Math.pow(10, p.outputGain / 20));
+
+      // Waveshaper for saturation
+      const waveshaper = new Tone.WaveShaper((x: number) => {
+        return applySaturationCurve(x, p.drive, p.saturationType, p.harmonicMix);
+      }, 4096);
+
+      inputGain.connect(dryGain);
+      inputGain.connect(waveshaper);
+      waveshaper.connect(wetGain);
+      dryGain.connect(outputGain);
+      wetGain.connect(outputGain);
+      outputGain.connect(output);
+
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: inputGain,
+        inputNode: unwrapToNative(inputGain, 'input'),
+        outputNode: unwrapToNative(output, 'output'),
+        dispose: () => {
+          inputGain.dispose();
+          output.dispose();
+          dryGain.dispose();
+          wetGain.dispose();
+          outputGain.dispose();
+          waveshaper.dispose();
+        },
+        _saturationWaveshaper: waveshaper,
+        _saturationDryGain: dryGain,
+        _saturationWetGain: wetGain,
+        _saturationInputGain: inputGain,
+        _saturationOutputGain: outputGain,
+      } as EffectNode;
+    }
   }
+}
+
+/** Compute saturation curve sample for given parameters */
+function applySaturationCurve(
+  x: number,
+  drive: number,
+  type: import('../types/project').SaturationType,
+  harmonicMix: number,
+): number {
+  const d = 1 + drive * 10; // drive multiplier
+  const input = x * d;
+
+  let odd: number; // odd harmonics (asymmetric)
+  let even: number; // even harmonics (symmetric)
+
+  switch (type) {
+    case 'tape':
+      // Soft saturation with gentle compression — tanh approximation
+      odd = Math.tanh(input);
+      even = Math.tanh(input * input) * Math.sign(input) * 0.5;
+      break;
+    case 'tube':
+      // Asymmetric triode-style clipping
+      odd = input > 0
+        ? 1 - Math.exp(-input)
+        : -Math.tanh(-input * 0.8);
+      even = (1 - Math.exp(-Math.abs(input))) * Math.sign(input) * 0.3;
+      break;
+    case 'transistor':
+      // Hard-knee transistor clipping
+      odd = Math.max(-1, Math.min(1, input * 1.2)) * 0.9 + Math.tanh(input * 0.3) * 0.1;
+      even = Math.tanh(input * input * 0.5) * Math.sign(input) * 0.4;
+      break;
+    case 'soft':
+      // Gentle soft clip
+      odd = input / (1 + Math.abs(input));
+      even = 0;
+      break;
+    case 'hard':
+    default:
+      // Hard clip
+      odd = Math.max(-1, Math.min(1, input));
+      even = 0;
+      break;
+  }
+
+  // Blend odd/even harmonics: -1 = pure odd, 0 = balanced, +1 = pure even
+  const evenWeight = Math.max(0, harmonicMix);
+  const oddWeight = 1 - evenWeight;
+  const result = odd * oddWeight + even * evenWeight;
+
+  return Math.max(-1, Math.min(1, result / d)); // normalize back
 }
 
 function scKey(trackId: string, effectId: string): string {
@@ -744,6 +915,38 @@ class EffectsEngine {
         if (outputGain) outputGain.gain.value = Math.pow(10, p.output / 20);
         break;
       }
+      case 'limiter': {
+        const p = params as import('../types/project').LimiterParams;
+        const state = (effectNode as Record<string, unknown>)._limiterState as { params: import('../types/project').LimiterParams } | undefined;
+        if (state) Object.assign(state.params, p);
+        const ig = (effectNode as Record<string, unknown>)._limiterInputGain as Tone.Gain | undefined;
+        const cg = (effectNode as Record<string, unknown>)._limiterCeilingGain as Tone.Gain | undefined;
+        if (ig) ig.gain.value = Math.pow(10, p.gain / 20);
+        if (cg) cg.gain.value = Math.pow(10, p.ceiling / 20);
+        break;
+      }
+      case 'saturation': {
+        const p = params as import('../types/project').SaturationParams;
+        const ws = (effectNode as Record<string, unknown>)._saturationWaveshaper as Tone.WaveShaper | undefined;
+        if (ws) {
+          // Rebuild waveshaper curve with new params
+          const curve = new Float32Array(4096);
+          for (let i = 0; i < 4096; i++) {
+            const x = (i / 4095) * 2 - 1;
+            curve[i] = applySaturationCurve(x, p.drive, p.saturationType, p.harmonicMix);
+          }
+          ws.curve = curve;
+        }
+        const dg = (effectNode as Record<string, unknown>)._saturationDryGain as Tone.Gain | undefined;
+        const wg = (effectNode as Record<string, unknown>)._saturationWetGain as Tone.Gain | undefined;
+        const ig = (effectNode as Record<string, unknown>)._saturationInputGain as Tone.Gain | undefined;
+        const og = (effectNode as Record<string, unknown>)._saturationOutputGain as Tone.Gain | undefined;
+        if (dg) dg.gain.value = 1 - p.mix;
+        if (wg) wg.gain.value = p.mix;
+        if (ig) ig.gain.value = Math.pow(10, p.inputGain / 20);
+        if (og) og.gain.value = Math.pow(10, p.outputGain / 20);
+        break;
+      }
     }
   }
 
@@ -897,6 +1100,36 @@ class EffectsEngine {
         if (target.param === 'output') {
           const outputGain = (effectNode as Record<string, unknown>)._transientOutputGain as Tone.Gain | undefined;
           if (outputGain) outputGain.gain.value = Math.pow(10, value / 20);
+        }
+        break;
+      }
+      case 'limiter': {
+        const state = (effectNode as Record<string, unknown>)._limiterState as { params: Record<string, number | string> } | undefined;
+        if (state) (state.params as Record<string, number>)[target.param] = value;
+        if (target.param === 'gain') {
+          const ig = (effectNode as Record<string, unknown>)._limiterInputGain as Tone.Gain | undefined;
+          if (ig) ig.gain.value = Math.pow(10, value / 20);
+        }
+        if (target.param === 'ceiling') {
+          const cg = (effectNode as Record<string, unknown>)._limiterCeilingGain as Tone.Gain | undefined;
+          if (cg) cg.gain.value = Math.pow(10, value / 20);
+        }
+        break;
+      }
+      case 'saturation': {
+        if (target.param === 'mix') {
+          const dg = (effectNode as Record<string, unknown>)._saturationDryGain as Tone.Gain | undefined;
+          const wg = (effectNode as Record<string, unknown>)._saturationWetGain as Tone.Gain | undefined;
+          if (dg) dg.gain.value = 1 - value;
+          if (wg) wg.gain.value = value;
+        }
+        if (target.param === 'inputGain') {
+          const ig = (effectNode as Record<string, unknown>)._saturationInputGain as Tone.Gain | undefined;
+          if (ig) ig.gain.value = Math.pow(10, value / 20);
+        }
+        if (target.param === 'outputGain') {
+          const og = (effectNode as Record<string, unknown>)._saturationOutputGain as Tone.Gain | undefined;
+          if (og) og.gain.value = Math.pow(10, value / 20);
         }
         break;
       }

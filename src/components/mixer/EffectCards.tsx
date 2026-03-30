@@ -32,6 +32,9 @@ import type {
   GateParams,
   DeEsserParams,
   TransientShaperParams,
+  LimiterParams,
+  SaturationParams,
+  SaturationType,
 } from '../../types/project';
 import {
   PARAMETRIC_EQ_MAX_FREQUENCY,
@@ -1211,6 +1214,113 @@ export function TransientShaperCard({ effect, trackId }: { effect: TrackEffect &
   );
 }
 
+// ─── Limiter Card ───────────────────────────────────────────────────────────
+
+export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type: 'limiter' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<LimiterParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'limiter');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#d4a040"
+      mode={
+        <>
+          {(['transparent', 'aggressive', 'warm'] as LimiterParams['style'][]).map((s) => (
+            <button
+              key={s}
+              className={`px-2 py-0.5 text-[8px] rounded capitalize ${
+                p.style === s ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+              }`}
+              onClick={() => update({ style: s })}
+            >
+              {s}
+            </button>
+          ))}
+        </>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'gain' }} normalizedValue={normalizeEffectParamValue('limiter', 'gain', p.gain) ?? 0.5}>
+        <Knob value={p.gain} onChange={(v) => update({ gain: v })} min={-12} max={24} defaultValue={0} label="Gain" unit=" dB" size={36} step={0.5} color="#d4a040" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'ceiling' }} normalizedValue={normalizeEffectParamValue('limiter', 'ceiling', p.ceiling) ?? 0.5}>
+        <Knob value={p.ceiling} onChange={(v) => update({ ceiling: v })} min={-12} max={0} defaultValue={-0.3} label="Ceiling" unit=" dB" size={36} step={0.1} color="#d4a040" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'release' }} normalizedValue={normalizeEffectParamValue('limiter', 'release', p.release) ?? 0.5}>
+        <Knob value={p.release * 1000} onChange={(v) => update({ release: v / 1000 })} min={1} max={1000} defaultValue={100} label="Release" unit=" ms" size={28} step={1} color="#d4a040" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'lookahead' }} normalizedValue={normalizeEffectParamValue('limiter', 'lookahead', p.lookahead) ?? 0.5}>
+        <Knob value={p.lookahead * 1000} onChange={(v) => update({ lookahead: v / 1000 })} min={0} max={20} defaultValue={5} label="L.Ahead" unit=" ms" size={28} step={0.5} color="#d4a040" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
+// ─── Saturation Card ────────────────────────────────────────────────────────
+
+const SATURATION_TYPE_LABELS: Record<SaturationType, string> = {
+  tape: 'Tape',
+  tube: 'Tube',
+  transistor: 'Transistor',
+  soft: 'Soft',
+  hard: 'Hard',
+};
+
+export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { type: 'saturation' }; trackId: string }) {
+  const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
+  const p = effect.params;
+
+  const update = (updates: Partial<SaturationParams>) => {
+    const newParams = { ...p, ...updates };
+    updateTrackEffect(trackId, effect.id, { params: newParams } as Partial<TrackEffect>);
+    effectsEngine.updateEffectParams(trackId, effect.id, newParams, 'saturation');
+  };
+
+  return (
+    <EffectCardLayout
+      color="#c46454"
+      mode={
+        <>
+          {(Object.keys(SATURATION_TYPE_LABELS) as SaturationType[]).map((st) => (
+            <button
+              key={st}
+              className={`px-1.5 py-0.5 text-[8px] rounded capitalize ${
+                p.saturationType === st ? 'bg-red-500/30 text-red-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+              }`}
+              onClick={() => update({ saturationType: st })}
+            >
+              {SATURATION_TYPE_LABELS[st]}
+            </button>
+          ))}
+        </>
+      }
+      footer={
+        <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'mix' }} normalizedValue={normalizeEffectParamValue('saturation', 'mix', p.mix) ?? 0.5}>
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#c46454" />
+        </AutomationControlShell>
+      }
+    >
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'drive' }} normalizedValue={normalizeEffectParamValue('saturation', 'drive', p.drive) ?? 0.5}>
+        <Knob value={p.drive} onChange={(v) => update({ drive: v })} min={0} max={1} defaultValue={0.3} label="Drive" size={36} step={0.01} color="#c46454" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'harmonicMix' }} normalizedValue={normalizeEffectParamValue('saturation', 'harmonicMix', p.harmonicMix) ?? 0.5}>
+        <Knob value={p.harmonicMix} onChange={(v) => update({ harmonicMix: v })} min={-1} max={1} defaultValue={0} label="Harmonics" size={32} step={0.01} color="#c46454" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'inputGain' }} normalizedValue={normalizeEffectParamValue('saturation', 'inputGain', p.inputGain) ?? 0.5}>
+        <Knob value={p.inputGain} onChange={(v) => update({ inputGain: v })} min={-12} max={12} defaultValue={0} label="Input" unit=" dB" size={28} step={0.5} color="#c46454" />
+      </AutomationControlShell>
+      <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'outputGain' }} normalizedValue={normalizeEffectParamValue('saturation', 'outputGain', p.outputGain) ?? 0.5}>
+        <Knob value={p.outputGain} onChange={(v) => update({ outputGain: v })} min={-12} max={12} defaultValue={0} label="Output" unit=" dB" size={28} step={0.5} color="#c46454" />
+      </AutomationControlShell>
+    </EffectCardLayout>
+  );
+}
+
 /**
  * Effect colors — desaturated, category-grouped.
  * CSS custom properties are defined in src/styles/effect-colors.css.
@@ -1231,6 +1341,8 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   gate: '#b8903a',
   deesser: '#c4a654',
   transientShaper: '#b89340',
+  limiter: '#d4a040',
+  saturation: '#c46454',
 };
 
 /** Resolve a CSS custom property to its computed hex value (for canvas drawing contexts). */
@@ -1251,6 +1363,8 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     gate: '--fx-gate',
     deesser: '--fx-deesser',
     transientShaper: '--fx-transient-shaper',
+    limiter: '--fx-limiter',
+    saturation: '--fx-distortion',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

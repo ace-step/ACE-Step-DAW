@@ -53,18 +53,18 @@ Don't assume — a wrong assumption wastes a full generation cycle.
 Use music-theory-engine's Phase 1 research process:
 
 1. **Search for genre analysis**:
-   - WebSearch: `"{genre}" music theory analysis chord progressions`
-   - WebSearch: `"{genre}" song structure typical arrangement`
-   - WebSearch: `"{genre}" production techniques rhythm patterns`
+   - Search the web: `"{genre}" music theory analysis chord progressions`
+   - Search the web: `"{genre}" song structure typical arrangement`
+   - Search the web: `"{genre}" production techniques rhythm patterns`
 
 2. **If user named a reference song/artist**:
-   - WebSearch: `"{song/artist}" chord progression key BPM`
-   - WebSearch: `"{song/artist}" song analysis music theory`
+   - Search the web: `"{song/artist}" chord progression key BPM`
+   - Search the web: `"{song/artist}" song analysis music theory`
    - This is the highest-value research — the user is telling you exactly what they want
 
 3. **Search for Strudel/TidalCycles examples in the genre**:
-   - WebSearch: `strudel "{genre}" pattern example`
-   - WebSearch: `TidalCycles "{genre}" live coding`
+   - Search the web: `strudel "{genre}" pattern example`
+   - Search the web: `TidalCycles "{genre}" live coding`
    - Finding a working pattern in the target style saves significant effort
 
 4. **Check the DAW's built-in presets** for defaults:
@@ -72,7 +72,7 @@ Use music-theory-engine's Phase 1 research process:
 
 ### Step 2: ANALYZE and Extract Principles
 
-From your research, distill exactly **3 principles** (see music-theory-engine Phase 3):
+From your research, distill **2-4 principles** (default: 3; see music-theory-engine Phase 3):
 
 ```
 Principle 1: [Harmonic character] — what chords, what voicing style
@@ -92,7 +92,7 @@ Reference: Nujabes "Feather"
 Key: D Dorian
 BPM: 78
 
-Principle 1: Jazz-rooted harmony — Dm9, Gm7, Em7b5, A7b9; 7th+ voicings
+Principle 1: Jazz-rooted harmony — Dm9, Gm7, Em7b5, A7b9 (i-iv-iiø-V7 in D minor); 7th+ voicings
 Principle 2: Boom-bap foundation — lazy kick, ghost snares, soft hi-hats
 Principle 3: Warm sparse texture — Rhodes keys, sub bass, pentatonic lead with delay
 
@@ -180,8 +180,8 @@ Users will ask for changes. When they do:
 ### "Make it sound like [artist/song]"
 
 This is the highest-value input. Research heavily:
-1. WebSearch: `"{song}" chord progression analysis`
-2. WebSearch: `"{artist}" music production style analysis`
+1. Search the web: `"{song}" chord progression analysis`
+2. Search the web: `"{artist}" music production style analysis`
 3. Extract the defining characteristics
 4. Apply them — but create something new, not a cover
 

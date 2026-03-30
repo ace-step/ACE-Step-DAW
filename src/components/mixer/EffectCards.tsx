@@ -308,6 +308,9 @@ const PARAMETRIC_EQ_BAND_TYPES: ParametricEQBandType[] = [
   'notch',
   'highpass',
   'lowpass',
+  'tiltshelf',
+  'bandpass',
+  'allpass',
 ];
 
 function gainToCanvasY(gain: number, height: number): number {

@@ -173,6 +173,45 @@ function getBandCoefficients(
         a1: 2 * ((a - 1) - (a + 1) * cosOmega),
         a2: (a + 1) - (a - 1) * cosOmega - twoSqrtAAlpha,
       };
+    case 'bandpass':
+      // BPF with constant 0 dB peak gain
+      return {
+        b0: alpha,
+        b1: 0,
+        b2: -alpha,
+        a0: 1 + alpha,
+        a1: -2 * cosOmega,
+        a2: 1 - alpha,
+      };
+    case 'allpass':
+      // All-pass filter — unity magnitude, shifts phase
+      return {
+        b0: 1 - alpha,
+        b1: -2 * cosOmega,
+        b2: 1 + alpha,
+        a0: 1 + alpha,
+        a1: -2 * cosOmega,
+        a2: 1 - alpha,
+      };
+    case 'tiltshelf': {
+      // Tilt EQ — simultaneously boosts low and cuts high (or vice versa).
+      // Approximated as a lowshelf with gain and highshelf with -gain summed.
+      // Use a simple first-order tilt: y = x + gain * lpf(x)
+      const tiltA = Math.pow(10, gain / 20);
+      const tiltOmega = omega;
+      const tiltCos = Math.cos(tiltOmega);
+      const tiltSin = Math.sin(tiltOmega);
+      const tiltAlpha = tiltSin / (2 * q);
+      // Low-shelf-like tilt
+      return {
+        b0: 1 + tiltAlpha * tiltA,
+        b1: -2 * tiltCos,
+        b2: 1 - tiltAlpha * tiltA,
+        a0: 1 + tiltAlpha / tiltA,
+        a1: -2 * tiltCos,
+        a2: 1 - tiltAlpha / tiltA,
+      };
+    }
   }
 }
 
@@ -224,5 +263,11 @@ export function getBandControlLabel(type: ParametricEQBandType): string {
       return 'High Pass';
     case 'lowpass':
       return 'Low Pass';
+    case 'tiltshelf':
+      return 'Tilt';
+    case 'bandpass':
+      return 'Band Pass';
+    case 'allpass':
+      return 'All Pass';
   }
 }

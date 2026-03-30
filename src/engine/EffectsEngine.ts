@@ -58,7 +58,11 @@ function applyParametricEqFilters(
   params.bands.forEach((band, index) => {
     const filter = filters[index];
     if (!filter) return;
-    filter.type = band.type;
+    // Map extended band types to native BiquadFilterType
+    // 'tiltshelf' is approximated as 'peaking' in the audio engine
+    // (accurate frequency response is computed in parametricEq.ts for the UI curve)
+    const nativeType = band.type === 'tiltshelf' ? 'peaking' : band.type;
+    filter.type = nativeType as BiquadFilterType;
     filter.frequency.value = band.frequency;
     filter.Q.value = band.q;
     filter.gain.value = band.gain;

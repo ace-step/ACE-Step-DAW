@@ -396,7 +396,10 @@ export type ParametricEQBandType =
   | 'highshelf'
   | 'notch'
   | 'highpass'
-  | 'lowpass';
+  | 'lowpass'
+  | 'tiltshelf'
+  | 'bandpass'
+  | 'allpass';
 
 export interface ParametricEQBand {
   id: string;
@@ -405,6 +408,10 @@ export interface ParametricEQBand {
   frequency: number;
   gain: number;
   q: number;
+  /** Per-band solo — audition only this band's effect */
+  solo?: boolean;
+  /** Per-band bypass */
+  bypass?: boolean;
 }
 
 export interface ParametricEQParams {

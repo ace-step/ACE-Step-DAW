@@ -1,37 +1,54 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  FACTORY_SYNTH_PRESETS,
-  SYNTH_PRESET_CATEGORIES,
-  getSynthPresetsByCategory,
-  getSynthPresetById,
-  type SynthPresetCategory,
-  type SynthPresetDefinition,
-} from '../../data/synthPresets';
+  ALL_PRESET_CATEGORIES,
+  getPresetById,
+  getPresetsByCategory,
+  getPresetsByKind,
+  getCategoriesForKind,
+  type InstrumentPreset,
+  type InstrumentPresetCategory,
+  type InstrumentKindFilter,
+} from '../../data/instrumentPresets';
+// Keep backward compat imports for legacy callers
+import type { SynthPresetDefinition } from '../../data/synthPresets';
+
+const KIND_LABELS: Record<InstrumentKindFilter, string> = {
+  all: 'All',
+  subtractive: 'Synth',
+  fm: 'FM',
+  wavetable: 'Wavetable',
+};
+
+const KIND_FILTERS: InstrumentKindFilter[] = ['all', 'subtractive', 'fm', 'wavetable'];
 
 interface SynthPresetBrowserProps {
   trackId: string;
   currentPresetId: string | null;
   onSelectPreset: (presetId: string) => void;
   onSavePreset: () => void;
+  /** Legacy subtractive-only user presets (kept for backward compat). */
   userPresets: SynthPresetDefinition[];
+  /** Unified user presets (all instrument kinds). */
+  userInstrumentPresets?: InstrumentPreset[];
   onDeleteUserPreset?: (presetId: string) => void;
 }
 
 export function SynthPresetBrowser({
-  trackId,
   currentPresetId,
   onSelectPreset,
   onSavePreset,
-  userPresets,
+  userPresets: _legacyUserPresets,
+  userInstrumentPresets = [],
   onDeleteUserPreset,
 }: SynthPresetBrowserProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<SynthPresetCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<InstrumentPresetCategory | null>(null);
+  const [kindFilter, setKindFilter] = useState<InstrumentKindFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
 
   const currentPreset = currentPresetId
-    ? getSynthPresetById(currentPresetId, userPresets)
+    ? getPresetById(currentPresetId, userInstrumentPresets)
     : null;
 
   // Close on outside click
@@ -70,17 +87,40 @@ export function SynthPresetBrowser({
     [onSelectPreset],
   );
 
+  const availableCategories = useMemo(
+    () => getCategoriesForKind(kindFilter),
+    [kindFilter],
+  );
+
   const filteredPresets = useMemo(() => {
-    const allPresets = [...FACTORY_SYNTH_PRESETS, ...userPresets];
+    const kindPresets = getPresetsByKind(kindFilter, userInstrumentPresets);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return allPresets.filter((p) => p.name.toLowerCase().includes(q));
+      return kindPresets.filter((p) => p.name.toLowerCase().includes(q));
     }
     if (selectedCategory) {
-      return getSynthPresetsByCategory(selectedCategory, userPresets);
+      return kindPresets.filter((p) => p.category === selectedCategory);
     }
     return null; // show categories
-  }, [searchQuery, selectedCategory, userPresets]);
+  }, [searchQuery, selectedCategory, kindFilter, userInstrumentPresets]);
+
+  const kindBadge = (kind: string) => {
+    const colors: Record<string, string> = {
+      subtractive: 'text-green-400',
+      fm: 'text-yellow-400',
+      wavetable: 'text-purple-400',
+    };
+    const labels: Record<string, string> = {
+      subtractive: 'SUB',
+      fm: 'FM',
+      wavetable: 'WT',
+    };
+    return (
+      <span className={`text-[8px] font-mono ${colors[kind] ?? 'text-zinc-500'} shrink-0`}>
+        {labels[kind] ?? kind}
+      </span>
+    );
+  };
 
   return (
     <div className="relative" ref={panelRef}>
@@ -94,7 +134,28 @@ export function SynthPresetBrowser({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 w-[280px] bg-[#1a1a1a] border border-[#333] rounded-lg shadow-2xl overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 z-50 w-[300px] bg-[#1a1a1a] border border-[#333] rounded-lg shadow-2xl overflow-hidden">
+          {/* Kind filter tabs */}
+          <div className="flex border-b border-[#333]">
+            {KIND_FILTERS.map((kind) => (
+              <button
+                key={kind}
+                onClick={() => {
+                  setKindFilter(kind);
+                  setSelectedCategory(null);
+                  setSearchQuery('');
+                }}
+                className={`flex-1 px-2 py-1.5 text-[10px] transition-colors ${
+                  kindFilter === kind
+                    ? 'text-blue-300 border-b-2 border-blue-400 bg-blue-500/10'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {KIND_LABELS[kind]}
+              </button>
+            ))}
+          </div>
+
           {/* Search */}
           <div className="p-2 border-b border-[#333]">
             <input
@@ -114,8 +175,9 @@ export function SynthPresetBrowser({
             {filteredPresets === null ? (
               /* Category list */
               <div className="p-1">
-                {SYNTH_PRESET_CATEGORIES.map((cat) => {
-                  const count = getSynthPresetsByCategory(cat, userPresets).length;
+                {availableCategories.map((cat) => {
+                  const count = getPresetsByKind(kindFilter, userInstrumentPresets)
+                    .filter((p) => p.category === cat).length;
                   return (
                     <button
                       key={cat}
@@ -157,6 +219,7 @@ export function SynthPresetBrowser({
                     >
                       {preset.name}
                     </button>
+                    {kindFilter === 'all' && kindBadge(preset.instrumentKind)}
                     {!preset.isFactory && (
                       <span className="text-[9px] text-zinc-500 shrink-0">user</span>
                     )}

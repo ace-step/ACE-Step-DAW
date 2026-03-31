@@ -17,6 +17,57 @@ React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js + Tailwind CSS v4
 
 **Skip only for**: pure questions, trivial typos (<3 lines), or existing issues. **When in doubt, create the issue.** It takes 10 seconds.
 
+## Autonomous Development Loop
+
+When working autonomously (cron-driven or self-directed), follow this full lifecycle:
+
+### Phase 0: Task Acquisition
+1. `gh issue list --state open --sort priority` — pick highest priority issue
+2. **No issues?** Spawn discovery subagents:
+   - `@tester` — full test suite + boundary exploration, file bugs as Issues
+   - `@refactorer` — code quality audit + tech debt scan, file Issues
+   - `@researcher` — competitive/community feedback research, file improvement Issues
+3. Wait for Issues to appear, then continue
+
+### Phase 1: PR Check (before creating new work)
+1. Check if issue already has a linked PR: `gh pr list --search "issue:NUMBER"`
+2. **Existing PR with `changes_requested`**: checkout that branch, apply requested changes
+3. **Existing PR with merge conflicts**: rebase on main and resolve conflicts
+4. **No existing PR**: create branch `feat/issue-NUMBER` or `fix/issue-NUMBER`, implement, push, create PR
+
+### Phase 2: QA Verification Loop (max 3 rounds)
+```
+for round in 1..3:
+    run: npx tsc --noEmit + npm test + npm run build + lint
+    if all pass → proceed to Phase 3
+    else → auto-fix failures, git push, continue loop
+if 3 rounds exhausted → label PR "qa-blocked", flag for human review
+```
+
+### Phase 3: UI Visual Review (only for UI changes)
+1. Start dev server (`npm run dev`)
+2. Capture screenshots at desktop (1920), tablet (1024), mobile (390) viewports
+3. Review against criteria: visual hierarchy, spacing consistency, color harmony, typography, interaction feedback, dark/light mode, animation smoothness, brand consistency
+4. Iterate at least 3 rounds, up to 8 max
+5. After each UI refinement, re-run lightweight QA (`npm test` + `npm run build`)
+6. If not approved after max rounds → label PR `ui-needs-review`, flag for human
+
+### Phase 4: Code Review Loop (max 3 rounds)
+```
+for round in 1..3:
+    run: /codex review (or /review for PR diff analysis)
+    if approved → proceed to Phase 5
+    else → apply review fixes, re-run QA, git push, continue loop
+if 3 rounds exhausted → flag for human review
+```
+
+### Phase 5: Merge Protocol
+1. Confirm PR is approved AND QA passed
+2. If merge conflicts exist → rebase on main, resolve, push
+3. Final gate: `npx tsc --noEmit` + `npm test` + `npm run build`
+4. If final gate passes → merge PR, close issue, delete branch
+5. If final gate fails → flag for human review
+
 ## Commands
 
 ```bash
@@ -61,6 +112,9 @@ npx tsc --noEmit     # Type check only
 - Never write tests that only assert truthiness — assert specific values
 - For interactive features, write adversarial test cases in TDD Red phase (weird BPMs, rapid input, undo immediately after action, drag during playback)
 - After completing a logical unit of work, commit immediately
+- **Own the PR lifecycle**: don't abandon PRs — handle CI failures, review comments, conflicts until merged
+- **Max 3 auto-fix rounds**: if tests/build/lint fail 3 times, stop and flag for human review instead of looping forever
+- **UI changes require visual proof**: screenshot before/after, check responsive viewports, never merge UI changes without visual verification
 
 ## When Compacting, Preserve
 

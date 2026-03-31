@@ -18,6 +18,18 @@ const DB_LABELS = [-80, -60, -40, -20, 0];
 
 const LUFS_SMOOTHING = 0.85;
 
+/** Spectrum smoothing presets — coefficient for exponential moving average */
+const SMOOTHING_PRESETS = {
+  fast: 0.7,    // Good for detecting transients
+  medium: 0.85, // Default, readable
+  slow: 0.95,   // Smooth, mastering analysis
+} as const;
+type SmoothingMode = keyof typeof SMOOTHING_PRESETS;
+
+/** Peak hold: peaks stay for 2s, then fall at -20dB/s */
+const PEAK_HOLD_FRAMES = 120; // ~2s at 60fps
+const PEAK_FALL_RATE = 20 / 60; // dB per frame at 60fps
+
 function formatFreq(hz: number): string {
   return hz >= 1000 ? `${hz / 1000}k` : `${hz}`;
 }
@@ -38,16 +50,27 @@ function getLufsColor(lufs: number): string {
 interface SpectrumAnalyzerProps {
   width?: number;
   height?: number;
+  /** Spectrum smoothing mode (default: 'medium') */
+  smoothing?: SmoothingMode;
+  /** Show peak hold line (default: true) */
+  showPeaks?: boolean;
 }
 
 export function SpectrumAnalyzer({
   width = 320,
   height = 160,
+  smoothing = 'medium',
+  showPeaks = true,
 }: SpectrumAnalyzerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const smoothedLufsRef = useRef<number>(-Infinity);
   const lufsDisplayRef = useRef<HTMLSpanElement>(null);
+  // Smoothed spectrum data (persists between frames)
+  const smoothedSpectrumRef = useRef<Float32Array | null>(null);
+  // Peak hold data: [peakValue, holdCountdown] per bin
+  const peakValuesRef = useRef<Float32Array | null>(null);
+  const peakHoldRef = useRef<Int32Array | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -104,8 +127,39 @@ export function SpectrumAnalyzer({
     const sampleRate = engine.sampleRate;
     const binCount = engine.spectrumBinCount;
     const binWidth = sampleRate / (binCount * 2);
+    const smoothCoeff = SMOOTHING_PRESETS[smoothing];
 
-    // Draw spectrum bars as filled area
+    // Initialize smoothed arrays if needed
+    if (!smoothedSpectrumRef.current || smoothedSpectrumRef.current.length !== binCount) {
+      smoothedSpectrumRef.current = new Float32Array(binCount).fill(MIN_DB);
+    }
+    if (showPeaks && (!peakValuesRef.current || peakValuesRef.current.length !== binCount)) {
+      peakValuesRef.current = new Float32Array(binCount).fill(MIN_DB);
+      peakHoldRef.current = new Int32Array(binCount).fill(0);
+    }
+
+    const smoothed = smoothedSpectrumRef.current;
+    const peaks = peakValuesRef.current;
+    const holds = peakHoldRef.current;
+
+    // Apply smoothing + update peaks
+    for (let i = 0; i < binCount; i++) {
+      const raw = spectrum[i] ?? MIN_DB;
+      smoothed[i] = smoothed[i] * smoothCoeff + raw * (1 - smoothCoeff);
+
+      if (showPeaks && peaks && holds) {
+        if (smoothed[i] > peaks[i]) {
+          peaks[i] = smoothed[i];
+          holds[i] = PEAK_HOLD_FRAMES;
+        } else if (holds[i] > 0) {
+          holds[i]--;
+        } else {
+          peaks[i] = Math.max(MIN_DB, peaks[i] - PEAK_FALL_RATE);
+        }
+      }
+    }
+
+    // Draw spectrum bars as filled area (using smoothed data)
     ctx.beginPath();
     ctx.moveTo(0, height);
 
@@ -115,7 +169,7 @@ export function SpectrumAnalyzer({
       if (freq < MIN_FREQ || freq > MAX_FREQ) continue;
 
       const x = freqToX(freq, width, MIN_FREQ, MAX_FREQ);
-      const db = Math.max(MIN_DB, Math.min(MAX_DB, spectrum[i]));
+      const db = Math.max(MIN_DB, Math.min(MAX_DB, smoothed[i]));
       const y = dbToY(db, height, MIN_DB, MAX_DB);
 
       if (prevX === 0) {
@@ -137,7 +191,7 @@ export function SpectrumAnalyzer({
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Draw spectrum line on top
+    // Draw spectrum line on top (smoothed)
     ctx.beginPath();
     let started = false;
     for (let i = 1; i < binCount; i++) {
@@ -145,7 +199,7 @@ export function SpectrumAnalyzer({
       if (freq < MIN_FREQ || freq > MAX_FREQ) continue;
 
       const x = freqToX(freq, width, MIN_FREQ, MAX_FREQ);
-      const db = Math.max(MIN_DB, Math.min(MAX_DB, spectrum[i]));
+      const db = Math.max(MIN_DB, Math.min(MAX_DB, smoothed[i]));
       const y = dbToY(db, height, MIN_DB, MAX_DB);
 
       if (!started) {
@@ -158,6 +212,30 @@ export function SpectrumAnalyzer({
     ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // Draw peak hold line
+    if (showPeaks && peaks) {
+      ctx.beginPath();
+      let peakStarted = false;
+      for (let i = 1; i < binCount; i++) {
+        const freq = i * binWidth;
+        if (freq < MIN_FREQ || freq > MAX_FREQ) continue;
+
+        const x = freqToX(freq, width, MIN_FREQ, MAX_FREQ);
+        const peakDb = Math.max(MIN_DB, Math.min(MAX_DB, peaks[i]));
+        const y = dbToY(peakDb, height, MIN_DB, MAX_DB);
+
+        if (!peakStarted) {
+          ctx.moveTo(x, y);
+          peakStarted = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
 
     // LUFS calculation from time-domain data
     const timeDomainData = engine.getMasterTimeDomainData();
@@ -183,7 +261,7 @@ export function SpectrumAnalyzer({
     }
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [width, height]);
+  }, [width, height, smoothing, showPeaks]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);

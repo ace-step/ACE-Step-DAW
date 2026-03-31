@@ -1,0 +1,16 @@
+[workspace]
+members = ["ace-dsp-core", "ace-dsp-wasm"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ace-step/ACE-Step-DAW"
+
+[profile.release]
+opt-level = "z"       # Optimize for size (WASM binary minimization)
+lto = true            # Link-time optimization
+codegen-units = 1     # Single codegen unit for best optimization
+strip = true          # Strip debug symbols
+panic = "abort"       # Smaller binary — no unwinding

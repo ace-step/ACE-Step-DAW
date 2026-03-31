@@ -316,6 +316,36 @@ describe('WasmDspEngine', () => {
         type: 'disable-gate',
       });
     });
+
+    it('should send set-eq-band message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setEqBand(0, FilterType.Peaking, 1000, 1.0, 6.0, true);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-eq-band',
+        bandIndex: 0,
+        filterType: 5,
+        frequency: 1000,
+        q: 1.0,
+        gainDb: 6.0,
+        enabled: true,
+      });
+    });
+
+    it('should send disable-eq message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableEq();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-eq',
+      });
+    });
   });
 
   describe('lifecycle', () => {

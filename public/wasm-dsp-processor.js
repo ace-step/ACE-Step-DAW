@@ -110,6 +110,23 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_gate();
           }
           break;
+        case 'set-eq-band':
+          if (this._processor) {
+            this._processor.set_eq_band(
+              msg.bandIndex,
+              msg.filterType,
+              msg.frequency,
+              msg.q,
+              msg.gainDb,
+              msg.enabled
+            );
+          }
+          break;
+        case 'disable-eq':
+          if (this._processor) {
+            this._processor.disable_eq();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

@@ -11,6 +11,7 @@ pub mod biquad;
 pub mod delay;
 #[cfg(feature = "std")]
 pub mod dynamics;
+pub mod eq;
 pub mod gain;
 
 /// Anti-denormal guard constant.

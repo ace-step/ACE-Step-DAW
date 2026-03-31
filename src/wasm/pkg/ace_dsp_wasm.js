@@ -38,6 +38,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_delay(this.__wbg_ptr);
     }
     /**
+     * Disable the parametric EQ entirely.
+     */
+    disable_eq() {
+        wasm.dspprocessor_disable_eq(this.__wbg_ptr);
+    }
+    /**
      * Disable the filter.
      */
     disable_filter() {
@@ -70,7 +76,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → Compressor → Delay → Gain
+     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -133,6 +139,24 @@ export class DspProcessor {
      */
     set_delay_params(delay_ms, feedback, wet, dry) {
         wasm.dspprocessor_set_delay_params(this.__wbg_ptr, delay_ms, feedback, wet, dry);
+    }
+    /**
+     * Set a parametric EQ band.
+     * - `band_index`: 0-7
+     * - `filter_type`: 0=LP, 1=HP, 2=BP, 3=Notch, 4=Allpass, 5=Peaking, 6=LowShelf, 7=HighShelf
+     * - `frequency`: center frequency in Hz
+     * - `q`: Q factor
+     * - `gain_db`: gain in dB (for peaking/shelf types)
+     * - `enabled`: whether this band is active
+     * @param {number} band_index
+     * @param {number} filter_type
+     * @param {number} frequency
+     * @param {number} q
+     * @param {number} gain_db
+     * @param {boolean} enabled
+     */
+    set_eq_band(band_index, filter_type, frequency, q, gain_db, enabled) {
+        wasm.dspprocessor_set_eq_band(this.__wbg_ptr, band_index, filter_type, frequency, q, gain_db, enabled);
     }
     /**
      * Enable a biquad filter with the given parameters.

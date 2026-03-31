@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
 use ace_dsp_core::delay::MonoDelay;
 use ace_dsp_core::dynamics::{Compressor, NoiseGate};
+use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
@@ -20,6 +21,7 @@ pub struct DspProcessor {
     delay: Option<MonoDelay>,
     compressor: Option<Compressor>,
     gate: Option<NoiseGate>,
+    eq: Option<ParametricEq>,
     sample_rate: f32,
 }
 
@@ -34,6 +36,7 @@ impl DspProcessor {
             delay: None,
             compressor: None,
             gate: None,
+            eq: None,
             sample_rate,
         }
     }
@@ -195,15 +198,56 @@ impl DspProcessor {
         self.gate = None;
     }
 
+    /// Set a parametric EQ band.
+    /// - `band_index`: 0-7
+    /// - `filter_type`: 0=LP, 1=HP, 2=BP, 3=Notch, 4=Allpass, 5=Peaking, 6=LowShelf, 7=HighShelf
+    /// - `frequency`: center frequency in Hz
+    /// - `q`: Q factor
+    /// - `gain_db`: gain in dB (for peaking/shelf types)
+    /// - `enabled`: whether this band is active
+    pub fn set_eq_band(
+        &mut self,
+        band_index: u8,
+        filter_type: u8,
+        frequency: f32,
+        q: f32,
+        gain_db: f32,
+        enabled: bool,
+    ) {
+        let ft = match filter_type {
+            0 => BiquadType::Lowpass,
+            1 => BiquadType::Highpass,
+            2 => BiquadType::Bandpass,
+            3 => BiquadType::Notch,
+            4 => BiquadType::Allpass,
+            5 => BiquadType::Peaking,
+            6 => BiquadType::LowShelf,
+            7 => BiquadType::HighShelf,
+            _ => BiquadType::Peaking,
+        };
+        let eq = self
+            .eq
+            .get_or_insert_with(|| ParametricEq::new(self.sample_rate));
+        eq.set_band(band_index as usize, ft, frequency, q, gain_db, enabled);
+    }
+
+    /// Disable the parametric EQ entirely.
+    pub fn disable_eq(&mut self) {
+        self.eq = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Gate → Filter → Compressor → Delay → Gain
+    /// Signal chain: Gate → Filter → EQ → Compressor → Delay → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
         if let Some(ref mut gate) = self.gate {
             gate.process_buffer(buffer);
         }
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -222,6 +266,9 @@ impl DspProcessor {
         }
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -250,6 +297,9 @@ impl DspProcessor {
         }
         if let Some(ref mut gate) = self.gate {
             gate.reset();
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.reset();
         }
     }
 }
@@ -367,6 +417,28 @@ mod tests {
         proc.process_mono(&mut buf);
         let last = buf[47999];
         assert!(last < 0.0005, "Gate should attenuate: {last}");
+    }
+
+    #[test]
+    fn test_processor_eq() {
+        let mut proc = DspProcessor::new(48000.0);
+        // Set a peaking band at 1kHz with +6dB
+        proc.set_eq_band(0, 5, 1000.0, 1.0, 6.0, true);
+        let mut buf = [0.5_f32; 128];
+        proc.process_mono(&mut buf);
+        // Should process without panic
+    }
+
+    #[test]
+    fn test_processor_disable_eq() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_eq_band(0, 5, 1000.0, 1.0, 6.0, true);
+        proc.disable_eq();
+        // After disabling, should pass through
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
     }
 
     #[test]

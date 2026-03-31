@@ -79,6 +79,19 @@ export interface WasmDspNode {
   /** Disable the noise gate. */
   disableGate(): void;
 
+  /** Set a parametric EQ band (0-7). */
+  setEqBand(
+    bandIndex: number,
+    filterType: FilterTypeValue,
+    frequency: number,
+    q: number,
+    gainDb: number,
+    enabled: boolean
+  ): void;
+
+  /** Disable parametric EQ entirely. */
+  disableEq(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -271,6 +284,29 @@ export class WasmDspEngine {
 
       disableGate() {
         workletNode.port.postMessage({ type: 'disable-gate' });
+      },
+
+      setEqBand(
+        bandIndex: number,
+        filterType: FilterTypeValue,
+        frequency: number,
+        q: number,
+        gainDb: number,
+        enabled: boolean
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-eq-band',
+          bandIndex,
+          filterType,
+          frequency,
+          q,
+          gainDb,
+          enabled,
+        });
+      },
+
+      disableEq() {
+        workletNode.port.postMessage({ type: 'disable-eq' });
       },
 
       reset() {

@@ -1,8 +1,9 @@
 Help the user generate AI music in the DAW.
 
-1. Read current project state with daw_get_project
+1. Read current project state: `npx tsx server/daw-cli.ts status`
 2. Ask the user for a text prompt describing the music they want
-3. Determine the best track to generate on, or create a new stems track with daw_add_track
+3. Determine the best track to generate on, or create a new stems track:
+   `npx tsx server/daw-cli.ts add-track stems "Track Name"`
 4. Use concrete prompt guidance: genre, mood, instruments, energy level
 5. Report when the generation is set up
 

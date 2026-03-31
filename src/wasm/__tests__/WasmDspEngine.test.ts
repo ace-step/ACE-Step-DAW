@@ -257,6 +257,65 @@ describe('WasmDspEngine', () => {
         type: 'disable-delay',
       });
     });
+
+    it('should send set-compressor message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setCompressor(-20, 4, 10, 100, 6, 3);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-compressor',
+        thresholdDb: -20,
+        ratio: 4,
+        attackMs: 10,
+        releaseMs: 100,
+        kneeDb: 6,
+        makeupDb: 3,
+      });
+    });
+
+    it('should send disable-compressor message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableCompressor();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-compressor',
+      });
+    });
+
+    it('should send set-gate message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setGate(-40, 0.5, 50, 200, -80);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-gate',
+        thresholdDb: -40,
+        attackMs: 0.5,
+        holdMs: 50,
+        releaseMs: 200,
+        rangeDb: -80,
+      });
+    });
+
+    it('should send disable-gate message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableGate();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-gate',
+      });
+    });
   });
 
   describe('lifecycle', () => {

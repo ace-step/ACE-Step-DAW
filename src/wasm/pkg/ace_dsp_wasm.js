@@ -18,6 +18,20 @@ export class DspProcessor {
         wasm.__wbg_dspprocessor_free(ptr, 0);
     }
     /**
+     * Get current compressor gain reduction in dB.
+     * @returns {number}
+     */
+    compressor_gr_db() {
+        const ret = wasm.dspprocessor_compressor_gr_db(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Disable the compressor.
+     */
+    disable_compressor() {
+        wasm.dspprocessor_disable_compressor(this.__wbg_ptr);
+    }
+    /**
      * Disable the delay.
      */
     disable_delay() {
@@ -28,6 +42,12 @@ export class DspProcessor {
      */
     disable_filter() {
         wasm.dspprocessor_disable_filter(this.__wbg_ptr);
+    }
+    /**
+     * Disable the noise gate.
+     */
+    disable_gate() {
+        wasm.dspprocessor_disable_gate(this.__wbg_ptr);
     }
     /**
      * Get the current gain value.
@@ -50,7 +70,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Filter → Delay → Gain
+     * Signal chain: Gate → Filter → Compressor → Delay → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -73,6 +93,24 @@ export class DspProcessor {
      */
     reset() {
         wasm.dspprocessor_reset(this.__wbg_ptr);
+    }
+    /**
+     * Enable compressor.
+     * - `threshold_db`: compression threshold (e.g., -20)
+     * - `ratio`: compression ratio (e.g., 4.0 for 4:1)
+     * - `attack_ms`: attack time in ms
+     * - `release_ms`: release time in ms
+     * - `knee_db`: knee width (0 = hard knee)
+     * - `makeup_db`: makeup gain in dB
+     * @param {number} threshold_db
+     * @param {number} ratio
+     * @param {number} attack_ms
+     * @param {number} release_ms
+     * @param {number} knee_db
+     * @param {number} makeup_db
+     */
+    set_compressor(threshold_db, ratio, attack_ms, release_ms, knee_db, makeup_db) {
+        wasm.dspprocessor_set_compressor(this.__wbg_ptr, threshold_db, ratio, attack_ms, release_ms, knee_db, makeup_db);
     }
     /**
      * Enable a delay effect.
@@ -113,6 +151,22 @@ export class DspProcessor {
      */
     set_gain(gain) {
         wasm.dspprocessor_set_gain(this.__wbg_ptr, gain);
+    }
+    /**
+     * Enable noise gate.
+     * - `threshold_db`: gate threshold
+     * - `attack_ms`: gate open time
+     * - `hold_ms`: hold time after signal drops
+     * - `release_ms`: gate close time
+     * - `range_db`: attenuation when closed (-80 = full gate, -12 = expander)
+     * @param {number} threshold_db
+     * @param {number} attack_ms
+     * @param {number} hold_ms
+     * @param {number} release_ms
+     * @param {number} range_db
+     */
+    set_gate(threshold_db, attack_ms, hold_ms, release_ms, range_db) {
+        wasm.dspprocessor_set_gate(this.__wbg_ptr, threshold_db, attack_ms, hold_ms, release_ms, range_db);
     }
 }
 if (Symbol.dispose) DspProcessor.prototype[Symbol.dispose] = DspProcessor.prototype.free;

@@ -77,6 +77,39 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_delay();
           }
           break;
+        case 'set-compressor':
+          if (this._processor) {
+            this._processor.set_compressor(
+              msg.thresholdDb,
+              msg.ratio,
+              msg.attackMs,
+              msg.releaseMs,
+              msg.kneeDb,
+              msg.makeupDb
+            );
+          }
+          break;
+        case 'disable-compressor':
+          if (this._processor) {
+            this._processor.disable_compressor();
+          }
+          break;
+        case 'set-gate':
+          if (this._processor) {
+            this._processor.set_gate(
+              msg.thresholdDb,
+              msg.attackMs,
+              msg.holdMs,
+              msg.releaseMs,
+              msg.rangeDb
+            );
+          }
+          break;
+        case 'disable-gate':
+          if (this._processor) {
+            this._processor.disable_gate();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

@@ -6,6 +6,7 @@
 use wasm_bindgen::prelude::*;
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
 use ace_dsp_core::delay::MonoDelay;
+use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::gain::GainProcessor;
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
@@ -17,6 +18,8 @@ pub struct DspProcessor {
     gain: GainProcessor,
     filter: Option<BiquadFilter>,
     delay: Option<MonoDelay>,
+    compressor: Option<Compressor>,
+    gate: Option<NoiseGate>,
     sample_rate: f32,
 }
 
@@ -29,6 +32,8 @@ impl DspProcessor {
             gain: GainProcessor::new(1.0),
             filter: None,
             delay: None,
+            compressor: None,
+            gate: None,
             sample_rate,
         }
     }
@@ -98,12 +103,110 @@ impl DspProcessor {
         self.delay = None;
     }
 
+    /// Enable compressor.
+    /// - `threshold_db`: compression threshold (e.g., -20)
+    /// - `ratio`: compression ratio (e.g., 4.0 for 4:1)
+    /// - `attack_ms`: attack time in ms
+    /// - `release_ms`: release time in ms
+    /// - `knee_db`: knee width (0 = hard knee)
+    /// - `makeup_db`: makeup gain in dB
+    pub fn set_compressor(
+        &mut self,
+        threshold_db: f32,
+        ratio: f32,
+        attack_ms: f32,
+        release_ms: f32,
+        knee_db: f32,
+        makeup_db: f32,
+    ) {
+        match &mut self.compressor {
+            Some(c) => {
+                c.set_threshold(threshold_db);
+                c.set_ratio(ratio);
+                c.set_attack(attack_ms);
+                c.set_release(release_ms);
+                c.set_knee(knee_db);
+                c.set_makeup_gain(makeup_db);
+            }
+            None => {
+                self.compressor = Some(Compressor::new(
+                    self.sample_rate,
+                    threshold_db,
+                    ratio,
+                    attack_ms,
+                    release_ms,
+                    knee_db,
+                    makeup_db,
+                ));
+            }
+        }
+    }
+
+    /// Disable the compressor.
+    pub fn disable_compressor(&mut self) {
+        self.compressor = None;
+    }
+
+    /// Get current compressor gain reduction in dB.
+    pub fn compressor_gr_db(&self) -> f32 {
+        self.compressor
+            .as_ref()
+            .map(|c| c.gain_reduction_db())
+            .unwrap_or(0.0)
+    }
+
+    /// Enable noise gate.
+    /// - `threshold_db`: gate threshold
+    /// - `attack_ms`: gate open time
+    /// - `hold_ms`: hold time after signal drops
+    /// - `release_ms`: gate close time
+    /// - `range_db`: attenuation when closed (-80 = full gate, -12 = expander)
+    pub fn set_gate(
+        &mut self,
+        threshold_db: f32,
+        attack_ms: f32,
+        hold_ms: f32,
+        release_ms: f32,
+        range_db: f32,
+    ) {
+        match &mut self.gate {
+            Some(g) => {
+                g.set_threshold(threshold_db);
+                g.set_attack(attack_ms);
+                g.set_hold(hold_ms);
+                g.set_release(release_ms);
+                g.set_range(range_db);
+            }
+            None => {
+                self.gate = Some(NoiseGate::new(
+                    self.sample_rate,
+                    threshold_db,
+                    attack_ms,
+                    hold_ms,
+                    release_ms,
+                    range_db,
+                ));
+            }
+        }
+    }
+
+    /// Disable the noise gate.
+    pub fn disable_gate(&mut self) {
+        self.gate = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Filter → Delay → Gain
+    /// Signal chain: Gate → Filter → Compressor → Delay → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
+        if let Some(ref mut gate) = self.gate {
+            gate.process_buffer(buffer);
+        }
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -114,8 +217,14 @@ impl DspProcessor {
     /// Process interleaved stereo audio buffer in-place.
     /// Samples arranged as [L, R, L, R, ...].
     pub fn process_stereo_interleaved(&mut self, buffer: &mut [f32]) {
+        if let Some(ref mut gate) = self.gate {
+            gate.process_buffer(buffer);
+        }
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -135,6 +244,12 @@ impl DspProcessor {
         }
         if let Some(ref mut delay) = self.delay {
             delay.reset();
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.reset();
+        }
+        if let Some(ref mut gate) = self.gate {
+            gate.reset();
         }
     }
 }
@@ -227,6 +342,39 @@ mod tests {
         proc.process_mono(&mut buf);
         // Dry signal should pass through unchanged (delay disabled)
         assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_compressor() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_compressor(-20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        let mut buf = [1.0_f32; 4800];
+        proc.process_mono(&mut buf);
+        // Loud signal should be compressed
+        let last = buf[4799];
+        assert!(last < 0.9, "Compressor should reduce: {last}");
+        assert!(last > 0.01, "Should not silence: {last}");
+        // GR should be reported
+        assert!(proc.compressor_gr_db() < -1.0);
+    }
+
+    #[test]
+    fn test_processor_gate() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_gate(-20.0, 0.1, 0.0, 10.0, -80.0);
+        // Feed very quiet signal
+        let mut buf = [0.001_f32; 48000];
+        proc.process_mono(&mut buf);
+        let last = buf[47999];
+        assert!(last < 0.0005, "Gate should attenuate: {last}");
+    }
+
+    #[test]
+    fn test_processor_disable_compressor() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_compressor(-20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        proc.disable_compressor();
+        assert_eq!(proc.compressor_gr_db(), 0.0);
     }
 
     #[test]

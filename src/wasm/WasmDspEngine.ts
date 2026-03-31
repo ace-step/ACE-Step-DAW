@@ -54,6 +54,31 @@ export interface WasmDspNode {
   /** Disable the delay. */
   disableDelay(): void;
 
+  /** Enable compressor. */
+  setCompressor(
+    thresholdDb: number,
+    ratio: number,
+    attackMs: number,
+    releaseMs: number,
+    kneeDb: number,
+    makeupDb: number
+  ): void;
+
+  /** Disable the compressor. */
+  disableCompressor(): void;
+
+  /** Enable noise gate. */
+  setGate(
+    thresholdDb: number,
+    attackMs: number,
+    holdMs: number,
+    releaseMs: number,
+    rangeDb: number
+  ): void;
+
+  /** Disable the noise gate. */
+  disableGate(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -202,6 +227,50 @@ export class WasmDspEngine {
 
       disableDelay() {
         workletNode.port.postMessage({ type: 'disable-delay' });
+      },
+
+      setCompressor(
+        thresholdDb: number,
+        ratio: number,
+        attackMs: number,
+        releaseMs: number,
+        kneeDb: number,
+        makeupDb: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-compressor',
+          thresholdDb,
+          ratio,
+          attackMs,
+          releaseMs,
+          kneeDb,
+          makeupDb,
+        });
+      },
+
+      disableCompressor() {
+        workletNode.port.postMessage({ type: 'disable-compressor' });
+      },
+
+      setGate(
+        thresholdDb: number,
+        attackMs: number,
+        holdMs: number,
+        releaseMs: number,
+        rangeDb: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-gate',
+          thresholdDb,
+          attackMs,
+          holdMs,
+          releaseMs,
+          rangeDb,
+        });
+      },
+
+      disableGate() {
+        workletNode.port.postMessage({ type: 'disable-gate' });
       },
 
       reset() {

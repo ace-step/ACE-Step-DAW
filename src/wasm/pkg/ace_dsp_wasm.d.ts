@@ -11,6 +11,14 @@ export class DspProcessor {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Get current compressor gain reduction in dB.
+     */
+    compressor_gr_db(): number;
+    /**
+     * Disable the compressor.
+     */
+    disable_compressor(): void;
+    /**
      * Disable the delay.
      */
     disable_delay(): void;
@@ -18,6 +26,10 @@ export class DspProcessor {
      * Disable the filter.
      */
     disable_filter(): void;
+    /**
+     * Disable the noise gate.
+     */
+    disable_gate(): void;
     /**
      * Get the current gain value.
      */
@@ -29,7 +41,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Filter → Delay → Gain
+     * Signal chain: Gate → Filter → Compressor → Delay → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -41,6 +53,16 @@ export class DspProcessor {
      * Reset all processor state (call on seek or transport stop).
      */
     reset(): void;
+    /**
+     * Enable compressor.
+     * - `threshold_db`: compression threshold (e.g., -20)
+     * - `ratio`: compression ratio (e.g., 4.0 for 4:1)
+     * - `attack_ms`: attack time in ms
+     * - `release_ms`: release time in ms
+     * - `knee_db`: knee width (0 = hard knee)
+     * - `makeup_db`: makeup gain in dB
+     */
+    set_compressor(threshold_db: number, ratio: number, attack_ms: number, release_ms: number, knee_db: number, makeup_db: number): void;
     /**
      * Enable a delay effect.
      * - `delay_ms`: delay time in milliseconds
@@ -61,6 +83,15 @@ export class DspProcessor {
      * Set gain value (linear, 0.0 to ~2.0).
      */
     set_gain(gain: number): void;
+    /**
+     * Enable noise gate.
+     * - `threshold_db`: gate threshold
+     * - `attack_ms`: gate open time
+     * - `hold_ms`: hold time after signal drops
+     * - `release_ms`: gate close time
+     * - `range_db`: attenuation when closed (-80 = full gate, -12 = expander)
+     */
+    set_gate(threshold_db: number, attack_ms: number, hold_ms: number, release_ms: number, range_db: number): void;
 }
 
 /**
@@ -73,16 +104,21 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
+    readonly dspprocessor_compressor_gr_db: (a: number) => number;
+    readonly dspprocessor_disable_compressor: (a: number) => void;
     readonly dspprocessor_disable_delay: (a: number) => void;
     readonly dspprocessor_disable_filter: (a: number) => void;
+    readonly dspprocessor_disable_gate: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_reset: (a: number) => void;
+    readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
+    readonly dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly version: (a: number) => void;
     readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;

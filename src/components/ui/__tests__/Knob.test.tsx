@@ -126,6 +126,62 @@ describe('Knob component', () => {
     });
   });
 
+  describe('keyboard navigation', () => {
+    it('increases value on ArrowUp', () => {
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} value={50} onChange={onChange} />);
+      const knob = screen.getByRole('slider');
+      fireEvent.keyDown(knob, { key: 'ArrowUp' });
+      expect(onChange).toHaveBeenCalled();
+      expect(onChange.mock.calls[0][0]).toBeGreaterThan(50);
+    });
+
+    it('decreases value on ArrowDown', () => {
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} value={50} onChange={onChange} />);
+      const knob = screen.getByRole('slider');
+      fireEvent.keyDown(knob, { key: 'ArrowDown' });
+      expect(onChange).toHaveBeenCalled();
+      expect(onChange.mock.calls[0][0]).toBeLessThan(50);
+    });
+
+    it('jumps to min on Home', () => {
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} value={50} onChange={onChange} />);
+      const knob = screen.getByRole('slider');
+      fireEvent.keyDown(knob, { key: 'Home' });
+      expect(onChange).toHaveBeenCalledWith(0);
+    });
+
+    it('jumps to max on End', () => {
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} value={50} onChange={onChange} />);
+      const knob = screen.getByRole('slider');
+      fireEvent.keyDown(knob, { key: 'End' });
+      expect(onChange).toHaveBeenCalledWith(100);
+    });
+
+    it('has proper ARIA attributes', () => {
+      render(<Knob {...defaultProps} value={50} />);
+      const knob = screen.getByRole('slider');
+      expect(knob.getAttribute('aria-valuenow')).toBe('50');
+      expect(knob.getAttribute('aria-valuemin')).toBe('0');
+      expect(knob.getAttribute('aria-valuemax')).toBe('100');
+    });
+
+    it('is focusable via Tab', () => {
+      render(<Knob {...defaultProps} />);
+      const knob = screen.getByRole('slider');
+      expect(knob.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('is not focusable when disabled', () => {
+      render(<Knob {...defaultProps} disabled />);
+      const knob = screen.getByLabelText('Control knob');
+      expect(knob.getAttribute('tabindex')).toBe('-1');
+    });
+  });
+
   describe('micro-interactions', () => {
     it('shows fine mode indicator when Alt is held during drag', () => {
       const onChange = vi.fn();

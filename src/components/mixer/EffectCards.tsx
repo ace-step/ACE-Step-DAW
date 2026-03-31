@@ -11,6 +11,7 @@ import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
 import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { DelayTapTimeline } from './DelayTapTimeline';
+import { ModulationDisplay } from './ModulationDisplay';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -992,6 +993,9 @@ export function ChorusCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.chorus}
+      visualization={
+        <ModulationDisplay frequency={p.frequency} depth={p.depth} baseDelay={p.delayTime} type="chorus" width={160} height={100} color={EFFECT_COLORS.chorus} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'wet' }} normalizedValue={normalizeEffectParamValue('chorus', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.chorus} />
@@ -1027,6 +1031,9 @@ export function FlangerCard({ effect, trackId }: { effect: TrackEffect & { type:
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.flanger}
+      visualization={
+        <ModulationDisplay frequency={p.frequency} depth={p.depth} baseDelay={p.delayTime} type="flanger" width={160} height={100} color={EFFECT_COLORS.flanger} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'wet' }} normalizedValue={normalizeEffectParamValue('flanger', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.flanger} />
@@ -1062,6 +1069,9 @@ export function PhaserCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.phaser}
+      visualization={
+        <ModulationDisplay frequency={p.frequency} depth={p.octaves / 6} type="phaser" width={160} height={100} color={EFFECT_COLORS.phaser} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'wet' }} normalizedValue={normalizeEffectParamValue('phaser', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.phaser} />

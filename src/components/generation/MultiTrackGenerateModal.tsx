@@ -91,6 +91,7 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
   const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(0);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const scrubIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPreview = useCallback(() => {
@@ -98,6 +99,10 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
       previewAudioRef.current.pause();
       previewAudioRef.current.src = '';
       previewAudioRef.current = null;
+    }
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
     }
     if (scrubIntervalRef.current) {
       clearInterval(scrubIntervalRef.current);
@@ -125,6 +130,7 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
         return;
       }
       const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
       const audio = new Audio(url);
       previewAudioRef.current = audio;
       audio.addEventListener('loadedmetadata', () => {

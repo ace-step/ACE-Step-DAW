@@ -234,4 +234,87 @@ describe('clip move — contextWindow migration', () => {
       expect(ctx.offsetEnd).toBe(9);
     });
   });
+
+  describe('edge cases', () => {
+    it('handles contextWindow: null without errors', () => {
+      const project = makeProject();
+      const clip: Clip = {
+        ...makeClipWithLegacyContextWindow(5.5),
+        generationParams: {
+          type: 'lego',
+          prompt: 'test',
+          lyrics: '',
+          contextWindow: null,
+        },
+      };
+      project.tracks[0].clips = [clip];
+      useProjectStore.getState().setProject(project);
+
+      useProjectStore.getState().updateClip('clip-1', { startTime: 10 });
+
+      const movedClip = useProjectStore.getState().getClipById('clip-1');
+      expect(movedClip!.startTime).toBe(10);
+      expect(movedClip!.generationParams?.contextWindow).toBeNull();
+    });
+
+    it('handles missing generationParams without errors', () => {
+      const project = makeProject();
+      const clip: Clip = {
+        id: 'clip-no-params',
+        trackId: 'track-1',
+        startTime: 5.5,
+        duration: 9,
+        color: '#ff0000',
+        prompt: 'test',
+        lyrics: '',
+        generationStatus: 'ready',
+        isolatedAudioKey: 'key-1',
+      } as Clip;
+      project.tracks[0].clips = [clip];
+      useProjectStore.getState().setProject(project);
+
+      useProjectStore.getState().updateClip('clip-no-params', { startTime: 10 });
+
+      const movedClip = useProjectStore.getState().getClipById('clip-no-params');
+      expect(movedClip!.startTime).toBe(10);
+      expect(movedClip!.generationParams).toBeUndefined();
+    });
+  });
+
+  describe('duplicateClip', () => {
+    it('converts legacy absolute contextWindow on duplicate', () => {
+      const project = makeProject();
+      const clip = makeClipWithLegacyContextWindow(5.5);
+      project.tracks[0].clips = [clip];
+      useProjectStore.getState().setProject(project);
+
+      const newClip = useProjectStore.getState().duplicateClip('clip-1');
+
+      expect(newClip).toBeDefined();
+      // Duplicate placed at sourceClip.startTime + sourceClip.duration = 5.5 + 9 = 14.5
+      expect(newClip!.startTime).toBe(14.5);
+
+      const ctx = newClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
+      expect(ctx.offsetStart).toBe(0);
+      expect(ctx.offsetEnd).toBe(9);
+    });
+  });
+
+  describe('duplicateClipToTrack', () => {
+    it('converts legacy absolute contextWindow on cross-track duplicate', () => {
+      const project = makeProject();
+      const clip = makeClipWithLegacyContextWindow(5.5);
+      project.tracks[0].clips = [clip];
+      useProjectStore.getState().setProject(project);
+
+      const newClip = useProjectStore.getState().duplicateClipToTrack('clip-1', 'track-2', 20);
+
+      expect(newClip).toBeDefined();
+      expect(newClip!.startTime).toBe(20);
+
+      const ctx = newClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
+      expect(ctx.offsetStart).toBe(0);
+      expect(ctx.offsetEnd).toBe(9);
+    });
+  });
 });

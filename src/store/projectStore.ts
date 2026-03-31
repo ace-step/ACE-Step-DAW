@@ -4033,8 +4033,10 @@ export const useProjectStore = create<ProjectState>()(
     if (!sourceClip || !trackId) return undefined;
 
     const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    // Migrate legacy absolute contextWindow before duplicating at new position
+    const migratedSource = _migrateContextWindowToRelative(sourceClip);
     const newClip: Clip = {
-      ...sourceClip,
+      ...migratedSource,
       id: uuidv4(),
       startTime: sourceClip.startTime + sourceClip.duration,
       generationStatus: isReady ? 'ready' : 'empty',
@@ -4873,8 +4875,10 @@ export const useProjectStore = create<ProjectState>()(
     if (!sourceClip) return undefined;
     _pushHistory(state.project);
     const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    // Migrate legacy absolute contextWindow before duplicating at new position
+    const migratedSource = _migrateContextWindowToRelative(sourceClip);
     const newClip: Clip = {
-      ...sourceClip,
+      ...migratedSource,
       id: uuidv4(),
       trackId: targetTrackId,
       startTime: startTime ?? sourceClip.startTime,
@@ -4913,8 +4917,10 @@ export const useProjectStore = create<ProjectState>()(
     const newClipsPerTrack = new Map<string, Clip[]>();
     for (const { clip, trackId } of clipsToClone) {
       const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+      // Migrate legacy absolute contextWindow before duplicating at new position
+      const migratedClip = _migrateContextWindowToRelative(clip);
       const dup: Clip = {
-        ...clip,
+        ...migratedClip,
         id: uuidv4(),
         trackId,
         startTime: Math.max(0, clip.startTime + timeOffset),

@@ -172,4 +172,53 @@ describe('contextWindow migration on clip move', () => {
       expect(resolved!.endTime).toBe(8.5);
     });
   });
+
+  describe('updateClip (same-track drag path)', () => {
+    it('converts legacy absolute contextWindow to relative offsets on startTime change', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('custom', 'sample');
+      const clip = addClipWithLegacyCtx(track.id, 5.5, 3.0, 8.5);
+
+      // Same-track drag: updateClip called with new startTime
+      store.updateClip(clip.id, { startTime: 9.5 });
+
+      const updated = getClip(clip.id)!;
+      expect(updated.startTime).toBe(9.5);
+
+      const ctx = updated.generationParams?.contextWindow;
+      expect(ctx).toHaveProperty('offsetStart');
+
+      const resolved = resolveContextWindow(updated);
+      expect(resolved!.startTime).toBe(7.0);  // 9.5 + (3.0 - 5.5)
+      expect(resolved!.endTime).toBe(12.5);   // 9.5 + (8.5 - 5.5)
+    });
+
+    it('does not migrate when generationParams is also being updated', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('custom', 'sample');
+      const clip = addClipWithLegacyCtx(track.id, 5.5, 3.0, 8.5);
+
+      // Caller explicitly sets generationParams — should not double-migrate
+      store.updateClip(clip.id, {
+        startTime: 9.5,
+        generationParams: { ...clip.generationParams, contextWindow: null },
+      });
+
+      const updated = getClip(clip.id)!;
+      expect(updated.generationParams?.contextWindow).toBeNull();
+    });
+
+    it('preserves relative contextWindow unchanged on startTime change', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('custom', 'sample');
+      const clip = addClipWithRelativeCtx(track.id, 5.5, -2.5, 3.0);
+
+      store.updateClip(clip.id, { startTime: 9.5 });
+
+      const updated = getClip(clip.id)!;
+      const ctx = updated.generationParams?.contextWindow;
+      expect(ctx).toHaveProperty('offsetStart', -2.5);
+      expect(ctx).toHaveProperty('offsetEnd', 3.0);
+    });
+  });
 });

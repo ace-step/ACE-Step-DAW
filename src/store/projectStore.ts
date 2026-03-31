@@ -3855,9 +3855,24 @@ export const useProjectStore = create<ProjectState>()(
     _pushHistory(state.project);
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
-      clips: t.clips.map((c) =>
-        c.id === clipId ? { ...c, ...updates } : c,
-      ),
+      clips: t.clips.map((c) => {
+        if (c.id !== clipId) return c;
+        // Migrate legacy contextWindow when startTime changes so regeneration
+        // uses correct context bounds after any kind of repositioning.
+        const needsCtxMigration =
+          'startTime' in updates &&
+          updates.startTime !== c.startTime &&
+          !('generationParams' in updates);
+        if (needsCtxMigration) {
+          const migratedParams = _migrateLegacyContextWindow(c);
+          return {
+            ...c,
+            ...updates,
+            ...(migratedParams !== c.generationParams ? { generationParams: migratedParams } : {}),
+          };
+        }
+        return { ...c, ...updates };
+      }),
     }));
     const updated = { ...state.project, tracks: newTracks };
     if (!_isDragging) {
@@ -4378,6 +4393,7 @@ export const useProjectStore = create<ProjectState>()(
 
     const rightClip: Clip = {
       ...sourceClip,
+      generationParams: _migrateLegacyContextWindow({ ...sourceClip, startTime: splitTime }) ?? sourceClip.generationParams,
       id: uuidv4(),
       startTime: splitTime,
       duration: rightDuration,
@@ -4823,11 +4839,13 @@ export const useProjectStore = create<ProjectState>()(
     if (!sourceClip) return undefined;
     _pushHistory(state.project);
     const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    const newClipStartTime = startTime ?? sourceClip.startTime;
     const newClip: Clip = {
       ...sourceClip,
+      generationParams: _migrateLegacyContextWindow({ ...sourceClip, startTime: newClipStartTime }) ?? sourceClip.generationParams,
       id: uuidv4(),
       trackId: targetTrackId,
-      startTime: startTime ?? sourceClip.startTime,
+      startTime: newClipStartTime,
       generationStatus: isReady ? 'ready' : 'empty',
       generationJobId: null,
       cumulativeMixKey: sourceClip.cumulativeMixKey,

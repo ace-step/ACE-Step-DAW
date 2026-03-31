@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "ace-dsp-core",
+    "ace-dsp-wasm",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Link-time optimization
+codegen-units = 1   # Single codegen unit for best optimization
+strip = true        # Strip debug symbols

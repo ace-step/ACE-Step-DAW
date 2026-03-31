@@ -1,0 +1,17 @@
+{
+  "name": "ace-dsp-wasm",
+  "type": "module",
+  "description": "WASM bindings for ACE-Step DSP engine",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "ace_dsp_wasm_bg.wasm",
+    "ace_dsp_wasm.js",
+    "ace_dsp_wasm.d.ts"
+  ],
+  "main": "ace_dsp_wasm.js",
+  "types": "ace_dsp_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

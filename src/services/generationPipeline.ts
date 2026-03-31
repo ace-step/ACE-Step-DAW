@@ -947,7 +947,7 @@ async function generateClipInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round((clipStart - ctxOffset) * sampleRate);
+    const startSample = Math.max(0, Math.round((clipStart - ctxOffset) * sampleRate));
     const endSample = Math.min(
       Math.round((clipStart - ctxOffset + clipDuration) * sampleRate),
       fullBuffer.length,
@@ -962,7 +962,7 @@ async function generateClipInternal(
       const src = fullBuffer.getChannelData(ch);
       const dst = trimmedBuffer.getChannelData(ch);
       for (let i = 0; i < trimmedLength; i++) {
-        dst[i] = src[startSample + i];
+        dst[i] = startSample + i < src.length ? src[startSample + i] : 0;
       }
     }
 
@@ -2041,7 +2041,7 @@ async function generateRepaintInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round(clipStart * sampleRate);
+    const startSample = Math.max(0, Math.round(clipStart * sampleRate));
     const endSample = Math.min(
       Math.round((clipStart + clipDuration) * sampleRate),
       fullBuffer.length,
@@ -2056,7 +2056,7 @@ async function generateRepaintInternal(
       const src = fullBuffer.getChannelData(ch);
       const dst = trimmedBuffer.getChannelData(ch);
       for (let i = 0; i < trimmedLength; i++) {
-        dst[i] = src[startSample + i];
+        dst[i] = startSample + i < src.length ? src[startSample + i] : 0;
       }
     }
 

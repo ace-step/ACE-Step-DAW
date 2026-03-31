@@ -19,6 +19,7 @@ interface FmSynthInstance {
   synth: Tone.FMSynth;
   params: FmInstrumentSettings;
   gain: Tone.Gain;
+  connectTo: Tone.InputNode | undefined;
 }
 
 /**
@@ -265,7 +266,15 @@ class SynthEngine {
   /** Create or retrieve an FM synth for a track. Reuses existing instance when params match. */
   ensureFmSynth(trackId: string, params: FmInstrumentSettings, connectTo?: Tone.InputNode): Tone.FMSynth {
     const existing = this.fmSynths.get(trackId);
-    if (existing && fmParamsEqual(existing.params, params)) return existing.synth;
+    if (existing && fmParamsEqual(existing.params, params)) {
+      // Reconnect gain if the output node has changed.
+      if (connectTo && connectTo !== existing.connectTo) {
+        existing.gain.disconnect();
+        existing.gain.connect(connectTo);
+        existing.connectTo = connectTo;
+      }
+      return existing.synth;
+    }
 
     if (existing) {
       existing.synth.dispose();
@@ -276,14 +285,14 @@ class SynthEngine {
     const options = buildFmSynthOptions(params);
     synth.set(options);
 
-    const gain = new Tone.Gain(0.55);
+    const gain = new Tone.Gain(params.outputGain ?? 0.55);
     synth.connect(gain);
     if (connectTo) {
       gain.connect(connectTo);
     } else {
       gain.toDestination();
     }
-    this.fmSynths.set(trackId, { synth, params, gain });
+    this.fmSynths.set(trackId, { synth, params, gain, connectTo });
     return synth;
   }
 

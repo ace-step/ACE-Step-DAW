@@ -227,33 +227,34 @@ export function VirtualKeyboard() {
 
       event.preventDefault();
       const transport = useTransportStore.getState();
-      const project = useProjectStore.getState();
+      const projectStore = useProjectStore.getState();
+      const project = projectStore.project;
       const captureService = getMidiCaptureService();
 
       if (held.trackId) {
-        const heldTrack = project.project?.tracks.find((t) => t.id === held.trackId);
+        const heldTrack = project?.tracks.find((t) => t.id === held.trackId);
         instrumentNoteOff(heldTrack, held.trackId, held.pitch);
         captureService.noteOff(held.trackId, held.pitch, transport.currentTime);
       }
 
       if (held.clipId) {
-        const secondsPerBeat = 60 / (project.project?.bpm ?? 120);
+        const secondsPerBeat = 60 / (project?.bpm ?? 120);
         const noteStartBeat = Math.max(0, (held.startTime - held.clipStartTime) / secondsPerBeat);
         const noteDurationBeats = Math.max(
           MIN_NOTE_DURATION_BEATS,
           (transport.currentTime - held.startTime) / secondsPerBeat,
         );
-        project.addMidiNote(held.clipId, {
+        projectStore.addMidiNote(held.clipId, {
           pitch: held.pitch,
           startBeat: Math.round(noteStartBeat * 1000) / 1000,
           durationBeats: Math.round(noteDurationBeats * 1000) / 1000,
           velocity: held.velocity / 127,
         });
 
-        const clip = project.getClipById(held.clipId);
+        const clip = projectStore.getClipById(held.clipId);
         const clipEndTime = transport.currentTime;
         if (clip && clipEndTime > clip.startTime + clip.duration) {
-          project.updateClip(held.clipId, { duration: clipEndTime - clip.startTime });
+          projectStore.updateClip(held.clipId, { duration: clipEndTime - clip.startTime });
         }
       }
 

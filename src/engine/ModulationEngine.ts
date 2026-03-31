@@ -132,25 +132,35 @@ class ModulationEngine {
       // For unipolar (bipolar=false) LFO sources, remap LFO output from [-1,1] to [0,1]
       // using Tone.Scale before the amount scaler.
       const isLfoSource = slot.source === 'lfo1' || slot.source === 'lfo2';
-      let upstream: Tone.ToneAudioNode = source.node as unknown as Tone.ToneAudioNode;
+      // sourceNode is the raw source output (LFO or Signal); captured for explicit disconnect on dispose.
+      const sourceNode = source.node as unknown as Tone.ToneAudioNode;
+      let upstream: Tone.ToneAudioNode = sourceNode;
       if (!slot.bipolar && isLfoSource) {
         const scaleNode = new Tone.Scale(0, 1); // maps [-1,1] → [0,1]
-        (source.node as unknown as Tone.ToneAudioNode).connect(scaleNode as unknown as Tone.InputNode);
+        sourceNode.connect(scaleNode as unknown as Tone.InputNode);
         upstream = scaleNode as unknown as Tone.ToneAudioNode;
         connections.push({
           scaler: scaleNode as unknown as Tone.Multiply,
-          dispose: () => scaleNode.dispose(),
+          dispose: () => {
+            // Disconnect source → scaleNode before disposal to avoid dangling connections.
+            try { sourceNode.disconnect(scaleNode as unknown as Tone.InputNode); } catch { /* already disconnected */ }
+            scaleNode.dispose();
+          },
         });
       }
 
-      // Create scaling node: source * amount → destination
+      // Create scaling node: upstream * amount → destination.
+      // Capture upstream in a const for the dispose closure.
+      const slotUpstream = upstream;
       const scaler = new Tone.Multiply(slot.amount);
-      upstream.connect(scaler);
+      slotUpstream.connect(scaler);
       scaler.connect(target);
 
       connections.push({
         scaler,
         dispose: () => {
+          // Disconnect upstream → scaler before disposal.
+          try { slotUpstream.disconnect(scaler); } catch { /* already disconnected */ }
           scaler.dispose();
         },
       });

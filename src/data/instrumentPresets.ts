@@ -155,11 +155,14 @@ export function createUserPreset(
   category: InstrumentPresetCategory,
   instrument: TrackInstrument,
 ): InstrumentPreset {
+  if (instrument.kind === 'sampler') {
+    throw new Error('Sampler instruments cannot be saved as instrument presets');
+  }
   return {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name,
     category,
-    instrumentKind: instrument.kind === 'sampler' ? 'subtractive' : instrument.kind,
+    instrumentKind: instrument.kind,
     isFactory: false,
     instrument: structuredClone(instrument),
   };

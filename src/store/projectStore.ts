@@ -3408,6 +3408,8 @@ export const useProjectStore = create<ProjectState>()(
         tracks: state.project.tracks.map((t) => {
           if (t.id !== trackId) return t;
           const inst = t.instrument;
+          // Modulation settings live on SubtractiveInstrumentSettings only.
+          // FM/Wavetable modulation routing is a future enhancement (Issue #1233).
           if (!inst || inst.kind !== 'subtractive') return t;
           return {
             ...t,

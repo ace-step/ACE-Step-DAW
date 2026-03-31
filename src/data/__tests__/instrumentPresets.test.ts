@@ -133,5 +133,12 @@ describe('Unified Instrument Presets', () => {
       expect(preset.isFactory).toBe(false);
       expect(preset.instrument.kind).toBe('subtractive');
     });
+
+    it('throws when attempting to create a preset from a sampler instrument', () => {
+      const samplerInstrument = { kind: 'sampler' as const };
+      expect(() => createUserPreset('Drum Kit', 'Bass', samplerInstrument as never)).toThrow(
+        'Sampler instruments cannot be saved as instrument presets',
+      );
+    });
   });
 });

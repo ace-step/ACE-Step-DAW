@@ -8,6 +8,8 @@ interface WavetableInstance {
   settings: WavetableSettings;
   /** Current morph position (updated manually via setPosition). */
   currentPosition: number;
+  /** The output node this instance is connected to; used to detect re-routing. */
+  connectTo: Tone.InputNode | undefined;
 }
 
 /**
@@ -34,6 +36,12 @@ class WavetableEngine {
     const existing = this.instances.get(trackId);
     if (existing) {
       this.applySettings(trackId, settings);
+      // Reconnect gain if the output node has changed.
+      if (connectTo && connectTo !== existing.connectTo) {
+        existing.gain.disconnect();
+        existing.gain.connect(connectTo);
+        existing.connectTo = connectTo;
+      }
       return existing.synth;
     }
 
@@ -63,6 +71,7 @@ class WavetableEngine {
       gain,
       settings: { ...settings },
       currentPosition: settings.position,
+      connectTo,
     };
 
     this.instances.set(trackId, instance);

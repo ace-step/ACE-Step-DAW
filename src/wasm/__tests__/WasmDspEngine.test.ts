@@ -214,6 +214,49 @@ describe('WasmDspEngine', () => {
         type: 'reset',
       });
     });
+
+    it('should send set-delay message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setDelay(250, 0.5, 0.7);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-delay',
+        delayMs: 250,
+        feedback: 0.5,
+        wet: 0.7,
+      });
+    });
+
+    it('should send set-delay-params message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setDelayParams(300, 0.4, 0.6, 0.8);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-delay-params',
+        delayMs: 300,
+        feedback: 0.4,
+        wet: 0.6,
+        dry: 0.8,
+      });
+    });
+
+    it('should send disable-delay message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableDelay();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-delay',
+      });
+    });
   });
 
   describe('lifecycle', () => {

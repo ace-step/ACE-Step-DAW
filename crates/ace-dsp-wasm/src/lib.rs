@@ -5,6 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
+use ace_dsp_core::delay::MonoDelay;
 use ace_dsp_core::gain::GainProcessor;
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
@@ -15,6 +16,7 @@ use ace_dsp_core::gain::GainProcessor;
 pub struct DspProcessor {
     gain: GainProcessor,
     filter: Option<BiquadFilter>,
+    delay: Option<MonoDelay>,
     sample_rate: f32,
 }
 
@@ -26,6 +28,7 @@ impl DspProcessor {
         Self {
             gain: GainProcessor::new(1.0),
             filter: None,
+            delay: None,
             sample_rate,
         }
     }
@@ -61,24 +64,61 @@ impl DspProcessor {
         self.filter = None;
     }
 
+    /// Enable a delay effect.
+    /// - `delay_ms`: delay time in milliseconds
+    /// - `feedback`: feedback amount (0.0 to 0.99)
+    /// - `wet`: wet mix level (0.0 to 1.0)
+    pub fn set_delay(&mut self, delay_ms: f32, feedback: f32, wet: f32) {
+        let delay_samples = delay_ms * self.sample_rate / 1000.0;
+        let max_samples = (2.0 * self.sample_rate) as usize; // 2 seconds max
+        match &mut self.delay {
+            Some(d) => {
+                d.set_delay_samples(delay_samples);
+                d.set_feedback(feedback);
+                d.set_wet(wet);
+            }
+            None => {
+                self.delay = Some(MonoDelay::new(max_samples, delay_samples, feedback, wet));
+            }
+        }
+    }
+
+    /// Update delay parameters without recreating.
+    pub fn set_delay_params(&mut self, delay_ms: f32, feedback: f32, wet: f32, dry: f32) {
+        if let Some(ref mut d) = self.delay {
+            d.set_delay_samples(delay_ms * self.sample_rate / 1000.0);
+            d.set_feedback(feedback);
+            d.set_wet(wet);
+            d.set_dry(dry);
+        }
+    }
+
+    /// Disable the delay.
+    pub fn disable_delay(&mut self) {
+        self.delay = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
+    /// Signal chain: Filter → Delay → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
-        // Apply filter first (if enabled)
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
         }
-        // Then gain
+        if let Some(ref mut delay) = self.delay {
+            delay.process_buffer(buffer);
+        }
         self.gain.process_mono(buffer);
     }
 
     /// Process interleaved stereo audio buffer in-place.
     /// Samples arranged as [L, R, L, R, ...].
     pub fn process_stereo_interleaved(&mut self, buffer: &mut [f32]) {
-        // For stereo, we process all samples through gain
-        // Filter is applied per-sample (mono processing on interleaved data)
         if let Some(ref mut filter) = self.filter {
             filter.process_buffer(buffer);
+        }
+        if let Some(ref mut delay) = self.delay {
+            delay.process_buffer(buffer);
         }
         self.gain.process_stereo_interleaved(buffer);
     }
@@ -92,6 +132,9 @@ impl DspProcessor {
     pub fn reset(&mut self) {
         if let Some(ref mut filter) = self.filter {
             filter.reset();
+        }
+        if let Some(ref mut delay) = self.delay {
+            delay.reset();
         }
     }
 }
@@ -150,6 +193,40 @@ mod tests {
         let mut buf = [1.0_f32; 64];
         proc.process_mono(&mut buf);
         proc.reset(); // Should not panic
+    }
+
+    #[test]
+    fn test_processor_delay() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_delay(10.0, 0.0, 1.0); // 10ms delay, no feedback, full wet
+        proc.set_gain(1.0);
+
+        // Process an impulse followed by silence
+        let mut output = Vec::new();
+        let mut buf = [1.0_f32];
+        proc.process_mono(&mut buf);
+        output.push(buf[0]);
+        for _ in 1..600 {
+            let mut buf = [0.0_f32];
+            proc.process_mono(&mut buf);
+            output.push(buf[0]);
+        }
+
+        // 10ms at 48kHz = 480 samples delay
+        // The impulse should appear around sample 480
+        assert!(output[480].abs() > 0.3, "Delayed impulse at 480: {}", output[480]);
+    }
+
+    #[test]
+    fn test_processor_disable_delay() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_delay(10.0, 0.0, 1.0);
+        proc.disable_delay();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        // Dry signal should pass through unchanged (delay disabled)
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
     }
 
     #[test]

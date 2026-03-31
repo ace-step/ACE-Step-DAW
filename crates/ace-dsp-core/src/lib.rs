@@ -7,6 +7,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod biquad;
+#[cfg(feature = "std")]
+pub mod delay;
 pub mod gain;
 
 /// Anti-denormal guard constant.

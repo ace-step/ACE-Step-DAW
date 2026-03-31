@@ -57,6 +57,26 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_filter();
           }
           break;
+        case 'set-delay':
+          if (this._processor) {
+            this._processor.set_delay(msg.delayMs, msg.feedback, msg.wet);
+          }
+          break;
+        case 'set-delay-params':
+          if (this._processor) {
+            this._processor.set_delay_params(
+              msg.delayMs,
+              msg.feedback,
+              msg.wet,
+              msg.dry
+            );
+          }
+          break;
+        case 'disable-delay':
+          if (this._processor) {
+            this._processor.disable_delay();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

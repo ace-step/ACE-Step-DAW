@@ -45,6 +45,15 @@ export interface WasmDspNode {
   /** Disable the filter. */
   disableFilter(): void;
 
+  /** Enable a delay effect. */
+  setDelay(delayMs: number, feedback: number, wet: number): void;
+
+  /** Update delay parameters. */
+  setDelayParams(delayMs: number, feedback: number, wet: number, dry: number): void;
+
+  /** Disable the delay. */
+  disableDelay(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -165,6 +174,34 @@ export class WasmDspEngine {
 
       disableFilter() {
         workletNode.port.postMessage({ type: 'disable-filter' });
+      },
+
+      setDelay(delayMs: number, feedback: number, wet: number) {
+        workletNode.port.postMessage({
+          type: 'set-delay',
+          delayMs,
+          feedback,
+          wet,
+        });
+      },
+
+      setDelayParams(
+        delayMs: number,
+        feedback: number,
+        wet: number,
+        dry: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-delay-params',
+          delayMs,
+          feedback,
+          wet,
+          dry,
+        });
+      },
+
+      disableDelay() {
+        workletNode.port.postMessage({ type: 'disable-delay' });
       },
 
       reset() {

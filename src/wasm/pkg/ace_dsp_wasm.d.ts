@@ -11,6 +11,10 @@ export class DspProcessor {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Disable the delay.
+     */
+    disable_delay(): void;
+    /**
      * Disable the filter.
      */
     disable_filter(): void;
@@ -25,6 +29,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
+     * Signal chain: Filter → Delay → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -36,6 +41,17 @@ export class DspProcessor {
      * Reset all processor state (call on seek or transport stop).
      */
     reset(): void;
+    /**
+     * Enable a delay effect.
+     * - `delay_ms`: delay time in milliseconds
+     * - `feedback`: feedback amount (0.0 to 0.99)
+     * - `wet`: wet mix level (0.0 to 1.0)
+     */
+    set_delay(delay_ms: number, feedback: number, wet: number): void;
+    /**
+     * Update delay parameters without recreating.
+     */
+    set_delay_params(delay_ms: number, feedback: number, wet: number, dry: number): void;
     /**
      * Enable a biquad filter with the given parameters.
      * filter_type: 0=LP, 1=HP, 2=BP, 3=Notch, 4=Allpass, 5=Peaking, 6=LowShelf, 7=HighShelf
@@ -57,11 +73,14 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
+    readonly dspprocessor_disable_delay: (a: number) => void;
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_reset: (a: number) => void;
+    readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
+    readonly dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
     readonly version: (a: number) => void;

@@ -18,6 +18,12 @@ export class DspProcessor {
         wasm.__wbg_dspprocessor_free(ptr, 0);
     }
     /**
+     * Disable the delay.
+     */
+    disable_delay() {
+        wasm.dspprocessor_disable_delay(this.__wbg_ptr);
+    }
+    /**
      * Disable the filter.
      */
     disable_filter() {
@@ -44,6 +50,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
+     * Signal chain: Filter → Delay → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -66,6 +73,28 @@ export class DspProcessor {
      */
     reset() {
         wasm.dspprocessor_reset(this.__wbg_ptr);
+    }
+    /**
+     * Enable a delay effect.
+     * - `delay_ms`: delay time in milliseconds
+     * - `feedback`: feedback amount (0.0 to 0.99)
+     * - `wet`: wet mix level (0.0 to 1.0)
+     * @param {number} delay_ms
+     * @param {number} feedback
+     * @param {number} wet
+     */
+    set_delay(delay_ms, feedback, wet) {
+        wasm.dspprocessor_set_delay(this.__wbg_ptr, delay_ms, feedback, wet);
+    }
+    /**
+     * Update delay parameters without recreating.
+     * @param {number} delay_ms
+     * @param {number} feedback
+     * @param {number} wet
+     * @param {number} dry
+     */
+    set_delay_params(delay_ms, feedback, wet, dry) {
+        wasm.dspprocessor_set_delay_params(this.__wbg_ptr, delay_ms, feedback, wet, dry);
     }
     /**
      * Enable a biquad filter with the given parameters.

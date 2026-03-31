@@ -178,7 +178,7 @@ export function Knob({
             <path
               d={trackPath}
               fill="none"
-              stroke="rgba(255,255,255,0.08)"
+              stroke="rgba(255,255,255,0.14)"
               strokeWidth={strokeWidth}
               strokeLinecap="round"
             />
@@ -233,7 +233,7 @@ export function Knob({
       )}
       {/* Label */}
       {label && (
-        <span className="text-[11px] text-white/40 leading-tight">
+        <span className="text-[11px] text-white/55 leading-tight">
           {label}
         </span>
       )}

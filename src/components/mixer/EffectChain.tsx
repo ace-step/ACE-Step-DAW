@@ -283,10 +283,19 @@ function EffectDevice({
   const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
   const effects = track.effects ?? [];
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close presets on outside click
+  useEffect(() => {
+    if (!showPresets) return;
+    const close = () => setShowPresets(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showPresets]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -360,18 +369,32 @@ function EffectDevice({
           {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
         </button>
 
-        {/* Preset selector */}
-        <select
-          className="bg-transparent text-white/40 text-[9px] border-none outline-none cursor-pointer hover:text-white/60"
-          onChange={(e) => { if (e.target.value !== '') applyPreset(parseInt(e.target.value)); e.target.value = ''; }}
-          value=""
-          onClick={(e) => e.stopPropagation()}
-        >
-          <option value="" className="bg-[#1a1a2e]">Presets</option>
-          {presets.map((preset, i) => (
-            <option key={i} value={i} className="bg-[#1a1a2e]">{preset.name}</option>
-          ))}
-        </select>
+        {/* Preset selector — custom dropdown */}
+        <div className="relative">
+          <button
+            className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
+          >
+            Presets
+            <ChevronDown className="h-2.5 w-2.5" />
+          </button>
+          {showPresets && (
+            <div
+              className="absolute right-0 top-full mt-1 bg-daw-surface-2 border border-white/10 rounded shadow-xl z-50 py-1 min-w-[100px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {presets.map((preset, i) => (
+                <button
+                  key={i}
+                  className="w-full text-left px-3 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
+                  onClick={() => { applyPreset(i); setShowPresets(false); }}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Bypass toggle */}
         <button
@@ -633,7 +656,7 @@ export function EffectChain() {
 
   return (
     <div
-      className="border-t border-[#1a1a1a] bg-[#0e0e24] flex flex-col select-none shrink-0"
+      className="border-t border-[#1a1a1a] bg-daw-bg flex flex-col select-none shrink-0"
       style={{ height: effectChainHeight }}
       onMouseDownCapture={() => setHistoryFocusScope('mixer')}
       onFocusCapture={() => setHistoryFocusScope('mixer')}
@@ -667,7 +690,7 @@ export function EffectChain() {
       </div>
 
       {/* ── Bottom tab strip — Ableton-style device chain ── */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#0e0e24]">
+      <div className="shrink-0 border-t border-white/[0.06] bg-daw-bg">
         {/* Track info + controls */}
         <div className="flex items-center gap-2 px-3 py-1 border-b border-white/[0.04]">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.color }} />
@@ -698,7 +721,7 @@ export function EffectChain() {
               <button
                 key={effect.id}
                 onClick={() => setSelectedEffectIdx(idx)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium transition-all border-r border-white/[0.04] last:border-r-0 ${
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium transition-all border-r border-white/[0.08] last:border-r-0 ${
                   isSelected
                     ? 'text-white/90 bg-white/[0.06]'
                     : 'text-white/40 hover:text-white/65 hover:bg-white/[0.03]'

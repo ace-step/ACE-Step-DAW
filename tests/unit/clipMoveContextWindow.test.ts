@@ -317,4 +317,29 @@ describe('clip move — contextWindow migration', () => {
       expect(ctx.offsetEnd).toBe(9);
     });
   });
+
+  describe('batchDuplicateClips', () => {
+    it('converts legacy absolute contextWindow on batch duplicate', () => {
+      const project = makeProject();
+      const clip = makeClipWithLegacyContextWindow(5.5);
+      project.tracks[0].clips = [clip];
+      useProjectStore.getState().setProject(project);
+
+      // Batch duplicate with +10 second offset
+      useProjectStore.getState().batchDuplicateClips(['clip-1'], 10);
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      const track1Clips = tracks[0].clips;
+      // Should have original + duplicate
+      expect(track1Clips).toHaveLength(2);
+
+      const dupClip = track1Clips.find((c) => c.id !== 'clip-1');
+      expect(dupClip).toBeDefined();
+      expect(dupClip!.startTime).toBe(15.5); // 5.5 + 10
+
+      const ctx = dupClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
+      expect(ctx.offsetStart).toBe(0);
+      expect(ctx.offsetEnd).toBe(9);
+    });
+  });
 });

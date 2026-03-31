@@ -409,12 +409,14 @@ export async function generateVariationSession(
 
   const track = project.tracks.find((entry) => entry.id === params.trackId);
   if (!track) {
+    genStore.setIsGenerating(false);
     useGenerationStore.getState().setGenerationRequestError(`Target track "${params.trackId}" was not found.`);
     return false;
   }
 
   const sessionId = useGenerationStore.getState().variationSession?.id;
   if (!sessionId) {
+    genStore.setIsGenerating(false);
     useGenerationStore.getState().setGenerationRequestError('Start a variation session before generating results.');
     return false;
   }
@@ -1156,7 +1158,10 @@ export async function streamGenerationVariations(
   }
 
   const session = useGenerationStore.getState().variationSession;
-  if (!session) return;
+  if (!session) {
+    useGenerationStore.getState().setIsGenerating(false);
+    return;
+  }
 
   const sessionId = session.id;
   const baseStartTime = getNextVariationStartTime(params.trackId);
@@ -1500,9 +1505,11 @@ export async function generateFromGenerationPanel(request: GenerationPanelReques
 
   const targetTrack = project.tracks.find((track) => track.id === request.trackId);
   if (!targetTrack) {
+    genStore.setIsGenerating(false);
     throw new Error(`Track '${request.trackId}' not found.`);
   }
   if ((targetTrack.trackType ?? 'stems') !== 'stems') {
+    genStore.setIsGenerating(false);
     throw new Error(`Track '${targetTrack.displayName}' does not support AI generation.`);
   }
 

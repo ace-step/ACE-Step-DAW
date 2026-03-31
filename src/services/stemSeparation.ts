@@ -152,13 +152,12 @@ export async function separateClipAudioToStems(options: {
 }): Promise<PreparedSeparatedStem[]> {
   const { clipId, sourceBlob, stemCount, sourceLabel } = options;
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) {
+  if (!genStore.tryAcquireGenerationLock()) {
     throw new Error('Another generation job is already running');
   }
 
   const jobId = uuidv4();
   toastInfo('Stem separation started');
-  genStore.setIsGenerating(true);
   genStore.addJob({
     id: jobId,
     clipId,

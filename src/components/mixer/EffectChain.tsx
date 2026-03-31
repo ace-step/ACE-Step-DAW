@@ -668,7 +668,7 @@ export function EffectChain() {
       />
 
       {/* ── Full-width selected effect view ── */}
-      <div className={`flex-1 overflow-y-auto transition-opacity ${track.effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
+      <div className={`flex-1 overflow-y-auto relative transition-all duration-200 ease-in-out ${track.effectsBypassed ? 'opacity-45 grayscale' : 'opacity-100 grayscale-0'}`}>
         {selectedEffect ? (
           <div className="h-full">
             {/* Device header — integrated into the full-width view */}
@@ -685,6 +685,14 @@ export function EffectChain() {
         ) : (
           <div className="flex items-center justify-center h-full text-white/20 text-sm">
             No effects — click + to add one
+          </div>
+        )}
+        {/* Bypass watermark overlay */}
+        {track.effectsBypassed && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200">
+            <span className="text-white/[0.06] text-4xl font-bold uppercase tracking-[0.3em] select-none">
+              Bypass
+            </span>
           </div>
         )}
       </div>

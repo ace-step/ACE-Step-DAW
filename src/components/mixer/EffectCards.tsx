@@ -10,6 +10,7 @@ import { EffectCardLayout } from './EffectCardLayout';
 import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
 import { ReverbDecayCurve } from './ReverbDecayCurve';
+import { DelayTapTimeline } from './DelayTapTimeline';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -840,6 +841,15 @@ export function DelayCard({ effect, trackId }: { effect: TrackEffect & { type: '
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.delay}
+      visualization={
+        <DelayTapTimeline
+          time={p.time}
+          feedback={p.feedback}
+          width={160}
+          height={100}
+          color={EFFECT_COLORS.delay}
+        />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'delay', param: 'wet' }} normalizedValue={normalizeEffectParamValue('delay', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.delay} />

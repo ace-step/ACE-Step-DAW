@@ -239,14 +239,14 @@ export function Knob({
           onCancel={() => setShowPrecisionInput(false)}
         />
       )}
-      {/* Label — dim, small */}
+      {/* Label */}
       {label && (
-        <span className="text-[10px] text-white/35 leading-tight">
+        <span className="text-[11px] text-white/40 leading-tight">
           {label}
         </span>
       )}
-      {/* Value — prominent */}
-      <span className="text-[11px] text-white/70 leading-tight font-mono font-medium">
+      {/* Value */}
+      <span className="text-xs text-white/75 leading-tight font-mono font-medium">
         {displayValue}{unit && !formatValue ? unit : ''}
       </span>
     </div>

@@ -9,6 +9,7 @@ import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { EffectCardLayout } from './EffectCardLayout';
 import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
+import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -1438,6 +1439,18 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
   return (
     <EffectCardLayout
       color="#7a6fb8"
+      visualization={
+        <ReverbDecayCurve
+          decay={p.decay}
+          preDelay={p.preDelay / 1000}
+          damping={p.damping}
+          erLevel={p.erLevel}
+          reverbType={p.reverbType}
+          width={160}
+          height={100}
+          color="#7a6fb8"
+        />
+      }
       mode={
         <>
           {(Object.keys(REVERB_TYPE_LABELS) as AlgorithmicReverbType[]).map((rt) => (

@@ -157,6 +157,31 @@ function _isViewerMode(): boolean {
   return useCollaborationStore.getState().isViewerMode;
 }
 
+/**
+ * Migrate a clip's legacy absolute contextWindow to relative offsets.
+ * If the clip already uses relative offsets or has no contextWindow, returns the clip unchanged.
+ * @param clip The clip before its startTime changes
+ * @returns A new clip object with contextWindow converted to relative offsets, or the same clip
+ */
+function _migrateContextWindowToRelative(clip: Clip): Clip {
+  const ctx = clip.generationParams?.contextWindow;
+  if (!ctx) return clip;
+  // Already in relative format
+  if ('offsetStart' in ctx) return clip;
+  // Legacy absolute format → convert to relative offsets based on current startTime
+  return {
+    ...clip,
+    generationParams: {
+      ...clip.generationParams!,
+      contextWindow: {
+        offsetStart: ctx.startTime - clip.startTime,
+        offsetEnd: ctx.endTime - clip.startTime,
+        trackIds: [],
+      },
+    },
+  };
+}
+
 function getBarDurationSec(bpm: number, timeSig: number, timeSigDenominator: number = 4): number {
   return (60 / bpm) * timeSig * (4 / Math.max(1, timeSigDenominator));
 }
@@ -3874,11 +3899,15 @@ export const useProjectStore = create<ProjectState>()(
     if (_isViewerMode()) return;
     if (!state.project) return;
     _pushHistory(state.project);
+    const isMoving = 'startTime' in updates;
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
-      clips: t.clips.map((c) =>
-        c.id === clipId ? { ...c, ...updates } : c,
-      ),
+      clips: t.clips.map((c) => {
+        if (c.id !== clipId) return c;
+        // Migrate legacy absolute contextWindow before applying position change
+        const base = isMoving ? _migrateContextWindowToRelative(c) : c;
+        return { ...base, ...updates };
+      }),
     }));
     const updated = { ...state.project, tracks: newTracks };
     if (!_isDragging) {
@@ -4004,8 +4033,10 @@ export const useProjectStore = create<ProjectState>()(
     if (!sourceClip || !trackId) return undefined;
 
     const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    // Migrate legacy absolute contextWindow before duplicating at new position
+    const migratedSource = _migrateContextWindowToRelative(sourceClip);
     const newClip: Clip = {
-      ...sourceClip,
+      ...migratedSource,
       id: uuidv4(),
       startTime: sourceClip.startTime + sourceClip.duration,
       generationStatus: isReady ? 'ready' : 'empty',
@@ -4806,8 +4837,10 @@ export const useProjectStore = create<ProjectState>()(
     const clip = srcTrack.clips.find((c) => c.id === clipId);
     if (!clip) return;
     _pushHistory(state.project);
+    // Migrate legacy absolute contextWindow before applying position change
+    const migratedClip = startTime !== undefined ? _migrateContextWindowToRelative(clip) : clip;
     const movedClip = {
-      ...clip,
+      ...migratedClip,
       trackId: targetTrackId,
       ...(startTime !== undefined ? { startTime } : {}),
     };
@@ -4842,8 +4875,10 @@ export const useProjectStore = create<ProjectState>()(
     if (!sourceClip) return undefined;
     _pushHistory(state.project);
     const isReady = sourceClip.generationStatus === 'ready' && !!sourceClip.isolatedAudioKey;
+    // Migrate legacy absolute contextWindow before duplicating at new position
+    const migratedSource = _migrateContextWindowToRelative(sourceClip);
     const newClip: Clip = {
-      ...sourceClip,
+      ...migratedSource,
       id: uuidv4(),
       trackId: targetTrackId,
       startTime: startTime ?? sourceClip.startTime,
@@ -4882,8 +4917,10 @@ export const useProjectStore = create<ProjectState>()(
     const newClipsPerTrack = new Map<string, Clip[]>();
     for (const { clip, trackId } of clipsToClone) {
       const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+      // Migrate legacy absolute contextWindow before duplicating at new position
+      const migratedClip = _migrateContextWindowToRelative(clip);
       const dup: Clip = {
-        ...clip,
+        ...migratedClip,
         id: uuidv4(),
         trackId,
         startTime: Math.max(0, clip.startTime + timeOffset),
@@ -4927,11 +4964,12 @@ export const useProjectStore = create<ProjectState>()(
     const idSet = new Set(clipIds);
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
-      clips: t.clips.map((c) =>
-        idSet.has(c.id)
-          ? { ...c, startTime: Math.max(0, c.startTime + timeOffset) }
-          : c,
-      ),
+      clips: t.clips.map((c) => {
+        if (!idSet.has(c.id)) return c;
+        // Migrate legacy absolute contextWindow before applying position change
+        const migrated = _migrateContextWindowToRelative(c);
+        return { ...migrated, startTime: Math.max(0, c.startTime + timeOffset) };
+      }),
     }));
     const updated = { ...state.project, tracks: newTracks };
     if (!_isDragging) {

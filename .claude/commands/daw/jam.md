@@ -1,7 +1,7 @@
 Interactive jam mode — build up a track collaboratively.
 
-1. Start playback with daw_play
-2. Read current project state
+1. Start playback: `npx tsx server/daw-cli.ts play`
+2. Read current project state: `npx tsx server/daw-cli.ts status`
 3. Enter an interactive loop:
    - Suggest musical additions based on what's playing
    - Propose new MIDI patterns, drum fills, or arrangement changes

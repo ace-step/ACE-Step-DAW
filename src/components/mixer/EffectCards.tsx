@@ -7,6 +7,7 @@ import { Knob } from '../ui/Knob';
 import { PrecisionInput, clampValue, roundToStep } from '../ui/PrecisionInput';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { EffectCardLayout } from './EffectCardLayout';
+import { CompressorCurve } from './CompressorCurve';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -713,6 +714,17 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.compressor}
+      visualization={
+        <CompressorCurve
+          threshold={p.threshold}
+          ratio={p.ratio}
+          kneeDb={p.knee}
+          reduction={reduction}
+          width={220}
+          height={120}
+          color={EFFECT_COLORS.compressor}
+        />
+      }
       footer={
         <div className="flex flex-col gap-2">
           {/* Sidechain source */}

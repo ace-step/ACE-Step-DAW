@@ -121,6 +121,35 @@ export function Knob({
     onChange(applyStep(value + delta));
   }, [value, min, max, onChange, disabled, applyStep]);
 
+  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (disabled) return;
+    const range = max - min;
+    const coarseStep = step ?? range / 100;
+    const fineStep = step ? step : range / 1000;
+    const s = e.altKey ? fineStep : coarseStep;
+
+    switch (e.key) {
+      case 'ArrowUp':
+      case 'ArrowRight':
+        e.preventDefault();
+        onChange(applyStep(value + s));
+        break;
+      case 'ArrowDown':
+      case 'ArrowLeft':
+        e.preventDefault();
+        onChange(applyStep(value - s));
+        break;
+      case 'Home':
+        e.preventDefault();
+        onChange(min);
+        break;
+      case 'End':
+        e.preventDefault();
+        onChange(max);
+        break;
+    }
+  }, [value, min, max, step, onChange, disabled, applyStep]);
+
   const wheelRef = useNonPassiveWheel(onWheelHandler);
   const mergedKnobRef = useCallback((el: HTMLDivElement | null) => {
     (knobRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
@@ -179,8 +208,16 @@ export function Knob({
           onMouseDown={onMouseDown}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenu}
+          onKeyDown={onKeyDown}
           aria-label={`${label ?? 'Control'} knob`}
-          className={`relative ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
+          tabIndex={disabled ? -1 : 0}
+          role="slider"
+          aria-valuenow={value}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          className={`relative outline-none rounded-full
+            focus-visible:ring-2 focus-visible:ring-daw-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent
+            ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
           style={{ width: s, height: s }}
           data-dragging={isDragging ? 'true' : undefined}
           data-resetting={isResetting ? 'true' : undefined}

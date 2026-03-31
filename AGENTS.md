@@ -55,7 +55,16 @@ git checkout -b feat/v0.0.X-feature-name
 | Claude Code CLI | Precise coding, adaptation, refactoring |
 | Codex | Bulk coding, PR review, testing |
 
-### Step 5: Code Review
+### Step 5: Code Review (Cross-Validated)
+
+**Two independent reviewers, both mandatory:**
+
+1. **GitHub Copilot**: Automatically reviews PRs — check via `gh pr view <num> --json reviews`
+2. **Codex review**: Run `/codex review` for independent structural analysis
+3. **Post Codex results**: `gh pr comment <num> --body "<codex findings>"` for visibility
+4. **Cross-reference**: Both reviewers' feedback must be addressed before merge
+
+**Manual checks** (in addition to automated review):
 - Quality gates (see CLAUDE.md) + scan for: unused imports, console.log, untyped `any`
 
 ### Step 6: Browser Testing
@@ -65,7 +74,7 @@ git checkout -b feat/v0.0.X-feature-name
 - Dark theme consistency, WCAG contrast, DAW color conventions
 
 ### Step 8: PR + Review + Merge + Tag
-- Push → PR → Copilot reviews → merge → tag → GitHub Release → Discord
+- Push → PR → Copilot reviews → Codex review → post findings → address both → merge → tag → GitHub Release → Discord
 
 ### Step 9: Full System Test (every 5 versions)
 - v0.0.15, v0.0.20, v0.0.25...

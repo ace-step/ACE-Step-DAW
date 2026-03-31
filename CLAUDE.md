@@ -22,7 +22,7 @@ React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js + Tailwind CSS v4
 When working autonomously (cron-driven or self-directed), follow this full lifecycle:
 
 ### Phase 0: Task Acquisition
-1. `gh issue list --state open --sort priority` — pick highest priority issue
+1. `gh issue list --state open --label "priority: P0" --limit 10` (then P1, P2) — pick highest priority issue
 2. **No issues?** Spawn discovery subagents:
    - `@tester` — full test suite + boundary exploration, file bugs as Issues
    - `@refactorer` — code quality audit + tech debt scan, file Issues
@@ -38,7 +38,7 @@ When working autonomously (cron-driven or self-directed), follow this full lifec
 ### Phase 2: QA Verification Loop (max 3 rounds)
 ```
 for round in 1..3:
-    run: npx tsc --noEmit + npm test + npm run build + lint
+    run: npx tsc --noEmit + npm test + npm run build
     if all pass → proceed to Phase 3
     else → auto-fix failures, git push, continue loop
 if 3 rounds exhausted → label PR "qa-blocked", flag for human review

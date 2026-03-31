@@ -750,7 +750,10 @@ export function useTransport() {
     if (resumePlayback) {
       engine.stop();
       synthEngine.releaseAll();
+      subtractiveEngine.releaseAll();
+      wavetableEngine.releaseAll();
       samplerEngine.stopAll();
+      modulationEngine.releaseAll();
       automationEngine.stop();
       useTransportStore.getState().pause();
     }

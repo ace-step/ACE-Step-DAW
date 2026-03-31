@@ -8,6 +8,8 @@ tools:
   - Bash
   - Grep
   - Glob
+  - WebSearch
+  - WebFetch
 ---
 
 # Task Executor Agent
@@ -35,6 +37,18 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task from the t
     git add -A
     git commit -m "feat: <description of what was implemented>"
     ```
+
+## Proactive Research Triggers
+
+Before coding, check if any of these apply. If so, **research first** using WebSearch/WebFetch:
+
+1. **Unfamiliar API or library** — You encounter a Tone.js, Web Audio, or third-party API you haven't used before → Search for docs, examples, and known pitfalls
+2. **Complex algorithm** — The task involves DSP, scheduling, or non-trivial logic → Search for established approaches and edge cases
+3. **UI pattern you haven't built** — Drag-and-drop, virtualized lists, canvas rendering → Search for best practices in React + the specific pattern
+4. **Competitor reference needed** — The task mentions matching Ableton/Logic/FL Studio behavior → Search for how they handle it at interaction-detail level
+5. **Error you can't resolve in 2 attempts** — Stop guessing, search for the error message + context
+
+**Research format**: Keep it lightweight. 2-3 searches max. Extract the key insight and move on. Don't turn every task into a research project.
 
 ## Rules
 

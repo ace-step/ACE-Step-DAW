@@ -113,6 +113,40 @@ Every plan (`docs/plans/*.md`) must contain: Problem → Root Cause → Solution
 
 ---
 
+## Proactive Research & Exploration
+
+### Principle: Precision + Breadth = Global Optimum
+
+Deep focus alone finds local maxima. Exploration alone finds nothing. Agents must combine both:
+- **Research before coding**: When facing unfamiliar APIs, patterns, or competitor behavior, search first
+- **Explore multiple approaches**: For architecture decisions, generate 2-3 options before committing
+- **Verify assumptions**: Don't code based on guesses — a 30-second search beats a 30-minute debug
+
+### Research Triggers (any agent)
+
+| Trigger | Action |
+|---------|--------|
+| Unfamiliar API or library | `/quick-research` — search docs + examples |
+| 2+ viable approaches | `/brainstorm` — score and select |
+| Competitor behavior needed | WebSearch for interaction-detail level info |
+| Error after 2 failed attempts | Stop guessing, search the error |
+| New UI pattern | Search for best practices + competitor screenshots |
+
+### Skills
+
+- **`/quick-research`**: Lightweight inline research (2-3 searches, extract key insight, move on)
+- **`/brainstorm`**: Multi-approach exploration (generate options, score, select, document decision)
+- **`@researcher`**: Full competitive research cycle (for epics and new feature areas)
+
+### Anti-Patterns
+
+- **Coding blind**: Implementing an unfamiliar API without reading docs first
+- **First-solution lock**: Committing to the first approach without considering alternatives
+- **Research rabbit hole**: Spending 20 minutes researching a 5-minute task
+- **Confirmation bias**: Searching only for evidence that supports your current approach
+
+---
+
 ## Red Lines (absolute prohibitions)
 
 - Never push directly to main

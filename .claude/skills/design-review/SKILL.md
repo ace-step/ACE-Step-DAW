@@ -166,6 +166,30 @@ Check: Do hardcoded colors bleed through? Is hierarchy still visible?
 
 For entirely new UI features (not modifications to existing ones):
 
+### 5.1 Proactive Competitive Research
+
+**Before evaluating**, use WebSearch to find how competitors handle this specific UI pattern:
+
+```
+Search: "[feature name] UI [Ableton / Logic Pro / FL Studio / Bitwig] 2025"
+Search: "[feature name] best practices DAW UI design"
+```
+
+Look for:
+- **Screenshots or videos** of how competitors implement this exact feature
+- **User complaints** about competitor implementations (what to avoid)
+- **Innovative approaches** from newer DAWs (Bitwig, BandLab) that break conventions
+
+Document findings briefly:
+```
+Competitor research for [feature]:
+- Ableton: [1 sentence on their approach]
+- Logic: [1 sentence on their approach]
+- Best insight: [the one thing we should learn from]
+```
+
+### 5.2 Reference Points
+
 ### How would Ableton approach this?
 Ableton = brutalist minimalism. Functional color only. Maximum density. Strict grid.
 

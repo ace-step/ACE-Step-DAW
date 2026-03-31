@@ -6,6 +6,8 @@ tools:
   - Grep
   - Glob
   - Bash
+  - WebSearch
+  - WebFetch
 ---
 
 # Code Reviewer Agent
@@ -71,6 +73,15 @@ If ANY design check fails, request changes — design quality is as important as
 - [ ] Feature accessible via `window.__store.getState().actionName()`
 - [ ] Error messages are actionable (not generic)
 - [ ] State changes go through Zustand (no local DOM state for shared data)
+
+### Best Practice Verification (use WebSearch when needed)
+When reviewing code that uses:
+- **Web Audio / Tone.js APIs**: Search for known gotchas, deprecations, or better patterns
+- **Complex CSS layout**: Search for cross-browser issues with the specific technique
+- **Security-sensitive patterns**: Search for OWASP guidance on the specific pattern
+- **Performance-critical code**: Search for benchmarks or known optimization techniques
+
+Keep searches targeted — verify specific concerns, don't research everything.
 
 ## Output Format
 ```

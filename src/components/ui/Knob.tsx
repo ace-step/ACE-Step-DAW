@@ -153,7 +153,7 @@ export function Knob({
 
   return (
     <div
-      className={`flex flex-col items-center gap-[2px] select-none ${disabled ? 'opacity-40' : ''}`}
+      className={`flex flex-col items-center gap-1 select-none ${disabled ? 'opacity-40' : ''}`}
       title={`${label ?? ''}: ${displayValue}${unit && !formatValue ? unit : ''} (double-click to reset)`}
     >
       <div className="relative">
@@ -166,7 +166,7 @@ export function Knob({
           className={`relative ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
           style={{ width: s, height: s }}
         >
-          <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+          <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} overflow="visible">
             <defs>
               <filter id="knob-glow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="2" result="blur" />
@@ -241,12 +241,12 @@ export function Knob({
       )}
       {/* Label — dim, small */}
       {label && (
-        <span className="text-[10px] text-white/30 leading-none tracking-wide">
+        <span className="text-[10px] text-white/35 leading-tight">
           {label}
         </span>
       )}
       {/* Value — prominent */}
-      <span className="text-[11px] text-white/70 leading-none font-mono font-medium">
+      <span className="text-[11px] text-white/70 leading-tight font-mono font-medium">
         {displayValue}{unit && !formatValue ? unit : ''}
       </span>
     </div>

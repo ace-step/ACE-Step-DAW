@@ -3859,17 +3859,27 @@ export const useProjectStore = create<ProjectState>()(
         if (c.id !== clipId) return c;
         // Migrate legacy contextWindow when startTime changes so regeneration
         // uses correct context bounds after any kind of repositioning.
-        const needsCtxMigration =
-          'startTime' in updates &&
-          updates.startTime !== c.startTime &&
-          !('generationParams' in updates);
-        if (needsCtxMigration) {
+        const startTimeChanging =
+          'startTime' in updates && updates.startTime !== c.startTime;
+        // Migrate when startTime changes, unless the caller is explicitly
+        // replacing contextWindow as part of the same update.
+        const callerGenerationParams =
+          'generationParams' in updates ? (updates.generationParams as Record<string, unknown> | undefined) : undefined;
+        const callerReplacesCtx =
+          callerGenerationParams !== undefined &&
+          callerGenerationParams !== null &&
+          'contextWindow' in callerGenerationParams;
+        if (startTimeChanging && !callerReplacesCtx) {
           const migratedParams = _migrateLegacyContextWindow(c);
-          return {
-            ...c,
-            ...updates,
-            ...(migratedParams !== c.generationParams ? { generationParams: migratedParams } : {}),
-          };
+          if (migratedParams === c.generationParams) {
+            // No migration needed (already relative or no ctx) — apply updates as-is
+            return { ...c, ...updates };
+          }
+          // Merge: migrated contextWindow + caller's other generationParams changes
+          const finalGenerationParams = callerGenerationParams != null
+            ? { ...(migratedParams as object), ...callerGenerationParams }
+            : migratedParams;
+          return { ...c, ...updates, generationParams: finalGenerationParams as Clip['generationParams'] };
         }
         return { ...c, ...updates };
       }),

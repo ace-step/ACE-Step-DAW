@@ -8,6 +8,7 @@ import { PrecisionInput, clampValue, roundToStep } from '../ui/PrecisionInput';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
 import { EffectCardLayout } from './EffectCardLayout';
 import { CompressorCurve } from './CompressorCurve';
+import { DistortionCurve } from './DistortionCurve';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -867,6 +868,15 @@ export function DistortionCard({ effect, trackId }: { effect: TrackEffect & { ty
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.distortion}
+      visualization={
+        <DistortionCurve
+          drive={p.amount}
+          distortionType={p.distortionType}
+          width={160}
+          height={100}
+          color={EFFECT_COLORS.distortion}
+        />
+      }
       mode={
         <>
           {(['soft', 'overdrive', 'fuzz'] as DistortionParams['distortionType'][]).map((dt) => (

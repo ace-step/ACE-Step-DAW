@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 
@@ -54,6 +54,16 @@ export function Knob({
   const knobRef = useRef<HTMLDivElement>(null);
   const [showPrecisionInput, setShowPrecisionInput] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isFineMode, setIsFineMode] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up reset timer on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   const clamp = (v: number) => clampValue(v, min, max);
   const applyStep = useCallback((nextValue: number) => clamp(roundToStep(nextValue, step)), [clamp, step]);
@@ -69,16 +79,19 @@ export function Knob({
     const onMove = (mv: MouseEvent) => {
       if (!dragStart.current) return;
       const range = max - min;
-      const sensitivity = mv.altKey ? range / 2000 : range / 200;
+      const fine = mv.altKey;
+      const sensitivity = fine ? range / 2000 : range / 200;
       const delta = mv.movementY * sensitivity;
       const newVal = applyStep(dragStart.current.value + delta);
       dragStart.current = { y: mv.clientY, value: newVal };
+      setIsFineMode(fine);
       onChange(newVal);
     };
 
     const onUp = () => {
       dragStart.current = null;
       setIsDragging(false);
+      setIsFineMode(false);
       document.exitPointerLock?.();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
@@ -92,6 +105,10 @@ export function Knob({
     if (disabled) return;
     e.preventDefault();
     onChange(defaultValue);
+    // Trigger reset animation
+    setIsResetting(true);
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => setIsResetting(false), 200);
   }, [defaultValue, onChange, disabled]);
 
   const onWheelHandler = useCallback((e: WheelEvent) => {
@@ -165,6 +182,8 @@ export function Knob({
           aria-label={`${label ?? 'Control'} knob`}
           className={`relative ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
           style={{ width: s, height: s }}
+          data-dragging={isDragging ? 'true' : undefined}
+          data-resetting={isResetting ? 'true' : undefined}
         >
           <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} overflow="visible">
             <defs>
@@ -187,11 +206,12 @@ export function Knob({
             <path
               d={fillPath}
               fill="none"
-              stroke={color}
+              stroke={isFineMode ? '#22d3ee' : color}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
               opacity={isDragging ? 1 : 0.8}
               filter={isDragging ? 'url(#knob-glow)' : undefined}
+              style={isResetting ? { transition: 'd 200ms ease-out' } : undefined}
             />
 
             {/* Minimal center anchor */}
@@ -213,6 +233,17 @@ export function Knob({
             style={{ bottom: s + 4 }}
           >
             {displayValue}{unit && !formatValue ? unit : ''}
+          </div>
+        )}
+
+        {/* Fine mode indicator */}
+        {isDragging && isFineMode && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap
+                        rounded bg-cyan-500/90 px-1 py-0.5 text-[10px] font-mono text-white shadow-lg"
+            style={{ bottom: s + (showTooltip ? 22 : 4) }}
+          >
+            Fine
           </div>
         )}
       </div>

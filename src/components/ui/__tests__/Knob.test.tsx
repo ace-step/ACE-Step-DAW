@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Knob } from '../Knob';
 
 describe('Knob component', () => {
@@ -123,6 +123,66 @@ describe('Knob component', () => {
       const { container } = render(<Knob {...defaultProps} disabled />);
       const wrapper = container.firstElementChild as HTMLElement;
       expect(wrapper.className).toContain('opacity-40');
+    });
+  });
+
+  describe('micro-interactions', () => {
+    it('shows fine mode indicator when Alt is held during drag', () => {
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} onChange={onChange} />);
+      const knob = screen.getByLabelText('Control knob');
+
+      // Start drag
+      fireEvent.mouseDown(knob, { clientY: 100 });
+
+      // Simulate Alt+move
+      fireEvent(window, new MouseEvent('mousemove', {
+        clientY: 90,
+        movementY: -10,
+        altKey: true,
+        bubbles: true,
+      }));
+
+      // Should show fine mode indicator
+      expect(screen.getByText('Fine')).toBeDefined();
+
+      // Release
+      fireEvent(window, new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    it('applies data-dragging attribute during drag', () => {
+      render(<Knob {...defaultProps} />);
+      const knob = screen.getByLabelText('Control knob');
+
+      // Before drag
+      expect(knob.getAttribute('data-dragging')).toBeNull();
+
+      // Start drag
+      fireEvent.mouseDown(knob, { clientY: 100 });
+      expect(knob.getAttribute('data-dragging')).toBe('true');
+
+      // Release
+      fireEvent(window, new MouseEvent('mouseup', { bubbles: true }));
+      expect(knob.getAttribute('data-dragging')).toBeNull();
+    });
+
+    it('animates reset on double-click by setting data-resetting', () => {
+      vi.useFakeTimers();
+      const onChange = vi.fn();
+      render(<Knob {...defaultProps} value={75} defaultValue={50} onChange={onChange} />);
+      const knob = screen.getByLabelText('Control knob');
+
+      fireEvent.doubleClick(knob);
+      expect(onChange).toHaveBeenCalledWith(50);
+
+      // data-resetting should be set during animation
+      expect(knob.getAttribute('data-resetting')).toBe('true');
+
+      // After animation duration (200ms), data-resetting should clear
+      act(() => { vi.advanceTimersByTime(250); });
+      expect(knob.getAttribute('data-resetting')).toBeNull();
+
+      vi.useRealTimers();
     });
   });
 

@@ -98,7 +98,8 @@ export function AddLayerModal({ trackId, startTime, duration, contextWindow, onC
     if (!contextWindow) return;
     setPreviewState('loading');
     try {
-      const blob = await extractContextAudioLazy(contextWindow);
+      // trimToContext: blob spans [0, ctxDuration] with no leading silence
+      const blob = await extractContextAudioLazy(contextWindow, { trimToContext: true });
       if (!blob) { setPreviewState('idle'); return; }
       const url = URL.createObjectURL(blob);
       previewUrlRef.current = url;

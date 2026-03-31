@@ -118,7 +118,8 @@ export function MultiTrackGenerateModal({ selectWindow, contextWindow, onClose }
     if (!contextWindow) return;
     setPreviewState('loading');
     try {
-      const blob = await extractContextAudioLazy(contextWindow);
+      // trimToContext: blob spans [0, ctxDuration] with no leading silence
+      const blob = await extractContextAudioLazy(contextWindow, { trimToContext: true });
       if (!blob || blob.size <= 44) {
         setPreviewState('idle');
         return;

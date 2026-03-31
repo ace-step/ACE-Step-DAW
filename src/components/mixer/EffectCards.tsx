@@ -648,15 +648,51 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
   const p = effect.params;
   const [reduction, setReduction] = useState(0);
   const [scReduction, setScReduction] = useState(0);
+  const [peakGr, setPeakGr] = useState(0);
   const animRef = useRef<number>(0);
+  const displayGrRef = useRef(0);
+  const displayScGrRef = useRef(0);
+  const peakGrRef = useRef(0);
+  const peakHoldCountRef = useRef(0);
 
   const hasSidechain = !!p.sidechainSourceTrackId;
   const otherTracks = tracks.filter((t) => t.id !== trackId);
 
+  // GR meter ballistics: fast attack, slower release, peak hold
   useEffect(() => {
+    const ATTACK_COEFF = 0.5;  // Fast attack (responds quickly to GR onset)
+    const RELEASE_COEFF = 0.05; // Slow release (meter falls back smoothly)
+    const PEAK_HOLD_FRAMES = 90; // ~1.5s at 60fps
+
     const tick = () => {
-      setReduction(effectsEngine.getCompressorReduction(trackId, effect.id));
-      setScReduction(effectsEngine.getSidechainReduction(trackId, effect.id));
+      const rawGr = effectsEngine.getCompressorReduction(trackId, effect.id);
+      const rawScGr = effectsEngine.getSidechainReduction(trackId, effect.id);
+
+      // Ballistic smoothing: fast attack, slow release
+      const targetGr = Math.abs(rawGr);
+      const prevGr = displayGrRef.current;
+      const coeff = targetGr > prevGr ? ATTACK_COEFF : RELEASE_COEFF;
+      displayGrRef.current = prevGr + (targetGr - prevGr) * coeff;
+
+      // Same for sidechain
+      const targetScGr = Math.abs(rawScGr);
+      const prevScGr = displayScGrRef.current;
+      const scCoeff = targetScGr > prevScGr ? ATTACK_COEFF : RELEASE_COEFF;
+      displayScGrRef.current = prevScGr + (targetScGr - prevScGr) * scCoeff;
+
+      // Peak hold
+      if (displayGrRef.current > peakGrRef.current) {
+        peakGrRef.current = displayGrRef.current;
+        peakHoldCountRef.current = PEAK_HOLD_FRAMES;
+      } else if (peakHoldCountRef.current > 0) {
+        peakHoldCountRef.current--;
+      } else {
+        peakGrRef.current = Math.max(0, peakGrRef.current - 0.3);
+      }
+
+      setReduction(-displayGrRef.current);
+      setScReduction(-displayScGrRef.current);
+      setPeakGr(peakGrRef.current);
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
@@ -696,14 +732,21 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
               ))}
             </select>
           </div>
-          {/* GR meter */}
+          {/* GR meter with ballistics */}
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-white/30 w-8">GR</span>
             <div className="w-[180px] h-2 bg-white/5 rounded-sm overflow-hidden relative">
               <div
-                className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-sm transition-all"
+                className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-sm"
                 style={{ width: `${Math.min(100, Math.abs(reduction) * 100 / 30)}%` }}
               />
+              {/* Peak hold indicator */}
+              {peakGr > 0.1 && (
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-amber-300/80"
+                  style={{ right: `${100 - Math.min(100, peakGr * 100 / 30)}%` }}
+                />
+              )}
             </div>
             <span className="text-[9px] text-white/40 font-mono w-12 text-right">{reduction.toFixed(1)} dB</span>
           </div>

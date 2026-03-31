@@ -335,10 +335,8 @@ function EffectDevice({
             : 'gap-1.5 px-2 py-1.5 rounded-t-lg'
         }`}
         style={{
-          background: fullWidth
-            ? `linear-gradient(90deg, ${color}15 0%, transparent 50%)`
-            : `linear-gradient(180deg, ${color}20 0%, ${color}0a 100%)`,
-          borderBottom: `1px solid ${color}${fullWidth ? '18' : '25'}`,
+          background: `${color}0a`,
+          borderBottom: `1px solid ${color}15`,
         }}
       >
         {/* Drag handle (compact view only) */}
@@ -669,7 +667,7 @@ export function EffectChain() {
       </div>
 
       {/* ── Bottom tab strip — Ableton-style device chain ── */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#0c0c1e]">
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#0e0e24]">
         {/* Track info + controls */}
         <div className="flex items-center gap-2 px-3 py-1 border-b border-white/[0.04]">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.color }} />

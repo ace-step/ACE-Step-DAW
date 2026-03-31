@@ -699,9 +699,9 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
           {/* GR meter */}
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-white/30 w-8">GR</span>
-            <div className="w-[180px] h-3 bg-white/5 rounded-full overflow-hidden relative">
+            <div className="w-[180px] h-2 bg-white/5 rounded-sm overflow-hidden relative">
               <div
-                className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-full transition-all"
+                className="absolute right-0 top-0 bottom-0 bg-amber-500/60 rounded-sm transition-all"
                 style={{ width: `${Math.min(100, Math.abs(reduction) * 100 / 30)}%` }}
               />
             </div>
@@ -710,9 +710,9 @@ export function CompressorCard({ effect, trackId }: { effect: TrackEffect & { ty
           {hasSidechain && (
             <div className="flex items-center gap-2">
               <span className="text-[9px] text-amber-400/50 w-8">SC</span>
-              <div className="w-[180px] h-3 bg-white/5 rounded-full overflow-hidden relative">
+              <div className="w-[180px] h-2 bg-white/5 rounded-sm overflow-hidden relative">
                 <div
-                  className="absolute right-0 top-0 bottom-0 bg-amber-400/40 rounded-full transition-all"
+                  className="absolute right-0 top-0 bottom-0 bg-amber-400/40 rounded-sm transition-all"
                   style={{ width: `${Math.min(100, Math.abs(scReduction) * 100 / 30)}%` }}
                 />
               </div>
@@ -818,7 +818,7 @@ export function DistortionCard({ effect, trackId }: { effect: TrackEffect & { ty
             <button
               key={dt}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.distortionType === dt ? 'bg-red-500/30 text-red-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.distortionType === dt ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
               }`}
               onClick={() => update({ distortionType: dt })}
             >
@@ -1093,7 +1093,7 @@ export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'g
             <button
               key={m}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
               }`}
               onClick={() => update({ mode: m })}
             >
@@ -1146,7 +1146,7 @@ export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type:
             <button
               key={m}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-amber-500/30 text-amber-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
               }`}
               onClick={() => update({ mode: m })}
             >
@@ -1290,7 +1290,7 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
             <button
               key={st}
               className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${
-                p.saturationType === st ? 'bg-red-500/30 text-red-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.saturationType === st ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
               }`}
               onClick={() => update({ saturationType: st })}
             >
@@ -1376,7 +1376,7 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
       mode={
         <>
           {(Object.keys(REVERB_TYPE_LABELS) as AlgorithmicReverbType[]).map((rt) => (
-            <button key={rt} className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${p.reverbType === rt ? 'bg-purple-500/30 text-purple-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+            <button key={rt} className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${p.reverbType === rt ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
               onClick={() => update({ reverbType: rt })}>{REVERB_TYPE_LABELS[rt]}</button>
           ))}
         </>
@@ -1420,7 +1420,7 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
       mode={
         <>
           {(['fast', 'smooth'] as NoiseGateReductionParams['mode'][]).map((m) => (
-            <button key={m} className={`px-2 py-0.5 text-[10px] rounded capitalize ${p.mode === m ? 'bg-gray-500/30 text-gray-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+            <button key={m} className={`px-2 py-0.5 text-[10px] rounded capitalize ${p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
               onClick={() => update({ mode: m })}>{m}</button>
           ))}
         </>

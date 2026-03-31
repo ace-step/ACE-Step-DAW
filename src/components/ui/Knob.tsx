@@ -120,7 +120,7 @@ export function Knob({
   // SVG geometry — Ableton-flat style: arc + center dot only
   const s = actualSize;
   const radius = s / 2;
-  const strokeWidth = Math.max(2.5, s / 10);
+  const strokeWidth = Math.max(3, s / 7);
   const startAngle = -arc / 2 - 90;
   const endAngle = arc / 2 - 90;
   const angle = valueToAngle(value, min, max, arc);
@@ -153,7 +153,7 @@ export function Knob({
 
   return (
     <div
-      className={`flex flex-col items-center gap-1.5 select-none ${disabled ? 'opacity-40' : ''}`}
+      className={`flex flex-col items-center gap-0.5 select-none ${disabled ? 'opacity-40' : ''}`}
       title={`${label ?? ''}: ${displayValue}${unit && !formatValue ? unit : ''} (double-click to reset)`}
     >
       <div className="relative">
@@ -194,20 +194,12 @@ export function Knob({
               filter={isDragging ? 'url(#knob-glow)' : undefined}
             />
 
-            {/* Center dot — small reference point */}
+            {/* Minimal center anchor */}
             <circle
               cx={radius}
               cy={radius}
-              r={Math.max(2, s / 12)}
-              fill="rgba(255,255,255,0.12)"
-            />
-
-            {/* Pointer dot at current position on the arc */}
-            <circle
-              cx={pointerPos.x}
-              cy={pointerPos.y}
-              r={pointerR}
-              fill={isDragging ? '#fff' : 'rgba(255,255,255,0.7)'}
+              r={1.5}
+              fill="rgba(255,255,255,0.06)"
             />
           </svg>
         </div>

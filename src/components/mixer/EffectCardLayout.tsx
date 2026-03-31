@@ -40,7 +40,7 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
           {children}
         </div>
         {footer && (
-          <div className="pt-2 border-t border-white/[0.06] w-full max-w-[280px] mx-auto">{footer}</div>
+          <div className="pt-1 w-full max-w-[400px] mx-auto">{footer}</div>
         )}
       </div>
     </div>

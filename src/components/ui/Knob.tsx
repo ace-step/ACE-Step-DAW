@@ -153,7 +153,7 @@ export function Knob({
 
   return (
     <div
-      className={`flex flex-col items-center gap-1 select-none ${disabled ? 'opacity-40' : ''}`}
+      className={`flex flex-col items-center gap-1.5 select-none ${disabled ? 'opacity-40' : ''}`}
       title={`${label ?? ''}: ${displayValue}${unit && !formatValue ? unit : ''} (double-click to reset)`}
     >
       <div className="relative">

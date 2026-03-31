@@ -436,7 +436,7 @@ function EffectDevice({
         className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'}
         style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
       >
-        <div className={fullWidth ? 'h-full' : 'overflow-y-auto max-h-[280px]'}>
+        <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[280px]'}>
           <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>

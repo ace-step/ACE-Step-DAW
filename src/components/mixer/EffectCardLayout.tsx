@@ -21,9 +21,9 @@ interface EffectCardLayoutProps {
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
   return (
-    <div className="flex flex-col items-center w-full px-6 pt-2 pb-3">
+    <div className="flex flex-col items-center w-full px-6 py-4">
       {/* Constrained content — prevents full-width stretching */}
-      <div className="w-full max-w-[800px] flex flex-col items-center gap-4">
+      <div className="w-full max-w-[800px] flex flex-col items-center gap-5">
         {mode && (
           <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">{mode}</div>
         )}
@@ -36,7 +36,7 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
           </div>
         )}
         {/* Parameters — evenly spaced horizontal row */}
-        <div className="flex flex-wrap items-start justify-center gap-x-6 gap-y-3 py-1">
+        <div className="flex flex-wrap items-start justify-center gap-x-8 gap-y-4">
           {children}
         </div>
         {footer && (

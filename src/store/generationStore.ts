@@ -462,6 +462,8 @@ export interface GenerationState {
   removeJob: (jobId: string) => void;
   clearCompletedJobs: () => void;
   setIsGenerating: (v: boolean) => void;
+  /** Atomically acquire the generation lock. Returns true if acquired, false if already held. */
+  tryAcquireGenerationLock: () => boolean;
   addPromptToHistory: (prompt: string, meta?: Partial<Omit<PromptHistoryEntry, 'id' | 'prompt' | 'timestamp'>>) => void;
   clearPromptHistory: () => void;
   upsertGenerationHistoryRecord: (record: Omit<GenerationHistoryRecord, 'id'> & { id?: string }) => string;
@@ -610,6 +612,12 @@ export const useGenerationStore = create<GenerationState>()(
         })),
 
       setIsGenerating: (v) => set({ isGenerating: v }),
+      tryAcquireGenerationLock: () => {
+        const state = get();
+        if (state.isGenerating) return false;
+        set({ isGenerating: true });
+        return true;
+      },
 
       addPromptToHistory: (prompt, meta) => set((s) => {
         const existing = s.promptHistory.find((p) => p.prompt === prompt);

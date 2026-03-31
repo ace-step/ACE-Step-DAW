@@ -165,9 +165,8 @@ export async function generateAllTracks(): Promise<void> {
   const { project, getTracksInGenerationOrder } = useProjectStore.getState();
   const genStore = useGenerationStore.getState();
 
-  if (!project || genStore.isGenerating) return;
+  if (!project || !genStore.tryAcquireGenerationLock()) return;
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const allTracks = getTracksInGenerationOrder();
@@ -221,10 +220,9 @@ export async function regenerateClip(clipId: string): Promise<void> {
   }
 
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       // If the clip was generated with a context window, re-extract the trimmed context
@@ -261,15 +259,17 @@ export async function regenerateClip(clipId: string): Promise<void> {
  */
 async function regenerateText2MusicClip(clipId: string): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   const store = useProjectStore.getState();
   const clip = store.getClipById(clipId);
-  if (!clip?.generationParams || clip.generationParams.type !== 'text2music') return;
+  if (!clip?.generationParams || clip.generationParams.type !== 'text2music') {
+    genStore.setIsGenerating(false);
+    return;
+  }
 
   const params = clip.generationParams;
   store.saveClipVersion(clipId);
-  genStore.setIsGenerating(true);
 
   try {
     await useModelStore.getState().ensureModelForIntent('full-song');
@@ -364,10 +364,9 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
  */
 export async function generateSingleClip(clipId: string, options?: { sharedSeed?: number }): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const clip = useProjectStore.getState().getClipById(clipId);
@@ -406,16 +405,18 @@ export async function generateVariationSession(
   const genStore = useGenerationStore.getState();
   const store = useProjectStore.getState();
   const project = store.project;
-  if (!project || genStore.isGenerating) return false;
+  if (!project || !genStore.tryAcquireGenerationLock()) return false;
 
   const track = project.tracks.find((entry) => entry.id === params.trackId);
   if (!track) {
+    genStore.setIsGenerating(false);
     useGenerationStore.getState().setGenerationRequestError(`Target track "${params.trackId}" was not found.`);
     return false;
   }
 
   const sessionId = useGenerationStore.getState().variationSession?.id;
   if (!sessionId) {
+    genStore.setIsGenerating(false);
     useGenerationStore.getState().setGenerationRequestError('Start a variation session before generating results.');
     return false;
   }
@@ -424,8 +425,6 @@ export async function generateVariationSession(
   const trackClipEnd = track.clips.reduce((maxEnd, clip) => Math.max(maxEnd, clip.startTime + clip.duration), 0);
   const baseStartTime = Math.max(project.totalDuration, trackClipEnd);
   const spacingSeconds = 0.25;
-
-  useGenerationStore.getState().setIsGenerating(true);
 
   try {
     const clipIds = Array.from({ length: params.variationCount }, (_, index) => {
@@ -947,7 +946,7 @@ async function generateClipInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round((clipStart - ctxOffset) * sampleRate);
+    const startSample = Math.max(0, Math.round((clipStart - ctxOffset) * sampleRate));
     const endSample = Math.min(
       Math.round((clipStart - ctxOffset + clipDuration) * sampleRate),
       fullBuffer.length,
@@ -962,7 +961,7 @@ async function generateClipInternal(
       const src = fullBuffer.getChannelData(ch);
       const dst = trimmedBuffer.getChannelData(ch);
       for (let i = 0; i < trimmedLength; i++) {
-        dst[i] = src[startSample + i];
+        dst[i] = startSample + i < src.length ? src[startSample + i] : 0;
       }
     }
 
@@ -1152,14 +1151,17 @@ export async function streamGenerationVariations(
   params: VariationSessionParams,
   dependencies: VariationGenerationDependencies = {},
 ): Promise<void> {
-  if (useGenerationStore.getState().isGenerating) return;
+  if (!useGenerationStore.getState().tryAcquireGenerationLock()) return;
 
   if (!useGenerationStore.getState().variationSession) {
     useGenerationStore.getState().startVariationSession(params);
   }
 
   const session = useGenerationStore.getState().variationSession;
-  if (!session) return;
+  if (!session) {
+    useGenerationStore.getState().setIsGenerating(false);
+    return;
+  }
 
   const sessionId = session.id;
   const baseStartTime = getNextVariationStartTime(params.trackId);
@@ -1168,8 +1170,6 @@ export async function streamGenerationVariations(
   const runClip = dependencies.runVariationClip ?? runVariationClip;
   const saveClipVersion = dependencies.saveVariationClipVersion
     ?? ((clipId: string) => useProjectStore.getState().saveClipVersion(clipId));
-
-  useGenerationStore.getState().setIsGenerating(true);
 
   try {
     await Promise.all(session.variations.map(async (variation) => {
@@ -1252,10 +1252,9 @@ export interface GenerateBatchOptions {
  */
 export async function generateBatch(options: GenerateBatchOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const { mode, globalCaption, tracks, sharedSeed, contextAudioPath, chunkMaskMode } = options;
@@ -1349,10 +1348,9 @@ export interface AddLayerOptions {
 
 export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const store = useProjectStore.getState();
@@ -1503,13 +1501,15 @@ export async function generateFromGenerationPanel(request: GenerationPanelReques
   const projectStore = useProjectStore.getState();
   const project = projectStore.project;
 
-  if (!project || genStore.isGenerating) return;
+  if (!project || !genStore.tryAcquireGenerationLock()) return;
 
   const targetTrack = project.tracks.find((track) => track.id === request.trackId);
   if (!targetTrack) {
+    genStore.setIsGenerating(false);
     throw new Error(`Track '${request.trackId}' not found.`);
   }
   if ((targetTrack.trackType ?? 'stems') !== 'stems') {
+    genStore.setIsGenerating(false);
     throw new Error(`Track '${targetTrack.displayName}' does not support AI generation.`);
   }
 
@@ -1539,8 +1539,6 @@ export async function generateFromGenerationPanel(request: GenerationPanelReques
   const temperature = normalizedParams?.temperature ?? normalizedParams?.guidanceScale ?? request.temperature;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
-
     try {
       let allSucceeded = true;
 
@@ -1623,10 +1621,9 @@ export interface MultiTrackGenerateOptions {
 
 export async function generateFromMultiTrack(opts: MultiTrackGenerateOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const store = useProjectStore.getState();
@@ -1734,11 +1731,9 @@ export interface GenerateCoverOptions {
 
 export async function generateCoverClip(opts: GenerateCoverOptions): Promise<string | undefined> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return undefined;
+  if (!genStore.tryAcquireGenerationLock()) return undefined;
   let resolvedTargetClipId: string | undefined;
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
-
     const { clipId, caption, lyrics, coverStrength, createNew, sourceAudioOverride } = opts;
     const store = useProjectStore.getState();
 
@@ -2041,7 +2036,7 @@ async function generateRepaintInternal(
     const clipDuration = currentClip?.duration ?? clip.duration;
 
     const sampleRate = fullBuffer.sampleRate;
-    const startSample = Math.round(clipStart * sampleRate);
+    const startSample = Math.max(0, Math.round(clipStart * sampleRate));
     const endSample = Math.min(
       Math.round((clipStart + clipDuration) * sampleRate),
       fullBuffer.length,
@@ -2056,7 +2051,7 @@ async function generateRepaintInternal(
       const src = fullBuffer.getChannelData(ch);
       const dst = trimmedBuffer.getChannelData(ch);
       for (let i = 0; i < trimmedLength; i++) {
-        dst[i] = src[startSample + i];
+        dst[i] = startSample + i < src.length ? src[startSample + i] : 0;
       }
     }
 
@@ -2137,11 +2132,9 @@ export interface GenerateRepaintOptions {
 
 export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<string | undefined> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return undefined;
+  if (!genStore.tryAcquireGenerationLock()) return undefined;
   let resolvedTargetClipId: string | undefined;
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
-
     try {
       const store = useProjectStore.getState();
       const clip = store.getClipById(opts.clipId);
@@ -2217,10 +2210,9 @@ export interface RegionRegenerateOptions {
  */
 export async function regenerateTimelineRegion(opts: RegionRegenerateOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
 
   await withGenerationToast('AI region regeneration', async () => {
-    genStore.setIsGenerating(true);
 
     try {
       const store = useProjectStore.getState();
@@ -2309,9 +2301,8 @@ export interface Vocal2BGMOptions {
 
 export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
   const genStore = useGenerationStore.getState();
-  if (genStore.isGenerating) return;
+  if (!genStore.tryAcquireGenerationLock()) return;
   await withGenerationToast('AI generation', async () => {
-    genStore.setIsGenerating(true);
 
     const { clipId, caption, targetTrackId } = opts;
     const store = useProjectStore.getState();
@@ -2552,7 +2543,9 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     throw new Error('No project open');
   }
 
-  genStore.setIsGenerating(true);
+  if (!genStore.tryAcquireGenerationLock()) {
+    throw new Error('Generation already in progress');
+  }
 
   // Step 1: Ensure text2music model + LM are loaded
   await modelStore.ensureModelForIntent('full-song');

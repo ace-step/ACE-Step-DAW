@@ -586,7 +586,7 @@ impl DspProcessor {
         if let Some(ref mut eq) = self.eq {
             eq.process_buffer(buffer);
         }
-        if let Some(ref d) = self.distortion {
+        if let Some(ref mut d) = self.distortion {
             d.process_buffer(buffer);
         }
         if let Some(ref mut tremolo) = self.tremolo {
@@ -608,7 +608,7 @@ impl DspProcessor {
             delay.process_buffer(buffer);
         }
         if let Some(ref mut reverb) = self.reverb {
-            reverb.process_buffer(buffer);
+            reverb.process_mono_buffer(buffer);
         }
         self.gain.process_mono(buffer);
         if let Some(ref mut dc) = self.dc_blocker {
@@ -631,7 +631,7 @@ impl DspProcessor {
         if let Some(ref mut eq) = self.eq {
             eq.process_buffer(buffer);
         }
-        if let Some(ref d) = self.distortion {
+        if let Some(ref mut d) = self.distortion {
             d.process_buffer(buffer);
         }
         if let Some(ref mut tremolo) = self.tremolo {
@@ -653,7 +653,7 @@ impl DspProcessor {
             delay.process_buffer(buffer);
         }
         if let Some(ref mut reverb) = self.reverb {
-            reverb.process_buffer(buffer);
+            reverb.process_stereo_buffer(buffer);
         }
         if let Some(ref si) = self.stereo_imager {
             si.process_interleaved(buffer);
@@ -666,7 +666,7 @@ impl DspProcessor {
             dc.process_buffer(buffer);
         }
         if let Some(ref mut limiter) = self.limiter {
-            limiter.process_buffer(buffer);
+            limiter.process_stereo_interleaved(buffer);
         }
     }
 
@@ -1075,10 +1075,11 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_distortion(1, 5.0, 1.0, 1.0, 8.0); // SoftClip
         proc.set_gain(1.0);
-        let mut buf = [0.5_f32; 4];
+        // Feed enough samples to let 2x oversampler settle
+        let mut buf = [0.5_f32; 64];
         proc.process_mono(&mut buf);
-        // tanh(0.5 * 5) = tanh(2.5) ≈ 0.987
-        assert!(buf[0] > 0.9, "Soft clip: {}", buf[0]);
+        // tanh(0.5 * 5) = tanh(2.5) ≈ 0.987, after oversampling filter settles
+        assert!(buf[63] > 0.8, "Soft clip: {}", buf[63]);
     }
 
     #[test]

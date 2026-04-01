@@ -97,9 +97,10 @@ impl AutoPan {
         let gain_r = angle.sin();
         let gain_l = angle.cos();
 
-        // Apply to mono sum for true auto-pan (or apply per-channel for stereo)
-        let mono = (left + right) * 0.5;
-        (mono * gain_l * 2.0_f32.sqrt(), mono * gain_r * 2.0_f32.sqrt())
+        // Apply pan gains directly to preserve stereo image.
+        // sqrt(2) compensates for constant-power -3dB at center.
+        let sqrt2 = core::f32::consts::SQRT_2;
+        (left * gain_l * sqrt2, right * gain_r * sqrt2)
     }
 
     /// Process an interleaved stereo buffer in-place [L, R, L, R, ...].

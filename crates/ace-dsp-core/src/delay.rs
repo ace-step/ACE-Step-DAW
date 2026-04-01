@@ -86,6 +86,8 @@ pub struct MonoDelay {
     wet: f32,
     dry: f32,
     fb_sample: f32,
+    /// Alternating-sign anti-denormal to avoid DC buildup in feedback path
+    ad_sign: f32,
 }
 
 impl MonoDelay {
@@ -102,6 +104,7 @@ impl MonoDelay {
             wet,
             dry: 1.0,
             fb_sample: 0.0,
+            ad_sign: 1.0,
         }
     }
 
@@ -128,8 +131,9 @@ impl MonoDelay {
         // Push input + stored feedback from previous read
         self.delay_line.push(input + self.fb_sample);
         let delayed = self.delay_line.read_cubic(self.delay_samples);
-        // Anti-denormal guard in feedback path; store for next call
-        self.fb_sample = delayed * self.feedback + ANTI_DENORMAL - ANTI_DENORMAL;
+        // Alternating-sign anti-denormal prevents DC buildup in feedback path
+        self.fb_sample = delayed * self.feedback + ANTI_DENORMAL * self.ad_sign;
+        self.ad_sign = -self.ad_sign;
         input * self.dry + delayed * self.wet
     }
 
@@ -160,6 +164,7 @@ pub struct StereoDelay {
     dry: f32,
     fb_left: f32,
     fb_right: f32,
+    ad_sign: f32,
 }
 
 impl StereoDelay {
@@ -184,6 +189,7 @@ impl StereoDelay {
             dry: 1.0,
             fb_left: 0.0,
             fb_right: 0.0,
+            ad_sign: 1.0,
         }
     }
 
@@ -222,11 +228,11 @@ impl StereoDelay {
         let del_l = self.left.read_cubic(self.delay_left);
         let del_r = self.right.read_cubic(self.delay_right);
 
-        // Feedback with cross-feed and anti-denormal; store for next call
-        self.fb_left = (del_l * self.feedback + del_r * self.cross_feedback)
-            + ANTI_DENORMAL - ANTI_DENORMAL;
-        self.fb_right = (del_r * self.feedback + del_l * self.cross_feedback)
-            + ANTI_DENORMAL - ANTI_DENORMAL;
+        // Alternating-sign anti-denormal prevents DC buildup in cross-feedback path
+        let ad = ANTI_DENORMAL * self.ad_sign;
+        self.ad_sign = -self.ad_sign;
+        self.fb_left = del_l * self.feedback + del_r * self.cross_feedback + ad;
+        self.fb_right = del_r * self.feedback + del_l * self.cross_feedback + ad;
 
         (
             left_in * self.dry + del_l * self.wet,

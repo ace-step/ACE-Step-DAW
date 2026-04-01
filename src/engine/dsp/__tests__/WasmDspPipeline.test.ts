@@ -30,24 +30,44 @@ describe('WASM DSP Pipeline', () => {
     expect(stats.size).toBeGreaterThan(100); // sanity: not empty
   });
 
-  it('WASM JS glue exports expected symbols', () => {
+  it('WASM JS glue exports Phase 0 symbols', () => {
     const jsPath = path.join(wasmDir, 'ace_dsp_wasm.js');
     const content = fs.readFileSync(jsPath, 'utf-8');
 
-    // Smoke test: check that our exported functions appear in the JS glue
     expect(content).toContain('add');
     expect(content).toContain('dsp_version');
     expect(content).toContain('WasmBiquadStereo');
     expect(content).toContain('WasmFeedbackDelay');
   });
 
-  it('TypeScript types are exported', () => {
+  it('WASM JS glue exports Phase 1 symbols (compressor, EQ, reverb)', () => {
+    const jsPath = path.join(wasmDir, 'ace_dsp_wasm.js');
+    const content = fs.readFileSync(jsPath, 'utf-8');
+
+    expect(content).toContain('WasmCompressor');
+    expect(content).toContain('WasmGate');
+    expect(content).toContain('WasmParametricEQ');
+    expect(content).toContain('WasmReverb');
+  });
+
+  it('TypeScript types are exported for all modules', () => {
     const dtsPath = path.join(wasmDir, 'ace_dsp_wasm.d.ts');
     expect(fs.existsSync(dtsPath)).toBe(true);
     const content = fs.readFileSync(dtsPath, 'utf-8');
+
+    // Phase 0
     expect(content).toContain('export function add');
     expect(content).toContain('export function dsp_version');
     expect(content).toContain('WasmBiquadStereo');
+    expect(content).toContain('WasmFeedbackDelay');
+
+    // Phase 1
+    expect(content).toContain('WasmCompressor');
+    expect(content).toContain('WasmGate');
+    expect(content).toContain('WasmParametricEQ');
+    expect(content).toContain('WasmReverb');
+    expect(content).toContain('gain_reduction_db');
+    expect(content).toContain('magnitude_response');
   });
 
   it('isWasmAudioSupported returns boolean in Node', () => {

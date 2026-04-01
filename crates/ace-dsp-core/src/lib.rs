@@ -8,6 +8,9 @@
 
 pub mod biquad;
 pub mod delay;
+pub mod dynamics;
+pub mod eq;
+pub mod reverb;
 
 /// Anti-denormal constant: add to feedback loops to prevent denormal floats.
 /// Denormals cause 10-100x CPU slowdown on x86/ARM when present in feedback.

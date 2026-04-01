@@ -9,6 +9,11 @@ use wasm_bindgen::prelude::*;
 // Re-export core types for internal use
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadStereo, FilterType};
 use ace_dsp_core::delay::FeedbackDelay;
+use ace_dsp_core::dynamics::{
+    Compressor, CompressorParams, DetectionMode, Gate, GateParams,
+};
+use ace_dsp_core::eq::{EqBandParams, ParametricEQ};
+use ace_dsp_core::reverb::{DattorroReverb, ReverbParams, RoomSize};
 
 // ── Smoke test ──────────────────────────────────────────────────────
 
@@ -164,5 +169,296 @@ impl WasmFeedbackDelay {
 
     pub fn clear(&mut self) {
         self.inner.clear();
+    }
+}
+
+// ── Compressor ──────────────────────────────────────────────────────
+
+/// Stereo compressor exposed to JS.
+#[wasm_bindgen]
+pub struct WasmCompressor {
+    inner: Compressor,
+}
+
+#[wasm_bindgen]
+impl WasmCompressor {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        threshold_db: f64,
+        ratio: f64,
+        knee_db: f64,
+        attack_ms: f64,
+        release_ms: f64,
+        makeup_db: f64,
+        mix: f64,
+        sample_rate: f64,
+    ) -> WasmCompressor {
+        let params = CompressorParams {
+            threshold_db,
+            ratio,
+            knee_db,
+            attack_ms,
+            release_ms,
+            makeup_db,
+            mix,
+            detection: DetectionMode::Rms,
+            lookahead_ms: 0.0,
+        };
+        WasmCompressor {
+            inner: Compressor::new(params, sample_rate),
+        }
+    }
+
+    pub fn set_params(
+        &mut self,
+        threshold_db: f64,
+        ratio: f64,
+        knee_db: f64,
+        attack_ms: f64,
+        release_ms: f64,
+        makeup_db: f64,
+        mix: f64,
+    ) {
+        self.inner.set_params(CompressorParams {
+            threshold_db,
+            ratio,
+            knee_db,
+            attack_ms,
+            release_ms,
+            makeup_db,
+            mix,
+            detection: DetectionMode::Rms,
+            lookahead_ms: 0.0,
+        });
+    }
+
+    pub fn set_sidechain_hpf(&mut self, freq: f64) {
+        self.inner.set_sidechain_hpf(freq);
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn gain_reduction_db(&self) -> f64 {
+        self.inner.gain_reduction_db()
+    }
+
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+// ── Gate ─────────────────────────────────────────────────────────────
+
+/// Stereo gate exposed to JS.
+#[wasm_bindgen]
+pub struct WasmGate {
+    inner: Gate,
+}
+
+#[wasm_bindgen]
+impl WasmGate {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        threshold_db: f64,
+        range_db: f64,
+        attack_ms: f64,
+        hold_ms: f64,
+        release_ms: f64,
+        hysteresis_db: f64,
+        sample_rate: f64,
+    ) -> WasmGate {
+        let params = GateParams {
+            threshold_db,
+            range_db,
+            attack_ms,
+            hold_ms,
+            release_ms,
+            hysteresis_db,
+            detection: DetectionMode::Rms,
+        };
+        WasmGate {
+            inner: Gate::new(params, sample_rate),
+        }
+    }
+
+    pub fn set_params(
+        &mut self,
+        threshold_db: f64,
+        range_db: f64,
+        attack_ms: f64,
+        hold_ms: f64,
+        release_ms: f64,
+        hysteresis_db: f64,
+    ) {
+        self.inner.set_params(GateParams {
+            threshold_db,
+            range_db,
+            attack_ms,
+            hold_ms,
+            release_ms,
+            hysteresis_db,
+            detection: DetectionMode::Rms,
+        });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn gain_reduction_db(&self) -> f64 {
+        self.inner.gain_reduction_db()
+    }
+
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+// ── Parametric EQ ───────────────────────────────────────────────────
+
+/// 8-band parametric EQ exposed to JS.
+#[wasm_bindgen]
+pub struct WasmParametricEQ {
+    inner: ParametricEQ,
+}
+
+#[wasm_bindgen]
+impl WasmParametricEQ {
+    #[wasm_bindgen(constructor)]
+    pub fn new(sample_rate: f64) -> WasmParametricEQ {
+        WasmParametricEQ {
+            inner: ParametricEQ::new(sample_rate),
+        }
+    }
+
+    /// Set parameters for a band. `filter_type` is one of:
+    /// "lowpass", "highpass", "bandpass", "notch", "peaking", "lowshelf", "highshelf", "allpass"
+    pub fn set_band(
+        &mut self,
+        index: usize,
+        filter_type: &str,
+        frequency: f64,
+        q: f64,
+        gain_db: f64,
+        enabled: bool,
+    ) {
+        self.inner.set_band(
+            index,
+            EqBandParams {
+                filter_type: parse_filter_type(filter_type),
+                frequency,
+                q,
+                gain_db,
+                enabled,
+            },
+        );
+    }
+
+    pub fn set_band_enabled(&mut self, index: usize, enabled: bool) {
+        self.inner.set_band_enabled(index, enabled);
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    /// Get the combined magnitude response (dB) at the given frequencies.
+    pub fn magnitude_response(&self, frequencies: &[f32]) -> Vec<f32> {
+        self.inner.magnitude_response(frequencies)
+    }
+
+    /// Get magnitude response for a single band.
+    pub fn band_magnitude_response(&self, band_index: usize, frequencies: &[f32]) -> Vec<f32> {
+        self.inner.band_magnitude_response(band_index, frequencies)
+    }
+
+    /// Get log-spaced frequency points for UI rendering.
+    pub fn frequency_points(num_points: usize) -> Vec<f32> {
+        ParametricEQ::frequency_points(num_points)
+    }
+
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+// ── Reverb ──────────────────────────────────────────────────────────
+
+fn parse_room_size(s: &str) -> RoomSize {
+    match s {
+        "small" => RoomSize::Small,
+        "medium" => RoomSize::Medium,
+        "large" => RoomSize::Large,
+        "hall" => RoomSize::Hall,
+        _ => RoomSize::Medium,
+    }
+}
+
+/// Dattorro plate reverb exposed to JS.
+#[wasm_bindgen]
+pub struct WasmReverb {
+    inner: DattorroReverb,
+}
+
+#[wasm_bindgen]
+impl WasmReverb {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        decay: f64,
+        damping: f64,
+        diffusion: f64,
+        predelay_ms: f64,
+        wet: f64,
+        room_size: &str,
+        sample_rate: f64,
+    ) -> WasmReverb {
+        let params = ReverbParams {
+            decay,
+            damping,
+            diffusion,
+            predelay_ms,
+            wet,
+            room_size: parse_room_size(room_size),
+            ..ReverbParams::default()
+        };
+        WasmReverb {
+            inner: DattorroReverb::new(params, sample_rate),
+        }
+    }
+
+    pub fn set_params(
+        &mut self,
+        decay: f64,
+        damping: f64,
+        diffusion: f64,
+        predelay_ms: f64,
+        wet: f64,
+        mod_depth: f64,
+        mod_rate: f64,
+        early_level: f64,
+        late_level: f64,
+    ) {
+        self.inner.set_params(ReverbParams {
+            decay,
+            damping,
+            diffusion,
+            predelay_ms,
+            mod_depth,
+            mod_rate,
+            early_level,
+            late_level,
+            wet,
+            room_size: RoomSize::Medium, // room size requires recreation
+        });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn reset(&mut self) {
+        self.inner.reset();
     }
 }

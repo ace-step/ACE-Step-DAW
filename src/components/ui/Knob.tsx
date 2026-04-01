@@ -80,9 +80,22 @@ export function Knob({
       if (!dragStart.current) return;
       const range = max - min;
       const fine = mv.altKey;
-      const sensitivity = fine ? range / 2000 : range / 200;
+      let sensitivity = fine ? range / 2000 : range / 200;
+
+      // Magnetic snap: reduce sensitivity near default value
+      const snapZone = range * 0.03; // 3% of range
+      if (Math.abs(dragStart.current.value - defaultValue) < snapZone) {
+        sensitivity *= 0.5;
+      }
+
       const delta = mv.movementY * sensitivity;
-      const newVal = applyStep(dragStart.current.value + delta);
+      let newVal = applyStep(dragStart.current.value + delta);
+
+      // Snap to exact default if within snap zone
+      if (Math.abs(newVal - defaultValue) < snapZone * 0.3) {
+        newVal = defaultValue;
+      }
+
       dragStart.current = { y: mv.clientY, value: newVal };
       setIsFineMode(fine);
       onChange(newVal);
@@ -250,6 +263,36 @@ export function Knob({
               filter={isDragging ? 'url(#knob-glow)' : undefined}
               style={isResetting ? { transition: 'd 200ms ease-out' } : undefined}
             />
+
+            {/* Default value detent marker — tiny tick on the track */}
+            {(() => {
+              const defAngle = valueToAngle(defaultValue, min, max, arc);
+              const defPos = polarToXY(defAngle - 90, trackR);
+              return (
+                <circle
+                  cx={defPos.x}
+                  cy={defPos.y}
+                  r={1}
+                  fill="rgba(255,255,255,0.15)"
+                />
+              );
+            })()}
+
+            {/* Reset brightness pulse */}
+            {isResetting && (
+              <circle
+                cx={radius}
+                cy={radius}
+                r={trackR + strokeWidth}
+                fill="none"
+                stroke={color}
+                strokeWidth={1}
+                opacity={0.6}
+                style={{
+                  animation: 'knob-pulse 200ms ease-out forwards',
+                }}
+              />
+            )}
 
             {/* Minimal center anchor */}
             <circle

@@ -168,10 +168,16 @@ export function SettingsDialog() {
         if (resp?.loaded_lm_model) return resp.loaded_lm_model;
         return lmModels[0]?.name ?? '';
       });
-    } catch {
+    } catch (err) {
       setAvailableModels([]);
       setAvailableLmModels([]);
       setLlmInitialized(false);
+      const isNetworkError = err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('network'));
+      if (!isNetworkError) {
+        setInitError('Failed to load models — check backend connection.');
+      } else {
+        setInitError('Backend offline — model list unavailable.');
+      }
     } finally {
       setModelsLoading(false);
     }
@@ -199,11 +205,7 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
-      // Only refresh models if backend is likely reachable — avoids failing
-      // network requests when the user opens Settings while offline.
-      if (useModelStore.getState().connected) {
-        void refreshModels();
-      }
+      void refreshModels();
     }
     prevShow.current = show;
   }, [show, project]);

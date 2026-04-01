@@ -110,12 +110,12 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
       {label && (
         <div className="flex justify-between items-center">
           <span className="text-[9px] text-white/30 tracking-wide">{label}</span>
-          {displayValue && <span className="text-[10px] text-white/60 font-mono font-medium">{displayValue}</span>}
+          {displayValue && <span className="text-[10px] text-white/60 font-mono font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>{displayValue}</span>}
         </div>
       )}
       <div
         ref={trackRef}
-        className="relative cursor-pointer rounded-sm"
+        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150"
         style={{ width, height: 4 }}
         onMouseDown={handleMouseDown}
         onDoubleClick={(e) => {
@@ -134,7 +134,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
         <div className="absolute inset-0 rounded-sm bg-white/[0.06]" />
         {/* Filled portion — crisp right edge, no thumb */}
         <div
-          className="absolute left-0 top-0 bottom-0 rounded-sm"
+          className="absolute left-0 top-0 bottom-0 rounded-sm transition-opacity duration-150 group-hover:opacity-90"
           style={{ width: `${norm * 100}%`, backgroundColor: color, opacity: 0.7 }}
         />
       </div>

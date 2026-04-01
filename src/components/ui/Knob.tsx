@@ -231,10 +231,14 @@ export function Knob({
           aria-valuenow={value}
           aria-valuemin={min}
           aria-valuemax={max}
-          className={`relative outline-none rounded-full
+          className={`relative outline-none rounded-full transition-[transform,filter] duration-150
             focus-visible:ring-2 focus-visible:ring-daw-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent
-            ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
-          style={{ width: s, height: s }}
+            ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize hover:brightness-110 hover:scale-[1.03]'}`}
+          style={{
+            width: s,
+            height: s,
+            ...(isDragging ? { filter: 'brightness(1.15)', transform: 'scale(1.05)' } : {}),
+          }}
           data-dragging={isDragging ? 'true' : undefined}
           data-resetting={isResetting ? 'true' : undefined}
         >

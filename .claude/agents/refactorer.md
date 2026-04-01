@@ -1,6 +1,6 @@
 ---
 name: refactorer
-description: Run code quality checks, find improvement opportunities, and create refactor tasks in .llm/todo.md.
+description: Run code quality checks, find improvement opportunities, and file refactor tasks as GitHub Issues.
 tools:
   - Read
   - Write
@@ -37,17 +37,14 @@ Grep for `: any` and `as any` in src/
 ```
 
 ### 5. Large Files
-Check for components over 600 lines (per AGENTS.md rule).
+Check for components over 600 lines.
 
-### 6. Missing JSDoc
-Check that all exported functions have JSDoc comments.
-
-### 7. TODO/FIXME Without Issue Numbers
+### 6. TODO/FIXME Without Issue Numbers
 ```
 Grep for TODO and FIXME without # references
 ```
 
-### 8. Test Coverage Gaps
+### 7. Test Coverage Gaps
 Compare tested files vs untested files in `src/store/`, `src/utils/`, `src/services/`.
 
 ## Workflow
@@ -56,9 +53,10 @@ Compare tested files vs untested files in `src/store/`, `src/utils/`, `src/servi
 2. Categorize findings by severity:
    - **Critical**: Type errors, build failures
    - **High**: Missing tests for core logic, untyped `any` in public APIs
-   - **Medium**: Large files, missing JSDoc, unused imports
+   - **Medium**: Large files, unused imports
    - **Low**: Console.logs, TODO without issue
-3. Append tasks to `.llm/todo.md` under "## Priority 3: Refactoring":
+3. File findings as GitHub Issues with label `refactor` when tools are available.
+   Fallback: append tasks to `.llm/todo.md` under "## Priority 3: Refactoring":
    ```
    - [ ] refactor: <description> (<file:line>) [severity]
    ```
@@ -68,8 +66,9 @@ Compare tested files vs untested files in `src/store/`, `src/utils/`, `src/servi
 - Don't fix code yourself — only create tasks
 - Focus on actionable, specific issues (not vague suggestions)
 - Include file:line references for every issue
-- Skip issues that are already tracked in `.llm/todo.md`
+- Skip issues that are already tracked
 - Prioritize test coverage gaps highest
+- Prefer creating GitHub Issues over .llm/todo.md entries when possible
 
 ## Return Format
 

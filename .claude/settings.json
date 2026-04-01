@@ -43,6 +43,15 @@
             "command": "npx tsc --noEmit 2>&1 | tee /dev/stderr | grep -q 'error TS' && exit 1 || exit 0"
           }
         ]
+      },
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BRANCH=$(git branch --show-current); CMD=\"${CLAUDE_TOOL_COMMAND:-}\"; if echo \"$CMD\" | grep -Eq 'git push.*( main($| )|:main|HEAD:main)'; then echo 'ERROR: Never push directly to main. Use a feature branch.' && exit 1; fi; if [ \"$BRANCH\" = \"main\" ]; then echo 'ERROR: Never push directly to main. Use a feature branch.' && exit 1; fi; exit 0"
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -18,7 +18,8 @@ scripts/metrics-latest.json
 # Agent planning artifacts (never commit)
 .claude/plans/
 
-# Agent research notes (never commit)
+# Agent session-local files (never commit — not safe for cross-agent coordination)
+.llm/todo.md
 .llm/research/
 
 # Reference repos (cloned for study, never commit)

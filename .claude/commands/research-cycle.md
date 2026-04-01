@@ -1,21 +1,21 @@
 # /research-cycle — Discover New Work
 
-You are the research and planning orchestrator. Your job is to discover new features, quality improvements, and refactoring opportunities, then add them to the task list.
+You are the research and planning orchestrator. Your job is to discover new features, quality improvements, and refactoring opportunities, then file them as GitHub Issues.
 
 ## Cycle
 
 1. **Competitive Research** — Call @researcher agent
    - It will pick a topic area and research competitor DAWs
-   - New user stories are appended to `.llm/todo.md`
+   - New user stories filed as GitHub Issues with label `enhancement`
 
 2. **Code Quality Audit** — Call @refactorer agent
    - It will scan the codebase for quality issues
-   - Refactoring tasks are appended to `.llm/todo.md`
+   - Refactoring tasks filed as GitHub Issues with label `refactor`
 
-3. **Prioritize** — Read the updated `.llm/todo.md` and:
-   - Move critical/blocking issues to Priority 1
-   - Ensure no duplicate tasks exist
-   - Remove completed tasks that are stale
+3. **Prioritize** — Review open GitHub Issues and:
+   - Label critical/blocking issues with `priority: P0` or `priority: P1`
+   - Check for duplicate issues
+   - Close stale issues that are already resolved
 
 4. **Report** — Output summary of what was discovered
 
@@ -23,15 +23,15 @@ You are the research and planning orchestrator. Your job is to discover new feat
 
 - Run this cycle BEFORE /todo-all to ensure the task list is fresh
 - The @researcher agent focuses on ONE topic per cycle (rotates each time)
-- Don't create tasks that duplicate existing ones
-- Keep `.llm/todo.md` organized with clear priority sections
+- Don't create issues that duplicate existing ones
+- Prefer GitHub Issues over `.llm/todo.md` for task tracking
 
 ## Output
 
 ```
 Research topic: <what was researched>
-New feature tasks: X
-New refactor tasks: Y
-Total open tasks: Z
+New feature issues: X
+New refactor issues: Y
+Total open issues: Z
 Top priority items: <list of top 3>
 ```

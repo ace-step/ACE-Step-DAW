@@ -11,26 +11,26 @@ REPEAT FOREVER:
   │ Run /research-cycle                                  │
   │ → @researcher finds new features from competitors    │
   │ → @refactorer finds code quality issues              │
-  │ → New tasks added to .llm/todo.md                    │
+  │ → New tasks filed as GitHub Issues                   │
   └──────────────────────────────────────────────────────┘
                           ↓
   ┌─── Phase 2: BUILD ──────────────────────────────────┐
   │ Run /todo-all                                        │
-  │ → For each task in .llm/todo.md:                     │
+  │ → Pick highest-priority open GitHub Issue             │
   │   → @do-todo implements with TDD (red→green→refactor)│
   │   → @tester verifies no regressions                  │
-  │   → git commit on success                            │
+  │   → git commit + push on success                     │
   └──────────────────────────────────────────────────────┘
                           ↓
   ┌─── Phase 3: VALIDATE ───────────────────────────────┐
   │ Call @tester for full regression test                 │
   │ → Generate report to .llm/reports/                   │
-  │ → Any failures → new Priority 1 tasks                │
+  │ → Any failures → new Priority 1 GitHub Issues        │
   └──────────────────────────────────────────────────────┘
                           ↓
   ┌─── Phase 4: MAINTAIN ──────────────────────────────┐
   │ /compact (preserve: files changed, test results,     │
-  │           current todo progress, blockers)           │
+  │           current issue number, blockers)             │
   │ Review .llm/BLOCKERS.md — skip or retry blocked tasks│
   └──────────────────────────────────────────────────────┘
                           ↓
@@ -54,7 +54,7 @@ REPEAT FOREVER:
 
 ## When to Stop
 
-- All tasks in `.llm/todo.md` are checked AND @researcher finds no new gaps
+- All open GitHub Issues are resolved AND @researcher finds no new gaps
 - Budget limit reached (--max-budget-usd)
 - Turn limit reached (--max-turns)
 - Human intervention (user stops the process)

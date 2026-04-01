@@ -66,19 +66,32 @@ React 19 + TypeScript 5.7 + Vite 6 + Zustand 5 + Tone.js 15 + Tailwind CSS 4
 + Strudel (Live Coding) + ONNX Runtime (ML 推理) + CodeMirror 6
 ```
 
+### 实际能力盘点
+
+| 能力 | 状态 | 实现程度 |
+|------|------|----------|
+| **VST3 原生宿主** | ✅ 生产级 | Rust companion app, 插件扫描/加载/GUI/预设/自动化 |
+| **WASM DSP 引擎** | ✅ 生产级 | Rust→WASM: EQ, 压缩, 混响, 延迟, 合唱, 失真, 移相, 时间拉伸等 |
+| **Session/Clip Launcher** | ✅ 成熟 | 场景触发, Follow Actions, 录制到编排 |
+| **AI 生成流水线** | ✅ 成熟 | 4种模型 (Text2Music/Lego/Cover/Repaint), 多变体, 上下文续写 |
+| **Canvas 渲染** | ✅ 2D Canvas | Piano Roll, EQ曲线, 压缩曲线等 |
+| **Agent 可编程** | ✅ 独创 | window.__store 全 API + 集成终端 |
+| **Live Coding** | ✅ Strudel | 完整 Strudel REPL + CodeMirror |
+| **实时协作** | ⚠️ 早期 | UI/Store 已有, 多人编辑未实现 |
+| **桌面应用** | ❌ 无 | PWA 可安装, 无 Electron/Tauri |
+
 ### 核心优势 (相对于行业)
 
 | 维度 | 传统 DAW | Web DAW | ACE-Step DAW | 评价 |
 |------|----------|---------|--------------|------|
 | **部署门槛** | 需安装, 平台限制 | 零安装 | 零安装 (Web) | **领先** |
-| **AI 集成** | 后加的, 功能有限 | 基本无 | **原生 AI-first** | **领先** |
-| **协作** | 无或后加 | Soundtrap/BandLab 强 | 有协作 store | 追赶中 |
+| **AI 集成** | 后加的, 功能有限 | 基本无 | **原生 AI-first, 4种模型** | **领先** |
+| **VST3 插件** | VST/AU/AAX 全支持 | 无 | **原生 VST3 宿主** (Rust companion) | **追平** |
+| **协作** | 无或后加 | Soundtrap/BandLab 强 | UI 就绪, 后端待实现 | 追赶中 |
 | **Agent 可编程性** | 无 | 无 | **window.__store 全 API** | **独创** |
 | **Live Coding** | Bitwig 有 Grid | 无 | **Strudel 集成** | **领先** |
-| **音频性能** | C++ 原生, 最强 | Web Audio 限制 | Web Audio (Tone.js) | **劣势** |
-| **插件生态** | VST/AU/AAX 海量 | 无 | VST3 Store (早期) | **劣势** |
-| **延迟** | <5ms (ASIO/Core Audio) | ~20-50ms (Web Audio) | ~20-50ms | **劣势** |
-| **离线能力** | 完全离线 | 需网络 | 需网络 (API 依赖) | 劣势 |
+| **WASM DSP** | C++ 原生, 最强 | Web Audio 限制 | **Rust→WASM 生产级 DSP** | 接近 |
+| **延迟** | <5ms (ASIO/Core Audio) | ~20-50ms (Web Audio) | ~20-50ms (Web) / companion 可更低 | 劣势 |
 
 ### 关键学习点
 
@@ -105,35 +118,32 @@ Bitwig 是最接近我们理念的传统 DAW:
 2. **多模型流水线**: Text → Transformer → Diffusion → Audio → 对应我们的 LEGO Pipeline
 3. **Suno Studio**: AI-native DAW 概念 → 直接竞争对手, 我们有更强的传统 DAW 功能
 
-## 6. 战略建议
+## 6. 战略建议 (基于实际能力修正)
 
-### 短期 (3-6个月): 巩固 Web DAW 优势
+### P0 — 打磨核心体验 (立即)
 
-1. **WASM DSP 引擎**: 将核心 DSP (EQ, Compressor, Effects) 用 Rust→WASM 重写, 在 AudioWorklet 中运行
-   - 参考: 已有 `ace_dsp_wasm` 基础设施
-   - 目标: 缩小与原生 DAW 的性能差距
-2. **Canvas/WebGL 渲染**: Piano Roll, Waveform, Timeline 等重绘制区域迁移到 Canvas
-   - 参考: Bitwig 的 GPU 加速渲染
-3. **WAM (Web Audio Module) 标准**: 支持标准 Web 插件格式
+1. **WASM DSP 全面启用**: 已有生产级 Rust DSP, 确保所有效果链默认走 WASM AudioWorklet 路径
+2. **Timeline WebGL 渲染**: Piano Roll 已用 Canvas, 将 Waveform/Timeline 也迁移到 Canvas/WebGL
+3. **VST3 体验打磨**: companion app 安装流程简化, 插件扫描 UX 优化
 
-### 中期 (6-12个月): 差异化竞争
+### P1 — 差异化优势深化 (3-6个月)
 
-4. **Agent-native 生态**: 开放 API, 让第三方 Agent 能操控 DAW
-   - 这是我们的独特优势, 没有任何竞争对手有这个
-5. **实时协作**: 基于 CRDT/WebRTC 的实时多人编辑
-   - 参考: Soundtrap 的协作架构
-6. **AI 编曲助手**: 超越简单生成, 提供智能编曲建议
-   - 参考: Suno Studio 的方向, 但我们有更强的 DAW 功能
+4. **AI 编曲助手**: 超越 "生成单段", 实现智能编曲建议 (自动推荐下一段, 和弦进行, 配器)
+5. **Agent-native 生态**: 开放 API 文档, 让第三方 Agent/MCP 能操控 DAW
+6. **Session View 增强**: 学习 Ableton 的 session→arrangement 录制, 强化 Follow Actions
 
-### 长期 (12个月+): 定义新品类
+### P2 — 追赶短板 (6-12个月)
 
-7. **"AI-native DAW" 品类定义者**: 
-   - 传统 DAW (Ableton等) 在后加 AI → 笨拙
-   - AI 工具 (Suno等) 在后加 DAW → 功能弱
-   - 我们从第一天就是 AI + DAW → **唯一的 AI-native DAW**
-8. **Hybrid 架构**: 考虑 Electron/Tauri 桌面版, 获得原生音频性能
-   - 保留 Web 版本用于协作和轻量使用
-   - 桌面版获得 ASIO/Core Audio 低延迟
+7. **实时协作**: 基于 CRDT/WebRTC 实现多人编辑 (UI/Store 已就绪, 需后端)
+8. **Tauri 桌面版**: 获得原生音频性能 + ASIO/CoreAudio 低延迟, 保留 Web 版
+9. **WAM (Web Audio Module)**: 除 VST3 外支持 Web 标准插件格式
+
+### P3 — 长期愿景 (12个月+)
+
+10. **"AI-native DAW" 品类定义者**:
+    - 传统 DAW (Ableton等) 在后加 AI → 笨拙
+    - AI 工具 (Suno等) 在后加 DAW → 功能弱
+    - ACE-Step 从第一天就是 AI + DAW + Agent → **唯一的 AI-native DAW**
 
 ### 核心战略定位
 
@@ -145,7 +155,7 @@ Ableton/Bitwig    Suno/Udio
               ↓
          ACE-Step DAW
       "AI-native DAW"
-    专业 DAW + 原生 AI
+  专业 DAW + 原生 AI + Agent-native
 ```
 
-**一句话战略**: 不要试图在音频性能上超越 C++ 原生 DAW, 而是在 AI 集成深度和协作便利性上建立不可追赶的领先优势, 同时用 WASM 将性能差距缩小到 "足够好" 的水平。
+**一句话战略**: 我们已拥有 VST3 宿主 + WASM DSP + 4种 AI 模型 + Agent API 的独特组合。下一步是打磨这些能力的集成体验, 而非追加新能力。在 AI 编曲深度和 Agent 可编程性上建立不可追赶的领先。

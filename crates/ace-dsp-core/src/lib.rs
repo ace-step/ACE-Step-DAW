@@ -11,6 +11,7 @@ pub mod biquad;
 pub mod chorus;
 #[cfg(feature = "std")]
 pub mod delay;
+pub mod distortion;
 #[cfg(feature = "std")]
 pub mod dynamics;
 pub mod eq;

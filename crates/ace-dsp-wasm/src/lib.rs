@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
 use ace_dsp_core::chorus::Chorus;
 use ace_dsp_core::delay::MonoDelay;
+use ace_dsp_core::distortion::{Distortion, DistortionType};
 use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
@@ -26,6 +27,7 @@ pub struct DspProcessor {
     eq: Option<ParametricEq>,
     reverb: Option<Reverb>,
     chorus: Option<Chorus>,
+    distortion: Option<Distortion>,
     sample_rate: f32,
 }
 
@@ -43,6 +45,7 @@ impl DspProcessor {
             eq: None,
             reverb: None,
             chorus: None,
+            distortion: None,
             sample_rate,
         }
     }
@@ -316,9 +319,52 @@ impl DspProcessor {
         self.chorus = None;
     }
 
+    /// Enable distortion/waveshaper.
+    /// - `dist_type`: 0=HardClip, 1=SoftClip, 2=Overdrive, 3=Fuzz, 4=Bitcrush
+    /// - `drive`: input gain (1.0–100.0)
+    /// - `mix`: wet/dry (0.0–1.0)
+    /// - `output_gain`: post level (0.0–2.0)
+    /// - `bit_depth`: for Bitcrush mode (1.0–16.0)
+    pub fn set_distortion(
+        &mut self,
+        dist_type: u8,
+        drive: f32,
+        mix: f32,
+        output_gain: f32,
+        bit_depth: f32,
+    ) {
+        let dt = match dist_type {
+            0 => DistortionType::HardClip,
+            1 => DistortionType::SoftClip,
+            2 => DistortionType::Overdrive,
+            3 => DistortionType::Fuzz,
+            4 => DistortionType::Bitcrush,
+            _ => DistortionType::SoftClip,
+        };
+        match &mut self.distortion {
+            Some(d) => {
+                d.set_type(dt);
+                d.set_drive(drive);
+                d.set_mix(mix);
+                d.set_output_gain(output_gain);
+                d.set_bit_depth(bit_depth);
+            }
+            None => {
+                let mut d = Distortion::new(dt, drive, mix, output_gain);
+                d.set_bit_depth(bit_depth);
+                self.distortion = Some(d);
+            }
+        }
+    }
+
+    /// Disable the distortion.
+    pub fn disable_distortion(&mut self) {
+        self.distortion = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
+    /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
         if let Some(ref mut gate) = self.gate {
             gate.process_buffer(buffer);
@@ -328,6 +374,9 @@ impl DspProcessor {
         }
         if let Some(ref mut eq) = self.eq {
             eq.process_buffer(buffer);
+        }
+        if let Some(ref d) = self.distortion {
+            d.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -355,6 +404,9 @@ impl DspProcessor {
         }
         if let Some(ref mut eq) = self.eq {
             eq.process_buffer(buffer);
+        }
+        if let Some(ref d) = self.distortion {
+            d.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -568,6 +620,28 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_reverb(0.5, 0.5, 1.0, 0.0);
         proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_distortion() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_distortion(1, 5.0, 1.0, 1.0, 8.0); // SoftClip
+        proc.set_gain(1.0);
+        let mut buf = [0.5_f32; 4];
+        proc.process_mono(&mut buf);
+        // tanh(0.5 * 5) = tanh(2.5) ≈ 0.987
+        assert!(buf[0] > 0.9, "Soft clip: {}", buf[0]);
+    }
+
+    #[test]
+    fn test_processor_disable_distortion() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_distortion(0, 10.0, 1.0, 1.0, 8.0);
+        proc.disable_distortion();
         let mut buf = [0.5_f32; 4];
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);

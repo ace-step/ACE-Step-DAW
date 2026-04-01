@@ -404,6 +404,35 @@ describe('WasmDspEngine', () => {
         type: 'disable-chorus',
       });
     });
+
+    it('should send set-distortion message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setDistortion(1, 5.0, 0.8, 1.0, 8.0);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-distortion',
+        distType: 1,
+        drive: 5.0,
+        mix: 0.8,
+        outputGain: 1.0,
+        bitDepth: 8.0,
+      });
+    });
+
+    it('should send disable-distortion message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableDistortion();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-distortion',
+      });
+    });
   });
 
   describe('lifecycle', () => {

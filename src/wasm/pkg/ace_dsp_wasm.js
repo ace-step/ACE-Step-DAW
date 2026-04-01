@@ -44,6 +44,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_delay(this.__wbg_ptr);
     }
     /**
+     * Disable the distortion.
+     */
+    disable_distortion() {
+        wasm.dspprocessor_disable_distortion(this.__wbg_ptr);
+    }
+    /**
      * Disable the parametric EQ entirely.
      */
     disable_eq() {
@@ -88,7 +94,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -169,6 +175,22 @@ export class DspProcessor {
      */
     set_delay_params(delay_ms, feedback, wet, dry) {
         wasm.dspprocessor_set_delay_params(this.__wbg_ptr, delay_ms, feedback, wet, dry);
+    }
+    /**
+     * Enable distortion/waveshaper.
+     * - `dist_type`: 0=HardClip, 1=SoftClip, 2=Overdrive, 3=Fuzz, 4=Bitcrush
+     * - `drive`: input gain (1.0–100.0)
+     * - `mix`: wet/dry (0.0–1.0)
+     * - `output_gain`: post level (0.0–2.0)
+     * - `bit_depth`: for Bitcrush mode (1.0–16.0)
+     * @param {number} dist_type
+     * @param {number} drive
+     * @param {number} mix
+     * @param {number} output_gain
+     * @param {number} bit_depth
+     */
+    set_distortion(dist_type, drive, mix, output_gain, bit_depth) {
+        wasm.dspprocessor_set_distortion(this.__wbg_ptr, dist_type, drive, mix, output_gain, bit_depth);
     }
     /**
      * Set a parametric EQ band.

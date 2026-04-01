@@ -159,6 +159,22 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_chorus();
           }
           break;
+        case 'set-distortion':
+          if (this._processor) {
+            this._processor.set_distortion(
+              msg.distType,
+              msg.drive,
+              msg.mix,
+              msg.outputGain,
+              msg.bitDepth
+            );
+          }
+          break;
+        case 'disable-distortion':
+          if (this._processor) {
+            this._processor.disable_distortion();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

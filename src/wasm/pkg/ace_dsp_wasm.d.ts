@@ -27,6 +27,10 @@ export class DspProcessor {
      */
     disable_delay(): void;
     /**
+     * Disable the distortion.
+     */
+    disable_distortion(): void;
+    /**
      * Disable the parametric EQ entirely.
      */
     disable_eq(): void;
@@ -53,7 +57,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -96,6 +100,15 @@ export class DspProcessor {
      * Update delay parameters without recreating.
      */
     set_delay_params(delay_ms: number, feedback: number, wet: number, dry: number): void;
+    /**
+     * Enable distortion/waveshaper.
+     * - `dist_type`: 0=HardClip, 1=SoftClip, 2=Overdrive, 3=Fuzz, 4=Bitcrush
+     * - `drive`: input gain (1.0–100.0)
+     * - `mix`: wet/dry (0.0–1.0)
+     * - `output_gain`: post level (0.0–2.0)
+     * - `bit_depth`: for Bitcrush mode (1.0–16.0)
+     */
+    set_distortion(dist_type: number, drive: number, mix: number, output_gain: number, bit_depth: number): void;
     /**
      * Set a parametric EQ band.
      * - `band_index`: 0-7
@@ -148,6 +161,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_chorus: (a: number) => void;
     readonly dspprocessor_disable_compressor: (a: number) => void;
     readonly dspprocessor_disable_delay: (a: number) => void;
+    readonly dspprocessor_disable_distortion: (a: number) => void;
     readonly dspprocessor_disable_eq: (a: number) => void;
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_disable_gate: (a: number) => void;
@@ -160,6 +174,7 @@ export interface InitOutput {
     readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly dspprocessor_set_distortion: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_eq_band: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_gain: (a: number, b: number) => void;

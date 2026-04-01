@@ -111,6 +111,18 @@ export interface WasmDspNode {
   /** Disable the chorus/flanger. */
   disableChorus(): void;
 
+  /** Enable distortion/waveshaper. */
+  setDistortion(
+    distType: number,
+    drive: number,
+    mix: number,
+    outputGain: number,
+    bitDepth: number
+  ): void;
+
+  /** Disable the distortion. */
+  disableDistortion(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -363,6 +375,27 @@ export class WasmDspEngine {
 
       disableChorus() {
         workletNode.port.postMessage({ type: 'disable-chorus' });
+      },
+
+      setDistortion(
+        distType: number,
+        drive: number,
+        mix: number,
+        outputGain: number,
+        bitDepth: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-distortion',
+          distType,
+          drive,
+          mix,
+          outputGain,
+          bitDepth,
+        });
+      },
+
+      disableDistortion() {
+        workletNode.port.postMessage({ type: 'disable-distortion' });
       },
 
       reset() {

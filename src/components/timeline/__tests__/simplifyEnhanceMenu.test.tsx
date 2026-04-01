@@ -4,6 +4,7 @@ import { ClipContextMenu } from '../ClipContextMenu';
 import { AIToolsSubmenu, type ClipAIContext } from '../AIToolsSubmenu';
 import { SHORTCUT_ACTIONS } from '../../../constants/shortcutDefaults';
 import { buildCommandPaletteCommands, type CommandPaletteContext } from '../../../services/commandPalette';
+import type { Clip, Track, Project } from '../../../types/project';
 
 // ── shortcutDefaults ──────────────────────────────────────────
 describe('shortcutDefaults — clips.enhance', () => {
@@ -93,50 +94,57 @@ describe('AIToolsSubmenu — no longer contains Enhance', () => {
       isReady: true,
     };
     expect(ctx).toBeDefined();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((ctx as any).onEnhance).toBeUndefined();
+    expect((ctx as Record<string, unknown>).onEnhance).toBeUndefined();
   });
 });
 
 // ── commandPalette ──────────────────────────────────────────────
 describe('commandPalette — Enhance Selected Clip command', () => {
   function makeContext(overrides: Partial<CommandPaletteContext> = {}): CommandPaletteContext {
+    const mockClip: Partial<Clip> = {
+      id: 'c1',
+      trackId: 't1',
+      startTime: 0,
+      duration: 10,
+      generationStatus: 'ready',
+      prompt: 'test',
+    };
+
+    const mockTrack: Partial<Track> = {
+      id: 't1',
+      displayName: 'Track 1',
+      trackName: 'vocals',
+      trackType: 'stems',
+      color: '#fff',
+      volume: 1,
+      pan: 0,
+      muted: false,
+      soloed: false,
+      order: 0,
+      clips: [mockClip as Clip],
+      effects: [],
+    };
+
+    const mockProject: Partial<Project> = {
+      id: 'p1',
+      name: 'Test',
+      bpm: 120,
+      timeSignature: 4,
+      totalDuration: 60,
+      tracks: [mockTrack as Track],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      generationDefaults: {
+        inferenceSteps: 50,
+        guidanceScale: 7,
+        shift: 0,
+        thinking: false,
+        model: 'default',
+      },
+    };
+
     return {
-      project: {
-        id: 'p1',
-        name: 'Test',
-        bpm: 120,
-        timeSignature: { numerator: 4, denominator: 4 },
-        totalDuration: 60,
-        tracks: [
-          {
-            id: 't1',
-            displayName: 'Track 1',
-            trackName: 'vocals' as any,
-            trackType: 'stems' as any,
-            color: '#fff',
-            volume: 1,
-            pan: 0,
-            muted: false,
-            soloed: false,
-            order: 0,
-            clips: [
-              {
-                id: 'c1',
-                trackId: 't1',
-                startTime: 0,
-                duration: 10,
-                generationStatus: 'ready' as any,
-                prompt: 'test',
-              } as any,
-            ],
-            effects: [],
-          } as any,
-        ],
-        sampleRate: 44100,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as any,
+      project: mockProject as Project,
       selectedClipIds: ['c1'],
       currentTime: 5,
       isPlaying: false,
@@ -172,15 +180,15 @@ describe('commandPalette — Enhance Selected Clip command', () => {
         zoomTimelineToSelection: vi.fn(),
         zoomTimelineToProject: vi.fn(),
         setBatchGenerateMode: vi.fn(),
-        addTrack: vi.fn() as any,
-        addTrackEffect: vi.fn() as any,
+        addTrack: vi.fn() as CommandPaletteContext['actions']['addTrack'],
+        addTrackEffect: vi.fn() as unknown as CommandPaletteContext['actions']['addTrackEffect'],
         updateProject: vi.fn(),
         updateTrack: vi.fn(),
         updateTrackMixer: vi.fn(),
         updateTrackEffect: vi.fn(),
         duplicateClip: vi.fn(),
         splitClip: vi.fn(),
-        splitClipAtZeroCrossing: vi.fn() as any,
+        splitClipAtZeroCrossing: vi.fn() as unknown as CommandPaletteContext['actions']['splitClipAtZeroCrossing'],
         removeClip: vi.fn(),
         setEditingClip: vi.fn(),
         deselectAll: vi.fn(),

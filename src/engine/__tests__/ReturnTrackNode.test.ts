@@ -1,32 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ReturnTrackNode } from '../ReturnTrackNode';
+import { type MockAudioParam, type MockNode, makeAudioParam, makeNode } from './mockAudioHelpers';
 
-function makeAudioParam(initial = 0) {
-  let _value = initial;
-  const rampCalls: { value: number; endTime: number }[] = [];
-  return {
-    get value() { return _value; },
-    set value(v: number) { _value = v; },
-    linearRampToValueAtTime(value: number, endTime: number) {
-      rampCalls.push({ value, endTime });
-      _value = value;
-      return this;
-    },
-    setValueAtTime(value: number, _time: number) {
-      _value = value;
-      return this;
-    },
-    cancelScheduledValues() { return this; },
-    rampCalls,
-  };
-}
-
-function makeNode(overrides: Record<string, unknown> = {}) {
-  return {
-    connect: vi.fn().mockReturnThis(),
-    disconnect: vi.fn(),
-    ...overrides,
-  };
+/** Type-safe accessor for private members of ReturnTrackNode used in tests. */
+interface ReturnTrackNodeInternals {
+  volumeGain: MockNode & { gain: MockAudioParam };
+  panNode: MockNode & { pan: MockAudioParam };
+  analyserNode: MockNode;
 }
 
 function makeAudioContext(): AudioContext {
@@ -51,25 +31,28 @@ function makeAudioContext(): AudioContext {
 
 describe('ReturnTrackNode', () => {
   let ctx: AudioContext;
-  let destination: ReturnType<typeof makeNode>;
+  let destination: MockNode;
   let node: ReturnTrackNode;
+  /** Type-safe accessor for private members. */
+  let internals: ReturnTrackNodeInternals;
 
   beforeEach(() => {
     ctx = makeAudioContext();
     destination = makeNode();
     node = new ReturnTrackNode(ctx, destination as unknown as AudioNode);
+    internals = node as unknown as ReturnTrackNodeInternals;
   });
 
   it('connects signal chain: inputGain → volumeGain → panNode → analyser → destination', () => {
     // inputGain connects to volumeGain
-    expect((node.inputGain as any).connect).toHaveBeenCalled();
+    const inputGain = node.inputGain as unknown as MockNode;
+    expect(inputGain.connect).toHaveBeenCalled();
   });
 
   it('applies volume with 5ms click-free ramp', () => {
     node.volume = 0.5;
     // Volume gain should have been ramped
-    const volumeGain = (node as any).volumeGain;
-    const param = volumeGain.gain;
+    const param = internals.volumeGain.gain;
     expect(param.rampCalls.length).toBeGreaterThan(0);
     expect(param.rampCalls[param.rampCalls.length - 1].value).toBe(0.5);
   });
@@ -77,7 +60,7 @@ describe('ReturnTrackNode', () => {
   it('mutes to 0 with ramp', () => {
     node.volume = 0.8;
     node.muted = true;
-    const param = (node as any).volumeGain.gain;
+    const param = internals.volumeGain.gain;
     expect(param.rampCalls[param.rampCalls.length - 1].value).toBe(0);
   });
 
@@ -85,15 +68,15 @@ describe('ReturnTrackNode', () => {
     node.volume = 0.7;
     node.muted = true;
     node.muted = false;
-    const param = (node as any).volumeGain.gain;
+    const param = internals.volumeGain.gain;
     expect(param.rampCalls[param.rampCalls.length - 1].value).toBe(0.7);
   });
 
   it('sets pan value clamped to [-1, 1]', () => {
     node.pan = 2;
-    expect((node as any).panNode.pan.value).toBe(1);
+    expect(internals.panNode.pan.value).toBe(1);
     node.pan = -5;
-    expect((node as any).panNode.pan.value).toBe(-1);
+    expect(internals.panNode.pan.value).toBe(-1);
   });
 
   it('spliceEffects inserts chain between input and volume', () => {
@@ -101,7 +84,8 @@ describe('ReturnTrackNode', () => {
     const effectOutput = makeNode();
     node.spliceEffects(effectInput as unknown as AudioNode, effectOutput as unknown as AudioNode);
     // inputGain should connect to effectInput
-    expect((node.inputGain as any).connect).toHaveBeenCalledWith(effectInput);
+    const inputGain = node.inputGain as unknown as MockNode;
+    expect(inputGain.connect).toHaveBeenCalledWith(effectInput);
     // effectOutput should connect to volumeGain
     expect(effectOutput.connect).toHaveBeenCalled();
   });
@@ -112,17 +96,19 @@ describe('ReturnTrackNode', () => {
     node.spliceEffects(effectInput as unknown as AudioNode, effectOutput as unknown as AudioNode);
     node.spliceEffects(null, null);
     // inputGain should reconnect directly to volumeGain
-    const connectCalls = (node.inputGain as any).connect.mock.calls;
+    const inputGain = node.inputGain as unknown as MockNode;
+    const connectCalls = inputGain.connect.mock.calls;
     const lastCall = connectCalls[connectCalls.length - 1];
-    expect(lastCall[0]).toBe((node as any).volumeGain);
+    expect(lastCall[0]).toBe(internals.volumeGain);
   });
 
   it('disconnect() disconnects all nodes', () => {
     node.disconnect();
-    expect((node.inputGain as any).disconnect).toHaveBeenCalled();
-    expect((node as any).volumeGain.disconnect).toHaveBeenCalled();
-    expect((node as any).panNode.disconnect).toHaveBeenCalled();
-    expect((node as any).analyserNode.disconnect).toHaveBeenCalled();
+    const inputGain = node.inputGain as unknown as MockNode;
+    expect(inputGain.disconnect).toHaveBeenCalled();
+    expect(internals.volumeGain.disconnect).toHaveBeenCalled();
+    expect(internals.panNode.disconnect).toHaveBeenCalled();
+    expect(internals.analyserNode.disconnect).toHaveBeenCalled();
   });
 
   it('getMeter returns level data', () => {

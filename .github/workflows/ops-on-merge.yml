@@ -16,7 +16,7 @@ jobs:
 
       - name: Auto-merge ready PRs (all checks must pass)
         run: |
-          cd $GITHUB_WORKSPACE
+          cd "$GITHUB_WORKSPACE"
 
           # Auto-merge any PR that's ready + ALL checks green
           READY=$(gh pr list --repo ${{ github.repository }} --state open --json number,isDraft,mergeable --jq '.[] | select(.isDraft==false and .mergeable=="MERGEABLE") | .number')
@@ -63,7 +63,7 @@ jobs:
       - name: Run Project Manager brain
         if: steps.verify-tests.outputs.tests_passed == 'true'
         run: |
-          cd $GITHUB_WORKSPACE
-          bash scripts/agents/project-manager.sh &
+          cd "$GITHUB_WORKSPACE"
+          bash scripts/agents/project-manager.sh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

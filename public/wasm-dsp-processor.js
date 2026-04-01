@@ -243,6 +243,20 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_limiter();
           }
           break;
+        case 'set-ringmod':
+          if (this._processor) {
+            this._processor.set_ringmod(
+              msg.freqHz,
+              msg.mix,
+              msg.shape
+            );
+          }
+          break;
+        case 'disable-ringmod':
+          if (this._processor) {
+            this._processor.disable_ringmod();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

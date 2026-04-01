@@ -15,6 +15,7 @@ use ace_dsp_core::gain::GainProcessor;
 use ace_dsp_core::limiter::Limiter;
 use ace_dsp_core::phaser::Phaser;
 use ace_dsp_core::reverb::Reverb;
+use ace_dsp_core::ringmod::{RingMod, RingModShape};
 use ace_dsp_core::stereo::StereoImager;
 use ace_dsp_core::tremolo::{Tremolo, TremoloShape};
 
@@ -38,6 +39,7 @@ pub struct DspProcessor {
     phaser: Option<Phaser>,
     tremolo: Option<Tremolo>,
     autopan: Option<AutoPan>,
+    ringmod: Option<RingMod>,
     sample_rate: f32,
 }
 
@@ -61,6 +63,7 @@ impl DspProcessor {
             phaser: None,
             tremolo: None,
             autopan: None,
+            ringmod: None,
             sample_rate,
         }
     }
@@ -520,6 +523,34 @@ impl DspProcessor {
         self.autopan = None;
     }
 
+    /// Enable ring modulator.
+    /// - `freq_hz`: carrier frequency (1–5000 Hz)
+    /// - `mix`: wet/dry (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Square, 2=Saw
+    pub fn set_ringmod(&mut self, freq_hz: f32, mix: f32, shape: u8) {
+        let sh = match shape {
+            0 => RingModShape::Sine,
+            1 => RingModShape::Square,
+            2 => RingModShape::Saw,
+            _ => RingModShape::Sine,
+        };
+        match &mut self.ringmod {
+            Some(rm) => {
+                rm.set_frequency(freq_hz);
+                rm.set_mix(mix);
+                rm.set_shape(sh);
+            }
+            None => {
+                self.ringmod = Some(RingMod::new(self.sample_rate, freq_hz, mix, sh));
+            }
+        }
+    }
+
+    /// Disable the ring modulator.
+    pub fn disable_ringmod(&mut self) {
+        self.ringmod = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
@@ -547,6 +578,9 @@ impl DspProcessor {
         }
         if let Some(ref mut phaser) = self.phaser {
             phaser.process_buffer(buffer);
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -586,6 +620,9 @@ impl DspProcessor {
         }
         if let Some(ref mut phaser) = self.phaser {
             phaser.process_buffer(buffer);
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -644,6 +681,9 @@ impl DspProcessor {
         }
         if let Some(ref mut autopan) = self.autopan {
             autopan.reset();
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.reset();
         }
     }
 }
@@ -847,6 +887,31 @@ mod tests {
         let min_l = left_vals.iter().cloned().fold(f32::INFINITY, f32::min);
         let max_l = left_vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         assert!(max_l - min_l > 0.3, "AutoPan should sweep L: range={}", max_l - min_l);
+    }
+
+    #[test]
+    fn test_processor_ringmod() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_ringmod(440.0, 1.0, 0); // Sine carrier
+        proc.set_gain(1.0);
+        // Feed sine wave — ring mod should create sidebands
+        let mut buf: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * 220.0 * std::f32::consts::TAU / 44100.0).sin() * 0.5)
+            .collect();
+        proc.process_mono(&mut buf);
+        let energy: f32 = buf.iter().map(|s| s * s).sum();
+        assert!(energy > 1.0, "Ring mod should produce output: {energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_ringmod() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_ringmod(440.0, 1.0, 0);
+        proc.disable_ringmod();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
     }
 
     #[test]

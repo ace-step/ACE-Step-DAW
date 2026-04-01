@@ -147,6 +147,12 @@ export interface WasmDspNode {
   /** Disable the auto-pan. */
   disableAutoPan(): void;
 
+  /** Enable ring modulator effect. */
+  setRingMod(freqHz: number, mix: number, shape: number): void;
+
+  /** Disable the ring modulator. */
+  disableRingMod(): void;
+
   /** Set stereo imager width (0.0 mono → 1.0 normal → 2.0 wide). */
   setStereoWidth(width: number): void;
 
@@ -479,6 +485,19 @@ export class WasmDspEngine {
 
       disableAutoPan() {
         workletNode.port.postMessage({ type: 'disable-autopan' });
+      },
+
+      setRingMod(freqHz: number, mix: number, shape: number) {
+        workletNode.port.postMessage({
+          type: 'set-ringmod',
+          freqHz,
+          mix,
+          shape,
+        });
+      },
+
+      disableRingMod() {
+        workletNode.port.postMessage({ type: 'disable-ringmod' });
       },
 
       setStereoWidth(width: number) {

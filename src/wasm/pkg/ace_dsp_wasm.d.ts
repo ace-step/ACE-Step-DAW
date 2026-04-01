@@ -59,6 +59,10 @@ export class DspProcessor {
      */
     disable_reverb(): void;
     /**
+     * Disable the ring modulator.
+     */
+    disable_ringmod(): void;
+    /**
      * Disable the stereo imager.
      */
     disable_stereo_imager(): void;
@@ -193,6 +197,13 @@ export class DspProcessor {
      */
     set_reverb(room_size: number, damping: number, wet: number, dry: number): void;
     /**
+     * Enable ring modulator.
+     * - `freq_hz`: carrier frequency (1–5000 Hz)
+     * - `mix`: wet/dry (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Square, 2=Saw
+     */
+    set_ringmod(freq_hz: number, mix: number, shape: number): void;
+    /**
      * Set stereo imager width.
      * - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
      */
@@ -228,6 +239,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_limiter: (a: number) => void;
     readonly dspprocessor_disable_phaser: (a: number) => void;
     readonly dspprocessor_disable_reverb: (a: number) => void;
+    readonly dspprocessor_disable_ringmod: (a: number) => void;
     readonly dspprocessor_disable_stereo_imager: (a: number) => void;
     readonly dspprocessor_disable_tremolo: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
@@ -249,6 +261,7 @@ export interface InitOutput {
     readonly dspprocessor_set_limiter: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_phaser: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly dspprocessor_set_ringmod: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
     readonly dspprocessor_set_tremolo: (a: number, b: number, c: number, d: number) => void;
     readonly version: (a: number) => void;

@@ -22,6 +22,7 @@ pub mod limiter;
 pub mod phaser;
 #[cfg(feature = "std")]
 pub mod reverb;
+pub mod ringmod;
 pub mod stereo;
 pub mod tremolo;
 

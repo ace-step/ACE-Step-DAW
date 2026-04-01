@@ -517,6 +517,33 @@ describe('WasmDspEngine', () => {
       });
     });
 
+    it('should send set-ringmod message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setRingMod(440, 0.8, 0);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-ringmod',
+        freqHz: 440,
+        mix: 0.8,
+        shape: 0,
+      });
+    });
+
+    it('should send disable-ringmod message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableRingMod();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-ringmod',
+      });
+    });
+
     it('should send set-stereo-width message', async () => {
       const { ctx, mockWorkletNodes } = createMockAudioContext();
       await engine.initialize(ctx);

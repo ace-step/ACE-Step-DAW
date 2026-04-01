@@ -92,6 +92,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_reverb(this.__wbg_ptr);
     }
     /**
+     * Disable the ring modulator.
+     */
+    disable_ringmod() {
+        wasm.dspprocessor_disable_ringmod(this.__wbg_ptr);
+    }
+    /**
      * Disable the stereo imager.
      */
     disable_stereo_imager() {
@@ -335,6 +341,18 @@ export class DspProcessor {
      */
     set_reverb(room_size, damping, wet, dry) {
         wasm.dspprocessor_set_reverb(this.__wbg_ptr, room_size, damping, wet, dry);
+    }
+    /**
+     * Enable ring modulator.
+     * - `freq_hz`: carrier frequency (1–5000 Hz)
+     * - `mix`: wet/dry (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Square, 2=Saw
+     * @param {number} freq_hz
+     * @param {number} mix
+     * @param {number} shape
+     */
+    set_ringmod(freq_hz, mix, shape) {
+        wasm.dspprocessor_set_ringmod(this.__wbg_ptr, freq_hz, mix, shape);
     }
     /**
      * Set stereo imager width.

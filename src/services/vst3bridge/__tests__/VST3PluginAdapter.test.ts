@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VST3PluginAdapter } from '../VST3PluginAdapter';
-import type { VST3BridgeClient, BridgeEvents } from '../VST3BridgeClient';
+import type { VST3BridgeClient } from '../VST3BridgeClient';
 import type {
   VST3PluginInfo,
   VST3ParamInfo,
@@ -25,24 +25,24 @@ vi.mock('../VST3AudioWorklet', () => ({
 // ─── Test helpers ───────────────────────────────────────────────────────────
 
 function createMockBridgeClient(): VST3BridgeClient & {
-  _listeners: Map<string, Set<(...args: unknown[]) => void>>;
-  _emit: <K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>) => void;
+  _listeners: Map<string, Set<(msg: Record<string, unknown>) => void>>;
+  _emit: (event: string, msg: Record<string, unknown>) => void;
 } {
-  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  const listeners = new Map<string, Set<(msg: Record<string, unknown>) => void>>();
 
   const client = {
     _listeners: listeners,
-    _emit<K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>) {
-      const set = listeners.get(event as string);
+    _emit(event: string, msg: Record<string, unknown>) {
+      const set = listeners.get(event);
       if (set) {
-        for (const cb of set) cb(...(args as unknown[]));
+        for (const cb of set) cb(msg);
       }
     },
-    on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+    on: vi.fn((event: string, cb: (msg: Record<string, unknown>) => void) => {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event)!.add(cb);
     }),
-    off: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+    off: vi.fn((event: string, cb: (msg: Record<string, unknown>) => void) => {
       listeners.get(event)?.delete(cb);
     }),
     setParam: vi.fn(),
@@ -58,8 +58,8 @@ function createMockBridgeClient(): VST3BridgeClient & {
   };
 
   return client as unknown as VST3BridgeClient & {
-    _listeners: Map<string, Set<(...args: unknown[]) => void>>;
-    _emit: <K extends keyof BridgeEvents>(event: K, ...args: Parameters<BridgeEvents[K]>) => void;
+    _listeners: Map<string, Set<(msg: Record<string, unknown>) => void>>;
+    _emit: (event: string, msg: Record<string, unknown>) => void;
   };
 }
 
@@ -307,7 +307,7 @@ describe('VST3PluginAdapter', () => {
       const adapter = createAdapter();
 
       // Simulate companion pushing a param change
-      bridgeClient._emit('paramChanged', 'inst-001', 0, 0.42);
+      bridgeClient._emit('paramChanged', { instanceId: 'inst-001', paramId: 0, value: 0.42 });
 
       expect(adapter.getParameter('0')).toBe(0.42);
     });
@@ -315,7 +315,7 @@ describe('VST3PluginAdapter', () => {
     it('ignores param changes for other instances', () => {
       const adapter = createAdapter();
 
-      bridgeClient._emit('paramChanged', 'other-instance', 0, 0.1);
+      bridgeClient._emit('paramChanged', { instanceId: 'other-instance', paramId: 0, value: 0.1 });
 
       // Value should remain at default
       expect(adapter.getParameter('0')).toBe(0.8);

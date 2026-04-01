@@ -22,7 +22,7 @@ export interface VST3PluginInfo {
 
 export interface VST3BridgeClientLike {
   scanPlugins(): Promise<VST3PluginInfo[]>;
-  on(type: string, handler: (msg: any) => void): () => void;
+  on(type: string, handler: (msg: Record<string, unknown>) => void): () => void;
   get isConnected(): boolean;
 }
 
@@ -62,7 +62,11 @@ export class VST3PluginScanner {
     let unsubscribe: (() => void) | null = null;
     if (onProgress) {
       unsubscribe = this.bridgeClient.on('scanProgress', (msg) => {
-        onProgress(msg.found, msg.current);
+        const found = msg.found;
+        const current = msg.current;
+        if (typeof found === 'number' && typeof current === 'string') {
+          onProgress(found, current);
+        }
       });
     }
 

@@ -26,9 +26,7 @@ import type { VST3ConnectionStatus } from '../../types/vst3';
 
 /** Events emitted by the bridge client (W9 compat). */
 export interface BridgeEvents {
-  paramChanged: (instanceId: string, paramId: number, value: number) => void;
-  audio_frame: (frame: AudioFrame) => void;
-  disconnected: () => void;
+  paramChanged: (msg: Record<string, unknown>) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,8 +35,7 @@ export interface BridgeEvents {
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MessageHandler = (...args: any[]) => void;
+type MessageHandler = (msg: Record<string, unknown>) => void;
 type AudioFrameHandler = (
   instanceIdHash: number,
   seq: number,

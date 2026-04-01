@@ -69,7 +69,7 @@ describe('VST3PluginScanner', () => {
 
     it('forwards scanProgress events to onProgress callback', async () => {
       const onProgress = vi.fn();
-      let progressHandler: ((msg: any) => void) | null = null;
+      let progressHandler: ((msg: Record<string, unknown>) => void) | null = null;
 
       const client = createMockBridgeClient({
         scanPlugins: vi.fn().mockImplementation(async () => {
@@ -80,7 +80,7 @@ describe('VST3PluginScanner', () => {
           }
           return [createMockPlugin()];
         }),
-        on: vi.fn().mockImplementation((type: string, handler: (msg: any) => void) => {
+        on: vi.fn().mockImplementation((type: string, handler: (msg: Record<string, unknown>) => void) => {
           if (type === 'scanProgress') {
             progressHandler = handler;
           }

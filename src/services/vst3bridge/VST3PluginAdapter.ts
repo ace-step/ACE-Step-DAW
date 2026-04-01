@@ -288,12 +288,12 @@ export class VST3PluginAdapter implements WAPPlugin {
    * Handle a parameter change pushed from the companion
    * (e.g., the user adjusted a knob in the native VST3 GUI).
    */
-  private handleParamChanged = (
-    instanceId: string,
-    paramId: number,
-    value: number,
-  ): void => {
-    if (instanceId !== this.instanceId) return;
+  private handleParamChanged = (msg: Record<string, unknown>): void => {
+    const instanceId = msg.instanceId;
+    if (typeof instanceId !== 'string' || instanceId !== this.instanceId) return;
+    const paramId = msg.paramId;
+    const value = msg.value;
+    if (typeof paramId !== 'number' || typeof value !== 'number') return;
     this.paramValues[String(paramId)] = value;
   };
 

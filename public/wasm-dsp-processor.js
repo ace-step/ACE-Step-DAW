@@ -80,15 +80,6 @@ function getArrayU8FromWasm(ptr, len) {
   return getUint8ArrayMemory().subarray(ptr, ptr + len);
 }
 
-let WASM_VECTOR_LEN = 0;
-
-function passArrayF32ToWasm(arg, malloc) {
-  const ptr = malloc(arg.length * 4, 4) >>> 0;
-  getFloat32ArrayMemory().set(arg, ptr / 4);
-  WASM_VECTOR_LEN = arg.length;
-  return ptr;
-}
-
 /**
  * Build the import object that wasm-bindgen expects.
  * The WASM binary imports from "./ace_dsp_wasm_bg.js" namespace.
@@ -391,6 +382,13 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             wasm.dspprocessor_reset(this._processorPtr);
           }
           break;
+        case 'dispose':
+          if (this._ready && this._processorPtr !== 0) {
+            wasm.__wbg_dspprocessor_free(this._processorPtr, 0);
+            this._processorPtr = 0;
+            this._ready = false;
+          }
+          break;
       }
     } catch (err) {
       this.port.postMessage({ type: 'error', message: err.message });
@@ -424,8 +422,9 @@ class WasmDspProcessor extends AudioWorkletProcessor {
 
     this._processorPtr = wasm.dspprocessor_new(sampleRate);
 
-    // Pre-allocate buffer for standard 128-frame render quantum
-    this._ensureBuffer(128);
+    // Pre-allocate buffer for up to 2048 frames to avoid any malloc
+    // in the real-time process() callback (standard quantum is 128).
+    this._ensureBuffer(2048);
 
     this._ready = true;
     this.port.postMessage({ type: 'ready' });

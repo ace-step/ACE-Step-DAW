@@ -547,7 +547,7 @@ export class WasmDspEngine {
       },
 
       dispose() {
-        workletNode.port.postMessage({ type: 'reset' });
+        workletNode.port.postMessage({ type: 'dispose' });
         workletNode.disconnect();
       },
     };

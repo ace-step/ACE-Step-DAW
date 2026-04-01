@@ -15,6 +15,8 @@ pub mod lfo;
 pub mod limiter;
 pub mod modulation;
 pub mod reverb;
+pub mod stft;
+pub mod timestretch;
 
 /// Anti-denormal constant: add to feedback loops to prevent denormal floats.
 /// Denormals cause 10-100x CPU slowdown on x86/ARM when present in feedback.

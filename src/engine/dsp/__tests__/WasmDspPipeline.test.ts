@@ -62,6 +62,14 @@ describe('WASM DSP Pipeline', () => {
     expect(content).toContain('WasmLufsMeter');
   });
 
+  it('WASM JS glue exports Phase 3 symbols (time-stretch)', () => {
+    const jsPath = path.join(wasmDir, 'ace_dsp_wasm.js');
+    const content = fs.readFileSync(jsPath, 'utf-8');
+
+    expect(content).toContain('WasmPhaseVocoder');
+    expect(content).toContain('WasmWsola');
+  });
+
   it('TypeScript types are exported for all modules', () => {
     const dtsPath = path.join(wasmDir, 'ace_dsp_wasm.d.ts');
     expect(fs.existsSync(dtsPath)).toBe(true);

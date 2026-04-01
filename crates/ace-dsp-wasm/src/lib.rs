@@ -19,6 +19,7 @@ use ace_dsp_core::modulation::{
 };
 use ace_dsp_core::distortion::{Distortion, DistortionParams, DistortionType};
 use ace_dsp_core::limiter::{Limiter, LimiterParams, LufsMeter};
+use ace_dsp_core::timestretch::{PhaseVocoder, PhaseVocoderParams, Wsola, WsolaParams};
 
 // ── Smoke test ──────────────────────────────────────────────────────
 
@@ -670,4 +671,68 @@ impl WasmLufsMeter {
     pub fn short_term_lufs(&self) -> f64 { self.inner.short_term_lufs() }
 
     pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── Phase Vocoder ───────────────────────────────────────────────────
+
+/// Phase vocoder time-stretcher exposed to JS.
+#[wasm_bindgen]
+pub struct WasmPhaseVocoder {
+    inner: PhaseVocoder,
+}
+
+#[wasm_bindgen]
+impl WasmPhaseVocoder {
+    #[wasm_bindgen(constructor)]
+    pub fn new(fft_size: usize, stretch_factor: f64, phase_locking: bool) -> WasmPhaseVocoder {
+        WasmPhaseVocoder {
+            inner: PhaseVocoder::new(PhaseVocoderParams {
+                fft_size,
+                stretch_factor,
+                phase_locking,
+            }),
+        }
+    }
+
+    pub fn set_stretch_factor(&mut self, factor: f64) {
+        self.inner.set_stretch_factor(factor);
+    }
+
+    /// Process entire audio buffer offline. Returns stretched audio.
+    pub fn process_offline(&mut self, input: &[f32]) -> Vec<f32> {
+        self.inner.process_offline(input)
+    }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── WSOLA ───────────────────────────────────────────────────────────
+
+/// WSOLA time-stretcher exposed to JS.
+#[wasm_bindgen]
+pub struct WasmWsola {
+    inner: Wsola,
+}
+
+#[wasm_bindgen]
+impl WasmWsola {
+    #[wasm_bindgen(constructor)]
+    pub fn new(stretch_factor: f64, window_ms: f64, sample_rate: f64) -> WasmWsola {
+        WasmWsola {
+            inner: Wsola::new(WsolaParams {
+                stretch_factor,
+                window_ms,
+                sample_rate,
+            }),
+        }
+    }
+
+    pub fn set_stretch_factor(&mut self, factor: f64) {
+        self.inner.set_stretch_factor(factor);
+    }
+
+    /// Process entire audio buffer offline. Returns stretched audio.
+    pub fn process_offline(&self, input: &[f32]) -> Vec<f32> {
+        self.inner.process_offline(input)
+    }
 }

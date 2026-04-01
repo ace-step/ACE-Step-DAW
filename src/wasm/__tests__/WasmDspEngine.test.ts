@@ -584,6 +584,31 @@ describe('WasmDspEngine', () => {
       });
     });
 
+    it('should send set-dc-blocker message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setDcBlocker(5.0);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-dc-blocker',
+        cutoffHz: 5.0,
+      });
+    });
+
+    it('should send disable-dc-blocker message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableDcBlocker();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-dc-blocker',
+      });
+    });
+
     it('should send disable-limiter message', async () => {
       const { ctx, mockWorkletNodes } = createMockAudioContext();
       await engine.initialize(ctx);

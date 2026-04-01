@@ -44,6 +44,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_compressor(this.__wbg_ptr);
     }
     /**
+     * Disable the DC blocker.
+     */
+    disable_dc_blocker() {
+        wasm.dspprocessor_disable_dc_blocker(this.__wbg_ptr);
+    }
+    /**
      * Disable the delay.
      */
     disable_delay() {
@@ -209,6 +215,14 @@ export class DspProcessor {
      */
     set_compressor(threshold_db, ratio, attack_ms, release_ms, knee_db, makeup_db) {
         wasm.dspprocessor_set_compressor(this.__wbg_ptr, threshold_db, ratio, attack_ms, release_ms, knee_db, makeup_db);
+    }
+    /**
+     * Enable DC blocker.
+     * - `cutoff_hz`: highpass cutoff (typically 3–10 Hz)
+     * @param {number} cutoff_hz
+     */
+    set_dc_blocker(cutoff_hz) {
+        wasm.dspprocessor_set_dc_blocker(this.__wbg_ptr, cutoff_hz);
     }
     /**
      * Enable a delay effect.

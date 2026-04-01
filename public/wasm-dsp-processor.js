@@ -257,6 +257,16 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_ringmod();
           }
           break;
+        case 'set-dc-blocker':
+          if (this._processor) {
+            this._processor.set_dc_blocker(msg.cutoffHz);
+          }
+          break;
+        case 'disable-dc-blocker':
+          if (this._processor) {
+            this._processor.disable_dc_blocker();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

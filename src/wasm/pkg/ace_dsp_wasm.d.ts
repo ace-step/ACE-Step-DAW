@@ -27,6 +27,10 @@ export class DspProcessor {
      */
     disable_compressor(): void;
     /**
+     * Disable the DC blocker.
+     */
+    disable_dc_blocker(): void;
+    /**
      * Disable the delay.
      */
     disable_delay(): void;
@@ -124,6 +128,11 @@ export class DspProcessor {
      * - `makeup_db`: makeup gain in dB
      */
     set_compressor(threshold_db: number, ratio: number, attack_ms: number, release_ms: number, knee_db: number, makeup_db: number): void;
+    /**
+     * Enable DC blocker.
+     * - `cutoff_hz`: highpass cutoff (typically 3–10 Hz)
+     */
+    set_dc_blocker(cutoff_hz: number): void;
     /**
      * Enable a delay effect.
      * - `delay_ms`: delay time in milliseconds
@@ -231,6 +240,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_autopan: (a: number) => void;
     readonly dspprocessor_disable_chorus: (a: number) => void;
     readonly dspprocessor_disable_compressor: (a: number) => void;
+    readonly dspprocessor_disable_dc_blocker: (a: number) => void;
     readonly dspprocessor_disable_delay: (a: number) => void;
     readonly dspprocessor_disable_distortion: (a: number) => void;
     readonly dspprocessor_disable_eq: (a: number) => void;
@@ -251,6 +261,7 @@ export interface InitOutput {
     readonly dspprocessor_set_autopan: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_chorus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly dspprocessor_set_dc_blocker: (a: number, b: number) => void;
     readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_distortion: (a: number, b: number, c: number, d: number, e: number, f: number) => void;

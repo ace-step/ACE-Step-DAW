@@ -165,6 +165,12 @@ export interface WasmDspNode {
   /** Disable the limiter. */
   disableLimiter(): void;
 
+  /** Enable DC blocker (removes DC offset). */
+  setDcBlocker(cutoffHz: number): void;
+
+  /** Disable the DC blocker. */
+  disableDcBlocker(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -519,6 +525,17 @@ export class WasmDspEngine {
 
       disableLimiter() {
         workletNode.port.postMessage({ type: 'disable-limiter' });
+      },
+
+      setDcBlocker(cutoffHz: number) {
+        workletNode.port.postMessage({
+          type: 'set-dc-blocker',
+          cutoffHz,
+        });
+      },
+
+      disableDcBlocker() {
+        workletNode.port.postMessage({ type: 'disable-dc-blocker' });
       },
 
       reset() {

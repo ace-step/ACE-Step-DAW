@@ -6,6 +6,7 @@
 use wasm_bindgen::prelude::*;
 use ace_dsp_core::autopan::{AutoPan, PanShape};
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
+use ace_dsp_core::dcblock::DcBlocker;
 use ace_dsp_core::chorus::Chorus;
 use ace_dsp_core::delay::MonoDelay;
 use ace_dsp_core::distortion::{Distortion, DistortionType};
@@ -40,6 +41,7 @@ pub struct DspProcessor {
     tremolo: Option<Tremolo>,
     autopan: Option<AutoPan>,
     ringmod: Option<RingMod>,
+    dc_blocker: Option<DcBlocker>,
     sample_rate: f32,
 }
 
@@ -64,6 +66,7 @@ impl DspProcessor {
             tremolo: None,
             autopan: None,
             ringmod: None,
+            dc_blocker: None,
             sample_rate,
         }
     }
@@ -551,6 +554,20 @@ impl DspProcessor {
         self.ringmod = None;
     }
 
+    /// Enable DC blocker.
+    /// - `cutoff_hz`: highpass cutoff (typically 3–10 Hz)
+    pub fn set_dc_blocker(&mut self, cutoff_hz: f32) {
+        match &mut self.dc_blocker {
+            Some(dc) => dc.set_cutoff(self.sample_rate, cutoff_hz),
+            None => self.dc_blocker = Some(DcBlocker::new(self.sample_rate, cutoff_hz)),
+        }
+    }
+
+    /// Disable the DC blocker.
+    pub fn disable_dc_blocker(&mut self) {
+        self.dc_blocker = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
@@ -589,6 +606,9 @@ impl DspProcessor {
             reverb.process_buffer(buffer);
         }
         self.gain.process_mono(buffer);
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.process_buffer(buffer);
+        }
         if let Some(ref mut limiter) = self.limiter {
             limiter.process_buffer(buffer);
         }
@@ -637,6 +657,9 @@ impl DspProcessor {
             autopan.process_interleaved(buffer);
         }
         self.gain.process_stereo_interleaved(buffer);
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.process_buffer(buffer);
+        }
         if let Some(ref mut limiter) = self.limiter {
             limiter.process_buffer(buffer);
         }
@@ -684,6 +707,9 @@ impl DspProcessor {
         }
         if let Some(ref mut ringmod) = self.ringmod {
             ringmod.reset();
+        }
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.reset();
         }
     }
 }
@@ -1054,6 +1080,32 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_chorus(1.0, 5.0, 10.0, 0.0, 0.5, 0.5);
         proc.disable_chorus();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_dc_blocker() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_dc_blocker(5.0);
+        proc.set_gain(1.0);
+        // Feed signal with DC offset
+        let mut buf: Vec<f32> = (0..44100)
+            .map(|i| 0.5 + (i as f32 * 440.0 * std::f32::consts::TAU / 44100.0).sin() * 0.3)
+            .collect();
+        proc.process_mono(&mut buf);
+        // After settling, DC should be removed
+        let mean: f32 = buf[22050..].iter().sum::<f32>() / buf[22050..].len() as f32;
+        assert!(mean.abs() < 0.01, "DC offset removed: mean={mean}");
+    }
+
+    #[test]
+    fn test_processor_disable_dc_blocker() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_dc_blocker(5.0);
+        proc.disable_dc_blocker();
         let mut buf = [0.5_f32; 4];
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);

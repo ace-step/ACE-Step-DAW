@@ -10,6 +10,7 @@ pub mod autopan;
 pub mod biquad;
 #[cfg(feature = "std")]
 pub mod chorus;
+pub mod dcblock;
 #[cfg(feature = "std")]
 pub mod delay;
 pub mod distortion;

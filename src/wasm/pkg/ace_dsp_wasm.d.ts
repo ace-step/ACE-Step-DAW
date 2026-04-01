@@ -235,7 +235,10 @@ export function alloc_f32_buffer(len: number): number;
 
 /**
  * Free a buffer previously allocated by `alloc_f32_buffer`.
- * `len` must match the original allocation length.
+ *
+ * # Safety
+ * `len` must be the exact value that was passed to `alloc_f32_buffer`.
+ * Passing a different `len` is undefined behavior.
  */
 export function free_f32_buffer(ptr: number, len: number): void;
 

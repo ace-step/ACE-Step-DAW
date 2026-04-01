@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, vi } from 'vitest';
 import type {
   WAPPlugin,
   PluginAudioNode,
@@ -434,6 +434,12 @@ describe('FM Synth plugin', () => {
 // ─── Plugin Store Integration Tests ──────────────────────────────────────────
 
 describe('Plugin store actions', () => {
+  // Pre-load projectStore so the first test doesn't timeout waiting for
+  // Tone.js and other heavy modules to initialise.
+  beforeAll(async () => {
+    await import('../../src/store/projectStore');
+  }, 15_000);
+
   it('adds and removes plugins on tracks', async () => {
     const { useProjectStore } = await import('../../src/store/projectStore');
 

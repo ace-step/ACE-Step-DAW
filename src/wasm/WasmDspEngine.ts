@@ -123,6 +123,12 @@ export interface WasmDspNode {
   /** Disable the distortion. */
   disableDistortion(): void;
 
+  /** Set stereo imager width (0.0 mono → 1.0 normal → 2.0 wide). */
+  setStereoWidth(width: number): void;
+
+  /** Disable the stereo imager. */
+  disableStereoImager(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -396,6 +402,14 @@ export class WasmDspEngine {
 
       disableDistortion() {
         workletNode.port.postMessage({ type: 'disable-distortion' });
+      },
+
+      setStereoWidth(width: number) {
+        workletNode.port.postMessage({ type: 'set-stereo-width', width });
+      },
+
+      disableStereoImager() {
+        workletNode.port.postMessage({ type: 'disable-stereo-imager' });
       },
 
       reset() {

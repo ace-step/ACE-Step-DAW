@@ -47,6 +47,10 @@ export class DspProcessor {
      */
     disable_reverb(): void;
     /**
+     * Disable the stereo imager.
+     */
+    disable_stereo_imager(): void;
+    /**
      * Get the current gain value.
      */
     get_gain(): number;
@@ -145,6 +149,11 @@ export class DspProcessor {
      * - `dry`: dry signal level (0.0–1.0)
      */
     set_reverb(room_size: number, damping: number, wet: number, dry: number): void;
+    /**
+     * Set stereo imager width.
+     * - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
+     */
+    set_stereo_width(width: number): void;
 }
 
 /**
@@ -166,9 +175,11 @@ export interface InitOutput {
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_disable_gate: (a: number) => void;
     readonly dspprocessor_disable_reverb: (a: number) => void;
+    readonly dspprocessor_disable_stereo_imager: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
+    readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_reset: (a: number) => void;
     readonly dspprocessor_set_chorus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -180,8 +191,8 @@ export interface InitOutput {
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
     readonly dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
     readonly version: (a: number) => void;
-    readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number) => void;

@@ -175,6 +175,16 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_distortion();
           }
           break;
+        case 'set-stereo-width':
+          if (this._processor) {
+            this._processor.set_stereo_width(msg.width);
+          }
+          break;
+        case 'disable-stereo-imager':
+          if (this._processor) {
+            this._processor.disable_stereo_imager();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

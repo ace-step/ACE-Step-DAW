@@ -433,6 +433,31 @@ describe('WasmDspEngine', () => {
         type: 'disable-distortion',
       });
     });
+
+    it('should send set-stereo-width message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setStereoWidth(1.5);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-stereo-width',
+        width: 1.5,
+      });
+    });
+
+    it('should send disable-stereo-imager message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableStereoImager();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-stereo-imager',
+      });
+    });
   });
 
   describe('lifecycle', () => {

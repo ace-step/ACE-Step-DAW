@@ -12,6 +12,7 @@ use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
 use ace_dsp_core::reverb::Reverb;
+use ace_dsp_core::stereo::StereoImager;
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
 ///
@@ -28,6 +29,7 @@ pub struct DspProcessor {
     reverb: Option<Reverb>,
     chorus: Option<Chorus>,
     distortion: Option<Distortion>,
+    stereo_imager: Option<StereoImager>,
     sample_rate: f32,
 }
 
@@ -46,6 +48,7 @@ impl DspProcessor {
             reverb: None,
             chorus: None,
             distortion: None,
+            stereo_imager: None,
             sample_rate,
         }
     }
@@ -362,6 +365,20 @@ impl DspProcessor {
         self.distortion = None;
     }
 
+    /// Set stereo imager width.
+    /// - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
+    pub fn set_stereo_width(&mut self, width: f32) {
+        match &mut self.stereo_imager {
+            Some(si) => si.set_width(width),
+            None => self.stereo_imager = Some(StereoImager::new(width)),
+        }
+    }
+
+    /// Disable the stereo imager.
+    pub fn disable_stereo_imager(&mut self) {
+        self.stereo_imager = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
@@ -419,6 +436,9 @@ impl DspProcessor {
         }
         if let Some(ref mut reverb) = self.reverb {
             reverb.process_buffer(buffer);
+        }
+        if let Some(ref si) = self.stereo_imager {
+            si.process_interleaved(buffer);
         }
         self.gain.process_stereo_interleaved(buffer);
     }
@@ -624,6 +644,32 @@ mod tests {
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);
         assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_stereo_imager() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_stereo_width(0.0); // mono
+        proc.set_gain(1.0);
+        // Interleaved stereo: [L=1.0, R=0.0, L=1.0, R=0.0]
+        let mut buf = [1.0_f32, 0.0, 1.0, 0.0];
+        proc.process_stereo_interleaved(&mut buf);
+        // Mono: both channels should be 0.5
+        assert!((buf[0] - 0.5).abs() < 0.01, "Stereo→mono L: {}", buf[0]);
+        assert!((buf[1] - 0.5).abs() < 0.01, "Stereo→mono R: {}", buf[1]);
+    }
+
+    #[test]
+    fn test_processor_disable_stereo_imager() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_stereo_width(0.0);
+        proc.disable_stereo_imager();
+        let mut buf = [0.8_f32, 0.2, 0.8, 0.2];
+        proc.set_gain(1.0);
+        proc.process_stereo_interleaved(&mut buf);
+        // Disabled → passthrough
+        assert!((buf[0] - 0.8).abs() < 0.01);
+        assert!((buf[1] - 0.2).abs() < 0.01);
     }
 
     #[test]

@@ -74,6 +74,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_reverb(this.__wbg_ptr);
     }
     /**
+     * Disable the stereo imager.
+     */
+    disable_stereo_imager() {
+        wasm.dspprocessor_disable_stereo_imager(this.__wbg_ptr);
+    }
+    /**
      * Get the current gain value.
      * @returns {number}
      */
@@ -257,6 +263,14 @@ export class DspProcessor {
      */
     set_reverb(room_size, damping, wet, dry) {
         wasm.dspprocessor_set_reverb(this.__wbg_ptr, room_size, damping, wet, dry);
+    }
+    /**
+     * Set stereo imager width.
+     * - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
+     * @param {number} width
+     */
+    set_stereo_width(width) {
+        wasm.dspprocessor_set_stereo_width(this.__wbg_ptr, width);
     }
 }
 if (Symbol.dispose) DspProcessor.prototype[Symbol.dispose] = DspProcessor.prototype.free;

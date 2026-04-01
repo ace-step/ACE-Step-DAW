@@ -410,15 +410,19 @@ class WasmDspProcessor extends AudioWorkletProcessor {
   }
 
   async _initWasm(wasmBytes, sampleRate) {
-    const wasmModule = await WebAssembly.compile(wasmBytes);
-    const imports = getWasmImports();
-    const instance = await WebAssembly.instantiate(wasmModule, imports);
+    // Guard: share a single WASM instance across all processor instances.
+    // Each processor gets its own _processorPtr within the shared linear memory.
+    if (wasm === null) {
+      const wasmModule = await WebAssembly.compile(wasmBytes);
+      const imports = getWasmImports();
+      const instance = await WebAssembly.instantiate(wasmModule, imports);
 
-    wasm = instance.exports;
+      wasm = instance.exports;
 
-    // Invalidate cached views after WASM instantiation
-    cachedUint8ArrayMemory = null;
-    cachedFloat32ArrayMemory = null;
+      // Invalidate cached views after WASM instantiation
+      cachedUint8ArrayMemory = null;
+      cachedFloat32ArrayMemory = null;
+    }
 
     this._processorPtr = wasm.dspprocessor_new(sampleRate);
 
@@ -456,26 +460,35 @@ class WasmDspProcessor extends AudioWorkletProcessor {
     // Ensure our pre-allocated buffer is large enough
     this._ensureBuffer(frames);
 
-    // Process each channel through the WASM DSP engine
-    for (let ch = 0; ch < output.length; ch++) {
-      const inChannel = input[ch];
-      const outChannel = output[ch];
-      if (!inChannel) continue;
+    try {
+      // Process each channel through the WASM DSP engine
+      for (let ch = 0; ch < output.length; ch++) {
+        const inChannel = input[ch];
+        const outChannel = output[ch];
+        if (!inChannel) continue;
 
-      // Copy input data into pre-allocated WASM buffer
-      getFloat32ArrayMemory().set(inChannel, this._bufPtr / 4);
+        // Copy input data into pre-allocated WASM buffer
+        getFloat32ArrayMemory().set(inChannel, this._bufPtr / 4);
 
-      // Call process_mono using the wasm-bindgen ABI:
-      // process_mono(self_ptr, data_ptr, data_len, heap_handle)
-      // The last argument is a heap handle to the output Float32Array
-      // so wasm-bindgen can copy results back via __wbindgen_copy_to_typed_array
-      const handle = addHeapObject(outChannel);
-      wasm.dspprocessor_process_mono(
-        this._processorPtr,
-        this._bufPtr,
-        frames,
-        handle
-      );
+        // Call process_mono using the wasm-bindgen ABI:
+        // process_mono(self_ptr, data_ptr, data_len, heap_handle)
+        // The last argument is a heap handle to the output Float32Array
+        // so wasm-bindgen can copy results back via __wbindgen_copy_to_typed_array
+        const handle = addHeapObject(outChannel);
+        wasm.dspprocessor_process_mono(
+          this._processorPtr,
+          this._bufPtr,
+          frames,
+          handle
+        );
+      }
+    } catch (err) {
+      // On WASM trap, fall back to pass-through to avoid killing the worklet
+      this._ready = false;
+      this.port.postMessage({ type: 'error', message: 'WASM process error: ' + err.message });
+      for (let ch = 0; ch < output.length; ch++) {
+        if (input[ch]) output[ch].set(input[ch]);
+      }
     }
 
     return true;

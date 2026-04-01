@@ -40,7 +40,7 @@ impl BiquadCoeffs {
         // Clamp inputs to prevent NaN/Inf from invalid parameters.
         let sr = if sample_rate > 0.0 { sample_rate } else { 1.0 };
         let nyquist = 0.5 * sr;
-        let safe_frequency = frequency.clamp(f32::EPSILON, nyquist - f32::EPSILON);
+        let safe_frequency = frequency.clamp(1.0, nyquist * 0.99);
         let safe_q = if q.is_finite() && q > 1.0e-6 { q } else { 1.0e-6 };
 
         let w0 = 2.0 * PI * safe_frequency / sr;

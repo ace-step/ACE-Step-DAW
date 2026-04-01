@@ -38,7 +38,7 @@ git checkout -b feat/v0.0.X-feature-name
 - Read competitor docs at **interaction-detail level** (parameter ranges, edge cases, shortcuts, error handling)
 - Bad: "Ableton has Group Tracks"
 - Good: "Ableton Group Track: nestable, shows sub-clip overview when folded, Cmd+Click for multi-select, color applies to all sub-tracks"
-- Output: `docs/research-notes/`
+- Output: file findings as GitHub Issues with detailed competitive references
 
 ### Step 2: Agile Planning
 - Write dev tasks with competitive references
@@ -87,7 +87,7 @@ git checkout -b feat/v0.0.X-feature-name
 - **Interaction Design**: `.claude/references/interaction-design.md`
 - **Design Guide**: `docs/design/INTERACTION_DESIGN_GUIDE.md`
 - **UX Checklist**: `docs/design/UX_IMPROVEMENT_CHECKLIST.md`
-- **Research Notes**: `docs/research-notes/` (drag testing, mixer UX gaps, recording UX gaps)
+- **Research Notes**: filed as GitHub Issues with competitive references
 
 ---
 
@@ -98,7 +98,7 @@ git checkout -b feat/v0.0.X-feature-name
 - [Automation](https://www.ableton.com/en/live-manual/12/automation-and-editing-envelopes/) | [Recording](https://www.ableton.com/en/live-manual/12/recording-new-clips/) | [Browser](https://www.ableton.com/en/live-manual/12/working-with-the-browser/) | [Routing](https://www.ableton.com/en/live-manual/12/routing-and-i-o/)
 
 ### ACE-Step
-- [DAW Repo](https://github.com/ace-step/ACE-Step-DAW) | [API Repo](https://github.com/ace-step/ACE-Step-1.5) | API Docs: `docs/research-notes/ace-step-api-details.md`
+- [DAW Repo](https://github.com/ace-step/ACE-Step-DAW) | [API Repo](https://github.com/ace-step/ACE-Step-1.5)
 
 ---
 
@@ -110,14 +110,14 @@ As a [human user / AI agent], I want to [action], so that [outcome].
 ```
 
 ### Plans Must Be Executable
-Every plan (`docs/plans/*.md`) must contain: Problem → Root Cause → Solution → Verification → Files to Touch.
+Every plan must contain: Problem → Root Cause → Solution → Verification → Files to Touch. Write plans as GitHub Issue bodies, not as separate files.
 
 ---
 
 ## Language Policy
 
 - All project files MUST be in English (source, comments, docs, commits, PRs, releases)
-- Exception: `docs/research-notes/` may contain bilingual content
+- Exception: research notes in `.llm/research/` (session-local) may contain bilingual content
 - Conversations may be in Chinese; all repo output must be English
 
 ---

@@ -3,6 +3,7 @@
 export const memory: WebAssembly.Memory;
 export const __wbg_dspprocessor_free: (a: number, b: number) => void;
 export const dspprocessor_compressor_gr_db: (a: number) => number;
+export const dspprocessor_disable_chorus: (a: number) => void;
 export const dspprocessor_disable_compressor: (a: number) => void;
 export const dspprocessor_disable_delay: (a: number) => void;
 export const dspprocessor_disable_eq: (a: number) => void;
@@ -13,6 +14,7 @@ export const dspprocessor_get_gain: (a: number) => number;
 export const dspprocessor_new: (a: number) => number;
 export const dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
 export const dspprocessor_reset: (a: number) => void;
+export const dspprocessor_set_chorus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
 export const dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;

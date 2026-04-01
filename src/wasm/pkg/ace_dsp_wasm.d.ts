@@ -15,6 +15,10 @@ export class DspProcessor {
      */
     compressor_gr_db(): number;
     /**
+     * Disable the chorus/flanger.
+     */
+    disable_chorus(): void;
+    /**
      * Disable the compressor.
      */
     disable_compressor(): void;
@@ -49,7 +53,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -61,6 +65,16 @@ export class DspProcessor {
      * Reset all processor state (call on seek or transport stop).
      */
     reset(): void;
+    /**
+     * Enable chorus/flanger effect.
+     * - `rate_hz`: LFO rate (0.1–10 Hz)
+     * - `depth_ms`: modulation depth in ms
+     * - `delay_ms`: base delay time in ms
+     * - `feedback`: feedback (0.0–0.95, >0 for flanger)
+     * - `wet`: wet level (0.0–1.0)
+     * - `dry`: dry level (0.0–1.0)
+     */
+    set_chorus(rate_hz: number, depth_ms: number, delay_ms: number, feedback: number, wet: number, dry: number): void;
     /**
      * Enable compressor.
      * - `threshold_db`: compression threshold (e.g., -20)
@@ -131,6 +145,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
     readonly dspprocessor_compressor_gr_db: (a: number) => number;
+    readonly dspprocessor_disable_chorus: (a: number) => void;
     readonly dspprocessor_disable_compressor: (a: number) => void;
     readonly dspprocessor_disable_delay: (a: number) => void;
     readonly dspprocessor_disable_eq: (a: number) => void;
@@ -141,6 +156,7 @@ export interface InitOutput {
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_reset: (a: number) => void;
+    readonly dspprocessor_set_chorus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_delay_params: (a: number, b: number, c: number, d: number, e: number) => void;

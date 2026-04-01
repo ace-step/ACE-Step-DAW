@@ -98,6 +98,19 @@ export interface WasmDspNode {
   /** Disable the reverb. */
   disableReverb(): void;
 
+  /** Enable chorus/flanger effect. */
+  setChorus(
+    rateHz: number,
+    depthMs: number,
+    delayMs: number,
+    feedback: number,
+    wet: number,
+    dry: number
+  ): void;
+
+  /** Disable the chorus/flanger. */
+  disableChorus(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -327,6 +340,29 @@ export class WasmDspEngine {
 
       disableReverb() {
         workletNode.port.postMessage({ type: 'disable-reverb' });
+      },
+
+      setChorus(
+        rateHz: number,
+        depthMs: number,
+        delayMs: number,
+        feedback: number,
+        wet: number,
+        dry: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-chorus',
+          rateHz,
+          depthMs,
+          delayMs,
+          feedback,
+          wet,
+          dry,
+        });
+      },
+
+      disableChorus() {
+        workletNode.port.postMessage({ type: 'disable-chorus' });
       },
 
       reset() {

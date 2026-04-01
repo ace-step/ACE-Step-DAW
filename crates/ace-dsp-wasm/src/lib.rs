@@ -5,6 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
+use ace_dsp_core::chorus::Chorus;
 use ace_dsp_core::delay::MonoDelay;
 use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
@@ -24,6 +25,7 @@ pub struct DspProcessor {
     gate: Option<NoiseGate>,
     eq: Option<ParametricEq>,
     reverb: Option<Reverb>,
+    chorus: Option<Chorus>,
     sample_rate: f32,
 }
 
@@ -40,6 +42,7 @@ impl DspProcessor {
             gate: None,
             eq: None,
             reverb: None,
+            chorus: None,
             sample_rate,
         }
     }
@@ -269,9 +272,53 @@ impl DspProcessor {
         self.reverb = None;
     }
 
+    /// Enable chorus/flanger effect.
+    /// - `rate_hz`: LFO rate (0.1–10 Hz)
+    /// - `depth_ms`: modulation depth in ms
+    /// - `delay_ms`: base delay time in ms
+    /// - `feedback`: feedback (0.0–0.95, >0 for flanger)
+    /// - `wet`: wet level (0.0–1.0)
+    /// - `dry`: dry level (0.0–1.0)
+    pub fn set_chorus(
+        &mut self,
+        rate_hz: f32,
+        depth_ms: f32,
+        delay_ms: f32,
+        feedback: f32,
+        wet: f32,
+        dry: f32,
+    ) {
+        match &mut self.chorus {
+            Some(c) => {
+                c.set_rate(rate_hz);
+                c.set_depth(depth_ms);
+                c.set_delay(delay_ms);
+                c.set_feedback(feedback);
+                c.set_wet(wet);
+                c.set_dry(dry);
+            }
+            None => {
+                self.chorus = Some(Chorus::new(
+                    self.sample_rate,
+                    rate_hz,
+                    depth_ms,
+                    delay_ms,
+                    feedback,
+                    wet,
+                    dry,
+                ));
+            }
+        }
+    }
+
+    /// Disable the chorus/flanger.
+    pub fn disable_chorus(&mut self) {
+        self.chorus = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
+    /// Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
         if let Some(ref mut gate) = self.gate {
             gate.process_buffer(buffer);
@@ -284,6 +331,9 @@ impl DspProcessor {
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -308,6 +358,9 @@ impl DspProcessor {
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -342,6 +395,9 @@ impl DspProcessor {
         }
         if let Some(ref mut reverb) = self.reverb {
             reverb.reset();
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.reset();
         }
     }
 }
@@ -512,6 +568,31 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_reverb(0.5, 0.5, 1.0, 0.0);
         proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_chorus() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_chorus(1.5, 5.0, 10.0, 0.0, 1.0, 0.0);
+        proc.set_gain(1.0);
+
+        // Feed constant signal, modulation should create variation
+        let mut buf = [0.5_f32; 4410];
+        proc.process_mono(&mut buf);
+        let min = buf[441..].iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = buf[441..].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(max - min > 0.001, "Chorus should modulate: range={}", max - min);
+    }
+
+    #[test]
+    fn test_processor_disable_chorus() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_chorus(1.0, 5.0, 10.0, 0.0, 0.5, 0.5);
+        proc.disable_chorus();
         let mut buf = [0.5_f32; 4];
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);

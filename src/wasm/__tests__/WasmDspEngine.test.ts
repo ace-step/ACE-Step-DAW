@@ -374,6 +374,36 @@ describe('WasmDspEngine', () => {
         type: 'disable-reverb',
       });
     });
+
+    it('should send set-chorus message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setChorus(1.5, 5.0, 10.0, 0.3, 0.5, 0.8);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-chorus',
+        rateHz: 1.5,
+        depthMs: 5.0,
+        delayMs: 10.0,
+        feedback: 0.3,
+        wet: 0.5,
+        dry: 0.8,
+      });
+    });
+
+    it('should send disable-chorus message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableChorus();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-chorus',
+      });
+    });
   });
 
   describe('lifecycle', () => {

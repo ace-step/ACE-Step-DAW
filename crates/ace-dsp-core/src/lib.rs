@@ -8,6 +8,8 @@
 
 pub mod biquad;
 #[cfg(feature = "std")]
+pub mod chorus;
+#[cfg(feature = "std")]
 pub mod delay;
 #[cfg(feature = "std")]
 pub mod dynamics;

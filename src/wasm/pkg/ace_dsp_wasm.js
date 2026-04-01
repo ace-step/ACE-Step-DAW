@@ -26,6 +26,12 @@ export class DspProcessor {
         return ret;
     }
     /**
+     * Disable the chorus/flanger.
+     */
+    disable_chorus() {
+        wasm.dspprocessor_disable_chorus(this.__wbg_ptr);
+    }
+    /**
      * Disable the compressor.
      */
     disable_compressor() {
@@ -82,7 +88,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Compressor → Chorus → Delay → Reverb → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -105,6 +111,24 @@ export class DspProcessor {
      */
     reset() {
         wasm.dspprocessor_reset(this.__wbg_ptr);
+    }
+    /**
+     * Enable chorus/flanger effect.
+     * - `rate_hz`: LFO rate (0.1–10 Hz)
+     * - `depth_ms`: modulation depth in ms
+     * - `delay_ms`: base delay time in ms
+     * - `feedback`: feedback (0.0–0.95, >0 for flanger)
+     * - `wet`: wet level (0.0–1.0)
+     * - `dry`: dry level (0.0–1.0)
+     * @param {number} rate_hz
+     * @param {number} depth_ms
+     * @param {number} delay_ms
+     * @param {number} feedback
+     * @param {number} wet
+     * @param {number} dry
+     */
+    set_chorus(rate_hz, depth_ms, delay_ms, feedback, wet, dry) {
+        wasm.dspprocessor_set_chorus(this.__wbg_ptr, rate_hz, depth_ms, delay_ms, feedback, wet, dry);
     }
     /**
      * Enable compressor.

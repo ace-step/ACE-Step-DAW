@@ -142,6 +142,23 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_reverb();
           }
           break;
+        case 'set-chorus':
+          if (this._processor) {
+            this._processor.set_chorus(
+              msg.rateHz,
+              msg.depthMs,
+              msg.delayMs,
+              msg.feedback,
+              msg.wet,
+              msg.dry
+            );
+          }
+          break;
+        case 'disable-chorus':
+          if (this._processor) {
+            this._processor.disable_chorus();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

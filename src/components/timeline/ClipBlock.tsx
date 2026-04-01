@@ -188,6 +188,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   const statusStyles: Record<string, string> = {
     empty: 'opacity-60',
+    idle: '',
     queued: 'opacity-70',
     generating: 'opacity-80 animate-pulse',
     processing: 'opacity-80 animate-pulse',

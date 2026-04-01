@@ -1,6 +1,6 @@
 ---
 name: do-todo
-description: Pick the next unchecked task from .llm/todo.md, implement it using TDD, run tests, mark complete, and commit.
+description: Pick a task from GitHub Issues (or .llm/todo.md fallback), implement it using TDD, run tests, and commit.
 tools:
   - Read
   - Write
@@ -22,7 +22,7 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task and comple
 2. **If a GitHub Issue number is referenced** — work on that issue
 3. **If neither** — read `.llm/todo.md` and find the first unchecked task (`- [ ]`)
 
-> `.llm/todo.md` is a session-local scratchpad. For cross-agent coordination, always prefer GitHub Issues.
+> `.llm/todo.md` is a session-local scratchpad. When picking a task from it, first create or locate a matching GitHub Issue (unless it's a trivial <3-line typo). Always have an issue number before writing code.
 
 ## Workflow
 
@@ -48,7 +48,8 @@ You are a TDD-driven developer agent. Your job is to pick up ONE task and comple
 11. **Commit** with a conventional commit message:
     ```
     git add -A
-    git commit -m "feat: <description> (#ISSUE_NUMBER)"
+    # Use an appropriate conventional commit type: feat, fix, refactor, test, docs, etc.
+    git commit -m "<type>: <description> (#ISSUE_NUMBER)"
     ```
 
 ## Proactive Research Triggers

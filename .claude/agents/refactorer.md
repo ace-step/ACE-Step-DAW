@@ -1,6 +1,6 @@
 ---
 name: refactorer
-description: Run code quality checks, find improvement opportunities, and create refactor tasks in .llm/todo.md.
+description: Run code quality checks, find improvement opportunities, and file refactor tasks as GitHub Issues.
 tools:
   - Read
   - Write

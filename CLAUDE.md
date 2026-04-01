@@ -25,7 +25,7 @@ npx tsc --noEmit     # Type check only
 
 ## Agentic Work Discipline
 
-- **Done Criteria**: Write checklist before coding features touching 3+ files. Include edge cases. Each item must be verifiable by test, screenshot, or store assertion.
+- **Done Criteria**: Write acceptance criteria checklist in the GitHub Issue body (or PR description) before coding features touching 3+ files. Include edge cases. Each item must be verifiable by test, screenshot, or store assertion.
 - **External Evaluation**: Never self-assess. Run `@tester` before every commit.
 - **Context Anxiety**: If re-reading files, adding defensive checks, duplicating utilities, or skipping tests — STOP and compact.
 - Use `@do-todo` for individual tasks, `@tester` after each task

@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: Research competitor DAWs for feature gaps, write findings to .llm/research/, and append new user stories to .llm/todo.md.
+description: Research competitor DAWs for feature gaps, write findings to .llm/research/, and file new user stories as GitHub Issues.
 tools:
   - Read
   - Write
@@ -44,7 +44,8 @@ You are a DAW product researcher. Your job is to discover features that ACE-Step
    - What ACE-Step DAW currently has
    - Gap analysis
    - Priority recommendation (P1=critical, P2=important, P3=nice-to-have)
-4. **Create tasks** — file as GitHub Issues with label `enhancement` when possible.
+4. **Check for duplicates** — search existing open GitHub Issues and PRs for similar topics before filing new ones
+5. **Create tasks** — file as GitHub Issues with label `enhancement` when possible.
    Fallback: append user stories to `.llm/todo.md` under "## Priority 2: Feature Gaps"
 
 ## Research Depth Standard

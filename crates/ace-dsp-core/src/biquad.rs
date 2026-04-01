@@ -37,10 +37,16 @@ impl BiquadCoeffs {
         q: f32,
         gain_db: f32,
     ) -> Self {
-        let w0 = 2.0 * PI * frequency / sample_rate;
+        // Clamp inputs to prevent NaN/Inf from invalid parameters.
+        let sr = if sample_rate > 0.0 { sample_rate } else { 1.0 };
+        let nyquist = 0.5 * sr;
+        let safe_frequency = frequency.clamp(f32::EPSILON, nyquist - f32::EPSILON);
+        let safe_q = if q.is_finite() && q > 1.0e-6 { q } else { 1.0e-6 };
+
+        let w0 = 2.0 * PI * safe_frequency / sr;
         let cos_w0 = w0.cos();
         let sin_w0 = w0.sin();
-        let alpha = sin_w0 / (2.0 * q);
+        let alpha = sin_w0 / (2.0 * safe_q);
 
         let (b0, b1, b2, a0, a1, a2) = match filter_type {
             BiquadType::Lowpass => {

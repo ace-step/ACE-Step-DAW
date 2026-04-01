@@ -31,6 +31,9 @@ export interface WasmDspNode {
   /** The underlying AudioWorkletNode for audio graph connection. */
   readonly audioNode: AudioWorkletNode;
 
+  /** Promise that resolves when the WASM processor is ready. */
+  readonly ready: Promise<void>;
+
   /** Set gain (linear scale, 0.0 to ~2.0). */
   setGain(gain: number): void;
 
@@ -269,6 +272,7 @@ export class WasmDspEngine {
 
     const node: WasmDspNode = {
       audioNode: workletNode,
+      ready: readyPromise,
 
       setGain(gain: number) {
         workletNode.port.postMessage({ type: 'set-gain', value: gain });

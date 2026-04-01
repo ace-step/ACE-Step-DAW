@@ -22,6 +22,10 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall wasm-pack --no-confirm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
       - name: Build WASM
         run: npm run build:wasm
       - name: Upload WASM artifacts

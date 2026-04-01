@@ -50,19 +50,30 @@ class WasmEffectProcessor extends AudioWorkletProcessor {
   }
 
   async _initWasm(wasmUrl, effectType, params) {
-    // Fetch and instantiate the WASM module
-    const response = await fetch(wasmUrl);
-    const bytes = await response.arrayBuffer();
+    // NOTE: Full WASM integration requires loading wasm-bindgen's JS glue
+    // alongside the .wasm binary. In AudioWorklet scope, ES module imports
+    // are limited. For now, we validate the WASM URL is fetchable and
+    // operate in passthrough mode. Per-effect WASM processing will be
+    // wired when the AudioWorklet module loading story is resolved
+    // (see: https://github.com/nicolo-ribaudo/tc39-proposal-structs-wasm).
+    try {
+      const response = await fetch(wasmUrl);
+      if (!response.ok) {
+        throw new Error(`WASM fetch failed: ${response.status}`);
+      }
+      // Validate the binary is valid WASM (compile but don't instantiate
+      // without the wasm-bindgen import object — that would throw)
+      const bytes = await response.arrayBuffer();
+      await WebAssembly.compile(bytes);
 
-    // Import the wasm-bindgen generated JS glue
-    // For AudioWorklet, we import the raw WASM and use wasm-bindgen's init
-    const { instance } = await WebAssembly.instantiate(bytes, {});
+      this._effectType = effectType;
+      this._ready = true;
 
-    this._wasm = instance;
-    this._effectType = effectType;
-    this._ready = true;
-
-    this.port.postMessage({ type: 'ready' });
+      // Signal ready — audio passes through until per-effect wiring is done
+      this.port.postMessage({ type: 'ready', mode: 'passthrough' });
+    } catch (err) {
+      this.port.postMessage({ type: 'error', message: `WASM init: ${err.message}` });
+    }
   }
 
   _setParam(paramId, value) {

@@ -130,7 +130,14 @@ impl Distortion {
             let dry_l = left[i];
             let dry_r = right[i];
 
-            let (proc_l, proc_r) = if os > 1 {
+            let (proc_l, proc_r) = if self.params.character == DistortionType::Bitcrusher {
+                // Bitcrusher: per-channel hold state, single counter advance per stereo pair
+                let (l, r) = self.apply_bitcrusher_stereo(
+                    dry_l as f64 * drive_gain,
+                    dry_r as f64 * drive_gain,
+                );
+                (l as f32, r as f32)
+            } else if os > 1 {
                 self.process_oversampled(left[i], right[i], drive_gain, os)
             } else {
                 let l = self.apply_waveshaper(left[i] as f64 * drive_gain);
@@ -193,6 +200,24 @@ impl Distortion {
         (sum_l, sum_r)
     }
 
+    /// Process bitcrusher for a stereo sample pair (per-channel hold state).
+    #[inline]
+    fn apply_bitcrusher_stereo(&mut self, l: f64, r: f64) -> (f64, f64) {
+        let levels = 2.0_f64.powf(self.params.bit_depth);
+        let q_l = (l * levels).round() / levels;
+        let q_r = (r * levels).round() / levels;
+
+        // Sample rate reduction: update hold values once per stereo pair
+        self.bc_counter += 1.0;
+        if self.bc_counter >= self.params.downsample {
+            self.bc_counter = 0.0;
+            self.bc_hold_l = q_l as f32;
+            self.bc_hold_r = q_r as f32;
+        }
+
+        (self.bc_hold_l as f64, self.bc_hold_r as f64)
+    }
+
     #[inline]
     fn apply_waveshaper(&mut self, x: f64) -> f64 {
         match self.params.character {
@@ -212,17 +237,9 @@ impl Distortion {
                 sign * (1.0 - (-x.abs()).exp())
             }
             DistortionType::Bitcrusher => {
-                // Bit depth reduction
+                // Bit depth reduction only (sample-rate reduction handled in process_stereo)
                 let levels = 2.0_f64.powf(self.params.bit_depth);
-                let quantized = (x * levels).round() / levels;
-
-                // Sample rate reduction
-                self.bc_counter += 1.0;
-                if self.bc_counter >= self.params.downsample {
-                    self.bc_counter = 0.0;
-                    self.bc_hold_l = quantized as f32;
-                }
-                self.bc_hold_l as f64
+                (x * levels).round() / levels
             }
         }
     }

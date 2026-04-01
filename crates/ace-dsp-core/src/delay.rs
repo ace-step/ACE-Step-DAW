@@ -147,7 +147,7 @@ impl FeedbackDelay {
     #[inline]
     pub fn process_sample(&mut self, input: f32) -> f32 {
         let delayed = self.delay.read_linear(self.delay_time_samples);
-        let to_write = input + delayed * self.feedback;
+        let to_write = input + delayed * self.feedback + crate::ANTI_DENORMAL as f32;
         self.delay.push(to_write);
 
         input * (1.0 - self.wet) + delayed * self.wet

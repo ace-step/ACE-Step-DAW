@@ -194,13 +194,17 @@ fn phase_lock(magnitudes: &[f64], phases: &mut [f64], half: usize) {
         }
     }
 
-    // Lock phase
+    // Lock phase: non-peak bins inherit the phase rotation from their nearest peak.
+    // Store original phases before modification.
+    let original_phases = phases.to_vec();
     for k in 0..half {
         if !is_peak[k] {
             let pk = nearest_peak[k];
             if pk != k {
-                let phase_diff = phases[pk] - phases[k];
-                phases[k] = phases[pk] - phase_diff;
+                // The peak's phase deviation = new_phase[pk] - original_phase[pk]
+                // Apply the same deviation to this bin
+                let peak_deviation = phases[pk] - original_phases[pk];
+                phases[k] = original_phases[k] + peak_deviation;
             }
         }
     }

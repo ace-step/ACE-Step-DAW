@@ -199,7 +199,11 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
-      void refreshModels();
+      // Only refresh models if backend is likely reachable — avoids failing
+      // network requests when the user opens Settings while offline.
+      if (useModelStore.getState().connected) {
+        void refreshModels();
+      }
     }
     prevShow.current = show;
   }, [show, project]);

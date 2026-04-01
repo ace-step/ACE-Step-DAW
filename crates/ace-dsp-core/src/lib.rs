@@ -8,8 +8,12 @@
 
 pub mod biquad;
 pub mod delay;
+pub mod distortion;
 pub mod dynamics;
 pub mod eq;
+pub mod lfo;
+pub mod limiter;
+pub mod modulation;
 pub mod reverb;
 
 /// Anti-denormal constant: add to feedback loops to prevent denormal floats.

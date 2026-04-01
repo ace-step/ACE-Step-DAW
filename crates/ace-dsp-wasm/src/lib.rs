@@ -14,6 +14,11 @@ use ace_dsp_core::dynamics::{
 };
 use ace_dsp_core::eq::{EqBandParams, ParametricEQ};
 use ace_dsp_core::reverb::{DattorroReverb, ReverbParams, RoomSize};
+use ace_dsp_core::modulation::{
+    Chorus, ChorusParams, Flanger, FlangerParams, Phaser, PhaserParams,
+};
+use ace_dsp_core::distortion::{Distortion, DistortionParams, DistortionType};
+use ace_dsp_core::limiter::{Limiter, LimiterParams, LufsMeter};
 
 // ── Smoke test ──────────────────────────────────────────────────────
 
@@ -461,4 +466,208 @@ impl WasmReverb {
     pub fn reset(&mut self) {
         self.inner.reset();
     }
+}
+
+// ── Chorus ──────────────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct WasmChorus {
+    inner: Chorus,
+}
+
+#[wasm_bindgen]
+impl WasmChorus {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        rate_hz: f64,
+        depth: f64,
+        delay_ms: f64,
+        feedback: f64,
+        wet: f64,
+        sample_rate: f64,
+    ) -> WasmChorus {
+        WasmChorus {
+            inner: Chorus::new(
+                ChorusParams { rate_hz, depth, delay_ms, feedback, wet, stereo_spread: 0.25 },
+                sample_rate,
+            ),
+        }
+    }
+
+    pub fn set_params(&mut self, rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64) {
+        self.inner.set_params(ChorusParams {
+            rate_hz, depth, delay_ms, feedback, wet, stereo_spread: 0.25,
+        });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── Flanger ─────────────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct WasmFlanger {
+    inner: Flanger,
+}
+
+#[wasm_bindgen]
+impl WasmFlanger {
+    #[wasm_bindgen(constructor)]
+    pub fn new(rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64, sample_rate: f64) -> WasmFlanger {
+        WasmFlanger {
+            inner: Flanger::new(FlangerParams { rate_hz, depth, delay_ms, feedback, wet }, sample_rate),
+        }
+    }
+
+    pub fn set_params(&mut self, rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64) {
+        self.inner.set_params(FlangerParams { rate_hz, depth, delay_ms, feedback, wet });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── Phaser ──────────────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct WasmPhaser {
+    inner: Phaser,
+}
+
+#[wasm_bindgen]
+impl WasmPhaser {
+    #[wasm_bindgen(constructor)]
+    pub fn new(rate_hz: f64, depth: f64, stages: usize, feedback: f64, base_freq: f64, wet: f64, sample_rate: f64) -> WasmPhaser {
+        WasmPhaser {
+            inner: Phaser::new(PhaserParams { rate_hz, depth, stages, feedback, base_freq, wet }, sample_rate),
+        }
+    }
+
+    pub fn set_params(&mut self, rate_hz: f64, depth: f64, feedback: f64, base_freq: f64, wet: f64) {
+        self.inner.set_params(PhaserParams {
+            rate_hz, depth, stages: 4, feedback, base_freq, wet,
+        });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── Distortion ──────────────────────────────────────────────────────
+
+fn parse_distortion_type(s: &str) -> DistortionType {
+    match s {
+        "softclip" => DistortionType::SoftClip,
+        "hardclip" => DistortionType::HardClip,
+        "tube" => DistortionType::Tube,
+        "tape" => DistortionType::Tape,
+        "fuzz" => DistortionType::Fuzz,
+        "bitcrusher" => DistortionType::Bitcrusher,
+        _ => DistortionType::SoftClip,
+    }
+}
+
+#[wasm_bindgen]
+pub struct WasmDistortion {
+    inner: Distortion,
+}
+
+#[wasm_bindgen]
+impl WasmDistortion {
+    #[wasm_bindgen(constructor)]
+    pub fn new(drive: f64, character: &str, tone: f64, oversample: usize, wet: f64, sample_rate: f64) -> WasmDistortion {
+        WasmDistortion {
+            inner: Distortion::new(
+                DistortionParams {
+                    drive,
+                    character: parse_distortion_type(character),
+                    tone,
+                    oversample,
+                    wet,
+                    ..DistortionParams::default()
+                },
+                sample_rate,
+            ),
+        }
+    }
+
+    pub fn set_params(&mut self, drive: f64, character: &str, tone: f64, oversample: usize, wet: f64) {
+        self.inner.set_params(DistortionParams {
+            drive,
+            character: parse_distortion_type(character),
+            tone,
+            oversample,
+            wet,
+            ..DistortionParams::default()
+        });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── Limiter ─────────────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct WasmLimiter {
+    inner: Limiter,
+}
+
+#[wasm_bindgen]
+impl WasmLimiter {
+    #[wasm_bindgen(constructor)]
+    pub fn new(ceiling_db: f64, release_ms: f64, lookahead_ms: f64, sample_rate: f64) -> WasmLimiter {
+        WasmLimiter {
+            inner: Limiter::new(LimiterParams { ceiling_db, release_ms, lookahead_ms }, sample_rate),
+        }
+    }
+
+    pub fn set_params(&mut self, ceiling_db: f64, release_ms: f64) {
+        self.inner.set_params(LimiterParams { ceiling_db, release_ms, lookahead_ms: 1.0 });
+    }
+
+    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
+        self.inner.process_stereo(left, right);
+    }
+
+    pub fn gain_reduction_db(&self) -> f64 { self.inner.gain_reduction_db() }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
+}
+
+// ── LUFS Meter ──────────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct WasmLufsMeter {
+    inner: LufsMeter,
+}
+
+#[wasm_bindgen]
+impl WasmLufsMeter {
+    #[wasm_bindgen(constructor)]
+    pub fn new(sample_rate: f64) -> WasmLufsMeter {
+        WasmLufsMeter { inner: LufsMeter::new(sample_rate) }
+    }
+
+    pub fn process_block(&mut self, left: &[f32], right: &[f32]) {
+        self.inner.process_block(left, right);
+    }
+
+    pub fn momentary_lufs(&self) -> f64 { self.inner.momentary_lufs() }
+    pub fn short_term_lufs(&self) -> f64 { self.inner.short_term_lufs() }
+
+    pub fn reset(&mut self) { self.inner.reset(); }
 }

@@ -22,14 +22,19 @@ import {
   type WasmMeterData,
 } from './WasmEffectNode';
 
-/** Supported WASM effect types (grows as we migrate more effects) */
+/** Supported WASM effect types — complete DSP suite */
 export type WasmEffectType =
   | 'compressor'
   | 'gate'
   | 'parametricEq'
   | 'reverb'
   | 'delay'
-  | 'biquad';
+  | 'biquad'
+  | 'chorus'
+  | 'flanger'
+  | 'phaser'
+  | 'distortion'
+  | 'limiter';
 
 /** Check if a given effect type has a WASM implementation available */
 export function hasWasmImplementation(effectType: string): boolean {
@@ -40,6 +45,11 @@ export function hasWasmImplementation(effectType: string): boolean {
     'reverb',
     'delay',
     'biquad',
+    'chorus',
+    'flanger',
+    'phaser',
+    'distortion',
+    'limiter',
   ]);
   return supported.has(effectType);
 }

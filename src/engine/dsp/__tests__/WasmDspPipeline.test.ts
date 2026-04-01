@@ -50,6 +50,18 @@ describe('WASM DSP Pipeline', () => {
     expect(content).toContain('WasmReverb');
   });
 
+  it('WASM JS glue exports Phase 2 symbols (modulation, distortion, limiter)', () => {
+    const jsPath = path.join(wasmDir, 'ace_dsp_wasm.js');
+    const content = fs.readFileSync(jsPath, 'utf-8');
+
+    expect(content).toContain('WasmChorus');
+    expect(content).toContain('WasmFlanger');
+    expect(content).toContain('WasmPhaser');
+    expect(content).toContain('WasmDistortion');
+    expect(content).toContain('WasmLimiter');
+    expect(content).toContain('WasmLufsMeter');
+  });
+
   it('TypeScript types are exported for all modules', () => {
     const dtsPath = path.join(wasmDir, 'ace_dsp_wasm.d.ts');
     expect(fs.existsSync(dtsPath)).toBe(true);

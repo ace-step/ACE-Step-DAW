@@ -15,12 +15,16 @@ describe('WasmDspBridge', () => {
     expect(hasWasmImplementation('biquad')).toBe(true);
   });
 
+  it('reports Phase 2 WASM effect types', () => {
+    expect(hasWasmImplementation('chorus')).toBe(true);
+    expect(hasWasmImplementation('flanger')).toBe(true);
+    expect(hasWasmImplementation('phaser')).toBe(true);
+    expect(hasWasmImplementation('distortion')).toBe(true);
+    expect(hasWasmImplementation('limiter')).toBe(true);
+  });
+
   it('reports unsupported effect types', () => {
     expect(hasWasmImplementation('eq3')).toBe(false);
-    expect(hasWasmImplementation('chorus')).toBe(false);
-    expect(hasWasmImplementation('flanger')).toBe(false);
-    expect(hasWasmImplementation('phaser')).toBe(false);
-    expect(hasWasmImplementation('distortion')).toBe(false);
     expect(hasWasmImplementation('convolver')).toBe(false);
     expect(hasWasmImplementation('unknown')).toBe(false);
   });

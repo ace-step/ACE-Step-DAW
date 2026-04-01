@@ -80,9 +80,19 @@ export function Knob({
       if (!dragStart.current) return;
       const range = max - min;
       const fine = mv.altKey;
-      const sensitivity = fine ? range / 2000 : range / 200;
+      let sensitivity = fine ? range / 2000 : range / 200;
+      // Magnetic snap: reduce sensitivity near default value
+      const snapZone = range * 0.03; // 3% of range
+      const distFromDefault = Math.abs(dragStart.current.value - defaultValue);
+      if (distFromDefault < snapZone) {
+        sensitivity *= 0.5; // half speed near default
+      }
       const delta = mv.movementY * sensitivity;
-      const newVal = applyStep(dragStart.current.value + delta);
+      let newVal = applyStep(dragStart.current.value + delta);
+      // Snap to exact default if within half-step
+      if (Math.abs(newVal - defaultValue) < (step ?? range / 200) * 0.5) {
+        newVal = defaultValue;
+      }
       dragStart.current = { y: mv.clientY, value: newVal };
       setIsFineMode(fine);
       onChange(newVal);
@@ -191,6 +201,12 @@ export function Knob({
   const pointerPos = polarToXY(angle - 90, trackR);
   const pointerR = Math.max(1.5, strokeWidth * 0.4);
 
+  // Default value detent marker position
+  const defaultAngle = valueToAngle(defaultValue, min, max, arc);
+  const detentInner = polarToXY(defaultAngle - 90, trackR - strokeWidth * 0.6);
+  const detentOuter = polarToXY(defaultAngle - 90, trackR + strokeWidth * 0.6);
+  const isAtDefault = Math.abs(value - defaultValue) < (step ?? (max - min) / 200) * 0.5;
+
   // Value display
   const defaultDisplayValue = step !== undefined && step >= 1
     ? Math.round(value).toString()
@@ -250,6 +266,27 @@ export function Knob({
               filter={isDragging ? 'url(#knob-glow)' : undefined}
               style={isResetting ? { transition: 'd 200ms ease-out' } : undefined}
             />
+
+            {/* Default value detent marker */}
+            <line
+              x1={detentInner.x} y1={detentInner.y}
+              x2={detentOuter.x} y2={detentOuter.y}
+              stroke={isAtDefault ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'}
+              strokeWidth={isAtDefault ? 1.5 : 0.75}
+              strokeLinecap="round"
+            />
+
+            {/* Reset pulse — bright flash on the arc when double-click resets */}
+            {isResetting && (
+              <path
+                d={trackPath}
+                fill="none"
+                stroke="rgba(255,255,255,0.6)"
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                style={{ animation: 'knob-reset-pulse 200ms ease-out forwards' }}
+              />
+            )}
 
             {/* Minimal center anchor */}
             <circle

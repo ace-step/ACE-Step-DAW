@@ -1,482 +1,347 @@
-//! Dynamics processing — compressor, gate, envelope follower.
+//! Dynamics processors — compressor, noise gate, envelope follower.
 //!
-//! Professional-grade dynamics with RMS/peak detection, soft/hard knee,
-//! sidechain support, lookahead, and auto-release.
+//! Professional-grade dynamics processing with:
+//! - RMS and peak envelope detection
+//! - Soft/hard knee compression
+//! - Ballistics-based attack/release smoothing
+//! - Noise gate with hold time and configurable range
 
-use crate::biquad::{BiquadCoeffs, BiquadMono, FilterType};
-use crate::delay::DelayLine;
+use core::f32::consts::LN_2;
 use crate::ANTI_DENORMAL;
 
-// ── Envelope Follower ───────────────────────────────────────────────
+/// Convert linear amplitude to decibels.
+#[inline]
+fn lin_to_db(lin: f32) -> f32 {
+    if lin <= ANTI_DENORMAL {
+        -100.0
+    } else {
+        20.0 * lin.log10()
+    }
+}
 
-/// Detection mode for the envelope follower.
+/// Convert decibels to linear amplitude.
+#[inline]
+fn db_to_lin(db: f32) -> f32 {
+    if db <= -100.0 {
+        0.0
+    } else {
+        10.0_f32.powf(db / 20.0)
+    }
+}
+
+/// Compute the ballistics coefficient for a 1-pole IIR filter.
+/// `time_sec` is the time constant (attack or release), `sample_rate` is in Hz.
+#[inline]
+fn ballistics_coeff(time_sec: f32, sample_rate: f32) -> f32 {
+    if time_sec <= 0.0 {
+        0.0 // instant
+    } else {
+        (-LN_2 / (time_sec * sample_rate)).exp()
+    }
+}
+
+/// Envelope detection mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DetectionMode {
+pub enum EnvelopeMode {
+    /// Peak detection — follows the instantaneous absolute value.
     Peak,
+    /// RMS detection — follows the root-mean-square level.
     Rms,
 }
 
-/// Envelope follower with configurable attack/release times.
-///
-/// Tracks the amplitude envelope of an audio signal using exponential
-/// smoothing with separate attack and release coefficients.
-#[derive(Debug, Clone)]
+/// Envelope follower with configurable attack/release ballistics.
 pub struct EnvelopeFollower {
-    mode: DetectionMode,
-    attack_coeff: f64,
-    release_coeff: f64,
-    envelope: f64,
-    rms_window: f64, // running sum of squares for RMS
-    sample_rate: f64,
+    mode: EnvelopeMode,
+    attack_coeff: f32,
+    release_coeff: f32,
+    envelope: f32,
+    sample_rate: f32,
 }
 
 impl EnvelopeFollower {
-    /// Create a new envelope follower.
-    ///
-    /// - `mode`: Peak or RMS detection
-    /// - `attack_ms`: attack time in milliseconds (0.1–100)
-    /// - `release_ms`: release time in milliseconds (10–2000)
-    /// - `sample_rate`: sample rate in Hz
-    pub fn new(mode: DetectionMode, attack_ms: f64, release_ms: f64, sample_rate: f64) -> Self {
+    pub fn new(mode: EnvelopeMode, sample_rate: f32, attack_ms: f32, release_ms: f32) -> Self {
         Self {
             mode,
-            attack_coeff: time_to_coeff(attack_ms, sample_rate),
-            release_coeff: time_to_coeff(release_ms, sample_rate),
+            attack_coeff: ballistics_coeff(attack_ms / 1000.0, sample_rate),
+            release_coeff: ballistics_coeff(release_ms / 1000.0, sample_rate),
             envelope: 0.0,
-            rms_window: 0.0,
             sample_rate,
         }
     }
 
-    pub fn set_attack(&mut self, attack_ms: f64) {
-        self.attack_coeff = time_to_coeff(attack_ms, self.sample_rate);
+    pub fn set_attack(&mut self, attack_ms: f32) {
+        self.attack_coeff = ballistics_coeff(attack_ms / 1000.0, self.sample_rate);
     }
 
-    pub fn set_release(&mut self, release_ms: f64) {
-        self.release_coeff = time_to_coeff(release_ms, self.sample_rate);
+    pub fn set_release(&mut self, release_ms: f32) {
+        self.release_coeff = ballistics_coeff(release_ms / 1000.0, self.sample_rate);
     }
 
-    /// Process one sample and return the current envelope level (linear).
+    /// Process a single sample and return the current envelope level (linear).
     #[inline]
-    pub fn process(&mut self, input: f64) -> f64 {
-        let level = match self.mode {
-            DetectionMode::Peak => input.abs(),
-            DetectionMode::Rms => {
-                // Exponentially-weighted RMS
-                let sq = input * input;
-                self.rms_window =
-                    self.rms_window * self.release_coeff + sq * (1.0 - self.release_coeff);
-                (self.rms_window + ANTI_DENORMAL).sqrt()
-            }
+    pub fn process(&mut self, input: f32) -> f32 {
+        let detector_input = match self.mode {
+            EnvelopeMode::Peak => input.abs(),
+            EnvelopeMode::Rms => input * input,
         };
 
-        let coeff = if level > self.envelope {
+        // Branching ballistics: fast attack, slow release
+        let coeff = if detector_input > self.envelope {
             self.attack_coeff
         } else {
             self.release_coeff
         };
 
-        self.envelope = self.envelope * coeff + level * (1.0 - coeff);
-        self.envelope
+        self.envelope = coeff * self.envelope + (1.0 - coeff) * detector_input
+            + ANTI_DENORMAL - ANTI_DENORMAL;
+
+        match self.mode {
+            EnvelopeMode::Peak => self.envelope,
+            EnvelopeMode::Rms => self.envelope.sqrt(),
+        }
+    }
+
+    /// Get current envelope level (linear).
+    pub fn level(&self) -> f32 {
+        match self.mode {
+            EnvelopeMode::Peak => self.envelope,
+            EnvelopeMode::Rms => self.envelope.sqrt(),
+        }
     }
 
     pub fn reset(&mut self) {
         self.envelope = 0.0;
-        self.rms_window = 0.0;
-    }
-
-    pub fn level_db(&self) -> f64 {
-        linear_to_db(self.envelope)
     }
 }
 
-// ── Compressor ──────────────────────────────────────────────────────
-
-/// Transfer function parameters for the compressor.
-#[derive(Debug, Clone, Copy)]
-pub struct CompressorParams {
-    pub threshold_db: f64,  // -60 to 0
-    pub ratio: f64,         // 1.0 to f64::INFINITY
-    pub knee_db: f64,       // 0 (hard) to 30 (soft)
-    pub attack_ms: f64,     // 0.1 to 100
-    pub release_ms: f64,    // 10 to 2000
-    pub makeup_db: f64,     // manual makeup gain
-    pub mix: f64,           // 0.0 (dry) to 1.0 (wet) — parallel compression
-    pub detection: DetectionMode,
-    pub lookahead_ms: f64,  // 0 to 10
-}
-
-impl Default for CompressorParams {
-    fn default() -> Self {
-        Self {
-            threshold_db: -18.0,
-            ratio: 4.0,
-            knee_db: 6.0,
-            attack_ms: 10.0,
-            release_ms: 100.0,
-            makeup_db: 0.0,
-            mix: 1.0,
-            detection: DetectionMode::Rms,
-            lookahead_ms: 0.0,
-        }
-    }
-}
-
-/// Professional compressor with soft knee, sidechain, and lookahead.
-#[derive(Debug, Clone)]
+/// Compressor with soft/hard knee, attack/release, and makeup gain.
 pub struct Compressor {
-    params: CompressorParams,
-    env_left: EnvelopeFollower,
-    env_right: EnvelopeFollower,
-    lookahead_left: Option<DelayLine>,
-    lookahead_right: Option<DelayLine>,
-    lookahead_samples: usize,
-    sidechain_hpf: Option<BiquadMono>,
-    gain_reduction_db: f64, // for metering
-    sample_rate: f64,
+    envelope: EnvelopeFollower,
+    threshold_db: f32,
+    ratio: f32,
+    knee_db: f32,
+    makeup_gain_db: f32,
+    gain_reduction_db: f32,
 }
 
 impl Compressor {
-    pub fn new(params: CompressorParams, sample_rate: f64) -> Self {
-        let env_left = EnvelopeFollower::new(
-            params.detection,
-            params.attack_ms,
-            params.release_ms,
-            sample_rate,
-        );
-        let env_right = env_left.clone();
+    /// Create a new compressor.
+    /// - `threshold_db`: compression threshold in dB (e.g., -20.0)
+    /// - `ratio`: compression ratio (e.g., 4.0 for 4:1)
+    /// - `attack_ms`: attack time in milliseconds
+    /// - `release_ms`: release time in milliseconds
+    /// - `knee_db`: knee width in dB (0.0 = hard knee)
+    /// - `makeup_gain_db`: output gain compensation in dB
+    pub fn new(
+        sample_rate: f32,
+        threshold_db: f32,
+        ratio: f32,
+        attack_ms: f32,
+        release_ms: f32,
+        knee_db: f32,
+        makeup_gain_db: f32,
+    ) -> Self {
+        Self {
+            envelope: EnvelopeFollower::new(EnvelopeMode::Rms, sample_rate, attack_ms, release_ms),
+            threshold_db,
+            ratio: ratio.max(1.0),
+            knee_db: knee_db.max(0.0),
+            makeup_gain_db,
+            gain_reduction_db: 0.0,
+        }
+    }
 
-        let lookahead_samples = (params.lookahead_ms * sample_rate / 1000.0) as usize;
-        let (la_l, la_r) = if lookahead_samples > 0 {
-            (
-                Some(DelayLine::new(lookahead_samples + 64)),
-                Some(DelayLine::new(lookahead_samples + 64)),
-            )
+    pub fn set_threshold(&mut self, db: f32) {
+        self.threshold_db = db;
+    }
+
+    pub fn set_ratio(&mut self, ratio: f32) {
+        self.ratio = ratio.max(1.0);
+    }
+
+    pub fn set_attack(&mut self, ms: f32) {
+        self.envelope.set_attack(ms);
+    }
+
+    pub fn set_release(&mut self, ms: f32) {
+        self.envelope.set_release(ms);
+    }
+
+    pub fn set_knee(&mut self, db: f32) {
+        self.knee_db = db.max(0.0);
+    }
+
+    pub fn set_makeup_gain(&mut self, db: f32) {
+        self.makeup_gain_db = db;
+    }
+
+    /// Get current gain reduction in dB (always <= 0).
+    pub fn gain_reduction_db(&self) -> f32 {
+        self.gain_reduction_db
+    }
+
+    /// Compute gain reduction for a given input level in dB.
+    /// Returns the gain to apply in dB.
+    #[inline]
+    fn compute_gain(&self, input_db: f32) -> f32 {
+        let t = self.threshold_db;
+        let r = self.ratio;
+        let w = self.knee_db;
+
+        if w <= 0.0 || w < 0.01 {
+            // Hard knee
+            if input_db <= t {
+                0.0
+            } else {
+                (t + (input_db - t) / r) - input_db
+            }
         } else {
-            (None, None)
+            // Soft knee
+            let half_w = w / 2.0;
+            if input_db <= t - half_w {
+                // Below knee — no compression
+                0.0
+            } else if input_db >= t + half_w {
+                // Above knee — full compression
+                (t + (input_db - t) / r) - input_db
+            } else {
+                // In the knee region — quadratic interpolation
+                let x = input_db - t + half_w;
+                (1.0 / r - 1.0) * x * x / (2.0 * w)
+            }
+        }
+    }
+
+    /// Process a single sample. Returns the compressed sample.
+    #[inline]
+    pub fn process_sample(&mut self, input: f32) -> f32 {
+        let level = self.envelope.process(input);
+        let input_db = lin_to_db(level);
+        let gr_db = self.compute_gain(input_db);
+        self.gain_reduction_db = gr_db;
+        let total_gain_db = gr_db + self.makeup_gain_db;
+        input * db_to_lin(total_gain_db)
+    }
+
+    /// Process a buffer in-place.
+    #[inline]
+    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
+        for sample in buffer.iter_mut() {
+            *sample = self.process_sample(*sample);
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.envelope.reset();
+        self.gain_reduction_db = 0.0;
+    }
+}
+
+/// Noise gate with hold time and configurable range.
+pub struct NoiseGate {
+    envelope: EnvelopeFollower,
+    threshold_db: f32,
+    range_db: f32,
+    hold_samples: usize,
+    hold_counter: usize,
+    gate_gain: f32,
+    attack_coeff: f32,
+    release_coeff: f32,
+    sample_rate: f32,
+}
+
+impl NoiseGate {
+    /// Create a new noise gate.
+    /// - `threshold_db`: gate threshold in dB
+    /// - `attack_ms`: gate open time
+    /// - `hold_ms`: time to hold gate open after signal drops below threshold
+    /// - `release_ms`: gate close time
+    /// - `range_db`: attenuation when gate is closed (e.g., -80 for full gate, -20 for expander)
+    pub fn new(
+        sample_rate: f32,
+        threshold_db: f32,
+        attack_ms: f32,
+        hold_ms: f32,
+        release_ms: f32,
+        range_db: f32,
+    ) -> Self {
+        Self {
+            envelope: EnvelopeFollower::new(EnvelopeMode::Peak, sample_rate, 0.1, release_ms),
+            threshold_db,
+            range_db: range_db.min(0.0),
+            hold_samples: (hold_ms / 1000.0 * sample_rate) as usize,
+            hold_counter: 0,
+            gate_gain: 1.0,
+            attack_coeff: ballistics_coeff(attack_ms / 1000.0, sample_rate),
+            release_coeff: ballistics_coeff(release_ms / 1000.0, sample_rate),
+            sample_rate,
+        }
+    }
+
+    pub fn set_threshold(&mut self, db: f32) {
+        self.threshold_db = db;
+    }
+
+    pub fn set_attack(&mut self, ms: f32) {
+        self.attack_coeff = ballistics_coeff(ms / 1000.0, self.sample_rate);
+    }
+
+    pub fn set_hold(&mut self, ms: f32) {
+        self.hold_samples = (ms / 1000.0 * self.sample_rate) as usize;
+    }
+
+    pub fn set_release(&mut self, ms: f32) {
+        self.release_coeff = ballistics_coeff(ms / 1000.0, self.sample_rate);
+    }
+
+    pub fn set_range(&mut self, db: f32) {
+        self.range_db = db.min(0.0);
+    }
+
+    /// Returns true if the gate is currently open.
+    pub fn is_open(&self) -> bool {
+        self.gate_gain > 0.5
+    }
+
+    /// Process a single sample. Returns the gated sample.
+    #[inline]
+    pub fn process_sample(&mut self, input: f32) -> f32 {
+        let level = self.envelope.process(input);
+        let level_db = lin_to_db(level);
+
+        let target_gain = if level_db >= self.threshold_db {
+            self.hold_counter = self.hold_samples;
+            1.0 // gate open
+        } else if self.hold_counter > 0 {
+            self.hold_counter -= 1;
+            1.0 // holding open
+        } else {
+            db_to_lin(self.range_db) // gate closed (attenuated)
         };
 
-        Self {
-            params,
-            env_left,
-            env_right,
-            lookahead_left: la_l,
-            lookahead_right: la_r,
-            lookahead_samples,
-            sidechain_hpf: None,
-            gain_reduction_db: 0.0,
-            sample_rate,
-        }
-    }
-
-    /// Enable a sidechain highpass filter (useful for de-essing or bass-transparent compression).
-    pub fn set_sidechain_hpf(&mut self, freq: f64) {
-        if freq > 20.0 {
-            let coeffs =
-                BiquadCoeffs::new(FilterType::Highpass, freq, 0.707, 0.0, self.sample_rate);
-            self.sidechain_hpf = Some(BiquadMono::new(coeffs));
+        // Smooth the gate gain with ballistics
+        let coeff = if target_gain > self.gate_gain {
+            self.attack_coeff
         } else {
-            self.sidechain_hpf = None;
+            self.release_coeff
+        };
+        self.gate_gain = coeff * self.gate_gain + (1.0 - coeff) * target_gain;
+
+        input * self.gate_gain
+    }
+
+    /// Process a buffer in-place.
+    #[inline]
+    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
+        for sample in buffer.iter_mut() {
+            *sample = self.process_sample(*sample);
         }
-    }
-
-    pub fn set_params(&mut self, params: CompressorParams) {
-        self.env_left.set_attack(params.attack_ms);
-        self.env_left.set_release(params.release_ms);
-        self.env_right.set_attack(params.attack_ms);
-        self.env_right.set_release(params.release_ms);
-        self.params = params;
-    }
-
-    /// Get current gain reduction in dB (for metering display).
-    pub fn gain_reduction_db(&self) -> f64 {
-        self.gain_reduction_db
-    }
-
-    /// Process stereo audio in-place.
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let len = left.len().min(right.len());
-        let mut max_gr = 0.0f64;
-
-        for i in 0..len {
-            // Sidechain input: use the audio signal (or filtered version)
-            let mut sc_l = left[i] as f64;
-            let sc_r = right[i] as f64;
-
-            if let Some(ref mut hpf) = self.sidechain_hpf {
-                sc_l = hpf.process_sample(sc_l as f32) as f64;
-                // Note: single HPF for linked stereo detection
-            }
-
-            // Envelope detection (linked stereo: max of L/R)
-            let env_l = self.env_left.process(sc_l);
-            let env_r = self.env_right.process(sc_r);
-            let env_db = linear_to_db(env_l.max(env_r));
-
-            // Transfer function: compute gain reduction
-            let gr_db = compute_gain_reduction(
-                env_db,
-                self.params.threshold_db,
-                self.params.ratio,
-                self.params.knee_db,
-            );
-
-            max_gr = max_gr.max(-gr_db);
-
-            // Apply makeup gain
-            let total_gain_db = gr_db + self.params.makeup_db;
-            let gain = db_to_linear(total_gain_db) as f32;
-
-            // Lookahead: delay the audio signal
-            let (dry_l, dry_r) = if let (Some(ref mut la_l), Some(ref mut la_r)) =
-                (&mut self.lookahead_left, &mut self.lookahead_right)
-            {
-                la_l.push(left[i]);
-                la_r.push(right[i]);
-                (
-                    la_l.read(self.lookahead_samples),
-                    la_r.read(self.lookahead_samples),
-                )
-            } else {
-                (left[i], right[i])
-            };
-
-            // Apply gain with parallel compression mix
-            let wet_l = dry_l * gain;
-            let wet_r = dry_r * gain;
-            let mix = self.params.mix as f32;
-
-            left[i] = dry_l * (1.0 - mix) + wet_l * mix;
-            right[i] = dry_r * (1.0 - mix) + wet_r * mix;
-        }
-
-        self.gain_reduction_db = max_gr;
     }
 
     pub fn reset(&mut self) {
-        self.env_left.reset();
-        self.env_right.reset();
-        if let Some(ref mut la) = self.lookahead_left {
-            la.clear();
-        }
-        if let Some(ref mut la) = self.lookahead_right {
-            la.clear();
-        }
-        self.gain_reduction_db = 0.0;
-    }
-}
-
-// ── Gate ─────────────────────────────────────────────────────────────
-
-/// Gate/expander parameters.
-#[derive(Debug, Clone, Copy)]
-pub struct GateParams {
-    pub threshold_db: f64,  // -80 to 0
-    pub range_db: f64,      // -inf to 0 (how much attenuation when closed)
-    pub attack_ms: f64,     // 0.1 to 50
-    pub hold_ms: f64,       // 0 to 500
-    pub release_ms: f64,    // 5 to 2000
-    pub hysteresis_db: f64, // 0 to 10 (separate open/close thresholds)
-    pub detection: DetectionMode,
-}
-
-impl Default for GateParams {
-    fn default() -> Self {
-        Self {
-            threshold_db: -40.0,
-            range_db: -80.0,
-            attack_ms: 1.0,
-            hold_ms: 10.0,
-            release_ms: 100.0,
-            hysteresis_db: 3.0,
-            detection: DetectionMode::Rms,
-        }
-    }
-}
-
-/// Gate state machine states.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum GateState {
-    Closed,
-    Opening,
-    Open,
-    Holding,
-    Closing,
-}
-
-/// Noise gate with hysteresis and hold time.
-#[derive(Debug, Clone)]
-pub struct Gate {
-    params: GateParams,
-    env: EnvelopeFollower,
-    state: GateState,
-    hold_counter: usize,
-    hold_samples: usize,
-    current_gain: f64,
-    attack_rate: f64,
-    release_rate: f64,
-    gain_reduction_db: f64,
-    sample_rate: f64,
-}
-
-impl Gate {
-    pub fn new(params: GateParams, sample_rate: f64) -> Self {
-        let hold_samples = (params.hold_ms * sample_rate / 1000.0) as usize;
-        let attack_rate = 1.0 / (params.attack_ms * sample_rate / 1000.0).max(1.0);
-        let release_rate = 1.0 / (params.release_ms * sample_rate / 1000.0).max(1.0);
-
-        Self {
-            params,
-            env: EnvelopeFollower::new(params.detection, 0.1, 50.0, sample_rate),
-            state: GateState::Closed,
-            hold_counter: 0,
-            hold_samples,
-            current_gain: 0.0,
-            attack_rate,
-            release_rate,
-            gain_reduction_db: 0.0,
-            sample_rate,
-        }
-    }
-
-    pub fn set_params(&mut self, params: GateParams) {
-        self.hold_samples = (params.hold_ms * self.sample_rate / 1000.0) as usize;
-        self.attack_rate = 1.0 / (params.attack_ms * self.sample_rate / 1000.0).max(1.0);
-        self.release_rate = 1.0 / (params.release_ms * self.sample_rate / 1000.0).max(1.0);
-        self.env.set_attack(0.1); // Fast env detection for gate
-        self.env.set_release(50.0);
-        self.params = params;
-    }
-
-    pub fn gain_reduction_db(&self) -> f64 {
-        self.gain_reduction_db
-    }
-
-    /// Process stereo audio in-place.
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let len = left.len().min(right.len());
-        let range_linear = db_to_linear(self.params.range_db);
-
-        for i in 0..len {
-            let sc = (left[i].abs().max(right[i].abs())) as f64;
-            let env_db = linear_to_db(self.env.process(sc));
-
-            let open_thresh = self.params.threshold_db;
-            let close_thresh = self.params.threshold_db - self.params.hysteresis_db;
-
-            // State machine
-            match self.state {
-                GateState::Closed | GateState::Closing => {
-                    if env_db > open_thresh {
-                        self.state = GateState::Opening;
-                    }
-                }
-                GateState::Opening => {
-                    self.current_gain += self.attack_rate;
-                    if self.current_gain >= 1.0 {
-                        self.current_gain = 1.0;
-                        self.state = GateState::Open;
-                    }
-                }
-                GateState::Open => {
-                    if env_db < close_thresh {
-                        self.state = GateState::Holding;
-                        self.hold_counter = self.hold_samples;
-                    }
-                }
-                GateState::Holding => {
-                    if env_db > open_thresh {
-                        self.state = GateState::Open;
-                    } else if self.hold_counter == 0 {
-                        self.state = GateState::Closing;
-                    } else {
-                        self.hold_counter -= 1;
-                    }
-                }
-            }
-
-            if self.state == GateState::Closing {
-                self.current_gain -= self.release_rate;
-                if self.current_gain <= range_linear {
-                    self.current_gain = range_linear;
-                    self.state = GateState::Closed;
-                }
-            }
-
-            let gain = self.current_gain as f32;
-            left[i] *= gain;
-            right[i] *= gain;
-        }
-
-        self.gain_reduction_db = linear_to_db(self.current_gain).min(0.0).abs();
-    }
-
-    pub fn reset(&mut self) {
-        self.env.reset();
-        self.state = GateState::Closed;
-        self.current_gain = 0.0;
+        self.envelope.reset();
         self.hold_counter = 0;
-        self.gain_reduction_db = 0.0;
-    }
-}
-
-// ── Utility functions ───────────────────────────────────────────────
-
-/// Convert time constant (ms) to exponential smoothing coefficient.
-#[inline]
-fn time_to_coeff(time_ms: f64, sample_rate: f64) -> f64 {
-    if time_ms <= 0.0 {
-        return 0.0;
-    }
-    (-1.0 / (time_ms * 0.001 * sample_rate)).exp()
-}
-
-/// Convert linear amplitude to dB.
-#[inline]
-pub fn linear_to_db(linear: f64) -> f64 {
-    if linear <= 1e-10 {
-        -200.0
-    } else {
-        20.0 * linear.log10()
-    }
-}
-
-/// Convert dB to linear amplitude.
-#[inline]
-pub fn db_to_linear(db: f64) -> f64 {
-    10.0_f64.powf(db / 20.0)
-}
-
-/// Compute gain reduction from the compressor transfer function.
-///
-/// Implements soft knee using a quadratic interpolation zone around threshold.
-#[inline]
-fn compute_gain_reduction(input_db: f64, threshold: f64, ratio: f64, knee_db: f64) -> f64 {
-    if knee_db <= 0.01 {
-        // Hard knee
-        if input_db <= threshold {
-            0.0
-        } else {
-            let over = input_db - threshold;
-            -(over - over / ratio)
-        }
-    } else {
-        // Soft knee (quadratic interpolation)
-        let half_knee = knee_db / 2.0;
-        let lower = threshold - half_knee;
-        let upper = threshold + half_knee;
-
-        if input_db <= lower {
-            0.0
-        } else if input_db >= upper {
-            let over = input_db - threshold;
-            -(over - over / ratio)
-        } else {
-            // In the knee zone: quadratic blend
-            let x = input_db - lower;
-            let knee_factor = (1.0 / ratio - 1.0) * x * x / (2.0 * knee_db);
-            knee_factor
-        }
+        self.gate_gain = 1.0;
     }
 }
 
@@ -484,209 +349,241 @@ fn compute_gain_reduction(input_db: f64, threshold: f64, ratio: f64, knee_db: f6
 mod tests {
     use super::*;
 
-    const SR: f64 = 48000.0;
+    // ---- Utility tests ----
 
     #[test]
-    fn envelope_follower_tracks_signal() {
-        let mut ef = EnvelopeFollower::new(DetectionMode::Peak, 1.0, 50.0, SR);
-
-        // Feed a constant signal
-        for _ in 0..1000 {
-            ef.process(0.5);
-        }
-
-        let level = ef.envelope;
-        assert!(
-            (level - 0.5).abs() < 0.05,
-            "Envelope should track 0.5: got {level}"
-        );
+    fn test_lin_to_db() {
+        assert!((lin_to_db(1.0) - 0.0).abs() < 0.01);
+        assert!((lin_to_db(0.5) - (-6.02)).abs() < 0.1);
+        assert!((lin_to_db(0.1) - (-20.0)).abs() < 0.1);
+        assert!(lin_to_db(0.0) <= -99.0);
     }
 
     #[test]
-    fn envelope_follower_decays_on_silence() {
-        let mut ef = EnvelopeFollower::new(DetectionMode::Peak, 0.1, 50.0, SR);
-
-        // Build up envelope
-        for _ in 0..500 {
-            ef.process(1.0);
-        }
-        let peak = ef.envelope;
-
-        // Feed silence — 50ms release at 48kHz needs ~15000 samples to decay significantly
-        for _ in 0..20000 {
-            ef.process(0.0);
-        }
-
-        assert!(
-            ef.envelope < peak * 0.1,
-            "Envelope should decay: peak={peak}, after silence={}",
-            ef.envelope
-        );
+    fn test_db_to_lin() {
+        assert!((db_to_lin(0.0) - 1.0).abs() < 0.01);
+        assert!((db_to_lin(-6.02) - 0.5).abs() < 0.01);
+        assert!((db_to_lin(-20.0) - 0.1).abs() < 0.01);
+        assert_eq!(db_to_lin(-100.0), 0.0);
     }
 
     #[test]
-    fn compressor_reduces_loud_signal() {
-        let params = CompressorParams {
-            threshold_db: -20.0,
-            ratio: 4.0,
-            knee_db: 0.0, // hard knee for predictable test
-            attack_ms: 0.1,
-            release_ms: 100.0,
-            makeup_db: 0.0,
-            mix: 1.0,
-            detection: DetectionMode::Peak,
-            lookahead_ms: 0.0,
-        };
-
-        let mut comp = Compressor::new(params, SR);
-
-        // Create a loud signal (0 dBFS)
-        let mut left = vec![0.8f32; 2000];
-        let mut right = vec![0.8f32; 2000];
-
-        comp.process_stereo(&mut left, &mut right);
-
-        // After settling, output should be reduced
-        let output_level = left[1999].abs();
-        assert!(
-            output_level < 0.8,
-            "Compressor should reduce loud signal: input=0.8, output={output_level}"
-        );
-        assert!(
-            comp.gain_reduction_db() > 0.0,
-            "Should report gain reduction: got {} dB",
-            comp.gain_reduction_db()
-        );
-    }
-
-    #[test]
-    fn compressor_passes_quiet_signal() {
-        let params = CompressorParams {
-            threshold_db: -10.0,
-            ratio: 4.0,
-            ..CompressorParams::default()
-        };
-
-        let mut comp = Compressor::new(params, SR);
-
-        // Signal well below threshold (-40 dBFS ≈ 0.01)
-        let mut left = vec![0.01f32; 1000];
-        let mut right = vec![0.01f32; 1000];
-
-        comp.process_stereo(&mut left, &mut right);
-
-        // Should pass through unchanged (within tolerance)
-        let output = left[999].abs();
-        assert!(
-            (output - 0.01).abs() < 0.005,
-            "Quiet signal should pass through: expected ~0.01, got {output}"
-        );
-    }
-
-    #[test]
-    fn compressor_parallel_mix() {
-        let params = CompressorParams {
-            threshold_db: -20.0,
-            ratio: 10.0,
-            mix: 0.5, // 50% parallel
-            attack_ms: 0.1,
-            detection: DetectionMode::Peak,
-            ..CompressorParams::default()
-        };
-
-        let mut comp = Compressor::new(params, SR);
-
-        let mut left = vec![0.9f32; 2000];
-        let mut right = vec![0.9f32; 2000];
-
-        comp.process_stereo(&mut left, &mut right);
-
-        // With 50% mix, output should be between compressed and dry
-        let output = left[1999].abs();
-        assert!(
-            output > 0.3 && output < 0.9,
-            "Parallel mix should blend: got {output}"
-        );
-    }
-
-    #[test]
-    fn gate_silences_quiet_signal() {
-        let params = GateParams {
-            threshold_db: -30.0,
-            range_db: -80.0,
-            attack_ms: 0.1,
-            hold_ms: 0.0,
-            release_ms: 5.0,
-            hysteresis_db: 0.0,
-            detection: DetectionMode::Peak,
-        };
-
-        let mut gate = Gate::new(params, SR);
-
-        // Signal below threshold (-40 dBFS ≈ 0.01)
-        let mut left = vec![0.01f32; 2000];
-        let mut right = vec![0.01f32; 2000];
-
-        gate.process_stereo(&mut left, &mut right);
-
-        let output = left[1999].abs();
-        assert!(
-            output < 0.005,
-            "Gate should silence quiet signal: got {output}"
-        );
-    }
-
-    #[test]
-    fn gate_passes_loud_signal() {
-        let params = GateParams {
-            threshold_db: -30.0,
-            range_db: -80.0,
-            attack_ms: 0.1,
-            ..GateParams::default()
-        };
-
-        let mut gate = Gate::new(params, SR);
-
-        // Signal above threshold (-6 dBFS ≈ 0.5)
-        let mut left = vec![0.5f32; 2000];
-        let mut right = vec![0.5f32; 2000];
-
-        gate.process_stereo(&mut left, &mut right);
-
-        let output = left[1999].abs();
-        assert!(
-            (output - 0.5).abs() < 0.05,
-            "Gate should pass loud signal: expected ~0.5, got {output}"
-        );
-    }
-
-    #[test]
-    fn soft_knee_gain_reduction() {
-        // At threshold with soft knee, GR should be half of hard-knee GR
-        let hard = compute_gain_reduction(-20.0, -20.0, 4.0, 0.0);
-        let soft = compute_gain_reduction(-20.0, -20.0, 4.0, 10.0);
-
-        // Hard knee at threshold: 0 dB GR
-        assert!(
-            hard.abs() < 0.01,
-            "Hard knee at threshold should be 0: got {hard}"
-        );
-        // Soft knee at threshold: some GR (midpoint of knee curve)
-        assert!(
-            soft.abs() < 5.0,
-            "Soft knee at threshold should have moderate GR: got {soft}"
-        );
-    }
-
-    #[test]
-    fn linear_db_roundtrip() {
-        for db in [-60.0, -20.0, -6.0, 0.0, 6.0, 12.0] {
-            let lin = db_to_linear(db);
-            let back = linear_to_db(lin);
+    fn test_db_roundtrip() {
+        for &val in &[0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0] {
+            let roundtrip = db_to_lin(lin_to_db(val));
             assert!(
-                (back - db).abs() < 0.001,
-                "dB roundtrip failed: {db} → {lin} → {back}"
+                (roundtrip - val).abs() < 0.001,
+                "Roundtrip failed for {val}: got {roundtrip}"
             );
         }
+    }
+
+    // ---- Envelope follower tests ----
+
+    #[test]
+    fn test_envelope_peak_follows_signal() {
+        let mut env = EnvelopeFollower::new(EnvelopeMode::Peak, 48000.0, 1.0, 50.0);
+        // Feed a constant signal
+        for _ in 0..4800 {
+            env.process(0.5);
+        }
+        let level = env.level();
+        assert!(
+            (level - 0.5).abs() < 0.05,
+            "Peak envelope should track 0.5, got {level}"
+        );
+    }
+
+    #[test]
+    fn test_envelope_rms_tracks_sine() {
+        let mut env = EnvelopeFollower::new(EnvelopeMode::Rms, 48000.0, 5.0, 50.0);
+        let freq = 1000.0;
+        // Feed a sine wave
+        for i in 0..48000 {
+            let sample = (2.0 * core::f32::consts::PI * freq * i as f32 / 48000.0).sin();
+            env.process(sample);
+        }
+        let level = env.level();
+        // Ballistics-based RMS reads higher than true RMS (~0.707) due to
+        // asymmetric attack/release. Expected range: 0.7–1.0
+        assert!(
+            level > 0.6 && level < 1.0,
+            "RMS envelope should track sine in range 0.6-1.0, got {level}"
+        );
+    }
+
+    #[test]
+    fn test_envelope_reset() {
+        let mut env = EnvelopeFollower::new(EnvelopeMode::Peak, 48000.0, 1.0, 50.0);
+        for _ in 0..1000 {
+            env.process(1.0);
+        }
+        env.reset();
+        assert_eq!(env.level(), 0.0);
+    }
+
+    // ---- Compressor tests ----
+
+    #[test]
+    fn test_compressor_below_threshold_passes() {
+        let mut comp = Compressor::new(48000.0, -10.0, 4.0, 1.0, 50.0, 0.0, 0.0);
+        // Feed a quiet signal (well below -10dB threshold)
+        let mut buf = [0.1_f32; 4800]; // ~-20dB
+        comp.process_buffer(&mut buf);
+        // After envelope settles, signal should be mostly unchanged
+        let last = buf[4799];
+        assert!(
+            (last - 0.1).abs() < 0.02,
+            "Below threshold should pass: got {last}"
+        );
+    }
+
+    #[test]
+    fn test_compressor_above_threshold_reduces() {
+        let mut comp = Compressor::new(48000.0, -20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        // Feed a loud signal (~0dB)
+        let mut buf = [1.0_f32; 4800];
+        comp.process_buffer(&mut buf);
+        // Should be compressed (output < input)
+        let last = buf[4799];
+        assert!(
+            last < 0.8,
+            "Above threshold should compress: got {last}"
+        );
+        assert!(last > 0.01, "Should not be silent: got {last}");
+    }
+
+    #[test]
+    fn test_compressor_gain_reduction_reported() {
+        let mut comp = Compressor::new(48000.0, -20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        let mut buf = [1.0_f32; 4800];
+        comp.process_buffer(&mut buf);
+        let gr = comp.gain_reduction_db();
+        assert!(gr < -1.0, "Should report gain reduction: {gr}dB");
+    }
+
+    #[test]
+    fn test_compressor_hard_knee() {
+        let comp = Compressor::new(48000.0, -20.0, 4.0, 1.0, 50.0, 0.0, 0.0);
+        // Hard knee: below threshold = 0 gain change
+        assert_eq!(comp.compute_gain(-30.0), 0.0);
+        // Above threshold: compressed
+        let gr = comp.compute_gain(-10.0);
+        assert!(gr < -1.0, "Hard knee above threshold: {gr}dB");
+    }
+
+    #[test]
+    fn test_compressor_soft_knee() {
+        let comp = Compressor::new(48000.0, -20.0, 4.0, 1.0, 50.0, 10.0, 0.0);
+        // Well below knee: no compression
+        assert_eq!(comp.compute_gain(-30.0), 0.0);
+        // In knee region: partial compression
+        let gr_knee = comp.compute_gain(-20.0);
+        assert!(gr_knee < 0.0, "In knee: {gr_knee}dB");
+        // Above knee: full compression
+        let gr_above = comp.compute_gain(-10.0);
+        assert!(gr_above < gr_knee, "Above knee should compress more: {gr_above} vs {gr_knee}");
+    }
+
+    #[test]
+    fn test_compressor_makeup_gain() {
+        let mut comp = Compressor::new(48000.0, -20.0, 4.0, 0.1, 50.0, 0.0, 10.0);
+        // Feed signal below threshold
+        let mut buf = [0.1_f32; 4800];
+        comp.process_buffer(&mut buf);
+        let last = buf[4799];
+        // Makeup gain should boost output
+        assert!(
+            last > 0.1,
+            "Makeup gain should boost: got {last}"
+        );
+    }
+
+    #[test]
+    fn test_compressor_ratio_1_no_compression() {
+        let comp = Compressor::new(48000.0, -20.0, 1.0, 1.0, 50.0, 0.0, 0.0);
+        // Ratio 1:1 = no compression
+        let gr = comp.compute_gain(0.0);
+        assert!(
+            gr.abs() < 0.01,
+            "Ratio 1:1 should not compress: {gr}dB"
+        );
+    }
+
+    #[test]
+    fn test_compressor_reset() {
+        let mut comp = Compressor::new(48000.0, -20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        let mut buf = [1.0_f32; 1000];
+        comp.process_buffer(&mut buf);
+        comp.reset();
+        assert_eq!(comp.gain_reduction_db(), 0.0);
+    }
+
+    // ---- Noise gate tests ----
+
+    #[test]
+    fn test_gate_passes_loud_signal() {
+        let mut gate = NoiseGate::new(48000.0, -40.0, 0.1, 10.0, 50.0, -80.0);
+        // Feed loud signal (well above -40dB threshold)
+        let mut buf = [0.5_f32; 4800];
+        gate.process_buffer(&mut buf);
+        let last = buf[4799];
+        assert!(
+            (last - 0.5).abs() < 0.05,
+            "Gate should pass loud signal: got {last}"
+        );
+    }
+
+    #[test]
+    fn test_gate_attenuates_quiet_signal() {
+        let mut gate = NoiseGate::new(48000.0, -20.0, 0.1, 0.0, 10.0, -80.0);
+        // Feed very quiet signal (well below -20dB threshold)
+        let mut buf = [0.001_f32; 48000]; // ~-60dB
+        gate.process_buffer(&mut buf);
+        let last = buf[47999];
+        assert!(
+            last < 0.0005,
+            "Gate should attenuate quiet signal: got {last}"
+        );
+    }
+
+    #[test]
+    fn test_gate_hold_time() {
+        let mut gate = NoiseGate::new(48000.0, -20.0, 0.1, 100.0, 50.0, -80.0);
+        // Feed loud signal to open gate
+        for _ in 0..4800 {
+            gate.process_sample(0.5);
+        }
+        assert!(gate.is_open(), "Gate should be open with loud signal");
+
+        // Feed silence — gate should hold for 100ms (4800 samples at 48kHz)
+        for _ in 0..2400 {
+            gate.process_sample(0.0);
+        }
+        // Should still be open (within hold time)
+        assert!(gate.is_open(), "Gate should still be open during hold");
+    }
+
+    #[test]
+    fn test_gate_range_expander() {
+        let mut gate = NoiseGate::new(48000.0, -20.0, 0.1, 0.0, 10.0, -12.0);
+        // Feed quiet signal with -12dB range (expander mode, not full gate)
+        let mut buf = [0.001_f32; 48000];
+        gate.process_buffer(&mut buf);
+        let last = buf[47999];
+        // With -12dB range, the signal should be attenuated but not fully gated
+        assert!(last > 0.0001, "Expander should not fully gate: {last}");
+        assert!(last < 0.001, "Expander should attenuate: {last}");
+    }
+
+    #[test]
+    fn test_gate_reset() {
+        let mut gate = NoiseGate::new(48000.0, -20.0, 0.1, 100.0, 50.0, -80.0);
+        for _ in 0..1000 {
+            gate.process_sample(0.5);
+        }
+        gate.reset();
+        assert_eq!(gate.gate_gain, 1.0);
+        assert_eq!(gate.hold_counter, 0);
     }
 }

@@ -1,738 +1,1152 @@
-//! ACE DSP WASM — WebAssembly bindings for the DSP engine.
+//! ACE-Step DSP WASM — wasm-bindgen exports for AudioWorklet processing.
 //!
-//! This crate exposes `ace-dsp-core` to JavaScript via `wasm-bindgen`.
-//! Each effect type gets a WASM-friendly wrapper that manages its own
-//! state and provides `process()` / `set_param()` methods.
+//! This crate exposes the DSP engine to JavaScript via wasm-bindgen.
+//! The primary consumer is the AudioWorklet processor (`wasm-dsp-processor.js`).
 
 use wasm_bindgen::prelude::*;
+use ace_dsp_core::autopan::{AutoPan, PanShape};
+use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
+use ace_dsp_core::dcblock::DcBlocker;
+use ace_dsp_core::chorus::Chorus;
+use ace_dsp_core::delay::MonoDelay;
+use ace_dsp_core::distortion::{Distortion, DistortionType};
+use ace_dsp_core::dynamics::{Compressor, NoiseGate};
+use ace_dsp_core::eq::ParametricEq;
+use ace_dsp_core::gain::GainProcessor;
+use ace_dsp_core::limiter::Limiter;
+use ace_dsp_core::phaser::Phaser;
+use ace_dsp_core::reverb::Reverb;
+use ace_dsp_core::ringmod::{RingMod, RingModShape};
+use ace_dsp_core::stereo::StereoImager;
+use ace_dsp_core::tremolo::{Tremolo, TremoloShape};
 
-// Re-export core types for internal use
-use ace_dsp_core::biquad::{BiquadCoeffs, BiquadStereo, FilterType};
-use ace_dsp_core::delay::FeedbackDelay;
-use ace_dsp_core::dynamics::{
-    Compressor, CompressorParams, DetectionMode, Gate, GateParams,
-};
-use ace_dsp_core::eq::{EqBandParams, ParametricEQ};
-use ace_dsp_core::reverb::{DattorroReverb, ReverbParams, RoomSize};
-use ace_dsp_core::modulation::{
-    Chorus, ChorusParams, Flanger, FlangerParams, Phaser, PhaserParams,
-};
-use ace_dsp_core::distortion::{Distortion, DistortionParams, DistortionType};
-use ace_dsp_core::limiter::{Limiter, LimiterParams, LufsMeter};
-use ace_dsp_core::timestretch::{PhaseVocoder, PhaseVocoderParams, Wsola, WsolaParams};
-
-// ── Smoke test ──────────────────────────────────────────────────────
-
-/// Pipeline smoke test: verifies Rust → WASM → JS works end-to-end.
+/// WASM-exported DSP processor that handles a chain of effects for one track.
+///
+/// Designed to be instantiated once per AudioWorkletNode and called from
+/// the worklet's `process()` method on every audio render quantum (128 frames).
 #[wasm_bindgen]
-pub fn add(a: f32, b: f32) -> f32 {
-    ace_dsp_core::add(a, b)
-}
-
-/// Return the DSP engine version string.
-#[wasm_bindgen]
-pub fn dsp_version() -> String {
-    format!("ace-dsp {}", env!("CARGO_PKG_VERSION"))
-}
-
-// ── Biquad Filter ───────────────────────────────────────────────────
-
-/// Map JS filter type string to Rust enum.
-fn parse_filter_type(s: &str) -> FilterType {
-    match s {
-        "lowpass" => FilterType::Lowpass,
-        "highpass" => FilterType::Highpass,
-        "bandpass" => FilterType::Bandpass,
-        "bandpassPeak" => FilterType::BandpassPeak,
-        "notch" => FilterType::Notch,
-        "peaking" => FilterType::Peaking,
-        "lowshelf" => FilterType::LowShelf,
-        "highshelf" => FilterType::HighShelf,
-        "allpass" => FilterType::Allpass,
-        _ => FilterType::Lowpass,
-    }
-}
-
-/// Stereo biquad filter exposed to JS.
-#[wasm_bindgen]
-pub struct WasmBiquadStereo {
-    inner: BiquadStereo,
-    sample_rate: f64,
+pub struct DspProcessor {
+    gain: GainProcessor,
+    filter: Option<BiquadFilter>,
+    delay: Option<MonoDelay>,
+    compressor: Option<Compressor>,
+    gate: Option<NoiseGate>,
+    eq: Option<ParametricEq>,
+    reverb: Option<Reverb>,
+    chorus: Option<Chorus>,
+    distortion: Option<Distortion>,
+    stereo_imager: Option<StereoImager>,
+    limiter: Option<Limiter>,
+    phaser: Option<Phaser>,
+    tremolo: Option<Tremolo>,
+    autopan: Option<AutoPan>,
+    ringmod: Option<RingMod>,
+    dc_blocker: Option<DcBlocker>,
+    sample_rate: f32,
+    limiter_lookahead_ms: f32,
 }
 
 #[wasm_bindgen]
-impl WasmBiquadStereo {
-    /// Create a new stereo biquad filter.
+impl DspProcessor {
+    /// Create a new DSP processor.
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        filter_type: &str,
-        freq: f64,
-        q: f64,
-        gain_db: f64,
-        sample_rate: f64,
-    ) -> WasmBiquadStereo {
-        let ft = parse_filter_type(filter_type);
-        let coeffs = BiquadCoeffs::new(ft, freq, q, gain_db, sample_rate);
-        WasmBiquadStereo {
-            inner: BiquadStereo::new(coeffs),
+    pub fn new(sample_rate: f32) -> Self {
+        Self {
+            gain: GainProcessor::new(1.0),
+            filter: None,
+            delay: None,
+            compressor: None,
+            gate: None,
+            eq: None,
+            reverb: None,
+            chorus: None,
+            distortion: None,
+            stereo_imager: None,
+            limiter: None,
+            phaser: None,
+            tremolo: None,
+            autopan: None,
+            ringmod: None,
+            dc_blocker: None,
             sample_rate,
+            limiter_lookahead_ms: 0.0,
         }
     }
 
-    /// Update filter parameters.
-    pub fn set_params(&mut self, filter_type: &str, freq: f64, q: f64, gain_db: f64) {
-        let ft = parse_filter_type(filter_type);
-        let coeffs = BiquadCoeffs::new(ft, freq, q, gain_db, self.sample_rate);
-        self.inner.set_coeffs(coeffs);
+    /// Set gain value (linear, 0.0 to ~2.0).
+    pub fn set_gain(&mut self, gain: f32) {
+        self.gain.set_gain(gain);
     }
 
-    /// Process interleaved stereo buffer in-place.
-    /// The buffer should be [L0, R0, L1, R1, ...].
-    pub fn process_interleaved(&mut self, buffer: &mut [f32]) {
-        self.inner.process_interleaved(buffer);
-    }
-
-    /// Process separate left and right channel buffers.
-    pub fn process_split(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_split(left, right);
-    }
-
-    /// Calculate magnitude response in dB at given frequencies.
-    /// Returns an array of dB values, one per input frequency.
-    pub fn magnitude_response(&self, frequencies: &[f32]) -> Vec<f32> {
-        // Access coefficients via a temporary mono filter to get the response
-        let coeffs = BiquadCoeffs::new(
-            FilterType::Lowpass, 1000.0, 0.707, 0.0, self.sample_rate,
-        );
-        // We need access to the inner coeffs — for now, reconstruct
-        // TODO: expose coeffs getter from BiquadStereo
-        let _ = coeffs;
-        frequencies
-            .iter()
-            .map(|&f| {
-                // Placeholder — will be implemented when coeffs are accessible
-                let _ = f;
-                0.0
-            })
-            .collect()
-    }
-
-    /// Reset filter state to silence.
-    pub fn reset(&mut self) {
-        self.inner.reset();
-    }
-}
-
-// ── Delay Line ──────────────────────────────────────────────────────
-
-/// Feedback delay effect exposed to JS.
-#[wasm_bindgen]
-pub struct WasmFeedbackDelay {
-    inner: FeedbackDelay,
-}
-
-#[wasm_bindgen]
-impl WasmFeedbackDelay {
-    /// Create a new feedback delay.
-    ///
-    /// - `max_delay_ms`: maximum delay capacity in milliseconds
-    /// - `delay_ms`: initial delay time in milliseconds
-    /// - `feedback`: feedback gain (0.0–0.95)
-    /// - `wet`: wet/dry mix (0.0–1.0)
-    /// - `sample_rate`: sample rate in Hz
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        max_delay_ms: f64,
-        delay_ms: f64,
-        feedback: f32,
-        wet: f32,
-        sample_rate: f64,
-    ) -> WasmFeedbackDelay {
-        let max_samples = (max_delay_ms * sample_rate / 1000.0) as usize;
-        let delay_samples = delay_ms * sample_rate / 1000.0;
-        WasmFeedbackDelay {
-            inner: FeedbackDelay::new(max_samples, delay_samples, feedback, wet),
-        }
-    }
-
-    pub fn set_delay_ms(&mut self, delay_ms: f64, sample_rate: f64) {
-        self.inner
-            .set_delay_time(delay_ms * sample_rate / 1000.0);
-    }
-
-    pub fn set_feedback(&mut self, feedback: f32) {
-        self.inner.set_feedback(feedback);
-    }
-
-    pub fn set_wet(&mut self, wet: f32) {
-        self.inner.set_wet(wet);
-    }
-
-    /// Process a mono buffer in-place.
-    pub fn process_block(&mut self, buffer: &mut [f32]) {
-        self.inner.process_block(buffer);
-    }
-
-    pub fn clear(&mut self) {
-        self.inner.clear();
-    }
-}
-
-// ── Compressor ──────────────────────────────────────────────────────
-
-/// Stereo compressor exposed to JS.
-#[wasm_bindgen]
-pub struct WasmCompressor {
-    inner: Compressor,
-}
-
-#[wasm_bindgen]
-impl WasmCompressor {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        threshold_db: f64,
-        ratio: f64,
-        knee_db: f64,
-        attack_ms: f64,
-        release_ms: f64,
-        makeup_db: f64,
-        mix: f64,
-        sample_rate: f64,
-    ) -> WasmCompressor {
-        let params = CompressorParams {
-            threshold_db,
-            ratio,
-            knee_db,
-            attack_ms,
-            release_ms,
-            makeup_db,
-            mix,
-            detection: DetectionMode::Rms,
-            lookahead_ms: 0.0,
+    /// Enable a biquad filter with the given parameters.
+    /// filter_type: 0=LP, 1=HP, 2=BP, 3=Notch, 4=Allpass, 5=Peaking, 6=LowShelf, 7=HighShelf
+    pub fn set_filter(&mut self, filter_type: u8, frequency: f32, q: f32, gain_db: f32) {
+        let ft = match filter_type {
+            0 => BiquadType::Lowpass,
+            1 => BiquadType::Highpass,
+            2 => BiquadType::Bandpass,
+            3 => BiquadType::Notch,
+            4 => BiquadType::Allpass,
+            5 => BiquadType::Peaking,
+            6 => BiquadType::LowShelf,
+            7 => BiquadType::HighShelf,
+            _ => BiquadType::Lowpass,
         };
-        WasmCompressor {
-            inner: Compressor::new(params, sample_rate),
+        let coeffs = BiquadCoeffs::compute(ft, self.sample_rate, frequency, q, gain_db);
+        match &mut self.filter {
+            Some(f) => f.set_coeffs(coeffs),
+            None => self.filter = Some(BiquadFilter::new(coeffs)),
         }
     }
 
-    pub fn set_params(
+    /// Disable the filter.
+    pub fn disable_filter(&mut self) {
+        self.filter = None;
+    }
+
+    /// Enable a delay effect.
+    /// - `delay_ms`: delay time in milliseconds
+    /// - `feedback`: feedback amount (0.0 to 0.99)
+    /// - `wet`: wet mix level (0.0 to 1.0)
+    pub fn set_delay(&mut self, delay_ms: f32, feedback: f32, wet: f32) {
+        let delay_samples = delay_ms * self.sample_rate / 1000.0;
+        let max_samples = (2.0 * self.sample_rate) as usize; // 2 seconds max
+        match &mut self.delay {
+            Some(d) => {
+                d.set_delay_samples(delay_samples);
+                d.set_feedback(feedback);
+                d.set_wet(wet);
+            }
+            None => {
+                self.delay = Some(MonoDelay::new(max_samples, delay_samples, feedback, wet));
+            }
+        }
+    }
+
+    /// Update delay parameters without recreating.
+    pub fn set_delay_params(&mut self, delay_ms: f32, feedback: f32, wet: f32, dry: f32) {
+        if let Some(ref mut d) = self.delay {
+            d.set_delay_samples(delay_ms * self.sample_rate / 1000.0);
+            d.set_feedback(feedback);
+            d.set_wet(wet);
+            d.set_dry(dry);
+        }
+    }
+
+    /// Disable the delay.
+    pub fn disable_delay(&mut self) {
+        self.delay = None;
+    }
+
+    /// Enable compressor.
+    /// - `threshold_db`: compression threshold (e.g., -20)
+    /// - `ratio`: compression ratio (e.g., 4.0 for 4:1)
+    /// - `attack_ms`: attack time in ms
+    /// - `release_ms`: release time in ms
+    /// - `knee_db`: knee width (0 = hard knee)
+    /// - `makeup_db`: makeup gain in dB
+    pub fn set_compressor(
         &mut self,
-        threshold_db: f64,
-        ratio: f64,
-        knee_db: f64,
-        attack_ms: f64,
-        release_ms: f64,
-        makeup_db: f64,
-        mix: f64,
+        threshold_db: f32,
+        ratio: f32,
+        attack_ms: f32,
+        release_ms: f32,
+        knee_db: f32,
+        makeup_db: f32,
     ) {
-        self.inner.set_params(CompressorParams {
-            threshold_db,
-            ratio,
-            knee_db,
-            attack_ms,
-            release_ms,
-            makeup_db,
-            mix,
-            detection: DetectionMode::Rms,
-            lookahead_ms: 0.0,
-        });
-    }
-
-    pub fn set_sidechain_hpf(&mut self, freq: f64) {
-        self.inner.set_sidechain_hpf(freq);
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn gain_reduction_db(&self) -> f64 {
-        self.inner.gain_reduction_db()
-    }
-
-    pub fn reset(&mut self) {
-        self.inner.reset();
-    }
-}
-
-// ── Gate ─────────────────────────────────────────────────────────────
-
-/// Stereo gate exposed to JS.
-#[wasm_bindgen]
-pub struct WasmGate {
-    inner: Gate,
-}
-
-#[wasm_bindgen]
-impl WasmGate {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        threshold_db: f64,
-        range_db: f64,
-        attack_ms: f64,
-        hold_ms: f64,
-        release_ms: f64,
-        hysteresis_db: f64,
-        sample_rate: f64,
-    ) -> WasmGate {
-        let params = GateParams {
-            threshold_db,
-            range_db,
-            attack_ms,
-            hold_ms,
-            release_ms,
-            hysteresis_db,
-            detection: DetectionMode::Rms,
-        };
-        WasmGate {
-            inner: Gate::new(params, sample_rate),
+        match &mut self.compressor {
+            Some(c) => {
+                c.set_threshold(threshold_db);
+                c.set_ratio(ratio);
+                c.set_attack(attack_ms);
+                c.set_release(release_ms);
+                c.set_knee(knee_db);
+                c.set_makeup_gain(makeup_db);
+            }
+            None => {
+                self.compressor = Some(Compressor::new(
+                    self.sample_rate,
+                    threshold_db,
+                    ratio,
+                    attack_ms,
+                    release_ms,
+                    knee_db,
+                    makeup_db,
+                ));
+            }
         }
     }
 
-    pub fn set_params(
+    /// Disable the compressor.
+    pub fn disable_compressor(&mut self) {
+        self.compressor = None;
+    }
+
+    /// Get current compressor gain reduction in dB.
+    pub fn compressor_gr_db(&self) -> f32 {
+        self.compressor
+            .as_ref()
+            .map(|c| c.gain_reduction_db())
+            .unwrap_or(0.0)
+    }
+
+    /// Enable noise gate.
+    /// - `threshold_db`: gate threshold
+    /// - `attack_ms`: gate open time
+    /// - `hold_ms`: hold time after signal drops
+    /// - `release_ms`: gate close time
+    /// - `range_db`: attenuation when closed (-80 = full gate, -12 = expander)
+    pub fn set_gate(
         &mut self,
-        threshold_db: f64,
-        range_db: f64,
-        attack_ms: f64,
-        hold_ms: f64,
-        release_ms: f64,
-        hysteresis_db: f64,
+        threshold_db: f32,
+        attack_ms: f32,
+        hold_ms: f32,
+        release_ms: f32,
+        range_db: f32,
     ) {
-        self.inner.set_params(GateParams {
-            threshold_db,
-            range_db,
-            attack_ms,
-            hold_ms,
-            release_ms,
-            hysteresis_db,
-            detection: DetectionMode::Rms,
-        });
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn gain_reduction_db(&self) -> f64 {
-        self.inner.gain_reduction_db()
-    }
-
-    pub fn reset(&mut self) {
-        self.inner.reset();
-    }
-}
-
-// ── Parametric EQ ───────────────────────────────────────────────────
-
-/// 8-band parametric EQ exposed to JS.
-#[wasm_bindgen]
-pub struct WasmParametricEQ {
-    inner: ParametricEQ,
-}
-
-#[wasm_bindgen]
-impl WasmParametricEQ {
-    #[wasm_bindgen(constructor)]
-    pub fn new(sample_rate: f64) -> WasmParametricEQ {
-        WasmParametricEQ {
-            inner: ParametricEQ::new(sample_rate),
+        match &mut self.gate {
+            Some(g) => {
+                g.set_threshold(threshold_db);
+                g.set_attack(attack_ms);
+                g.set_hold(hold_ms);
+                g.set_release(release_ms);
+                g.set_range(range_db);
+            }
+            None => {
+                self.gate = Some(NoiseGate::new(
+                    self.sample_rate,
+                    threshold_db,
+                    attack_ms,
+                    hold_ms,
+                    release_ms,
+                    range_db,
+                ));
+            }
         }
     }
 
-    /// Set parameters for a band. `filter_type` is one of:
-    /// "lowpass", "highpass", "bandpass", "notch", "peaking", "lowshelf", "highshelf", "allpass"
-    pub fn set_band(
+    /// Disable the noise gate.
+    pub fn disable_gate(&mut self) {
+        self.gate = None;
+    }
+
+    /// Set a parametric EQ band.
+    /// - `band_index`: 0-7
+    /// - `filter_type`: 0=LP, 1=HP, 2=BP, 3=Notch, 4=Allpass, 5=Peaking, 6=LowShelf, 7=HighShelf
+    /// - `frequency`: center frequency in Hz
+    /// - `q`: Q factor
+    /// - `gain_db`: gain in dB (for peaking/shelf types)
+    /// - `enabled`: whether this band is active
+    pub fn set_eq_band(
         &mut self,
-        index: usize,
-        filter_type: &str,
-        frequency: f64,
-        q: f64,
-        gain_db: f64,
+        band_index: u8,
+        filter_type: u8,
+        frequency: f32,
+        q: f32,
+        gain_db: f32,
         enabled: bool,
     ) {
-        self.inner.set_band(
-            index,
-            EqBandParams {
-                filter_type: parse_filter_type(filter_type),
-                frequency,
-                q,
-                gain_db,
-                enabled,
-            },
-        );
-    }
-
-    pub fn set_band_enabled(&mut self, index: usize, enabled: bool) {
-        self.inner.set_band_enabled(index, enabled);
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    /// Get the combined magnitude response (dB) at the given frequencies.
-    pub fn magnitude_response(&self, frequencies: &[f32]) -> Vec<f32> {
-        self.inner.magnitude_response(frequencies)
-    }
-
-    /// Get magnitude response for a single band.
-    pub fn band_magnitude_response(&self, band_index: usize, frequencies: &[f32]) -> Vec<f32> {
-        self.inner.band_magnitude_response(band_index, frequencies)
-    }
-
-    /// Get log-spaced frequency points for UI rendering.
-    pub fn frequency_points(num_points: usize) -> Vec<f32> {
-        ParametricEQ::frequency_points(num_points)
-    }
-
-    pub fn reset(&mut self) {
-        self.inner.reset();
-    }
-}
-
-// ── Reverb ──────────────────────────────────────────────────────────
-
-fn parse_room_size(s: &str) -> RoomSize {
-    match s {
-        "small" => RoomSize::Small,
-        "medium" => RoomSize::Medium,
-        "large" => RoomSize::Large,
-        "hall" => RoomSize::Hall,
-        _ => RoomSize::Medium,
-    }
-}
-
-/// Dattorro plate reverb exposed to JS.
-#[wasm_bindgen]
-pub struct WasmReverb {
-    inner: DattorroReverb,
-}
-
-#[wasm_bindgen]
-impl WasmReverb {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        decay: f64,
-        damping: f64,
-        diffusion: f64,
-        predelay_ms: f64,
-        wet: f64,
-        room_size: &str,
-        sample_rate: f64,
-    ) -> WasmReverb {
-        let params = ReverbParams {
-            decay,
-            damping,
-            diffusion,
-            predelay_ms,
-            wet,
-            room_size: parse_room_size(room_size),
-            ..ReverbParams::default()
+        let ft = match filter_type {
+            0 => BiquadType::Lowpass,
+            1 => BiquadType::Highpass,
+            2 => BiquadType::Bandpass,
+            3 => BiquadType::Notch,
+            4 => BiquadType::Allpass,
+            5 => BiquadType::Peaking,
+            6 => BiquadType::LowShelf,
+            7 => BiquadType::HighShelf,
+            _ => BiquadType::Peaking,
         };
-        WasmReverb {
-            inner: DattorroReverb::new(params, sample_rate),
-        }
+        let eq = self
+            .eq
+            .get_or_insert_with(|| ParametricEq::new(self.sample_rate));
+        eq.set_band(band_index as usize, ft, frequency, q, gain_db, enabled);
     }
 
-    pub fn set_params(
-        &mut self,
-        decay: f64,
-        damping: f64,
-        diffusion: f64,
-        predelay_ms: f64,
-        wet: f64,
-        mod_depth: f64,
-        mod_rate: f64,
-        early_level: f64,
-        late_level: f64,
-    ) {
-        self.inner.set_params(ReverbParams {
-            decay,
-            damping,
-            diffusion,
-            predelay_ms,
-            mod_depth,
-            mod_rate,
-            early_level,
-            late_level,
-            wet,
-            room_size: RoomSize::Medium, // room size requires recreation
-        });
+    /// Disable the parametric EQ entirely.
+    pub fn disable_eq(&mut self) {
+        self.eq = None;
     }
 
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn reset(&mut self) {
-        self.inner.reset();
-    }
-}
-
-// ── Chorus ──────────────────────────────────────────────────────────
-
-#[wasm_bindgen]
-pub struct WasmChorus {
-    inner: Chorus,
-}
-
-#[wasm_bindgen]
-impl WasmChorus {
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        rate_hz: f64,
-        depth: f64,
-        delay_ms: f64,
-        feedback: f64,
-        wet: f64,
-        sample_rate: f64,
-    ) -> WasmChorus {
-        WasmChorus {
-            inner: Chorus::new(
-                ChorusParams { rate_hz, depth, delay_ms, feedback, wet, stereo_spread: 0.25 },
-                sample_rate,
-            ),
-        }
-    }
-
-    pub fn set_params(&mut self, rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64) {
-        self.inner.set_params(ChorusParams {
-            rate_hz, depth, delay_ms, feedback, wet, stereo_spread: 0.25,
-        });
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── Flanger ─────────────────────────────────────────────────────────
-
-#[wasm_bindgen]
-pub struct WasmFlanger {
-    inner: Flanger,
-}
-
-#[wasm_bindgen]
-impl WasmFlanger {
-    #[wasm_bindgen(constructor)]
-    pub fn new(rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64, sample_rate: f64) -> WasmFlanger {
-        WasmFlanger {
-            inner: Flanger::new(FlangerParams { rate_hz, depth, delay_ms, feedback, wet }, sample_rate),
-        }
-    }
-
-    pub fn set_params(&mut self, rate_hz: f64, depth: f64, delay_ms: f64, feedback: f64, wet: f64) {
-        self.inner.set_params(FlangerParams { rate_hz, depth, delay_ms, feedback, wet });
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── Phaser ──────────────────────────────────────────────────────────
-
-#[wasm_bindgen]
-pub struct WasmPhaser {
-    inner: Phaser,
-}
-
-#[wasm_bindgen]
-impl WasmPhaser {
-    #[wasm_bindgen(constructor)]
-    pub fn new(rate_hz: f64, depth: f64, stages: usize, feedback: f64, base_freq: f64, wet: f64, sample_rate: f64) -> WasmPhaser {
-        WasmPhaser {
-            inner: Phaser::new(PhaserParams { rate_hz, depth, stages, feedback, base_freq, wet }, sample_rate),
-        }
-    }
-
-    pub fn set_params(&mut self, rate_hz: f64, depth: f64, feedback: f64, base_freq: f64, wet: f64) {
-        self.inner.set_params(PhaserParams {
-            rate_hz, depth, stages: 4, feedback, base_freq, wet,
-        });
-    }
-
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── Distortion ──────────────────────────────────────────────────────
-
-fn parse_distortion_type(s: &str) -> DistortionType {
-    match s {
-        "softclip" => DistortionType::SoftClip,
-        "hardclip" => DistortionType::HardClip,
-        "tube" => DistortionType::Tube,
-        "tape" => DistortionType::Tape,
-        "fuzz" => DistortionType::Fuzz,
-        "bitcrusher" => DistortionType::Bitcrusher,
-        _ => DistortionType::SoftClip,
-    }
-}
-
-#[wasm_bindgen]
-pub struct WasmDistortion {
-    inner: Distortion,
-}
-
-#[wasm_bindgen]
-impl WasmDistortion {
-    #[wasm_bindgen(constructor)]
-    pub fn new(drive: f64, character: &str, tone: f64, oversample: usize, wet: f64, sample_rate: f64) -> WasmDistortion {
-        WasmDistortion {
-            inner: Distortion::new(
-                DistortionParams {
-                    drive,
-                    character: parse_distortion_type(character),
-                    tone,
-                    oversample,
+    /// Enable reverb effect.
+    /// - `room_size`: 0.0 (small) to 1.0 (large)
+    /// - `damping`: 0.0 (bright) to 1.0 (dark)
+    /// - `wet`: wet signal level (0.0–1.0)
+    /// - `dry`: dry signal level (0.0–1.0)
+    pub fn set_reverb(&mut self, room_size: f32, damping: f32, wet: f32, dry: f32) {
+        match &mut self.reverb {
+            Some(r) => {
+                r.set_room_size(room_size);
+                r.set_damping(damping);
+                r.set_wet(wet);
+                r.set_dry(dry);
+            }
+            None => {
+                self.reverb = Some(Reverb::new(
+                    self.sample_rate,
+                    room_size,
+                    damping,
                     wet,
-                    ..DistortionParams::default()
-                },
-                sample_rate,
-            ),
+                    dry,
+                ));
+            }
         }
     }
 
-    pub fn set_params(&mut self, drive: f64, character: &str, tone: f64, oversample: usize, wet: f64) {
-        self.inner.set_params(DistortionParams {
-            drive,
-            character: parse_distortion_type(character),
-            tone,
-            oversample,
-            wet,
-            ..DistortionParams::default()
-        });
+    /// Disable the reverb.
+    pub fn disable_reverb(&mut self) {
+        self.reverb = None;
     }
 
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── Limiter ─────────────────────────────────────────────────────────
-
-#[wasm_bindgen]
-pub struct WasmLimiter {
-    inner: Limiter,
-}
-
-#[wasm_bindgen]
-impl WasmLimiter {
-    #[wasm_bindgen(constructor)]
-    pub fn new(ceiling_db: f64, release_ms: f64, lookahead_ms: f64, sample_rate: f64) -> WasmLimiter {
-        WasmLimiter {
-            inner: Limiter::new(LimiterParams { ceiling_db, release_ms, lookahead_ms }, sample_rate),
+    /// Enable chorus/flanger effect.
+    /// - `rate_hz`: LFO rate (0.1–10 Hz)
+    /// - `depth_ms`: modulation depth in ms
+    /// - `delay_ms`: base delay time in ms
+    /// - `feedback`: feedback (0.0–0.95, >0 for flanger)
+    /// - `wet`: wet level (0.0–1.0)
+    /// - `dry`: dry level (0.0–1.0)
+    pub fn set_chorus(
+        &mut self,
+        rate_hz: f32,
+        depth_ms: f32,
+        delay_ms: f32,
+        feedback: f32,
+        wet: f32,
+        dry: f32,
+    ) {
+        match &mut self.chorus {
+            Some(c) => {
+                c.set_rate(rate_hz);
+                c.set_depth(depth_ms);
+                c.set_delay(delay_ms);
+                c.set_feedback(feedback);
+                c.set_wet(wet);
+                c.set_dry(dry);
+            }
+            None => {
+                self.chorus = Some(Chorus::new(
+                    self.sample_rate,
+                    rate_hz,
+                    depth_ms,
+                    delay_ms,
+                    feedback,
+                    wet,
+                    dry,
+                ));
+            }
         }
     }
 
-    pub fn set_params(&mut self, ceiling_db: f64, release_ms: f64) {
-        self.inner.set_params(LimiterParams { ceiling_db, release_ms, lookahead_ms: 1.0 });
+    /// Disable the chorus/flanger.
+    pub fn disable_chorus(&mut self) {
+        self.chorus = None;
     }
 
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.inner.process_stereo(left, right);
-    }
-
-    pub fn gain_reduction_db(&self) -> f64 { self.inner.gain_reduction_db() }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── LUFS Meter ──────────────────────────────────────────────────────
-
-#[wasm_bindgen]
-pub struct WasmLufsMeter {
-    inner: LufsMeter,
-}
-
-#[wasm_bindgen]
-impl WasmLufsMeter {
-    #[wasm_bindgen(constructor)]
-    pub fn new(sample_rate: f64) -> WasmLufsMeter {
-        WasmLufsMeter { inner: LufsMeter::new(sample_rate) }
-    }
-
-    pub fn process_block(&mut self, left: &[f32], right: &[f32]) {
-        self.inner.process_block(left, right);
-    }
-
-    pub fn momentary_lufs(&self) -> f64 { self.inner.momentary_lufs() }
-    pub fn short_term_lufs(&self) -> f64 { self.inner.short_term_lufs() }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── Phase Vocoder ───────────────────────────────────────────────────
-
-/// Phase vocoder time-stretcher exposed to JS.
-#[wasm_bindgen]
-pub struct WasmPhaseVocoder {
-    inner: PhaseVocoder,
-}
-
-#[wasm_bindgen]
-impl WasmPhaseVocoder {
-    #[wasm_bindgen(constructor)]
-    pub fn new(fft_size: usize, stretch_factor: f64, phase_locking: bool) -> WasmPhaseVocoder {
-        WasmPhaseVocoder {
-            inner: PhaseVocoder::new(PhaseVocoderParams {
-                fft_size,
-                stretch_factor,
-                phase_locking,
-            }),
+    /// Enable distortion/waveshaper.
+    /// - `dist_type`: 0=HardClip, 1=SoftClip, 2=Overdrive, 3=Fuzz, 4=Bitcrush
+    /// - `drive`: input gain (1.0–100.0)
+    /// - `mix`: wet/dry (0.0–1.0)
+    /// - `output_gain`: post level (0.0–2.0)
+    /// - `bit_depth`: for Bitcrush mode (1.0–16.0)
+    pub fn set_distortion(
+        &mut self,
+        dist_type: u8,
+        drive: f32,
+        mix: f32,
+        output_gain: f32,
+        bit_depth: f32,
+    ) {
+        let dt = match dist_type {
+            0 => DistortionType::HardClip,
+            1 => DistortionType::SoftClip,
+            2 => DistortionType::Overdrive,
+            3 => DistortionType::Fuzz,
+            4 => DistortionType::Bitcrush,
+            _ => DistortionType::SoftClip,
+        };
+        match &mut self.distortion {
+            Some(d) => {
+                d.set_type(dt);
+                d.set_drive(drive);
+                d.set_mix(mix);
+                d.set_output_gain(output_gain);
+                d.set_bit_depth(bit_depth);
+            }
+            None => {
+                let mut d = Distortion::new(dt, drive, mix, output_gain);
+                d.set_bit_depth(bit_depth);
+                self.distortion = Some(d);
+            }
         }
     }
 
-    pub fn set_stretch_factor(&mut self, factor: f64) {
-        self.inner.set_stretch_factor(factor);
+    /// Disable the distortion.
+    pub fn disable_distortion(&mut self) {
+        self.distortion = None;
     }
 
-    /// Process entire audio buffer offline. Returns stretched audio.
-    pub fn process_offline(&mut self, input: &[f32]) -> Vec<f32> {
-        self.inner.process_offline(input)
-    }
-
-    pub fn reset(&mut self) { self.inner.reset(); }
-}
-
-// ── WSOLA ───────────────────────────────────────────────────────────
-
-/// WSOLA time-stretcher exposed to JS.
-#[wasm_bindgen]
-pub struct WasmWsola {
-    inner: Wsola,
-}
-
-#[wasm_bindgen]
-impl WasmWsola {
-    #[wasm_bindgen(constructor)]
-    pub fn new(stretch_factor: f64, window_ms: f64, sample_rate: f64) -> WasmWsola {
-        WasmWsola {
-            inner: Wsola::new(WsolaParams {
-                stretch_factor,
-                window_ms,
-                sample_rate,
-            }),
+    /// Set stereo imager width.
+    /// - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
+    pub fn set_stereo_width(&mut self, width: f32) {
+        match &mut self.stereo_imager {
+            Some(si) => si.set_width(width),
+            None => self.stereo_imager = Some(StereoImager::new(width)),
         }
     }
 
-    pub fn set_stretch_factor(&mut self, factor: f64) {
-        self.inner.set_stretch_factor(factor);
+    /// Disable the stereo imager.
+    pub fn disable_stereo_imager(&mut self) {
+        self.stereo_imager = None;
     }
 
-    /// Process entire audio buffer offline. Returns stretched audio.
-    pub fn process_offline(&self, input: &[f32]) -> Vec<f32> {
-        self.inner.process_offline(input)
+    /// Enable limiter.
+    /// - `ceiling_db`: max output level (≤ 0.0 dB)
+    /// - `release_ms`: gain recovery time
+    /// - `lookahead_ms`: anticipation window (1–10ms)
+    pub fn set_limiter(&mut self, ceiling_db: f32, release_ms: f32, lookahead_ms: f32) {
+        // Only re-create when lookahead changes (it sizes an internal buffer).
+        // For ceiling/release changes, update in-place to avoid audible glitches.
+        match &mut self.limiter {
+            Some(l) if (self.limiter_lookahead_ms - lookahead_ms).abs() < 0.001 => {
+                l.set_ceiling(ceiling_db);
+                l.set_release(release_ms);
+            }
+            _ => {
+                self.limiter = Some(Limiter::new(
+                    self.sample_rate,
+                    ceiling_db,
+                    release_ms,
+                    lookahead_ms,
+                ));
+                self.limiter_lookahead_ms = lookahead_ms;
+            }
+        }
+    }
+
+    /// Disable the limiter.
+    pub fn disable_limiter(&mut self) {
+        self.limiter = None;
+    }
+
+    /// Get current limiter gain reduction in dB.
+    pub fn limiter_gr_db(&self) -> f32 {
+        self.limiter
+            .as_ref()
+            .map(|l| l.gain_reduction_db())
+            .unwrap_or(0.0)
+    }
+
+    /// Enable phaser.
+    /// - `rate_hz`: LFO rate (0.05–10 Hz)
+    /// - `depth`: modulation depth (0.0–1.0)
+    /// - `feedback`: resonance (0.0–0.95)
+    /// - `stages`: allpass stages (2–12, even)
+    /// - `mix`: wet/dry (0.0–1.0)
+    pub fn set_phaser(
+        &mut self,
+        rate_hz: f32,
+        depth: f32,
+        feedback: f32,
+        stages: u8,
+        mix: f32,
+    ) {
+        match &mut self.phaser {
+            Some(p) => {
+                p.set_rate(rate_hz);
+                p.set_depth(depth);
+                p.set_feedback(feedback);
+                p.set_stages(stages as usize);
+                p.set_mix(mix);
+            }
+            None => {
+                self.phaser = Some(Phaser::new(
+                    self.sample_rate,
+                    rate_hz,
+                    depth,
+                    feedback,
+                    stages as usize,
+                    mix,
+                ));
+            }
+        }
+    }
+
+    /// Disable the phaser.
+    pub fn disable_phaser(&mut self) {
+        self.phaser = None;
+    }
+
+    /// Enable tremolo.
+    /// - `rate_hz`: LFO rate (0.1–20 Hz)
+    /// - `depth`: modulation depth (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Triangle, 2=Square
+    pub fn set_tremolo(&mut self, rate_hz: f32, depth: f32, shape: u8) {
+        let sh = match shape {
+            0 => TremoloShape::Sine,
+            1 => TremoloShape::Triangle,
+            2 => TremoloShape::Square,
+            _ => TremoloShape::Sine,
+        };
+        match &mut self.tremolo {
+            Some(t) => {
+                t.set_rate(rate_hz);
+                t.set_depth(depth);
+                t.set_shape(sh);
+            }
+            None => {
+                self.tremolo = Some(Tremolo::new(self.sample_rate, rate_hz, depth, sh));
+            }
+        }
+    }
+
+    /// Disable the tremolo.
+    pub fn disable_tremolo(&mut self) {
+        self.tremolo = None;
+    }
+
+    /// Enable auto-pan.
+    /// - `rate_hz`: LFO rate (0.05–20 Hz)
+    /// - `depth`: panning depth (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Triangle
+    pub fn set_autopan(&mut self, rate_hz: f32, depth: f32, shape: u8) {
+        let sh = match shape {
+            0 => PanShape::Sine,
+            1 => PanShape::Triangle,
+            _ => PanShape::Sine,
+        };
+        match &mut self.autopan {
+            Some(ap) => {
+                ap.set_rate(rate_hz);
+                ap.set_depth(depth);
+                ap.set_shape(sh);
+            }
+            None => {
+                self.autopan = Some(AutoPan::new(self.sample_rate, rate_hz, depth, sh));
+            }
+        }
+    }
+
+    /// Disable auto-pan.
+    pub fn disable_autopan(&mut self) {
+        self.autopan = None;
+    }
+
+    /// Enable ring modulator.
+    /// - `freq_hz`: carrier frequency (1–5000 Hz)
+    /// - `mix`: wet/dry (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Square, 2=Saw
+    pub fn set_ringmod(&mut self, freq_hz: f32, mix: f32, shape: u8) {
+        let sh = match shape {
+            0 => RingModShape::Sine,
+            1 => RingModShape::Square,
+            2 => RingModShape::Saw,
+            _ => RingModShape::Sine,
+        };
+        match &mut self.ringmod {
+            Some(rm) => {
+                rm.set_frequency(freq_hz);
+                rm.set_mix(mix);
+                rm.set_shape(sh);
+            }
+            None => {
+                self.ringmod = Some(RingMod::new(self.sample_rate, freq_hz, mix, sh));
+            }
+        }
+    }
+
+    /// Disable the ring modulator.
+    pub fn disable_ringmod(&mut self) {
+        self.ringmod = None;
+    }
+
+    /// Enable DC blocker.
+    /// - `cutoff_hz`: highpass cutoff (typically 3–10 Hz)
+    pub fn set_dc_blocker(&mut self, cutoff_hz: f32) {
+        match &mut self.dc_blocker {
+            Some(dc) => dc.set_cutoff(self.sample_rate, cutoff_hz),
+            None => self.dc_blocker = Some(DcBlocker::new(self.sample_rate, cutoff_hz)),
+        }
+    }
+
+    /// Disable the DC blocker.
+    pub fn disable_dc_blocker(&mut self) {
+        self.dc_blocker = None;
+    }
+
+    /// Process a mono audio buffer in-place.
+    /// Called from the AudioWorklet's process() method.
+    /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
+    pub fn process_mono(&mut self, buffer: &mut [f32]) {
+        if let Some(ref mut gate) = self.gate {
+            gate.process_buffer(buffer);
+        }
+        if let Some(ref mut filter) = self.filter {
+            filter.process_buffer(buffer);
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.process_buffer(buffer);
+        }
+        if let Some(ref d) = self.distortion {
+            d.process_buffer(buffer);
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.process_buffer(buffer);
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.process_buffer(buffer);
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.process_buffer(buffer);
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.process_buffer(buffer);
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.process_buffer(buffer);
+        }
+        if let Some(ref mut delay) = self.delay {
+            delay.process_buffer(buffer);
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.process_buffer(buffer);
+        }
+        self.gain.process_mono(buffer);
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.process_buffer(buffer);
+        }
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.process_buffer(buffer);
+        }
+    }
+
+    /// Process interleaved stereo audio buffer in-place.
+    /// Samples arranged as [L, R, L, R, ...].
+    pub fn process_stereo_interleaved(&mut self, buffer: &mut [f32]) {
+        if let Some(ref mut gate) = self.gate {
+            gate.process_buffer(buffer);
+        }
+        if let Some(ref mut filter) = self.filter {
+            filter.process_buffer(buffer);
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.process_buffer(buffer);
+        }
+        if let Some(ref d) = self.distortion {
+            d.process_buffer(buffer);
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.process_buffer(buffer);
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.process_buffer(buffer);
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.process_buffer(buffer);
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.process_buffer(buffer);
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.process_buffer(buffer);
+        }
+        if let Some(ref mut delay) = self.delay {
+            delay.process_buffer(buffer);
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.process_buffer(buffer);
+        }
+        if let Some(ref si) = self.stereo_imager {
+            si.process_interleaved(buffer);
+        }
+        if let Some(ref mut autopan) = self.autopan {
+            autopan.process_interleaved(buffer);
+        }
+        self.gain.process_stereo_interleaved(buffer);
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.process_buffer(buffer);
+        }
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.process_buffer(buffer);
+        }
+    }
+
+    /// Get the current gain value.
+    pub fn get_gain(&self) -> f32 {
+        self.gain.gain()
+    }
+
+    /// Reset all processor state (call on seek or transport stop).
+    pub fn reset(&mut self) {
+        if let Some(ref mut filter) = self.filter {
+            filter.reset();
+        }
+        if let Some(ref mut delay) = self.delay {
+            delay.reset();
+        }
+        if let Some(ref mut compressor) = self.compressor {
+            compressor.reset();
+        }
+        if let Some(ref mut gate) = self.gate {
+            gate.reset();
+        }
+        if let Some(ref mut eq) = self.eq {
+            eq.reset();
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.reset();
+        }
+        if let Some(ref mut chorus) = self.chorus {
+            chorus.reset();
+        }
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.reset();
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.reset();
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.reset();
+        }
+        if let Some(ref mut autopan) = self.autopan {
+            autopan.reset();
+        }
+        if let Some(ref mut ringmod) = self.ringmod {
+            ringmod.reset();
+        }
+        if let Some(ref mut dc) = self.dc_blocker {
+            dc.reset();
+        }
+    }
+}
+
+/// Allocate a f32 buffer in WASM linear memory.
+/// Returns a pointer the caller can write into and pass to `process_mono`.
+/// This is a stable, named replacement for the internal `__wbindgen_export` symbol.
+#[wasm_bindgen]
+pub fn alloc_f32_buffer(len: usize) -> *mut f32 {
+    let len = len.max(1); // guard against zero-length allocation
+    let mut v = vec![0.0_f32; len];
+    let ptr = v.as_mut_ptr();
+    core::mem::forget(v);
+    ptr
+}
+
+/// Free a buffer previously allocated by `alloc_f32_buffer`.
+///
+/// # Safety
+/// `len` must be the exact value that was passed to `alloc_f32_buffer`.
+/// Passing a different `len` is undefined behavior.
+#[wasm_bindgen]
+pub fn free_f32_buffer(ptr: *mut f32, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        unsafe {
+            drop(Vec::from_raw_parts(ptr, len, len));
+        }
+    }
+}
+
+/// Version string for debugging.
+#[wasm_bindgen]
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_processor_creation() {
+        let proc = DspProcessor::new(48000.0);
+        assert_eq!(proc.get_gain(), 1.0);
+    }
+
+    #[test]
+    fn test_processor_gain() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_gain(0.5);
+        let mut buf = [1.0_f32, -1.0, 0.5, 0.0];
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, -0.5, 0.25, 0.0]);
+    }
+
+    #[test]
+    fn test_processor_with_filter() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_filter(0, 1000.0, 0.707, 0.0); // Lowpass at 1kHz
+        let mut buf = [1.0_f32; 128];
+        proc.process_mono(&mut buf);
+        // Filter should process without panic; DC should pass through lowpass
+        assert!(buf[127] > 0.5); // DC passes through lowpass
+    }
+
+    #[test]
+    fn test_processor_disable_filter() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_filter(0, 1000.0, 0.707, 0.0);
+        proc.disable_filter();
+        let mut buf = [0.75_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        // With no filter and unity gain, output should equal input
+        assert_eq!(buf, [0.75, 0.75, 0.75, 0.75]);
+    }
+
+    #[test]
+    fn test_processor_reset() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_filter(0, 1000.0, 0.707, 0.0);
+        let mut buf = [1.0_f32; 64];
+        proc.process_mono(&mut buf);
+        proc.reset(); // Should not panic
+    }
+
+    #[test]
+    fn test_processor_delay() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_delay(10.0, 0.0, 1.0); // 10ms delay, no feedback, full wet
+        proc.set_gain(1.0);
+
+        // Process an impulse followed by silence
+        let mut output = Vec::new();
+        let mut buf = [1.0_f32];
+        proc.process_mono(&mut buf);
+        output.push(buf[0]);
+        for _ in 1..600 {
+            let mut buf = [0.0_f32];
+            proc.process_mono(&mut buf);
+            output.push(buf[0]);
+        }
+
+        // 10ms at 48kHz = 480 samples delay
+        // The impulse should appear around sample 480
+        assert!(output[480].abs() > 0.3, "Delayed impulse at 480: {}", output[480]);
+    }
+
+    #[test]
+    fn test_processor_disable_delay() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_delay(10.0, 0.0, 1.0);
+        proc.disable_delay();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        // Dry signal should pass through unchanged (delay disabled)
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_compressor() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_compressor(-20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        let mut buf = [1.0_f32; 4800];
+        proc.process_mono(&mut buf);
+        // Loud signal should be compressed
+        let last = buf[4799];
+        assert!(last < 0.9, "Compressor should reduce: {last}");
+        assert!(last > 0.01, "Should not silence: {last}");
+        // GR should be reported
+        assert!(proc.compressor_gr_db() < -1.0);
+    }
+
+    #[test]
+    fn test_processor_gate() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_gate(-20.0, 0.1, 0.0, 10.0, -80.0);
+        // Feed very quiet signal
+        let mut buf = [0.001_f32; 48000];
+        proc.process_mono(&mut buf);
+        let last = buf[47999];
+        assert!(last < 0.0005, "Gate should attenuate: {last}");
+    }
+
+    #[test]
+    fn test_processor_eq() {
+        let mut proc = DspProcessor::new(48000.0);
+        // Set a peaking band at 1kHz with +6dB
+        proc.set_eq_band(0, 5, 1000.0, 1.0, 6.0, true);
+        let mut buf = [0.5_f32; 128];
+        proc.process_mono(&mut buf);
+        // Should process without panic
+    }
+
+    #[test]
+    fn test_processor_disable_eq() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_eq_band(0, 5, 1000.0, 1.0, 6.0, true);
+        proc.disable_eq();
+        // After disabling, should pass through
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_disable_compressor() {
+        let mut proc = DspProcessor::new(48000.0);
+        proc.set_compressor(-20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
+        proc.disable_compressor();
+        assert_eq!(proc.compressor_gr_db(), 0.0);
+    }
+
+    #[test]
+    fn test_processor_reverb() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_reverb(0.7, 0.4, 1.0, 0.0); // Large room, wet only
+        proc.set_gain(1.0);
+
+        // Feed impulse + silence
+        let mut buf = [0.0_f32; 4410];
+        buf[0] = 1.0;
+        proc.process_mono(&mut buf);
+
+        // Reverb tail should have energy
+        let tail_energy: f32 = buf[100..].iter().map(|s| s * s).sum();
+        assert!(tail_energy > 0.01, "Reverb tail energy: {tail_energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_reverb() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_reverb(0.5, 0.5, 1.0, 0.0);
+        proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_tremolo() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_tremolo(5.0, 1.0, 0); // Sine, full depth
+        proc.set_gain(1.0);
+        let mut buf = [1.0_f32; 8820]; // one full LFO cycle
+        proc.process_mono(&mut buf);
+        let min = buf.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = buf.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(min < 0.1, "Tremolo should reach near 0: {min}");
+        assert!(max > 0.9, "Tremolo should reach near 1: {max}");
+    }
+
+    #[test]
+    fn test_processor_autopan() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_autopan(2.0, 1.0, 0); // Sine, full depth
+        proc.set_gain(1.0);
+        // Interleaved stereo: constant signal
+        let samples = (44100.0 / 2.0) as usize; // one LFO cycle
+        let mut buf: Vec<f32> = vec![0.5; samples * 2]; // L,R pairs
+        proc.process_stereo_interleaved(&mut buf);
+        // Left channel should vary (auto-pan sweeps)
+        let left_vals: Vec<f32> = buf.iter().step_by(2).cloned().collect();
+        let min_l = left_vals.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_l = left_vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(max_l - min_l > 0.3, "AutoPan should sweep L: range={}", max_l - min_l);
+    }
+
+    #[test]
+    fn test_processor_ringmod() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_ringmod(440.0, 1.0, 0); // Sine carrier
+        proc.set_gain(1.0);
+        // Feed sine wave — ring mod should create sidebands
+        let mut buf: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * 220.0 * std::f32::consts::TAU / 44100.0).sin() * 0.5)
+            .collect();
+        proc.process_mono(&mut buf);
+        let energy: f32 = buf.iter().map(|s| s * s).sum();
+        assert!(energy > 1.0, "Ring mod should produce output: {energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_ringmod() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_ringmod(440.0, 1.0, 0);
+        proc.disable_ringmod();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_disable_autopan() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_autopan(2.0, 1.0, 0);
+        proc.disable_autopan();
+        let mut buf = [0.5_f32, 0.5, 0.5, 0.5];
+        proc.set_gain(1.0);
+        proc.process_stereo_interleaved(&mut buf);
+        // Disabled → passthrough
+        assert!((buf[0] - 0.5).abs() < 0.01);
+        assert!((buf[1] - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_processor_disable_tremolo() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_tremolo(5.0, 1.0, 0);
+        proc.disable_tremolo();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_phaser() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_phaser(2.0, 1.0, 0.5, 6, 1.0);
+        proc.set_gain(1.0);
+        // Feed sine wave — phaser sweep should alter it
+        let mut buf: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / 44100.0).sin() * 0.5)
+            .collect();
+        proc.process_mono(&mut buf);
+        // Should process without panic and produce non-zero output
+        let energy: f32 = buf.iter().map(|s| s * s).sum();
+        assert!(energy > 0.1, "Phaser should produce output: energy={energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_phaser() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_phaser(1.0, 0.5, 0.3, 4, 0.5);
+        proc.disable_phaser();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_limiter() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_limiter(-1.0, 100.0, 5.0);
+        proc.set_gain(2.0); // boost to trigger limiting
+
+        // Feed loud signal
+        let mut buf = [0.8_f32; 4410];
+        proc.process_mono(&mut buf);
+
+        // After settling, output should not exceed ceiling (-1dB ≈ 0.891)
+        let max_out = buf[1000..].iter().cloned().fold(0.0_f32, |a, b| a.max(b.abs()));
+        assert!(max_out <= 0.91, "Should be limited: {max_out}");
+    }
+
+    #[test]
+    fn test_processor_disable_limiter() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_limiter(-1.0, 100.0, 5.0);
+        proc.disable_limiter();
+        assert_eq!(proc.limiter_gr_db(), 0.0);
+    }
+
+    #[test]
+    fn test_processor_stereo_imager() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_stereo_width(0.0); // mono
+        proc.set_gain(1.0);
+        // Interleaved stereo: [L=1.0, R=0.0, L=1.0, R=0.0]
+        let mut buf = [1.0_f32, 0.0, 1.0, 0.0];
+        proc.process_stereo_interleaved(&mut buf);
+        // Mono: both channels should be 0.5
+        assert!((buf[0] - 0.5).abs() < 0.01, "Stereo→mono L: {}", buf[0]);
+        assert!((buf[1] - 0.5).abs() < 0.01, "Stereo→mono R: {}", buf[1]);
+    }
+
+    #[test]
+    fn test_processor_disable_stereo_imager() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_stereo_width(0.0);
+        proc.disable_stereo_imager();
+        let mut buf = [0.8_f32, 0.2, 0.8, 0.2];
+        proc.set_gain(1.0);
+        proc.process_stereo_interleaved(&mut buf);
+        // Disabled → passthrough
+        assert!((buf[0] - 0.8).abs() < 0.01);
+        assert!((buf[1] - 0.2).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_processor_distortion() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_distortion(1, 5.0, 1.0, 1.0, 8.0); // SoftClip
+        proc.set_gain(1.0);
+        let mut buf = [0.5_f32; 4];
+        proc.process_mono(&mut buf);
+        // tanh(0.5 * 5) = tanh(2.5) ≈ 0.987
+        assert!(buf[0] > 0.9, "Soft clip: {}", buf[0]);
+    }
+
+    #[test]
+    fn test_processor_disable_distortion() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_distortion(0, 10.0, 1.0, 1.0, 8.0);
+        proc.disable_distortion();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_chorus() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_chorus(1.5, 5.0, 10.0, 0.0, 1.0, 0.0);
+        proc.set_gain(1.0);
+
+        // Feed constant signal, modulation should create variation
+        let mut buf = [0.5_f32; 4410];
+        proc.process_mono(&mut buf);
+        let min = buf[441..].iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = buf[441..].iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(max - min > 0.001, "Chorus should modulate: range={}", max - min);
+    }
+
+    #[test]
+    fn test_processor_disable_chorus() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_chorus(1.0, 5.0, 10.0, 0.0, 0.5, 0.5);
+        proc.disable_chorus();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_dc_blocker() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_dc_blocker(5.0);
+        proc.set_gain(1.0);
+        // Feed signal with DC offset
+        let mut buf: Vec<f32> = (0..44100)
+            .map(|i| 0.5 + (i as f32 * 440.0 * std::f32::consts::TAU / 44100.0).sin() * 0.3)
+            .collect();
+        proc.process_mono(&mut buf);
+        // After settling, DC should be removed
+        let mean: f32 = buf[22050..].iter().sum::<f32>() / buf[22050..].len() as f32;
+        assert!(mean.abs() < 0.01, "DC offset removed: mean={mean}");
+    }
+
+    #[test]
+    fn test_processor_disable_dc_blocker() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_dc_blocker(5.0);
+        proc.disable_dc_blocker();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_version() {
+        let v = version();
+        assert!(!v.is_empty());
+        assert!(v.starts_with("0."));
     }
 }

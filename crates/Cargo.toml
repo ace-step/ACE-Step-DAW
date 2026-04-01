@@ -1,6 +1,9 @@
 [workspace]
-members = ["ace-dsp-core", "ace-dsp-wasm"]
 resolver = "2"
+members = [
+    "ace-dsp-core",
+    "ace-dsp-wasm",
+]
 
 [workspace.package]
 version = "0.1.0"

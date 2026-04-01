@@ -1,149 +1,148 @@
-//! Parametric EQ — 8-band equalizer built on cascaded biquad filters.
+//! Parametric EQ — multi-band equalizer using cascaded biquad filters.
 //!
-//! Each band has independent type, frequency, Q, gain, and enable state.
-//! Provides analytic magnitude response calculation for UI curve display.
+//! Supports up to 8 bands, each independently configurable with type,
+//! frequency, Q, and gain. Uses the biquad module for coefficient computation.
 
-use crate::biquad::{BiquadCoeffs, BiquadStereo, FilterType};
+use crate::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
 
 /// Maximum number of EQ bands.
 pub const MAX_BANDS: usize = 8;
 
-/// Parameters for a single EQ band.
+/// Configuration for a single EQ band.
 #[derive(Debug, Clone, Copy)]
-pub struct EqBandParams {
-    pub filter_type: FilterType,
-    pub frequency: f64,  // 20–20000 Hz
-    pub q: f64,          // 0.1–30.0
-    pub gain_db: f64,    // -24–+24 dB
+pub struct EqBand {
+    pub filter_type: BiquadType,
+    pub frequency: f32,
+    pub q: f32,
+    pub gain_db: f32,
     pub enabled: bool,
 }
 
-impl Default for EqBandParams {
+impl Default for EqBand {
     fn default() -> Self {
         Self {
-            filter_type: FilterType::Peaking,
+            filter_type: BiquadType::Peaking,
             frequency: 1000.0,
-            q: 1.0,
+            q: 0.707,
             gain_db: 0.0,
-            enabled: true,
+            enabled: false,
         }
     }
 }
 
-/// 8-band parametric EQ with per-band type/freq/Q/gain control.
-#[derive(Debug)]
-pub struct ParametricEQ {
-    bands: [BiquadStereo; MAX_BANDS],
-    band_params: [EqBandParams; MAX_BANDS],
-    band_coeffs: [BiquadCoeffs; MAX_BANDS],
-    enabled: [bool; MAX_BANDS],
-    sample_rate: f64,
+/// Multi-band parametric equalizer.
+///
+/// Each band is a biquad filter in series. Disabled bands have zero cost
+/// (skipped during processing).
+pub struct ParametricEq {
+    bands: [EqBand; MAX_BANDS],
+    filters: [BiquadFilter; MAX_BANDS],
+    sample_rate: f32,
 }
 
-impl ParametricEQ {
-    /// Create a new 8-band parametric EQ with default (flat) settings.
-    pub fn new(sample_rate: f64) -> Self {
-        let default_params = EqBandParams::default();
-        let coeffs = BiquadCoeffs::default(); // unity pass-through
-
+impl ParametricEq {
+    /// Create a new parametric EQ with all bands disabled.
+    pub fn new(sample_rate: f32) -> Self {
+        let default_coeffs = BiquadCoeffs::compute(
+            BiquadType::Peaking,
+            sample_rate,
+            1000.0,
+            0.707,
+            0.0,
+        );
         Self {
-            bands: core::array::from_fn(|_| BiquadStereo::new(coeffs)),
-            band_params: [default_params; MAX_BANDS],
-            band_coeffs: [coeffs; MAX_BANDS],
-            enabled: [false; MAX_BANDS], // all disabled by default
+            bands: [EqBand::default(); MAX_BANDS],
+            filters: core::array::from_fn(|_| BiquadFilter::new(default_coeffs)),
             sample_rate,
         }
     }
 
-    /// Set parameters for a specific band (0-indexed).
-    pub fn set_band(&mut self, index: usize, params: EqBandParams) {
+    /// Configure a band. `index` must be 0..MAX_BANDS.
+    pub fn set_band(
+        &mut self,
+        index: usize,
+        filter_type: BiquadType,
+        frequency: f32,
+        q: f32,
+        gain_db: f32,
+        enabled: bool,
+    ) {
         if index >= MAX_BANDS {
             return;
         }
-
-        self.band_params[index] = params;
-        self.enabled[index] = params.enabled;
-
-        if params.enabled {
-            let coeffs = BiquadCoeffs::new(
-                params.filter_type,
-                params.frequency,
-                params.q,
-                params.gain_db,
-                self.sample_rate,
-            );
-            self.band_coeffs[index] = coeffs;
-            self.bands[index].set_coeffs(coeffs);
+        self.bands[index] = EqBand {
+            filter_type,
+            frequency,
+            q,
+            gain_db,
+            enabled,
+        };
+        if enabled {
+            let coeffs =
+                BiquadCoeffs::compute(filter_type, self.sample_rate, frequency, q, gain_db);
+            self.filters[index].set_coeffs(coeffs);
         }
     }
 
-    /// Enable or disable a band without changing its parameters.
+    /// Enable or disable a band.
     pub fn set_band_enabled(&mut self, index: usize, enabled: bool) {
-        if index < MAX_BANDS {
-            self.enabled[index] = enabled;
-            self.band_params[index].enabled = enabled;
+        if index >= MAX_BANDS {
+            return;
+        }
+        self.bands[index].enabled = enabled;
+    }
+
+    /// Update only the frequency of a band (for smooth sweeping).
+    pub fn set_band_frequency(&mut self, index: usize, frequency: f32) {
+        if index >= MAX_BANDS {
+            return;
+        }
+        let band = &mut self.bands[index];
+        band.frequency = frequency;
+        if band.enabled {
+            let coeffs = BiquadCoeffs::compute(
+                band.filter_type,
+                self.sample_rate,
+                frequency,
+                band.q,
+                band.gain_db,
+            );
+            self.filters[index].set_coeffs(coeffs);
         }
     }
 
-    /// Process stereo audio with separate L/R buffers.
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        for i in 0..MAX_BANDS {
-            if self.enabled[i] {
-                self.bands[i].process_split(left, right);
+    /// Get the number of currently enabled bands.
+    pub fn active_band_count(&self) -> usize {
+        self.bands.iter().filter(|b| b.enabled).count()
+    }
+
+    /// Process a single sample through all enabled bands.
+    #[inline]
+    pub fn process_sample(&mut self, input: f32) -> f32 {
+        let mut sample = input;
+        for (band, filter) in self.bands.iter().zip(self.filters.iter_mut()) {
+            if band.enabled {
+                sample = filter.process_sample(sample);
+            }
+        }
+        sample
+    }
+
+    /// Process a buffer in-place through all enabled bands.
+    #[inline]
+    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
+        // Process each enabled band across the entire buffer for better cache locality
+        for (band, filter) in self.bands.iter().zip(self.filters.iter_mut()) {
+            if band.enabled {
+                filter.process_buffer(buffer);
             }
         }
     }
 
-    /// Calculate the combined magnitude response at the given frequencies.
-    ///
-    /// Returns dB values for each frequency. This is an analytic calculation
-    /// (no FFT needed) — evaluates H(z) directly from coefficients.
-    pub fn magnitude_response(&self, frequencies: &[f32]) -> Vec<f32> {
-        frequencies
-            .iter()
-            .map(|&freq| {
-                let mut total_db = 0.0f64;
-                for i in 0..MAX_BANDS {
-                    if self.enabled[i] {
-                        total_db += self.band_coeffs[i].magnitude_db(freq as f64, self.sample_rate);
-                    }
-                }
-                total_db as f32
-            })
-            .collect()
-    }
-
-    /// Calculate magnitude response for a single band.
-    pub fn band_magnitude_response(&self, band_index: usize, frequencies: &[f32]) -> Vec<f32> {
-        if band_index >= MAX_BANDS || !self.enabled[band_index] {
-            return vec![0.0; frequencies.len()];
-        }
-
-        frequencies
-            .iter()
-            .map(|&freq| {
-                self.band_coeffs[band_index]
-                    .magnitude_db(freq as f64, self.sample_rate) as f32
-            })
-            .collect()
-    }
-
-    /// Generate log-spaced frequency points for UI curve rendering.
-    /// Returns `num_points` frequencies from 20Hz to 20kHz.
-    pub fn frequency_points(num_points: usize) -> Vec<f32> {
-        let log_min = (20.0f64).ln();
-        let log_max = (20000.0f64).ln();
-        (0..num_points)
-            .map(|i| {
-                let t = i as f64 / (num_points - 1).max(1) as f64;
-                (log_min + t * (log_max - log_min)).exp() as f32
-            })
-            .collect()
-    }
-
+    /// Reset all filter states.
     pub fn reset(&mut self) {
-        for band in &mut self.bands {
-            band.reset();
+        for filter in &mut self.filters {
+            filter.reset();
         }
     }
 }
@@ -151,176 +150,175 @@ impl ParametricEQ {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const SR: f64 = 48000.0;
+    use core::f32::consts::PI;
 
     #[test]
-    fn flat_eq_passes_through() {
-        let mut eq = ParametricEQ::new(SR);
-
-        // No bands enabled — should be unity
-        let mut left = vec![1.0f32; 100];
-        let mut right = vec![1.0f32; 100];
-
-        eq.process_stereo(&mut left, &mut right);
-
-        assert!(
-            (left[99] - 1.0).abs() < 0.001,
-            "Flat EQ should pass through: got {}",
-            left[99]
-        );
+    fn test_new_eq_all_bands_disabled() {
+        let eq = ParametricEq::new(48000.0);
+        assert_eq!(eq.active_band_count(), 0);
     }
 
     #[test]
-    fn single_band_boost() {
-        let mut eq = ParametricEQ::new(SR);
-
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 1000.0,
-            q: 1.0,
-            gain_db: 12.0,
-            enabled: true,
-        });
-
-        let response = eq.magnitude_response(&[1000.0]);
-        assert!(
-            (response[0] - 12.0).abs() < 0.5,
-            "1kHz +12dB boost: expected ~12dB, got {:.2}dB",
-            response[0]
-        );
+    fn test_set_band_enables() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, 6.0, true);
+        assert_eq!(eq.active_band_count(), 1);
     }
 
     #[test]
-    fn single_band_cut() {
-        let mut eq = ParametricEQ::new(SR);
-
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 500.0,
-            q: 2.0,
-            gain_db: -6.0,
-            enabled: true,
-        });
-
-        let response = eq.magnitude_response(&[500.0]);
-        assert!(
-            (response[0] - (-6.0)).abs() < 0.5,
-            "500Hz -6dB cut: expected ~-6dB, got {:.2}dB",
-            response[0]
-        );
-    }
-
-    #[test]
-    fn multiple_bands_combine() {
-        let mut eq = ParametricEQ::new(SR);
-
-        // Band 0: +6dB at 200Hz
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 200.0,
-            q: 1.0,
-            gain_db: 6.0,
-            enabled: true,
-        });
-
-        // Band 1: +6dB at 200Hz (same freq — should stack)
-        eq.set_band(1, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 200.0,
-            q: 1.0,
-            gain_db: 6.0,
-            enabled: true,
-        });
-
-        let response = eq.magnitude_response(&[200.0]);
-        assert!(
-            (response[0] - 12.0).abs() < 1.0,
-            "Two +6dB bands at same freq should give ~+12dB: got {:.2}dB",
-            response[0]
-        );
-    }
-
-    #[test]
-    fn disabled_band_has_no_effect() {
-        let mut eq = ParametricEQ::new(SR);
-
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 1000.0,
-            q: 1.0,
-            gain_db: 12.0,
-            enabled: false,
-        });
-
-        let response = eq.magnitude_response(&[1000.0]);
-        assert!(
-            response[0].abs() < 0.01,
-            "Disabled band should have 0dB effect: got {:.2}dB",
-            response[0]
-        );
-    }
-
-    #[test]
-    fn frequency_points_log_spaced() {
-        let pts = ParametricEQ::frequency_points(100);
-        assert_eq!(pts.len(), 100);
-        assert!((pts[0] - 20.0).abs() < 0.1, "First point should be ~20Hz");
-        assert!(
-            (pts[99] - 20000.0).abs() < 10.0,
-            "Last point should be ~20kHz"
-        );
-        // Should be monotonically increasing
-        for i in 1..pts.len() {
-            assert!(pts[i] > pts[i - 1], "Points should be increasing");
+    fn test_disabled_eq_passes_through() {
+        let mut eq = ParametricEq::new(48000.0);
+        // All bands disabled — should be transparent
+        let mut buf = [0.5_f32; 128];
+        eq.process_buffer(&mut buf);
+        for &s in &buf {
+            assert_eq!(s, 0.5);
         }
     }
 
     #[test]
-    fn highpass_at_band_0() {
-        let mut eq = ParametricEQ::new(SR);
+    fn test_peaking_boost_increases_level() {
+        let mut eq = ParametricEq::new(48000.0);
+        // Boost 12dB at 1kHz
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, 12.0, true);
 
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Highpass,
-            frequency: 200.0,
-            q: 0.707,
-            gain_db: 0.0,
-            enabled: true,
-        });
+        let sample_rate = 48000.0;
+        let freq = 1000.0;
+        // Generate 1kHz sine
+        let mut buf: Vec<f32> = (0..4096)
+            .map(|i| (2.0 * PI * freq * i as f32 / sample_rate).sin())
+            .collect();
 
-        let response = eq.magnitude_response(&[50.0, 200.0, 5000.0]);
-        // 50Hz should be attenuated
-        assert!(response[0] < -6.0, "50Hz should be cut by HP@200: got {:.2}dB", response[0]);
-        // 5kHz should pass
-        assert!(response[2].abs() < 1.0, "5kHz should pass HP@200: got {:.2}dB", response[2]);
+        eq.process_buffer(&mut buf);
+
+        // Measure RMS of last 2048 samples (after transient)
+        let rms: f32 = buf[2048..]
+            .iter()
+            .map(|x| x * x)
+            .sum::<f32>()
+            / 2048.0;
+        let rms = rms.sqrt();
+        let input_rms = 1.0 / 2.0_f32.sqrt(); // ~0.707
+
+        assert!(
+            rms > input_rms * 1.5,
+            "12dB peaking boost at center freq should increase level: rms={rms}, input_rms={input_rms}"
+        );
     }
 
     #[test]
-    fn band_magnitude_response_individual() {
-        let mut eq = ParametricEQ::new(SR);
+    fn test_peaking_cut_decreases_level() {
+        let mut eq = ParametricEq::new(48000.0);
+        // Cut 12dB at 1kHz
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, -12.0, true);
 
-        eq.set_band(0, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 1000.0,
-            q: 1.0,
-            gain_db: 6.0,
-            enabled: true,
-        });
+        let sample_rate = 48000.0;
+        let freq = 1000.0;
+        let mut buf: Vec<f32> = (0..4096)
+            .map(|i| (2.0 * PI * freq * i as f32 / sample_rate).sin())
+            .collect();
 
-        eq.set_band(1, EqBandParams {
-            filter_type: FilterType::Peaking,
-            frequency: 5000.0,
-            q: 1.0,
-            gain_db: -3.0,
-            enabled: true,
-        });
+        eq.process_buffer(&mut buf);
 
-        // Band 0 at its center
-        let b0 = eq.band_magnitude_response(0, &[1000.0]);
-        assert!((b0[0] - 6.0).abs() < 0.5, "Band 0 at 1kHz: got {:.2}dB", b0[0]);
+        let rms: f32 = buf[2048..]
+            .iter()
+            .map(|x| x * x)
+            .sum::<f32>()
+            / 2048.0;
+        let rms = rms.sqrt();
+        let input_rms = 1.0 / 2.0_f32.sqrt();
 
-        // Band 1 at its center
-        let b1 = eq.band_magnitude_response(1, &[5000.0]);
-        assert!((b1[0] - (-3.0)).abs() < 0.5, "Band 1 at 5kHz: got {:.2}dB", b1[0]);
+        assert!(
+            rms < input_rms * 0.5,
+            "12dB peaking cut at center freq should decrease level: rms={rms}"
+        );
+    }
+
+    #[test]
+    fn test_lowshelf_boosts_low_frequencies() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::LowShelf, 500.0, 0.707, 12.0, true);
+
+        let sample_rate = 48000.0;
+        // Generate 100Hz sine (below shelf)
+        let mut buf: Vec<f32> = (0..8192)
+            .map(|i| (2.0 * PI * 100.0 * i as f32 / sample_rate).sin())
+            .collect();
+
+        eq.process_buffer(&mut buf);
+
+        let rms: f32 = buf[4096..]
+            .iter()
+            .map(|x| x * x)
+            .sum::<f32>()
+            / 4096.0;
+        let rms = rms.sqrt();
+        let input_rms = 1.0 / 2.0_f32.sqrt();
+
+        assert!(
+            rms > input_rms * 1.5,
+            "Low shelf should boost 100Hz: rms={rms}"
+        );
+    }
+
+    #[test]
+    fn test_multiple_bands() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::Peaking, 100.0, 1.0, 6.0, true);
+        eq.set_band(1, BiquadType::Peaking, 1000.0, 1.0, 6.0, true);
+        eq.set_band(2, BiquadType::Peaking, 5000.0, 1.0, 6.0, true);
+        assert_eq!(eq.active_band_count(), 3);
+
+        // Should process without panic
+        let mut buf = [0.5_f32; 128];
+        eq.process_buffer(&mut buf);
+    }
+
+    #[test]
+    fn test_band_disable() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, 12.0, true);
+        eq.set_band_enabled(0, false);
+        assert_eq!(eq.active_band_count(), 0);
+
+        // Disabled band should pass through
+        let mut buf = [0.5_f32; 128];
+        eq.process_buffer(&mut buf);
+        for &s in &buf {
+            assert_eq!(s, 0.5);
+        }
+    }
+
+    #[test]
+    fn test_set_band_frequency() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, 6.0, true);
+        eq.set_band_frequency(0, 2000.0);
+        assert_eq!(eq.bands[0].frequency, 2000.0);
+    }
+
+    #[test]
+    fn test_out_of_bounds_band_ignored() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(MAX_BANDS + 1, BiquadType::Peaking, 1000.0, 1.0, 6.0, true);
+        assert_eq!(eq.active_band_count(), 0);
+    }
+
+    #[test]
+    fn test_reset_clears_state() {
+        let mut eq = ParametricEq::new(48000.0);
+        eq.set_band(0, BiquadType::Peaking, 1000.0, 1.0, 12.0, true);
+        let mut buf = [1.0_f32; 256];
+        eq.process_buffer(&mut buf);
+        eq.reset();
+        // After reset, processing should start fresh (no ringing)
+        let mut zero_buf = [0.0_f32; 64];
+        eq.process_buffer(&mut zero_buf);
+        // Output should be very close to zero
+        assert!(
+            zero_buf[63].abs() < 0.001,
+            "After reset, zero input should give ~zero output: {}",
+            zero_buf[63]
+        );
     }
 }

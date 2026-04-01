@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:wasm": "bash scripts/build-wasm.sh --release",
-    "build:wasm:dev": "bash scripts/build-wasm.sh",
+    "build": "npm run build:wasm && tsc -b && vite build",
+    "build:wasm": "wasm-pack build crates/ace-dsp-wasm --target web --out-dir ../../src/wasm/pkg --release && node -e \"require('fs').copyFileSync('src/wasm/pkg/ace_dsp_wasm_bg.wasm','public/ace_dsp_wasm_bg.wasm')\"",
+    "build:wasm:dev": "wasm-pack build crates/ace-dsp-wasm --target web --out-dir ../../src/wasm/pkg --dev && node -e \"require('fs').copyFileSync('src/wasm/pkg/ace_dsp_wasm_bg.wasm','public/ace_dsp_wasm_bg.wasm')\"",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -12,37 +12,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Build WASM first — other jobs need the generated pkg/
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall wasm-pack --no-confirm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Build WASM
+        run: npm run build:wasm
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-pkg
+          path: |
+            src/wasm/pkg/
+            public/ace_dsp_wasm_bg.wasm
+          retention-days: 1
+
+  # Run Rust unit tests
+  rust-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run Rust tests
+        run: cd crates && cargo test --all
+
   type-check:
     runs-on: ubuntu-latest
+    needs: [build-wasm]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
       - run: npm ci
       - run: npx tsc --noEmit
 
   unit-test:
     runs-on: ubuntu-latest
+    needs: [build-wasm]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-pkg
       - run: npm ci
       - run: npm test
 
   build:
     runs-on: ubuntu-latest
-    needs: [type-check, unit-test]
+    needs: [type-check, unit-test, rust-test]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall wasm-pack --no-confirm
       - run: npm ci
       - run: npm run build
-

@@ -1,575 +1,431 @@
-//! Reverb engine — Dattorro plate reverb + early reflections.
+//! Schroeder reverb — 4 parallel comb filters + 2 series allpass filters.
 //!
-//! Based on Jon Dattorro's "Effect Design Part 1: Reverberator and Other
-//! Filters" (JAES 1997). Uses allpass diffusers, modulated delay lines,
-//! and crossfed tank loops for natural-sounding reverberation.
+//! Classic algorithmic reverb design. The comb filters create the dense
+//! reflection pattern (tail), while the allpass filters add diffusion
+//! without changing the frequency balance.
+//!
+//! Parameters:
+//! - `room_size` (0.0–1.0): scales comb filter feedback → longer tail
+//! - `damping` (0.0–1.0): low-pass in comb feedback → darker sound
+//! - `wet` / `dry`: mix levels
+//!
+//! Comb delay times (in samples at 44.1 kHz, scaled for other rates):
+//!   1116, 1188, 1277, 1356 — mutually prime to avoid metallic resonance
+//! Allpass delay times: 556, 441
 
-use crate::biquad::{BiquadCoeffs, BiquadMono, FilterType};
-use crate::delay::DelayLine;
 use crate::ANTI_DENORMAL;
 
-// ── Allpass Diffuser ────────────────────────────────────────────────
+// ── Tuning constants (Freeverb / Schroeder standard) ──────────────────
+const COMB_TUNING: [usize; 4] = [1116, 1188, 1277, 1356];
+const ALLPASS_TUNING: [usize; 2] = [556, 441];
+const ALLPASS_FEEDBACK: f32 = 0.5;
+const REFERENCE_RATE: f32 = 44100.0;
 
-/// Single allpass filter stage for diffusion.
-#[derive(Debug, Clone)]
-struct AllpassDiffuser {
-    delay: DelayLine,
-    delay_samples: usize,
-    feedback: f64,
+// ── Comb filter with integrated low-pass damping ──────────────────────
+
+struct CombFilter {
+    buffer: Vec<f32>,
+    index: usize,
+    filter_store: f32, // one-pole LPF state
 }
 
-impl AllpassDiffuser {
-    fn new(delay_samples: usize, feedback: f64) -> Self {
+impl CombFilter {
+    fn new(size: usize) -> Self {
         Self {
-            delay: DelayLine::new(delay_samples + 8),
-            delay_samples,
-            feedback,
+            buffer: vec![0.0; size],
+            index: 0,
+            filter_store: 0.0,
+        }
+    }
+
+    /// Process one sample: read delayed output, apply damping + feedback, write.
+    #[inline]
+    fn process(&mut self, input: f32, feedback: f32, damp1: f32, damp2: f32) -> f32 {
+        let output = self.buffer[self.index];
+
+        // One-pole low-pass filter in the feedback path
+        self.filter_store = output * damp2 + self.filter_store * damp1 + ANTI_DENORMAL;
+
+        self.buffer[self.index] = input + self.filter_store * feedback;
+
+        self.index += 1;
+        if self.index >= self.buffer.len() {
+            self.index = 0;
+        }
+
+        output
+    }
+
+    fn clear(&mut self) {
+        self.buffer.fill(0.0);
+        self.filter_store = 0.0;
+        self.index = 0;
+    }
+}
+
+// ── Allpass filter ────────────────────────────────────────────────────
+
+struct AllpassFilter {
+    buffer: Vec<f32>,
+    index: usize,
+}
+
+impl AllpassFilter {
+    fn new(size: usize) -> Self {
+        Self {
+            buffer: vec![0.0; size],
+            index: 0,
         }
     }
 
     #[inline]
-    fn process(&mut self, input: f64) -> f64 {
-        let delayed = self.delay.read(self.delay_samples) as f64;
-        let v = input - self.feedback * delayed;
-        self.delay.push(v as f32);
-        delayed + self.feedback * v + ANTI_DENORMAL
+    fn process(&mut self, input: f32) -> f32 {
+        let buffered = self.buffer[self.index];
+        let output = -input + buffered;
+        self.buffer[self.index] = input + buffered * ALLPASS_FEEDBACK + ANTI_DENORMAL;
+
+        self.index += 1;
+        if self.index >= self.buffer.len() {
+            self.index = 0;
+        }
+
+        output
     }
 
     fn clear(&mut self) {
-        self.delay.clear();
+        self.buffer.fill(0.0);
+        self.index = 0;
     }
 }
 
-// ── Early Reflections ───────────────────────────────────────────────
+// ── Public reverb struct ─────────────────────────────────────────────
 
-/// Early reflections using a tapped delay line.
-#[derive(Debug, Clone)]
-struct EarlyReflections {
-    delay: DelayLine,
-    taps_left: Vec<(usize, f32)>,  // (delay_samples, gain)
-    taps_right: Vec<(usize, f32)>,
-}
-
-impl EarlyReflections {
-    fn new(sample_rate: f64, room_size: RoomSize) -> Self {
-        let taps = room_size.tap_times_ms();
-        let max_delay = (300.0 * sample_rate / 1000.0) as usize;
-
-        let taps_left: Vec<(usize, f32)> = taps
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| i % 2 == 0)
-            .map(|(_, &(ms, gain))| ((ms * sample_rate / 1000.0) as usize, gain))
-            .collect();
-
-        let taps_right: Vec<(usize, f32)> = taps
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| i % 2 == 1)
-            .map(|(_, &(ms, gain))| ((ms * sample_rate / 1000.0) as usize, gain))
-            .collect();
-
-        Self {
-            delay: DelayLine::new(max_delay),
-            taps_left,
-            taps_right,
-        }
-    }
-
-    fn process(&mut self, input: f32) -> (f32, f32) {
-        self.delay.push(input);
-
-        let left: f32 = self
-            .taps_left
-            .iter()
-            .map(|&(d, g)| self.delay.read(d) * g)
-            .sum();
-
-        let right: f32 = self
-            .taps_right
-            .iter()
-            .map(|&(d, g)| self.delay.read(d) * g)
-            .sum();
-
-        (left, right)
-    }
-
-    fn clear(&mut self) {
-        self.delay.clear();
-    }
-}
-
-/// Room size presets for early reflections.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RoomSize {
-    Small,
-    Medium,
-    Large,
-    Hall,
-}
-
-impl RoomSize {
-    /// Return (delay_ms, gain) pairs for early reflection taps.
-    fn tap_times_ms(&self) -> Vec<(f64, f32)> {
-        match self {
-            RoomSize::Small => vec![
-                (3.0, 0.7),
-                (7.0, 0.65),
-                (11.0, 0.5),
-                (17.0, 0.45),
-                (23.0, 0.35),
-                (29.0, 0.3),
-            ],
-            RoomSize::Medium => vec![
-                (5.0, 0.7),
-                (12.0, 0.6),
-                (19.0, 0.5),
-                (28.0, 0.45),
-                (37.0, 0.35),
-                (46.0, 0.3),
-                (57.0, 0.25),
-                (71.0, 0.2),
-            ],
-            RoomSize::Large => vec![
-                (8.0, 0.65),
-                (19.0, 0.55),
-                (31.0, 0.5),
-                (45.0, 0.4),
-                (62.0, 0.35),
-                (81.0, 0.3),
-                (103.0, 0.25),
-                (128.0, 0.2),
-                (157.0, 0.15),
-                (191.0, 0.12),
-            ],
-            RoomSize::Hall => vec![
-                (11.0, 0.6),
-                (27.0, 0.5),
-                (47.0, 0.45),
-                (71.0, 0.4),
-                (97.0, 0.35),
-                (131.0, 0.3),
-                (169.0, 0.25),
-                (211.0, 0.2),
-                (259.0, 0.15),
-                (311.0, 0.12),
-            ],
-        }
-    }
-}
-
-// ── Dattorro Plate Reverb ───────────────────────────────────────────
-
-/// Reverb parameters.
-#[derive(Debug, Clone, Copy)]
-pub struct ReverbParams {
-    pub decay: f64,        // 0.1–30 seconds
-    pub damping: f64,      // 0–1 (high-frequency absorption)
-    pub diffusion: f64,    // 0–1
-    pub predelay_ms: f64,  // 0–250ms
-    pub mod_depth: f64,    // 0–1 (tank modulation)
-    pub mod_rate: f64,     // 0.1–5 Hz
-    pub early_level: f64,  // 0–1
-    pub late_level: f64,   // 0–1
-    pub wet: f64,          // 0–1
-    pub room_size: RoomSize,
-}
-
-impl Default for ReverbParams {
-    fn default() -> Self {
-        Self {
-            decay: 2.0,
-            damping: 0.5,
-            diffusion: 0.7,
-            predelay_ms: 20.0,
-            mod_depth: 0.3,
-            mod_rate: 0.5,
-            early_level: 0.5,
-            late_level: 1.0,
-            wet: 0.3,
-            room_size: RoomSize::Medium,
-        }
-    }
-}
-
-/// Dattorro plate reverb with early reflections.
+/// Schroeder reverb processor.
 ///
-/// Architecture:
-/// Input → Pre-delay → Input Diffusers (4x allpass)
-///     → Tank Loop A (delay + damping + modulation)
-///     → Tank Loop B (delay + damping + modulation)
-///     → Cross-fed output taps
-#[derive(Debug)]
-pub struct DattorroReverb {
-    params: ReverbParams,
-    sample_rate: f64,
-
-    // Pre-delay
-    predelay: DelayLine,
-    predelay_samples: usize,
-
-    // Early reflections
-    early: EarlyReflections,
-
-    // Input diffusion (4 allpass stages)
-    input_diffusers: [AllpassDiffuser; 4],
-
-    // Tank: two delay lines with damping filters
-    tank_delay_a: DelayLine,
-    tank_delay_b: DelayLine,
-    tank_allpass_a: AllpassDiffuser,
-    tank_allpass_b: AllpassDiffuser,
-    damp_a: BiquadMono,
-    damp_b: BiquadMono,
-
-    // Tank delay lengths (in samples) — prime-like for density
-    tank_len_a: usize,
-    tank_len_b: usize,
-
-    // Modulation LFO
-    lfo_phase: f64,
-
-    // Decay coefficient
-    decay_coeff: f64,
+/// Signal flow:
+/// ```text
+///   input ──┬─[comb 0]──┐
+///            ├─[comb 1]──┤
+///            ├─[comb 2]──┼── sum ──[allpass 0]──[allpass 1]── wet
+///            └─[comb 3]──┘
+///   input ────────────────────────────────────────────────── dry
+/// ```
+pub struct Reverb {
+    combs: Vec<CombFilter>,
+    allpasses: Vec<AllpassFilter>,
+    room_size: f32,
+    damping: f32,
+    wet: f32,
+    dry: f32,
+    // Derived coefficients
+    feedback: f32,
+    damp1: f32,
+    damp2: f32,
 }
 
-impl DattorroReverb {
-    pub fn new(params: ReverbParams, sample_rate: f64) -> Self {
-        let predelay_samples = (params.predelay_ms * sample_rate / 1000.0) as usize;
+impl Reverb {
+    /// Create a new reverb at the given sample rate.
+    ///
+    /// - `room_size`: 0.0 (small) to 1.0 (large) — controls decay time
+    /// - `damping`: 0.0 (bright) to 1.0 (dark) — high-frequency absorption
+    /// - `wet`: wet signal level (0.0–1.0)
+    /// - `dry`: dry signal level (0.0–1.0)
+    pub fn new(sample_rate: f32, room_size: f32, damping: f32, wet: f32, dry: f32) -> Self {
+        let rate_scale = sample_rate / REFERENCE_RATE;
 
-        // Tank delay lengths (prime-ish, scaled by sample rate)
-        let scale = sample_rate / 29761.0; // Dattorro's reference sample rate
-        let tank_len_a = (4453.0 * scale) as usize;
-        let tank_len_b = (3720.0 * scale) as usize;
+        let combs = COMB_TUNING
+            .iter()
+            .map(|&t| {
+                let size = ((t as f32) * rate_scale) as usize;
+                CombFilter::new(size.max(1))
+            })
+            .collect();
 
-        // Input diffuser delay lengths (from Dattorro paper)
-        let diff = params.diffusion;
-        let input_diffusers = [
-            AllpassDiffuser::new((142.0 * scale) as usize, 0.75 * diff),
-            AllpassDiffuser::new((107.0 * scale) as usize, 0.75 * diff),
-            AllpassDiffuser::new((379.0 * scale) as usize, 0.625 * diff),
-            AllpassDiffuser::new((277.0 * scale) as usize, 0.625 * diff),
-        ];
+        let allpasses = ALLPASS_TUNING
+            .iter()
+            .map(|&t| {
+                let size = ((t as f32) * rate_scale) as usize;
+                AllpassFilter::new(size.max(1))
+            })
+            .collect();
 
-        // Tank allpass (inside the feedback loop)
-        let tank_allpass_a =
-            AllpassDiffuser::new((672.0 * scale) as usize, 0.5 * diff);
-        let tank_allpass_b =
-            AllpassDiffuser::new((908.0 * scale) as usize, 0.5 * diff);
-
-        // Damping filters (lowpass in feedback path)
-        let damp_freq = 2000.0 + (1.0 - params.damping) * 16000.0;
-        let damp_coeffs =
-            BiquadCoeffs::new(FilterType::Lowpass, damp_freq, 0.707, 0.0, sample_rate);
-
-        // Decay coefficient from decay time
-        let decay_coeff = compute_decay_coeff(params.decay, tank_len_a + tank_len_b, sample_rate);
+        let room_size = room_size.clamp(0.0, 1.0);
+        let damping = damping.clamp(0.0, 1.0);
+        let feedback = room_size * 0.28 + 0.7; // map 0..1 → 0.7..0.98
+        let damp1 = damping;
+        let damp2 = 1.0 - damping;
 
         Self {
-            params,
-            sample_rate,
-            predelay: DelayLine::new(predelay_samples.max(1) + 64),
-            predelay_samples,
-            early: EarlyReflections::new(sample_rate, params.room_size),
-            input_diffusers,
-            tank_delay_a: DelayLine::new(tank_len_a + 256),
-            tank_delay_b: DelayLine::new(tank_len_b + 256),
-            tank_allpass_a,
-            tank_allpass_b,
-            damp_a: BiquadMono::new(damp_coeffs),
-            damp_b: BiquadMono::new(damp_coeffs),
-            tank_len_a,
-            tank_len_b,
-            lfo_phase: 0.0,
-            decay_coeff,
+            combs,
+            allpasses,
+            room_size,
+            damping,
+            wet: wet.clamp(0.0, 1.0),
+            dry: dry.clamp(0.0, 1.0),
+            feedback,
+            damp1,
+            damp2,
         }
     }
 
-    pub fn set_params(&mut self, params: ReverbParams) {
-        self.predelay_samples = (params.predelay_ms * self.sample_rate / 1000.0) as usize;
-        self.decay_coeff = compute_decay_coeff(
-            params.decay,
-            self.tank_len_a + self.tank_len_b,
-            self.sample_rate,
-        );
-
-        let damp_freq = 2000.0 + (1.0 - params.damping) * 16000.0;
-        let damp_coeffs = BiquadCoeffs::new(
-            FilterType::Lowpass,
-            damp_freq,
-            0.707,
-            0.0,
-            self.sample_rate,
-        );
-        self.damp_a.set_coeffs(damp_coeffs);
-        self.damp_b.set_coeffs(damp_coeffs);
-
-        self.params = params;
+    /// Set room size (0.0–1.0).
+    pub fn set_room_size(&mut self, size: f32) {
+        self.room_size = size.clamp(0.0, 1.0);
+        self.feedback = self.room_size * 0.28 + 0.7;
     }
 
-    /// Process stereo audio in-place.
-    pub fn process_stereo(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let len = left.len().min(right.len());
-        let lfo_inc = self.params.mod_rate * 2.0 * core::f64::consts::PI / self.sample_rate;
-        let mod_depth_samples = self.params.mod_depth * 16.0; // max 16 samples modulation
+    /// Get current room size.
+    pub fn room_size(&self) -> f32 {
+        self.room_size
+    }
 
-        for i in 0..len {
-            let dry_l = left[i];
-            let dry_r = right[i];
+    /// Set damping (0.0–1.0).
+    pub fn set_damping(&mut self, damping: f32) {
+        self.damping = damping.clamp(0.0, 1.0);
+        self.damp1 = self.damping;
+        self.damp2 = 1.0 - self.damping;
+    }
 
-            // Mono sum for input
-            let input = (dry_l + dry_r) * 0.5;
+    /// Get current damping.
+    pub fn damping(&self) -> f32 {
+        self.damping
+    }
 
-            // Pre-delay
-            self.predelay.push(input);
-            let predelayed = if self.predelay_samples > 0 {
-                self.predelay.read(self.predelay_samples)
-            } else {
-                input
-            };
+    /// Set wet level (0.0–1.0).
+    pub fn set_wet(&mut self, wet: f32) {
+        self.wet = wet.clamp(0.0, 1.0);
+    }
 
-            // Early reflections
-            let (er_l, er_r) = self.early.process(predelayed);
+    /// Set dry level (0.0–1.0).
+    pub fn set_dry(&mut self, dry: f32) {
+        self.dry = dry.clamp(0.0, 1.0);
+    }
 
-            // Input diffusion
-            let mut diffused = predelayed as f64;
-            for diff in &mut self.input_diffusers {
-                diffused = diff.process(diffused);
-            }
+    /// Process a single sample, returning the mixed output.
+    #[inline]
+    pub fn process_sample(&mut self, input: f32) -> f32 {
+        // Sum of parallel comb filters, normalized by count
+        let mut comb_sum = 0.0_f32;
+        for comb in &mut self.combs {
+            comb_sum += comb.process(input, self.feedback, self.damp1, self.damp2);
+        }
+        comb_sum *= 0.25; // normalize: 1/4 combs
 
-            // LFO for tank modulation
-            let lfo = self.lfo_phase.sin();
-            self.lfo_phase += lfo_inc;
-            if self.lfo_phase > 2.0 * core::f64::consts::PI {
-                self.lfo_phase -= 2.0 * core::f64::consts::PI;
-            }
+        // Series allpass filters for diffusion
+        let mut out = comb_sum;
+        for ap in &mut self.allpasses {
+            out = ap.process(out);
+        }
 
-            // Tank loop A
-            let mod_a = (1.0 + lfo * mod_depth_samples) as f64;
-            let tank_read_a = self
-                .tank_delay_a
-                .read_linear(self.tank_len_a as f64 + mod_a) as f64;
-            let damped_a = self.damp_a.process_sample(tank_read_a as f32) as f64;
+        // Wet/dry mix
+        input * self.dry + out * self.wet
+    }
 
-            // Tank loop B (with cross-feed from A)
-            let mod_b = (1.0 - lfo * mod_depth_samples * 0.7) as f64;
-            let tank_read_b = self
-                .tank_delay_b
-                .read_linear(self.tank_len_b as f64 + mod_b) as f64;
-            let damped_b = self.damp_b.process_sample(tank_read_b as f32) as f64;
-
-            // Cross-feed: A feeds into B, B feeds into A
-            let into_a = diffused + damped_b * self.decay_coeff;
-            let into_b = damped_a * self.decay_coeff;
-
-            // Process through tank allpass
-            let ap_a = self.tank_allpass_a.process(into_a);
-            let ap_b = self.tank_allpass_b.process(into_b);
-
-            self.tank_delay_a.push(ap_a as f32);
-            self.tank_delay_b.push(ap_b as f32);
-
-            // Output taps (decorrelated L/R)
-            let late_l = (tank_read_a + tank_read_b * 0.6) as f32;
-            let late_r = (tank_read_b + tank_read_a * 0.6) as f32;
-
-            // Mix
-            let el = self.params.early_level as f32;
-            let ll = self.params.late_level as f32;
-            let wet = self.params.wet as f32;
-
-            let reverb_l = er_l * el + late_l * ll;
-            let reverb_r = er_r * el + late_r * ll;
-
-            left[i] = dry_l * (1.0 - wet) + reverb_l * wet;
-            right[i] = dry_r * (1.0 - wet) + reverb_r * wet;
+    /// Process a buffer in-place.
+    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
+        for sample in buffer.iter_mut() {
+            *sample = self.process_sample(*sample);
         }
     }
 
+    /// Clear all internal delay buffers (call on seek/stop).
     pub fn reset(&mut self) {
-        self.predelay.clear();
-        self.early.clear();
-        for diff in &mut self.input_diffusers {
-            diff.clear();
+        for comb in &mut self.combs {
+            comb.clear();
         }
-        self.tank_delay_a.clear();
-        self.tank_delay_b.clear();
-        self.tank_allpass_a.clear();
-        self.tank_allpass_b.clear();
-        self.damp_a.reset();
-        self.damp_b.reset();
-        self.lfo_phase = 0.0;
+        for ap in &mut self.allpasses {
+            ap.clear();
+        }
     }
-}
-
-/// Compute the per-sample decay coefficient from the desired RT60 time.
-fn compute_decay_coeff(decay_seconds: f64, loop_length_samples: usize, sample_rate: f64) -> f64 {
-    if decay_seconds <= 0.0 || loop_length_samples == 0 {
-        return 0.0;
-    }
-    let rt60_samples = decay_seconds * sample_rate;
-    let loops = rt60_samples / loop_length_samples as f64;
-    // -60dB after `loops` iterations → gain^loops = 0.001
-    0.001_f64.powf(1.0 / loops).min(0.9999)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const SR: f64 = 48000.0;
+    #[test]
+    fn test_reverb_creation() {
+        let rev = Reverb::new(44100.0, 0.5, 0.5, 0.3, 1.0);
+        assert_eq!(rev.room_size(), 0.5);
+        assert_eq!(rev.damping(), 0.5);
+    }
 
     #[test]
-    fn reverb_produces_output() {
-        let params = ReverbParams::default();
-        let mut reverb = DattorroReverb::new(params, SR);
+    fn test_reverb_silence_in_silence_out() {
+        let mut rev = Reverb::new(44100.0, 0.5, 0.5, 1.0, 0.0);
+        let mut buf = [0.0_f32; 512];
+        rev.process_buffer(&mut buf);
+        for s in &buf {
+            assert!(s.abs() < 1e-10, "Expected silence, got {s}");
+        }
+    }
 
-        // Send an impulse
-        let mut left = vec![0.0f32; 4800];
-        let mut right = vec![0.0f32; 4800];
-        left[0] = 1.0;
-        right[0] = 1.0;
+    #[test]
+    fn test_reverb_impulse_response_has_tail() {
+        let mut rev = Reverb::new(44100.0, 0.8, 0.3, 1.0, 0.0);
 
-        reverb.process_stereo(&mut left, &mut right);
+        // Feed an impulse
+        let out0 = rev.process_sample(1.0);
+        // Process many samples of silence to let the tail develop
+        let mut tail_energy = 0.0_f32;
+        for _ in 0..4410 {
+            let s = rev.process_sample(0.0);
+            tail_energy += s * s;
+        }
 
-        // After the impulse, there should be reverb tail energy
-        let tail_energy: f32 = left[2400..4800].iter().map(|&s| s * s).sum();
+        // The impulse should create a reverb tail with significant energy
         assert!(
-            tail_energy > 0.0001,
-            "Reverb should produce tail energy: got {tail_energy}"
+            tail_energy > 0.01,
+            "Reverb tail should have energy: {tail_energy}"
+        );
+        // First output should be near zero (combs haven't echoed yet)
+        assert!(
+            out0.abs() < 0.01,
+            "First sample should be near-zero: {out0}"
         );
     }
 
     #[test]
-    fn reverb_decays_to_silence() {
-        let params = ReverbParams {
-            decay: 0.5, // Short decay
-            wet: 1.0,
-            ..ReverbParams::default()
-        };
-        let mut reverb = DattorroReverb::new(params, SR);
+    fn test_reverb_dry_passthrough() {
+        let mut rev = Reverb::new(44100.0, 0.5, 0.5, 0.0, 1.0);
+        let mut buf = [0.5_f32; 128];
+        rev.process_buffer(&mut buf);
+        // With 0 wet and 1.0 dry, output should equal input (plus tiny anti-denormal)
+        for &s in &buf {
+            assert!(
+                (s - 0.5).abs() < 0.01,
+                "Dry passthrough failed: {s}"
+            );
+        }
+    }
 
-        // Impulse
-        let mut left = vec![0.0f32; 48000]; // 1 second
-        let mut right = vec![0.0f32; 48000];
-        left[0] = 1.0;
-        right[0] = 1.0;
-
-        reverb.process_stereo(&mut left, &mut right);
-
-        // Early energy should be higher than late energy
-        let early_energy: f32 = left[1000..5000].iter().map(|&s| s * s).sum();
-        let late_energy: f32 = left[40000..48000].iter().map(|&s| s * s).sum();
-
+    #[test]
+    fn test_reverb_wet_only_no_immediate_output() {
+        let mut rev = Reverb::new(44100.0, 0.5, 0.5, 1.0, 0.0);
+        // With only wet signal, the first few samples should be near-zero
+        // because the comb filters haven't produced output yet
+        let out = rev.process_sample(1.0);
         assert!(
-            early_energy > late_energy,
-            "Reverb should decay: early={early_energy:.6}, late={late_energy:.6}"
+            out.abs() < 0.01,
+            "Wet-only first sample should be near-zero: {out}"
         );
     }
 
     #[test]
-    fn dry_signal_preserved() {
-        let params = ReverbParams {
-            wet: 0.0, // Fully dry
-            ..ReverbParams::default()
-        };
-        let mut reverb = DattorroReverb::new(params, SR);
+    fn test_reverb_room_size_affects_decay() {
+        // Small room = shorter decay
+        let mut small = Reverb::new(44100.0, 0.1, 0.5, 1.0, 0.0);
+        small.process_sample(1.0);
+        let mut small_energy = 0.0_f32;
+        for _ in 0..44100 {
+            let s = small.process_sample(0.0);
+            small_energy += s * s;
+        }
 
-        let mut left = vec![0.5f32; 100];
-        let mut right = vec![0.5f32; 100];
-
-        reverb.process_stereo(&mut left, &mut right);
-
-        // Should be exactly dry signal
-        assert!(
-            (left[99] - 0.5).abs() < 0.001,
-            "Dry-only should preserve signal: got {}",
-            left[99]
-        );
-    }
-
-    #[test]
-    fn stereo_decorrelation() {
-        let params = ReverbParams {
-            wet: 1.0,
-            ..ReverbParams::default()
-        };
-        let mut reverb = DattorroReverb::new(params, SR);
-
-        // Impulse
-        let mut left = vec![0.0f32; 4800];
-        let mut right = vec![0.0f32; 4800];
-        left[0] = 1.0;
-        right[0] = 1.0;
-
-        reverb.process_stereo(&mut left, &mut right);
-
-        // L and R should be different (decorrelated)
-        let mut diff_sum = 0.0f32;
-        for i in 1000..4800 {
-            diff_sum += (left[i] - right[i]).abs();
+        // Large room = longer decay
+        let mut large = Reverb::new(44100.0, 0.9, 0.5, 1.0, 0.0);
+        large.process_sample(1.0);
+        let mut large_energy = 0.0_f32;
+        for _ in 0..44100 {
+            let s = large.process_sample(0.0);
+            large_energy += s * s;
         }
 
         assert!(
-            diff_sum > 0.01,
-            "L/R should be decorrelated: diff_sum = {diff_sum}"
+            large_energy > small_energy,
+            "Large room ({large_energy}) should have more energy than small ({small_energy})"
         );
     }
 
     #[test]
-    fn predelay_delays_output() {
-        let params = ReverbParams {
-            predelay_ms: 50.0, // 50ms = 2400 samples at 48kHz
-            wet: 1.0,
-            early_level: 0.0,
-            late_level: 1.0,
-            ..ReverbParams::default()
-        };
-        let mut reverb = DattorroReverb::new(params, SR);
+    fn test_reverb_damping_affects_brightness() {
+        // No damping = bright (more high frequency content)
+        let mut bright = Reverb::new(44100.0, 0.7, 0.0, 1.0, 0.0);
+        bright.process_sample(1.0);
+        let mut bright_energy = 0.0_f32;
+        for _ in 0..4410 {
+            let s = bright.process_sample(0.0);
+            bright_energy += s * s;
+        }
 
-        let mut left = vec![0.0f32; 4800];
-        let mut right = vec![0.0f32; 4800];
-        left[0] = 1.0;
-        right[0] = 1.0;
+        // Full damping = dark (less high frequency, also less total energy)
+        let mut dark = Reverb::new(44100.0, 0.7, 1.0, 1.0, 0.0);
+        dark.process_sample(1.0);
+        let mut dark_energy = 0.0_f32;
+        for _ in 0..4410 {
+            let s = dark.process_sample(0.0);
+            dark_energy += s * s;
+        }
 
-        reverb.process_stereo(&mut left, &mut right);
-
-        // First 2000 samples should be near-silent (predelay + diffusion latency)
-        let early_energy: f32 = left[0..1000].iter().map(|&s| s * s).sum();
+        // With damping, the tail should have less energy
         assert!(
-            early_energy < 0.01,
-            "Predelay should delay output: early energy = {early_energy}"
+            bright_energy > dark_energy,
+            "Bright ({bright_energy}) should have more energy than dark ({dark_energy})"
         );
     }
 
     #[test]
-    fn reset_clears_state() {
-        let params = ReverbParams::default();
-        let mut reverb = DattorroReverb::new(params, SR);
+    fn test_reverb_reset_clears_tail() {
+        let mut rev = Reverb::new(44100.0, 0.8, 0.3, 1.0, 0.0);
+        // Build up some reverb tail
+        rev.process_sample(1.0);
+        for _ in 0..1000 {
+            rev.process_sample(0.0);
+        }
+        // Reset should clear it
+        rev.reset();
+        let s = rev.process_sample(0.0);
+        assert!(s.abs() < 1e-10, "After reset, output should be silence: {s}");
+    }
 
-        // Process some audio
-        let mut left = vec![1.0f32; 1000];
-        let mut right = vec![1.0f32; 1000];
-        reverb.process_stereo(&mut left, &mut right);
+    #[test]
+    fn test_reverb_parameter_setters() {
+        let mut rev = Reverb::new(44100.0, 0.5, 0.5, 0.5, 0.5);
+        rev.set_room_size(0.9);
+        assert_eq!(rev.room_size(), 0.9);
+        rev.set_damping(0.8);
+        assert_eq!(rev.damping(), 0.8);
+        rev.set_wet(0.7);
+        rev.set_dry(0.3);
+    }
 
-        reverb.reset();
+    #[test]
+    fn test_reverb_clamping() {
+        let mut rev = Reverb::new(44100.0, 0.5, 0.5, 0.5, 0.5);
+        rev.set_room_size(2.0);
+        assert_eq!(rev.room_size(), 1.0);
+        rev.set_room_size(-1.0);
+        assert_eq!(rev.room_size(), 0.0);
+        rev.set_damping(5.0);
+        assert_eq!(rev.damping(), 1.0);
+    }
 
-        // After reset, silence input should produce silence output
-        let mut left = vec![0.0f32; 1000];
-        let mut right = vec![0.0f32; 1000];
-        reverb.process_stereo(&mut left, &mut right);
+    #[test]
+    fn test_reverb_48khz() {
+        // Should work at 48kHz without panic
+        let mut rev = Reverb::new(48000.0, 0.5, 0.5, 1.0, 0.0);
+        rev.process_sample(1.0);
+        let mut energy = 0.0_f32;
+        for _ in 0..4800 {
+            let s = rev.process_sample(0.0);
+            energy += s * s;
+        }
+        assert!(energy > 0.01, "48kHz reverb should work: {energy}");
+    }
 
-        let energy: f32 = left.iter().map(|&s| s * s).sum();
+    #[test]
+    fn test_reverb_output_bounded() {
+        let mut rev = Reverb::new(44100.0, 0.8, 0.5, 0.5, 1.0);
+        // Feed a sustained signal
+        let mut max_output = 0.0_f32;
+        for _ in 0..44100 {
+            let s = rev.process_sample(0.5);
+            max_output = max_output.max(s.abs());
+        }
+        // Output should stay reasonable (feedback < 1.0, so it converges)
         assert!(
-            energy < 0.001,
-            "After reset, silence should produce silence: energy = {energy}"
+            max_output < 5.0,
+            "Output should be bounded: {max_output}"
         );
-    }
-
-    #[test]
-    fn decay_coeff_reasonable() {
-        // 2-second decay with ~8000 sample loop at 48kHz
-        let coeff = compute_decay_coeff(2.0, 8000, SR);
-        assert!(coeff > 0.5 && coeff < 1.0, "Decay coeff should be 0.5..1.0: got {coeff}");
     }
 }

@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import { copyFileSync, existsSync } from 'fs';
 
 const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8001';
 
@@ -13,6 +14,14 @@ export default defineConfig(async ({ command }) => {
   if (command === 'serve') {
     const { claudeTerminalPlugin } = await import('./server/vite-plugin-claude-terminal');
     plugins.push(claudeTerminalPlugin());
+  }
+
+  // Copy WASM binary to public/ so it can be served as a static asset
+  // (needed for AudioWorklet which can't use ESM imports)
+  const wasmSrc = resolve(__dirname, 'src/wasm/pkg/ace_dsp_wasm_bg.wasm');
+  const wasmDest = resolve(__dirname, 'public/ace_dsp_wasm_bg.wasm');
+  if (existsSync(wasmSrc)) {
+    copyFileSync(wasmSrc, wasmDest);
   }
 
   return {

@@ -408,7 +408,7 @@ export interface DrumMachineConfig {
 }
 
 export type ClipGenerationStatus =
-  | 'empty' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
+  | 'empty' | 'idle' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
 
 export interface MidiNote {
   id: string;

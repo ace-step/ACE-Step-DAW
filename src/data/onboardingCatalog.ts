@@ -66,7 +66,7 @@ function createMidiClip(trackId: string, startTime: number, duration: number, pr
     duration,
     prompt,
     lyrics: '',
-    generationStatus: 'empty',
+    generationStatus: 'idle',
     generationJobId: null,
     cumulativeMixKey: null,
     isolatedAudioKey: null,

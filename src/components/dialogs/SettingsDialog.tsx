@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useModelStore } from '../../store/modelStore';
-import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
+import { listModels, initModel, getBackendUrl, setBackendUrl, healthCheck } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
@@ -199,7 +199,13 @@ export function SettingsDialog() {
       setInitMessage('');
       setInitError('');
       setSelectedLmModel('');
-      void refreshModels();
+      // Only fetch model inventory if backend is reachable (#853)
+      const isConnected = useModelStore.getState().connected;
+      if (isConnected) {
+        void refreshModels();
+      } else {
+        void healthCheck().then((ok) => { if (ok) void refreshModels(); });
+      }
     }
     prevShow.current = show;
   }, [show, project]);

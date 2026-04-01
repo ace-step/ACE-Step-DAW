@@ -23,20 +23,23 @@ pub enum DistortionType {
     Bitcrush,
 }
 
-/// Simple 2x oversampling state for anti-aliasing.
-/// Uses linear interpolation for upsampling and decimation (taking every other sample) for downsampling,
-/// with a one-pole lowpass to attenuate frequencies above Nyquist.
+/// 2x oversampling state with cascaded two-pole anti-aliasing filter.
+/// Uses linear interpolation for upsampling and decimation for downsampling,
+/// with two cascaded one-pole lowpass filters (-12dB/octave) for better
+/// anti-aliasing rejection compared to a single -6dB/octave pole.
 struct Oversampler {
     prev_input: f32,
-    /// One-pole lowpass state for the anti-aliasing filter
-    lp_state: f32,
+    /// Two cascaded one-pole lowpass states for -12dB/oct anti-aliasing
+    lp_state1: f32,
+    lp_state2: f32,
 }
 
 impl Oversampler {
     fn new() -> Self {
         Self {
             prev_input: 0.0,
-            lp_state: 0.0,
+            lp_state1: 0.0,
+            lp_state2: 0.0,
         }
     }
 
@@ -44,7 +47,7 @@ impl Oversampler {
     /// `driven_input` should already have drive applied.
     /// 1. Upsample: linear interpolation to generate 2 samples
     /// 2. Apply waveshaping function to both
-    /// 3. Lowpass filter at original Nyquist
+    /// 3. Cascaded two-pole lowpass at original Nyquist (-12dB/oct)
     /// 4. Downsample: take every other sample
     #[inline]
     fn process<F: Fn(f32) -> f32>(&mut self, driven_input: f32, shape_fn: &F) -> f32 {
@@ -56,13 +59,15 @@ impl Oversampler {
         let y0 = shape_fn(mid);
         let y1 = shape_fn(driven_input);
 
-        // Anti-alias lowpass (one-pole at ~0.5 normalized freq)
-        // Coefficient 0.25 gives -6dB at Nyquist/2, good tradeoff
+        // Anti-alias: two cascaded one-pole lowpass filters (-12dB/oct)
         const LP_COEFF: f32 = 0.25;
-        self.lp_state = self.lp_state + LP_COEFF * (y0 - self.lp_state);
-        let _filtered0 = self.lp_state;
-        self.lp_state = self.lp_state + LP_COEFF * (y1 - self.lp_state);
-        let filtered1 = self.lp_state;
+        // Process sample y0 through both poles
+        self.lp_state1 += LP_COEFF * (y0 - self.lp_state1);
+        self.lp_state2 += LP_COEFF * (self.lp_state1 - self.lp_state2);
+        // Process sample y1 through both poles
+        self.lp_state1 += LP_COEFF * (y1 - self.lp_state1);
+        self.lp_state2 += LP_COEFF * (self.lp_state1 - self.lp_state2);
+        let filtered1 = self.lp_state2;
 
         // Downsample: output the second filtered sample
         filtered1
@@ -70,7 +75,8 @@ impl Oversampler {
 
     fn reset(&mut self) {
         self.prev_input = 0.0;
-        self.lp_state = 0.0;
+        self.lp_state1 = 0.0;
+        self.lp_state2 = 0.0;
     }
 }
 

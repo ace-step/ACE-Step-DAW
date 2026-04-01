@@ -57,6 +57,7 @@ pub struct EnvelopeFollower {
     release_coeff: f32,
     envelope: f32,
     sample_rate: f32,
+    ad_sign: f32,
 }
 
 impl EnvelopeFollower {
@@ -67,6 +68,7 @@ impl EnvelopeFollower {
             release_coeff: ballistics_coeff(release_ms / 1000.0, sample_rate),
             envelope: 0.0,
             sample_rate,
+            ad_sign: 1.0,
         }
     }
 
@@ -93,7 +95,8 @@ impl EnvelopeFollower {
             self.release_coeff
         };
 
-        self.envelope = coeff * self.envelope + (1.0 - coeff) * detector_input + ANTI_DENORMAL;
+        self.envelope = coeff * self.envelope + (1.0 - coeff) * detector_input + ANTI_DENORMAL * self.ad_sign;
+        self.ad_sign = -self.ad_sign;
 
         match self.mode {
             EnvelopeMode::Peak => self.envelope,

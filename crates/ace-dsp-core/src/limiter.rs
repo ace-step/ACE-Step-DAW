@@ -37,25 +37,26 @@ fn lin_to_db(lin: f32) -> f32 {
 struct SlidingMax {
     /// Ring buffer of (value, insertion_index) pairs.
     /// Maintained as a monotone decreasing deque: front is always the max.
-    deque: Vec<(f32, usize)>,
+    deque: Vec<(f32, u64)>,
     head: usize,   // front of deque
     tail: usize,   // back of deque (next write position)
     count: usize,  // number of valid entries
     capacity: usize,
-    window_size: usize,
-    global_idx: usize,
+    window_size: u64,
+    /// Use u64 to avoid overflow on wasm32 (usize is 32-bit, wraps after ~27h at 44.1kHz)
+    global_idx: u64,
 }
 
 impl SlidingMax {
     fn new(window_size: usize) -> Self {
         let capacity = window_size + 1;
         Self {
-            deque: vec![(0.0, 0); capacity],
+            deque: vec![(0.0, 0u64); capacity],
             head: 0,
             tail: 0,
             count: 0,
             capacity,
-            window_size,
+            window_size: window_size as u64,
             global_idx: 0,
         }
     }
@@ -110,8 +111,10 @@ pub struct Limiter {
     ceiling: f32,      // linear ceiling level
     ceiling_db: f32,
     release_coeff: f32,
-    /// Delay line for the audio signal (lookahead)
+    /// Delay line for the audio signal (lookahead) — mono/left channel
     delay_buf: Vec<f32>,
+    /// Delay line for right channel (stereo processing)
+    delay_buf_r: Vec<f32>,
     delay_len: usize,
     write_pos: usize,
     /// Sliding maximum over the lookahead window
@@ -142,6 +145,7 @@ impl Limiter {
             ceiling_db,
             release_coeff,
             delay_buf: vec![0.0; lookahead_samples],
+            delay_buf_r: vec![0.0; lookahead_samples],
             delay_len: lookahead_samples,
             write_pos: 0,
             sliding_max: SlidingMax::new(lookahead_samples),
@@ -220,16 +224,66 @@ impl Limiter {
         delayed * self.envelope
     }
 
-    /// Process a buffer in-place.
+    /// Process a mono buffer in-place.
     pub fn process_buffer(&mut self, buffer: &mut [f32]) {
         for sample in buffer.iter_mut() {
             *sample = self.process_sample(*sample);
         }
     }
 
+    /// Process an interleaved stereo buffer [L, R, L, R, ...] in-place.
+    /// Uses max(|L|, |R|) for linked peak detection so both channels get
+    /// identical gain and delay, avoiding inter-channel mismatch.
+    pub fn process_stereo_interleaved(&mut self, buffer: &mut [f32]) {
+        let len = buffer.len();
+        let mut i = 0;
+        while i + 1 < len {
+            let l_in = buffer[i];
+            let r_in = buffer[i + 1];
+
+            // Linked peak = max of both channels
+            let peak = l_in.abs().max(r_in.abs());
+
+            // Feed linked peak into sliding max
+            let lookahead_peak = self.sliding_max.push(peak);
+
+            // Target gain from lookahead peak
+            let target_gain = if lookahead_peak > self.ceiling {
+                self.ceiling / lookahead_peak
+            } else {
+                1.0
+            };
+
+            // Envelope follower
+            if target_gain < self.envelope {
+                self.envelope = (self.envelope - self.attack_step).max(target_gain);
+            } else {
+                self.envelope = target_gain + self.release_coeff * (self.envelope - target_gain);
+            }
+
+            self.gain_reduction_db = lin_to_db(self.envelope).min(0.0);
+
+            // Read delayed L and R from separate delay buffers
+            let delayed_l = self.delay_buf[self.write_pos];
+            let delayed_r = self.delay_buf_r[self.write_pos];
+
+            // Write current L/R into delay buffers
+            self.delay_buf[self.write_pos] = l_in;
+            self.delay_buf_r[self.write_pos] = r_in;
+            self.write_pos = (self.write_pos + 1) % self.delay_len;
+
+            // Apply same gain to both channels
+            buffer[i] = delayed_l * self.envelope;
+            buffer[i + 1] = delayed_r * self.envelope;
+
+            i += 2;
+        }
+    }
+
     /// Clear internal state.
     pub fn reset(&mut self) {
         self.delay_buf.fill(0.0);
+        self.delay_buf_r.fill(0.0);
         self.write_pos = 0;
         self.sliding_max.reset();
         self.envelope = 1.0;

@@ -20,8 +20,9 @@
 use crate::ANTI_DENORMAL;
 
 // ── Freeverb tuning constants ────────────────────────────────────────
-// Delay lengths chosen to be mutually prime, minimizing metallic resonance.
-// These are the standard Freeverb values at 44100 Hz.
+// Canonical Freeverb delay lengths from Jezar's original implementation.
+// Spread to avoid strong common resonances (not strictly coprime, but
+// chosen empirically for natural-sounding density at 44100 Hz).
 const COMB_TUNING: [usize; 8] = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
 const ALLPASS_TUNING: [usize; 4] = [556, 441, 341, 225];
 const STEREO_SPREAD: usize = 23; // offset for right channel decorrelation

@@ -62,7 +62,8 @@ impl Lfo {
 /// Multiple voices with phase offsets create richer ensemble effect.
 pub struct Chorus {
     delay_line: DelayLine,
-    lfos: Vec<Lfo>,
+    /// Fixed-size LFO array to avoid heap allocation when changing voice count
+    lfos: [Lfo; MAX_VOICES],
     num_voices: usize,
     sample_rate: f32,
     base_delay_ms: f32,
@@ -112,13 +113,17 @@ impl Chorus {
         let max_delay_ms = delay_ms + depth_ms + 5.0;
         let max_delay_samples = ((max_delay_ms * sample_rate / 1000.0) as usize).max(4);
 
-        // Create LFOs with evenly distributed phase offsets
-        let lfos = (0..num_voices)
-            .map(|i| {
-                let phase_offset = i as f32 / num_voices as f32;
-                Lfo::new(rate_hz, sample_rate, phase_offset)
-            })
-            .collect();
+        // Create LFOs with evenly distributed phase offsets (fixed array, no heap alloc)
+        let mut lfos = [
+            Lfo::new(rate_hz, sample_rate, 0.0),
+            Lfo::new(rate_hz, sample_rate, 0.0),
+            Lfo::new(rate_hz, sample_rate, 0.0),
+            Lfo::new(rate_hz, sample_rate, 0.0),
+        ];
+        for i in 0..MAX_VOICES {
+            let phase_offset = if i < num_voices { i as f32 / num_voices as f32 } else { 0.0 };
+            lfos[i] = Lfo::new(rate_hz, sample_rate, phase_offset);
+        }
 
         Self {
             delay_line: DelayLine::new(max_delay_samples),
@@ -134,18 +139,16 @@ impl Chorus {
         }
     }
 
-    /// Set number of voices (1–4). Resets LFO phases.
+    /// Set number of voices (1–4). Resets LFO phases. No heap allocation.
     pub fn set_voices(&mut self, voices: usize) {
         let num_voices = voices.clamp(1, MAX_VOICES);
         if num_voices != self.num_voices {
             self.num_voices = num_voices;
             let rate_hz = self.lfos[0].phase_inc * self.sample_rate;
-            self.lfos = (0..num_voices)
-                .map(|i| {
-                    let phase_offset = i as f32 / num_voices as f32;
-                    Lfo::new(rate_hz, self.sample_rate, phase_offset)
-                })
-                .collect();
+            for i in 0..MAX_VOICES {
+                let phase_offset = if i < num_voices { i as f32 / num_voices as f32 } else { 0.0 };
+                self.lfos[i] = Lfo::new(rate_hz, self.sample_rate, phase_offset);
+            }
         }
     }
 
@@ -197,7 +200,7 @@ impl Chorus {
         let mut voice_sum = 0.0_f32;
         let inv_voices = 1.0 / self.num_voices as f32;
 
-        for lfo in &mut self.lfos {
+        for lfo in &mut self.lfos[..self.num_voices] {
             let lfo_val = lfo.next();
             let mod_delay_ms = self.base_delay_ms + lfo_val * self.depth_ms;
             let mod_delay_samples = (mod_delay_ms * self.sample_rate / 1000.0).max(1.0);

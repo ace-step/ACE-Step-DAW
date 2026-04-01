@@ -666,7 +666,7 @@ impl DspProcessor {
             dc.process_buffer(buffer);
         }
         if let Some(ref mut limiter) = self.limiter {
-            limiter.process_buffer(buffer);
+            limiter.process_stereo_interleaved(buffer);
         }
     }
 

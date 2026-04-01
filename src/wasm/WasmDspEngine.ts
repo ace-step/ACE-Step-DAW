@@ -135,6 +135,12 @@ export interface WasmDspNode {
   /** Disable the phaser. */
   disablePhaser(): void;
 
+  /** Enable tremolo effect. */
+  setTremolo(rateHz: number, depth: number, shape: number): void;
+
+  /** Disable the tremolo. */
+  disableTremolo(): void;
+
   /** Set stereo imager width (0.0 mono → 1.0 normal → 2.0 wide). */
   setStereoWidth(width: number): void;
 
@@ -441,6 +447,19 @@ export class WasmDspEngine {
 
       disablePhaser() {
         workletNode.port.postMessage({ type: 'disable-phaser' });
+      },
+
+      setTremolo(rateHz: number, depth: number, shape: number) {
+        workletNode.port.postMessage({
+          type: 'set-tremolo',
+          rateHz,
+          depth,
+          shape,
+        });
+      },
+
+      disableTremolo() {
+        workletNode.port.postMessage({ type: 'disable-tremolo' });
       },
 
       setStereoWidth(width: number) {

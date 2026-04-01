@@ -191,6 +191,20 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_phaser();
           }
           break;
+        case 'set-tremolo':
+          if (this._processor) {
+            this._processor.set_tremolo(
+              msg.rateHz,
+              msg.depth,
+              msg.shape
+            );
+          }
+          break;
+        case 'disable-tremolo':
+          if (this._processor) {
+            this._processor.disable_tremolo();
+          }
+          break;
         case 'set-stereo-width':
           if (this._processor) {
             this._processor.set_stereo_width(msg.width);

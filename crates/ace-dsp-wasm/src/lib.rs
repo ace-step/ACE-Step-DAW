@@ -15,6 +15,7 @@ use ace_dsp_core::limiter::Limiter;
 use ace_dsp_core::phaser::Phaser;
 use ace_dsp_core::reverb::Reverb;
 use ace_dsp_core::stereo::StereoImager;
+use ace_dsp_core::tremolo::{Tremolo, TremoloShape};
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
 ///
@@ -34,6 +35,7 @@ pub struct DspProcessor {
     stereo_imager: Option<StereoImager>,
     limiter: Option<Limiter>,
     phaser: Option<Phaser>,
+    tremolo: Option<Tremolo>,
     sample_rate: f32,
 }
 
@@ -55,6 +57,7 @@ impl DspProcessor {
             stereo_imager: None,
             limiter: None,
             phaser: None,
+            tremolo: None,
             sample_rate,
         }
     }
@@ -459,6 +462,34 @@ impl DspProcessor {
         self.phaser = None;
     }
 
+    /// Enable tremolo.
+    /// - `rate_hz`: LFO rate (0.1–20 Hz)
+    /// - `depth`: modulation depth (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Triangle, 2=Square
+    pub fn set_tremolo(&mut self, rate_hz: f32, depth: f32, shape: u8) {
+        let sh = match shape {
+            0 => TremoloShape::Sine,
+            1 => TremoloShape::Triangle,
+            2 => TremoloShape::Square,
+            _ => TremoloShape::Sine,
+        };
+        match &mut self.tremolo {
+            Some(t) => {
+                t.set_rate(rate_hz);
+                t.set_depth(depth);
+                t.set_shape(sh);
+            }
+            None => {
+                self.tremolo = Some(Tremolo::new(self.sample_rate, rate_hz, depth, sh));
+            }
+        }
+    }
+
+    /// Disable the tremolo.
+    pub fn disable_tremolo(&mut self) {
+        self.tremolo = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
@@ -474,6 +505,9 @@ impl DspProcessor {
         }
         if let Some(ref d) = self.distortion {
             d.process_buffer(buffer);
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -510,6 +544,9 @@ impl DspProcessor {
         }
         if let Some(ref d) = self.distortion {
             d.process_buffer(buffer);
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.process_buffer(buffer);
         }
         if let Some(ref mut compressor) = self.compressor {
             compressor.process_buffer(buffer);
@@ -568,6 +605,9 @@ impl DspProcessor {
         }
         if let Some(ref mut phaser) = self.phaser {
             phaser.reset();
+        }
+        if let Some(ref mut tremolo) = self.tremolo {
+            tremolo.reset();
         }
     }
 }
@@ -738,6 +778,30 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_reverb(0.5, 0.5, 1.0, 0.0);
         proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_tremolo() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_tremolo(5.0, 1.0, 0); // Sine, full depth
+        proc.set_gain(1.0);
+        let mut buf = [1.0_f32; 8820]; // one full LFO cycle
+        proc.process_mono(&mut buf);
+        let min = buf.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = buf.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(min < 0.1, "Tremolo should reach near 0: {min}");
+        assert!(max > 0.9, "Tremolo should reach near 1: {max}");
+    }
+
+    #[test]
+    fn test_processor_disable_tremolo() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_tremolo(5.0, 1.0, 0);
+        proc.disable_tremolo();
         let mut buf = [0.5_f32; 4];
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);

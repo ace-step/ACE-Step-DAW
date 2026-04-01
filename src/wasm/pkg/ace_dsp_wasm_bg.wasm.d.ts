@@ -14,6 +14,7 @@ export const dspprocessor_disable_limiter: (a: number) => void;
 export const dspprocessor_disable_phaser: (a: number) => void;
 export const dspprocessor_disable_reverb: (a: number) => void;
 export const dspprocessor_disable_stereo_imager: (a: number) => void;
+export const dspprocessor_disable_tremolo: (a: number) => void;
 export const dspprocessor_get_gain: (a: number) => number;
 export const dspprocessor_limiter_gr_db: (a: number) => number;
 export const dspprocessor_new: (a: number) => number;
@@ -33,6 +34,7 @@ export const dspprocessor_set_limiter: (a: number, b: number, c: number, d: numb
 export const dspprocessor_set_phaser: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
 export const dspprocessor_set_stereo_width: (a: number, b: number) => void;
+export const dspprocessor_set_tremolo: (a: number, b: number, c: number, d: number) => void;
 export const version: (a: number) => void;
 export const __wbindgen_export: (a: number, b: number) => number;
 export const __wbindgen_add_to_stack_pointer: (a: number) => number;

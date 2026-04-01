@@ -59,6 +59,10 @@ export class DspProcessor {
      */
     disable_stereo_imager(): void;
     /**
+     * Disable the tremolo.
+     */
+    disable_tremolo(): void;
+    /**
      * Get the current gain value.
      */
     get_gain(): number;
@@ -182,6 +186,13 @@ export class DspProcessor {
      * - `width`: 0.0 (mono) to 2.0 (extra wide), 1.0 = unchanged
      */
     set_stereo_width(width: number): void;
+    /**
+     * Enable tremolo.
+     * - `rate_hz`: LFO rate (0.1–20 Hz)
+     * - `depth`: modulation depth (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Triangle, 2=Square
+     */
+    set_tremolo(rate_hz: number, depth: number, shape: number): void;
 }
 
 /**
@@ -206,6 +217,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_phaser: (a: number) => void;
     readonly dspprocessor_disable_reverb: (a: number) => void;
     readonly dspprocessor_disable_stereo_imager: (a: number) => void;
+    readonly dspprocessor_disable_tremolo: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
     readonly dspprocessor_limiter_gr_db: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
@@ -225,6 +237,7 @@ export interface InitOutput {
     readonly dspprocessor_set_phaser: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
+    readonly dspprocessor_set_tremolo: (a: number, b: number, c: number, d: number) => void;
     readonly version: (a: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;

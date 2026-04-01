@@ -22,6 +22,7 @@ pub mod phaser;
 #[cfg(feature = "std")]
 pub mod reverb;
 pub mod stereo;
+pub mod tremolo;
 
 /// Anti-denormal guard constant.
 /// Add/subtract in feedback paths to prevent denormalized floats.

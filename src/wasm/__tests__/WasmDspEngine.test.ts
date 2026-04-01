@@ -463,6 +463,33 @@ describe('WasmDspEngine', () => {
       });
     });
 
+    it('should send set-tremolo message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setTremolo(5.0, 0.8, 0);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-tremolo',
+        rateHz: 5.0,
+        depth: 0.8,
+        shape: 0,
+      });
+    });
+
+    it('should send disable-tremolo message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableTremolo();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-tremolo',
+      });
+    });
+
     it('should send set-stereo-width message', async () => {
       const { ctx, mockWorkletNodes } = createMockAudioContext();
       await engine.initialize(ctx);

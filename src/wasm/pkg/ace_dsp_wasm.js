@@ -92,6 +92,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_stereo_imager(this.__wbg_ptr);
     }
     /**
+     * Disable the tremolo.
+     */
+    disable_tremolo() {
+        wasm.dspprocessor_disable_tremolo(this.__wbg_ptr);
+    }
+    /**
      * Get the current gain value.
      * @returns {number}
      */
@@ -319,6 +325,18 @@ export class DspProcessor {
      */
     set_stereo_width(width) {
         wasm.dspprocessor_set_stereo_width(this.__wbg_ptr, width);
+    }
+    /**
+     * Enable tremolo.
+     * - `rate_hz`: LFO rate (0.1–20 Hz)
+     * - `depth`: modulation depth (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Triangle, 2=Square
+     * @param {number} rate_hz
+     * @param {number} depth
+     * @param {number} shape
+     */
+    set_tremolo(rate_hz, depth, shape) {
+        wasm.dspprocessor_set_tremolo(this.__wbg_ptr, rate_hz, depth, shape);
     }
 }
 if (Symbol.dispose) DspProcessor.prototype[Symbol.dispose] = DspProcessor.prototype.free;

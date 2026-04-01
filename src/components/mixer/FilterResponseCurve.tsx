@@ -5,6 +5,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { generateFilterResponse, type FilterType } from '../../utils/filterResponse';
+import { fillBackground, GRID_COLOR, GRID_COLOR_STRONG, LABEL_COLOR, LABEL_AREA_BG } from '../../utils/canvasTheme';
 
 interface FilterResponseCurveProps {
   frequency: number;   // Cutoff frequency in Hz
@@ -65,23 +66,17 @@ export function FilterResponseCurve({
 
     // ── Background ──────────────────────────────────────────────────────────
     ctx.clearRect(0, 0, width, height);
-
-    // Subtle horizontal gradient hinting at the passband zone
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, drawH);
-    bgGrad.addColorStop(0, 'rgba(8, 12, 24, 0.95)');
-    bgGrad.addColorStop(1, 'rgba(6, 10, 20, 0.95)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, width, height);
+    fillBackground(ctx, width, height);
 
     // Label area
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = LABEL_AREA_BG;
     ctx.fillRect(0, drawH, width, labelH);
 
     // ── dB grid ─────────────────────────────────────────────────────────────
     ctx.font = '7px monospace';
     for (const db of [0, -12, -24, -36]) {
       const y = yForDb(db);
-      ctx.strokeStyle = db === 0 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)';
+      ctx.strokeStyle = db === 0 ? GRID_COLOR_STRONG : GRID_COLOR;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.moveTo(0, y);

@@ -5,6 +5,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { generateDelayTaps } from '../../utils/delayTaps';
+import { fillBackground, GRID_COLOR, LABEL_AREA_BG } from '../../utils/canvasTheme';
 
 interface DelayTapTimelineProps {
   time: number;       // Delay time in seconds
@@ -46,15 +47,10 @@ export function DelayTapTimeline({
 
     // ── Background ──────────────────────────────────────────────────────────
     ctx.clearRect(0, 0, width, height);
-
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-    bgGrad.addColorStop(0, 'rgba(8, 12, 24, 0.95)');
-    bgGrad.addColorStop(1, 'rgba(4, 8, 18, 0.95)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, width, height);
+    fillBackground(ctx, width, height);
 
     // Label area separator
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = LABEL_AREA_BG;
     ctx.fillRect(0, drawH, width, labelH);
 
     // ── Ruler: horizontal baseline ──────────────────────────────────────────

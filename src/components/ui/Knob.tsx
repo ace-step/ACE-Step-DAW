@@ -265,9 +265,9 @@ export function Knob({
         {showTooltip && isDragging && (
           <div
             className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap
-                        rounded bg-black/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow-lg
+                        rounded-sm bg-black/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow-lg
                         border border-white/10"
-            style={{ bottom: s + 4 }}
+            style={{ bottom: s + 4, fontVariantNumeric: 'tabular-nums' }}
           >
             {displayValue}{unit && !formatValue ? unit : ''}
           </div>

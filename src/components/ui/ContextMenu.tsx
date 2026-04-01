@@ -11,9 +11,9 @@ export const CONTEXT_MENU = {
   textDim: '#a1a1aa',   // zinc-400
   separatorColor: 'rgba(255, 255, 255, 0.06)',
   fontSize: 11,
-  borderRadius: 8,
+  borderRadius: 4,
   minWidth: 160,
-  shadow: '0 2px 8px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3)',
+  shadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)',
   backdropFilter: 'blur(16px) saturate(1.2)',
 } as const;
 

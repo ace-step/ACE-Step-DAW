@@ -38,6 +38,11 @@ test-results/
 # PM agent persistent memory
 .pm/
 /companion/target/
+
+# Rust WASM DSP build artifacts
+/crates/target/
+/public/wasm/.gitignore
+/public/wasm/package.json
 # ONNX models (too large for git, download via script)
 public/models/*.onnx
 .gstack/

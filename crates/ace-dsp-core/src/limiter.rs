@@ -204,11 +204,10 @@ impl Limiter {
 
         // Envelope follower with linear attack (spread over lookahead) and exp release
         if target_gain < self.envelope {
-            // Attack: linear ramp down over the lookahead window
-            // Move toward target by attack_step fraction per sample
-            let step = self.attack_step * (self.envelope - target_gain);
-            self.envelope -= step.max(self.envelope - target_gain); // don't overshoot
-            self.envelope = self.envelope.max(target_gain); // clamp to target
+            // Attack: linear ramp down — decrease by 1/lookahead_samples per sample.
+            // This guarantees the envelope reaches any target within the lookahead window,
+            // since from 1.0 it reaches 0.0 in exactly lookahead_samples steps.
+            self.envelope = (self.envelope - self.attack_step).max(target_gain);
         } else {
             // Release: exponential recovery
             self.envelope = target_gain + self.release_coeff * (self.envelope - target_gain);

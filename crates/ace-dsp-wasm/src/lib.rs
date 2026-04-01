@@ -608,7 +608,7 @@ impl DspProcessor {
             delay.process_buffer(buffer);
         }
         if let Some(ref mut reverb) = self.reverb {
-            reverb.process_buffer(buffer);
+            reverb.process_mono_buffer(buffer);
         }
         self.gain.process_mono(buffer);
         if let Some(ref mut dc) = self.dc_blocker {
@@ -653,7 +653,7 @@ impl DspProcessor {
             delay.process_buffer(buffer);
         }
         if let Some(ref mut reverb) = self.reverb {
-            reverb.process_buffer(buffer);
+            reverb.process_stereo_buffer(buffer);
         }
         if let Some(ref si) = self.stereo_imager {
             si.process_interleaved(buffer);

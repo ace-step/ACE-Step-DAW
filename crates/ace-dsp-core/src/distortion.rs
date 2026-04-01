@@ -24,7 +24,7 @@ pub enum DistortionType {
 }
 
 /// Simple 2x oversampling state for anti-aliasing.
-/// Uses linear interpolation for upsampling and averaging for downsampling
+/// Uses linear interpolation for upsampling and decimation (taking every other sample) for downsampling,
 /// with a one-pole lowpass to attenuate frequencies above Nyquist.
 struct Oversampler {
     prev_input: f32,
@@ -278,6 +278,19 @@ mod tests {
         // Mix = 0 → pure dry signal
         let out = d.process_sample(0.3);
         assert!((out - 0.3).abs() < 0.001, "Dry only: {out}");
+    }
+
+    #[test]
+    fn test_mix_half_blends() {
+        let mut d = Distortion::new(DistortionType::HardClip, 10.0, 0.5, 1.0);
+        // Settle oversampler
+        for _ in 0..16 { d.process_sample(0.3); }
+        let out = d.process_sample(0.3);
+        // mix=0.5: output = 0.3*0.5 + wet*0.5, wet ≈ 1.0 (hard clipped)
+        // So output should be between dry (0.3) and wet (~1.0)
+        assert!(out > 0.3 && out < 1.0, "Half mix should blend: {out}");
+        // Should differ from both pure dry and pure wet
+        assert!((out - 0.3).abs() > 0.05, "Should differ from dry: {out}");
     }
 
     #[test]

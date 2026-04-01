@@ -314,7 +314,7 @@ impl Reverb {
     }
 
     /// Process a mono buffer in-place.
-    pub fn process_buffer(&mut self, buffer: &mut [f32]) {
+    pub fn process_mono_buffer(&mut self, buffer: &mut [f32]) {
         for sample in buffer.iter_mut() {
             *sample = self.process_sample(*sample);
         }
@@ -364,7 +364,7 @@ mod tests {
     fn test_reverb_silence_in_silence_out() {
         let mut rev = Reverb::new(44100.0, 0.5, 0.5, 1.0, 0.0);
         let mut buf = [0.0_f32; 512];
-        rev.process_buffer(&mut buf);
+        rev.process_mono_buffer(&mut buf);
         for s in &buf {
             assert!(s.abs() < 1e-10, "Expected silence, got {s}");
         }
@@ -399,7 +399,7 @@ mod tests {
     fn test_reverb_dry_passthrough() {
         let mut rev = Reverb::new(44100.0, 0.5, 0.5, 0.0, 1.0);
         let mut buf = [0.5_f32; 128];
-        rev.process_buffer(&mut buf);
+        rev.process_mono_buffer(&mut buf);
         for &s in &buf {
             assert!(
                 (s - 0.5).abs() < 0.01,

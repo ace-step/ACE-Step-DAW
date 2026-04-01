@@ -107,6 +107,9 @@ import * as audioEngineHooks from '../hooks/useAudioEngine';
 import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
+import { audioBufferToWavBlob } from '../utils/wav';
+import { computeWaveformPeaks } from '../utils/waveformPeaks';
+import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
@@ -6486,15 +6489,11 @@ export const useProjectStore = create<ProjectState>()(
     const audioBuffer = await renderStrudelOffline(track.strudelCode, durationSeconds, bpm, sampleRate, onProgress);
 
     // Convert to WAV and store
-    const { audioBufferToWavBlob } = await import('../utils/wav');
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const clipId = uuidv4();
-    const { saveAudioBlob } = await import('../services/audioFileManager');
     const audioKey = await saveAudioBlob(get().project!.id, clipId, 'isolated', wavBlob);
 
     // Compute waveform peaks for visual display
-    const { computeWaveformPeaks } = await import('../utils/waveformPeaks');
-    const { CLIP_WAVEFORM_PEAK_COUNT } = await import('../utils/clipAudio');
     const waveformPeaks = computeWaveformPeaks(audioBuffer, CLIP_WAVEFORM_PEAK_COUNT);
 
     // Create a new stems track with the rendered audio clip

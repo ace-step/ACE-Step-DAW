@@ -4,6 +4,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { generateTransferCurve } from '../../utils/compressorCurve';
+import { fillBackground, GRID_COLOR, LABEL_COLOR } from '../../utils/canvasTheme';
 
 const MIN_DB = -60;
 const MAX_DB = 0;
@@ -49,18 +50,15 @@ export function CompressorCurve({
     const xForDb = (db: number) => ((db - MIN_DB) / (MAX_DB - MIN_DB)) * width;
     const yForDb = (db: number) => height - ((db - MIN_DB) / (MAX_DB - MIN_DB)) * height;
 
-    // Clear
+    // Clear + vignette background
     ctx.clearRect(0, 0, width, height);
-
-    // Background
-    ctx.fillStyle = 'rgba(8, 12, 24, 0.85)';
-    ctx.fillRect(0, 0, width, height);
+    fillBackground(ctx, width, height);
 
     // Grid lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 0.5;
     ctx.font = '8px monospace';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.fillStyle = LABEL_COLOR;
 
     for (const db of DB_LABELS) {
       const x = xForDb(db);

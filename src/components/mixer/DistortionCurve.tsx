@@ -4,6 +4,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { generateDistortionCurve, type DistortionType } from '../../utils/distortionCurve';
+import { fillBackground, GRID_COLOR } from '../../utils/canvasTheme';
 
 interface DistortionCurveProps {
   drive: number;
@@ -43,9 +44,8 @@ export function DistortionCurve({
     // Clear
     ctx.clearRect(0, 0, width, height);
 
-    // Background
-    ctx.fillStyle = 'rgba(8, 12, 24, 0.85)';
-    ctx.fillRect(0, 0, width, height);
+    // Background (radial vignette)
+    fillBackground(ctx, width, height);
 
     // Grid lines at -1, -0.5, 0, +0.5, +1
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
@@ -60,7 +60,7 @@ export function DistortionCurve({
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.strokeStyle = GRID_COLOR;
       ctx.stroke();
       // Horizontal
       ctx.beginPath();

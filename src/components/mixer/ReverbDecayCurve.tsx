@@ -8,6 +8,7 @@ import {
   generateReverbEnvelope,
   getEarlyReflectionTimes,
 } from '../../utils/reverbCurve';
+import { fillBackground, GRID_COLOR, LABEL_COLOR, LABEL_AREA_BG } from '../../utils/canvasTheme';
 import type { AlgorithmicReverbType } from '../../types/project';
 
 interface ReverbDecayCurveProps {
@@ -57,17 +58,10 @@ export function ReverbDecayCurve({
 
     // ── Background ──────────────────────────────────────────────────────────
     ctx.clearRect(0, 0, width, height);
-
-    // Subtle atmospheric gradient background — slightly lighter where decay tail lives
-    const bgGrad = ctx.createLinearGradient(0, 0, width, 0);
-    bgGrad.addColorStop(0, 'rgba(8, 12, 24, 0.95)');
-    bgGrad.addColorStop(0.15, `${color}08`);
-    bgGrad.addColorStop(1, 'rgba(8, 12, 24, 0.95)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, width, height);
+    fillBackground(ctx, width, height);
 
     // Bottom label area separator
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillStyle = LABEL_AREA_BG;
     ctx.fillRect(0, drawH, width, labelH);
 
     // ── Grid ────────────────────────────────────────────────────────────────

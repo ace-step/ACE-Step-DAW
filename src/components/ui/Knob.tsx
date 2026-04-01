@@ -80,9 +80,19 @@ export function Knob({
       if (!dragStart.current) return;
       const range = max - min;
       const fine = mv.altKey;
-      const sensitivity = fine ? range / 2000 : range / 200;
+      let sensitivity = fine ? range / 2000 : range / 200;
+      // Magnetic snap: reduce sensitivity near default value
+      const snapZone = range * 0.03; // 3% of range
+      const distFromDefault = Math.abs(dragStart.current.value - defaultValue);
+      if (distFromDefault < snapZone) {
+        sensitivity *= 0.5; // half speed near default
+      }
       const delta = mv.movementY * sensitivity;
-      const newVal = applyStep(dragStart.current.value + delta);
+      let newVal = applyStep(dragStart.current.value + delta);
+      // Snap to exact default if within half-step
+      if (Math.abs(newVal - defaultValue) < (step ?? range / 200) * 0.5) {
+        newVal = defaultValue;
+      }
       dragStart.current = { y: mv.clientY, value: newVal };
       setIsFineMode(fine);
       onChange(newVal);
@@ -191,6 +201,12 @@ export function Knob({
   const pointerPos = polarToXY(angle - 90, trackR);
   const pointerR = Math.max(1.5, strokeWidth * 0.4);
 
+  // Default value detent marker position
+  const defaultAngle = valueToAngle(defaultValue, min, max, arc);
+  const detentInner = polarToXY(defaultAngle - 90, trackR - strokeWidth * 0.6);
+  const detentOuter = polarToXY(defaultAngle - 90, trackR + strokeWidth * 0.6);
+  const isAtDefault = Math.abs(value - defaultValue) < (step ?? (max - min) / 200) * 0.5;
+
   // Value display
   const defaultDisplayValue = step !== undefined && step >= 1
     ? Math.round(value).toString()
@@ -215,10 +231,14 @@ export function Knob({
           aria-valuenow={value}
           aria-valuemin={min}
           aria-valuemax={max}
-          className={`relative outline-none rounded-full
+          className={`relative outline-none rounded-full transition-[transform,filter] duration-150
             focus-visible:ring-2 focus-visible:ring-daw-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent
-            ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize'}`}
-          style={{ width: s, height: s }}
+            ${disabled ? 'cursor-not-allowed' : 'cursor-ns-resize hover:brightness-110 hover:scale-[1.03]'}`}
+          style={{
+            width: s,
+            height: s,
+            ...(isDragging ? { filter: 'brightness(1.15)', transform: 'scale(1.05)' } : {}),
+          }}
           data-dragging={isDragging ? 'true' : undefined}
           data-resetting={isResetting ? 'true' : undefined}
         >
@@ -251,6 +271,27 @@ export function Knob({
               style={isResetting ? { transition: 'd 200ms ease-out' } : undefined}
             />
 
+            {/* Default value detent marker */}
+            <line
+              x1={detentInner.x} y1={detentInner.y}
+              x2={detentOuter.x} y2={detentOuter.y}
+              stroke={isAtDefault ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'}
+              strokeWidth={isAtDefault ? 1.5 : 0.75}
+              strokeLinecap="round"
+            />
+
+            {/* Reset pulse — bright flash on the arc when double-click resets */}
+            {isResetting && (
+              <path
+                d={trackPath}
+                fill="none"
+                stroke="rgba(255,255,255,0.6)"
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                style={{ animation: 'knob-reset-pulse 200ms ease-out forwards' }}
+              />
+            )}
+
             {/* Minimal center anchor */}
             <circle
               cx={radius}
@@ -265,9 +306,9 @@ export function Knob({
         {showTooltip && isDragging && (
           <div
             className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap
-                        rounded bg-black/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow-lg
+                        rounded-sm bg-black/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow-lg
                         border border-white/10"
-            style={{ bottom: s + 4 }}
+            style={{ bottom: s + 4, fontVariantNumeric: 'tabular-nums' }}
           >
             {displayValue}{unit && !formatValue ? unit : ''}
           </div>
@@ -305,8 +346,8 @@ export function Knob({
           {label}
         </span>
       )}
-      {/* Value */}
-      <span className="text-xs text-white/75 leading-tight font-mono font-medium">
+      {/* Value — tabular-nums prevents digit jitter during parameter changes */}
+      <span className="text-xs text-white/75 leading-tight font-mono font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {displayValue}{unit && !formatValue ? unit : ''}
       </span>
     </div>

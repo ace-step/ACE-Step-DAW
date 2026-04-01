@@ -11,6 +11,8 @@ import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
 import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { DelayTapTimeline } from './DelayTapTimeline';
+import { FilterResponseCurve } from './FilterResponseCurve';
+import { ModulationDisplay } from './ModulationDisplay';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -108,12 +110,12 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
       {label && (
         <div className="flex justify-between items-center">
           <span className="text-[9px] text-white/30 tracking-wide">{label}</span>
-          {displayValue && <span className="text-[10px] text-white/60 font-mono font-medium">{displayValue}</span>}
+          {displayValue && <span className="text-[10px] text-white/60 font-mono font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>{displayValue}</span>}
         </div>
       )}
       <div
         ref={trackRef}
-        className="relative cursor-pointer rounded-sm"
+        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150"
         style={{ width, height: 4 }}
         onMouseDown={handleMouseDown}
         onDoubleClick={(e) => {
@@ -132,7 +134,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
         <div className="absolute inset-0 rounded-sm bg-white/[0.06]" />
         {/* Filled portion — crisp right edge, no thumb */}
         <div
-          className="absolute left-0 top-0 bottom-0 rounded-sm"
+          className="absolute left-0 top-0 bottom-0 rounded-sm transition-opacity duration-150 group-hover:opacity-90"
           style={{ width: `${norm * 100}%`, backgroundColor: color, opacity: 0.7 }}
         />
       </div>
@@ -894,7 +896,7 @@ export function DistortionCard({ effect, trackId }: { effect: TrackEffect & { ty
             <button
               key={dt}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.distortionType === dt ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.distortionType === dt ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
               }`}
               onClick={() => update({ distortionType: dt })}
             >
@@ -929,13 +931,23 @@ export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.filter}
+      visualization={
+        <FilterResponseCurve
+          frequency={p.frequency}
+          resonance={Math.max(0.1, p.resonance)}
+          filterType={p.filterType}
+          width={160}
+          height={100}
+          color={EFFECT_COLORS.filter}
+        />
+      }
       mode={
         <>
           {(['lowpass', 'highpass', 'bandpass'] as FilterParams['filterType'][]).map((ft) => (
             <button
               key={ft}
               className={`px-1.5 py-0.5 text-[8px] rounded uppercase ${
-                p.filterType === ft ? 'bg-cyan-500/30 text-cyan-300' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.filterType === ft ? 'bg-cyan-500/20 text-cyan-300 shadow-[0_0_3px_-1px_rgba(34,211,238,0.3)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
               }`}
               onClick={() => update({ filterType: ft })}
             >
@@ -992,6 +1004,9 @@ export function ChorusCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.chorus}
+      visualization={
+        <ModulationDisplay type="chorus" rate={p.frequency} depth={p.depth} color={EFFECT_COLORS.chorus} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'chorus', param: 'wet' }} normalizedValue={normalizeEffectParamValue('chorus', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.chorus} />
@@ -1027,6 +1042,9 @@ export function FlangerCard({ effect, trackId }: { effect: TrackEffect & { type:
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.flanger}
+      visualization={
+        <ModulationDisplay type="flanger" rate={p.frequency} depth={p.depth} centerDelay={p.delayTime} feedback={p.feedback} color={EFFECT_COLORS.flanger} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'wet' }} normalizedValue={normalizeEffectParamValue('flanger', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.flanger} />
@@ -1062,6 +1080,9 @@ export function PhaserCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.phaser}
+      visualization={
+        <ModulationDisplay type="phaser" rate={p.frequency} depth={p.octaves / 6} baseFreq={p.baseFrequency} stages={p.stages ?? 4} color={EFFECT_COLORS.phaser} />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'phaser', param: 'wet' }} normalizedValue={normalizeEffectParamValue('phaser', 'wet', p.wet) ?? 0.5}>
           <HSlider value={p.wet} onChange={(v) => update({ wet: v })} label="Dry/Wet" displayValue={`${Math.round(p.wet * 100)}%`} color={EFFECT_COLORS.phaser} />
@@ -1169,7 +1190,7 @@ export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'g
             <button
               key={m}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
               }`}
               onClick={() => update({ mode: m })}
             >
@@ -1222,7 +1243,7 @@ export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type:
             <button
               key={m}
               className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
               }`}
               onClick={() => update({ mode: m })}
             >
@@ -1366,7 +1387,7 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
             <button
               key={st}
               className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${
-                p.saturationType === st ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'
+                p.saturationType === st ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
               }`}
               onClick={() => update({ saturationType: st })}
             >
@@ -1464,7 +1485,7 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
       mode={
         <>
           {(Object.keys(REVERB_TYPE_LABELS) as AlgorithmicReverbType[]).map((rt) => (
-            <button key={rt} className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${p.reverbType === rt ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+            <button key={rt} className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${p.reverbType === rt ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'}`}
               onClick={() => update({ reverbType: rt })}>{REVERB_TYPE_LABELS[rt]}</button>
           ))}
         </>
@@ -1508,7 +1529,7 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
       mode={
         <>
           {(['fast', 'smooth'] as NoiseGateReductionParams['mode'][]).map((m) => (
-            <button key={m} className={`px-2 py-0.5 text-[10px] rounded capitalize ${p.mode === m ? 'bg-white/[0.08] text-white/70' : 'text-white/30 hover:text-white/50 hover:bg-white/5'}`}
+            <button key={m} className={`px-2 py-0.5 text-[10px] rounded capitalize ${p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'}`}
               onClick={() => update({ mode: m })}>{m}</button>
           ))}
         </>

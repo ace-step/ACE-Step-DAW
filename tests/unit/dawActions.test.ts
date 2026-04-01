@@ -14,7 +14,7 @@ describe('Typed DAW Action API', () => {
   it('exports DAWActions interface from types/dawActions', async () => {
     const mod = await import('../../src/types/dawActions');
     // The module should export the type (we verify the module exists and is importable)
-    expect(mod).toBeDefined();
+    expect(typeof mod).toBe('object');
   });
 
   it('exports ProjectActions type that matches projectStore action methods', async () => {
@@ -64,12 +64,13 @@ describe('Typed DAW Action API', () => {
     const mod = await import('../../src/types/dawActions');
     // Module should be importable and provide type-level constructs
     // At runtime we verify the module shape
-    expect(mod).toBeDefined();
+    expect(typeof mod).toBe('object');
   });
 
   it('re-exports action types from the stable api barrel', async () => {
     const mod = await import('../../src/api/dawApi');
-    expect(mod).toBeDefined();
+    expect(typeof mod).toBe('object');
+    expect(typeof mod.getDAWApi).toBe('function');
     // The barrel should re-export the types (verified at compile time)
     // At runtime we verify the module is importable
   });
@@ -79,15 +80,24 @@ describe('Typed DAW Action API', () => {
     expect(typeof getDAWApi).toBe('function');
 
     const api = getDAWApi();
-    expect(api).toBeDefined();
-    expect(api.project).toBeDefined();
-    expect(api.transport).toBeDefined();
-    expect(api.ui).toBeDefined();
-    expect(api.generation).toBeDefined();
-    expect(api.collaboration).toBeDefined();
-    expect(api.session).toBeDefined();
-    expect(api.shortcuts).toBeDefined();
-    expect(api.commands).toBeDefined();
+    expect(api).toMatchObject({
+      project: expect.any(Function),
+      transport: expect.any(Function),
+      ui: expect.any(Function),
+      generation: expect.any(Function),
+      collaboration: expect.any(Function),
+      session: expect.any(Function),
+      shortcuts: expect.any(Function),
+      commands: expect.objectContaining({ executeCoreShortcut: expect.any(Function) }),
+    });
+    expect(typeof api.project.getState).toBe('function');
+    expect(typeof api.transport.getState).toBe('function');
+    expect(typeof api.ui.getState).toBe('function');
+    expect(typeof api.generation.getState).toBe('function');
+    expect(typeof api.collaboration.getState).toBe('function');
+    expect(typeof api.session.getState).toBe('function');
+    expect(typeof api.shortcuts.getState).toBe('function');
+    expect(typeof api.commands.executeCoreShortcut).toBe('function');
   });
 
   it('getDAWApi().project exposes store actions', async () => {

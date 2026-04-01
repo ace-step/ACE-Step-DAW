@@ -1,14 +1,19 @@
 [package]
 name = "ace-dsp-core"
+description = "Pure DSP algorithms for ACE-Step DAW — filters, dynamics, reverb, modulation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Pure DSP algorithms for ACE-Step-DAW (no_std compatible)"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+rustfft = "6"
 
 [features]
 default = ["std"]
 std = []
 
-[dependencies]
-
 [dev-dependencies]
+approx = "0.5"

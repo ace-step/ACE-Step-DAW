@@ -133,6 +133,6 @@ Dev Server: port 5175
 ## Recommended Next Steps
 1. Fix `addTrack` to handle "stems" gracefully (guard clause or add to TRACK_CATALOG)
 2. Refactor SequencerEditor.tsx (split into SequencerToolbar, SequencerRow, SequencerControls)
-3. UI layout persistence (plan ready at docs/plans/feat-ui-layout-persist.md)
+3. UI layout persistence
 4. Add agent API documentation to AGENTS.md (valid TrackName values, store method signatures)
 5. Human audio testing pass (14 🔊 items)

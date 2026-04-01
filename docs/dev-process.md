@@ -34,7 +34,6 @@
 ### ACE-Step
 - DAW (upstream): https://github.com/ace-step/ACE-Step-DAW
 - ACE-Step 1.5 API: https://github.com/ace-step/ACE-Step-1.5
-- Local API docs: docs/research-notes/ace-step-api-details.md
 
 ---
 
@@ -49,7 +48,7 @@ Every feature must be researched at interaction-detail level before coding.
 > "Ableton Group Track: nestable, folded view shows sub-clip overview, Session View group slots have independent launch/stop, Cmd+Click for multi-select grouping, group color can be applied to all sub-tracks, output defaults to Group Track but can be rerouted, can serve as pure folder, deleting Group deletes all contents, Ungroup reverts to individual tracks"
 
 ### Research output
-- Save to `docs/research-notes/<feature>-details.md`
+- File findings as GitHub Issues with detailed competitive references
 - Include: interaction details, parameter ranges, edge cases, shortcuts, visual feedback, error handling
 
 ---

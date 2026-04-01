@@ -19,8 +19,11 @@ scripts/metrics-latest.json
 .claude/plans/
 
 # Agent session-local files (never commit — not safe for cross-agent coordination)
-.llm/todo.md
-.llm/research/
+.llm/
+
+# Agent-generated plans and research (session artifacts, not living documents)
+docs/plans/
+docs/research-notes/
 
 # Reference repos (cloned for study, never commit)
 .claude/references/

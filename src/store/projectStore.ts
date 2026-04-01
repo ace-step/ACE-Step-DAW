@@ -130,12 +130,14 @@ import { buildConsolidatedMidiClipData, renderConsolidatedAudioClip, validateCli
 import type { MidiCaptureService } from '../services/midiCaptureService';
 import { snapTimeToZeroCrossing } from '../utils/zeroCrossing';
 import {
+  CLIP_WAVEFORM_PEAK_COUNT,
   getClipAudibleEndTime,
   getClipAudibleStartTime,
   getClipContentOffset,
   getClipPlaybackRate,
   isClipRepitchStretched,
 } from '../utils/clipAudio';
+import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { snapToGrid, beatsToSeconds } from '../utils/time';
 import {
   createDefaultPlaybackLatencySettings,

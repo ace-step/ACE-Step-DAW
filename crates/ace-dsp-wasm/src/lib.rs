@@ -402,20 +402,13 @@ impl DspProcessor {
     /// - `release_ms`: gain recovery time
     /// - `lookahead_ms`: anticipation window (1–10ms)
     pub fn set_limiter(&mut self, ceiling_db: f32, release_ms: f32, lookahead_ms: f32) {
-        match &mut self.limiter {
-            Some(l) => {
-                l.set_ceiling(ceiling_db);
-                l.set_release(release_ms);
-            }
-            None => {
-                self.limiter = Some(Limiter::new(
-                    self.sample_rate,
-                    ceiling_db,
-                    release_ms,
-                    lookahead_ms,
-                ));
-            }
-        }
+        // Always re-create: lookahead sizes an internal buffer that can't be resized.
+        self.limiter = Some(Limiter::new(
+            self.sample_rate,
+            ceiling_db,
+            release_ms,
+            lookahead_ms,
+        ));
     }
 
     /// Disable the limiter.
@@ -710,6 +703,30 @@ impl DspProcessor {
         }
         if let Some(ref mut dc) = self.dc_blocker {
             dc.reset();
+        }
+    }
+}
+
+/// Allocate a f32 buffer in WASM linear memory.
+/// Returns a pointer the caller can write into and pass to `process_mono`.
+/// This is a stable, named replacement for the internal `__wbindgen_export` symbol.
+#[wasm_bindgen]
+pub fn alloc_f32_buffer(len: usize) -> *mut f32 {
+    let mut v = Vec::<f32>::with_capacity(len);
+    #[allow(clippy::uninit_vec)]
+    unsafe { v.set_len(len); }
+    let ptr = v.as_mut_ptr();
+    core::mem::forget(v);
+    ptr
+}
+
+/// Free a buffer previously allocated by `alloc_f32_buffer`.
+/// `len` must match the original allocation length.
+#[wasm_bindgen]
+pub fn free_f32_buffer(ptr: *mut f32, len: usize) {
+    if !ptr.is_null() && len > 0 {
+        unsafe {
+            drop(Vec::from_raw_parts(ptr, len, len));
         }
     }
 }

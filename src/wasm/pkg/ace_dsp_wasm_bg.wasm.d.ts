@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_dspprocessor_free: (a: number, b: number) => void;
+export const alloc_f32_buffer: (a: number) => number;
 export const dspprocessor_compressor_gr_db: (a: number) => number;
 export const dspprocessor_disable_autopan: (a: number) => void;
 export const dspprocessor_disable_chorus: (a: number) => void;
@@ -41,6 +42,7 @@ export const dspprocessor_set_reverb: (a: number, b: number, c: number, d: numbe
 export const dspprocessor_set_ringmod: (a: number, b: number, c: number, d: number) => void;
 export const dspprocessor_set_stereo_width: (a: number, b: number) => void;
 export const dspprocessor_set_tremolo: (a: number, b: number, c: number, d: number) => void;
+export const free_f32_buffer: (a: number, b: number) => void;
 export const version: (a: number) => void;
 export const __wbindgen_export: (a: number, b: number) => number;
 export const __wbindgen_add_to_stack_pointer: (a: number) => number;

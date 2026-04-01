@@ -398,14 +398,16 @@ class WasmDspProcessor extends AudioWorkletProcessor {
   /**
    * Pre-allocate a WASM buffer for the given frame count.
    * Reused across process() calls to avoid real-time allocation.
+   * Uses our named Rust exports (alloc_f32_buffer / free_f32_buffer)
+   * instead of unstable __wbindgen_export internals.
    */
   _ensureBuffer(frames) {
     if (this._bufLen >= frames) return;
     // Free previous buffer if any
     if (this._bufPtr !== 0) {
-      wasm.__wbindgen_export2(this._bufPtr, this._bufLen * 4, 4);
+      wasm.free_f32_buffer(this._bufPtr, this._bufLen);
     }
-    this._bufPtr = wasm.__wbindgen_export(frames * 4, 4) >>> 0;
+    this._bufPtr = wasm.alloc_f32_buffer(frames) >>> 0;
     this._bufLen = frames;
   }
 

@@ -227,6 +227,19 @@ export class DspProcessor {
 }
 
 /**
+ * Allocate a f32 buffer in WASM linear memory.
+ * Returns a pointer the caller can write into and pass to `process_mono`.
+ * This is a stable, named replacement for the internal `__wbindgen_export` symbol.
+ */
+export function alloc_f32_buffer(len: number): number;
+
+/**
+ * Free a buffer previously allocated by `alloc_f32_buffer`.
+ * `len` must match the original allocation length.
+ */
+export function free_f32_buffer(ptr: number, len: number): void;
+
+/**
  * Version string for debugging.
  */
 export function version(): string;
@@ -236,6 +249,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
+    readonly alloc_f32_buffer: (a: number) => number;
     readonly dspprocessor_compressor_gr_db: (a: number) => number;
     readonly dspprocessor_disable_autopan: (a: number) => void;
     readonly dspprocessor_disable_chorus: (a: number) => void;
@@ -275,6 +289,7 @@ export interface InitOutput {
     readonly dspprocessor_set_ringmod: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
     readonly dspprocessor_set_tremolo: (a: number, b: number, c: number, d: number) => void;
+    readonly free_f32_buffer: (a: number, b: number) => void;
     readonly version: (a: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;

@@ -392,6 +392,28 @@ export class DspProcessor {
 if (Symbol.dispose) DspProcessor.prototype[Symbol.dispose] = DspProcessor.prototype.free;
 
 /**
+ * Allocate a f32 buffer in WASM linear memory.
+ * Returns a pointer the caller can write into and pass to `process_mono`.
+ * This is a stable, named replacement for the internal `__wbindgen_export` symbol.
+ * @param {number} len
+ * @returns {number}
+ */
+export function alloc_f32_buffer(len) {
+    const ret = wasm.alloc_f32_buffer(len);
+    return ret >>> 0;
+}
+
+/**
+ * Free a buffer previously allocated by `alloc_f32_buffer`.
+ * `len` must match the original allocation length.
+ * @param {number} ptr
+ * @param {number} len
+ */
+export function free_f32_buffer(ptr, len) {
+    wasm.free_f32_buffer(ptr, len);
+}
+
+/**
  * Version string for debugging.
  * @returns {string}
  */

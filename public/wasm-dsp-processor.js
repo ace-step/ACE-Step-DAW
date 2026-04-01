@@ -185,6 +185,20 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_stereo_imager();
           }
           break;
+        case 'set-limiter':
+          if (this._processor) {
+            this._processor.set_limiter(
+              msg.ceilingDb,
+              msg.releaseMs,
+              msg.lookaheadMs
+            );
+          }
+          break;
+        case 'disable-limiter':
+          if (this._processor) {
+            this._processor.disable_limiter();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

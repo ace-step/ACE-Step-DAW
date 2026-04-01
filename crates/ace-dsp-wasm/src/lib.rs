@@ -11,6 +11,7 @@ use ace_dsp_core::distortion::{Distortion, DistortionType};
 use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
+use ace_dsp_core::limiter::Limiter;
 use ace_dsp_core::reverb::Reverb;
 use ace_dsp_core::stereo::StereoImager;
 
@@ -30,6 +31,7 @@ pub struct DspProcessor {
     chorus: Option<Chorus>,
     distortion: Option<Distortion>,
     stereo_imager: Option<StereoImager>,
+    limiter: Option<Limiter>,
     sample_rate: f32,
 }
 
@@ -49,6 +51,7 @@ impl DspProcessor {
             chorus: None,
             distortion: None,
             stereo_imager: None,
+            limiter: None,
             sample_rate,
         }
     }
@@ -379,6 +382,40 @@ impl DspProcessor {
         self.stereo_imager = None;
     }
 
+    /// Enable limiter.
+    /// - `ceiling_db`: max output level (≤ 0.0 dB)
+    /// - `release_ms`: gain recovery time
+    /// - `lookahead_ms`: anticipation window (1–10ms)
+    pub fn set_limiter(&mut self, ceiling_db: f32, release_ms: f32, lookahead_ms: f32) {
+        match &mut self.limiter {
+            Some(l) => {
+                l.set_ceiling(ceiling_db);
+                l.set_release(release_ms);
+            }
+            None => {
+                self.limiter = Some(Limiter::new(
+                    self.sample_rate,
+                    ceiling_db,
+                    release_ms,
+                    lookahead_ms,
+                ));
+            }
+        }
+    }
+
+    /// Disable the limiter.
+    pub fn disable_limiter(&mut self) {
+        self.limiter = None;
+    }
+
+    /// Get current limiter gain reduction in dB.
+    pub fn limiter_gr_db(&self) -> f32 {
+        self.limiter
+            .as_ref()
+            .map(|l| l.gain_reduction_db())
+            .unwrap_or(0.0)
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
@@ -408,6 +445,9 @@ impl DspProcessor {
             reverb.process_buffer(buffer);
         }
         self.gain.process_mono(buffer);
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.process_buffer(buffer);
+        }
     }
 
     /// Process interleaved stereo audio buffer in-place.
@@ -441,6 +481,9 @@ impl DspProcessor {
             si.process_interleaved(buffer);
         }
         self.gain.process_stereo_interleaved(buffer);
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.process_buffer(buffer);
+        }
     }
 
     /// Get the current gain value.
@@ -470,6 +513,9 @@ impl DspProcessor {
         }
         if let Some(ref mut chorus) = self.chorus {
             chorus.reset();
+        }
+        if let Some(ref mut limiter) = self.limiter {
+            limiter.reset();
         }
     }
 }
@@ -644,6 +690,29 @@ mod tests {
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);
         assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_limiter() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_limiter(-1.0, 100.0, 5.0);
+        proc.set_gain(2.0); // boost to trigger limiting
+
+        // Feed loud signal
+        let mut buf = [0.8_f32; 4410];
+        proc.process_mono(&mut buf);
+
+        // After settling, output should not exceed ceiling (-1dB ≈ 0.891)
+        let max_out = buf[1000..].iter().cloned().fold(0.0_f32, |a, b| a.max(b.abs()));
+        assert!(max_out <= 0.91, "Should be limited: {max_out}");
+    }
+
+    #[test]
+    fn test_processor_disable_limiter() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_limiter(-1.0, 100.0, 5.0);
+        proc.disable_limiter();
+        assert_eq!(proc.limiter_gr_db(), 0.0);
     }
 
     #[test]

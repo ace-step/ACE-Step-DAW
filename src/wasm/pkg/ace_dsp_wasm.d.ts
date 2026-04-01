@@ -43,6 +43,10 @@ export class DspProcessor {
      */
     disable_gate(): void;
     /**
+     * Disable the limiter.
+     */
+    disable_limiter(): void;
+    /**
      * Disable the reverb.
      */
     disable_reverb(): void;
@@ -54,6 +58,10 @@ export class DspProcessor {
      * Get the current gain value.
      */
     get_gain(): number;
+    /**
+     * Get current limiter gain reduction in dB.
+     */
+    limiter_gr_db(): number;
     /**
      * Create a new DSP processor.
      */
@@ -142,6 +150,13 @@ export class DspProcessor {
      */
     set_gate(threshold_db: number, attack_ms: number, hold_ms: number, release_ms: number, range_db: number): void;
     /**
+     * Enable limiter.
+     * - `ceiling_db`: max output level (≤ 0.0 dB)
+     * - `release_ms`: gain recovery time
+     * - `lookahead_ms`: anticipation window (1–10ms)
+     */
+    set_limiter(ceiling_db: number, release_ms: number, lookahead_ms: number): void;
+    /**
      * Enable reverb effect.
      * - `room_size`: 0.0 (small) to 1.0 (large)
      * - `damping`: 0.0 (bright) to 1.0 (dark)
@@ -174,9 +189,11 @@ export interface InitOutput {
     readonly dspprocessor_disable_eq: (a: number) => void;
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_disable_gate: (a: number) => void;
+    readonly dspprocessor_disable_limiter: (a: number) => void;
     readonly dspprocessor_disable_reverb: (a: number) => void;
     readonly dspprocessor_disable_stereo_imager: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
+    readonly dspprocessor_limiter_gr_db: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
@@ -190,6 +207,7 @@ export interface InitOutput {
     readonly dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
     readonly dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly dspprocessor_set_limiter: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
     readonly version: (a: number) => void;

@@ -68,6 +68,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_gate(this.__wbg_ptr);
     }
     /**
+     * Disable the limiter.
+     */
+    disable_limiter() {
+        wasm.dspprocessor_disable_limiter(this.__wbg_ptr);
+    }
+    /**
      * Disable the reverb.
      */
     disable_reverb() {
@@ -85,6 +91,14 @@ export class DspProcessor {
      */
     get_gain() {
         const ret = wasm.dspprocessor_get_gain(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Get current limiter gain reduction in dB.
+     * @returns {number}
+     */
+    limiter_gr_db() {
+        const ret = wasm.dspprocessor_limiter_gr_db(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -249,6 +263,18 @@ export class DspProcessor {
      */
     set_gate(threshold_db, attack_ms, hold_ms, release_ms, range_db) {
         wasm.dspprocessor_set_gate(this.__wbg_ptr, threshold_db, attack_ms, hold_ms, release_ms, range_db);
+    }
+    /**
+     * Enable limiter.
+     * - `ceiling_db`: max output level (≤ 0.0 dB)
+     * - `release_ms`: gain recovery time
+     * - `lookahead_ms`: anticipation window (1–10ms)
+     * @param {number} ceiling_db
+     * @param {number} release_ms
+     * @param {number} lookahead_ms
+     */
+    set_limiter(ceiling_db, release_ms, lookahead_ms) {
+        wasm.dspprocessor_set_limiter(this.__wbg_ptr, ceiling_db, release_ms, lookahead_ms);
     }
     /**
      * Enable reverb effect.

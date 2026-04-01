@@ -129,6 +129,12 @@ export interface WasmDspNode {
   /** Disable the stereo imager. */
   disableStereoImager(): void;
 
+  /** Enable brick-wall limiter. */
+  setLimiter(ceilingDb: number, releaseMs: number, lookaheadMs: number): void;
+
+  /** Disable the limiter. */
+  disableLimiter(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -410,6 +416,19 @@ export class WasmDspEngine {
 
       disableStereoImager() {
         workletNode.port.postMessage({ type: 'disable-stereo-imager' });
+      },
+
+      setLimiter(ceilingDb: number, releaseMs: number, lookaheadMs: number) {
+        workletNode.port.postMessage({
+          type: 'set-limiter',
+          ceilingDb,
+          releaseMs,
+          lookaheadMs,
+        });
+      },
+
+      disableLimiter() {
+        workletNode.port.postMessage({ type: 'disable-limiter' });
       },
 
       reset() {

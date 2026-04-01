@@ -458,6 +458,33 @@ describe('WasmDspEngine', () => {
         type: 'disable-stereo-imager',
       });
     });
+
+    it('should send set-limiter message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setLimiter(-0.1, 100, 5);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-limiter',
+        ceilingDb: -0.1,
+        releaseMs: 100,
+        lookaheadMs: 5,
+      });
+    });
+
+    it('should send disable-limiter message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableLimiter();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-limiter',
+      });
+    });
   });
 
   describe('lifecycle', () => {

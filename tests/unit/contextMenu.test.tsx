@@ -8,9 +8,8 @@ import {
   CONTEXT_MENU,
 } from '../../src/components/ui/ContextMenu';
 
-// jsdom normalizes hex colors to rgb(), so we compare against that
-const RGB_BG = 'rgb(42, 42, 42)';        // #2a2a2a
-const RGB_BORDER = 'rgb(68, 68, 68)';     // #444
+// jsdom preserves rgba() strings as-is when set via style prop
+const EXPECTED_BG = CONTEXT_MENU.bg;
 const RGB_DANGER = 'rgb(231, 76, 60)';    // #e74c3c
 
 describe('ContextMenuWrapper', () => {
@@ -55,7 +54,7 @@ describe('ContextMenuWrapper', () => {
       </ContextMenuWrapper>,
     );
     const menu = screen.getByTestId('test-menu');
-    expect(menu.style.background).toBe(RGB_BG);
+    expect(menu.style.background).toBe(EXPECTED_BG);
     expect(menu.style.border).toContain('1px solid');
     expect(menu.style.borderRadius).toBe(`${CONTEXT_MENU.borderRadius}px`);
   });
@@ -157,7 +156,7 @@ describe('ContextMenuSeparator', () => {
   it('renders a separator line with consistent color', () => {
     const { container } = render(<ContextMenuSeparator />);
     const sep = container.firstChild as HTMLElement;
-    expect(sep.style.background).toBe(RGB_BORDER); // separatorColor = #444
+    expect(sep.style.background).toBe(CONTEXT_MENU.separatorColor);
     expect(sep.style.height).toBe('1px');
   });
 });
@@ -171,7 +170,7 @@ describe('ContextMenuSubmenu', () => {
     );
     expect(screen.getByText('Sub item')).toBeInTheDocument();
     const submenu = container.firstChild as HTMLElement;
-    expect(submenu.style.background).toBe(RGB_BG);
+    expect(submenu.style.background).toBe(EXPECTED_BG);
     expect(submenu.style.border).toContain('1px solid');
     expect(submenu.style.borderRadius).toBe(`${CONTEXT_MENU.borderRadius}px`);
   });

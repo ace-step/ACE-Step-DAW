@@ -2,18 +2,19 @@ import type { ReactNode } from 'react';
 
 /* ─── Shared context-menu design tokens ──────────────────────────────────── */
 export const CONTEXT_MENU = {
-  bg: '#2a2a2a',
-  border: '#444',
+  bg: 'rgba(32, 32, 36, 0.85)',
+  border: 'rgba(255, 255, 255, 0.08)',
   hoverBg: 'rgba(74, 95, 255, 0.25)', // daw-accent at 25%
   dangerColor: '#e74c3c',
   dangerHoverBg: 'rgba(231, 76, 60, 0.15)',
   textColor: '#d4d4d8', // zinc-300
   textDim: '#a1a1aa',   // zinc-400
-  separatorColor: '#444',
+  separatorColor: 'rgba(255, 255, 255, 0.06)',
   fontSize: 11,
   borderRadius: 8,
   minWidth: 160,
-  shadow: '0 4px 16px rgba(0,0,0,0.5)',
+  shadow: '0 2px 8px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3)',
+  backdropFilter: 'blur(16px) saturate(1.2)',
 } as const;
 
 /* ─── Overlay + positioned wrapper ───────────────────────────────────────── */
@@ -62,6 +63,8 @@ export function ContextMenuWrapper({
           border: `1px solid ${CONTEXT_MENU.border}`,
           borderRadius: CONTEXT_MENU.borderRadius,
           boxShadow: CONTEXT_MENU.shadow,
+          backdropFilter: CONTEXT_MENU.backdropFilter,
+          WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
           padding: '4px 0',
           minWidth,
         }}
@@ -169,6 +172,8 @@ export function ContextMenuSubmenu({ children }: ContextMenuSubmenuProps) {
         border: `1px solid ${CONTEXT_MENU.border}`,
         borderRadius: CONTEXT_MENU.borderRadius,
         boxShadow: CONTEXT_MENU.shadow,
+        backdropFilter: CONTEXT_MENU.backdropFilter,
+        WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
         padding: '4px 0',
         minWidth: 130,
       }}

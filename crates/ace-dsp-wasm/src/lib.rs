@@ -4,6 +4,7 @@
 //! The primary consumer is the AudioWorklet processor (`wasm-dsp-processor.js`).
 
 use wasm_bindgen::prelude::*;
+use ace_dsp_core::autopan::{AutoPan, PanShape};
 use ace_dsp_core::biquad::{BiquadCoeffs, BiquadFilter, BiquadType};
 use ace_dsp_core::chorus::Chorus;
 use ace_dsp_core::delay::MonoDelay;
@@ -36,6 +37,7 @@ pub struct DspProcessor {
     limiter: Option<Limiter>,
     phaser: Option<Phaser>,
     tremolo: Option<Tremolo>,
+    autopan: Option<AutoPan>,
     sample_rate: f32,
 }
 
@@ -58,6 +60,7 @@ impl DspProcessor {
             limiter: None,
             phaser: None,
             tremolo: None,
+            autopan: None,
             sample_rate,
         }
     }
@@ -490,6 +493,33 @@ impl DspProcessor {
         self.tremolo = None;
     }
 
+    /// Enable auto-pan.
+    /// - `rate_hz`: LFO rate (0.05–20 Hz)
+    /// - `depth`: panning depth (0.0–1.0)
+    /// - `shape`: 0=Sine, 1=Triangle
+    pub fn set_autopan(&mut self, rate_hz: f32, depth: f32, shape: u8) {
+        let sh = match shape {
+            0 => PanShape::Sine,
+            1 => PanShape::Triangle,
+            _ => PanShape::Sine,
+        };
+        match &mut self.autopan {
+            Some(ap) => {
+                ap.set_rate(rate_hz);
+                ap.set_depth(depth);
+                ap.set_shape(sh);
+            }
+            None => {
+                self.autopan = Some(AutoPan::new(self.sample_rate, rate_hz, depth, sh));
+            }
+        }
+    }
+
+    /// Disable auto-pan.
+    pub fn disable_autopan(&mut self) {
+        self.autopan = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
     /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
@@ -566,6 +596,9 @@ impl DspProcessor {
         if let Some(ref si) = self.stereo_imager {
             si.process_interleaved(buffer);
         }
+        if let Some(ref mut autopan) = self.autopan {
+            autopan.process_interleaved(buffer);
+        }
         self.gain.process_stereo_interleaved(buffer);
         if let Some(ref mut limiter) = self.limiter {
             limiter.process_buffer(buffer);
@@ -608,6 +641,9 @@ impl DspProcessor {
         }
         if let Some(ref mut tremolo) = self.tremolo {
             tremolo.reset();
+        }
+        if let Some(ref mut autopan) = self.autopan {
+            autopan.reset();
         }
     }
 }
@@ -795,6 +831,35 @@ mod tests {
         let max = buf.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         assert!(min < 0.1, "Tremolo should reach near 0: {min}");
         assert!(max > 0.9, "Tremolo should reach near 1: {max}");
+    }
+
+    #[test]
+    fn test_processor_autopan() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_autopan(2.0, 1.0, 0); // Sine, full depth
+        proc.set_gain(1.0);
+        // Interleaved stereo: constant signal
+        let samples = (44100.0 / 2.0) as usize; // one LFO cycle
+        let mut buf: Vec<f32> = vec![0.5; samples * 2]; // L,R pairs
+        proc.process_stereo_interleaved(&mut buf);
+        // Left channel should vary (auto-pan sweeps)
+        let left_vals: Vec<f32> = buf.iter().step_by(2).cloned().collect();
+        let min_l = left_vals.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_l = left_vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(max_l - min_l > 0.3, "AutoPan should sweep L: range={}", max_l - min_l);
+    }
+
+    #[test]
+    fn test_processor_disable_autopan() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_autopan(2.0, 1.0, 0);
+        proc.disable_autopan();
+        let mut buf = [0.5_f32, 0.5, 0.5, 0.5];
+        proc.set_gain(1.0);
+        proc.process_stereo_interleaved(&mut buf);
+        // Disabled → passthrough
+        assert!((buf[0] - 0.5).abs() < 0.01);
+        assert!((buf[1] - 0.5).abs() < 0.01);
     }
 
     #[test]

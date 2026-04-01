@@ -15,6 +15,10 @@ export class DspProcessor {
      */
     compressor_gr_db(): number;
     /**
+     * Disable auto-pan.
+     */
+    disable_autopan(): void;
+    /**
      * Disable the chorus/flanger.
      */
     disable_chorus(): void;
@@ -89,6 +93,13 @@ export class DspProcessor {
      * Reset all processor state (call on seek or transport stop).
      */
     reset(): void;
+    /**
+     * Enable auto-pan.
+     * - `rate_hz`: LFO rate (0.05–20 Hz)
+     * - `depth`: panning depth (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Triangle
+     */
+    set_autopan(rate_hz: number, depth: number, shape: number): void;
     /**
      * Enable chorus/flanger effect.
      * - `rate_hz`: LFO rate (0.1–10 Hz)
@@ -206,6 +217,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
     readonly dspprocessor_compressor_gr_db: (a: number) => number;
+    readonly dspprocessor_disable_autopan: (a: number) => void;
     readonly dspprocessor_disable_chorus: (a: number) => void;
     readonly dspprocessor_disable_compressor: (a: number) => void;
     readonly dspprocessor_disable_delay: (a: number) => void;
@@ -224,6 +236,7 @@ export interface InitOutput {
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_reset: (a: number) => void;
+    readonly dspprocessor_set_autopan: (a: number, b: number, c: number, d: number) => void;
     readonly dspprocessor_set_chorus: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_compressor: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly dspprocessor_set_delay: (a: number, b: number, c: number, d: number) => void;

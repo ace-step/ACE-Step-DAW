@@ -490,6 +490,33 @@ describe('WasmDspEngine', () => {
       });
     });
 
+    it('should send set-autopan message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setAutoPan(2.0, 0.8, 0);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-autopan',
+        rateHz: 2.0,
+        depth: 0.8,
+        shape: 0,
+      });
+    });
+
+    it('should send disable-autopan message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableAutoPan();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-autopan',
+      });
+    });
+
     it('should send set-stereo-width message', async () => {
       const { ctx, mockWorkletNodes } = createMockAudioContext();
       await engine.initialize(ctx);

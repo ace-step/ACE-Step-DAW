@@ -26,6 +26,12 @@ export class DspProcessor {
         return ret;
     }
     /**
+     * Disable auto-pan.
+     */
+    disable_autopan() {
+        wasm.dspprocessor_disable_autopan(this.__wbg_ptr);
+    }
+    /**
      * Disable the chorus/flanger.
      */
     disable_chorus() {
@@ -149,6 +155,18 @@ export class DspProcessor {
      */
     reset() {
         wasm.dspprocessor_reset(this.__wbg_ptr);
+    }
+    /**
+     * Enable auto-pan.
+     * - `rate_hz`: LFO rate (0.05–20 Hz)
+     * - `depth`: panning depth (0.0–1.0)
+     * - `shape`: 0=Sine, 1=Triangle
+     * @param {number} rate_hz
+     * @param {number} depth
+     * @param {number} shape
+     */
+    set_autopan(rate_hz, depth, shape) {
+        wasm.dspprocessor_set_autopan(this.__wbg_ptr, rate_hz, depth, shape);
     }
     /**
      * Enable chorus/flanger effect.

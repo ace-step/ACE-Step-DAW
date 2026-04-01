@@ -205,6 +205,20 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_tremolo();
           }
           break;
+        case 'set-autopan':
+          if (this._processor) {
+            this._processor.set_autopan(
+              msg.rateHz,
+              msg.depth,
+              msg.shape
+            );
+          }
+          break;
+        case 'disable-autopan':
+          if (this._processor) {
+            this._processor.disable_autopan();
+          }
+          break;
         case 'set-stereo-width':
           if (this._processor) {
             this._processor.set_stereo_width(msg.width);

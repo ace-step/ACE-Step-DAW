@@ -141,6 +141,12 @@ export interface WasmDspNode {
   /** Disable the tremolo. */
   disableTremolo(): void;
 
+  /** Enable auto-pan effect. */
+  setAutoPan(rateHz: number, depth: number, shape: number): void;
+
+  /** Disable the auto-pan. */
+  disableAutoPan(): void;
+
   /** Set stereo imager width (0.0 mono → 1.0 normal → 2.0 wide). */
   setStereoWidth(width: number): void;
 
@@ -460,6 +466,19 @@ export class WasmDspEngine {
 
       disableTremolo() {
         workletNode.port.postMessage({ type: 'disable-tremolo' });
+      },
+
+      setAutoPan(rateHz: number, depth: number, shape: number) {
+        workletNode.port.postMessage({
+          type: 'set-autopan',
+          rateHz,
+          depth,
+          shape,
+        });
+      },
+
+      disableAutoPan() {
+        workletNode.port.postMessage({ type: 'disable-autopan' });
       },
 
       setStereoWidth(width: number) {

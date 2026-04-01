@@ -46,7 +46,7 @@ export interface StrudelPatternInfo {
 
 /** State of a per-track strudel repl instance. */
 interface TrackRepl {
-  repl: any;
+  repl: StrudelRepl;
   isPlaying: boolean;
   lastCode: string;
   lastError: string | null;
@@ -55,7 +55,7 @@ interface TrackRepl {
 // ─── Singleton State ────────────────────────────────────────
 
 const trackRepls = new Map<string, TrackRepl>();
-let webaudioReplFactory: ((opts?: any) => any) | null = null;
+let webaudioReplFactory: ((opts?: Record<string, unknown>) => StrudelRepl) | null = null;
 let scopeRegistered = false;
 
 /**
@@ -70,9 +70,9 @@ async function ensureStrudelLoaded(): Promise<void> {
   // Register s(), note(), bank(), etc. on globalThis so repl.evaluate() can find them.
   // Also register mini-notation string parser and initialize audio engine.
   if (!scopeRegistered) {
-    const core = await import('@strudel/core') as any;
-    const miniMod = await import('@strudel/mini') as any;
-    const webaudioMod = await import('@strudel/webaudio') as any;
+    const core = await import('@strudel/core');
+    const miniMod = await import('@strudel/mini');
+    const webaudioMod = await import('@strudel/webaudio');
 
     // Enable mini-notation parsing for all string arguments in pattern functions
     if (miniMod.miniAllStrings) {
@@ -147,10 +147,12 @@ async function getOrCreateRepl(trackId: string): Promise<TrackRepl> {
  *
  * Call from a user gesture (click/keydown) to ensure AudioContext is allowed.
  */
+export async function evaluateStrudelCode(code: string): Promise<StrudelPattern>;
+export async function evaluateStrudelCode(code: string, trackId: string): Promise<StrudelPattern | null>;
 export async function evaluateStrudelCode(
   code: string,
   trackId?: string,
-): Promise<any> {
+): Promise<StrudelPattern | null> {
   // If no trackId, use pure mini-notation evaluation (for tests/analysis)
   if (!trackId) {
     return evaluateMiniNotation(code);
@@ -196,7 +198,7 @@ export async function evaluateStrudelCode(
 /**
  * Pure mini-notation evaluation (no audio, for tests and pattern analysis).
  */
-async function evaluateMiniNotation(code: string): Promise<any> {
+async function evaluateMiniNotation(code: string): Promise<StrudelPattern> {
   const { mini } = await import('@strudel/mini');
   const cleaned = code
     .split('\n')
@@ -216,7 +218,7 @@ async function evaluateMiniNotation(code: string): Promise<any> {
  * and conversion (freeze-to-MIDI, freeze-to-drums) where you need the real
  * pattern from `s("bd sd")` rather than mini-notation parsing.
  */
-export async function evaluateStrudelPatternPure(code: string): Promise<any> {
+export async function evaluateStrudelPatternPure(code: string): Promise<StrudelPattern | null> {
   await ensureStrudelLoaded();
 
   const cleaned = code
@@ -349,14 +351,14 @@ export function getStrudelError(trackId: string): string | null {
  * Pure function — no audio, no scheduler.
  */
 export function queryPatternEvents(
-  pattern: any,
+  pattern: StrudelPattern,
   startCycle: number,
   endCycle: number,
 ): StrudelEvent[] {
   const haps = pattern.queryArc(startCycle, endCycle);
   return haps
-    .filter((h: any) => h.hasOnset())
-    .map((h: any) => {
+    .filter((h: StrudelHap) => h.hasOnset())
+    .map((h: StrudelHap) => {
       const v = h.value;
       const sound = typeof v === 'string' ? v : (typeof v === 'object' ? (v.s ?? v.value) : undefined);
       const noteVal = typeof v === 'number' ? v : (typeof v === 'object' ? (v.note ?? v.n) : undefined);
@@ -376,7 +378,7 @@ export function queryPatternEvents(
 /**
  * Analyze a pattern and return aggregate info.
  */
-export function getPatternInfo(pattern: any, cycleLengthBars: number = 1): StrudelPatternInfo {
+export function getPatternInfo(pattern: StrudelPattern, cycleLengthBars: number = 1): StrudelPatternInfo {
   const events = queryPatternEvents(pattern, 0, 1);
 
   const instruments = new Set<string>();
@@ -442,14 +444,14 @@ export async function extractStrudelMidiNotes(
   // We use new Function() (not eval) because eval inside an ES module resolves to
   // module scope where globalThis DSL functions aren't visible. new Function()
   // always evaluates in global scope.
-  let pattern: any;
+  let pattern: StrudelPattern | null = null;
   try {
-    const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<any>;
+    const fn = new Function(`return (async () => { return ${cleanCode} })()`) as () => Promise<StrudelPattern>;
     pattern = await fn();
   } catch {
     // Fallback: try without return wrapper (multi-line code)
     try {
-      const fn = new Function(`return (async () => { ${cleanCode} })()`) as () => Promise<any>;
+      const fn = new Function(`return (async () => { ${cleanCode} })()`) as () => Promise<StrudelPattern>;
       pattern = await fn();
     } catch {
       // Last resort: try mini-notation
@@ -524,8 +526,8 @@ export async function renderStrudelOffline(
 ): Promise<AudioBuffer> {
   await ensureStrudelLoaded();
 
-  const { webaudioRepl, getAudioContext, getSuperdoughAudioController } = await import('@strudel/webaudio') as any;
-  const { transpiler } = await import('@strudel/transpiler') as any;
+  const { webaudioRepl, getAudioContext, getSuperdoughAudioController } = await import('@strudel/webaudio');
+  const { transpiler } = await import('@strudel/transpiler');
 
   const cleanCode = code
     .split('\n')

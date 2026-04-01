@@ -4,33 +4,71 @@ declare module '*?raw' {
   export default content;
 }
 
+/** Shared Strudel type interfaces used across module declarations. */
+
+/** A rational time span with begin/end. */
+interface StrudelTimeSpan {
+  begin: { valueOf(): number };
+  end: { valueOf(): number };
+}
+
+/** A single event (hap) from a Strudel pattern query. */
+interface StrudelHap {
+  whole: StrudelTimeSpan;
+  part: StrudelTimeSpan;
+  value: Record<string, unknown> | string | number;
+  duration?: { valueOf(): number };
+  hasOnset(): boolean;
+  ensureObjectValue(): void;
+}
+
+/** A Strudel pattern that can be queried for events. */
+interface StrudelPattern {
+  queryArc(begin: number, end: number, controls?: Record<string, unknown>): StrudelHap[];
+}
+
+/** Superdough audio controller with its destination gain node. */
+interface SuperdoughAudioController {
+  output: { destinationGain: GainNode };
+}
+
+/** A webaudioRepl instance for evaluating and playing Strudel patterns. */
+interface StrudelRepl {
+  evaluate(code: string): Promise<StrudelPattern>;
+  start(): void;
+  stop(): void;
+  setCps(cps: number): void;
+}
+
 /** Type declarations for @strudel packages (untyped ESM modules). */
 declare module '@strudel/mini' {
-  export function mini(code: string): any;
+  export function mini(code: string): StrudelPattern;
+  export function miniAllStrings(): void;
 }
 
 declare module '@strudel/core' {
-  export class Pattern {
-    queryArc(begin: number, end: number, controls?: Record<string, unknown>): any[];
+  export class Pattern implements StrudelPattern {
+    queryArc(begin: number, end: number, controls?: Record<string, unknown>): StrudelHap[];
   }
-  export class Hap {
-    whole: { begin: { valueOf(): number }; end: { valueOf(): number } };
-    part: { begin: { valueOf(): number }; end: { valueOf(): number } };
-    value: any;
+  export class Hap implements StrudelHap {
+    whole: StrudelTimeSpan;
+    part: StrudelTimeSpan;
+    value: Record<string, unknown> | string | number;
     duration?: { valueOf(): number };
     hasOnset(): boolean;
     ensureObjectValue(): void;
   }
+  export function evalScope(...modules: Promise<Record<string, unknown>>[]): Promise<void>;
 }
 
 declare module '@strudel/webaudio' {
-  export function webaudioRepl(options?: Record<string, unknown>): any;
-  export function webaudioOutput(hap: any, deadline: number, hapDuration: number, cps: number, t?: number): any;
+  export function webaudioRepl(options?: Record<string, unknown>): StrudelRepl;
+  export function webaudioOutput(hap: StrudelHap, deadline: number, hapDuration: number, cps: number, t?: number): void;
   export function samples(sampleMap: string | Record<string, unknown>, baseUrl?: string, options?: Record<string, unknown>): Promise<void>;
   export function getAudioContext(): AudioContext;
   export function setAudioContext(ctx: AudioContext | OfflineAudioContext | null): void;
-  export function getSuperdoughAudioController(): any;
-  export function setSuperdoughAudioController(controller: any): void;
+  export function getSuperdoughAudioController(): SuperdoughAudioController | null;
+  export function setSuperdoughAudioController(controller: SuperdoughAudioController | null): void;
   export function initAudio(options?: Record<string, unknown>): Promise<void>;
   export function initAudioOnFirstClick(options?: Record<string, unknown>): void;
   export function resetGlobalEffects(): void;
@@ -50,13 +88,13 @@ declare module '@strudel/codemirror' {
 declare module 'superdough' {
   export function registerSynthSounds(): void;
   export function initAudio(options?: Record<string, unknown>): Promise<void>;
-  export function registerSound(key: string, onTrigger: any, data?: any): void;
+  export function registerSound(key: string, onTrigger: (value: Record<string, unknown>, t: number, dur: number) => void, data?: Record<string, unknown>): void;
   export function getAudioContext(): AudioContext;
   export function setAudioContext(ctx: AudioContext | OfflineAudioContext | null): void;
-  export function getSuperdoughAudioController(): any;
-  export function setSuperdoughAudioController(controller: any): void;
+  export function getSuperdoughAudioController(): SuperdoughAudioController | null;
+  export function setSuperdoughAudioController(controller: SuperdoughAudioController | null): void;
   export function resetGlobalEffects(): void;
-  export function superdough(value: Record<string, unknown>, t: number, dur: number, cps?: number, cycle?: number): Promise<any>;
+  export function superdough(value: Record<string, unknown>, t: number, dur: number, cps?: number, cycle?: number): Promise<void>;
 }
 
 declare module 'superdough/superdoughoutput.mjs' {

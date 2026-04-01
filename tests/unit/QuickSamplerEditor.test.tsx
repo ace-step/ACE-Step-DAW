@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { QuickSamplerEditor } from '../../src/components/pianoroll/QuickSamplerEditor';
 import type { SamplerConfig, Track } from '../../src/types/project';
 
@@ -69,25 +70,25 @@ describe('QuickSamplerEditor', () => {
 
   it('renders the Quick Sampler heading', () => {
     renderEditor();
-    expect(screen.getByText('Quick Sampler')).toBeDefined();
+    expect(screen.getByText('Quick Sampler')).toBeInTheDocument();
   });
 
   it('shows sample name when loaded', () => {
     renderEditor();
-    expect(screen.getByText('Test Sound')).toBeDefined();
+    expect(screen.getByText('Test Sound')).toBeInTheDocument();
   });
 
   it('shows root note input', () => {
     renderEditor();
     const rootInput = screen.getByLabelText('Sampler root note');
-    expect(rootInput).toBeDefined();
+    expect(rootInput).toBeInTheDocument();
     expect((rootInput as HTMLInputElement).value).toBe('60');
   });
 
   it('shows playback mode selector', () => {
     renderEditor();
     const modeSelect = screen.getByLabelText('Quick Sampler playback mode');
-    expect(modeSelect).toBeDefined();
+    expect(modeSelect).toBeInTheDocument();
     expect((modeSelect as HTMLSelectElement).value).toBe('classic');
   });
 
@@ -107,34 +108,34 @@ describe('QuickSamplerEditor', () => {
 
   it('shows ADSR controls', () => {
     renderEditor();
-    expect(screen.getByLabelText('Attack')).toBeDefined();
-    expect(screen.getByLabelText('Decay')).toBeDefined();
-    expect(screen.getByLabelText('Sustain')).toBeDefined();
-    expect(screen.getByLabelText('Release')).toBeDefined();
+    expect(screen.getByLabelText('Attack')).toBeInTheDocument();
+    expect(screen.getByLabelText('Decay')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sustain')).toBeInTheDocument();
+    expect(screen.getByLabelText('Release')).toBeInTheDocument();
   });
 
   it('shows preview button', () => {
     renderEditor();
-    expect(screen.getByLabelText('Preview quick sampler root note')).toBeDefined();
+    expect(screen.getByLabelText('Preview quick sampler root note')).toBeInTheDocument();
   });
 
   it('shows audition keyboard keys', () => {
     renderEditor();
-    expect(screen.getByTestId('audition-keyboard')).toBeDefined();
+    expect(screen.getByTestId('audition-keyboard')).toBeInTheDocument();
   });
 
   it('shows trim controls', () => {
     renderEditor();
-    expect(screen.getByLabelText('Quick Sampler trim start')).toBeDefined();
-    expect(screen.getByLabelText('Quick Sampler trim end')).toBeDefined();
+    expect(screen.getByLabelText('Quick Sampler trim start')).toBeInTheDocument();
+    expect(screen.getByLabelText('Quick Sampler trim end')).toBeInTheDocument();
   });
 
   it('shows loop controls when mode is loop', () => {
     const track = makeTrack();
     track.samplerConfig!.playbackMode = 'loop';
     renderEditor(track);
-    expect(screen.getByLabelText('Quick Sampler loop start')).toBeDefined();
-    expect(screen.getByLabelText('Quick Sampler loop end')).toBeDefined();
+    expect(screen.getByLabelText('Quick Sampler loop start')).toBeInTheDocument();
+    expect(screen.getByLabelText('Quick Sampler loop end')).toBeInTheDocument();
   });
 
   it('hides loop controls when mode is classic', () => {
@@ -149,7 +150,7 @@ describe('QuickSamplerEditor', () => {
       samplerConfig: undefined,
     });
     renderEditor(track);
-    expect(screen.getByText(/Drop audio here/i)).toBeDefined();
+    expect(screen.getByText(/Drop audio here/i)).toBeInTheDocument();
   });
 
   it('shows Load Sample button', () => {

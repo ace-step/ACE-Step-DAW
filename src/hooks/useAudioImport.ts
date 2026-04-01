@@ -9,6 +9,9 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { parseMidiFile } from '../utils/midi';
 import { toastError, toastInfo, toastSuccess } from './useToast';
 import { LOOP_DEFINITIONS, loadLoop } from '../engine/LoopLibrary';
+import { createDebugLogger } from '../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:audio-import');
 
 function trimAudioBuffer(
   engine: ReturnType<typeof getAudioEngine>,
@@ -278,7 +281,7 @@ export function useAudioImport() {
 
       toastSuccess(`Imported MIDI into ${parsed.tracks.length} piano roll track${parsed.tracks.length === 1 ? '' : 's'}`);
     } catch (error) {
-      console.error(error);
+      logger.error('Failed to import MIDI file:', error);
       toastError(`Failed to import MIDI file: ${file.name}`);
     }
   }, [addClip, addTrack, maybeApplyImportedMidiMetadata, updateTrack]);

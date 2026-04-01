@@ -13,6 +13,9 @@ import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
+import { createDebugLogger } from '../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:mcp-bridge');
 
 const WS_URL = `ws://${window.location.hostname}:${window.location.port}/ws/mcp-bridge`;
 const RECONNECT_DELAY_MS = 3000;
@@ -39,7 +42,7 @@ function connect() {
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
-    console.log('[MCP Bridge] Connected');
+    logger.info('Connected');
   };
 
   ws.onmessage = (event) => {
@@ -49,7 +52,7 @@ function connect() {
         const response = await handleToolCall(request);
         ws?.send(JSON.stringify(response));
       } catch (err) {
-        console.error('[MCP Bridge] Failed to handle message:', err);
+        logger.error('Failed to handle message:', err);
       }
     })();
   };

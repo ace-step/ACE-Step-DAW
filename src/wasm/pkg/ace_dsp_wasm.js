@@ -56,6 +56,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_gate(this.__wbg_ptr);
     }
     /**
+     * Disable the reverb.
+     */
+    disable_reverb() {
+        wasm.dspprocessor_disable_reverb(this.__wbg_ptr);
+    }
+    /**
      * Get the current gain value.
      * @returns {number}
      */
@@ -76,7 +82,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Gain
+     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -191,6 +197,20 @@ export class DspProcessor {
      */
     set_gate(threshold_db, attack_ms, hold_ms, release_ms, range_db) {
         wasm.dspprocessor_set_gate(this.__wbg_ptr, threshold_db, attack_ms, hold_ms, release_ms, range_db);
+    }
+    /**
+     * Enable reverb effect.
+     * - `room_size`: 0.0 (small) to 1.0 (large)
+     * - `damping`: 0.0 (bright) to 1.0 (dark)
+     * - `wet`: wet signal level (0.0–1.0)
+     * - `dry`: dry signal level (0.0–1.0)
+     * @param {number} room_size
+     * @param {number} damping
+     * @param {number} wet
+     * @param {number} dry
+     */
+    set_reverb(room_size, damping, wet, dry) {
+        wasm.dspprocessor_set_reverb(this.__wbg_ptr, room_size, damping, wet, dry);
     }
 }
 if (Symbol.dispose) DspProcessor.prototype[Symbol.dispose] = DspProcessor.prototype.free;

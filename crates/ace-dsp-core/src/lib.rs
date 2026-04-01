@@ -13,6 +13,8 @@ pub mod delay;
 pub mod dynamics;
 pub mod eq;
 pub mod gain;
+#[cfg(feature = "std")]
+pub mod reverb;
 
 /// Anti-denormal guard constant.
 /// Add/subtract in feedback paths to prevent denormalized floats.

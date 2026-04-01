@@ -8,6 +8,7 @@ export const dspprocessor_disable_delay: (a: number) => void;
 export const dspprocessor_disable_eq: (a: number) => void;
 export const dspprocessor_disable_filter: (a: number) => void;
 export const dspprocessor_disable_gate: (a: number) => void;
+export const dspprocessor_disable_reverb: (a: number) => void;
 export const dspprocessor_get_gain: (a: number) => number;
 export const dspprocessor_new: (a: number) => number;
 export const dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
@@ -19,6 +20,7 @@ export const dspprocessor_set_eq_band: (a: number, b: number, c: number, d: numb
 export const dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
 export const dspprocessor_set_gain: (a: number, b: number) => void;
 export const dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+export const dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
 export const version: (a: number) => void;
 export const dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
 export const __wbindgen_export: (a: number, b: number) => number;

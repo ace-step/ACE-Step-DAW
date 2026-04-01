@@ -346,6 +346,34 @@ describe('WasmDspEngine', () => {
         type: 'disable-eq',
       });
     });
+
+    it('should send set-reverb message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setReverb(0.7, 0.4, 0.5, 0.8);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-reverb',
+        roomSize: 0.7,
+        damping: 0.4,
+        wet: 0.5,
+        dry: 0.8,
+      });
+    });
+
+    it('should send disable-reverb message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disableReverb();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-reverb',
+      });
+    });
   });
 
   describe('lifecycle', () => {

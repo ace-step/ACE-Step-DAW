@@ -127,6 +127,21 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_eq();
           }
           break;
+        case 'set-reverb':
+          if (this._processor) {
+            this._processor.set_reverb(
+              msg.roomSize,
+              msg.damping,
+              msg.wet,
+              msg.dry
+            );
+          }
+          break;
+        case 'disable-reverb':
+          if (this._processor) {
+            this._processor.disable_reverb();
+          }
+          break;
         case 'reset':
           if (this._processor) {
             this._processor.reset();

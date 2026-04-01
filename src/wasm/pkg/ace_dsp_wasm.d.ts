@@ -35,6 +35,10 @@ export class DspProcessor {
      */
     disable_gate(): void;
     /**
+     * Disable the reverb.
+     */
+    disable_reverb(): void;
+    /**
      * Get the current gain value.
      */
     get_gain(): number;
@@ -45,7 +49,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Gain
+     * Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -106,6 +110,14 @@ export class DspProcessor {
      * - `range_db`: attenuation when closed (-80 = full gate, -12 = expander)
      */
     set_gate(threshold_db: number, attack_ms: number, hold_ms: number, release_ms: number, range_db: number): void;
+    /**
+     * Enable reverb effect.
+     * - `room_size`: 0.0 (small) to 1.0 (large)
+     * - `damping`: 0.0 (bright) to 1.0 (dark)
+     * - `wet`: wet signal level (0.0–1.0)
+     * - `dry`: dry signal level (0.0–1.0)
+     */
+    set_reverb(room_size: number, damping: number, wet: number, dry: number): void;
 }
 
 /**
@@ -124,6 +136,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_eq: (a: number) => void;
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_disable_gate: (a: number) => void;
+    readonly dspprocessor_disable_reverb: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
     readonly dspprocessor_new: (a: number) => number;
     readonly dspprocessor_process_mono: (a: number, b: number, c: number, d: number) => void;
@@ -135,6 +148,7 @@ export interface InitOutput {
     readonly dspprocessor_set_filter: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
     readonly dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly version: (a: number) => void;
     readonly dspprocessor_process_stereo_interleaved: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;

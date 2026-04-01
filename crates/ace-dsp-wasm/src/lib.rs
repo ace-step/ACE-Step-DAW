@@ -9,6 +9,7 @@ use ace_dsp_core::delay::MonoDelay;
 use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
+use ace_dsp_core::reverb::Reverb;
 
 /// WASM-exported DSP processor that handles a chain of effects for one track.
 ///
@@ -22,6 +23,7 @@ pub struct DspProcessor {
     compressor: Option<Compressor>,
     gate: Option<NoiseGate>,
     eq: Option<ParametricEq>,
+    reverb: Option<Reverb>,
     sample_rate: f32,
 }
 
@@ -37,6 +39,7 @@ impl DspProcessor {
             compressor: None,
             gate: None,
             eq: None,
+            reverb: None,
             sample_rate,
         }
     }
@@ -236,9 +239,39 @@ impl DspProcessor {
         self.eq = None;
     }
 
+    /// Enable reverb effect.
+    /// - `room_size`: 0.0 (small) to 1.0 (large)
+    /// - `damping`: 0.0 (bright) to 1.0 (dark)
+    /// - `wet`: wet signal level (0.0–1.0)
+    /// - `dry`: dry signal level (0.0–1.0)
+    pub fn set_reverb(&mut self, room_size: f32, damping: f32, wet: f32, dry: f32) {
+        match &mut self.reverb {
+            Some(r) => {
+                r.set_room_size(room_size);
+                r.set_damping(damping);
+                r.set_wet(wet);
+                r.set_dry(dry);
+            }
+            None => {
+                self.reverb = Some(Reverb::new(
+                    self.sample_rate,
+                    room_size,
+                    damping,
+                    wet,
+                    dry,
+                ));
+            }
+        }
+    }
+
+    /// Disable the reverb.
+    pub fn disable_reverb(&mut self) {
+        self.reverb = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Gate → Filter → EQ → Compressor → Delay → Gain
+    /// Signal chain: Gate → Filter → EQ → Compressor → Delay → Reverb → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
         if let Some(ref mut gate) = self.gate {
             gate.process_buffer(buffer);
@@ -254,6 +287,9 @@ impl DspProcessor {
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.process_buffer(buffer);
         }
         self.gain.process_mono(buffer);
     }
@@ -275,6 +311,9 @@ impl DspProcessor {
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.process_buffer(buffer);
         }
         self.gain.process_stereo_interleaved(buffer);
     }
@@ -300,6 +339,9 @@ impl DspProcessor {
         }
         if let Some(ref mut eq) = self.eq {
             eq.reset();
+        }
+        if let Some(ref mut reverb) = self.reverb {
+            reverb.reset();
         }
     }
 }
@@ -447,6 +489,33 @@ mod tests {
         proc.set_compressor(-20.0, 4.0, 0.1, 50.0, 0.0, 0.0);
         proc.disable_compressor();
         assert_eq!(proc.compressor_gr_db(), 0.0);
+    }
+
+    #[test]
+    fn test_processor_reverb() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_reverb(0.7, 0.4, 1.0, 0.0); // Large room, wet only
+        proc.set_gain(1.0);
+
+        // Feed impulse + silence
+        let mut buf = [0.0_f32; 4410];
+        buf[0] = 1.0;
+        proc.process_mono(&mut buf);
+
+        // Reverb tail should have energy
+        let tail_energy: f32 = buf[100..].iter().map(|s| s * s).sum();
+        assert!(tail_energy > 0.01, "Reverb tail energy: {tail_energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_reverb() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_reverb(0.5, 0.5, 1.0, 0.0);
+        proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
     }
 
     #[test]

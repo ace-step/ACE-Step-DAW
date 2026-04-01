@@ -92,6 +92,12 @@ export interface WasmDspNode {
   /** Disable parametric EQ entirely. */
   disableEq(): void;
 
+  /** Enable reverb effect. */
+  setReverb(roomSize: number, damping: number, wet: number, dry: number): void;
+
+  /** Disable the reverb. */
+  disableReverb(): void;
+
   /** Reset processor state (on seek/stop). */
   reset(): void;
 
@@ -307,6 +313,20 @@ export class WasmDspEngine {
 
       disableEq() {
         workletNode.port.postMessage({ type: 'disable-eq' });
+      },
+
+      setReverb(roomSize: number, damping: number, wet: number, dry: number) {
+        workletNode.port.postMessage({
+          type: 'set-reverb',
+          roomSize,
+          damping,
+          wet,
+          dry,
+        });
+      },
+
+      disableReverb() {
+        workletNode.port.postMessage({ type: 'disable-reverb' });
       },
 
       reset() {

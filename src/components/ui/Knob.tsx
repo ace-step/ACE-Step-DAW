@@ -305,8 +305,8 @@ export function Knob({
           {label}
         </span>
       )}
-      {/* Value */}
-      <span className="text-xs text-white/75 leading-tight font-mono font-medium">
+      {/* Value — tabular-nums prevents digit jitter during parameter changes */}
+      <span className="text-xs text-white/75 leading-tight font-mono font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {displayValue}{unit && !formatValue ? unit : ''}
       </span>
     </div>

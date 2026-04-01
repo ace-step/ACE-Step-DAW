@@ -175,6 +175,22 @@ class WasmDspProcessor extends AudioWorkletProcessor {
             this._processor.disable_distortion();
           }
           break;
+        case 'set-phaser':
+          if (this._processor) {
+            this._processor.set_phaser(
+              msg.rateHz,
+              msg.depth,
+              msg.feedback,
+              msg.stages,
+              msg.mix
+            );
+          }
+          break;
+        case 'disable-phaser':
+          if (this._processor) {
+            this._processor.disable_phaser();
+          }
+          break;
         case 'set-stereo-width':
           if (this._processor) {
             this._processor.set_stereo_width(msg.width);

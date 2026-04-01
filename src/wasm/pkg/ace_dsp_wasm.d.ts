@@ -47,6 +47,10 @@ export class DspProcessor {
      */
     disable_limiter(): void;
     /**
+     * Disable the phaser.
+     */
+    disable_phaser(): void;
+    /**
      * Disable the reverb.
      */
     disable_reverb(): void;
@@ -69,7 +73,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
      */
     process_mono(buffer: Float32Array): void;
     /**
@@ -157,6 +161,15 @@ export class DspProcessor {
      */
     set_limiter(ceiling_db: number, release_ms: number, lookahead_ms: number): void;
     /**
+     * Enable phaser.
+     * - `rate_hz`: LFO rate (0.05–10 Hz)
+     * - `depth`: modulation depth (0.0–1.0)
+     * - `feedback`: resonance (0.0–0.95)
+     * - `stages`: allpass stages (2–12, even)
+     * - `mix`: wet/dry (0.0–1.0)
+     */
+    set_phaser(rate_hz: number, depth: number, feedback: number, stages: number, mix: number): void;
+    /**
      * Enable reverb effect.
      * - `room_size`: 0.0 (small) to 1.0 (large)
      * - `damping`: 0.0 (bright) to 1.0 (dark)
@@ -190,6 +203,7 @@ export interface InitOutput {
     readonly dspprocessor_disable_filter: (a: number) => void;
     readonly dspprocessor_disable_gate: (a: number) => void;
     readonly dspprocessor_disable_limiter: (a: number) => void;
+    readonly dspprocessor_disable_phaser: (a: number) => void;
     readonly dspprocessor_disable_reverb: (a: number) => void;
     readonly dspprocessor_disable_stereo_imager: (a: number) => void;
     readonly dspprocessor_get_gain: (a: number) => number;
@@ -208,6 +222,7 @@ export interface InitOutput {
     readonly dspprocessor_set_gain: (a: number, b: number) => void;
     readonly dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_limiter: (a: number, b: number, c: number, d: number) => void;
+    readonly dspprocessor_set_phaser: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly dspprocessor_set_stereo_width: (a: number, b: number) => void;
     readonly version: (a: number) => void;

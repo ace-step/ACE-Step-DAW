@@ -434,6 +434,35 @@ describe('WasmDspEngine', () => {
       });
     });
 
+    it('should send set-phaser message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.setPhaser(1.5, 0.8, 0.5, 6, 0.7);
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'set-phaser',
+        rateHz: 1.5,
+        depth: 0.8,
+        feedback: 0.5,
+        stages: 6,
+        mix: 0.7,
+      });
+    });
+
+    it('should send disable-phaser message', async () => {
+      const { ctx, mockWorkletNodes } = createMockAudioContext();
+      await engine.initialize(ctx);
+
+      const node = engine.createProcessor(ctx, 'track-1');
+      node.disablePhaser();
+
+      expect(mockWorkletNodes[0].port.postMessage).toHaveBeenCalledWith({
+        type: 'disable-phaser',
+      });
+    });
+
     it('should send set-stereo-width message', async () => {
       const { ctx, mockWorkletNodes } = createMockAudioContext();
       await engine.initialize(ctx);

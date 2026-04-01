@@ -123,6 +123,18 @@ export interface WasmDspNode {
   /** Disable the distortion. */
   disableDistortion(): void;
 
+  /** Enable phaser effect. */
+  setPhaser(
+    rateHz: number,
+    depth: number,
+    feedback: number,
+    stages: number,
+    mix: number
+  ): void;
+
+  /** Disable the phaser. */
+  disablePhaser(): void;
+
   /** Set stereo imager width (0.0 mono → 1.0 normal → 2.0 wide). */
   setStereoWidth(width: number): void;
 
@@ -408,6 +420,27 @@ export class WasmDspEngine {
 
       disableDistortion() {
         workletNode.port.postMessage({ type: 'disable-distortion' });
+      },
+
+      setPhaser(
+        rateHz: number,
+        depth: number,
+        feedback: number,
+        stages: number,
+        mix: number
+      ) {
+        workletNode.port.postMessage({
+          type: 'set-phaser',
+          rateHz,
+          depth,
+          feedback,
+          stages,
+          mix,
+        });
+      },
+
+      disablePhaser() {
+        workletNode.port.postMessage({ type: 'disable-phaser' });
       },
 
       setStereoWidth(width: number) {

@@ -18,6 +18,7 @@ pub mod eq;
 pub mod gain;
 #[cfg(feature = "std")]
 pub mod limiter;
+pub mod phaser;
 #[cfg(feature = "std")]
 pub mod reverb;
 pub mod stereo;

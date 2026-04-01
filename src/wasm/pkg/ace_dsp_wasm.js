@@ -74,6 +74,12 @@ export class DspProcessor {
         wasm.dspprocessor_disable_limiter(this.__wbg_ptr);
     }
     /**
+     * Disable the phaser.
+     */
+    disable_phaser() {
+        wasm.dspprocessor_disable_phaser(this.__wbg_ptr);
+    }
+    /**
      * Disable the reverb.
      */
     disable_reverb() {
@@ -114,7 +120,7 @@ export class DspProcessor {
     /**
      * Process a mono audio buffer in-place.
      * Called from the AudioWorklet's process() method.
-     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
+     * Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
      * @param {Float32Array} buffer
      */
     process_mono(buffer) {
@@ -275,6 +281,22 @@ export class DspProcessor {
      */
     set_limiter(ceiling_db, release_ms, lookahead_ms) {
         wasm.dspprocessor_set_limiter(this.__wbg_ptr, ceiling_db, release_ms, lookahead_ms);
+    }
+    /**
+     * Enable phaser.
+     * - `rate_hz`: LFO rate (0.05–10 Hz)
+     * - `depth`: modulation depth (0.0–1.0)
+     * - `feedback`: resonance (0.0–0.95)
+     * - `stages`: allpass stages (2–12, even)
+     * - `mix`: wet/dry (0.0–1.0)
+     * @param {number} rate_hz
+     * @param {number} depth
+     * @param {number} feedback
+     * @param {number} stages
+     * @param {number} mix
+     */
+    set_phaser(rate_hz, depth, feedback, stages, mix) {
+        wasm.dspprocessor_set_phaser(this.__wbg_ptr, rate_hz, depth, feedback, stages, mix);
     }
     /**
      * Enable reverb effect.

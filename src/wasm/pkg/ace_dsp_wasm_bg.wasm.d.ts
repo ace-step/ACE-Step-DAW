@@ -11,6 +11,7 @@ export const dspprocessor_disable_eq: (a: number) => void;
 export const dspprocessor_disable_filter: (a: number) => void;
 export const dspprocessor_disable_gate: (a: number) => void;
 export const dspprocessor_disable_limiter: (a: number) => void;
+export const dspprocessor_disable_phaser: (a: number) => void;
 export const dspprocessor_disable_reverb: (a: number) => void;
 export const dspprocessor_disable_stereo_imager: (a: number) => void;
 export const dspprocessor_get_gain: (a: number) => number;
@@ -29,6 +30,7 @@ export const dspprocessor_set_filter: (a: number, b: number, c: number, d: numbe
 export const dspprocessor_set_gain: (a: number, b: number) => void;
 export const dspprocessor_set_gate: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const dspprocessor_set_limiter: (a: number, b: number, c: number, d: number) => void;
+export const dspprocessor_set_phaser: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const dspprocessor_set_reverb: (a: number, b: number, c: number, d: number, e: number) => void;
 export const dspprocessor_set_stereo_width: (a: number, b: number) => void;
 export const version: (a: number) => void;

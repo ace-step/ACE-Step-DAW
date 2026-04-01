@@ -12,6 +12,7 @@ use ace_dsp_core::dynamics::{Compressor, NoiseGate};
 use ace_dsp_core::eq::ParametricEq;
 use ace_dsp_core::gain::GainProcessor;
 use ace_dsp_core::limiter::Limiter;
+use ace_dsp_core::phaser::Phaser;
 use ace_dsp_core::reverb::Reverb;
 use ace_dsp_core::stereo::StereoImager;
 
@@ -32,6 +33,7 @@ pub struct DspProcessor {
     distortion: Option<Distortion>,
     stereo_imager: Option<StereoImager>,
     limiter: Option<Limiter>,
+    phaser: Option<Phaser>,
     sample_rate: f32,
 }
 
@@ -52,6 +54,7 @@ impl DspProcessor {
             distortion: None,
             stereo_imager: None,
             limiter: None,
+            phaser: None,
             sample_rate,
         }
     }
@@ -416,9 +419,49 @@ impl DspProcessor {
             .unwrap_or(0.0)
     }
 
+    /// Enable phaser.
+    /// - `rate_hz`: LFO rate (0.05–10 Hz)
+    /// - `depth`: modulation depth (0.0–1.0)
+    /// - `feedback`: resonance (0.0–0.95)
+    /// - `stages`: allpass stages (2–12, even)
+    /// - `mix`: wet/dry (0.0–1.0)
+    pub fn set_phaser(
+        &mut self,
+        rate_hz: f32,
+        depth: f32,
+        feedback: f32,
+        stages: u8,
+        mix: f32,
+    ) {
+        match &mut self.phaser {
+            Some(p) => {
+                p.set_rate(rate_hz);
+                p.set_depth(depth);
+                p.set_feedback(feedback);
+                p.set_stages(stages as usize);
+                p.set_mix(mix);
+            }
+            None => {
+                self.phaser = Some(Phaser::new(
+                    self.sample_rate,
+                    rate_hz,
+                    depth,
+                    feedback,
+                    stages as usize,
+                    mix,
+                ));
+            }
+        }
+    }
+
+    /// Disable the phaser.
+    pub fn disable_phaser(&mut self) {
+        self.phaser = None;
+    }
+
     /// Process a mono audio buffer in-place.
     /// Called from the AudioWorklet's process() method.
-    /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Delay → Reverb → Gain
+    /// Signal chain: Gate → Filter → EQ → Distortion → Compressor → Chorus → Phaser → Delay → Reverb → Gain
     pub fn process_mono(&mut self, buffer: &mut [f32]) {
         if let Some(ref mut gate) = self.gate {
             gate.process_buffer(buffer);
@@ -437,6 +480,9 @@ impl DspProcessor {
         }
         if let Some(ref mut chorus) = self.chorus {
             chorus.process_buffer(buffer);
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -470,6 +516,9 @@ impl DspProcessor {
         }
         if let Some(ref mut chorus) = self.chorus {
             chorus.process_buffer(buffer);
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.process_buffer(buffer);
         }
         if let Some(ref mut delay) = self.delay {
             delay.process_buffer(buffer);
@@ -516,6 +565,9 @@ impl DspProcessor {
         }
         if let Some(ref mut limiter) = self.limiter {
             limiter.reset();
+        }
+        if let Some(ref mut phaser) = self.phaser {
+            phaser.reset();
         }
     }
 }
@@ -686,6 +738,32 @@ mod tests {
         let mut proc = DspProcessor::new(44100.0);
         proc.set_reverb(0.5, 0.5, 1.0, 0.0);
         proc.disable_reverb();
+        let mut buf = [0.5_f32; 4];
+        proc.set_gain(1.0);
+        proc.process_mono(&mut buf);
+        assert_eq!(buf, [0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_processor_phaser() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_phaser(2.0, 1.0, 0.5, 6, 1.0);
+        proc.set_gain(1.0);
+        // Feed sine wave — phaser sweep should alter it
+        let mut buf: Vec<f32> = (0..4410)
+            .map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / 44100.0).sin() * 0.5)
+            .collect();
+        proc.process_mono(&mut buf);
+        // Should process without panic and produce non-zero output
+        let energy: f32 = buf.iter().map(|s| s * s).sum();
+        assert!(energy > 0.1, "Phaser should produce output: energy={energy}");
+    }
+
+    #[test]
+    fn test_processor_disable_phaser() {
+        let mut proc = DspProcessor::new(44100.0);
+        proc.set_phaser(1.0, 0.5, 0.3, 4, 0.5);
+        proc.disable_phaser();
         let mut buf = [0.5_f32; 4];
         proc.set_gain(1.0);
         proc.process_mono(&mut buf);

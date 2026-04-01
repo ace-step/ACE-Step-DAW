@@ -62,7 +62,11 @@ export class VST3PluginScanner {
     let unsubscribe: (() => void) | null = null;
     if (onProgress) {
       unsubscribe = this.bridgeClient.on('scanProgress', (msg) => {
-        onProgress(msg.found as number, msg.current as string);
+        const found = msg.found;
+        const current = msg.current;
+        if (typeof found === 'number' && typeof current === 'string') {
+          onProgress(found, current);
+        }
       });
     }
 

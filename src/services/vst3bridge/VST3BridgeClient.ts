@@ -27,8 +27,6 @@ import type { VST3ConnectionStatus } from '../../types/vst3';
 /** Events emitted by the bridge client (W9 compat). */
 export interface BridgeEvents {
   paramChanged: (msg: Record<string, unknown>) => void;
-  audio_frame: (msg: Record<string, unknown>) => void;
-  disconnected: (msg: Record<string, unknown>) => void;
 }
 
 // ---------------------------------------------------------------------------

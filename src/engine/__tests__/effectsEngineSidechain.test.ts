@@ -42,7 +42,7 @@ vi.mock('../sidechainFollower', () => {
 });
 
 import { effectsEngine } from '../EffectsEngine';
-import type { TrackEffect } from '../../types/project';
+import type { CompressorParams, TrackEffect } from '../../types/project';
 
 describe('EffectsEngine sidechain management', () => {
   const compressorEffect: TrackEffect = {
@@ -59,14 +59,14 @@ describe('EffectsEngine sidechain management', () => {
   it('connectSidechain creates a sidechain follower', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(-6);
   });
 
   it('disconnectSidechain cleans up the follower', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     effectsEngine.disconnectSidechain('bass-track', 'fx-1');
     expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(0);
   });
@@ -78,7 +78,7 @@ describe('EffectsEngine sidechain management', () => {
   it('dispose cleans up all sidechains', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     effectsEngine.dispose();
     expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(0);
   });
@@ -86,7 +86,7 @@ describe('EffectsEngine sidechain management', () => {
   it('getOutputNode returns follower gainNode when compressor has sidechain', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     const output = effectsEngine.getOutputNode('bass-track');
     expect(output).toBeDefined();
   });
@@ -101,7 +101,7 @@ describe('EffectsEngine sidechain management', () => {
   it('updateSidechainParams calls updateParams on the follower', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     // Should not throw
     effectsEngine.updateSidechainParams('bass-track', 'fx-1', {
       threshold: -30, ratio: 6, attack: 0.01, release: 0.1, knee: 3,
@@ -113,9 +113,9 @@ describe('EffectsEngine sidechain management', () => {
   it('reconnecting sidechain disposes the previous follower', () => {
     effectsEngine.rebuildChain('bass-track', [compressorEffect]);
     const mockSource = { context: {} } as unknown as AudioNode;
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     // Connect again — should dispose old follower first, then create new one
-    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
+    effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as CompressorParams);
     expect(effectsEngine.getSidechainReduction('bass-track', 'fx-1')).toBe(-6);
   });
 });

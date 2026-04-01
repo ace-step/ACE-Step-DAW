@@ -1,61 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
-// Mock canvas getContext to suppress jsdom warnings
-if (typeof HTMLCanvasElement !== 'undefined') {
-  HTMLCanvasElement.prototype.getContext = ((contextId: string) => {
-    if (contextId === '2d') {
-      return {
-        fillRect: () => {},
-        clearRect: () => {},
-        getImageData: (x: number, y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
-        putImageData: () => {},
-        createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
-        setTransform: () => {},
-        drawImage: () => {},
-        save: () => {},
-        fillText: () => {},
-        restore: () => {},
-        beginPath: () => {},
-        moveTo: () => {},
-        lineTo: () => {},
-        closePath: () => {},
-        stroke: () => {},
-        translate: () => {},
-        scale: () => {},
-        rotate: () => {},
-        arc: () => {},
-        fill: () => {},
-        measureText: () => ({ width: 0 }),
-        transform: () => {},
-        rect: () => {},
-        clip: () => {},
-        canvas: { width: 0, height: 0 },
-        createLinearGradient: () => ({ addColorStop: () => {} }),
-        createRadialGradient: () => ({ addColorStop: () => {} }),
-        createPattern: () => null,
-        strokeRect: () => {},
-        strokeText: () => {},
-        setLineDash: () => {},
-        getLineDash: () => [],
-        bezierCurveTo: () => {},
-        quadraticCurveTo: () => {},
-        globalAlpha: 1,
-        globalCompositeOperation: 'source-over',
-        lineWidth: 1,
-        lineCap: 'butt',
-        lineJoin: 'miter',
-        strokeStyle: '#000',
-        fillStyle: '#000',
-        font: '10px sans-serif',
-        textAlign: 'start',
-        textBaseline: 'alphabetic',
-      };
-    }
-    return null;
-  }) as any;
-}
-
 if (typeof globalThis.ResizeObserver === 'undefined') {
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
@@ -63,3 +8,82 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     disconnect() {}
   });
 }
+
+// Mock canvas getContext to suppress jsdom "Not implemented" warnings.
+// Uses vi.spyOn so individual tests can override/restore cleanly.
+vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+  this: HTMLCanvasElement,
+  contextId: string,
+) {
+  if (contextId === '2d') {
+    const gradient = { addColorStop: () => {} };
+    const knownMethods: Record<string, unknown> = {
+      fillRect: () => {},
+      clearRect: () => {},
+      strokeRect: () => {},
+      getImageData: (_x: number, _y: number, w: number, h: number) => ({
+        data: new Uint8ClampedArray((w ?? 0) * (h ?? 0) * 4),
+        width: w ?? 0,
+        height: h ?? 0,
+      }),
+      putImageData: () => {},
+      createImageData: (w: number, h: number) => ({
+        data: new Uint8ClampedArray((w ?? 0) * (h ?? 0) * 4),
+        width: w ?? 0,
+        height: h ?? 0,
+      }),
+      createLinearGradient: () => gradient,
+      createRadialGradient: () => gradient,
+      createPattern: () => null,
+      setTransform: () => {},
+      drawImage: () => {},
+      save: () => {},
+      restore: () => {},
+      fillText: () => {},
+      strokeText: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      closePath: () => {},
+      stroke: () => {},
+      fill: () => {},
+      translate: () => {},
+      scale: () => {},
+      rotate: () => {},
+      arc: () => {},
+      arcTo: () => {},
+      ellipse: () => {},
+      bezierCurveTo: () => {},
+      quadraticCurveTo: () => {},
+      measureText: () => ({ width: 0 }),
+      transform: () => {},
+      resetTransform: () => {},
+      rect: () => {},
+      roundRect: () => {},
+      clip: () => {},
+      isPointInPath: () => false,
+      setLineDash: () => {},
+      getLineDash: () => [],
+      canvas: this,
+      globalAlpha: 1,
+      globalCompositeOperation: 'source-over',
+      lineWidth: 1,
+      lineCap: 'butt',
+      lineJoin: 'miter',
+      strokeStyle: '#000',
+      fillStyle: '#000',
+      font: '10px sans-serif',
+      textAlign: 'start',
+      textBaseline: 'alphabetic',
+    };
+    // Proxy returns no-op for any method not explicitly listed above
+    return new Proxy(knownMethods, {
+      get(target, prop) {
+        if (prop in target) return target[prop as string];
+        if (typeof prop === 'string') return () => {};
+        return undefined;
+      },
+    });
+  }
+  return null;
+} as () => null);

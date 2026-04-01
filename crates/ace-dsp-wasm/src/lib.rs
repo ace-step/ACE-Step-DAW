@@ -43,6 +43,7 @@ pub struct DspProcessor {
     ringmod: Option<RingMod>,
     dc_blocker: Option<DcBlocker>,
     sample_rate: f32,
+    limiter_lookahead_ms: f32,
 }
 
 #[wasm_bindgen]
@@ -68,6 +69,7 @@ impl DspProcessor {
             ringmod: None,
             dc_blocker: None,
             sample_rate,
+            limiter_lookahead_ms: 0.0,
         }
     }
 
@@ -402,13 +404,23 @@ impl DspProcessor {
     /// - `release_ms`: gain recovery time
     /// - `lookahead_ms`: anticipation window (1–10ms)
     pub fn set_limiter(&mut self, ceiling_db: f32, release_ms: f32, lookahead_ms: f32) {
-        // Always re-create: lookahead sizes an internal buffer that can't be resized.
-        self.limiter = Some(Limiter::new(
-            self.sample_rate,
-            ceiling_db,
-            release_ms,
-            lookahead_ms,
-        ));
+        // Only re-create when lookahead changes (it sizes an internal buffer).
+        // For ceiling/release changes, update in-place to avoid audible glitches.
+        match &mut self.limiter {
+            Some(l) if (self.limiter_lookahead_ms - lookahead_ms).abs() < 0.001 => {
+                l.set_ceiling(ceiling_db);
+                l.set_release(release_ms);
+            }
+            _ => {
+                self.limiter = Some(Limiter::new(
+                    self.sample_rate,
+                    ceiling_db,
+                    release_ms,
+                    lookahead_ms,
+                ));
+                self.limiter_lookahead_ms = lookahead_ms;
+            }
+        }
     }
 
     /// Disable the limiter.
@@ -712,16 +724,18 @@ impl DspProcessor {
 /// This is a stable, named replacement for the internal `__wbindgen_export` symbol.
 #[wasm_bindgen]
 pub fn alloc_f32_buffer(len: usize) -> *mut f32 {
-    let mut v = Vec::<f32>::with_capacity(len);
-    #[allow(clippy::uninit_vec)]
-    unsafe { v.set_len(len); }
+    let len = len.max(1); // guard against zero-length allocation
+    let mut v = vec![0.0_f32; len];
     let ptr = v.as_mut_ptr();
     core::mem::forget(v);
     ptr
 }
 
 /// Free a buffer previously allocated by `alloc_f32_buffer`.
-/// `len` must match the original allocation length.
+///
+/// # Safety
+/// `len` must be the exact value that was passed to `alloc_f32_buffer`.
+/// Passing a different `len` is undefined behavior.
 #[wasm_bindgen]
 pub fn free_f32_buffer(ptr: *mut f32, len: usize) {
     if !ptr.is_null() && len > 0 {

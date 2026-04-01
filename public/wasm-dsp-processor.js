@@ -384,6 +384,12 @@ class WasmDspProcessor extends AudioWorkletProcessor {
           break;
         case 'dispose':
           if (this._ready && this._processorPtr !== 0) {
+            // Free pre-allocated audio buffer first to prevent memory leak
+            if (this._bufPtr !== 0) {
+              wasm.free_f32_buffer(this._bufPtr, this._bufLen);
+              this._bufPtr = 0;
+              this._bufLen = 0;
+            }
             wasm.__wbg_dspprocessor_free(this._processorPtr, 0);
             this._processorPtr = 0;
             this._ready = false;

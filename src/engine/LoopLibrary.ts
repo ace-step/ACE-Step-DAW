@@ -3,12 +3,14 @@
  * No external audio files needed.
  */
 import * as Tone from 'tone';
+import type { ToneAudioBuffer } from 'tone';
 
 // Tone.Offline returns ToneAudioBuffer; extract the underlying AudioBuffer
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toAudioBuffer(buf: any): AudioBuffer {
-  if (typeof buf.get === 'function') return buf.get();
-  return buf as AudioBuffer;
+function toAudioBuffer(buf: ToneAudioBuffer | AudioBuffer): AudioBuffer {
+  if (buf instanceof AudioBuffer) return buf;
+  const nativeBuffer = buf.get();
+  if (!nativeBuffer) throw new Error('Offline render returned no AudioBuffer');
+  return nativeBuffer;
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────

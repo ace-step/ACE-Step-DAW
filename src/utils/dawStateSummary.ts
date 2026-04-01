@@ -75,7 +75,7 @@ function formatTrackLine(track: Track): string {
 
   // Effects
   if (track.effects && track.effects.length > 0) {
-    const fx = track.effects.map((e) => `${e.type}${(e as any).bypass ? '(off)' : ''}`).join(', ');
+    const fx = track.effects.map((e) => `${e.type}${!e.enabled ? '(off)' : ''}`).join(', ');
     parts.push(`    FX: ${fx}`);
   }
 

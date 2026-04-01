@@ -12,6 +12,7 @@ import {
   type StemExportScope,
 } from '../../engine/exportMix';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { createDebugLogger } from '../../utils/debugLogger';
 import {
   type ExportFormat,
   type ExportMetadata,
@@ -24,6 +25,8 @@ import {
   formatFileSize,
 } from '../../utils/audioEncoders';
 import { Button } from '../ui/Button';
+
+const logger = createDebugLogger('ace-step:export');
 
 const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
   { value: 'wav', label: 'WAV' },
@@ -141,7 +144,7 @@ export function ExportDialog() {
       }
       setShow(false);
     } catch (error) {
-      console.error('Export failed:', error);
+      logger.error('Export failed:', error);
       toastError('Export failed');
     } finally {
       setExporting(false);

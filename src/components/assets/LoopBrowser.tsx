@@ -13,7 +13,10 @@ import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { AssetClip } from '../../types/project';
 import { setDragPayload, clearDragPayload } from '../../utils/dragPayload';
+import { createDebugLogger } from '../../utils/debugLogger';
 import * as Tone from 'tone';
+
+const logger = createDebugLogger('ace-step:loop-browser');
 
 /** 1x1 transparent GIF used to hide the native drag ghost. */
 const TRANSPARENT_IMG = new Image();
@@ -137,7 +140,7 @@ export function LoopBrowser() {
       setPreviewWaveform(waveformData);
       addRecentlyUsed(def.id);
     } catch (err) {
-      console.error('Failed to preview loop:', err);
+      logger.error('Failed to preview loop:', err);
     }
   }, [previewingId, setPreviewingId, addRecentlyUsed]);
 
@@ -161,7 +164,7 @@ export function LoopBrowser() {
       setPreviewingId(asset.id);
       setPreviewWaveform(asset.waveformPeaks);
     } catch (err) {
-      console.error('Failed to preview asset:', err);
+      logger.error('Failed to preview asset:', err);
     }
   }, [previewingId, setPreviewingId]);
 

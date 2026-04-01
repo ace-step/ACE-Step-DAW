@@ -291,7 +291,7 @@ export function LoopBrowser() {
         >
           My Loops
           {allAssets.length > 0 && (
-            <span className="ml-1 text-[10px] text-white/20">{allAssets.length}</span>
+            <span className="ml-1 text-[10px] text-white/20">({allAssets.length})</span>
           )}
         </button>
       </div>

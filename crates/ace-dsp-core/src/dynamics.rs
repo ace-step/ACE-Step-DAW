@@ -30,13 +30,14 @@ fn db_to_lin(db: f32) -> f32 {
 }
 
 /// Compute the ballistics coefficient for a 1-pole IIR filter.
-/// `time_sec` is the time constant (attack or release), `sample_rate` is in Hz.
+/// Uses standard RC time constant: envelope reaches 63.2% in `time_sec`.
+/// This matches the behavior of professional compressors (Pro Tools, Logic, Ableton).
 #[inline]
 fn ballistics_coeff(time_sec: f32, sample_rate: f32) -> f32 {
     if time_sec <= 0.0 {
         0.0 // instant
     } else {
-        (-LN_2 / (time_sec * sample_rate)).exp()
+        (-1.0 / (time_sec * sample_rate)).exp()
     }
 }
 
@@ -92,8 +93,7 @@ impl EnvelopeFollower {
             self.release_coeff
         };
 
-        self.envelope = coeff * self.envelope + (1.0 - coeff) * detector_input
-            + ANTI_DENORMAL - ANTI_DENORMAL;
+        self.envelope = coeff * self.envelope + (1.0 - coeff) * detector_input + ANTI_DENORMAL;
 
         match self.mode {
             EnvelopeMode::Peak => self.envelope,

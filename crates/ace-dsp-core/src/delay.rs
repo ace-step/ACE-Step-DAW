@@ -129,7 +129,7 @@ impl MonoDelay {
         self.delay_line.push(input + self.fb_sample);
         let delayed = self.delay_line.read_cubic(self.delay_samples);
         // Anti-denormal guard in feedback path; store for next call
-        self.fb_sample = delayed * self.feedback + ANTI_DENORMAL - ANTI_DENORMAL;
+        self.fb_sample = delayed * self.feedback + ANTI_DENORMAL;
         input * self.dry + delayed * self.wet
     }
 
@@ -223,10 +223,8 @@ impl StereoDelay {
         let del_r = self.right.read_cubic(self.delay_right);
 
         // Feedback with cross-feed and anti-denormal; store for next call
-        self.fb_left = (del_l * self.feedback + del_r * self.cross_feedback)
-            + ANTI_DENORMAL - ANTI_DENORMAL;
-        self.fb_right = (del_r * self.feedback + del_l * self.cross_feedback)
-            + ANTI_DENORMAL - ANTI_DENORMAL;
+        self.fb_left = del_l * self.feedback + del_r * self.cross_feedback + ANTI_DENORMAL;
+        self.fb_right = del_r * self.feedback + del_l * self.cross_feedback + ANTI_DENORMAL;
 
         (
             left_in * self.dry + del_l * self.wet,

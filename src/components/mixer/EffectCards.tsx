@@ -11,6 +11,7 @@ import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
 import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { DelayTapTimeline } from './DelayTapTimeline';
+import { FilterResponseCurve } from './FilterResponseCurve';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -929,6 +930,16 @@ export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.filter}
+      visualization={
+        <FilterResponseCurve
+          frequency={p.frequency}
+          resonance={Math.max(0.1, p.resonance)}
+          filterType={p.filterType}
+          width={160}
+          height={100}
+          color={EFFECT_COLORS.filter}
+        />
+      }
       mode={
         <>
           {(['lowpass', 'highpass', 'bandpass'] as FilterParams['filterType'][]).map((ft) => (

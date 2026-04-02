@@ -19,6 +19,12 @@ import {
   navigateTimelineByArrow,
 } from '../services/arrowKeyNavigation';
 import { resolveFocusedTrackId } from '../services/focusResolution';
+import {
+  copyClips,
+  copyNotes,
+  preparePasteClips,
+  preparePasteNotes,
+} from '../services/clipboardService';
 import type { KeyCombo } from '../types/shortcuts';
 import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from '../utils/timelineZoom';
 import { getSessionClips } from '../utils/sessionClips';
@@ -326,6 +332,117 @@ export function useKeyboardShortcuts() {
           if (track) {
             const clip = getSessionClips(track)[slot.sceneIndex];
             if (clip) project.duplicateClip(clip.id);
+          }
+        }
+        return;
+      }
+
+      // ── Clipboard: Copy / Cut / Paste ───────────────────────────
+      // Must be before the `if (mod) return` guard since these use Cmd/Ctrl.
+      if (matches('clips.copy') && !anyModalOpen) {
+        event.preventDefault();
+        if (ui.keyboardContext.scope === 'pianoRoll') {
+          // Copy selected piano roll notes
+          const clipId = ui.openPianoRollClipId;
+          if (clipId && ui.selectedPianoRollNoteIds.length > 0) {
+            const clip = project.getClipById?.(clipId);
+            if (clip?.midiData) {
+              const noteIdSet = new Set(ui.selectedPianoRollNoteIds);
+              const selectedNotes = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
+              const data = copyNotes(selectedNotes, clipId);
+              if (data) ui.setClipboard(data);
+            }
+          }
+        } else {
+          // Copy selected clips
+          if (ui.selectedClipIds.size > 0 && project.project) {
+            const entries = [...ui.selectedClipIds]
+              .map((clipId) => {
+                for (const track of project.project!.tracks) {
+                  const clip = track.clips.find((c) => c.id === clipId);
+                  if (clip) return { clip, trackId: track.id };
+                }
+                return null;
+              })
+              .filter((e): e is NonNullable<typeof e> => e !== null);
+            const data = copyClips(entries);
+            if (data) ui.setClipboard(data);
+          }
+        }
+        return;
+      }
+
+      if (matches('clips.cut') && !anyModalOpen) {
+        event.preventDefault();
+        if (ui.keyboardContext.scope === 'pianoRoll') {
+          // Cut selected piano roll notes (copy then delete)
+          const clipId = ui.openPianoRollClipId;
+          if (clipId && ui.selectedPianoRollNoteIds.length > 0) {
+            const clip = project.getClipById?.(clipId);
+            if (clip?.midiData) {
+              const noteIdSet = new Set(ui.selectedPianoRollNoteIds);
+              const selectedNotes = clip.midiData.notes.filter((n) => noteIdSet.has(n.id));
+              const data = copyNotes(selectedNotes, clipId);
+              if (data) {
+                ui.setClipboard(data);
+                // Delete the original notes
+                for (const noteId of ui.selectedPianoRollNoteIds) {
+                  project.removeMidiNote(clipId, noteId);
+                }
+                ui.setSelectedPianoRollNoteIds([]);
+              }
+            }
+          }
+        } else {
+          // Cut selected clips (copy then delete)
+          if (ui.selectedClipIds.size > 0 && project.project) {
+            const entries = [...ui.selectedClipIds]
+              .map((clipId) => {
+                for (const track of project.project!.tracks) {
+                  const clip = track.clips.find((c) => c.id === clipId);
+                  if (clip) return { clip, trackId: track.id };
+                }
+                return null;
+              })
+              .filter((e): e is NonNullable<typeof e> => e !== null);
+            const data = copyClips(entries);
+            if (data) {
+              ui.setClipboard(data);
+              const ids = [...ui.selectedClipIds];
+              ui.deselectAll();
+              ids.forEach((id) => project.removeClip(id));
+            }
+          }
+        }
+        return;
+      }
+
+      if (matches('clips.paste') && !anyModalOpen) {
+        event.preventDefault();
+        const clipboard = ui.clipboard;
+        if (!clipboard) return;
+
+        if (clipboard.type === 'notes' && ui.keyboardContext.scope === 'pianoRoll') {
+          // Paste notes into the active piano roll clip at playhead
+          const clipId = ui.openPianoRollClipId;
+          if (clipId) {
+            const clip = project.getClipById?.(clipId);
+            if (clip) {
+              const bpm = project.project?.bpm ?? 120;
+              const pasteBeat = (transport.currentTime - clip.startTime) * (bpm / 60);
+              const newNotes = preparePasteNotes(clipboard, Math.max(0, pasteBeat));
+              for (const note of newNotes) {
+                project.addMidiNote(clipId, note);
+              }
+              ui.setSelectedPianoRollNoteIds(newNotes.map((n) => n.id));
+            }
+          }
+        } else if (clipboard.type === 'clips') {
+          // Paste clips at playhead position
+          const pastedClips = preparePasteClips(clipboard, transport.currentTime);
+          const newIds = project.pasteClipsToTracks(pastedClips);
+          if (newIds.length > 0) {
+            ui.selectClips(newIds);
           }
         }
         return;

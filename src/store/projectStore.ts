@@ -742,6 +742,8 @@ export interface ProjectState extends MidiSliceActions {
   duplicateClipToTrack: (clipId: string, targetTrackId: string, startTime?: number) => Clip | undefined;
   batchDuplicateClips: (clipIds: string[], timeOffset: number) => void;
   batchMoveClips: (clipIds: string[], timeOffset: number) => void;
+  /** Paste pre-built clips into their target tracks. Returns IDs of newly created clips. */
+  pasteClipsToTracks: (clips: { clip: Clip; targetTrackId: string }[]) => string[];
 
   // Session View / clip launcher
   createSessionScene: (name?: string) => SessionScene | undefined;
@@ -4980,6 +4982,40 @@ export const useProjectStore = create<ProjectState>()(
       updated.totalDuration = computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap);
     }
     set({ project: updated });
+  },
+
+  pasteClipsToTracks: (clips) => {
+    const state = get();
+    if (_isViewerMode()) return [];
+    if (!state.project || clips.length === 0) return [];
+    _pushHistory(state.project);
+
+    const trackIdSet = new Set(state.project.tracks.map((t) => t.id));
+    const newClipIds: string[] = [];
+    let newTracks = state.project.tracks;
+    let session = ensureProjectSession(state.project).session!;
+
+    for (const { clip, targetTrackId } of clips) {
+      if (!trackIdSet.has(targetTrackId)) continue;
+      const newClip: Clip = { ...clip, trackId: targetTrackId };
+      newTracks = newTracks.map((t) =>
+        t.id === targetTrackId ? { ...t, clips: [...t.clips, newClip] } : t,
+      );
+      session = autoAssignClipToSession(session, targetTrackId, newClip.id);
+      newClipIds.push(newClip.id);
+    }
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        session: ensureProjectSession({ ...state.project, tracks: newTracks, session }).session!,
+      },
+    });
+
+    return newClipIds;
   },
 
   createSessionScene: (name) => {

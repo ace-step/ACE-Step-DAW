@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import type { Track, InputMonitoringMode } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -57,7 +57,7 @@ interface TrackHeaderProps {
   dragOverPosition: 'before' | 'after' | null;
 }
 
-export function TrackHeader({
+export const TrackHeader = React.memo(function TrackHeader({
   track,
   isCollapsed = false,
   isChild,
@@ -83,11 +83,11 @@ export function TrackHeader({
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const removeGroupTrack = useProjectStore((s) => s.removeGroupTrack);
   const moveTrackToGroup = useProjectStore((s) => s.moveTrackToGroup);
-  const project = useProjectStore((s) => s.project);
 
-  // Check if any track is soloed — if so, non-soloed tracks are "implied muted"
-  const anySoloed = project?.tracks.some((t) => t.soloed) ?? false;
+  // Narrow selectors: avoid subscribing to entire project object
+  const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
   const isImpliedMute = anySoloed && !track.soloed;
+  const hasAutomationLane = useProjectStore((s) => (s.project?.automationLanes ?? []).some((lane) => lane.trackId === track.id));
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const setOpenEffectChainTrackId = useUIStore((s) => s.setOpenEffectChainTrackId);
   const openBounceInPlaceDialog = useUIStore((s) => s.openBounceInPlaceDialog);
@@ -157,7 +157,6 @@ export function TrackHeader({
   const isCompact = laneHeight < 52;
   const isArmed = armedTrackIds.includes(track.id) || !!track.armed;
   const monitorMode: InputMonitoringMode = track.inputMonitoring ?? 'off';
-  const hasAutomationLane = (project?.automationLanes ?? []).some((lane) => lane.trackId === track.id);
   const effectsBypassed = track.effectsBypassed ?? false;
   const headerBackgroundColor = track.isGroup ? ARRANGEMENT_GROUP_ROW_BG : ARRANGEMENT_HEADER_ROW_BG;
   const isTwoRow = laneHeight >= 60;
@@ -263,10 +262,11 @@ export function TrackHeader({
       onMouseDown={(e) => {
         setExpandedTrackId(track.id);
         setKeyboardContext('timeline', track.id);
-        if (e.shiftKey && project) {
+        const currentProject = useProjectStore.getState().project;
+        if (e.shiftKey && currentProject) {
           // Shift+click: range select
           const selectedIds = useUIStore.getState().selectedTrackIds;
-          const tracks = project.tracks;
+          const tracks = currentProject.tracks;
           const clickedIdx = tracks.findIndex((t) => t.id === track.id);
           // Find anchor: first selected track or expanded track
           let anchorIdx = clickedIdx;
@@ -655,7 +655,7 @@ export function TrackHeader({
         <ContextMenuItem label="Duplicate Track" onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }} />
         {/* Move to Group submenu — only for non-group tracks */}
         {!track.isGroup && (() => {
-          const groups = project?.tracks.filter((t) => t.isGroup) ?? [];
+          const groups = useProjectStore.getState().project?.tracks.filter((t) => t.isGroup) ?? [];
           return groups.length > 0 ? (
             <div
               className="relative"
@@ -731,4 +731,4 @@ export function TrackHeader({
     )}
     </>
   );
-}
+});

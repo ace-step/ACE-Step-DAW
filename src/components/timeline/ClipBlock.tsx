@@ -46,7 +46,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     }
     return null;
   });
-  const tracks = useProjectStore((s) => s.project?.tracks);
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 600);
   const isMidiClip = Boolean(clip.midiData);
@@ -202,8 +201,9 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const audioOffset = clip.audioOffset ?? 0;
   const contentOffset = getClipContentOffset(clip);
   const selectedActionClipIds = isClipSelected ? [...useUIStore.getState().selectedClipIds] : [clip.id];
+  const allTracks = useProjectStore.getState().project?.tracks ?? [];
   const selectedActionClips = selectedActionClipIds
-    .map((clipId) => (tracks ?? []).flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
+    .map((clipId) => allTracks.flatMap((candidate) => candidate.clips).find((candidate) => candidate.id === clipId))
     .filter((candidate): candidate is Clip => Boolean(candidate));
   const canConsolidate = selectedActionClips.length === selectedActionClipIds.length
     && selectedActionClips.every((candidate) => candidate.trackId === track.id)

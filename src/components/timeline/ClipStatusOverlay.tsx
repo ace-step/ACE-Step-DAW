@@ -8,8 +8,12 @@ interface ClipStatusOverlayProps {
 }
 
 export function ClipStatusOverlay({ clip, generatingProgress, isMidiClip }: ClipStatusOverlayProps) {
-  const isQueued = clip.generationStatus === 'queued' && !generatingProgress;
-  const isGenerating = clip.generationStatus === 'generating' || clip.generationStatus === 'processing' || (generatingProgress != null);
+  const isQueued = clip.generationStatus === 'queued';
+  const isGenerating =
+    (clip.generationStatus === 'generating' ||
+      clip.generationStatus === 'processing' ||
+      generatingProgress != null) &&
+    !isQueued;
   const isError = clip.generationStatus === 'error';
 
   return (
@@ -50,15 +54,16 @@ export function ClipStatusOverlay({ clip, generatingProgress, isMidiClip }: Clip
               boxShadow: 'inset 0 0 0 1.5px rgba(239, 68, 68, 0.6)',
             }}
           />
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 px-1.5 py-0.5">
-            <span
-              className="text-[8px] text-red-300 truncate flex-1 pointer-events-none"
-              title={clip.errorMessage}
-            >
+          <div
+            className="absolute inset-x-0 bottom-0 flex items-center gap-1 px-1.5 py-0.5"
+            title={clip.errorMessage}
+          >
+            <span className="text-[8px] text-red-300 truncate flex-1 pointer-events-none">
               {clip.errorMessage || 'Generation failed'}
             </span>
             <button
               className="text-[8px] text-red-300 hover:text-red-200 bg-red-500/20 hover:bg-red-500/30 px-1 py-px rounded transition-colors shrink-0"
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 void regenerateClip(clip.id);

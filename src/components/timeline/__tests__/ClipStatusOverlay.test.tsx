@@ -32,11 +32,23 @@ describe('ClipStatusOverlay', () => {
     expect(container.textContent).toBe('');
   });
 
-  it('shows "Queued" label when clip is queued', () => {
+  it('shows "Queued" label when clip is queued with null progress', () => {
     render(
       <ClipStatusOverlay
         clip={makeClip({ generationStatus: 'queued' })}
         generatingProgress={null}
+        isMidiClip={false}
+      />,
+    );
+    expect(screen.getByText('Queued')).toBeTruthy();
+  });
+
+  it('shows "Queued" label even when generatingProgress is non-null for queued clips', () => {
+    // In ClipBlock, the selector may return a progress string for queued jobs
+    render(
+      <ClipStatusOverlay
+        clip={makeClip({ generationStatus: 'queued' })}
+        generatingProgress="Queued"
         isMidiClip={false}
       />,
     );
@@ -88,6 +100,21 @@ describe('ClipStatusOverlay', () => {
     );
     fireEvent.click(screen.getByText('Retry'));
     expect(regenerateClip).toHaveBeenCalledWith('clip-1');
+  });
+
+  it('retry button stops mouseDown propagation to prevent clip drag', () => {
+    render(
+      <ClipStatusOverlay
+        clip={makeClip({ generationStatus: 'error', errorMessage: 'Failed' })}
+        generatingProgress={null}
+        isMidiClip={false}
+      />,
+    );
+    const retryBtn = screen.getByText('Retry');
+    const mouseDownEvent = new MouseEvent('mousedown', { bubbles: true });
+    const stopProp = vi.spyOn(mouseDownEvent, 'stopPropagation');
+    retryBtn.dispatchEvent(mouseDownEvent);
+    expect(stopProp).toHaveBeenCalled();
   });
 
   it('shows inferred metadata for ready clips', () => {

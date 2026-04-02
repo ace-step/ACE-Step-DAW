@@ -22,6 +22,7 @@ import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
+import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -163,6 +164,7 @@ function EditorShell() {
       {project && <AddLayerPanel />}
       <ToastContainer />
       <UndoHistoryPanel />
+      <WelcomeOverlay />
 
       {/* Modals — lazy-loaded, code-split */}
       <NewProjectDialog />

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useSessionStore } from '../../store/sessionStore';
 import type { SessionScene } from '../../types/session';
 
@@ -6,7 +6,7 @@ interface SessionSceneStripProps {
   scene: SessionScene;
 }
 
-export function SessionSceneStrip({ scene }: SessionSceneStripProps) {
+export const SessionSceneStrip = React.memo(function SessionSceneStrip({ scene }: SessionSceneStripProps) {
   const launchScene = useSessionStore((s) => s.launchScene);
   const stopScene = useSessionStore((s) => s.stopScene);
   const renameScene = useSessionStore((s) => s.renameScene);
@@ -86,4 +86,4 @@ export function SessionSceneStrip({ scene }: SessionSceneStripProps) {
       )}
     </div>
   );
-}
+});

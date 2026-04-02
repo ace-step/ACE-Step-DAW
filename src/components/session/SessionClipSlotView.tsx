@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import type { SessionClipSlot } from '../../types/session';
 import { useSessionStore } from '../../store/sessionStore';
 
@@ -7,7 +7,7 @@ interface SessionClipSlotViewProps {
   trackColor: string;
 }
 
-export function SessionClipSlotView({ slot, trackColor }: SessionClipSlotViewProps) {
+export const SessionClipSlotView = React.memo(function SessionClipSlotView({ slot, trackColor }: SessionClipSlotViewProps) {
   const launchSlot = useSessionStore((s) => s.launchSlot);
   const stopSlot = useSessionStore((s) => s.stopSlot);
 
@@ -61,4 +61,4 @@ export function SessionClipSlotView({ slot, trackColor }: SessionClipSlotViewPro
       {isEmpty && <span className="text-zinc-600">+</span>}
     </button>
   );
-}
+});

@@ -3,6 +3,7 @@
  *
  * Dense Ableton-style layout with openDAW-inspired visual depth:
  * multi-layer shadows on visualization, glass-morphism mode selectors.
+ * Staggered entrance animation when switching effects.
  */
 import type { ReactNode } from 'react';
 
@@ -14,7 +15,17 @@ interface EffectCardLayoutProps {
   color?: string;
 }
 
+/**
+ * Inline style for staggered entrance. Each section fades in + slides up
+ * with increasing delay (40ms between sections).
+ */
+const stagger = (index: number): React.CSSProperties => ({
+  animation: `fx-card-enter 180ms ease-out ${index * 40}ms both`,
+});
+
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
+  // idx is safe: re-initialized every render, all increments are synchronous in JSX evaluation
+  let idx = 0;
   return (
     <div className="flex flex-col items-center w-full px-4 py-3">
       <div className="w-full max-w-[800px] flex flex-col items-center gap-3">
@@ -22,6 +33,7 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
           <div
             className="flex items-center gap-0.5 rounded-sm p-0.5"
             style={{
+              ...stagger(idx++),
               background: 'rgba(255,255,255,0.03)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
@@ -36,6 +48,7 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
           <div
             className="w-full min-h-[60px] rounded-sm overflow-hidden"
             style={{
+              ...stagger(idx++),
               border: `1px solid ${color ? `${color}18` : 'rgba(255,255,255,0.04)'}`,
               boxShadow: '0 0 0 0.5px rgba(255,255,255,0.06), inset 0 1px 3px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.25)',
             }}
@@ -43,11 +56,16 @@ export function EffectCardLayout({ mode, visualization, children, footer, color 
             {visualization}
           </div>
         )}
-        <div className="flex flex-wrap items-start justify-center gap-x-6 gap-y-3">
+        <div
+          className="flex flex-wrap items-start justify-center gap-x-6 gap-y-3"
+          style={stagger(idx++)}
+        >
           {children}
         </div>
         {footer && (
-          <div className="pt-0.5 w-full max-w-[400px] mx-auto">{footer}</div>
+          <div className="pt-0.5 w-full max-w-[400px] mx-auto" style={stagger(idx++)}>
+            {footer}
+          </div>
         )}
       </div>
     </div>

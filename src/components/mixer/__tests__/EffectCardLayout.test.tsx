@@ -47,10 +47,11 @@ describe('EffectCardLayout', () => {
         <div>Params only</div>
       </EffectCardLayout>,
     );
-    // Should only have the grid container, no mode/viz/footer wrappers
+    // topLevel is the outer padding div; its only child is the max-w container
     const topLevel = container.firstElementChild!;
-    // Only 1 child: the grid
-    expect(topLevel.children.length).toBe(1);
+    const inner = topLevel.firstElementChild!;
+    // Inner should have only 1 child (the params grid), no mode/viz/footer wrappers
+    expect(inner.children.length).toBe(1);
   });
 });
 

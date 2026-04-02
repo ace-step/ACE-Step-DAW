@@ -8,6 +8,7 @@ import { useTransportStore } from './transportStore';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
+import type { ClipboardData } from '../services/clipboardService';
 import type { SynthPresetDefinition, SynthPresetCategory } from '../data/synthPresets';
 import type { InstrumentPreset } from '../data/instrumentPresets';
 import type { LoopCategory } from '../engine/LoopLibrary';
@@ -54,6 +55,8 @@ export interface UIState {
   selectedTrackIds: Set<string>;
   /** Tracks whether the user's last selection was on clips or tracks, for context-aware Cmd+A and Delete. */
   lastSelectionContext: 'tracks' | 'clips' | null;
+  /** Internal clipboard for copy/cut/paste of clips or MIDI notes. */
+  clipboard: ClipboardData | null;
   editingClipId: string | null;
   editingText2MusicClipId: string | null;
   showNewProjectDialog: boolean;
@@ -260,6 +263,7 @@ export interface UIState {
   selectTracks: (trackIds: string[]) => void;
   deselectAllTracks: () => void;
   deselectAll: () => void;
+  setClipboard: (data: ClipboardData | null) => void;
   setEditingClip: (clipId: string | null) => void;
   setEditingText2MusicClipId: (clipId: string | null) => void;
   setShowNewProjectDialog: (v: boolean) => void;
@@ -589,6 +593,7 @@ export const useUIStore = create<UIState>()(
   selectedClipIds: new Set(),
   selectedTrackIds: new Set(),
   lastSelectionContext: null,
+  clipboard: null,
   editingClipId: null,
   editingText2MusicClipId: null,
   showNewProjectDialog: false,
@@ -830,6 +835,8 @@ export const useUIStore = create<UIState>()(
   deselectAllTracks: () => set({ selectedTrackIds: new Set() }),
 
   deselectAll: () => set({ selectedClipIds: new Set(), selectedTrackIds: new Set(), lastSelectionContext: null }),
+
+  setClipboard: (data) => set({ clipboard: data }),
 
   setEditingClip: (clipId) => set({ editingClipId: clipId }),
   setEditingText2MusicClipId: (clipId: string | null) => set({ editingText2MusicClipId: clipId }),

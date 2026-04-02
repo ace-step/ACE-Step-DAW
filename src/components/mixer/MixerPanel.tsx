@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -51,7 +51,7 @@ interface ChannelStripProps {
   returnTracks: ReturnTrack[];
 }
 
-function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
+const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
@@ -382,7 +382,7 @@ function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
       </div>
     </div>
   );
-}
+});
 
 interface MasterStripProps {
   faderHeight: number;

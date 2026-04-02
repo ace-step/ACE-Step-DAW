@@ -5,10 +5,11 @@
 import * as Tone from 'tone';
 
 // Tone.Offline returns ToneAudioBuffer; extract the underlying AudioBuffer
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toAudioBuffer(buf: any): AudioBuffer {
-  if (typeof buf.get === 'function') return buf.get();
-  return buf as AudioBuffer;
+function toAudioBuffer(buf: Tone.ToneAudioBuffer | AudioBuffer): AudioBuffer {
+  if (buf instanceof AudioBuffer) return buf;
+  const inner = buf.get();
+  if (!inner) throw new Error('ToneAudioBuffer has no underlying AudioBuffer');
+  return inner;
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Z } from '../../utils/zIndex';
 
 const STORAGE_KEY = 'ace-step-welcome-seen';
@@ -16,7 +16,7 @@ const SHORTCUTS = [
 
 function Key({ label }: { label: string }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.5rem] px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#444] border border-zinc-600 text-zinc-200 shadow-sm">
+    <kbd className="inline-flex items-center justify-center min-w-[1.5rem] px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-zinc-700 border border-zinc-600 text-zinc-200 shadow-sm">
       {label}
     </kbd>
   );
@@ -31,6 +31,8 @@ export function WelcomeOverlay() {
     }
   });
 
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
   const dismiss = useCallback(() => {
     setVisible(false);
     try {
@@ -39,6 +41,11 @@ export function WelcomeOverlay() {
       // localStorage unavailable
     }
   }, []);
+
+  // Auto-focus the CTA button on mount
+  useEffect(() => {
+    if (visible) buttonRef.current?.focus();
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -54,6 +61,9 @@ export function WelcomeOverlay() {
   return (
     <div
       data-testid="welcome-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="welcome-title"
       className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm"
       style={{ zIndex: Z.onboarding }}
       onMouseDown={(e) => e.target === e.currentTarget && dismiss()}
@@ -64,7 +74,7 @@ export function WelcomeOverlay() {
       >
         {/* Header */}
         <div className="px-6 pt-6 pb-4 text-center">
-          <h2 className="text-base font-semibold text-zinc-100">
+          <h2 id="welcome-title" className="text-base font-semibold text-zinc-100">
             Welcome to ACE-Step DAW
           </h2>
           <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
@@ -102,8 +112,9 @@ export function WelcomeOverlay() {
         {/* Action */}
         <div className="px-6 pb-6 flex justify-center">
           <button
+            ref={buttonRef}
             onClick={dismiss}
-            className="px-6 py-2 rounded-md bg-orange-500 hover:bg-orange-400 text-white text-xs font-medium transition-colors"
+            className="px-6 py-2 rounded-md bg-daw-accent hover:bg-daw-accent/90 text-white text-xs font-medium transition-colors"
           >
             Get Started
           </button>

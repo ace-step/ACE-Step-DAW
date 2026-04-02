@@ -55,4 +55,11 @@ describe('WelcomeOverlay', () => {
     const backdrop = screen.getByTestId('welcome-backdrop');
     expect(backdrop.style.zIndex).toBe('240');
   });
+
+  it('has correct ARIA dialog attributes', () => {
+    render(<WelcomeOverlay />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAttribute('aria-labelledby', 'welcome-title');
+  });
 });

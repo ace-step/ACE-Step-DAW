@@ -399,6 +399,7 @@ export function useKeyboardShortcuts() {
           }
         } else {
           const entries = resolveSelectedClipEntries();
+          if (entries.length === 0) return;
           const data = copyClips(entries);
           if (data) {
             ui.setClipboard(data);

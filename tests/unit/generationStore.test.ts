@@ -88,8 +88,8 @@ describe('generationStore', () => {
         now: 12_000,
       });
 
-      expect(updates.actionableMessage).toContain('timed out');
-      expect(updates.actionableMessage).toContain('Retry');
+      expect(updates.actionableMessage).toMatch(/retry|duration|shorter/i);
+      expect(updates.errorCategory).toBe('timeout');
       expect(updates.etaConfidence).toBe('none');
     });
 

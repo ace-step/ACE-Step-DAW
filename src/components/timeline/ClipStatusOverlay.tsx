@@ -18,8 +18,11 @@ export function ClipStatusOverlay({ clip, generatingProgress, isMidiClip }: Clip
         </div>
       )}
       {clip.generationStatus === 'error' && (
-        <div className="absolute bottom-0 left-1.5 text-[8px] text-red-300 truncate pointer-events-none">
-          Error
+        <div
+          className="absolute bottom-0 left-1.5 right-1.5 text-[8px] text-red-300 truncate pointer-events-none"
+          title={clip.errorMessage}
+        >
+          {clip.errorMessage ? clip.errorMessage : 'Error'}
         </div>
       )}
       {clip.generationStatus === 'ready' && clip.inferredMetas && (

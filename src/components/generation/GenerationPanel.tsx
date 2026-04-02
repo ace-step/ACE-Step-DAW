@@ -43,6 +43,11 @@ export function GenerationPanel() {
                       <span className="text-red-400">✕</span>
                     )}
                     <span className="uppercase">{job.trackName}</span>
+                    {job.status === 'error' && job.errorCategory && (
+                      <span className="px-1 py-px rounded text-[9px] bg-red-800/60 text-red-200 uppercase">
+                        {job.errorCategory}
+                      </span>
+                    )}
                     <span className="text-[10px] opacity-70">
                       {job.status === 'error'
                         ? (job.actionableMessage ?? job.error ?? 'Failed')

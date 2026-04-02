@@ -145,8 +145,9 @@ impl Allpass {
         } else {
             self.delay.write_pos - 1
         };
-        self.delay.buffer[idx] = v;
-        delayed + coeff * v
+        let v_guarded = v + ANTI_DENORMAL;
+        self.delay.buffer[idx] = v_guarded;
+        delayed + coeff * v_guarded
     }
 
     fn clear(&mut self) {
@@ -295,6 +296,8 @@ pub struct Reverb {
 
     // Derived
     decay: f32,
+    wet1: f32, // cached: wet * (width * 0.5 + 0.5)
+    wet2: f32, // cached: wet * ((1.0 - width) * 0.5)
     sample_rate: f32,
 
     // Scaled tap positions for output
@@ -354,6 +357,8 @@ impl Reverb {
             wet: wet.clamp(0.0, 1.0),
             dry: dry.clamp(0.0, 1.0),
             decay,
+            wet1: wet.clamp(0.0, 1.0) * (1.0 * 0.5 + 0.5), // width=1.0 default
+            wet2: wet.clamp(0.0, 1.0) * ((1.0 - 1.0) * 0.5),
             sample_rate,
 
             tap_l1: scale_delay(TAP_L1, sample_rate),
@@ -370,6 +375,13 @@ impl Reverb {
             tap_r6: scale_delay(TAP_R6, sample_rate),
         };
         rev
+    }
+
+    // ── Internal helpers ─────────────────────────────────────────────
+
+    fn update_wet_gains(&mut self) {
+        self.wet1 = self.wet * (self.width * 0.5 + 0.5);
+        self.wet2 = self.wet * ((1.0 - self.width) * 0.5);
     }
 
     // ── Parameter setters ────────────────────────────────────────────
@@ -393,6 +405,7 @@ impl Reverb {
 
     pub fn set_width(&mut self, width: f32) {
         self.width = width.clamp(0.0, 1.0);
+        self.update_wet_gains();
     }
 
     pub fn width(&self) -> f32 {
@@ -405,15 +418,16 @@ impl Reverb {
 
     pub fn set_wet(&mut self, wet: f32) {
         self.wet = wet.clamp(0.0, 1.0);
+        self.update_wet_gains();
     }
 
     pub fn set_dry(&mut self, dry: f32) {
         self.dry = dry.clamp(0.0, 1.0);
     }
 
-    /// Set pre-delay in milliseconds. Resizes the pre-delay buffer.
+    /// Set pre-delay in milliseconds (clamped to 0–100ms). Resizes the pre-delay buffer.
     pub fn set_pre_delay(&mut self, ms: f32) {
-        let samples = ((ms.max(0.0) * self.sample_rate / 1000.0) as usize).max(1);
+        let samples = ((ms.clamp(0.0, 100.0) * self.sample_rate / 1000.0) as usize).max(1);
         if samples != self.pre_delay.len() {
             self.pre_delay = Delay::new(samples);
         }
@@ -501,12 +515,9 @@ impl Reverb {
         let out_l = out_l * 0.15;
         let out_r = out_r * 0.15;
 
-        // Stereo width
-        let wet1 = self.wet * (self.width * 0.5 + 0.5);
-        let wet2 = self.wet * ((1.0 - self.width) * 0.5);
-
-        let wet_l = out_l * wet1 + out_r * wet2;
-        let wet_r = out_r * wet1 + out_l * wet2;
+        // Stereo width (wet1/wet2 cached, updated in set_wet/set_width)
+        let wet_l = out_l * self.wet1 + out_r * self.wet2;
+        let wet_r = out_r * self.wet1 + out_l * self.wet2;
 
         (input_l * self.dry + wet_l, input_r * self.dry + wet_r)
     }

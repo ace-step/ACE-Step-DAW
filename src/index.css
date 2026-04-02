@@ -164,6 +164,17 @@ select:focus-visible,
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fx-card-enter {
+    from { opacity: 1; transform: none; }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes knob-reset-pulse {
+    from { opacity: 0; }
+    to { opacity: 0; }
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    THEME STRUCTURAL OVERRIDES
    Each DAW theme changes: border-radius, shadows, borders,

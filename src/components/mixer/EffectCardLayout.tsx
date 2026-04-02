@@ -17,7 +17,7 @@ interface EffectCardLayoutProps {
 
 /**
  * Inline style for staggered entrance. Each section fades in + slides up
- * with increasing delay (30ms between sections).
+ * with increasing delay (40ms between sections).
  */
 const stagger = (index: number): React.CSSProperties => ({
   animation: `fx-card-enter 180ms ease-out ${index * 40}ms both`,

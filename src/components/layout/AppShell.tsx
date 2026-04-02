@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Toolbar } from './Toolbar';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
@@ -132,21 +133,23 @@ function EditorShell() {
           }
         }}
       >
-        {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
+        <ErrorBoundary name="Timeline">
+          {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
+        </ErrorBoundary>
         {project && <LoopBrowser />}
       </div>
 
       <StatusBar saveStatus={saveStatus} />
 
       {project && showSmartControls && <SmartControlsPanel />}
-      {project && openSequencerTrackId && <Suspense fallback={null}><SequencerEditor /></Suspense>}
-      {project && openDrumMachineTrackId && <Suspense fallback={null}><DrumMachineEditor /></Suspense>}
-      {project && openPianoRollTrackId && <Suspense fallback={null}><PianoRoll /></Suspense>}
-      {project && strudelPanelOpen && <Suspense fallback={null}><StrudelEditor /></Suspense>}
-      {project && (openEffectChainTrackId || openMidiEffectChainTrackId) && <Suspense fallback={null}><EffectChain /></Suspense>}
-      {project && showMixer && <Suspense fallback={null}><MixerPanel /></Suspense>}
-      {project && <GenerationPanel />}
-      {project && <GenerationSidePanel />}
+      {project && openSequencerTrackId && <ErrorBoundary name="Sequencer"><Suspense fallback={null}><SequencerEditor /></Suspense></ErrorBoundary>}
+      {project && openDrumMachineTrackId && <ErrorBoundary name="DrumMachine"><Suspense fallback={null}><DrumMachineEditor /></Suspense></ErrorBoundary>}
+      {project && openPianoRollTrackId && <ErrorBoundary name="PianoRoll"><Suspense fallback={null}><PianoRoll /></Suspense></ErrorBoundary>}
+      {project && strudelPanelOpen && <ErrorBoundary name="StrudelEditor"><Suspense fallback={null}><StrudelEditor /></Suspense></ErrorBoundary>}
+      {project && (openEffectChainTrackId || openMidiEffectChainTrackId) && <ErrorBoundary name="EffectChain"><Suspense fallback={null}><EffectChain /></Suspense></ErrorBoundary>}
+      {project && showMixer && <ErrorBoundary name="Mixer"><Suspense fallback={null}><MixerPanel /></Suspense></ErrorBoundary>}
+      {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
+      {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
       {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
@@ -198,5 +201,9 @@ export function AppShell() {
     return <SharedProjectPage sharedProject={sharedProject} />;
   }
 
-  return <EditorShell />;
+  return (
+    <ErrorBoundary name="DAW">
+      <EditorShell />
+    </ErrorBoundary>
+  );
 }

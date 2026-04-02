@@ -53,6 +53,9 @@ export function ClipDragGhost({
 }: ClipDragGhostProps) {
   if (!dragGhost.targetTrackId) return null;
 
+  const isValid = dragGhost.isValidDrop !== false;
+  const invalidColor = '#ef4444'; // red-500
+
   return createPortal(
     <>
       {dragGhost.sourceLaneRect && dragGhost.isShiftCopy && (
@@ -81,9 +84,11 @@ export function ClipDragGhost({
           width: dragGhost.width,
           height: dragGhost.height,
           background: clipPresentation.bodyBackground,
-          borderLeft: `2px solid ${clipColor}`,
-          boxShadow: `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${clipPresentation.bodyBorderColor}`,
-          opacity: ghostLanding ? 1 : 0.5,
+          borderLeft: `2px solid ${isValid ? clipColor : invalidColor}`,
+          boxShadow: isValid
+            ? `0 4px 20px ${hexToRgba(clipColor, 0.3)}, 0 0 0 1px ${clipPresentation.bodyBorderColor}`
+            : `0 4px 20px ${hexToRgba(invalidColor, 0.3)}, 0 0 0 1px ${hexToRgba(invalidColor, 0.4)}`,
+          opacity: ghostLanding ? 1 : isValid ? 0.5 : 0.35,
           transition: ghostLanding ? 'opacity 180ms ease-out' : undefined,
         }}
       >
@@ -91,8 +96,8 @@ export function ClipDragGhost({
           className="absolute left-0 right-0 top-0"
           style={{
             height: HEADER_RAIL_HEIGHT_PX,
-            background: clipPresentation.headerBackground,
-            borderBottom: `1px solid ${hexToRgba(clipColor, 0.38)}`,
+            background: isValid ? clipPresentation.headerBackground : hexToRgba(invalidColor, 0.2),
+            borderBottom: `1px solid ${hexToRgba(isValid ? clipColor : invalidColor, 0.38)}`,
           }}
         />
         <div
@@ -108,7 +113,7 @@ export function ClipDragGhost({
             timeStretchRate={timeStretchRate}
             stretchMode={stretchMode}
             width={width}
-            color={clipPresentation.waveformColor}
+            color={isValid ? clipPresentation.waveformColor : invalidColor}
             opacityClassName="opacity-85"
             trackVolume={trackVolume}
           />
@@ -119,7 +124,7 @@ export function ClipDragGhost({
             width={dragGhost.width}
             duration={clipDuration}
             bpm={bpm}
-            color={clipPresentation.waveformColor}
+            color={isValid ? clipPresentation.waveformColor : invalidColor}
           />
         )}
         <div
@@ -128,9 +133,14 @@ export function ClipDragGhost({
         >
           {prompt || displayName}
         </div>
-        {dragGhost.isShiftCopy && (
+        {dragGhost.isShiftCopy && isValid && (
           <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow z-20">
             +
+          </div>
+        )}
+        {!isValid && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow z-20">
+            ✕
           </div>
         )}
       </div>
@@ -144,9 +154,11 @@ export function ClipDragGhost({
             top: dragGhost.targetLaneRect.top,
             width: '100vw',
             height: dragGhost.targetLaneRect.height,
-            backgroundColor: hexToRgba(clipColor, 0.06),
-            borderTop: `1px solid ${hexToRgba(clipColor, 0.35)}`,
-            borderBottom: `1px solid ${hexToRgba(clipColor, 0.35)}`,
+            backgroundColor: isValid
+              ? hexToRgba(clipColor, 0.08)
+              : hexToRgba(invalidColor, 0.06),
+            borderTop: `1px solid ${hexToRgba(isValid ? clipColor : invalidColor, isValid ? 0.4 : 0.25)}`,
+            borderBottom: `1px solid ${hexToRgba(isValid ? clipColor : invalidColor, isValid ? 0.4 : 0.25)}`,
           }}
         />
       )}

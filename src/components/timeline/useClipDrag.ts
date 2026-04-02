@@ -22,6 +22,8 @@ export interface DragGhostInfo {
   targetLaneRect: { top: number; height: number } | null;
   sourceLaneRect: { top: number; height: number } | null;
   isShiftCopy?: boolean;
+  /** Whether the current drop target is valid (false when hovering outside lanes or on group tracks). */
+  isValidDrop?: boolean;
 }
 
 export const EDGE_HANDLE_PX = 16;
@@ -302,6 +304,12 @@ export function useClipDrag({
           const ghostLeftVp = ev.clientX - clickOffsetPx;
           const clickOffsetY = clipRect ? startY - clipRect.top : 0;
           const crossingTrack = closest.trackId !== track.id;
+          // Determine drop validity
+          const isEmptySlot = closest.trackId.startsWith(ARRANGEMENT_EMPTY_TRACK_ID_PREFIX);
+          const targetTrack = isEmptySlot ? null : useProjectStore.getState().project?.tracks.find((t) => t.id === closest.trackId);
+          const isGroupTarget = targetTrack?.isGroup === true;
+          const isMultiCrossTrack = isMultiSelected && crossingTrack && !isShiftCopy;
+          const isValidDrop = !isGroupTarget && !isMultiCrossTrack;
           pendingGhost = {
             x: ghostLeftVp,
             y: ev.clientY - clickOffsetY,
@@ -315,6 +323,7 @@ export function useClipDrag({
               ? { top: sourceLane.rect.top, height: sourceLane.rect.height }
               : null,
             isShiftCopy,
+            isValidDrop,
           };
           if (!ghostRafId) {
             ghostRafId = requestAnimationFrame(() => {

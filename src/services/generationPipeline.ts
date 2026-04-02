@@ -746,7 +746,7 @@ async function generateClipInternal(
     } as LegoTaskParams;
 
     // Always log critical generation params for debugging
-    console.log(
+    logger.info(
       `[generateClip] audio_duration=${audioDuration}`,
       `repainting=[${repaintStart.toFixed(2)}, ${repaintEnd.toFixed(2)}]`,
       `isChunk=${isChunkMode}`,
@@ -1440,7 +1440,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         // trimToContext: blob spans [0, ctxDuration], no leading silence
         contextBlob = await extractContextAudioLazy(effectiveCtxWindow, { trimToContext: true });
         const ctxDur = effectiveCtxWindow.endTime - effectiveCtxWindow.startTime;
-        console.log(
+        logger.info(
           `[AddLayer] contextBlob: size=${contextBlob?.size ?? 0}`,
           `expectedDur=${ctxDur.toFixed(1)}s`,
           `ctx=[${effectiveCtxWindow.startTime}, ${effectiveCtxWindow.endTime}]`,
@@ -1448,7 +1448,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
           `chunkMaskMode=${opts.chunkMaskMode}`,
         );
       } else {
-        console.log(`[AddLayer] NO contextWindow, forceSilence=true`);
+        logger.info(`[AddLayer] NO contextWindow, forceSilence=true`);
       }
 
       const outcome = await generateClipInternal(clipId, contextBlob, {
@@ -1749,7 +1749,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
     if (sourceAudioOverride) {
       sourceAudioBlob = (await loadAudioBlobByKey(sourceAudioOverride)) ?? null;
       if (!sourceAudioBlob) {
-        console.warn(`[EnhancePipeline] Chained source audio key "${sourceAudioOverride}" not found in storage, falling back to clip audio`);
+        logger.warn(`[EnhancePipeline] Chained source audio key "${sourceAudioOverride}" not found in storage, falling back to clip audio`);
       }
     }
     if (!sourceAudioBlob && sourceClip.isolatedAudioKey) {
@@ -2148,7 +2148,7 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
       if (opts.sourceAudioOverride) {
         srcBlob = (await loadAudioBlobByKey(opts.sourceAudioOverride)) ?? null;
         if (!srcBlob) {
-          console.warn(`[EnhancePipeline] Chained source audio key "${opts.sourceAudioOverride}" not found in storage, falling back to clip audio`);
+          logger.warn(`[EnhancePipeline] Chained source audio key "${opts.sourceAudioOverride}" not found in storage, falling back to clip audio`);
         }
       }
       if (!srcBlob && clip.cumulativeMixKey) {

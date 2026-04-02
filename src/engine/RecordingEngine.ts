@@ -4,6 +4,9 @@
  */
 
 import * as Tone from 'tone';
+import { createDebugLogger } from '../utils/debugLogger';
+
+const log = createDebugLogger('recording-engine');
 
 export interface AudioInputDevice {
   deviceId: string;
@@ -105,7 +108,7 @@ class RecordingEngine {
 
       return true;
     } catch (err) {
-      console.error('Microphone permission denied:', err);
+      log.error('Microphone permission denied:', err);
       this.permissionGranted = false;
       this.permissionDenied = true;
       return false;
@@ -343,7 +346,7 @@ class RecordingEngine {
         duration: audioBuffer.duration,
       };
     } catch (err) {
-      console.error('Failed to decode recorded audio:', err);
+      log.error('Failed to decode recorded audio:', err);
       audioCtx.close();
       return null;
     }

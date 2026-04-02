@@ -155,6 +155,9 @@ import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
   ensurePlaybackLatencySettings,
 } from '../utils/playbackLatency';
+import { createDebugLogger } from '../utils/debugLogger';
+
+const log = createDebugLogger('project-store');
 
 function _isViewerMode(): boolean {
   return useCollaborationStore.getState().isViewerMode;
@@ -6834,7 +6837,7 @@ export const useProjectStore = create<ProjectState>()(
       };
       return convertParsedMidiFileToStrudelCode(parsed, file.name.replace(/\.(mid|midi)$/i, ''), options);
     } catch (error) {
-      console.error(error);
+      log.error(error);
       return null;
     }
   },
@@ -8766,7 +8769,7 @@ export const useProjectStore = create<ProjectState>()(
       toastSuccess(`Imported MIDI into ${parsed.tracks.length} piano roll track${parsed.tracks.length === 1 ? '' : 's'}`);
       return trackIds;
     } catch (error) {
-      console.error(error);
+      log.error(error);
       toastError(`Failed to import MIDI file: ${file.name}`);
       return [];
     }

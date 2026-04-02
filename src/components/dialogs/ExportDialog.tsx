@@ -12,6 +12,9 @@ import {
   type StemExportScope,
 } from '../../engine/exportMix';
 import { toastError, toastSuccess } from '../../hooks/useToast';
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const log = createDebugLogger('export-dialog');
 import {
   type ExportFormat,
   type ExportMetadata,
@@ -141,7 +144,7 @@ export function ExportDialog() {
       }
       setShow(false);
     } catch (error) {
-      console.error('Export failed:', error);
+      log.error('Export failed:', error);
       toastError('Export failed');
     } finally {
       setExporting(false);

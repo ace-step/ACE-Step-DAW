@@ -5,6 +5,9 @@ import { projectActionApi } from '../../services/actionApi';
 import { DEFAULT_BOUNCE_IN_PLACE_OPTIONS } from '../../services/bounceInPlace';
 import type { BounceInPlaceOptions } from '../../types/project';
 import { toastError } from '../../hooks/useToast';
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const log = createDebugLogger('bounce-in-place');
 
 const checkboxClass = 'h-4 w-4 rounded border border-daw-border bg-daw-surface-2 text-daw-accent focus:ring-1 focus:ring-daw-accent';
 
@@ -32,7 +35,7 @@ export function BounceInPlaceDialog() {
       if (result.ok) {
         close();
       } else {
-        console.error('Bounce in place failed', result.error);
+        log.error('Bounce in place failed', result.error);
         toastError(result.error.message);
       }
     } finally {

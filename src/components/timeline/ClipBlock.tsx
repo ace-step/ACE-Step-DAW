@@ -15,6 +15,7 @@ import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
 import { ClipFadeHandles } from './ClipFadeHandles';
 import { ClipDragGhost } from './ClipDragGhost';
+import { DragTooltip, shouldShowDragTooltip, incrementDragTooltipCount } from './DragTooltip';
 import { ClipVersionNav } from './ClipVersionNav';
 import { getClipFadeBounds } from '../../utils/clipFade';
 import { useClipDrag, HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
@@ -55,6 +56,8 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
   const [ghostLanding, setGhostLanding] = useState(false);
+  const [showDragTooltip, setShowDragTooltip] = useState(false);
+  const dragTooltipCounted = useRef(false);
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const clipBlockRef = useRef<HTMLDivElement>(null);
@@ -71,10 +74,24 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   const onGhostLanding = useCallback(() => {
     setGhostLanding(true);
+    setShowDragTooltip(false);
     setTimeout(() => {
       setDragGhost(null);
       setGhostLanding(false);
     }, 200);
+  }, []);
+
+  const handleDragGhostChange = useCallback((ghost: DragGhostInfo | null) => {
+    setDragGhost(ghost);
+    if (ghost && !dragTooltipCounted.current && shouldShowDragTooltip()) {
+      setShowDragTooltip(true);
+      incrementDragTooltipCount();
+      dragTooltipCounted.current = true;
+    }
+    if (!ghost) {
+      setShowDragTooltip(false);
+      dragTooltipCounted.current = false;
+    }
   }, []);
 
   const { handleMouseDown, scissorRef, suppressContextMenuRef, rangePreviewCommittedRef } = useClipDrag({
@@ -84,7 +101,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     pixelsPerSecond,
     bpm,
     totalDuration,
-    onDragGhostChange: setDragGhost,
+    onDragGhostChange: handleDragGhostChange,
     onGhostLanding,
     onScissorLineChange: setScissorLine,
     onRangePreviewChange: setRangePreview,
@@ -469,6 +486,11 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           clipId={clip.id}
           onClose={() => setEditModalOpen(false)}
         />
+      )}
+
+      {/* Drag tooltip — shown for first 3 drags */}
+      {showDragTooltip && dragGhost && (
+        <DragTooltip x={dragGhost.x + dragGhost.width} y={dragGhost.y} />
       )}
 
       {/* Drag ghost */}

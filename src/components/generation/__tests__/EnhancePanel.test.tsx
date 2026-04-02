@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { EnhancePanel } from '../EnhancePanel';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -814,12 +814,15 @@ describe('EnhancePanel generation calls', () => {
     });
     mockGenerateCoverClip.mockResolvedValue('new-clip-id');
     render(<EnhancePanel />);
-    // Click generate
-    const genBtn = screen.getByTestId('enhance-btn');
-    fireEvent.click(genBtn);
+    // Click generate and wait for async state updates to settle
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('enhance-btn'));
+    });
     // generateCoverClip should have been called with sourceAudioOverride: undefined (no chaining)
-    await vi.waitFor(() => {
-      expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+      });
     });
     const callArgs = mockGenerateCoverClip.mock.calls[0][0];
     expect(callArgs.clipId).toBe(clip.id);
@@ -834,10 +837,13 @@ describe('EnhancePanel generation calls', () => {
     });
     mockGenerateRepaintClip.mockResolvedValue(clip.id);
     render(<EnhancePanel />);
-    const genBtn = screen.getByTestId('enhance-btn');
-    fireEvent.click(genBtn);
-    await vi.waitFor(() => {
-      expect(mockGenerateRepaintClip).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('enhance-btn'));
+    });
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(mockGenerateRepaintClip).toHaveBeenCalledTimes(1);
+      });
     });
     const callArgs = mockGenerateRepaintClip.mock.calls[0][0];
     expect(callArgs.clipId).toBe(clip.id);
@@ -859,10 +865,13 @@ describe('EnhancePanel generation calls', () => {
     // Mock loadBuffer to return null so finalizeResult exits early (we just care about the call chain)
     mockPlayback.loadBuffer.mockResolvedValue(null);
     render(<EnhancePanel />);
-    const genBtn = screen.getByTestId('enhance-btn');
-    fireEvent.click(genBtn);
-    await vi.waitFor(() => {
-      expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('enhance-btn'));
+    });
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(mockGenerateCoverClip).toHaveBeenCalledTimes(1);
+      });
     });
     // The function was called and returned the clip ID — the component awaits it
     expect(await mockGenerateCoverClip.mock.results[0].value).toBe(expectedNewClipId);

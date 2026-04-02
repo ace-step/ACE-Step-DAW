@@ -22,9 +22,10 @@ export function _resetLastKnownConnection() {
 
 interface StatusBarProps {
   saveStatus?: SaveStatus;
+  lastSavedAt?: number | null;
 }
 
-export function StatusBar({ saveStatus }: StatusBarProps) {
+export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
   const [connected, setConnected] = useState(lastKnownBackendConnection);
   const jobs = useGenerationStore((s) => s.jobs);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
@@ -165,7 +166,7 @@ export function StatusBar({ saveStatus }: StatusBarProps) {
             </a>
           </div>
           {saveStatus && (
-            <SaveStatusIndicator status={saveStatus} />
+            <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
           )}
           <div className="hidden md:flex items-center gap-1.5 text-daw-text-muted">
             <button

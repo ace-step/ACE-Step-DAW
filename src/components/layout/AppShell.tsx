@@ -97,7 +97,7 @@ function EditorShell() {
   }, [project, setShowNewProjectDialog]);
 
   // Auto-save to IndexedDB with dirty detection and beforeunload warning
-  const { status: saveStatus, saveNow } = useAutoSave();
+  const { status: saveStatus, saveNow, lastSavedAt } = useAutoSave();
 
   // Cmd/Ctrl+S — immediate save
   useEffect(() => {
@@ -110,6 +110,13 @@ function EditorShell() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [saveNow]);
+
+  // Unsaved changes indicator in document title
+  useEffect(() => {
+    const projectName = project?.name ?? 'ACE-Step DAW';
+    document.title = saveStatus === 'unsaved' ? `● ${projectName}` : projectName;
+    return () => { document.title = 'ACE-Step DAW'; };
+  }, [saveStatus, project?.name]);
 
   useKeyboardShortcuts();
   useEffectsSync();
@@ -139,7 +146,7 @@ function EditorShell() {
         {project && <LoopBrowser />}
       </div>
 
-      <StatusBar saveStatus={saveStatus} />
+      <StatusBar saveStatus={saveStatus} lastSavedAt={lastSavedAt} />
 
       {project && showSmartControls && <SmartControlsPanel />}
       {project && openSequencerTrackId && <ErrorBoundary name="Sequencer"><Suspense fallback={null}><SequencerEditor /></Suspense></ErrorBoundary>}

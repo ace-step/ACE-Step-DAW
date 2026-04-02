@@ -90,7 +90,6 @@ export function ClipDragGhost({
             : `0 4px 20px ${hexToRgba(invalidColor, 0.3)}, 0 0 0 1px ${hexToRgba(invalidColor, 0.4)}`,
           opacity: ghostLanding ? 1 : isValid ? 0.5 : 0.35,
           transition: ghostLanding ? 'opacity 180ms ease-out' : undefined,
-          cursor: isValid ? undefined : 'not-allowed',
         }}
       >
         <div

@@ -134,19 +134,22 @@ export function SettingsDialog() {
     setLegoModel(newModel);
   };
 
-  /** Refresh model lists from backend. Only sets dropdown values on first load (empty state). */
-  const refreshModels = async () => {
+  /** Refresh model lists from backend. Only sets dropdown values on first load (empty state).
+   *  @param skipHealthCheck — bypass health check (for user-initiated retries that should ignore backoff) */
+  const refreshModels = async (skipHealthCheck = false) => {
     setModelsLoading(true);
     setInitError('');
     try {
-      // Quick health check before making the full API call
-      const isOnline = await healthCheck();
-      if (!isOnline) {
-        setAvailableModels([]);
-        setAvailableLmModels([]);
-        setLlmInitialized(false);
-        setInitError('Backend offline — start the ACE-Step server to configure models.');
-        return;
+      // Quick health check before making the full API call (skip on manual retry)
+      if (!skipHealthCheck) {
+        const isOnline = await healthCheck();
+        if (!isOnline) {
+          setAvailableModels([]);
+          setAvailableLmModels([]);
+          setLlmInitialized(false);
+          setInitError('Backend offline — start the ACE-Step server to configure models.');
+          return;
+        }
       }
 
       const resp = await listModels();
@@ -638,7 +641,7 @@ export function SettingsDialog() {
             <div className="flex items-center gap-2">
               <p className="text-[10px] text-red-400">{initError}</p>
               <button
-                onClick={() => void refreshModels()}
+                onClick={() => void refreshModels(true)}
                 className="text-[10px] text-violet-400 hover:text-violet-300 underline"
               >
                 Retry

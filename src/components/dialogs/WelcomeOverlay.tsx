@@ -1,7 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
-
-const WELCOME_DISMISSED_KEY = 'ace-daw-welcome-dismissed';
+import { useProjectStore } from '../../store/projectStore';
+import { markWelcomeSeen } from '../../utils/welcomeStorage';
 
 /** 5 essential shortcuts new users should know. */
 const ESSENTIAL_SHORTCUTS = [
@@ -20,31 +20,39 @@ function Key({ label }: { label: string }) {
   );
 }
 
-/** Returns true if the user has already dismissed the welcome overlay. */
-export function hasSeenWelcome(): boolean {
-  try {
-    return localStorage.getItem(WELCOME_DISMISSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function WelcomeOverlay() {
   const show = useUIStore((s) => s.showWelcomeOverlay);
   const setShow = useUIStore((s) => s.setShowWelcomeOverlay);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Focus the dialog on open for keyboard accessibility
+  useEffect(() => {
+    if (show) dialogRef.current?.focus();
+  }, [show]);
 
   const dismiss = useCallback(() => {
-    try {
-      localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
-    } catch { /* quota exceeded — ignore */ }
+    markWelcomeSeen();
     setShow(false);
-  }, [setShow]);
+    // If no project exists after dismiss, open the new-project dialog
+    if (!useProjectStore.getState().project) {
+      setShowNewProjectDialog(true);
+    }
+  }, [setShow, setShowNewProjectDialog]);
 
   const handleNewProject = useCallback(() => {
-    dismiss();
+    markWelcomeSeen();
+    setShow(false);
     setShowNewProjectDialog(true);
-  }, [dismiss, setShowNewProjectDialog]);
+  }, [setShow, setShowNewProjectDialog]);
+
+  // Escape key dismissal
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') dismiss();
+    },
+    [dismiss],
+  );
 
   if (!show) return null;
 
@@ -54,12 +62,20 @@ export function WelcomeOverlay() {
       onMouseDown={(e) => e.target === e.currentTarget && dismiss()}
     >
       <div
-        className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col overflow-hidden"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcome-overlay-title"
+        tabIndex={-1}
+        className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col overflow-hidden outline-none"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div className="px-6 pt-6 pb-4 text-center border-b border-daw-border">
-          <h1 className="text-lg font-bold text-zinc-100">Welcome to ACE-Step DAW</h1>
+          <h1 id="welcome-overlay-title" className="text-lg font-bold text-zinc-100">
+            Welcome to ACE-Step DAW
+          </h1>
           <p className="text-xs text-zinc-400 mt-1">
             AI-native music production — generate, arrange, and mix with AI
           </p>

@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { WelcomeOverlay, hasSeenWelcome } from '../WelcomeOverlay';
+import { WelcomeOverlay } from '../WelcomeOverlay';
+import { hasSeenWelcome } from '../../../utils/welcomeStorage';
 import { useUIStore } from '../../../store/uiStore';
+import { useProjectStore } from '../../../store/projectStore';
+
+vi.mock('../../../services/projectStorage', () => ({
+  saveProject: vi.fn(),
+}));
 
 describe('WelcomeOverlay', () => {
   beforeEach(() => {
@@ -51,6 +57,39 @@ describe('WelcomeOverlay', () => {
     fireEvent.click(screen.getByText('Explore'));
     expect(useUIStore.getState().showWelcomeOverlay).toBe(false);
     expect(localStorage.getItem('ace-daw-welcome-dismissed')).toBe('1');
+  });
+
+  it('opens new project dialog on dismiss when no project exists', () => {
+    useProjectStore.setState({ project: null });
+    useUIStore.setState({ showWelcomeOverlay: true, showNewProjectDialog: false });
+    render(<WelcomeOverlay />);
+    fireEvent.click(screen.getByText('Explore'));
+    expect(useUIStore.getState().showNewProjectDialog).toBe(true);
+  });
+
+  it('does not open new project dialog on dismiss when project exists', () => {
+    useProjectStore.getState().createProject();
+    useUIStore.setState({ showWelcomeOverlay: true, showNewProjectDialog: false });
+    render(<WelcomeOverlay />);
+    fireEvent.click(screen.getByText('Explore'));
+    expect(useUIStore.getState().showNewProjectDialog).toBe(false);
+  });
+
+  it('has proper dialog accessibility attributes', () => {
+    useUIStore.setState({ showWelcomeOverlay: true });
+    const { container } = render(<WelcomeOverlay />);
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.getAttribute('aria-labelledby')).toBe('welcome-overlay-title');
+  });
+
+  it('dismisses on Escape key', () => {
+    useUIStore.setState({ showWelcomeOverlay: true });
+    const { container } = render(<WelcomeOverlay />);
+    const dialog = container.querySelector('[role="dialog"]')!;
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(useUIStore.getState().showWelcomeOverlay).toBe(false);
   });
 
   it('opens new project dialog when New Project is clicked', () => {

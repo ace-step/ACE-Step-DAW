@@ -24,6 +24,7 @@ const stagger = (index: number): React.CSSProperties => ({
 });
 
 export function EffectCardLayout({ mode, visualization, children, footer, color }: EffectCardLayoutProps) {
+  // idx is safe: re-initialized every render, all increments are synchronous in JSX evaluation
   let idx = 0;
   return (
     <div className="flex flex-col items-center w-full px-4 py-3">

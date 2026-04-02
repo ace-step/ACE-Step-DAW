@@ -269,6 +269,24 @@ describe('useAutoSave', () => {
     expect(result.current.status).toBe('saved');
   });
 
+  it('sets lastSavedAt after manual save', async () => {
+    const project = makeProject({ updatedAt: 1000 });
+
+    const { result } = renderHook(() => useAutoSave());
+
+    act(() => {
+      useProjectStore.setState({ project });
+    });
+
+    expect(result.current.lastSavedAt).toBeNull();
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    expect(result.current.lastSavedAt).toBeGreaterThan(0);
+  });
+
   it('accepts custom debounce interval via status transitions', async () => {
     const project = makeProject({ updatedAt: 1000 });
 

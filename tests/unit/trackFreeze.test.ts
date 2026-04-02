@@ -58,4 +58,13 @@ describe('track freeze / unfreeze', () => {
     expect(track!.frozen).toBe(false);
     expect(track!.frozenAudioKey).toBeUndefined();
   });
+
+  it('flattenTrack creates history entry with correct label', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().flattenTrack(trackId, 'flat-audio-key');
+    const history = useProjectStore.getState().getUndoHistory('arrangement');
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry.label).toBe('Flatten track');
+    expect(lastEntry.scope).toBe('arrangement');
+  });
 });

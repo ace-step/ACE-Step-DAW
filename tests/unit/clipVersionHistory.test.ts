@@ -1,9 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../../src/store/projectStore';
+import type { ClipVersion } from '../../src/types/project';
 
 vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
+
+function makeVersion(overrides: Partial<ClipVersion> & { id: string; generatedAt: number }): ClipVersion {
+  return {
+    cumulativeMixKey: null,
+    isolatedAudioKey: null,
+    waveformPeaks: null,
+    ...overrides,
+  };
+}
 
 describe('clip version undo history', () => {
   let trackId: string;
@@ -19,7 +29,6 @@ describe('clip version undo history', () => {
   });
 
   it('setActiveVersion creates an undo history entry', () => {
-    // Manually set up clip versions
     useProjectStore.setState((state) => ({
       project: {
         ...state.project!,
@@ -30,8 +39,8 @@ describe('clip version undo history', () => {
               ? {
                   ...c,
                   versions: [
-                    { cumulativeMixKey: 'v0', isolatedAudioKey: 'v0-iso', waveformPeaks: null, inferredMetas: null, generatedFromContext: false, serverCumulativePath: null },
-                    { cumulativeMixKey: 'v1', isolatedAudioKey: 'v1-iso', waveformPeaks: null, inferredMetas: null, generatedFromContext: false, serverCumulativePath: null },
+                    makeVersion({ id: 'ver-0', generatedAt: 1000, cumulativeMixKey: 'v0', isolatedAudioKey: 'v0-iso' }),
+                    makeVersion({ id: 'ver-1', generatedAt: 2000, cumulativeMixKey: 'v1', isolatedAudioKey: 'v1-iso' }),
                   ],
                   activeVersionIdx: 0,
                 }
@@ -62,8 +71,8 @@ describe('clip version undo history', () => {
                   ...c,
                   isolatedAudioKey: 'original-audio',
                   versions: [
-                    { cumulativeMixKey: 'v0', isolatedAudioKey: 'original-audio', waveformPeaks: null, inferredMetas: null, generatedFromContext: false, serverCumulativePath: null },
-                    { cumulativeMixKey: 'v1', isolatedAudioKey: 'new-audio', waveformPeaks: null, inferredMetas: null, generatedFromContext: false, serverCumulativePath: null },
+                    makeVersion({ id: 'ver-0', generatedAt: 1000, cumulativeMixKey: 'v0', isolatedAudioKey: 'original-audio' }),
+                    makeVersion({ id: 'ver-1', generatedAt: 2000, cumulativeMixKey: 'v1', isolatedAudioKey: 'new-audio' }),
                   ],
                   activeVersionIdx: 0,
                 }

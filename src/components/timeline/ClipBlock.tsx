@@ -35,17 +35,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const setEditingClip = useUIStore((s) => s.setEditingClip);
   const setOpenPianoRoll = useUIStore((s) => s.setOpenPianoRoll);
   const contextWindow = useUIStore((s) => s.contextWindow);
-  const generatingProgress = useGenerationStore((s) => {
+  const generationJob = useGenerationStore((s) => {
     for (let i = s.jobs.length - 1; i >= 0; i--) {
       const j = s.jobs[i];
       if (j.clipId === clip.id && (j.status === 'generating' || j.status === 'queued' || j.status === 'processing')) {
-        return j.progressPercent != null
-          ? `${j.stage ?? j.progress} ${Math.round(j.progressPercent)}%`
-          : j.stage ?? j.progress;
+        return j;
       }
     }
     return null;
   });
+  const generatingProgress = generationJob
+    ? generationJob.progressPercent != null
+      ? `${generationJob.stage ?? generationJob.progress} ${Math.round(generationJob.progressPercent)}%`
+      : generationJob.stage ?? generationJob.progress
+    : null;
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 600);
   const isMidiClip = Boolean(clip.midiData);
@@ -373,7 +376,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           canRegenerate={clip.source === 'generated' && !!(clip.generationParams || track.trackType === 'mix')}
         />
 
-        <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} isMidiClip={isMidiClip} />
+        <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} generationJob={generationJob} isMidiClip={isMidiClip} />
 
         {/* Muted overlay */}
         {clip.muted && (

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_BPM, DEFAULT_DURATION, DEFAULT_KEY_SCALE, DEFAULT_GENERATION, MAX_BPM, MAX_DURATION, MIN_BPM, MIN_DURATION } from '../constants/defaults';
 import type { GenerationPreset } from '../constants/generationPresets';
 import { useProjectStore } from './projectStore';
+import { classifyGenerationError, type GenerationErrorCategory } from '../services/generationErrorClassifier';
 import { loadAudioBlobByKey } from '../services/audioFileManager';
 import {
   applyPromptAutocompleteSuggestion as applyPromptAutocompleteSuggestionToPrompt,
@@ -25,6 +26,7 @@ export interface GenerationJob {
   completedAt?: number;
   lastUpdatedAt?: number;
   actionableMessage?: string;
+  errorCategory?: GenerationErrorCategory;
   error?: string;
   taskId?: string;
 }
@@ -80,20 +82,13 @@ function normalizeProgressPercent(
   return Math.max(0, Math.min(100, parsed));
 }
 
-function buildActionableGenerationMessage(status: GenerationJob['status'], error?: string): string | undefined {
-  if (status !== 'error') return undefined;
-  const message = error?.trim();
-  if (!message) {
-    return 'Generation failed. Retry the request. If it keeps failing, verify the backend is healthy.';
-  }
-  const lower = message.toLowerCase();
-  if (lower.includes('timed out')) {
-    return 'Generation timed out while waiting for the backend. Retry the request or check the backend status before trying again.';
-  }
-  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort')) {
-    return 'Generation lost connection to the backend. Check the backend URL or health, then retry.';
-  }
-  return `${message} Retry the request. If it keeps failing, try a shorter duration or check the backend logs.`;
+function buildClassifiedError(status: GenerationJob['status'], error?: string): { actionableMessage?: string; errorCategory?: GenerationErrorCategory } {
+  if (status !== 'error') return {};
+  const classified = classifyGenerationError(error);
+  return {
+    actionableMessage: classified.suggestion,
+    errorCategory: classified.category,
+  };
 }
 
 export function deriveGenerationJobProgress(
@@ -146,7 +141,7 @@ export function deriveGenerationJobProgress(
     startedAt,
     lastUpdatedAt: now,
     completedAt: input.status === 'done' ? now : previous?.completedAt,
-    actionableMessage: buildActionableGenerationMessage(input.status, input.error),
+    ...buildClassifiedError(input.status, input.error),
     error: input.error,
   };
 }

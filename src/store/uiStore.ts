@@ -208,6 +208,10 @@ export interface UIState {
   /** Slice marker positions in seconds relative to clip start, keyed by clip ID. */
   sliceMarkersByClip: Record<string, number[]>;
 
+  // DSP backend preference
+  dspBackend: 'auto' | 'wasm' | 'tonejs';
+  setDspBackend: (mode: 'auto' | 'wasm' | 'tonejs') => void;
+
   // Theme
   theme: ThemeId;
 
@@ -694,6 +698,8 @@ export const useUIStore = create<UIState>()(
   sliceModeClipId: null,
   sliceMarkersByClip: {},
 
+  dspBackend: 'auto',
+
   theme: 'ableton',
 
   regionRegenerateTarget: null,
@@ -837,6 +843,7 @@ export const useUIStore = create<UIState>()(
   setShowInstrumentPicker: (v) => set(v ? { ...ALL_MODALS_CLOSED, showInstrumentPicker: true } : { showInstrumentPicker: false }),
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
+  setDspBackend: (mode) => set({ dspBackend: mode }),
   setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
@@ -1391,6 +1398,8 @@ export const useUIStore = create<UIState>()(
         suggestionFrequency: state.suggestionFrequency,
         // Command palette
         recentCommandIds: state.recentCommandIds,
+        // DSP backend
+        dspBackend: state.dspBackend,
         // Theme
         theme: state.theme,
         // Synth presets

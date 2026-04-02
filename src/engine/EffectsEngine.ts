@@ -920,10 +920,44 @@ class EffectsEngine {
   private bypassedTracks = new Map<string, boolean>();
   private sidechains = new Map<string, SidechainFollower>();
 
+  // WASM DSP integration
+  private wasmNodes = new Map<string, import('../wasm/WasmDspEngine').WasmDspNode>();
+  private _useWasm = false;
+  private _wasmEngine: typeof import('../wasm/WasmDspEngine') | null = null;
+  private _wasmMapper: typeof import('./wasmParamMapper') | null = null;
+
+  /** Enable/disable WASM DSP routing. Called after WasmDspEngine.initialize() succeeds. */
+  setUseWasm(enabled: boolean, wasmEngine?: typeof import('../wasm/WasmDspEngine'), mapper?: typeof import('./wasmParamMapper')) {
+    this._useWasm = enabled;
+    if (wasmEngine) this._wasmEngine = wasmEngine;
+    if (mapper) this._wasmMapper = mapper;
+  }
+
   rebuildChain(trackId: string, effects: TrackEffect[], bypassed = false) {
     this.disposeChain(trackId);
     this.bypassedTracks.set(trackId, bypassed);
     const activeEffects = effects.filter((e) => e.enabled);
+    if (activeEffects.length === 0) return;
+
+    // Try WASM path: single AudioWorkletNode per track
+    if (this._useWasm && this._wasmEngine && this._wasmMapper) {
+      const { canUseWasmForChain, applyEffectsToWasmNode } = this._wasmMapper;
+      if (canUseWasmForChain(activeEffects)) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const eng = this._wasmEngine as any;
+          const ctx = Tone.getContext().rawContext as AudioContext;
+          const wasmNode = eng.createProcessor(ctx, trackId) as import('../wasm/WasmDspEngine').WasmDspNode;
+          applyEffectsToWasmNode(wasmNode, activeEffects);
+          this.wasmNodes.set(trackId, wasmNode);
+          return;
+        } catch (err) {
+          console.warn(`[EffectsEngine] WASM chain failed for ${trackId}, falling back to Tone.js`, err);
+        }
+      }
+    }
+
+    // Tone.js path (unchanged)
     const nodes = activeEffects.map(createNode);
     for (let i = 0; i < nodes.length - 1; i++) {
       getEffectOutput(nodes[i]).connect(getEffectInput(nodes[i + 1]));
@@ -937,6 +971,14 @@ class EffectsEngine {
     params: TrackEffect['params'],
     effectType: TrackEffectType,
   ) {
+    // WASM path: re-map the single changed effect
+    const wasmNode = this.wasmNodes.get(trackId);
+    if (wasmNode && this._wasmMapper) {
+      const msg = this._wasmMapper.mapEffectToWasm(effectType, params as unknown as Record<string, unknown>);
+      if (msg) wasmNode.audioNode.port.postMessage(msg);
+      return;
+    }
+
     const nodes = this.chains.get(trackId);
     if (!nodes) return;
     const effectNode = nodes.find((n) => n.id === effectId);
@@ -1473,6 +1515,9 @@ class EffectsEngine {
 
   getInputNode(trackId: string): AudioNode | null {
     if (this.bypassedTracks.get(trackId)) return null;
+    // WASM path: AudioWorkletNode is both input and output
+    const wasmNode = this.wasmNodes.get(trackId);
+    if (wasmNode) return wasmNode.audioNode;
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
     return getEffectInput(nodes[0]) ?? null;
@@ -1480,6 +1525,9 @@ class EffectsEngine {
 
   getOutputNode(trackId: string): AudioNode | null {
     if (this.bypassedTracks.get(trackId)) return null;
+    // WASM path
+    const wasmNode = this.wasmNodes.get(trackId);
+    if (wasmNode) return wasmNode.audioNode;
     const nodes = this.chains.get(trackId);
     if (!nodes?.length) return null;
 
@@ -1495,6 +1543,13 @@ class EffectsEngine {
 
   disposeChain(trackId: string) {
     this.bypassedTracks.delete(trackId);
+    // Dispose WASM node if present
+    const wasmNode = this.wasmNodes.get(trackId);
+    if (wasmNode) {
+      try { wasmNode.audioNode.disconnect(); } catch { /* already disconnected */ }
+      try { wasmNode.audioNode.port.close(); } catch { /* already closed */ }
+      this.wasmNodes.delete(trackId);
+    }
     // Dispose all sidechains for this track
     for (const [key, follower] of this.sidechains) {
       if (key.startsWith(`${trackId}:`)) {
@@ -1514,6 +1569,12 @@ class EffectsEngine {
 
   dispose() {
     this.bypassedTracks.clear();
+    // Dispose all WASM nodes
+    for (const wasmNode of this.wasmNodes.values()) {
+      try { wasmNode.audioNode.disconnect(); } catch { /* ok */ }
+      try { wasmNode.audioNode.port.close(); } catch { /* ok */ }
+    }
+    this.wasmNodes.clear();
     for (const follower of this.sidechains.values()) {
       follower.dispose();
     }
@@ -1525,3 +1586,26 @@ class EffectsEngine {
 }
 
 export const effectsEngine = new EffectsEngine();
+
+/**
+ * Initialize WASM DSP and wire it into the effects engine.
+ * Call once after AudioContext is available. Safe to call multiple times (idempotent).
+ * Returns true if WASM is ready, false on fallback to Tone.js.
+ */
+export async function initWasmDsp(): Promise<boolean> {
+  try {
+    const wasmEngine = await import('../wasm/WasmDspEngine');
+    const mapper = await import('./wasmParamMapper');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const eng = wasmEngine as any;
+    const ctx = Tone.getContext().rawContext as AudioContext;
+    await eng.initialize(ctx);
+    effectsEngine.setUseWasm(true, eng, mapper);
+    console.info('[WASM DSP] Initialized — effects will route through WASM when compatible');
+    return true;
+  } catch (err) {
+    console.warn('[WASM DSP] Init failed, using Tone.js fallback:', err);
+    effectsEngine.setUseWasm(false);
+    return false;
+  }
+}

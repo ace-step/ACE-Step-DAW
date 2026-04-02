@@ -2618,7 +2618,7 @@ export const useProjectStore = create<ProjectState>()(
   freezeTrack: (trackId, frozenAudioKey?) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project, { scope: 'mixer', label: 'Add audio effect', trackId });
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Freeze track', trackId });
     set({
       project: {
         ...state.project,
@@ -2633,7 +2633,7 @@ export const useProjectStore = create<ProjectState>()(
   unfreezeTrack: (trackId) => {
     const state = get();
     if (!state.project) return;
-    _pushHistory(state.project, { scope: 'mixer', label: 'Edit audio effect', trackId });
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Unfreeze track', trackId });
     set({
       project: {
         ...state.project,
@@ -2650,7 +2650,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     const track = state.project.tracks.find((t) => t.id === trackId);
     if (!track) return;
-    _pushHistory(state.project, { scope: 'mixer', label: 'Remove audio effect', trackId });
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Flatten track', trackId });
 
     const newClip: Clip = {
       id: uuidv4(),
@@ -4783,6 +4783,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return;
     const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
     if (!clip || !clip.versions || idx < 0 || idx >= clip.versions.length) return;
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Switch clip version', clipId });
 
     const version = clip.versions[idx];
     set({

@@ -19,6 +19,25 @@ describe('track freeze / unfreeze', () => {
     expect(track!.frozen).toBe(true);
   });
 
+  it('freezeTrack creates history entry with correct label', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().freezeTrack(trackId);
+    const history = useProjectStore.getState().getUndoHistory('arrangement');
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry.label).toBe('Freeze track');
+    expect(lastEntry.scope).toBe('arrangement');
+  });
+
+  it('unfreezeTrack creates history entry with correct label', () => {
+    const trackId = useProjectStore.getState().project!.tracks[0].id;
+    useProjectStore.getState().freezeTrack(trackId);
+    useProjectStore.getState().unfreezeTrack(trackId);
+    const history = useProjectStore.getState().getUndoHistory('arrangement');
+    const lastEntry = history[history.length - 1];
+    expect(lastEntry.label).toBe('Unfreeze track');
+    expect(lastEntry.scope).toBe('arrangement');
+  });
+
   it('unfreezeTrack sets frozen to false and clears frozenAudioKey', () => {
     const trackId = useProjectStore.getState().project!.tracks[0].id;
     // First freeze the track and simulate a frozen audio key

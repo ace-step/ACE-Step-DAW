@@ -77,6 +77,7 @@ export interface UIState {
   showCommandPalette: boolean;
   commandPaletteQuery: string;
   recentCommandIds: string[];
+  showWelcomeOverlay: boolean;
   showUndoHistoryPanel: boolean;
   historyFocusScope: HistoryScope;
   historyFocusTrackId: string | null;
@@ -292,6 +293,7 @@ export interface UIState {
   getCommandPaletteRegistry: (query?: string) => CommandPaletteRegistryEntry[];
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
+  setShowWelcomeOverlay: (v: boolean) => void;
   setShowUndoHistoryPanel: (v: boolean) => void;
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
@@ -550,6 +552,7 @@ const ALL_MODALS_CLOSED = {
   showInstrumentPicker: false,
   bounceInPlaceTrackId: null,
   showCommandPalette: false,
+  showWelcomeOverlay: false,
 } as const;
 
 /**
@@ -571,6 +574,7 @@ export function isAnyModalOpen(): boolean {
     || s.showGeneratePatternDialog
     || s.bounceInPlaceTrackId
     || s.pendingDeleteTrackIds
+    || s.showWelcomeOverlay
   );
 }
 
@@ -615,6 +619,7 @@ export const useUIStore = create<UIState>()(
   showCommandPalette: false,
   commandPaletteQuery: '',
   recentCommandIds: [],
+  showWelcomeOverlay: false,
   showUndoHistoryPanel: false,
   historyFocusScope: 'arrangement',
   historyFocusTrackId: null,
@@ -930,6 +935,7 @@ export const useUIStore = create<UIState>()(
 
     return true;
   },
+  setShowWelcomeOverlay: (v) => set(v ? { ...ALL_MODALS_CLOSED, showWelcomeOverlay: true } : { showWelcomeOverlay: false }),
   setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
   setHistoryFocusScope: (scope, target) => set((state) => {
     const resolvedTrackId =

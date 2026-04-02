@@ -30,8 +30,10 @@ export function ArrangementEmptyTrackHeaderRow({
   const setShowInstrumentPicker = useUIStore((s) => s.setShowInstrumentPicker);
   const selectTrack = useUIStore((s) => s.selectTrack);
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const trackCount = useProjectStore((s) => s.project?.tracks?.length ?? 0);
   const virtualId = getArrangementEmptyTrackId(slotIndex);
   const isSelected = selectedTrackIds.has(virtualId);
+  const isFirstEmptySlot = slotIndex === 0 && trackCount === 0;
 
   return (
     <div
@@ -48,20 +50,25 @@ export function ArrangementEmptyTrackHeaderRow({
       }}
       onDragOver={isDropDisabled ? undefined : (e) => onDragOver(e, slotIndex)}
       onDrop={isDropDisabled ? undefined : (e) => onDrop(e, slotIndex)}
-      aria-label={`Empty track slot ${slotIndex + 1}`}
+      aria-label={isFirstEmptySlot ? 'Add your first track' : `Empty track slot ${slotIndex + 1}`}
       data-drop-disabled={isDropDisabled ? 'true' : 'false'}
       data-testid={`empty-header-row-${slotIndex}`}
     >
       {isSelected && (
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
       )}
-      <span className={`text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${isCollapsed ? 'text-sm' : 'text-lg'}`}>+</span>
+      {isFirstEmptySlot ? (
+        <span className="text-[10px] text-zinc-500 font-medium">+ Add Track</span>
+      ) : (
+        <span className={`text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity ${isCollapsed ? 'text-sm' : 'text-lg'}`}>+</span>
+      )}
     </div>
   );
 }
 
 export function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
+  const trackCount = useProjectStore((s) => s.project?.tracks?.length ?? 0);
   const pixelsPerSecond = useUIStore((s) => s.pixelsPerSecond);
   const setTrackLaneRect = useUIStore((s) => s.setTrackLaneRect);
   const removeTrackLaneRect = useUIStore((s) => s.removeTrackLaneRect);
@@ -217,6 +224,13 @@ export function EmptyTrackRow({ slotIndex }: { slotIndex: number }) {
     >
       {isSelected && (
         <div aria-hidden="true" className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+      )}
+      {slotIndex === 0 && trackCount === 0 && !isDragOver && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-xs text-zinc-500">
+            Click "+ Add Track" or drag audio here to get started
+          </span>
+        </div>
       )}
       {dropGhost && (
         <div

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useModelStore } from '../../store/modelStore';
-import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
+import { listModels, initModel, getBackendUrl, setBackendUrl, healthCheck } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
@@ -137,7 +137,18 @@ export function SettingsDialog() {
   /** Refresh model lists from backend. Only sets dropdown values on first load (empty state). */
   const refreshModels = async () => {
     setModelsLoading(true);
+    setInitError('');
     try {
+      // Quick health check before making the full API call
+      const isOnline = await healthCheck();
+      if (!isOnline) {
+        setAvailableModels([]);
+        setAvailableLmModels([]);
+        setLlmInitialized(false);
+        setInitError('Backend offline — start the ACE-Step server to configure models.');
+        return;
+      }
+
       const resp = await listModels();
       const models = resp?.models ?? [];
       const lmModels = resp?.lm_models ?? [];
@@ -176,7 +187,7 @@ export function SettingsDialog() {
       if (!isNetworkError) {
         setInitError('Failed to load models — check backend connection.');
       } else {
-        setInitError('Backend offline — model list unavailable.');
+        setInitError('Backend offline — start the ACE-Step server to configure models.');
       }
     } finally {
       setModelsLoading(false);
@@ -624,7 +635,15 @@ export function SettingsDialog() {
           )}
 
           {initError && (
-            <p className="text-[10px] text-red-400">{initError}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] text-red-400">{initError}</p>
+              <button
+                onClick={() => void refreshModels()}
+                className="text-[10px] text-violet-400 hover:text-violet-300 underline"
+              >
+                Retry
+              </button>
+            </div>
           )}
           {initMessage && !initError && (
             <p className="text-[10px] text-emerald-400">{initMessage}</p>

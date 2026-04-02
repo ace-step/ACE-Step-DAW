@@ -292,10 +292,7 @@ export function LoopBrowser() {
               : 'text-white/30 hover:text-white/50'
           }`}
         >
-          My Loops
-          {allAssets.length > 0 && (
-            <span className="ml-1 text-[10px] text-white/20">({allAssets.length})</span>
-          )}
+          My Loops{allAssets.length > 0 ? ` (${allAssets.length})` : ''}
         </button>
       </div>
 

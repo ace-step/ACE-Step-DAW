@@ -22,6 +22,7 @@ import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
+import { hasSeenWelcome } from '../dialogs/WelcomeOverlay';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -42,6 +43,7 @@ const Vocal2BGMModal = lazy(() => import('../generation/Vocal2BGMModal').then(m 
 const AudioAnalysisPanel = lazy(() => import('../generation/AudioAnalysisPanel').then(m => ({ default: m.AudioAnalysisPanel })));
 const StemSeparationModal = lazy(() => import('../generation/StemSeparationModal').then(m => ({ default: m.StemSeparationModal })));
 const AudioToMidiModal = lazy(() => import('../generation/AudioToMidiModal').then(m => ({ default: m.AudioToMidiModal })));
+const WelcomeOverlay = lazy(() => import('../dialogs/WelcomeOverlay').then(m => ({ default: m.WelcomeOverlay })));
 
 // Lazy-loaded heavy panels (code-split, loaded on first use)
 const MixerPanel = lazy(() => import('../mixer/MixerPanel').then(m => ({ default: m.MixerPanel })));
@@ -79,6 +81,7 @@ function EditorShell() {
   const showModelLibrary = useUIStore((s) => s.showModelLibrary);
   const showVirtualKeyboard = useUIStore((s) => s.showVirtualKeyboard);
 
+  const showWelcomeOverlayVal = useUIStore((s) => s.showWelcomeOverlay);
   const hasBlockingDialog =
     showNewProjectDialog ||
     showInstrumentPicker ||
@@ -87,14 +90,20 @@ function EditorShell() {
     showProjectListDialog ||
     bounceInPlaceTrackId !== null ||
     showKeyboardShortcutsDialog ||
-    showShortcutEditorDialog;
+    showShortcutEditorDialog ||
+    showWelcomeOverlayVal;
 
-  // Show new-project dialog on first load when no project exists
+  // Show welcome overlay for first-time users, or new-project dialog for returning users
+  const setShowWelcomeOverlay = useUIStore((s) => s.setShowWelcomeOverlay);
   useEffect(() => {
     if (!project) {
-      setShowNewProjectDialog(true);
+      if (!hasSeenWelcome()) {
+        setShowWelcomeOverlay(true);
+      } else {
+        setShowNewProjectDialog(true);
+      }
     }
-  }, [project, setShowNewProjectDialog]);
+  }, [project, setShowNewProjectDialog, setShowWelcomeOverlay]);
 
   // Auto-save to IndexedDB with dirty detection and beforeunload warning
   const { status: saveStatus, saveNow, lastSavedAt } = useAutoSave();
@@ -183,6 +192,7 @@ function EditorShell() {
         <ShareDialog />
         <VideoExportDialog />
         <RecordingOverlay />
+        <WelcomeOverlay />
       </Suspense>
       {!hasBlockingDialog && <Suspense fallback={null}><CommandPalette /></Suspense>}
       {!hasBlockingDialog && <Suspense fallback={null}><ClaudeTerminal /></Suspense>}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
+import { toastError, toastSuccess } from './useToast';
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved';
 
@@ -16,6 +17,8 @@ interface UseAutoSaveReturn {
   status: SaveStatus;
   /** Trigger an immediate save, bypassing the debounce timer. */
   saveNow: () => Promise<void>;
+  /** Timestamp of last successful save (ms since epoch), or null if never saved. */
+  lastSavedAt: number | null;
 }
 
 /**
@@ -29,24 +32,32 @@ interface UseAutoSaveReturn {
 export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
   const debounceMs = options?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const [status, setStatus] = useState<SaveStatus>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedUpdatedAtRef = useRef<number>(0);
   const isDirtyRef = useRef(false);
+  const isManualSaveRef = useRef(false);
 
   const saveNow = useCallback(async () => {
     const project = useProjectStore.getState().project;
     if (!project) return;
 
+    isManualSaveRef.current = true;
     setStatus('saving');
     try {
       await saveProjectToIDB(project);
       lastSavedUpdatedAtRef.current = project.updatedAt;
       isDirtyRef.current = false;
       setStatus('saved');
+      setLastSavedAt(Date.now());
+      if (isManualSaveRef.current) {
+        toastSuccess('Project saved');
+      }
     } catch {
-      // On failure, remain unsaved so the next cycle retries
       setStatus('unsaved');
+      toastError('Save failed — will retry automatically');
     }
+    isManualSaveRef.current = false;
 
     // Clear any pending debounce timer since we just saved
     if (timerRef.current) {
@@ -82,6 +93,10 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
           lastSavedUpdatedAtRef.current = currentProject.updatedAt;
           isDirtyRef.current = false;
           setStatus('saved');
+          setLastSavedAt(Date.now());
+        }).catch(() => {
+          setStatus('unsaved');
+          toastError('Auto-save failed — will retry');
         });
       }, debounceMs);
     });
@@ -111,5 +126,5 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
     };
   }, []);
 
-  return { status, saveNow };
+  return { status, saveNow, lastSavedAt };
 }

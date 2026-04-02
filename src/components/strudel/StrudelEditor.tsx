@@ -10,6 +10,9 @@ import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
 import type { StrudelFromMidiOptions } from '../../types/project';
 import { registerStrudelEditorPlaybackStop, registerStrudelEditorAudioContext, resumeStrudelAudio } from '../../engine/strudelEditorPlayback';
+import { createDebugLogger } from '../../utils/debugLogger';
+
+const log = createDebugLogger('strudel-editor');
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
 
 // Inject CSS to constrain the autocomplete info panel
@@ -238,7 +241,7 @@ export function StrudelEditor() {
         setIsLoading(false);
         setConsoleMessages(['🌀 Strudel ready']);
       } catch (err) {
-        console.error('[StrudelEditor] init failed:', err);
+        log.error('init failed:', err);
         setIsLoading(false);
         setError(err instanceof Error ? err.message : 'Failed to load editor');
       }
@@ -310,7 +313,7 @@ export function StrudelEditor() {
         setConsoleMessages((prev) => [...prev.slice(-50), `✓ sent ${bounceBars} bars to track`]);
       }
     } catch (err: any) {
-      console.error('Strudel bounce failed:', err);
+      log.error('Strudel bounce failed:', err);
       setError(err?.message ?? 'Bounce failed');
       setConsoleMessages((prev) => [...prev.slice(-50), `! bounce failed: ${err?.message}`]);
     } finally {

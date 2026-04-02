@@ -97,6 +97,8 @@ describe('sourceAudioOverride fallback warning', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGenerationStore.setState({ isGenerating: false, jobs: [] });
+    // Enable debug logging so logger.warn calls actually reach console.warn
+    localStorage.setItem('ace-step-daw-debug', '*');
   });
 
   it('logs warning when sourceAudioOverride key is not found in storage for cover', async () => {
@@ -142,6 +144,7 @@ describe('sourceAudioOverride fallback warning', () => {
     }
 
     expect(warnSpy).toHaveBeenCalledWith(
+      '[ace-step:generation]',
       '[EnhancePipeline] Chained source audio key "missing-chained-key" not found in storage, falling back to clip audio',
     );
 

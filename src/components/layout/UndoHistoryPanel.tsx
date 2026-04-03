@@ -8,6 +8,7 @@ const HISTORY_SCOPE_LABELS: Record<HistoryScope, string> = {
   track: 'Track',
   pianoRoll: 'Piano Roll',
   mixer: 'Mixer',
+  session: 'Session',
 };
 
 function formatTimestamp(timestamp: number) {

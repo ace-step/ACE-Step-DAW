@@ -325,7 +325,7 @@ const MIN_TIMELINE_DURATION = DEFAULT_MEASURES * getBarDurationSec(DEFAULT_BPM, 
 const TIMELINE_PADDING = 10; // seconds beyond last clip
 
 // ── Undo/Redo history ───────────────────────────────────────────────────────
-export type HistoryScope = 'arrangement' | 'track' | 'pianoRoll' | 'mixer';
+export type HistoryScope = 'arrangement' | 'track' | 'pianoRoll' | 'mixer' | 'session';
 
 export interface HistoryTarget {
   trackId?: string;
@@ -348,12 +348,13 @@ type HistoryBucketMap<T> = Record<string, T>;
 type HistoryBuckets<T> = HistoryScopes<HistoryBucketMap<T>>;
 type HistoryOptions = HistoryTarget & Partial<Pick<ProjectHistoryEntry, 'label' | 'scope'>>;
 
-const HISTORY_SCOPES: HistoryScope[] = ['arrangement', 'track', 'pianoRoll', 'mixer'];
+const HISTORY_SCOPES: HistoryScope[] = ['arrangement', 'track', 'pianoRoll', 'mixer', 'session'];
 const DEFAULT_HISTORY_LABEL: Record<HistoryScope, string> = {
   arrangement: 'Arrange project',
   track: 'Edit track',
   pianoRoll: 'Edit MIDI',
   mixer: 'Adjust mixer',
+  session: 'Session clip action',
 };
 const MIXER_TRACK_KEYS = new Set(['volume', 'muted', 'soloed', 'pan', 'eqLowGain', 'eqMidGain', 'eqHighGain', 'compressorEnabled', 'compressorThreshold', 'compressorRatio']);
 const GLOBAL_HISTORY_BUCKET = '__global__';
@@ -378,6 +379,7 @@ function createHistoryBuckets<T>(factory: () => T): HistoryBuckets<T> {
     track: { [GLOBAL_HISTORY_BUCKET]: factory() },
     pianoRoll: { [GLOBAL_HISTORY_BUCKET]: factory() },
     mixer: { [GLOBAL_HISTORY_BUCKET]: factory() },
+    session: { [GLOBAL_HISTORY_BUCKET]: factory() },
   };
 }
 
@@ -5205,6 +5207,8 @@ export const useProjectStore = create<ProjectState>()(
     const slot = session.slots.find((candidate) => candidate.trackId === trackId && candidate.sceneId === sceneId);
     if (!slot?.clipId || !track.clips.some((clip) => clip.id === slot.clipId)) return;
 
+    _pushHistory(state.project, { scope: 'session', label: 'Launch session clip' });
+
     // Re-trigger toggle: clicking an already-playing clip stops it (standard DAW behavior).
     // This applies to all launch modes — re-clicking the active clip always acts as stop.
     if (session.activeClipIdsByTrackId[trackId] === slot.clipId) {
@@ -5278,6 +5282,7 @@ export const useProjectStore = create<ProjectState>()(
   stopSessionTrack: (trackId) => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project, { scope: 'session', label: 'Stop session track' });
     const session = ensureProjectSession(state.project).session!;
     const transport = useTransportStore.getState();
     const isImmediate = !transport.isPlaying || session.quantization === 'none';
@@ -5305,6 +5310,7 @@ export const useProjectStore = create<ProjectState>()(
   stopAllSessionClips: () => {
     const state = get();
     if (!state.project) return;
+    _pushHistory(state.project, { scope: 'session', label: 'Stop all session clips' });
     const session = ensureProjectSession(state.project).session!;
     const transport = useTransportStore.getState();
     const isImmediate = !transport.isPlaying || session.quantization === 'none';

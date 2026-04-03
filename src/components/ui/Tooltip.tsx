@@ -3,6 +3,7 @@ import {
   useRef,
   useEffect,
   useCallback,
+  useId,
   type ReactNode,
   type ReactElement,
   cloneElement,
@@ -97,7 +98,16 @@ function computePosition(
     }
   }
   if (!chosen) {
-    chosen = tryPlacement(preferred)!;
+    // All placements overflow — force-clamp at preferred position
+    const top = Math.max(pad, Math.min(
+      preferred === 'bottom' ? triggerRect.bottom + OFFSET : triggerRect.top - tooltipRect.height - OFFSET,
+      vh - tooltipRect.height - pad,
+    ));
+    const left = Math.max(pad, Math.min(
+      triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2,
+      vw - tooltipRect.width - pad,
+    ));
+    chosen = { top, left };
     actualPlacement = preferred;
   }
 
@@ -155,6 +165,7 @@ export function Tooltip({
   const triggerRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number>(0);
+  const tooltipId = useId();
 
   const show = useCallback(() => {
     if (disabled) return;
@@ -193,6 +204,7 @@ export function Tooltip({
   if (!isValidElement(children)) return children;
 
   const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
+    'aria-describedby': visible ? tooltipId : undefined,
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
       // Forward ref if child has one
@@ -232,6 +244,7 @@ export function Tooltip({
           <>
             <div
               ref={tooltipRef}
+              id={tooltipId}
               role="tooltip"
               className="pointer-events-none"
               style={{

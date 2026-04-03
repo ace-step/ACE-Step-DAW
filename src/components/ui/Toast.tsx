@@ -78,16 +78,14 @@ function ToastItem({
     setTimeout(() => onDismiss(toast.id), 200);
   }, [onDismiss, toast.id]);
 
-  // Progress bar animation
+  // Progress bar animation — stops RAF loop when paused
   useEffect(() => {
+    if (paused) return;
+
     const el = progressRef.current;
     if (!el) return;
 
     const animate = () => {
-      if (paused) {
-        rafRef.current = requestAnimationFrame(animate);
-        return;
-      }
       const elapsed = Date.now() - startTimeRef.current;
       const progress = Math.min(elapsed / toast.durationMs, 1);
       el.style.width = `${(1 - progress) * 100}%`;

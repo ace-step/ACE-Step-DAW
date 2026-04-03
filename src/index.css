@@ -347,6 +347,28 @@ select:focus-visible,
               filter var(--duration-normal) var(--ease-out);
 }
 
+/* ── Skeleton shimmer ── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-daw-surface-2, rgba(255,255,255,0.04)) 25%,
+    rgba(255,255,255,0.08) 50%,
+    var(--color-daw-surface-2, rgba(255,255,255,0.04)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-shimmer[data-static="true"] {
+  animation: none;
+  background: var(--color-daw-surface-2, rgba(255,255,255,0.04));
+}
+
 /* Generation complete flash */
 @keyframes generation-complete-flash {
   0% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6); }

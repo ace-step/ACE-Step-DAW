@@ -24,6 +24,13 @@ import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
 import { BottomPanelTransition } from '../ui/BottomPanelTransition';
+import {
+  MixerFallback,
+  PianoRollFallback,
+  EffectChainFallback,
+  BottomPanelFallback,
+  SessionViewFallback,
+} from '../ui/PanelFallback';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -143,7 +150,7 @@ function EditorShell() {
         }}
       >
         <ErrorBoundary name="Timeline">
-          {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
+          {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={<SessionViewFallback />}><SessionView /></Suspense>}
         </ErrorBoundary>
         {project && <LoopBrowser />}
       </div>
@@ -152,22 +159,22 @@ function EditorShell() {
 
       {project && showSmartControls && <SmartControlsPanel />}
       <BottomPanelTransition show={!!project && !!openSequencerTrackId}>
-        <ErrorBoundary name="Sequencer"><Suspense fallback={null}><SequencerEditor /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="Sequencer"><Suspense fallback={<BottomPanelFallback />}><SequencerEditor /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && !!openDrumMachineTrackId}>
-        <ErrorBoundary name="DrumMachine"><Suspense fallback={null}><DrumMachineEditor /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="DrumMachine"><Suspense fallback={<BottomPanelFallback />}><DrumMachineEditor /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && !!openPianoRollTrackId}>
-        <ErrorBoundary name="PianoRoll"><Suspense fallback={null}><PianoRoll /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="PianoRoll"><Suspense fallback={<PianoRollFallback />}><PianoRoll /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && strudelPanelOpen}>
-        <ErrorBoundary name="StrudelEditor"><Suspense fallback={null}><StrudelEditor /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="StrudelEditor"><Suspense fallback={<BottomPanelFallback />}><StrudelEditor /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && !!(openEffectChainTrackId || openMidiEffectChainTrackId)}>
-        <ErrorBoundary name="EffectChain"><Suspense fallback={null}><EffectChain /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="EffectChain"><Suspense fallback={<EffectChainFallback />}><EffectChain /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && showMixer}>
-        <ErrorBoundary name="Mixer"><Suspense fallback={null}><MixerPanel /></Suspense></ErrorBoundary>
+        <ErrorBoundary name="Mixer"><Suspense fallback={<MixerFallback />}><MixerPanel /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}

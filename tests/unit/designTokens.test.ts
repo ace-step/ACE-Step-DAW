@@ -127,6 +127,42 @@ describe('Design System Tokens (index.css)', () => {
     });
   });
 
+  describe('Micro-interaction Utilities (#1124)', () => {
+    it('defines .daw-btn-interactive with hover and active states', () => {
+      expect(indexCss).toContain('.daw-btn-interactive');
+      expect(indexCss).toContain('.daw-btn-interactive:hover');
+      expect(indexCss).toContain('.daw-btn-interactive:active');
+    });
+
+    it('defines .daw-clip-interactive with hover state', () => {
+      expect(indexCss).toContain('.daw-clip-interactive');
+      expect(indexCss).toContain('.daw-clip-interactive:hover');
+    });
+
+    it('defines .daw-drag-lift with dragging state', () => {
+      expect(indexCss).toContain('.daw-drag-lift');
+      expect(indexCss).toContain('data-dragging="true"');
+    });
+
+    it('defines scroll edge fade utilities', () => {
+      expect(indexCss).toContain('.daw-scroll-fade-x');
+      expect(indexCss).toContain('.daw-scroll-fade-y');
+      expect(indexCss).toContain('mask-image: linear-gradient');
+    });
+
+    it('enhanced focus ring has glow spread', () => {
+      expect(indexCss).toContain('box-shadow: 0 0 0 4px var(--color-daw-focus-ring)');
+    });
+
+    it('disables micro-interaction transitions in reduced motion', () => {
+      const reducedMotionBlocks = indexCss.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\n\}/g) ?? [];
+      const hasMicroInteractionDisable = reducedMotionBlocks.some((block) =>
+        block.includes('.daw-btn-interactive')
+      );
+      expect(hasMicroInteractionDisable).toBe(true);
+    });
+  });
+
   describe('All tokens are within @theme block', () => {
     it('type scale tokens are in @theme', () => {
       const themeBlock = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/)?.[0] ?? '';

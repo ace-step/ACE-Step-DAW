@@ -10,8 +10,8 @@ describe('EffectCardLayout', () => {
         <div data-testid="param2">Param 2</div>
       </EffectCardLayout>,
     );
-    expect(screen.getByTestId('param1')).toBeDefined();
-    expect(screen.getByTestId('param2')).toBeDefined();
+    screen.getByTestId('param1'); // getBy* throws if not found
+    screen.getByTestId('param2');
   });
 
   it('renders mode slot when provided', () => {
@@ -20,7 +20,7 @@ describe('EffectCardLayout', () => {
         <div>Params</div>
       </EffectCardLayout>,
     );
-    expect(screen.getByRole('button', { name: 'LP' })).toBeDefined();
+    screen.getByRole('button', { name: 'LP' }); // getBy* throws if not found
   });
 
   it('renders visualization slot when provided', () => {
@@ -29,7 +29,7 @@ describe('EffectCardLayout', () => {
         <div>Params</div>
       </EffectCardLayout>,
     );
-    expect(screen.getByTestId('viz')).toBeDefined();
+    screen.getByTestId('viz'); // getBy* throws if not found
   });
 
   it('renders footer slot when provided', () => {
@@ -38,7 +38,7 @@ describe('EffectCardLayout', () => {
         <div>Params</div>
       </EffectCardLayout>,
     );
-    expect(screen.getByTestId('footer')).toBeDefined();
+    screen.getByTestId('footer'); // getBy* throws if not found
   });
 
   it('does not render optional slots when not provided', () => {

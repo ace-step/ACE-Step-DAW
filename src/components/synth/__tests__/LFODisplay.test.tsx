@@ -23,9 +23,9 @@ describe('LFODisplay', () => {
 
   it('renders shape selector buttons', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /SIN/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /SQR/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /TRI/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /SAW/i })).toBeDefined();
+    screen.getByRole('button', { name: /SIN/i }); // getBy* throws if not found
+    screen.getByRole('button', { name: /SQR/i });
+    screen.getByRole('button', { name: /TRI/i });
+    screen.getByRole('button', { name: /SAW/i });
   });
 });

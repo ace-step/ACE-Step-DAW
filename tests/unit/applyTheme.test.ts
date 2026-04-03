@@ -16,9 +16,9 @@ describe('applyTheme', () => {
     applyTheme('ace-studio', aceStudioTheme.tokens);
 
     const root = document.documentElement;
-    expect(root.style.getPropertyValue('--color-daw-bg')).toBe('#191b1f');
-    expect(root.style.getPropertyValue('--color-daw-accent')).toBe('#4a90d9');
-    expect(root.style.getPropertyValue('--color-daw-playhead')).toBe('#5e59ff');
+    expect(root.style.getPropertyValue('--color-daw-bg')).toBe(aceStudioTheme.tokens['daw-bg']);
+    expect(root.style.getPropertyValue('--color-daw-accent')).toBe(aceStudioTheme.tokens['daw-accent']);
+    expect(root.style.getPropertyValue('--color-daw-playhead')).toBe(aceStudioTheme.tokens['daw-playhead']);
   });
 
   it('sets data-theme attribute', () => {
@@ -40,7 +40,7 @@ describe('applyTheme', () => {
 
   it('overwrites previous theme values', () => {
     applyTheme('ace-studio', aceStudioTheme.tokens);
-    expect(document.documentElement.style.getPropertyValue('--color-daw-accent')).toBe('#4a90d9');
+    expect(document.documentElement.style.getPropertyValue('--color-daw-accent')).toBe(aceStudioTheme.tokens['daw-accent']);
     expect(document.documentElement.dataset.theme).toBe('ace-studio');
 
     applyTheme('ableton', abletonTheme.tokens);

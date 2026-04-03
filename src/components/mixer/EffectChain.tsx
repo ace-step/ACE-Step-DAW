@@ -2,9 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Knob } from '../ui/Knob';
 
 // Inline icon components (no lucide-react dependency)
-const GripVertical = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-);
 const ChevronDown = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
 );
@@ -13,12 +10,6 @@ const ChevronRight = ({ className }: { className?: string }) => (
 );
 const Plus = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14"/></svg>
-);
-const Power = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
-);
-const Trash2 = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
 );
 
 import { useProjectStore } from '../../store/projectStore';
@@ -261,11 +252,6 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   noiseReduction: 'Noise Reduce',
 };
 
-// ─── More menu icon ─────────────────────────────────────────────────────────
-const MoreVertical = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-);
-
 function EffectDevice({
   effect, track, index, onDragStart, onDragOver, isDragOver, fullWidth = false,
 }: {
@@ -283,19 +269,10 @@ function EffectDevice({
   const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showPresets, setShowPresets] = useState(false);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
   const effects = track.effects ?? [];
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close presets on outside click
-  useEffect(() => {
-    if (!showPresets) return;
-    const close = () => setShowPresets(false);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, [showPresets]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -340,120 +317,126 @@ function EffectDevice({
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
-      {/* ── Device header bar ── */}
+      {/* ── Device header bar (#1068) ── */}
+      {/* Left: bypass indicator + colored name (draggable). Right: collapse chevron. */}
+      {/* Context menu (right-click): presets, reorder, duplicate, delete */}
       <div
         className={`flex items-center select-none shrink-0 ${
           fullWidth
-            ? 'gap-2 px-4 py-1.5'
-            : 'gap-1.5 px-2 py-1.5 rounded-t-lg'
+            ? 'gap-2 px-4'
+            : `gap-2 px-2.5 rounded-t-lg ${!fullWidth ? 'cursor-grab active:cursor-grabbing' : ''}`
         }`}
         style={{
-          background: `${color}0a`,
-          borderBottom: `1px solid ${color}15`,
+          minHeight: 28,
+          background: `${color}14`,
+          borderBottom: `1px solid ${color}18`,
+        }}
+        onMouseDown={!fullWidth ? (e) => { if (e.button === 0) onDragStart(index); } : undefined}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowMenu(!showMenu);
         }}
       >
-        {/* Drag handle (compact view only) */}
-        {!fullWidth && (
+        {/* Bypass indicator — filled/hollow circle (Ableton-style) */}
+        <button
+          className="flex items-center justify-center shrink-0 transition-all duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
+          }}
+          title={effect.enabled ? 'Bypass' : 'Enable'}
+          style={{ width: 14, height: 14 }}
+        >
           <div
-            className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
-            onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
-          >
-            <GripVertical className="h-3 w-3 text-white/50" />
-          </div>
-        )}
+            className="rounded-full transition-all duration-150"
+            style={{
+              width: 10,
+              height: 10,
+              backgroundColor: effect.enabled ? color : 'transparent',
+              border: `1.5px solid ${effect.enabled ? color : 'rgba(255,255,255,0.2)'}`,
+              boxShadow: effect.enabled ? `0 0 6px ${color}60` : 'none',
+            }}
+          />
+        </button>
 
         {/* Effect name */}
         <button
-          onClick={() => !fullWidth && setCollapsed(!collapsed)}
+          onClick={(e) => { e.stopPropagation(); !fullWidth && setCollapsed(!collapsed); }}
           className={`font-semibold flex-1 truncate text-left transition-colors ${
-            fullWidth ? 'text-[12px]' : 'text-[10px]'
+            fullWidth ? 'text-[12px]' : 'text-[11px]'
           }`}
           style={{ color: `${color}dd` }}
         >
           {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
         </button>
 
-        {/* Preset selector — custom dropdown */}
-        <div className="relative">
+        {/* Collapse chevron (compact view only) */}
+        {!fullWidth && (
           <button
-            className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors"
-            onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
+            className="h-5 w-5 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors shrink-0"
+            onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
           >
-            Presets
-            <ChevronDown className="h-2.5 w-2.5" />
+            <ChevronDown
+              className={`h-3 w-3 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
+            />
           </button>
-          {showPresets && (
-            <div
-              className="absolute right-0 top-full mt-1 bg-daw-surface-2 border border-white/10 rounded shadow-xl z-50 py-1 min-w-[100px]"
-              onClick={(e) => e.stopPropagation()}
+        )}
+
+        {/* Context menu (replaces separate preset dropdown + more menu) */}
+        {showMenu && (
+          <div
+            ref={menuRef}
+            className="absolute right-1 top-full mt-0.5 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[130px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Presets section */}
+            {presets.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-[9px] text-white/30 uppercase tracking-wider">Presets</div>
+                {presets.map((preset, i) => (
+                  <button
+                    key={i}
+                    className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
+                    onClick={() => { applyPreset(i); setShowMenu(false); }}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+                <div className="border-t border-white/5 my-1" />
+              </>
+            )}
+            <button
+              className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+              onClick={() => { addTrackEffect(track.id, effect.type); setShowMenu(false); }}
             >
-              {presets.map((preset, i) => (
-                <button
-                  key={i}
-                  className="w-full text-left px-3 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
-                  onClick={() => { applyPreset(i); setShowPresets(false); }}
-                >
-                  {preset.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Bypass toggle */}
-        <button
-          className={`h-5 w-5 flex items-center justify-center transition-colors rounded ${effect.enabled ? 'text-green-400 hover:text-green-300' : 'text-white/20 hover:text-white/40'}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
-          }}
-          title={effect.enabled ? 'Bypass' : 'Enable'}
-        >
-          <Power className="h-3 w-3" />
-        </button>
-
-        {/* More menu */}
-        <div className="relative" ref={menuRef}>
-          <button
-            className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-white/50"
-            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-          >
-            <MoreVertical className="h-3 w-3" />
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+              Duplicate
+            </button>
+            {index > 0 && (
               <button
                 className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                onClick={() => { addTrackEffect(track.id, effect.type); setShowMenu(false); }}
+                onClick={() => { reorderTrackEffect(track.id, index, index - 1); setShowMenu(false); }}
               >
-                Duplicate
+                Move Left
               </button>
-              {index > 0 && (
-                <button
-                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                  onClick={() => { reorderTrackEffect(track.id, index, index - 1); setShowMenu(false); }}
-                >
-                  Move Left
-                </button>
-              )}
-              {index < effects.length - 1 && (
-                <button
-                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                  onClick={() => { reorderTrackEffect(track.id, index, index + 1); setShowMenu(false); }}
-                >
-                  Move Right
-                </button>
-              )}
-              <div className="border-t border-white/5 my-1" />
+            )}
+            {index < effects.length - 1 && (
               <button
-                className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
-                onClick={() => { removeTrackEffect(track.id, effect.id); setShowMenu(false); }}
+                className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+                onClick={() => { reorderTrackEffect(track.id, index, index + 1); setShowMenu(false); }}
               >
-                Delete
+                Move Right
               </button>
-            </div>
-          )}
-        </div>
+            )}
+            <div className="border-t border-white/5 my-1" />
+            <button
+              className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
+              onClick={() => { removeTrackEffect(track.id, effect.id); setShowMenu(false); }}
+            >
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Body ── */}

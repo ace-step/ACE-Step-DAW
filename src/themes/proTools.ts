@@ -76,5 +76,14 @@ export const proToolsTheme: ThemeDefinition = {
     'daw-slider-thumb-hover': '#e0ba58',
     // Focus ring — amber
     'daw-focus-ring': 'rgba(212, 168, 67, 0.5)',
+    // Shadows — Pro Tools: warm-tinted (olive/brown) shadows
+    'daw-shadow-sm': '0 1px 2px rgba(20, 18, 10, 0.3)',
+    'daw-shadow-md': '0 2px 8px rgba(20, 18, 10, 0.4)',
+    'daw-shadow-lg': '0 4px 16px rgba(20, 18, 10, 0.45)',
+    'daw-shadow-xl': '0 8px 24px rgba(20, 18, 10, 0.5)',
+    'daw-shadow-inset': 'inset 0 1px 3px rgba(20, 18, 10, 0.3)',
+    // Glass — warm tinted semi-transparent
+    'daw-glass-bg': 'rgba(30, 29, 24, 0.88)',
+    'daw-glass-border': 'rgba(74, 72, 64, 0.4)',
   },
 };

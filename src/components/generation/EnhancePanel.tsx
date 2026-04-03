@@ -567,7 +567,7 @@ export function EnhancePanel() {
         data-testid="enhance-panel"
         role="dialog"
         aria-label="AI Enhancer"
-        className="fixed left-1/2 -translate-x-1/2 w-[780px] max-w-[95vw] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
+        className="fixed left-1/2 -translate-x-1/2 w-[780px] max-w-[95vw] bg-[#1e1e22]/95 border border-[#3a3a3a] rounded-xl shadow-2xl backdrop-blur-sm text-xs text-zinc-200 p-8 text-center transition-[bottom] duration-200 ease-out"
         style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
       >
         <div className="flex items-center justify-between mb-6">
@@ -637,7 +637,7 @@ export function EnhancePanel() {
       data-testid="enhance-panel"
       role="dialog"
       aria-label="AI Enhancer"
-      className="fixed left-1/2 -translate-x-1/2 w-[820px] max-w-[95vw] max-h-[60vh] bg-[#1e1e22] border border-[#3a3a3a] rounded-xl shadow-2xl flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
+      className="fixed left-1/2 -translate-x-1/2 w-[820px] max-w-[95vw] max-h-[60vh] bg-[#1e1e22]/95 border border-[#3a3a3a] rounded-xl shadow-2xl backdrop-blur-sm flex text-xs text-zinc-200 overflow-hidden transition-[bottom] duration-200 ease-out"
       style={{ zIndex: Z.panel, bottom: `${dynamicBottom}px` }}
     >
       {/* Left Sidebar — Version Tree & Session History */}

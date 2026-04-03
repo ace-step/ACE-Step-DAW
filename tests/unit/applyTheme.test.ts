@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { applyTheme } from '../../src/themes/applyTheme';
+import { THEMES } from '../../src/themes';
 import { aceStudioTheme } from '../../src/themes/aceStudio';
 import { abletonTheme } from '../../src/themes/ableton';
 
 describe('applyTheme', () => {
+  const NON_COLOR_PREFIXES = ['daw-shadow-', 'daw-glass-'];
+  const propName = (key: string) =>
+    NON_COLOR_PREFIXES.some((p) => key.startsWith(p)) ? `--${key}` : `--color-${key}`;
+
   beforeEach(() => {
     const root = document.documentElement;
     for (const key of Object.keys(aceStudioTheme.tokens)) {
-      root.style.removeProperty(`--color-${key}`);
+      root.style.removeProperty(propName(key));
     }
     delete root.dataset.theme;
   });
@@ -34,7 +39,38 @@ describe('applyTheme', () => {
 
     const root = document.documentElement;
     for (const [key, value] of Object.entries(aceStudioTheme.tokens)) {
-      expect(root.style.getPropertyValue(`--color-${key}`)).toBe(value);
+      expect(root.style.getPropertyValue(propName(key))).toBe(value);
+    }
+  });
+
+  it('sets shadow tokens without --color- prefix', () => {
+    applyTheme('ace-studio', aceStudioTheme.tokens);
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--daw-shadow-sm')).toBe(aceStudioTheme.tokens['daw-shadow-sm']);
+    expect(root.style.getPropertyValue('--daw-shadow-xl')).toBe(aceStudioTheme.tokens['daw-shadow-xl']);
+    expect(root.style.getPropertyValue('--daw-glass-bg')).toBe(aceStudioTheme.tokens['daw-glass-bg']);
+  });
+
+  it('Ableton theme sets shadow tokens to none', () => {
+    applyTheme('ableton', abletonTheme.tokens);
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--daw-shadow-sm')).toBe('none');
+    expect(root.style.getPropertyValue('--daw-shadow-xl')).toBe('none');
+  });
+
+  it('all themes define shadow and glass tokens', () => {
+    const requiredTokens = [
+      'daw-shadow-sm', 'daw-shadow-md', 'daw-shadow-lg', 'daw-shadow-xl', 'daw-shadow-inset',
+      'daw-glass-bg', 'daw-glass-border',
+    ] as const;
+
+    for (const [themeId, theme] of Object.entries(THEMES)) {
+      for (const token of requiredTokens) {
+        expect(theme.tokens[token], `${themeId} missing ${token}`).toBeDefined();
+        expect(theme.tokens[token].length, `${themeId} has empty ${token}`).toBeGreaterThan(0);
+      }
     }
   });
 

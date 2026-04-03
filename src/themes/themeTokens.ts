@@ -40,6 +40,15 @@ export interface ThemeTokens {
   'daw-slider-thumb': string;
   'daw-slider-thumb-hover': string;
   'daw-focus-ring': string;
+  // Shadows — depth hierarchy per theme
+  'daw-shadow-sm': string;
+  'daw-shadow-md': string;
+  'daw-shadow-lg': string;
+  'daw-shadow-xl': string;
+  'daw-shadow-inset': string;
+  // Glass/backdrop — floating panel overlay
+  'daw-glass-bg': string;
+  'daw-glass-border': string;
 }
 
 export interface ThemeDefinition {

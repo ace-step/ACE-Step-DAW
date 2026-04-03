@@ -106,6 +106,27 @@ describe('Design System Tokens (index.css)', () => {
     });
   });
 
+  describe('Surface Depth & Layering Utilities', () => {
+    const shadowClasses = ['.daw-shadow-sm', '.daw-shadow-md', '.daw-shadow-lg', '.daw-shadow-xl', '.daw-shadow-inset'];
+
+    it.each(shadowClasses)('defines %s utility class', (cls) => {
+      expect(indexCss).toContain(cls);
+    });
+
+    it('defines .daw-glass utility class with backdrop-filter', () => {
+      expect(indexCss).toContain('.daw-glass');
+      expect(indexCss).toContain('backdrop-filter: blur(');
+    });
+
+    it('disables backdrop-filter in prefers-reduced-motion', () => {
+      const reducedMotionBlock = indexCss.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\n\}/g) ?? [];
+      const hasBackdropDisable = reducedMotionBlock.some((block) =>
+        block.includes('backdrop-filter: none')
+      );
+      expect(hasBackdropDisable).toBe(true);
+    });
+  });
+
   describe('All tokens are within @theme block', () => {
     it('type scale tokens are in @theme', () => {
       const themeBlock = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/)?.[0] ?? '';

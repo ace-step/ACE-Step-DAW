@@ -44,5 +44,14 @@ export const aceStudioTheme: ThemeDefinition = {
     'daw-slider-thumb': '#4A7AFF',
     'daw-slider-thumb-hover': '#5B8AFF',
     'daw-focus-ring': 'rgba(74, 122, 255, 0.5)',
+    // Shadows — cool modern with slight blue shift
+    'daw-shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.3)',
+    'daw-shadow-md': '0 2px 8px rgba(0, 0, 0, 0.35)',
+    'daw-shadow-lg': '0 4px 16px rgba(0, 0, 0, 0.4)',
+    'daw-shadow-xl': '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(74, 122, 255, 0.06)',
+    'daw-shadow-inset': 'inset 0 1px 3px rgba(0, 0, 0, 0.25)',
+    // Glass — semi-transparent for floating panels
+    'daw-glass-bg': 'rgba(22, 23, 28, 0.85)',
+    'daw-glass-border': 'rgba(74, 122, 255, 0.12)',
   },
 };

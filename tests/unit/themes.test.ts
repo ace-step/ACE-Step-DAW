@@ -17,7 +17,15 @@ const EXPECTED_TOKEN_KEYS: (keyof ThemeTokens)[] = [
   'daw-scrollbar', 'daw-scrollbar-hover',
   'daw-slider-thumb', 'daw-slider-thumb-hover',
   'daw-focus-ring',
+  'daw-shadow-sm', 'daw-shadow-md', 'daw-shadow-lg', 'daw-shadow-xl', 'daw-shadow-inset',
+  'daw-glass-bg', 'daw-glass-border',
 ];
+
+/** Token keys that contain non-color values (shadows, glass backgrounds) */
+const NON_COLOR_TOKEN_KEYS = new Set<string>([
+  'daw-shadow-sm', 'daw-shadow-md', 'daw-shadow-lg', 'daw-shadow-xl', 'daw-shadow-inset',
+  'daw-glass-bg', 'daw-glass-border',
+]);
 
 describe('Theme definitions', () => {
   it('exports 5 themes', () => {
@@ -44,12 +52,21 @@ describe('Theme definitions', () => {
         expect(tokenKeys).toEqual([...EXPECTED_TOKEN_KEYS].sort());
       });
 
-      it('has valid color values for all tokens', () => {
+      it('has valid color values for color tokens', () => {
         for (const [key, value] of Object.entries(theme.tokens)) {
+          if (NON_COLOR_TOKEN_KEYS.has(key)) continue;
           expect(
             value,
             `${id}.${key} should be a valid CSS color`,
           ).toMatch(/^(#[0-9a-fA-F]{6}|rgba?\(.+\))$/);
+        }
+      });
+
+      it('has valid shadow/glass token values', () => {
+        for (const key of NON_COLOR_TOKEN_KEYS) {
+          const value = (theme.tokens as Record<string, string>)[key];
+          expect(value, `${id}.${key} should be defined`).toBeDefined();
+          expect(value.length, `${id}.${key} should not be empty`).toBeGreaterThan(0);
         }
       });
 

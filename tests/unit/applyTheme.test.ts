@@ -1,18 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { applyTheme } from '../../src/themes/applyTheme';
+import { applyTheme, tokenToCssVar } from '../../src/themes/applyTheme';
 import { THEMES } from '../../src/themes';
 import { aceStudioTheme } from '../../src/themes/aceStudio';
 import { abletonTheme } from '../../src/themes/ableton';
 
 describe('applyTheme', () => {
-  const NON_COLOR_PREFIXES = ['daw-shadow-', 'daw-glass-'];
-  const propName = (key: string) =>
-    NON_COLOR_PREFIXES.some((p) => key.startsWith(p)) ? `--${key}` : `--color-${key}`;
 
   beforeEach(() => {
     const root = document.documentElement;
     for (const key of Object.keys(aceStudioTheme.tokens)) {
-      root.style.removeProperty(propName(key));
+      root.style.removeProperty(tokenToCssVar(key));
     }
     delete root.dataset.theme;
   });
@@ -39,7 +36,7 @@ describe('applyTheme', () => {
 
     const root = document.documentElement;
     for (const [key, value] of Object.entries(aceStudioTheme.tokens)) {
-      expect(root.style.getPropertyValue(propName(key))).toBe(value);
+      expect(root.style.getPropertyValue(tokenToCssVar(key))).toBe(value);
     }
   });
 

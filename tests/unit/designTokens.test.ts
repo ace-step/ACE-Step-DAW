@@ -115,10 +115,7 @@ describe('Design System Tokens (index.css)', () => {
 
     it('does not define un-namespaced --text-* tokens in @theme (avoid Tailwind v4 conflict)', () => {
       const themeBlock = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-      const conflictingTokens = ['--text-xs:', '--text-sm:', '--text-base:', '--text-lg:', '--text-xl:', '--text-2xl:'];
-      for (const token of conflictingTokens) {
-        expect(themeBlock).not.toContain(token);
-      }
+      expect(themeBlock).not.toMatch(/--text-[a-z0-9-]+\s*:/);
     });
 
     it('spacing tokens are in @theme', () => {

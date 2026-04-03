@@ -147,7 +147,7 @@ export function SharedStemPlayer({ sharedProject }: { sharedProject: SharedProje
           >
             {isPlaying ? 'Pause' : 'Play'}
           </button>
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200 tabular-nums">
             {formatTime(currentTime)}
           </div>
         </div>
@@ -232,7 +232,7 @@ export function SharedStemPlayer({ sharedProject }: { sharedProject: SharedProje
                       aria-label={`${stem.trackName} volume`}
                       className="w-full accent-cyan-300"
                     />
-                    <span className="w-10 text-right text-zinc-200">
+                    <span className="w-10 text-right text-zinc-200 tabular-nums">
                       {Math.round(trackState.volume * 100)}
                     </span>
                   </label>

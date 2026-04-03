@@ -369,7 +369,7 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-[11px] font-medium uppercase text-zinc-400">Detected</label>
-            <div className="rounded border border-[#444] bg-black/20 px-3 py-1.5 text-sm text-zinc-200">
+            <div className="rounded border border-[#444] bg-black/20 px-3 py-1.5 text-sm text-zinc-200 tabular-nums">
               {playbackLatency.detectedLatencyMs !== null ? `${playbackLatency.detectedLatencyMs.toFixed(1)} ms` : 'Unavailable'}
             </div>
           </div>
@@ -392,9 +392,9 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
           </div>
         </div>
 
-        <p className="text-[10px] text-zinc-400">Active compensation: {playbackLatency.compensationMs.toFixed(1)} ms</p>
+        <p className="text-[10px] text-zinc-400 tabular-nums">Active compensation: {playbackLatency.compensationMs.toFixed(1)} ms</p>
         {hasPendingManualOverride ? (
-          <p className="text-[10px] text-zinc-500">Pending manual override after save: {pendingManualOverrideMs?.toFixed(1)} ms</p>
+          <p className="text-[10px] text-zinc-500 tabular-nums">Pending manual override after save: {pendingManualOverrideMs?.toFixed(1)} ms</p>
         ) : null}
       </section>
 

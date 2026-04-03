@@ -97,7 +97,7 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
       <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar">
         {hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
-            <span className="text-daw-accent truncate">
+            <span className="text-daw-accent truncate tabular-nums">
               Generating: {primaryJob?.trackName ?? 'unknown'}
               {primaryJob?.stage ? ` \u2022 ${primaryJob.stage}` : ''}
               {primaryJob?.progressPercent != null ? ` ${Math.round(primaryJob.progressPercent)}%` : ''}

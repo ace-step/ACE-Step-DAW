@@ -372,6 +372,15 @@ select:focus-visible,
   }
 }
 
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 @keyframes fx-card-enter {
   from {
     opacity: 0;

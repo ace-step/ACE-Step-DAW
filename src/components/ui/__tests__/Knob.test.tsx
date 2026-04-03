@@ -271,4 +271,32 @@ describe('Knob component', () => {
       expect(screen.getByText('440 Hz')).toBeDefined();
     });
   });
+
+  describe('hover parameter highlighting', () => {
+    it('calls onHoverChange with paramId on mouse enter/leave', () => {
+      const onHoverChange = vi.fn();
+      render(
+        <Knob {...defaultProps} paramId="frequency" onHoverChange={onHoverChange} />,
+      );
+      const wrapper = screen.getByLabelText('Control knob').closest('[data-param-id]')!;
+      fireEvent.mouseEnter(wrapper);
+      expect(onHoverChange).toHaveBeenCalledWith('frequency', true);
+      fireEvent.mouseLeave(wrapper);
+      expect(onHoverChange).toHaveBeenCalledWith('frequency', false);
+    });
+
+    it('sets data-param-id attribute when paramId is provided', () => {
+      render(<Knob {...defaultProps} paramId="threshold" />);
+      const wrapper = screen.getByLabelText('Control knob').closest('[data-param-id]');
+      expect(wrapper?.getAttribute('data-param-id')).toBe('threshold');
+    });
+
+    it('does not call onHoverChange when paramId is not set', () => {
+      const onHoverChange = vi.fn();
+      render(<Knob {...defaultProps} onHoverChange={onHoverChange} />);
+      const knob = screen.getByLabelText('Control knob');
+      fireEvent.mouseEnter(knob.parentElement!.parentElement!);
+      expect(onHoverChange).not.toHaveBeenCalled();
+    });
+  });
 });

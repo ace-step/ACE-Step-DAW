@@ -325,11 +325,11 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col transition-all ${
+      className={`flex flex-col transition-all duration-200 ease-out ${
         fullWidth
           ? 'w-full h-full'
           : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
-      } ${!effect.enabled ? 'opacity-40' : ''}`}
+      } ${!effect.enabled ? 'opacity-50 grayscale-[50%]' : ''}`}
       style={fullWidth ? undefined : {
         backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
         border: `1px solid ${color}22`,
@@ -454,7 +454,7 @@ function EffectDevice({
 
       {/* ── Body ── */}
       <div
-        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'}
+        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-[250ms] ease-out'}
         style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
       >
         <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[280px]'}>
@@ -741,7 +741,7 @@ export function EffectChain() {
                   isSelected
                     ? 'text-white/90 bg-white/[0.06]'
                     : 'text-white/40 hover:text-white/65 hover:bg-white/[0.03]'
-                } ${!effect.enabled ? 'opacity-40' : ''}`}
+                } ${!effect.enabled ? 'opacity-50 grayscale-[50%]' : ''}`}
                 style={isSelected ? {
                   borderBottom: `2px solid ${c}`,
                 } : { borderBottom: '2px solid transparent' }}

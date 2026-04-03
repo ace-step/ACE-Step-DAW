@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
+import { useSmoothedValue } from '../../hooks/useSmoothedValue';
 
 interface KnobProps {
   value: number;
@@ -23,6 +24,10 @@ interface KnobProps {
   showTooltip?: boolean;
   /** Custom value formatter for display */
   formatValue?: (v: number) => string;
+  /** Parameter ID for hover highlighting (links knob to visualization elements) */
+  paramId?: string;
+  /** Called when hover state changes — enables connected parameter highlighting */
+  onHoverChange?: (paramId: string, hovered: boolean) => void;
 }
 
 const VARIANT_SIZES: Record<string, number> = { sm: 24, md: 32, lg: 48 };
@@ -48,6 +53,8 @@ export function Knob({
   variant,
   showTooltip = true,
   formatValue,
+  paramId,
+  onHoverChange,
 }: KnobProps) {
   const actualSize = variant ? VARIANT_SIZES[variant] : size;
   const dragStart = useRef<{ y: number; value: number } | null>(null);
@@ -173,13 +180,26 @@ export function Knob({
     setShowPrecisionInput(true);
   }, [disabled]);
 
+  const onMouseEnter = useCallback(() => {
+    if (paramId && onHoverChange) onHoverChange(paramId, true);
+  }, [paramId, onHoverChange]);
+
+  const onMouseLeave = useCallback(() => {
+    if (paramId && onHoverChange) onHoverChange(paramId, false);
+  }, [paramId, onHoverChange]);
+
+  // Visual smoothing: smooth external (automation/preset) changes over ~3 frames,
+  // but during drag, use direct value for instant feedback
+  const smoothedValue = useSmoothedValue(value, { factor: isDragging ? 1 : 0.35 });
+  const visualValue = isDragging ? value : smoothedValue;
+
   // SVG geometry — Ableton-flat style: arc + center dot only
   const s = actualSize;
   const radius = s / 2;
   const strokeWidth = Math.max(3, s / 7);
   const startAngle = -arc / 2 - 90;
   const endAngle = arc / 2 - 90;
-  const angle = valueToAngle(value, min, max, arc);
+  const angle = valueToAngle(visualValue, min, max, arc);
 
   function polarToXY(deg: number, r: number) {
     const rad = (deg * Math.PI) / 180;
@@ -217,6 +237,9 @@ export function Knob({
     <div
       className={`flex flex-col items-center gap-1 select-none ${disabled ? 'opacity-40' : ''}`}
       title={`${label ?? ''}: ${displayValue}${unit && !formatValue ? unit : ''} (double-click to reset)`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      data-param-id={paramId}
     >
       <div className="relative">
         <div

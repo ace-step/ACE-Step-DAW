@@ -7,13 +7,14 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 
   /* ── Type Scale (DAW-optimized: compact, readable at small sizes) ── */
-  --text-xs: 10px;
-  --text-sm: 11px;
-  --text-base: 12px;
-  --text-lg: 13px;
-  --text-xl: 16px;
-  --text-2xl: 20px;
-  --text-display: 28px;
+  /* Namespaced with --daw- prefix to avoid overriding Tailwind v4 built-in text-* utilities */
+  --daw-text-xs: 10px;
+  --daw-text-sm: 11px;
+  --daw-text-base: 12px;
+  --daw-text-lg: 13px;
+  --daw-text-xl: 16px;
+  --daw-text-2xl: 20px;
+  --daw-text-display: 28px;
 
   /* ── Font Weights ── */
   --font-normal: 400;

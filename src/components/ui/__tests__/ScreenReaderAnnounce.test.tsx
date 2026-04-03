@@ -23,13 +23,14 @@ describe('ScreenReaderAnnounce', () => {
     expect(el.getAttribute('aria-live')).toBe('polite');
   });
 
-  it('supports assertive politeness', () => {
+  it('supports assertive politeness with role="alert"', () => {
     render(<ScreenReaderAnnounce message="urgent" politeness="assertive" />);
     const el = screen.getByTestId('sr-announce');
     expect(el.getAttribute('aria-live')).toBe('assertive');
+    expect(el.getAttribute('role')).toBe('alert');
   });
 
-  it('has role="status"', () => {
+  it('has role="status" for polite announcements', () => {
     render(<ScreenReaderAnnounce message="test" />);
     const el = screen.getByTestId('sr-announce');
     expect(el.getAttribute('role')).toBe('status');
@@ -51,5 +52,9 @@ describe('ScreenReaderAnnounce', () => {
     // After delay, message appears
     act(() => vi.advanceTimersByTime(100));
     expect(el.textContent).toBe('Playback started');
+
+    // After 1 second, message is cleared
+    act(() => vi.advanceTimersByTime(1000));
+    expect(el.textContent).toBe('');
   });
 });

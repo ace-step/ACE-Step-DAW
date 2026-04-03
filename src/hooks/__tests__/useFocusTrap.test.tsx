@@ -21,6 +21,11 @@ describe('useFocusTrap', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('wraps focus from last to first on Tab', async () => {
     render(<TestDialog active />);
 

@@ -36,7 +36,7 @@ export function useFocusTrap(
     };
 
     // Delay to let the DOM render
-    requestAnimationFrame(focusFirst);
+    const rafId = requestAnimationFrame(focusFirst);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
@@ -65,6 +65,7 @@ export function useFocusTrap(
     container.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      cancelAnimationFrame(rafId);
       container.removeEventListener('keydown', handleKeyDown);
 
       // Restore focus to the previously focused element

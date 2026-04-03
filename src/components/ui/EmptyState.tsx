@@ -28,7 +28,7 @@ export function EmptyState({
       } ${className}`}
     >
       {icon && (
-        <div className="text-daw-text-muted opacity-40">{icon}</div>
+        <div aria-hidden="true" className="text-daw-text-muted opacity-40">{icon}</div>
       )}
 
       <p

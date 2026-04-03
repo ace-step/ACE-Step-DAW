@@ -399,6 +399,11 @@ select:focus-visible,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* Preserve functional loading spinners under reduced-motion */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
   @keyframes fx-card-enter {
     from { opacity: 1; transform: none; }
     to { opacity: 1; transform: none; }

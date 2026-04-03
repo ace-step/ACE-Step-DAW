@@ -5,25 +5,21 @@ import { Z } from '../../utils/zIndex';
 /* ── Type-specific styles ── */
 const TOAST_STYLES: Record<ToastType, {
   border: string;
-  accent: string;
   label: string;
   iconPath: string;
 }> = {
   success: {
     border: 'border-emerald-500/40',
-    accent: 'bg-emerald-400',
     label: 'text-emerald-300',
     iconPath: 'M5 13l4 4L19 7', // checkmark
   },
   error: {
     border: 'border-red-500/40',
-    accent: 'bg-red-400',
     label: 'text-red-300',
     iconPath: 'M6 18L18 6M6 6l12 12', // X
   },
   info: {
     border: 'border-sky-500/40',
-    accent: 'bg-sky-400',
     label: 'text-sky-300',
     iconPath: 'M12 16v-4m0-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z', // info circle
   },

@@ -172,7 +172,7 @@ export function ContextMenuItem({
       )}
       <span className="flex-1">{label}</span>
       {shortcut && (
-        <kbd className="ml-3 font-mono text-[10px] text-zinc-600">
+        <kbd className="ml-3 font-mono text-[10px] text-zinc-500">
           {shortcut}
         </kbd>
       )}

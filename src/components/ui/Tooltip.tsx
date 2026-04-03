@@ -141,6 +141,7 @@ export function Tooltip({
 
   const show = useCallback(() => {
     if (disabled) return;
+    window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       setVisible(true);
     }, delayMs);

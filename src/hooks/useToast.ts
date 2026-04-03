@@ -24,8 +24,7 @@ const DEFAULT_DURATION_MS: Record<ToastType, number> = {
 
 const toastTimers = new Map<string, number>();
 
-/** Cancel the store's auto-dismiss timer for a toast (e.g. when the component manages its own lifetime). */
-export function clearToastTimer(id: string) {
+function clearToastTimer(id: string) {
   const timerId = toastTimers.get(id);
   if (timerId !== undefined) {
     window.clearTimeout(timerId);

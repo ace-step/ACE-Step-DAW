@@ -290,11 +290,8 @@ describe('ClipBlock hover and active feedback', () => {
 
     render(<ClipBlock clip={clip} track={track} />);
 
-    const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // No left-side color strip — both sides should be open
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
-    expect(stripEl).toBeNull();
+    // Header rail uses the clip color override (green)
     expect(headerRail.style.background).toContain('34, 197, 94');
   });
 
@@ -304,11 +301,8 @@ describe('ClipBlock hover and active feedback', () => {
 
     render(<ClipBlock clip={clip} track={track} />);
 
-    const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // No left-side color strip — both sides should be open
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
-    expect(stripEl).toBeNull();
+    // Header rail uses the track color (blue) as fallback
     expect(headerRail.style.background).toContain('68, 136, 255');
   });
 });

@@ -37,13 +37,13 @@
   --fx-filter: #4a9da8;
   --fx-chorus: #5aa8b4;
   --fx-flanger: #4dab94;
-  --fx-phaser: #58a8a0;
+  --fx-phaser: #5db8a4;
 
   /* ── Distortion family (warm red/coral) ── */
   --fx-distortion: #c46454;
-  --fx-saturation: #b87060;
+  --fx-saturation: #b87858;
 
-  /* ── Utility (neutral) ── */
+  /* ── Utility family (neutral slate) ── */
   --fx-stereo-imager: #7a8ab4;
   --fx-noise-reduction: #8a8a8a;
 }

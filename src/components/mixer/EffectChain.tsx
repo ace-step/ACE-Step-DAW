@@ -331,8 +331,8 @@ function EffectDevice({
           : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
       } ${!effect.enabled ? 'opacity-50 grayscale-[50%]' : ''}`}
       style={fullWidth ? undefined : {
-        backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
-        border: `1px solid ${color}22`,
+        backgroundColor: `color-mix(in srgb, ${color} 12%, #181828)`,
+        border: `1px solid ${color}30`,
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
@@ -344,8 +344,8 @@ function EffectDevice({
             : 'gap-1.5 px-2 py-2 rounded-t-lg cursor-grab active:cursor-grabbing'
         }`}
         style={{
-          background: `${color}0f`,
-          borderBottom: `1px solid ${color}18`,
+          background: `${color}18`,
+          borderBottom: `1px solid ${color}25`,
           minHeight: 28,
         }}
         onMouseDown={!fullWidth ? (e) => { if ((e.target as HTMLElement).closest('button')) return; onDragStart(index); } : undefined}

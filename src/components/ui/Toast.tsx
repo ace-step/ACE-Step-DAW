@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useToast, type ToastItem as ToastItemType } from '../../hooks/useToast';
+import { useToast, clearToastTimer, type ToastItem as ToastItemType } from '../../hooks/useToast';
 import { Z } from '../../utils/zIndex';
 
 /* ── Type-based styling ── */
@@ -60,6 +60,12 @@ function ToastItem({
   const startTimeRef = useRef(Date.now());
   const remainingRef = useRef(toast.durationMs);
   const rafRef = useRef<number>(0);
+
+  // Cancel the store's auto-dismiss timer — this component manages its own lifetime
+  // via RAF progress bar + hover-pause logic.
+  useEffect(() => {
+    clearToastTimer(toast.id);
+  }, [toast.id]);
 
   // Enter animation
   useEffect(() => {

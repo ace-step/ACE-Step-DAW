@@ -1696,25 +1696,42 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
  * CSS custom properties are defined in src/styles/effect-colors.css.
  * These fallback hex values match the CSS vars for use in non-CSS contexts (canvas, SVG).
  */
+/**
+ * Effect color palette — category-grouped, desaturated, all unique.
+ *
+ * Categories:
+ *   EQ/Filter (cool blues/teals)     — eq3, parametricEq, filter
+ *   Dynamics (warm ambers/golds)      — compressor, gate, limiter, deesser, transientShaper
+ *   Time-based (purples/indigo)       — reverb, delay, convolver, algorithmicReverb
+ *   Modulation (greens/teals)         — chorus, flanger, phaser
+ *   Character (reds/earth tones)      — distortion, saturation
+ *   Utility (neutrals)               — stereoImager, noiseReduction
+ */
 export const EFFECT_COLORS: Record<TrackEffectType, string> = {
+  // EQ / Filter — cool blues & teals
   eq3: '#5b8ac4',
   parametricEq: '#6b9fd4',
-  compressor: '#c4993b',
-  reverb: '#8b6fc0',
-  delay: '#9478c4',
-  distortion: '#c46454',
   filter: '#4a9da8',
+  // Dynamics — warm ambers & golds (each distinct)
+  compressor: '#c4993b',
+  gate: '#a88530',
+  limiter: '#d4a040',
+  deesser: '#b5a355',
+  transientShaper: '#c4884a',
+  // Time-based — purples & indigos (spread across hue range)
+  reverb: '#8b6fc0',
+  delay: '#6a7ec8',
+  convolver: '#a07cc8',
+  algorithmicReverb: '#7a6fb8',
+  // Modulation — greens & teals
   chorus: '#5aa8b4',
   flanger: '#4dab94',
-  phaser: '#c48a54',
-  convolver: '#a07cc8',
-  gate: '#b8903a',
-  deesser: '#c4a654',
-  transientShaper: '#b89340',
-  limiter: '#d4a040',
-  saturation: '#c46454',
+  phaser: '#8aab5a',
+  // Character — reds & earth tones (distinct)
+  distortion: '#c46454',
+  saturation: '#b87868',
+  // Utility — neutrals
   stereoImager: '#7a8ab4',
-  algorithmicReverb: '#7a6fb8',
   noiseReduction: '#8a8a8a',
 };
 

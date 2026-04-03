@@ -549,7 +549,7 @@ export function MixerPanel() {
   return (
     <div
       data-testid="mixer-panel"
-      className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0 transition-[height,opacity] duration-150 ease-out overflow-hidden"
+      className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0 transition-[height,opacity] duration-150 ease-out overflow-hidden daw-shadow-md"
       style={{ height: showMixer ? visibleMixerHeight : 0, opacity: showMixer ? 1 : 0 }}
       onMouseDownCapture={() => setHistoryFocusScope('mixer')}
       onFocusCapture={() => {

@@ -79,5 +79,14 @@ export const logicProTheme: ThemeDefinition = {
     'daw-slider-thumb-hover': '#409cff',
     // Focus ring — blue
     'daw-focus-ring': 'rgba(10, 132, 255, 0.6)',
+    // Shadows — Apple refined: warm tint, layered with 1px inset glow
+    'daw-shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.2)',
+    'daw-shadow-md': '0 2px 8px rgba(0, 0, 0, 0.3)',
+    'daw-shadow-lg': '0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+    'daw-shadow-xl': '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+    'daw-shadow-inset': 'inset 0 1px 3px rgba(0, 0, 0, 0.2)',
+    // Glass — Apple's signature vibrancy/frosted effect
+    'daw-glass-bg': 'rgba(28, 28, 30, 0.8)',
+    'daw-glass-border': 'rgba(255, 255, 255, 0.08)',
   },
 };

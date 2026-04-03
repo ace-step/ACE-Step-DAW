@@ -81,5 +81,14 @@ export const abletonTheme: ThemeDefinition = {
     'daw-slider-thumb-hover': '#f7a738',
     // Focus ring matches accent
     'daw-focus-ring': 'rgba(247, 167, 56, 0.5)',
+    // Shadows — Ableton is intentionally flat: no shadows anywhere
+    'daw-shadow-sm': 'none',
+    'daw-shadow-md': 'none',
+    'daw-shadow-lg': 'none',
+    'daw-shadow-xl': 'none',
+    'daw-shadow-inset': 'none',
+    // Glass — solid background, no transparency (Ableton philosophy)
+    'daw-glass-bg': 'rgba(29, 31, 35, 0.95)',
+    'daw-glass-border': 'rgba(63, 68, 70, 0.5)',
   },
 };

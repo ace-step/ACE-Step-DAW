@@ -732,7 +732,7 @@ export function Toolbar() {
 
   return (
     <div
-      className="flex h-12 shrink-0 select-none items-center gap-1.5 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5"
+      className="flex h-12 shrink-0 select-none items-center gap-1.5 overflow-x-auto border-b border-black/40 bg-[#1f2226] px-2.5 daw-shadow-sm"
       data-testid="main-toolbar"
       style={{ scrollbarWidth: 'none' }}
     >

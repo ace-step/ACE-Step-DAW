@@ -132,23 +132,60 @@ export function VerticalFader({
       aria-orientation="vertical"
       tabIndex={0}
     >
-      {/* Arrow on LEFT side — right-pointing triangle, tip at meter bar */}
+      {/* Fader cap — styled rect with highlight line on top */}
       <div
         className="absolute pointer-events-none"
         style={{
           bottom: `calc(${bottomPct}% - ${arrowH / 2}px)`,
-          left: 10 - arrowW,
+          left: -2,
+          width: width + 4,
         }}
       >
+        {/* Horizontal line marker across full width */}
+        <div
+          style={{
+            position: 'absolute',
+            top: arrowH / 2 - 0.5,
+            left: 0,
+            right: 0,
+            height: 1,
+            backgroundColor: accentColor,
+            opacity: 0.6,
+          }}
+        />
+        {/* Left-side fader cap: rect with 3D appearance */}
         <svg
           width={arrowW}
           height={arrowH}
           viewBox={`0 0 ${arrowW} ${arrowH}`}
           fill="none"
+          style={{ display: 'block' }}
         >
-          <polygon
-            points={`0,0 ${arrowW},${arrowH / 2} 0,${arrowH}`}
+          <rect
+            x="0"
+            y="1"
+            width={arrowW}
+            height={arrowH - 2}
+            rx="1.5"
             fill="#c8c8cc"
+          />
+          {/* Highlight line on top for 3D effect */}
+          <rect
+            x="1"
+            y="1"
+            width={arrowW - 2}
+            height="1.5"
+            rx="0.5"
+            fill="rgba(255,255,255,0.4)"
+          />
+          {/* Center groove */}
+          <line
+            x1="3"
+            y1={arrowH / 2}
+            x2={arrowW - 3}
+            y2={arrowH / 2}
+            stroke="rgba(0,0,0,0.3)"
+            strokeWidth="0.5"
           />
         </svg>
       </div>

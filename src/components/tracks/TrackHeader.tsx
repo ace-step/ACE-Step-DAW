@@ -8,6 +8,7 @@ import { TrackHeaderMeter } from './TrackHeaderMeter';
 import { FaderMeter } from './FaderMeter';
 import { useRecording } from '../../hooks/useRecording';
 import { freezeTrackToAudio, flattenTrackToAudio } from '../../services/freezeTrack';
+import { TRACK_TYPE_CATALOG } from '../../constants/tracks';
 import {
   ARRANGEMENT_GROUP_ROW_BG,
   ARRANGEMENT_HEADER_ROW_BG,
@@ -21,6 +22,43 @@ import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuS
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
+
+/** Track type abbreviation badge — compact label showing track type (e.g. STM, MIX, PNO). */
+function TrackTypeIcon({ trackType, size = 10 }: { trackType: keyof typeof TRACK_TYPE_CATALOG; size?: number }) {
+  const typeInfo = TRACK_TYPE_CATALOG[trackType];
+  if (!typeInfo) return null;
+  const abbr = typeInfo.abbr;
+  return (
+    <span
+      className="text-zinc-500 font-mono leading-none select-none"
+      style={{ fontSize: size - 2 }}
+      title={typeInfo.label}
+    >
+      {abbr}
+    </span>
+  );
+}
+
+/** 6-dot grip icon for drag handles — appears on hover. */
+function DragGripIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width="6"
+      height="10"
+      viewBox="0 0 6 10"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="1.5" cy="1.5" r="1" />
+      <circle cx="4.5" cy="1.5" r="1" />
+      <circle cx="1.5" cy="5" r="1" />
+      <circle cx="4.5" cy="5" r="1" />
+      <circle cx="1.5" cy="8.5" r="1" />
+      <circle cx="4.5" cy="8.5" r="1" />
+    </svg>
+  );
+}
 
 /** Snowflake-style icon shown next to frozen track names. */
 function FrozenIcon() {
@@ -234,12 +272,15 @@ export const TrackHeader = React.memo(function TrackHeader({
       data-group={track.isGroup ? 'true' : undefined}
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
-      className={`relative flex items-center gap-2 border-b group select-none ${
+      className={`relative flex items-center gap-2 border-b group select-none transition-[background-color,filter] duration-100 hover:brightness-[1.04] ${
         isDragOver ? 'bg-daw-hover-subtle' : ''
       } ${isImpliedMute ? 'daw-implied-mute' : ''} ${track.soloed ? 'daw-soloed' : ''}`}
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
-        borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
+        borderColor: 'transparent',
+        borderImage: isDragOver
+          ? undefined
+          : `linear-gradient(90deg, transparent 0%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 10%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 90%, transparent 100%) 1`,
         height: rowHeight,
         paddingLeft: isCollapsed ? 0 : isChild ? 24 : 8,
         paddingRight: isCollapsed ? 0 : 8,
@@ -361,7 +402,9 @@ export const TrackHeader = React.memo(function TrackHeader({
               </svg>
             </button>
           ) : (
-            <div className="text-zinc-600 text-[10px] leading-none select-none" title="Drag to reorder">⠿</div>
+            <div className="text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity duration-100 cursor-grab active:cursor-grabbing" title="Drag to reorder">
+              <DragGripIcon />
+            </div>
           )}
 
           <div
@@ -410,24 +453,29 @@ export const TrackHeader = React.memo(function TrackHeader({
         </button>
       ) : (
         <div
-          className="flex-shrink-0 ml-1 text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-[10px] leading-none select-none"
+          className="flex-shrink-0 ml-1 w-4 flex items-center justify-center text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-zinc-400 cursor-grab active:cursor-grabbing transition-opacity duration-100"
           title="Drag to reorder"
         >
-          ⠿
+          <DragGripIcon />
         </div>
       )}
 
-      {/* Instrument icon or folder icon */}
-      <div
-        className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm"
-        style={{ backgroundColor: track.color + '20' }}
-        title={track.isGroup ? 'Group' : info.displayName}
-      >
-        {track.isGroup ? (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 4h4l2 2h6v7H2V4z" fill={track.color + '40'} />
-          </svg>
-        ) : info.emoji}
+      {/* Instrument icon + track type badge */}
+      <div className="flex-shrink-0 flex items-center gap-1">
+        <div
+          className="w-6 h-6 rounded flex items-center justify-center text-sm"
+          style={{ backgroundColor: track.color + '20' }}
+          title={track.isGroup ? 'Group' : info.displayName}
+        >
+          {track.isGroup ? (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 4h4l2 2h6v7H2V4z" fill={track.color + '40'} />
+            </svg>
+          ) : info.emoji}
+        </div>
+        {!track.isGroup && isTwoRow && track.trackType && (
+          <TrackTypeIcon trackType={track.trackType} size={10} />
+        )}
       </div>
 
       {/* Track name element (shared between layouts) */}
@@ -506,9 +554,10 @@ export const TrackHeader = React.memo(function TrackHeader({
                   onClick={(e) => { e.stopPropagation(); toggleArmTrack(track.id); }}
                   className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
                     isArmed
-                      ? 'bg-red-500 text-white'
+                      ? 'bg-red-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.5)]'
                       : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                   }`}
+                  style={isArmed ? { animation: 'record-arm-pulse 1.5s ease-in-out infinite' } : undefined}
                   title="Record Arm"
                   aria-label={`Record arm ${track.displayName}`}
                 >

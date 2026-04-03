@@ -49,9 +49,10 @@ interface ChannelStripProps {
   track: Track;
   faderHeight: number;
   returnTracks: ReturnTrack[];
+  anySoloed: boolean;
 }
 
-const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
+const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, returnTracks, anySoloed }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
@@ -83,6 +84,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
   const effects = track.effects ?? [];
   const effectsBypassed = track.effectsBypassed ?? false;
   const sends = track.sends ?? [];
+  const isImpliedMute = anySoloed && !track.soloed;
   const isSelected = useUIStore((s) => s.keyboardContext.scope === 'mixer' && s.keyboardContext.trackId === track.id);
 
   const handleDoubleClickName = useCallback(() => {
@@ -118,7 +120,12 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
       aria-label={`Mixer channel ${track.displayName}`}
       aria-selected={isSelected ? 'true' : 'false'}
       tabIndex={0}
-      className={`flex h-full min-h-0 min-w-[132px] flex-col overflow-hidden border-r border-[#3a3a3a] bg-[#2a2a2a] px-3 py-2 ${isSelected ? 'ring-1 ring-inset ring-daw-accent' : ''} ${isFrozen ? 'opacity-70' : ''}`}
+      className={`flex h-full min-h-0 min-w-[132px] flex-col overflow-hidden border-r border-[#3a3a3a] px-3 py-0 ${isSelected ? 'ring-1 ring-inset ring-daw-accent' : ''} ${isFrozen ? 'opacity-70' : ''} ${isImpliedMute ? 'daw-implied-mute' : ''} ${track.soloed ? 'daw-soloed' : ''}`}
+      style={{
+        background: 'linear-gradient(180deg, #2e2e2e 0%, #262626 100%)',
+        ...(track.soloed ? { boxShadow: 'inset 0 0 8px rgba(251, 191, 36, 0.15)' } : {}),
+        ...(track.muted ? { boxShadow: 'inset 0 0 0 1px rgba(239, 68, 68, 0.15)' } : {}),
+      }}
       onFocus={() => {
         setExpandedTrackId(track.id);
         setKeyboardContext('mixer', track.id);
@@ -128,10 +135,12 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         setKeyboardContext('mixer', track.id);
       }}
     >
+      {/* Track color strip at top */}
+      <div className="w-full h-1 rounded-b-sm shrink-0 mb-2" style={{ backgroundColor: track.color }} data-testid="track-color-strip-top" />
+
       <div className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
         {/* Track header group */}
         <div data-testid="channel-header" className="flex w-full flex-col items-center gap-1.5 pb-2">
-            {/* Track color strip moved to bottom of channel strip */}
           {track.isGroup && (
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 bg-[#333] rounded px-1.5 py-0.5">GRP</span>
           )}
@@ -205,7 +214,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         </div>
 
         {/* Section separator */}
-        <div className="w-4/5 border-t border-[#3a3a3a]" />
+        <div className="w-4/5 h-px" style={{ background: 'linear-gradient(90deg, transparent 0%, #3a3a3a 30%, #3a3a3a 70%, transparent 100%)' }} />
 
         {/* Inserts section — dynamic effect slots */}
         <div data-testid="inserts-section" className={`w-full py-1 transition-opacity ${effectsBypassed ? 'opacity-45' : 'opacity-100'}`}>
@@ -251,7 +260,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         </div>
 
         {/* Section separator */}
-        <div className="w-4/5 border-t border-[#3a3a3a]" />
+        <div className="w-4/5 h-px" style={{ background: 'linear-gradient(90deg, transparent 0%, #3a3a3a 30%, #3a3a3a 70%, transparent 100%)' }} />
 
         {/* Sends section — dynamic send slots */}
         <div data-testid="sends-section" className="w-full py-1">
@@ -330,7 +339,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         </div>
 
         {/* Section separator */}
-        <div className="w-4/5 border-t border-[#3a3a3a]" />
+        <div className="w-4/5 h-px" style={{ background: 'linear-gradient(90deg, transparent 0%, #3a3a3a 30%, #3a3a3a 70%, transparent 100%)' }} />
 
         {/* EQ section */}
         <div data-testid="eq-section" className="flex w-full flex-col items-center gap-1.5 py-1">
@@ -343,7 +352,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         </div>
 
         {/* Section separator */}
-        <div className="w-4/5 border-t border-[#3a3a3a]" />
+        <div className="w-4/5 h-px" style={{ background: 'linear-gradient(90deg, transparent 0%, #3a3a3a 30%, #3a3a3a 70%, transparent 100%)' }} />
 
         {/* Compressor section */}
         <div data-testid="comp-section" className="flex w-full flex-col items-center gap-1.5 py-1">
@@ -378,7 +387,6 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
           />
         </div>
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
-        <div className="w-full h-1.5 rounded-full mt-1" style={{ backgroundColor: track.color }} data-testid="track-color-strip" />
       </div>
     </div>
   );
@@ -399,7 +407,8 @@ function ReturnTrackStrip({ returnTrack, faderHeight }: ReturnTrackStripProps) {
   return (
     <div
       data-testid={`return-strip-${returnTrack.id}`}
-      className="flex h-full min-h-0 w-[72px] shrink-0 flex-col items-center border-l border-[#333] bg-[#282828] px-1 py-2 gap-1"
+      className="flex h-full min-h-0 w-[72px] shrink-0 flex-col items-center border-l border-[#333] px-1 py-2 gap-1"
+      style={{ background: 'linear-gradient(180deg, #2c2c2c 0%, #242424 100%)' }}
     >
       {/* Return track label */}
       <span className="text-[10px] font-semibold text-teal-400 uppercase tracking-wider truncate w-full text-center" title={returnTrack.name}>
@@ -459,7 +468,8 @@ function MasterStrip({ faderHeight }: MasterStripProps) {
   return (
     <div
       data-testid="master-strip"
-      className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] bg-[#252525] px-4 py-2"
+      className="flex h-full min-h-0 min-w-[250px] flex-col overflow-hidden border-l-2 border-[#555] px-4 py-2"
+      style={{ background: 'linear-gradient(180deg, #2a2a2a 0%, #202020 100%)' }}
     >
       <div className="flex w-full shrink-0 items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">Master</span>
@@ -539,6 +549,7 @@ export function MixerPanel() {
   if (!project) return null;
 
   const returnTracks = project.returnTracks ?? [];
+  const anySoloed = project.tracks.some((t) => t.soloed);
   const visibleMixerHeight = Math.max(mixerHeight, MIXER_MIN_VISIBLE_HEIGHT);
   const focusedTrackName = project.tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'None';
   const faderHeight = Math.max(
@@ -549,8 +560,8 @@ export function MixerPanel() {
   return (
     <div
       data-testid="mixer-panel"
-      className="border-t border-[#1a1a1a] bg-[#2a2a2a] flex flex-col select-none shrink-0 transition-[height,opacity] duration-150 ease-out overflow-hidden daw-shadow-md"
-      style={{ height: showMixer ? visibleMixerHeight : 0, opacity: showMixer ? 1 : 0 }}
+      className="border-t border-[#1a1a1a] flex flex-col select-none shrink-0 transition-[height,opacity] duration-150 ease-out overflow-hidden daw-shadow-md"
+      style={{ height: showMixer ? visibleMixerHeight : 0, opacity: showMixer ? 1 : 0, background: showMixer ? 'linear-gradient(180deg, #2a2a2a 0%, #222 100%)' : undefined }}
       onMouseDownCapture={() => setHistoryFocusScope('mixer')}
       onFocusCapture={() => {
         setHistoryFocusScope('mixer');
@@ -590,7 +601,7 @@ export function MixerPanel() {
             </div>
           )}
           {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (
-            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} />
+            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} anySoloed={anySoloed} />
           ))}
           {returnTracks.length > 0 && (
             <>

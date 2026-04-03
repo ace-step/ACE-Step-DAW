@@ -159,7 +159,7 @@ describe('Channel strip improvements', () => {
     it('renders color strip with track color', () => {
       setupWithTrack();
       render(<MixerPanel />);
-      const strip = screen.getAllByTestId('track-color-strip')[0];
+      const strip = screen.getAllByTestId('track-color-strip-top')[0];
       // backgroundColor is set via inline style; jsdom converts hex to rgb
       expect(strip.style.backgroundColor).toBeTruthy();
       // Verify it's actually a color value (not empty)

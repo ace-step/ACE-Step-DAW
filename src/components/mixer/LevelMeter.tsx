@@ -216,13 +216,24 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
         title="Reset clip indicator"
       />
 
-      {/* CENTER: meter canvas */}
+      {/* CENTER: meter canvas + peak glow overlay */}
       <canvas
         ref={canvasRef}
         aria-label={label}
         data-testid="meter-canvas"
         className="absolute inset-y-0 rounded-sm"
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}
+      />
+      {/* Subtle glow overlay — CSS shadow that gives meters a luminous feel */}
+      <div
+        data-meter-glow
+        className="absolute inset-y-0 rounded-sm pointer-events-none"
+        style={{
+          width: totalBarWidth,
+          left: meterLeft,
+          boxShadow: '0 0 4px rgba(74, 222, 128, 0.15)',
+          mixBlendMode: 'screen',
+        }}
       />
 
       {/* Unified scale: tick LEFT + number RIGHT, each mark is one element */}

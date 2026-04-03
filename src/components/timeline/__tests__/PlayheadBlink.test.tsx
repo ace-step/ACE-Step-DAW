@@ -60,7 +60,7 @@ describe('Playhead blink animation', () => {
     const cursor = children.find(
       (el) => (el as HTMLElement).style.top === '50px' && (el as HTMLElement).style.height === '80px',
     ) as HTMLElement | undefined;
-    expect(cursor).toBeTruthy();
+    expect(cursor).not.toBeNull();
     expect(cursor!.style.left).toBe('200px'); // playStartTime=2 * pps=100
   });
 

@@ -65,7 +65,7 @@ describe('Theme definitions', () => {
       it('has valid shadow/glass token values', () => {
         for (const key of NON_COLOR_TOKEN_KEYS) {
           const value = (theme.tokens as Record<string, string>)[key];
-          expect(value, `${id}.${key} should be defined`).not.toBeUndefined();
+          expect(value, `${id}.${key} should be defined`).toBeDefined();
           expect(value.length, `${id}.${key} should not be empty`).toBeGreaterThan(0);
         }
       });

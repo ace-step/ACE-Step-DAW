@@ -65,7 +65,7 @@ describe('applyTheme', () => {
 
     for (const [themeId, theme] of Object.entries(THEMES)) {
       for (const token of requiredTokens) {
-        expect(theme.tokens[token], `${themeId} missing ${token}`).not.toBeUndefined();
+        expect(theme.tokens[token], `${themeId} missing ${token}`).toBeDefined();
         expect(theme.tokens[token].length, `${themeId} has empty ${token}`).toBeGreaterThan(0);
       }
     }

@@ -240,7 +240,7 @@ describe('populateMidiPattern (store action)', () => {
     expect(notes).toHaveLength(noteIds.length);
     // Each note should have a valid id
     for (const note of notes) {
-      expect(note.id).toBeTruthy();
+      expect(note.id.length).toBeGreaterThan(0);
       expect(note.pitch).toBeGreaterThanOrEqual(0);
       expect(note.pitch).toBeLessThanOrEqual(127);
     }

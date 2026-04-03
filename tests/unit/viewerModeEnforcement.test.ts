@@ -245,7 +245,7 @@ describe('viewer mode enforcement', () => {
       useCollaborationStore.getState().setViewerMode(true);
       const project = useProjectStore.getState().project;
       expect(project).not.toBeUndefined();
-      expect(project!.name).not.toBeUndefined();
+      expect(typeof project!.name).toBe('string');
     });
 
     it('tracks are readable', () => {

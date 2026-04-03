@@ -16,9 +16,7 @@ describe('TimelineEmptyState', () => {
 
   it('renders the empty state message when there are 0 tracks', () => {
     render(<TimelineEmptyState />);
-    expect(
-      screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).not.toBeUndefined();
+    screen.getByText(/drop audio files here or click \+ track to get started/i); // getBy* throws if not found
   });
 
   it('renders a music note icon', () => {
@@ -43,9 +41,7 @@ describe('TimelineEmptyState', () => {
 
   it('renders description text', () => {
     render(<TimelineEmptyState />);
-    expect(
-      screen.getByText(/create tracks, generate ai music, or drag loops/i),
-    ).not.toBeUndefined();
+    screen.getByText(/create tracks, generate ai music, or drag loops/i); // getBy* throws if not found
   });
 
   it('is not visible when there is 1 or more tracks', () => {

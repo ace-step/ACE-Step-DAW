@@ -62,7 +62,7 @@ describe('TimeRuler loop region braces', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
     const region = screen.getByTestId('timeline-loop-region');
-    expect(region).toBeTruthy();
+    expect(region).not.toBeNull();
     // Should have a gradient background for the highlight band
     expect(region.style.background).toContain('linear-gradient');
   });
@@ -81,7 +81,7 @@ describe('TimeRuler loop region braces', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
     const handle = screen.getByTestId('timeline-loop-start-handle');
-    expect(handle).toBeTruthy();
+    expect(handle).not.toBeNull();
     expect(handle.getAttribute('role')).toBe('slider');
     expect(handle.getAttribute('aria-label')).toBe('Adjust loop start');
     expect(handle.getAttribute('aria-valuenow')).toBe('2');
@@ -91,7 +91,7 @@ describe('TimeRuler loop region braces', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
     const handle = screen.getByTestId('timeline-loop-end-handle');
-    expect(handle).toBeTruthy();
+    expect(handle).not.toBeNull();
     expect(handle.getAttribute('role')).toBe('slider');
     expect(handle.getAttribute('aria-label')).toBe('Adjust loop end');
     expect(handle.getAttribute('aria-valuenow')).toBe('6');
@@ -101,7 +101,7 @@ describe('TimeRuler loop region braces', () => {
     useTransportStore.setState({ loopEnabled: true, loopStart: 2, loopEnd: 6 });
     render(<TimeRuler />);
     const handle = screen.getByTestId('timeline-loop-move-handle');
-    expect(handle).toBeTruthy();
+    expect(handle).not.toBeNull();
     expect(handle.getAttribute('aria-label')).toBe('Move loop region');
   });
 
@@ -188,7 +188,7 @@ describe('TimeRuler loop region braces', () => {
     it('transport.loop shortcut defaults to KeyL', async () => {
       const { SHORTCUT_ACTIONS } = await import('../../../constants/shortcutDefaults');
       const loopAction = SHORTCUT_ACTIONS.find((a) => a.id === 'transport.loop');
-      expect(loopAction).toBeTruthy();
+      expect(loopAction).not.toBeUndefined();
       expect(loopAction!.defaultCombo.code).toBe('KeyL');
     });
   });

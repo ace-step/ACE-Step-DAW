@@ -325,14 +325,18 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col transition-all ${
+      className={`flex flex-col ${
         fullWidth
           ? 'w-full h-full'
           : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
-      } ${!effect.enabled ? 'opacity-40' : ''}`}
-      style={fullWidth ? undefined : {
-        backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
-        border: `1px solid ${color}22`,
+      }`}
+      data-bypassed={!effect.enabled ? 'true' : undefined}
+      style={{
+        transition: 'opacity 200ms ease-out, filter 200ms ease-out',
+        ...(fullWidth ? {} : {
+          backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
+          border: `1px solid ${color}22`,
+        }),
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >

@@ -58,6 +58,34 @@ export function Knob({
   const [isResetting, setIsResetting] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Visual smoothing — display angle lags ~3 frames behind actual value for inertia feel.
+  // The audio parameter updates instantly; only the SVG arc is smoothed.
+  const displayValueRef = useRef(value);
+  const [displayValue_smoothed, setDisplayValueSmoothed] = useState(value);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const SMOOTHING = 0.35; // 0 = instant, 1 = never catches up; ~3 frame lag at 60fps
+    let running = true;
+
+    const tick = () => {
+      if (!running) return;
+      const current = displayValueRef.current;
+      const target = value;
+      if (Math.abs(current - target) > (max - min) * 0.0005) {
+        displayValueRef.current = current + (target - current) * (1 - SMOOTHING);
+        setDisplayValueSmoothed(displayValueRef.current);
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        displayValueRef.current = target;
+        setDisplayValueSmoothed(target);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { running = false; cancelAnimationFrame(rafRef.current); };
+  }, [value, min, max]);
+
   // Clean up reset timer on unmount
   useEffect(() => {
     return () => {
@@ -174,12 +202,13 @@ export function Knob({
   }, [disabled]);
 
   // SVG geometry — Ableton-flat style: arc + center dot only
+  // Use smoothed value for visual arc, actual value for everything else
   const s = actualSize;
   const radius = s / 2;
   const strokeWidth = Math.max(3, s / 7);
   const startAngle = -arc / 2 - 90;
   const endAngle = arc / 2 - 90;
-  const angle = valueToAngle(value, min, max, arc);
+  const angle = valueToAngle(isDragging ? displayValue_smoothed : value, min, max, arc);
 
   function polarToXY(deg: number, r: number) {
     const rad = (deg * Math.PI) / 180;

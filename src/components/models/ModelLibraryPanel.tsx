@@ -74,10 +74,10 @@ export function ModelLibraryPanel() {
             <div>
               <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">Server Stats</h3>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Total Jobs</div><div className="text-sm font-medium text-zinc-200">{stats.jobs.total}</div></div>
-                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Queue</div><div className="text-sm font-medium text-zinc-200">{stats.queue_size}/{stats.queue_maxsize}</div></div>
-                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Running</div><div className="text-sm font-medium text-zinc-200">{stats.jobs.running}</div></div>
-                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Avg Time</div><div className="text-sm font-medium text-zinc-200">{stats.avg_job_seconds.toFixed(1)}s</div></div>
+                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Total Jobs</div><div className="text-sm font-medium text-zinc-200 tabular-nums">{stats.jobs.total}</div></div>
+                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Queue</div><div className="text-sm font-medium text-zinc-200 tabular-nums">{stats.queue_size}/{stats.queue_maxsize}</div></div>
+                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Running</div><div className="text-sm font-medium text-zinc-200 tabular-nums">{stats.jobs.running}</div></div>
+                <div className="rounded-lg bg-zinc-800/60 p-2"><div className="text-[10px] text-zinc-500">Avg Time</div><div className="text-sm font-medium text-zinc-200 tabular-nums">{stats.avg_job_seconds.toFixed(1)}s</div></div>
               </div>
             </div>
           )}

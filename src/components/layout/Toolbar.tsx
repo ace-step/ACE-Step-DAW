@@ -96,8 +96,8 @@ function splitKeyScale(keyScale?: string) {
   };
 }
 
-const numericDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[22px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
-const selectClass = 'h-8 appearance-none bg-transparent px-0 font-mono text-[19px] leading-none tracking-[0.005em] text-white focus:text-white focus:outline-none disabled:opacity-50';
+const numericDisplayInputClass = 'h-8 bg-transparent px-0 text-center font-mono text-[22px] leading-none tracking-[0.005em] tabular-nums text-white focus:text-white focus:outline-none disabled:opacity-50';
+const selectClass = 'h-8 appearance-none bg-transparent px-0 font-mono text-[19px] leading-none tracking-[0.005em] tabular-nums text-white focus:text-white focus:outline-none disabled:opacity-50';
 const boxedReadoutClass = 'flex h-8 items-center bg-transparent px-0';
 const flatReadoutClass = 'flex h-8 items-center px-0';
 

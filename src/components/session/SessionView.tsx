@@ -844,7 +844,7 @@ function FragmentRow({
                       {getClipLabel(clip, sceneIndex)}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400 tabular-nums">
                     <span>{clip.duration.toFixed(1)}s</span>
                     {isActive ? (
                       <span className="flex items-center gap-1">

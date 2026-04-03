@@ -125,14 +125,14 @@ export function DualRangeSlider({
       <div className="relative h-5 mx-2 mt-1">
         {/* Start label — clamp so it doesn't overflow left */}
         <span
-          className="absolute text-[10px] font-mono text-zinc-300 -translate-x-1/2 whitespace-nowrap"
+          className="absolute text-[10px] font-mono text-zinc-300 -translate-x-1/2 whitespace-nowrap tabular-nums"
           style={{ left: `${clamp(startPct, 0, 85)}%` }}
         >
           {fmt(startValue)}
         </span>
         {/* End label — clamp so it doesn't overflow right */}
         <span
-          className="absolute text-[10px] font-mono text-zinc-300 -translate-x-1/2 whitespace-nowrap"
+          className="absolute text-[10px] font-mono text-zinc-300 -translate-x-1/2 whitespace-nowrap tabular-nums"
           style={{ left: `${clamp(endPct, 15, 100)}%` }}
         >
           {fmt(endValue)}
@@ -140,7 +140,7 @@ export function DualRangeSlider({
       </div>
 
       {/* Duration badge */}
-      <div className="text-center text-[10px] text-zinc-400 mt-0.5">
+      <div className="text-center text-[10px] text-zinc-400 mt-0.5 tabular-nums">
         duration: {fmt(endValue - startValue)}
       </div>
       {editingHandle && (

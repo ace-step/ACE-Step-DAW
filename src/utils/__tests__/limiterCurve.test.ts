@@ -54,5 +54,15 @@ describe('limiterCurve', () => {
         expect(lastPt.outputDb).toBeLessThanOrEqual(-0.5 + 0.01);
       }
     });
+
+    it('output never exceeds input + gain (no expansion)', () => {
+      for (const style of ['transparent', 'aggressive', 'warm'] as const) {
+        const gain = 6;
+        const pts = generateLimiterCurve(-0.3, gain, style);
+        for (const p of pts) {
+          expect(p.outputDb).toBeLessThanOrEqual(p.inputDb + gain + 0.01);
+        }
+      }
+    });
   });
 });

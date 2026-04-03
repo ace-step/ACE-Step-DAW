@@ -373,10 +373,13 @@ select:focus-visible,
 }
 
 /* ── Effect bypass transition (#1242) — smooth dim/brighten + grayscale ── */
+[data-bypassed] {
+  transition: opacity 200ms ease-out, filter 200ms ease-out;
+}
+
 [data-bypassed="true"] {
   opacity: 0.4;
   filter: grayscale(0.6) brightness(0.7);
-  transition: opacity 200ms ease-out, filter 200ms ease-out;
 }
 
 @keyframes fx-card-enter {

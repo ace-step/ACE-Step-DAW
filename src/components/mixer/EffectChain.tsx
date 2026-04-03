@@ -308,12 +308,9 @@ function EffectDevice({
           : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
       }`}
       data-bypassed={!effect.enabled ? 'true' : undefined}
-      style={{
-        transition: 'opacity 200ms ease-out, filter 200ms ease-out',
-        ...(fullWidth ? {} : {
-          backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
-          border: `1px solid ${color}22`,
-        }),
+      style={fullWidth ? undefined : {
+        backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
+        border: `1px solid ${color}22`,
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
@@ -321,7 +318,7 @@ function EffectDevice({
       {/* Left: bypass indicator + colored name (draggable). Right: collapse chevron. */}
       {/* Context menu (right-click): presets, reorder, duplicate, delete */}
       <div
-        className={`flex items-center select-none shrink-0 ${
+        className={`relative flex items-center select-none shrink-0 ${
           fullWidth
             ? 'gap-2 px-4'
             : `gap-2 px-2.5 rounded-t-lg ${!fullWidth ? 'cursor-grab active:cursor-grabbing' : ''}`
@@ -331,7 +328,7 @@ function EffectDevice({
           background: `${color}14`,
           borderBottom: `1px solid ${color}18`,
         }}
-        onMouseDown={!fullWidth ? (e) => { if (e.button === 0) onDragStart(index); } : undefined}
+        onMouseDown={!fullWidth ? (e) => { if (e.button === 0 && e.target === e.currentTarget) onDragStart(index); } : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();

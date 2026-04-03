@@ -65,6 +65,13 @@ export function Knob({
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
+    // Only run smoothing RAF loop while dragging; snap instantly otherwise
+    if (!isDragging) {
+      displayValueRef.current = value;
+      setDisplayValueSmoothed(value);
+      return;
+    }
+
     const SMOOTHING = 0.35; // 0 = instant, 1 = never catches up; ~3 frame lag at 60fps
     let running = true;
 
@@ -84,7 +91,7 @@ export function Knob({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => { running = false; cancelAnimationFrame(rafRef.current); };
-  }, [value, min, max]);
+  }, [value, min, max, isDragging]);
 
   // Clean up reset timer on unmount
   useEffect(() => {

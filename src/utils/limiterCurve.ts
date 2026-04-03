@@ -38,20 +38,20 @@ export function generateLimiterCurve(
     const threshold = ceiling;
     const diff = boosted - threshold;
 
-    if (kneeDb > 0 && Math.abs(diff) < kneeDb) {
-      // Soft knee region — quadratic interpolation
-      const t = (diff + kneeDb) / (2 * kneeDb);
-      const compression = t * t;
-      outputDb = boosted - diff * compression;
-    } else if (boosted > threshold) {
-      // Above ceiling — hard limit
-      outputDb = ceiling;
-    } else {
+    if (boosted <= threshold) {
       // Below threshold — unity
       outputDb = boosted;
+    } else if (kneeDb > 0 && diff < kneeDb) {
+      // Soft knee region above threshold only — smoothly bend into the ceiling
+      const t = diff / kneeDb;
+      const compression = t * (2 - t);
+      outputDb = boosted - diff * compression;
+    } else {
+      // Above knee — hard limit
+      outputDb = ceiling;
     }
 
-    points.push({ inputDb, outputDb: Math.min(outputDb, ceiling) });
+    points.push({ inputDb, outputDb: Math.min(Math.min(outputDb, boosted), ceiling) });
   }
 
   return points;

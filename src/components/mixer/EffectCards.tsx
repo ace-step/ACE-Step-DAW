@@ -269,7 +269,7 @@ export function EQ3Card({ effect, trackId }: { effect: TrackEffect & { type: 'eq
   );
 }
 
-export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500 }: { low: number; mid: number; high: number; lowFreq?: number; highFreq?: number }) {
+export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500, color = EFFECT_COLORS.eq3 }: { low: number; mid: number; high: number; lowFreq?: number; highFreq?: number; color?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const W = 200;
   const H = 80;
@@ -288,7 +288,6 @@ export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500 }: { lo
 
     const labelH = 13;
     const drawH = H - labelH;
-    const color = '#a855f7';
 
     // Background
     const grad = ctx.createRadialGradient(W / 2, drawH / 2, 0, W / 2, drawH / 2, W * 0.6);
@@ -425,7 +424,7 @@ export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500 }: { lo
     ctx.fillStyle = `${color}cc`;
     ctx.textAlign = 'center';
     ctx.fillText(badge, W - badgeW / 2 - 2, H - 4);
-  }, [low, mid, high, lowFreq, highFreq]);
+  }, [low, mid, high, lowFreq, highFreq, color]);
 
   return <canvas ref={canvasRef} className="rounded" style={{ width: W, height: H }} data-testid="eq3-curve" />;
 }

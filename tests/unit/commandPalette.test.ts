@@ -90,7 +90,7 @@ describe('commandPalette', () => {
     const results = searchCommandsForQuery('tempo 140', context, []);
     const tempoCommand = results.find((result) => result.id === 'project:set-tempo:140');
 
-    expect(tempoCommand).toBeTruthy();
+    expect(tempoCommand).not.toBeUndefined();
     if (!tempoCommand) {
       throw new Error('Expected tempo command to be available');
     }
@@ -105,7 +105,7 @@ describe('commandPalette', () => {
     const results = searchCommandsForQuery('set vocals volume to 65', createContext(), []);
     const volumeCommand = results.find((result) => result.id === `track:${vocalsTrack.id}:volume:65`);
 
-    expect(volumeCommand).toBeTruthy();
+    expect(volumeCommand).not.toBeUndefined();
     if (!volumeCommand) {
       throw new Error('Expected a dynamic volume command');
     }
@@ -120,12 +120,12 @@ describe('commandPalette', () => {
     const vocalsTrack = useProjectStore.getState().addTrack('vocals');
     const existingEffectId = useProjectStore.getState().addTrackEffect(vocalsTrack.id, 'reverb');
 
-    expect(existingEffectId).toBeTruthy();
+    expect(typeof existingEffectId).toBe('string');
 
     const results = searchCommandsForQuery('vocals reverb decay 4.2', createContext(), []);
     const decayCommand = results.find((result) => result.id === `track:${vocalsTrack.id}:reverb-decay:4.2`);
 
-    expect(decayCommand).toBeTruthy();
+    expect(decayCommand).not.toBeUndefined();
     if (!decayCommand) {
       throw new Error('Expected a dynamic reverb decay command');
     }
@@ -151,7 +151,7 @@ describe('commandPalette', () => {
     const registry = buildCommandPaletteRegistry(createContext(), 'vocals volume 80');
     const volumeEntry = registry.find((entry) => entry.id === `track:${vocalsTrack.id}:volume:80`);
 
-    expect(volumeEntry).toBeTruthy();
+    expect(volumeEntry).not.toBeUndefined();
     expect(volumeEntry?.kind).toBe('parameter');
     expect(volumeEntry?.searchText).toContain('vocals');
     expect(volumeEntry?.searchText).toContain('volume');
@@ -162,9 +162,9 @@ describe('commandPalette', () => {
     const zoomSelection = commands.find((command) => command.id === 'view:zoom-to-selection');
     const fitProject = commands.find((command) => command.id === 'view:zoom-to-fit-project');
 
-    expect(zoomSelection).toBeTruthy();
+    expect(zoomSelection).not.toBeUndefined();
     expect(zoomSelection?.shortcut).toEqual(['Z']);
-    expect(fitProject).toBeTruthy();
+    expect(fitProject).not.toBeUndefined();
     expect(fitProject?.shortcut).toEqual(['Shift', 'Z']);
   });
 

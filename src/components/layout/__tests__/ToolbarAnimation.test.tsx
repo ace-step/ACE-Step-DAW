@@ -37,13 +37,13 @@ vi.mock('../../../services/midiCaptureService', () => ({
 }));
 
 describe('Toolbar button micro-animations', () => {
-  it('applies active:scale-95 and transition duration to ControlBarButtons', () => {
+  it('applies active:scale and transition duration to ControlBarButtons', () => {
     useProjectStore.getState().createProject();
     render(<Toolbar />);
 
     const smartControlsButton = screen.getByLabelText('Smart Controls');
-    expect(smartControlsButton.className).toContain('active:scale-95');
-    expect(smartControlsButton.className).toContain('duration-150');
+    expect(smartControlsButton.className).toContain('active:scale-[0.97]');
+    expect(smartControlsButton.className).toContain('duration-[var(--duration-normal)]');
   });
 
   it('applies active:scale-95 to the play button', () => {

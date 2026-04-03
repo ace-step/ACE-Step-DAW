@@ -175,7 +175,7 @@ export function GridOverlay() {
           style={{
             left: shade.x,
             width: shade.width,
-            backgroundColor: 'rgba(0, 0, 0, 0.03)',
+            backgroundColor: 'var(--color-daw-grid-bar-shading)',
           }}
         />
       ))}

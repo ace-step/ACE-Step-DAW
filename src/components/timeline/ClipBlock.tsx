@@ -235,7 +235,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       <div
         ref={clipBlockRef}
         className={`absolute top-1 bottom-1 rounded-[3px] select-none overflow-hidden
-          transition-[filter,box-shadow,border-color] duration-200
           daw-clip-interactive
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}

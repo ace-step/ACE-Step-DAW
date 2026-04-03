@@ -253,21 +253,27 @@ describe('framesToNotes', () => {
     expect(notes[1].startTime).toBeGreaterThan(notes[0].startTime);
   });
 
-  it('MIDI pitch is clamped to 0-127 range', () => {
+  it('excludes frames with out-of-range MIDI pitches (below 0 or above 127)', () => {
     const frames: PitchFrame[] = [
-      { time: 0.0, frequency: 440, confidence: 0.9 },
-      { time: 0.01, frequency: 440, confidence: 0.9 },
-      { time: 0.02, frequency: 440, confidence: 0.9 },
-      { time: 0.03, frequency: 440, confidence: 0.9 },
-      { time: 0.04, frequency: 440, confidence: 0.9 },
-      { time: 0.05, frequency: 440, confidence: 0.9 },
+      // 1 Hz → MIDI ≈ -36 (below 0, should be excluded)
+      { time: 0.0, frequency: 1, confidence: 0.9 },
+      { time: 0.01, frequency: 1, confidence: 0.9 },
+      { time: 0.02, frequency: 1, confidence: 0.9 },
+      { time: 0.03, frequency: 1, confidence: 0.9 },
+      { time: 0.04, frequency: 1, confidence: 0.9 },
+      { time: 0.05, frequency: 1, confidence: 0.9 },
+      // 20000 Hz → MIDI ≈ 135 (above 127, should be excluded)
+      { time: 0.06, frequency: 20000, confidence: 0.9 },
+      { time: 0.07, frequency: 20000, confidence: 0.9 },
+      { time: 0.08, frequency: 20000, confidence: 0.9 },
+      { time: 0.09, frequency: 20000, confidence: 0.9 },
+      { time: 0.10, frequency: 20000, confidence: 0.9 },
+      { time: 0.11, frequency: 20000, confidence: 0.9 },
     ];
 
     const notes = framesToNotes(frames);
-    for (const note of notes) {
-      expect(note.pitch).toBeGreaterThanOrEqual(0);
-      expect(note.pitch).toBeLessThanOrEqual(127);
-    }
+    // Both frequencies produce out-of-range MIDI — treated as null, no notes produced
+    expect(notes).toHaveLength(0);
   });
 
   it('averages confidence across merged frames', () => {

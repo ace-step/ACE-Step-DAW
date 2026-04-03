@@ -261,7 +261,7 @@ describe('getClipAudibleSourceEnd', () => {
     expect(getClipAudibleSourceEnd(clip)).toBe(6);
   });
 
-  it('returns 0 when source is exhausted', () => {
+  it('returns audioOffset when source is exhausted', () => {
     expect(getClipAudibleSourceEnd(makeClip({ audioOffset: 10, audioDuration: 5 }))).toBe(10);
   });
 });

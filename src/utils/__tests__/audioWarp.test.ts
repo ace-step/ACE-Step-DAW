@@ -165,11 +165,11 @@ describe('detectBpm', () => {
     }
 
     const bpm = detectBpm(samples, sampleRate);
+    // Must detect a BPM for clear impulse signal
+    expect(bpm).not.toBeNull();
     // Should detect ~120 BPM (within reasonable range due to histogram binning)
-    if (bpm !== null) {
-      expect(bpm).toBeGreaterThanOrEqual(100);
-      expect(bpm).toBeLessThanOrEqual(140);
-    }
+    expect(bpm!).toBeGreaterThanOrEqual(100);
+    expect(bpm!).toBeLessThanOrEqual(140);
   });
 
   it('normalizes detected BPM to 60-200 range', () => {
@@ -189,10 +189,9 @@ describe('detectBpm', () => {
     }
 
     const bpm = detectBpm(samples, sampleRate);
-    if (bpm !== null) {
-      expect(bpm).toBeGreaterThanOrEqual(60);
-      expect(bpm).toBeLessThanOrEqual(200);
-    }
+    expect(bpm).not.toBeNull();
+    expect(bpm!).toBeGreaterThanOrEqual(60);
+    expect(bpm!).toBeLessThanOrEqual(200);
   });
 
   it('returns an integer BPM', () => {
@@ -211,8 +210,7 @@ describe('detectBpm', () => {
     }
 
     const bpm = detectBpm(samples, sampleRate);
-    if (bpm !== null) {
-      expect(Number.isInteger(bpm)).toBe(true);
-    }
+    expect(bpm).not.toBeNull();
+    expect(Number.isInteger(bpm!)).toBe(true);
   });
 });

@@ -235,7 +235,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
       <div
         ref={clipBlockRef}
         className={`absolute top-1 bottom-1 rounded-md select-none overflow-hidden
-          transition-[filter,box-shadow] duration-100
+          transition-[filter,box-shadow] duration-200
           hover:brightness-110 hover:ring-1 hover:ring-white/10
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
@@ -395,14 +395,13 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
         <ClipStatusOverlay clip={clip} generatingProgress={generatingProgress} generationJob={generationJob} isMidiClip={isMidiClip} />
 
-        {/* Muted overlay */}
+        {/* Muted overlay: diagonal stripes + darkening + label */}
         {clip.muted && (
           <div
-            className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center"
+            className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center daw-clip-mute-overlay"
             data-testid="clip-muted-overlay"
-            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
           >
-            <span className="text-[9px] font-bold tracking-wider text-zinc-400 uppercase opacity-80">Muted</span>
+            <span className="text-[9px] font-bold tracking-wider text-zinc-400 uppercase opacity-90 bg-black/40 px-1.5 py-px rounded-sm">Muted</span>
           </div>
         )}
 

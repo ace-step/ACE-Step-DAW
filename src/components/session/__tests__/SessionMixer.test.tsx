@@ -150,7 +150,7 @@ describe('SessionMixerStrip', () => {
     );
 
     const soloBtn = screen.getByRole('button', { name: /solo/i });
-    expect(soloBtn.className).toContain('bg-green');
+    expect(soloBtn.className).toContain('bg-amber-400');
   });
 
   it('shows active state on mute button when track is muted', () => {
@@ -167,7 +167,7 @@ describe('SessionMixerStrip', () => {
     );
 
     const muteBtn = screen.getByRole('button', { name: /mute/i });
-    expect(muteBtn.className).toContain('bg-amber');
+    expect(muteBtn.className).toContain('bg-red-500');
   });
 
   it('shows track color accent on left edge', () => {

@@ -1270,20 +1270,24 @@ class EffectsEngine {
       case 'filter': {
         const filter = effectNode.node as Tone.Filter;
         if (target.param === 'frequency') {
-          const currentFrequency = Number(filter.frequency.value);
-          filter.frequency.value = value;
           if (effectNode.lfo) {
-            const depth = currentFrequency > 0
-              ? Math.max(0, Math.min(1, (effectNode.lfo.max - currentFrequency) / currentFrequency))
-              : 0;
-            effectNode.lfo.min = Math.max(20, value * (1 - depth));
-            effectNode.lfo.max = Math.min(20000, value * (1 + depth));
+            // When LFO is active, automation controls the base frequency.
+            // Update LFO min/max to modulate around the automation value
+            // instead of writing directly to filter.frequency (which fights the LFO).
+            const lfoMax = effectNode.lfo.max;
+            const lfoMin = effectNode.lfo.min;
+            const center = (lfoMax + lfoMin) / 2;
+            const halfRange = center > 0 ? (lfoMax - lfoMin) / (2 * center) : 0;
+            effectNode.lfo.min = Math.max(20, value * (1 - halfRange));
+            effectNode.lfo.max = Math.min(20000, value * (1 + halfRange));
+          } else {
+            filter.frequency.value = value;
           }
         }
         if (target.param === 'resonance') filter.Q.value = value;
         if (target.param === 'lfoRate' && effectNode.lfo) effectNode.lfo.frequency.value = value;
         if (target.param === 'lfoDepth' && effectNode.lfo) {
-          const freq = Number(filter.frequency.value);
+          const freq = (effectNode.lfo.min + effectNode.lfo.max) / 2;
           effectNode.lfo.min = Math.max(20, freq * (1 - value));
           effectNode.lfo.max = Math.min(20000, freq * (1 + value));
         }

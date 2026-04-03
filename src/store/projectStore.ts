@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { detectLfoAutomationConflict } from '../utils/automationLfoConflict';
 import { createMidiSlice, appendMidiNotesToClip, type MidiSliceActions } from './slices/midiSlice';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
@@ -7365,6 +7366,24 @@ export const useProjectStore = create<ProjectState>()(
       (lane) => lane.trackId === trackId && automationParamEquals(lane.parameter, parameter),
     );
     if (existingLane) return;
+
+    // Warn if this automation lane conflicts with an active LFO
+    if (parameter.type === 'effect') {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      if (track) {
+        const effect = (track.effects ?? []).find((e) => e.id === parameter.effectId);
+        if (effect) {
+          const conflictLane = { id: '', trackId, parameter, points: [] as { time: number; value: number }[] };
+          if (detectLfoAutomationConflict(effect, conflictLane)) {
+            console.warn(
+              `[ACE-Step] Automation lane for ${parameter.param} on ${parameter.effectType} conflicts with active LFO. ` +
+              `Automation will control the LFO base value instead of the parameter directly.`,
+            );
+          }
+        }
+      }
+    }
+
     _pushHistory(state.project);
     const lanes = [
       ...(state.project.automationLanes ?? []),

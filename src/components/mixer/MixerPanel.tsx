@@ -168,8 +168,8 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
               aria-label={`Mute ${track.displayName}`}
               aria-pressed={track.muted}
-              className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-colors ${
-                track.muted ? 'bg-red-500 text-white' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
+              className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-all duration-200 ${
+                track.muted ? 'bg-red-500 text-white shadow-[0_0_6px_rgba(239,68,68,0.4)]' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
               }`}
             >
               M
@@ -179,8 +179,8 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
               aria-label={`Solo ${track.displayName}`}
               aria-pressed={track.soloed}
-              className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-colors ${
-                track.soloed ? 'bg-yellow-400 text-black' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
+              className={`text-[10px] font-bold w-[18px] h-[18px] flex items-center justify-center rounded-sm transition-all duration-200 ${
+                track.soloed ? 'bg-amber-400 text-black shadow-[0_0_6px_rgba(251,191,36,0.5)]' : 'bg-[#444] text-zinc-500 hover:bg-[#484848]'
               }`}
             >
               S

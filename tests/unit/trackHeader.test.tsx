@@ -94,16 +94,16 @@ describe('TrackHeader — icon bar cleanup (#267)', () => {
       expect(fxBtn.textContent).toBe('FX');
     });
 
-    it('mute dot turns amber when active', () => {
+    it('mute dot turns red when active', () => {
       renderHeader({ muted: true });
       const muteBtn = screen.getByTitle('Mute (M)');
-      expect(muteBtn.className).toContain('bg-amber-500');
+      expect(muteBtn.className).toContain('bg-red-500');
     });
 
-    it('solo dot turns emerald when active', () => {
+    it('solo dot turns amber when active', () => {
       renderHeader({ soloed: true });
       const soloBtn = screen.getByTitle('Solo (S)');
-      expect(soloBtn.className).toContain('bg-emerald-500');
+      expect(soloBtn.className).toContain('bg-amber-400');
     });
   });
 

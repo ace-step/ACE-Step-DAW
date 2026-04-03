@@ -75,16 +75,16 @@ describe('TrackHeader layout improvements (#546)', () => {
       expect(fxBtn.textContent).toBe('FX');
     });
 
-    it('mute button is amber when active', () => {
+    it('mute button is red when active', () => {
       render(<TrackHeader track={makeTrack({ muted: true })} {...defaultProps} />);
       const muteBtn = screen.getByLabelText('Mute Vocals');
-      expect(muteBtn.className).toContain('bg-amber-500');
+      expect(muteBtn.className).toContain('bg-red-500');
     });
 
-    it('solo button is emerald when active', () => {
+    it('solo button is amber when active', () => {
       render(<TrackHeader track={makeTrack({ soloed: true })} {...defaultProps} />);
       const soloBtn = screen.getByLabelText('Solo Vocals');
-      expect(soloBtn.className).toContain('bg-emerald-500');
+      expect(soloBtn.className).toContain('bg-amber-400');
     });
 
     it('M/S/FX buttons have no SVG icons', () => {

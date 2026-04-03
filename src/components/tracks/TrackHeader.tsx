@@ -236,7 +236,7 @@ export const TrackHeader = React.memo(function TrackHeader({
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
       className={`relative flex items-center gap-2 border-b group select-none ${
         isDragOver ? 'bg-daw-hover-subtle' : ''
-      }`}
+      } ${isImpliedMute ? 'daw-implied-mute' : ''} ${track.soloed ? 'daw-soloed' : ''}`}
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: ARRANGEMENT_ROW_SEPARATOR_COLOR,
@@ -245,8 +245,6 @@ export const TrackHeader = React.memo(function TrackHeader({
         paddingRight: isCollapsed ? 0 : 8,
         borderTop: isDragOver && dragOverPosition === 'before' ? '2px solid var(--color-daw-accent)' : undefined,
         borderBottom: isDragOver && dragOverPosition === 'after' ? '2px solid var(--color-daw-accent)' : undefined,
-        opacity: isImpliedMute ? 0.45 : undefined,
-        transition: 'opacity 150ms ease',
       }}
       draggable
       onDragStart={() => onDragStart(track.id)}
@@ -284,13 +282,39 @@ export const TrackHeader = React.memo(function TrackHeader({
     >
       {/* Selected track overlay */}
       {isTrackSelected && !isDragOver && (
-        <div aria-hidden="true" className="absolute inset-0 pointer-events-none rounded-inherit" style={{ backgroundColor: 'rgba(94, 89, 255, 0.24)' }} />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none rounded-inherit"
+          style={{
+            backgroundColor: 'rgba(94, 89, 255, 0.18)',
+            borderLeft: '2px solid rgba(94, 89, 255, 0.6)',
+            transition: 'background-color var(--duration-normal) var(--ease-out)',
+          }}
+        />
       )}
 
-      {/* Color strip (left edge) — click to change track color */}
+      {/* Muted track: diagonal stripe overlay */}
+      {track.muted && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none daw-mute-stripes"
+          style={{ transition: 'opacity var(--duration-normal) var(--ease-out)' }}
+        />
+      )}
+
+      {/* Color strip (left edge) — red when armed, golden glow when soloed */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[6px] rounded-r-sm cursor-pointer hover:w-2 hover:shadow-[0_0_6px_var(--track-color)] transition-all duration-100"
-        style={{ backgroundColor: track.color, '--track-color': track.color } as React.CSSProperties}
+        className={`absolute left-0 top-0 bottom-0 rounded-r-sm cursor-pointer hover:w-2 transition-all duration-100 ${
+          isArmed
+            ? 'w-[6px] animate-pulse'
+            : track.soloed
+              ? 'w-[6px] shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+              : 'w-[6px] hover:shadow-[0_0_6px_var(--track-color)]'
+        }`}
+        style={{
+          backgroundColor: isArmed ? '#ef4444' : track.soloed ? '#10b981' : track.color,
+          '--track-color': track.color,
+        } as React.CSSProperties}
         title="Click to change track color"
         onClick={(e) => {
           e.stopPropagation();
@@ -428,7 +452,9 @@ export const TrackHeader = React.memo(function TrackHeader({
                 />
               ) : (
                 <span
-                  className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
+                  className={`text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight ${
+                    track.muted ? 'line-through decoration-zinc-500' : ''
+                  }`}
                   title={track.displayName}
                   onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
                 >
@@ -443,9 +469,9 @@ export const TrackHeader = React.memo(function TrackHeader({
             >
               <button
                 onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
                   track.muted
-                    ? 'bg-amber-500 text-white'
+                    ? 'bg-red-500 text-white shadow-[0_0_6px_rgba(239,68,68,0.4)]'
                     : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                 }`}
                 title="Mute (M)"
@@ -453,9 +479,9 @@ export const TrackHeader = React.memo(function TrackHeader({
               >M</button>
               <button
                 onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
                   track.soloed
-                    ? 'bg-emerald-500 text-white'
+                    ? 'bg-amber-400 text-black shadow-[0_0_6px_rgba(251,191,36,0.5)]'
                     : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-zinc-200'
                 }`}
                 title="Solo (S)"
@@ -522,7 +548,9 @@ export const TrackHeader = React.memo(function TrackHeader({
               />
             ) : (
               <span
-                className="text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight"
+                className={`text-[11px] font-medium text-zinc-200 block truncate cursor-text leading-tight ${
+                  track.muted ? 'line-through decoration-zinc-500' : ''
+                }`}
                 title={track.displayName}
                 onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
               >
@@ -536,9 +564,9 @@ export const TrackHeader = React.memo(function TrackHeader({
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => track.isGroup ? setGroupMuted(track.id, !track.muted) : updateTrack(track.id, { muted: !track.muted })}
-              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
+              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
                 track.muted
-                  ? 'bg-amber-500 text-white'
+                  ? 'bg-red-500 text-white shadow-[0_0_4px_rgba(239,68,68,0.4)]'
                   : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
               }`}
               title="Mute (M)"
@@ -546,9 +574,9 @@ export const TrackHeader = React.memo(function TrackHeader({
             >M</button>
             <button
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
-              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
+              className={`w-[16px] h-[16px] rounded-full text-[8px] font-bold leading-none flex items-center justify-center transition-all duration-200 ${
                 track.soloed
-                  ? 'bg-emerald-500 text-white'
+                  ? 'bg-amber-400 text-black shadow-[0_0_4px_rgba(251,191,36,0.5)]'
                   : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
               }`}
               title="Solo (S)"

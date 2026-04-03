@@ -167,9 +167,9 @@ export function SessionMixerStrip({
       {/* Solo button */}
       <button
         onClick={onSoloToggle}
-        className={`w-6 h-6 rounded text-[10px] font-bold shrink-0 transition-colors ${
+        className={`w-6 h-6 rounded text-[10px] font-bold shrink-0 transition-all duration-200 ${
           soloed
-            ? 'bg-green-500 text-white'
+            ? 'bg-amber-400 text-black shadow-[0_0_6px_rgba(251,191,36,0.5)]'
             : 'bg-[#343434] text-zinc-400 hover:bg-[#404040]'
         }`}
         aria-label={`Solo ${trackName}`}
@@ -181,9 +181,9 @@ export function SessionMixerStrip({
       {/* Mute button */}
       <button
         onClick={onMuteToggle}
-        className={`w-6 h-6 rounded text-[10px] font-bold shrink-0 transition-colors ${
+        className={`w-6 h-6 rounded text-[10px] font-bold shrink-0 transition-all duration-200 ${
           muted
-            ? 'bg-amber-500 text-white'
+            ? 'bg-red-500 text-white shadow-[0_0_6px_rgba(239,68,68,0.4)]'
             : 'bg-[#343434] text-zinc-400 hover:bg-[#404040]'
         }`}
         aria-label={`Mute ${trackName}`}

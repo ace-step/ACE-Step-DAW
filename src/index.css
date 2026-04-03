@@ -292,6 +292,85 @@ select:focus-visible,
   100% { opacity: 0; }
 }
 
+/* ── State Communication System (#1133) ── */
+
+/* Recording state: pulsing red glow for armed tracks */
+@keyframes record-arm-pulse {
+  0%, 100% { box-shadow: inset 4px 0 0 0 rgba(239, 68, 68, 0.8); }
+  50% { box-shadow: inset 4px 0 0 0 rgba(239, 68, 68, 0.4); }
+}
+
+/* Solo glow: golden left border shimmer */
+@keyframes solo-glow {
+  0%, 100% { box-shadow: inset 4px 0 0 0 rgba(16, 185, 129, 0.7); }
+  50% { box-shadow: inset 4px 0 0 0 rgba(16, 185, 129, 0.4); }
+}
+
+/* Mute stripe pattern: diagonal lines overlay */
+.daw-mute-stripes {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 0, 0, 0.12) 4px,
+    rgba(0, 0, 0, 0.12) 5px
+  );
+}
+
+/* Clip mute overlay: diagonal stripes + darkening */
+.daw-clip-mute-overlay {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 3px,
+      rgba(0, 0, 0, 0.18) 3px,
+      rgba(0, 0, 0, 0.18) 4px
+    ),
+    rgba(0, 0, 0, 0.35);
+}
+
+/* Non-soloed track dimming: desaturate + reduce opacity */
+.daw-implied-mute {
+  opacity: 0.4;
+  filter: saturate(0.35);
+  transition: opacity var(--duration-normal) var(--ease-out),
+              filter var(--duration-normal) var(--ease-out);
+}
+
+/* Soloed track: restore full saturation + subtle glow */
+.daw-soloed {
+  opacity: 1;
+  filter: saturate(1);
+  transition: opacity var(--duration-normal) var(--ease-out),
+              filter var(--duration-normal) var(--ease-out);
+}
+
+/* Generation complete flash */
+@keyframes generation-complete-flash {
+  0% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.6); }
+  100% { box-shadow: 0 0 0 2px rgba(52, 211, 153, 0); }
+}
+
+/* Loop region highlight */
+.daw-loop-region {
+  background: linear-gradient(
+    180deg,
+    rgba(74, 122, 255, 0.06) 0%,
+    rgba(123, 94, 255, 0.04) 100%
+  );
+  border-left: 1px dashed rgba(74, 122, 255, 0.4);
+  border-right: 1px dashed rgba(74, 122, 255, 0.4);
+}
+
+/* Reduced motion: disable state communication animations */
+@media (prefers-reduced-motion: reduce) {
+  .daw-implied-mute {
+    filter: none;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+}
+
 @keyframes fx-card-enter {
   from {
     opacity: 0;

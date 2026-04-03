@@ -60,7 +60,7 @@ describe('Channel strip improvements', () => {
 
       render(<MixerPanel />);
       const soloBtn = screen.getAllByTestId('solo-btn')[0];
-      expect(soloBtn.className).toContain('bg-yellow-400');
+      expect(soloBtn.className).toContain('bg-amber-400');
       expect(soloBtn.getAttribute('aria-pressed')).toBe('true');
     });
 

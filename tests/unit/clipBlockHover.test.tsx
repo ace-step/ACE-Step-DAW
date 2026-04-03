@@ -86,12 +86,10 @@ describe('ClipBlock hover and active feedback', () => {
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const classList = clipEl.className;
 
-    // Hover state: brightness boost or ring
-    expect(classList).toMatch(/hover:/);
-    // Active state: brightness change
+    // Hover/active states handled via daw-clip-interactive CSS class
+    expect(classList).toContain('daw-clip-interactive');
+    // Active state: brightness change via Tailwind utility
     expect(classList).toMatch(/active:/);
-    // Smooth CSS transition
-    expect(classList).toMatch(/transition/);
   });
 
   it('renders resize edge handles with custom bracket cursors on header rail only', () => {

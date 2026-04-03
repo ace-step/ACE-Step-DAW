@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
+import { useAnimatedPresence } from '../../hooks/useAnimatedPresence';
 
 function ShortcutHint({ keys }: { keys?: string[] }) {
   if (!keys || keys.length === 0) return null;
@@ -48,7 +49,9 @@ export function CommandPalette() {
     }
   }, [results, selectedIndex]);
 
-  if (!show) return null;
+  const { shouldRender, isVisible } = useAnimatedPresence(show, 100);
+
+  if (!shouldRender) return null;
 
   const activeResult = results[selectedIndex] ?? null;
 
@@ -59,8 +62,13 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 flex items-start justify-center bg-black/55 px-4 pt-[10vh] backdrop-blur-sm"
-      style={{ zIndex: Z.commandPalette }}
+      className="fixed inset-0 flex items-start justify-center px-4 pt-[10vh]"
+      style={{
+        zIndex: Z.commandPalette,
+        backgroundColor: isVisible ? 'rgba(0, 0, 0, 0.55)' : 'rgba(0, 0, 0, 0)',
+        backdropFilter: isVisible ? 'blur(4px)' : 'blur(0px)',
+        transition: 'background-color 200ms ease-out, backdrop-filter 200ms ease-out',
+      }}
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
       <div
@@ -68,6 +76,13 @@ export function CommandPalette() {
         aria-modal="true"
         aria-label="Command palette"
         className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#171717]/96 shadow-[0_40px_120px_rgba(0,0,0,0.55)]"
+        style={{
+          transform: isVisible ? 'translateY(0)' : 'translateY(-8px)',
+          opacity: isVisible ? 1 : 0,
+          transition: isVisible
+            ? 'transform 200ms ease-out, opacity 200ms ease-out'
+            : 'transform 100ms ease-in, opacity 100ms ease-in',
+        }}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="border-b border-white/8 px-4 py-3">

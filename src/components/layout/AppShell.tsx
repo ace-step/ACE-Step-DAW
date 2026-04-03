@@ -23,6 +23,7 @@ import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
+import { BottomPanelTransition } from '../ui/BottomPanelTransition';
 
 // Lazy-loaded dialogs (code-split, loaded on first use)
 const InstrumentPicker = lazy(() => import('../dialogs/InstrumentPicker').then(m => ({ default: m.InstrumentPicker })));
@@ -150,12 +151,24 @@ function EditorShell() {
       <StatusBar saveStatus={saveStatus} lastSavedAt={lastSavedAt} />
 
       {project && showSmartControls && <SmartControlsPanel />}
-      {project && openSequencerTrackId && <ErrorBoundary name="Sequencer"><Suspense fallback={null}><SequencerEditor /></Suspense></ErrorBoundary>}
-      {project && openDrumMachineTrackId && <ErrorBoundary name="DrumMachine"><Suspense fallback={null}><DrumMachineEditor /></Suspense></ErrorBoundary>}
-      {project && openPianoRollTrackId && <ErrorBoundary name="PianoRoll"><Suspense fallback={null}><PianoRoll /></Suspense></ErrorBoundary>}
-      {project && strudelPanelOpen && <ErrorBoundary name="StrudelEditor"><Suspense fallback={null}><StrudelEditor /></Suspense></ErrorBoundary>}
-      {project && (openEffectChainTrackId || openMidiEffectChainTrackId) && <ErrorBoundary name="EffectChain"><Suspense fallback={null}><EffectChain /></Suspense></ErrorBoundary>}
-      {project && showMixer && <ErrorBoundary name="Mixer"><Suspense fallback={null}><MixerPanel /></Suspense></ErrorBoundary>}
+      <BottomPanelTransition show={!!project && !!openSequencerTrackId}>
+        <ErrorBoundary name="Sequencer"><Suspense fallback={null}><SequencerEditor /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
+      <BottomPanelTransition show={!!project && !!openDrumMachineTrackId}>
+        <ErrorBoundary name="DrumMachine"><Suspense fallback={null}><DrumMachineEditor /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
+      <BottomPanelTransition show={!!project && !!openPianoRollTrackId}>
+        <ErrorBoundary name="PianoRoll"><Suspense fallback={null}><PianoRoll /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
+      <BottomPanelTransition show={!!project && strudelPanelOpen}>
+        <ErrorBoundary name="StrudelEditor"><Suspense fallback={null}><StrudelEditor /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
+      <BottomPanelTransition show={!!project && !!(openEffectChainTrackId || openMidiEffectChainTrackId)}>
+        <ErrorBoundary name="EffectChain"><Suspense fallback={null}><EffectChain /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
+      <BottomPanelTransition show={!!project && showMixer}>
+        <ErrorBoundary name="Mixer"><Suspense fallback={null}><MixerPanel /></Suspense></ErrorBoundary>
+      </BottomPanelTransition>
       {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}

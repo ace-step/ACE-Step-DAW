@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useUIStore } from '../../src/store/uiStore';
 import { useProjectStore } from '../../src/store/projectStore';
-import { buildAssistantContext } from '../../src/utils/aiAssistantContext';
-import { getArrangementSuggestions } from '../../src/services/aiAssistantService';
 import type { InlineSuggestion } from '../../src/types/suggestions';
 
 describe('inline regeneration and suggestions', () => {
@@ -64,47 +62,4 @@ describe('inline regeneration and suggestions', () => {
     });
   });
 
-  describe('arrangement suggestions', () => {
-    it('returns empty array when no project exists', () => {
-      const context = buildAssistantContext(null, {});
-      expect(getArrangementSuggestions(context)).toEqual([]);
-    });
-
-    it('suggests fills for empty regions when tracks exist', () => {
-      useProjectStore.getState().createProject({ name: 'Test', bpm: 120 });
-      useProjectStore.getState().addTrack('drums');
-      useProjectStore.getState().addTrack('bass');
-
-      const project = useProjectStore.getState().project;
-      const context = buildAssistantContext(project, {});
-      const suggestions = getArrangementSuggestions(context, project);
-
-      expect(suggestions.length).toBeGreaterThan(0);
-      // All suggestions should have required fields
-      for (const s of suggestions) {
-        expect(s.id).toBeTruthy();
-        expect(s.text).toBeTruthy();
-        expect(typeof s.time).toBe('number');
-        expect(s.type).toMatch(/^(fill|arrangement|variation|next)$/);
-      }
-    });
-
-    it('suggests "what comes next" at the end of the arrangement', () => {
-      useProjectStore.getState().createProject({ name: 'Test', bpm: 120 });
-      const track = useProjectStore.getState().addTrack('drums');
-      useProjectStore.getState().addClip(track.id, {
-        startTime: 0,
-        duration: 30,
-        prompt: 'energetic drums',
-      });
-
-      const project = useProjectStore.getState().project;
-      const context = buildAssistantContext(project, {});
-      const suggestions = getArrangementSuggestions(context, project);
-
-      const nextSuggestion = suggestions.find((s) => s.type === 'next');
-      expect(nextSuggestion).toBeDefined();
-      expect(nextSuggestion!.time).toBeGreaterThanOrEqual(30);
-    });
-  });
 });

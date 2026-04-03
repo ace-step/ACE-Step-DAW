@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Knob } from '../ui/Knob';
 import { PrecisionInput, clampValue, roundToStep } from '../ui/PrecisionInput';
 import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
-import { EffectCardLayout } from './EffectCardLayout';
+import { EffectCardLayout, ModeButton } from './EffectCardLayout';
 import { CompressorCurve } from './CompressorCurve';
 import { DistortionCurve } from './DistortionCurve';
 import { ReverbDecayCurve } from './ReverbDecayCurve';
@@ -564,20 +564,12 @@ export function ParametricEQCard({
     <div className="flex flex-col gap-2 p-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex gap-1">
-          <button
-            className={`px-2 py-0.5 rounded text-[8px] uppercase ${effect.params.mode === 'simple' ? 'bg-blue-500/30 text-blue-200' : 'text-white/40 hover:bg-white/5'}`}
-            onClick={() => switchMode('simple')}
-            aria-label="Parametric EQ simple mode"
-          >
+          <ModeButton active={effect.params.mode === 'simple'} onClick={() => switchMode('simple')} color={EFFECT_COLORS.parametricEq}>
             Simple
-          </button>
-          <button
-            className={`px-2 py-0.5 rounded text-[8px] uppercase ${effect.params.mode === 'parametric' ? 'bg-blue-500/30 text-blue-200' : 'text-white/40 hover:bg-white/5'}`}
-            onClick={() => switchMode('parametric')}
-            aria-label="Parametric EQ parametric mode"
-          >
+          </ModeButton>
+          <ModeButton active={effect.params.mode === 'parametric'} onClick={() => switchMode('parametric')} color={EFFECT_COLORS.parametricEq}>
             Parametric
-          </button>
+          </ModeButton>
         </div>
         <span className="text-[8px] text-white/35">Spectrum + response</span>
       </div>
@@ -893,15 +885,9 @@ export function DistortionCard({ effect, trackId }: { effect: TrackEffect & { ty
       mode={
         <>
           {(['soft', 'overdrive', 'fuzz'] as DistortionParams['distortionType'][]).map((dt) => (
-            <button
-              key={dt}
-              className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.distortionType === dt ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
-              }`}
-              onClick={() => update({ distortionType: dt })}
-            >
+            <ModeButton key={dt} active={p.distortionType === dt} onClick={() => update({ distortionType: dt })} color={EFFECT_COLORS.distortion}>
               {dt}
-            </button>
+            </ModeButton>
           ))}
         </>
       }
@@ -944,29 +930,18 @@ export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 
       mode={
         <>
           {(['lowpass', 'highpass', 'bandpass'] as FilterParams['filterType'][]).map((ft) => (
-            <button
-              key={ft}
-              className={`px-1.5 py-0.5 text-[8px] rounded uppercase ${
-                p.filterType === ft ? 'bg-cyan-500/20 text-cyan-300 shadow-[0_0_3px_-1px_rgba(34,211,238,0.3)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
-              }`}
-              onClick={() => update({ filterType: ft })}
-            >
+            <ModeButton key={ft} active={p.filterType === ft} onClick={() => update({ filterType: ft })} color={EFFECT_COLORS.filter}>
               {ft === 'lowpass' ? 'LP' : ft === 'highpass' ? 'HP' : 'BP'}
-            </button>
+            </ModeButton>
           ))}
         </>
       }
       footer={
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1.5">
-            <button
-              className={`px-2 py-0.5 text-[8px] rounded ${
-                p.lfoEnabled ? 'bg-green-500/30 text-green-300' : 'text-white/30 hover:bg-white/5'
-              }`}
-              onClick={() => update({ lfoEnabled: !p.lfoEnabled })}
-            >
+            <ModeButton active={p.lfoEnabled} onClick={() => update({ lfoEnabled: !p.lfoEnabled })} color="#34d399">
               LFO {p.lfoEnabled ? 'ON' : 'OFF'}
-            </button>
+            </ModeButton>
           </div>
           {p.lfoEnabled && (
             <div className="flex gap-3 justify-center">
@@ -1187,15 +1162,9 @@ export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'g
       mode={
         <>
           {(['gate', 'expander'] as GateParams['mode'][]).map((m) => (
-            <button
-              key={m}
-              className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
-              }`}
-              onClick={() => update({ mode: m })}
-            >
+            <ModeButton key={m} active={p.mode === m} onClick={() => update({ mode: m })} color={EFFECT_COLORS.gate}>
               {m}
-            </button>
+            </ModeButton>
           ))}
         </>
       }
@@ -1240,24 +1209,13 @@ export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type:
       mode={
         <>
           {(['wideband', 'split'] as DeEsserParams['mode'][]).map((m) => (
-            <button
-              key={m}
-              className={`px-2 py-0.5 text-[10px] rounded capitalize ${
-                p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
-              }`}
-              onClick={() => update({ mode: m })}
-            >
+            <ModeButton key={m} active={p.mode === m} onClick={() => update({ mode: m })} color={EFFECT_COLORS.deesser}>
               {m}
-            </button>
+            </ModeButton>
           ))}
-          <button
-            className={`px-2 py-0.5 text-[8px] rounded ${
-              p.listen ? 'bg-green-500/30 text-green-300' : 'text-white/30 hover:bg-white/5'
-            }`}
-            onClick={() => update({ listen: !p.listen })}
-          >
+          <ModeButton active={p.listen} onClick={() => update({ listen: !p.listen })} color="#34d399">
             Listen
-          </button>
+          </ModeButton>
         </>
       }
     >
@@ -1329,15 +1287,9 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
       mode={
         <>
           {(['transparent', 'aggressive', 'warm'] as LimiterParams['style'][]).map((s) => (
-            <button
-              key={s}
-              className={`px-3 py-1 text-[9px] rounded-md capitalize transition-colors ${
-                p.style === s ? 'bg-amber-500/25 text-amber-200 font-medium' : 'text-white/40 hover:text-white/60 hover:bg-white/5'
-              }`}
-              onClick={() => update({ style: s })}
-            >
+            <ModeButton key={s} active={p.style === s} onClick={() => update({ style: s })} color={EFFECT_COLORS.limiter}>
               {s}
-            </button>
+            </ModeButton>
           ))}
         </>
       }
@@ -1384,15 +1336,9 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
       mode={
         <>
           {(Object.keys(SATURATION_TYPE_LABELS) as SaturationType[]).map((st) => (
-            <button
-              key={st}
-              className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${
-                p.saturationType === st ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'
-              }`}
-              onClick={() => update({ saturationType: st })}
-            >
+            <ModeButton key={st} active={p.saturationType === st} onClick={() => update({ saturationType: st })} color={EFFECT_COLORS.saturation}>
               {SATURATION_TYPE_LABELS[st]}
-            </button>
+            </ModeButton>
           ))}
         </>
       }
@@ -1485,8 +1431,9 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
       mode={
         <>
           {(Object.keys(REVERB_TYPE_LABELS) as AlgorithmicReverbType[]).map((rt) => (
-            <button key={rt} className={`px-1.5 py-0.5 text-[10px] rounded capitalize ${p.reverbType === rt ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'}`}
-              onClick={() => update({ reverbType: rt })}>{REVERB_TYPE_LABELS[rt]}</button>
+            <ModeButton key={rt} active={p.reverbType === rt} onClick={() => update({ reverbType: rt })} color={EFFECT_COLORS.algorithmicReverb}>
+              {REVERB_TYPE_LABELS[rt]}
+            </ModeButton>
           ))}
         </>
       }
@@ -1529,8 +1476,9 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
       mode={
         <>
           {(['fast', 'smooth'] as NoiseGateReductionParams['mode'][]).map((m) => (
-            <button key={m} className={`px-2 py-0.5 text-[10px] rounded capitalize ${p.mode === m ? 'bg-white/[0.08] text-white/70 shadow-[0_0_3px_-1px_rgba(255,255,255,0.15)]' : 'text-white/30 hover:text-white/50 hover:bg-white/[0.06]'}`}
-              onClick={() => update({ mode: m })}>{m}</button>
+            <ModeButton key={m} active={p.mode === m} onClick={() => update({ mode: m })} color={EFFECT_COLORS.noiseReduction}>
+              {m}
+            </ModeButton>
           ))}
         </>
       }

@@ -243,7 +243,9 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
 
 
 /**
- * Width tier for compact card view.
+ * Width tier for compact card view (fullWidth=false).
+ * Currently the main EffectChain renders in full-width mode, but EffectDevice
+ * supports compact mode for potential use in horizontal chain strips or popups.
  * - compact: simple effects (1-2 knobs, no visualization)
  * - standard: medium effects (3-4 knobs or visualization)
  * - wide: complex effects (5+ knobs, visualization + mode + extra sections)
@@ -503,7 +505,7 @@ function EffectDevice({
         }
         style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '400px' }}
       >
-        <div className={fullWidth ? 'h-full flex flex-col justify-center' : ''}>
+        <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[400px]'}>
           <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>

@@ -37,7 +37,7 @@ describe('session clip undo/redo integration', () => {
 
   it('undo after launchSessionClip restores previous session state', () => {
     // Before launch — no active clip
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId] ?? null).toBeNull();
 
     // Launch clip
     useProjectStore.getState().launchSessionClip(trackId, sceneId);
@@ -45,7 +45,7 @@ describe('session clip undo/redo integration', () => {
 
     // Undo — should restore to no active clip
     useProjectStore.getState().undo('session');
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId] ?? null).toBeNull();
   });
 
   it('redo after undo restores the launched clip', () => {
@@ -53,7 +53,7 @@ describe('session clip undo/redo integration', () => {
     expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
     useProjectStore.getState().undo('session');
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId] ?? null).toBeNull();
 
     useProjectStore.getState().redo('session');
     expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
@@ -65,7 +65,7 @@ describe('session clip undo/redo integration', () => {
     expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
     useProjectStore.getState().stopSessionTrack(trackId);
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId] ?? null).toBeNull();
 
     // Undo the stop — should restore active clip
     useProjectStore.getState().undo('session');
@@ -78,7 +78,7 @@ describe('session clip undo/redo integration', () => {
     expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
     useProjectStore.getState().stopAllSessionClips();
-    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId] ?? null).toBeNull();
 
     // Undo — should restore active clips
     useProjectStore.getState().undo('session');

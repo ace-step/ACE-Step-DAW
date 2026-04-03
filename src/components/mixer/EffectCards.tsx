@@ -564,10 +564,10 @@ export function ParametricEQCard({
     <div className="flex flex-col gap-2 p-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex gap-1">
-          <ModeButton active={effect.params.mode === 'simple'} onClick={() => switchMode('simple')} color={EFFECT_COLORS.parametricEq}>
+          <ModeButton active={effect.params.mode === 'simple'} onClick={() => switchMode('simple')} color={EFFECT_COLORS.parametricEq} ariaLabel="Parametric EQ simple mode">
             Simple
           </ModeButton>
-          <ModeButton active={effect.params.mode === 'parametric'} onClick={() => switchMode('parametric')} color={EFFECT_COLORS.parametricEq}>
+          <ModeButton active={effect.params.mode === 'parametric'} onClick={() => switchMode('parametric')} color={EFFECT_COLORS.parametricEq} ariaLabel="Parametric EQ parametric mode">
             Parametric
           </ModeButton>
         </div>

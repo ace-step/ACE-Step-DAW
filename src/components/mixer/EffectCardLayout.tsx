@@ -97,9 +97,10 @@ interface ModeButtonProps {
   onClick: () => void;
   children: ReactNode;
   color?: string;
+  ariaLabel?: string;
 }
 
-export function ModeButton({ active, onClick, children, color }: ModeButtonProps) {
+export function ModeButton({ active, onClick, children, color, ariaLabel }: ModeButtonProps) {
   return (
     <button
       className={`px-2 py-0.5 text-[10px] rounded capitalize transition-colors ${
@@ -112,6 +113,8 @@ export function ModeButton({ active, onClick, children, color }: ModeButtonProps
         color: color ? `${color}cc` : undefined,
       } : undefined}
       onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
     >
       {children}
     </button>

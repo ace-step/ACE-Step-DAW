@@ -62,7 +62,7 @@ describe('ParamGroup', () => {
         <div>Attack</div>
       </ParamGroup>,
     );
-    expect(screen.getByText('Envelope')).toBeDefined();
+    screen.getByText('Envelope'); // getBy* throws if not found
   });
 
   it('renders children without label', () => {
@@ -71,6 +71,6 @@ describe('ParamGroup', () => {
         <div data-testid="child">Knob</div>
       </ParamGroup>,
     );
-    expect(screen.getByTestId('child')).toBeDefined();
+    screen.getByTestId('child'); // getBy* throws if not found
   });
 });

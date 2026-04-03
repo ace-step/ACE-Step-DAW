@@ -28,8 +28,9 @@ describe('ClipWaveform', () => {
       </div>,
     );
 
+    // 4 paths: 2 filled (L+R channel) + 2 peak envelope lines
     const paths = Array.from(container.querySelectorAll('path'));
-    expect(paths.length).toBe(2); // left + right channel
+    expect(paths.length).toBe(4);
     const d = paths[0].getAttribute('d') ?? '';
     // First M command sets the starting X — should be offset by contentOffset
     const match = d.match(/^M\s+([\d.]+)/);
@@ -54,8 +55,9 @@ describe('ClipWaveform', () => {
       </div>,
     );
 
+    // 4 paths: 2 filled (L+R channel) + 2 peak envelope lines
     const paths = Array.from(container.querySelectorAll('path'));
-    expect(paths.length).toBe(2);
+    expect(paths.length).toBe(4);
     const d = paths[0].getAttribute('d') ?? '';
     const match = d.match(/^M\s+([\d.]+)/);
     expect(match).not.toBeNull();
@@ -83,8 +85,9 @@ describe('ClipWaveform', () => {
       </div>,
     );
 
+    // 4 paths: 2 filled (L+R channel) + 2 peak envelope lines
     const paths = Array.from(container.querySelectorAll('path'));
-    expect(paths.length).toBe(2);
+    expect(paths.length).toBe(4);
     expect(paths[0].getAttribute('data-testid')).toBe('waveform-left-channel');
     expect(paths[1].getAttribute('data-testid')).toBe('waveform-right-channel');
 

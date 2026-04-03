@@ -198,12 +198,13 @@ select:focus-visible,
   box-shadow: var(--daw-shadow-inset);
 }
 
-/* Clip block hover: border brightening */
+/* Clip block hover: border brightening + subtle brightness lift */
 .daw-clip-interactive {
-  transition: border-color var(--duration-fast) var(--ease-out);
+  transition: border-color var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 .daw-clip-interactive:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.24);
+  filter: brightness(1.08);
 }
 
 /* Drag lift: element elevates when being dragged */

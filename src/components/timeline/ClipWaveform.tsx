@@ -77,6 +77,16 @@ export function ClipWaveform({
     scaledAmplitude,
   );
 
+  // Peak envelope lines — brighter outline on top of the filled waveform
+  const leftPeakLine = buildPeakEnvelopeLine(
+    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
+    0, 25, scaledAmplitude,
+  );
+  const rightPeakLine = buildPeakEnvelopeLine(
+    peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
+    2, 75, scaledAmplitude,
+  );
+
   return (
     <div className="absolute inset-0 flex items-center overflow-hidden">
       <svg
@@ -96,8 +106,12 @@ export function ClipWaveform({
           strokeOpacity={0.2}
           strokeWidth={0.5}
         />
-        <path d={leftPath} fill={color} data-testid="waveform-left-channel" />
-        <path d={rightPath} fill={color} data-testid="waveform-right-channel" />
+        {/* Filled waveform shapes */}
+        <path d={leftPath} fill={color} fillOpacity={0.6} data-testid="waveform-left-channel" />
+        <path d={rightPath} fill={color} fillOpacity={0.6} data-testid="waveform-right-channel" />
+        {/* Peak envelope highlight lines — brighter outline on top */}
+        <path d={leftPeakLine} fill="none" stroke={color} strokeOpacity={1} strokeWidth={0.8} data-testid="waveform-left-peak" />
+        <path d={rightPeakLine} fill="none" stroke={color} strokeOpacity={1} strokeWidth={0.8} data-testid="waveform-right-peak" />
       </svg>
     </div>
   );
@@ -135,6 +149,31 @@ function buildChannelPath(
 
   // Build closed path: upper left-to-right, then lower right-to-left
   return `M ${upperPoints[0]} L ${upperPoints.join(' L ')} L ${lowerPoints.reverse().join(' L ')} Z`;
+}
+
+/**
+ * Build an SVG path for the peak envelope line (positive peaks only).
+ * This draws a single polyline along the top of the waveform for a brighter highlight.
+ */
+function buildPeakEnvelopeLine(
+  peaks: number[],
+  peakSlice: { startPeakIdx: number; numBars: number },
+  columnCount: number,
+  columnWidth: number,
+  leftPx: number,
+  channelOffset: number,
+  centerY: number,
+  maxAmplitude: number,
+): string {
+  const points: string[] = [];
+  for (let i = 0; i < columnCount; i++) {
+    const x = leftPx + (i + 0.5) * columnWidth;
+    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    const yTop = centerY - max * maxAmplitude;
+    points.push(`${x} ${yTop}`);
+  }
+  if (points.length === 0) return '';
+  return `M ${points.join(' L ')}`;
 }
 
 function getVisiblePeakSlice(
@@ -207,16 +246,23 @@ export function ClipMidiThumbnail({ midiData, width, duration, bpm, color }: Cli
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
 
+  // Zoom-adaptive density: when clip is narrow, skip notes that would overlap
+  // to avoid visual noise. At wider widths, show all notes.
+  const maxNotes = Math.max(20, Math.floor(width / 2));
+  const notes = midiData.notes.length > maxNotes
+    ? midiData.notes.filter((_, i) => i % Math.ceil(midiData.notes.length / maxNotes) === 0)
+    : midiData.notes;
+
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: 14 }}>
       <svg width="100%" height="100%" preserveAspectRatio="none" viewBox={`0 0 ${width} 100`}>
-        {midiData.notes.map((note, index) => {
+        {notes.map((note, index) => {
           const x = (note.startBeat * secPerBeat / duration) * width;
           const noteWidth = Math.max((note.durationBeats * secPerBeat / duration) * width, 1);
           const y = 100 - ((note.pitch - minPitch + pad) / (range + pad * 2)) * 100;
           const height = Math.max(100 / (range + pad * 2), 2);
 
-          return <rect key={index} x={x} y={y} width={noteWidth} height={height} fill={color} opacity={0.8} rx={0.5} />;
+          return <rect key={index} x={x} y={y} width={noteWidth} height={height} fill={color} opacity={0.7} rx={0.5} />;
         })}
       </svg>
     </div>

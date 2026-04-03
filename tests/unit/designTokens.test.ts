@@ -7,13 +7,13 @@ const indexCss = readFileSync(resolve(__dirname, '../../src/index.css'), 'utf-8'
 describe('Design System Tokens (index.css)', () => {
   describe('Type Scale', () => {
     const typeTokens = [
-      ['--text-xs', '10px'],
-      ['--text-sm', '11px'],
-      ['--text-base', '12px'],
-      ['--text-lg', '13px'],
-      ['--text-xl', '16px'],
-      ['--text-2xl', '20px'],
-      ['--text-display', '28px'],
+      ['--daw-text-xs', '10px'],
+      ['--daw-text-sm', '11px'],
+      ['--daw-text-base', '12px'],
+      ['--daw-text-lg', '13px'],
+      ['--daw-text-xl', '16px'],
+      ['--daw-text-2xl', '20px'],
+      ['--daw-text-display', '28px'],
     ];
 
     it.each(typeTokens)('defines %s as %s', (token, value) => {
@@ -109,8 +109,16 @@ describe('Design System Tokens (index.css)', () => {
   describe('All tokens are within @theme block', () => {
     it('type scale tokens are in @theme', () => {
       const themeBlock = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-      expect(themeBlock).toContain('--text-xs');
-      expect(themeBlock).toContain('--text-display');
+      expect(themeBlock).toContain('--daw-text-xs');
+      expect(themeBlock).toContain('--daw-text-display');
+    });
+
+    it('does not define un-namespaced --text-* tokens in @theme (avoid Tailwind v4 conflict)', () => {
+      const themeBlock = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+      const conflictingTokens = ['--text-xs:', '--text-sm:', '--text-base:', '--text-lg:', '--text-xl:', '--text-2xl:'];
+      for (const token of conflictingTokens) {
+        expect(themeBlock).not.toContain(token);
+      }
     });
 
     it('spacing tokens are in @theme', () => {

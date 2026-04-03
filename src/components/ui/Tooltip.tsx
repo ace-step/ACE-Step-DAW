@@ -3,7 +3,7 @@ import {
   useRef,
   useCallback,
   useEffect,
-  type ReactNode,
+  useId,
   type ReactElement,
   cloneElement,
   isValidElement,
@@ -39,6 +39,26 @@ interface Position {
   actualSide: 'top' | 'bottom' | 'left' | 'right';
 }
 
+function fitsInViewport(
+  side: 'top' | 'bottom' | 'left' | 'right',
+  triggerRect: DOMRect,
+  tooltipRect: { width: number; height: number },
+): boolean {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  switch (side) {
+    case 'top':
+      return triggerRect.top - tooltipRect.height - TOOLTIP_OFFSET >= VIEWPORT_PADDING;
+    case 'bottom':
+      return triggerRect.bottom + tooltipRect.height + TOOLTIP_OFFSET <= vh - VIEWPORT_PADDING;
+    case 'left':
+      return triggerRect.left - tooltipRect.width - TOOLTIP_OFFSET >= VIEWPORT_PADDING;
+    case 'right':
+      return triggerRect.right + tooltipRect.width + TOOLTIP_OFFSET <= vw - VIEWPORT_PADDING;
+  }
+}
+
 function computePosition(
   triggerRect: DOMRect,
   tooltipRect: { width: number; height: number },
@@ -47,64 +67,61 @@ function computePosition(
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  const sides: Array<'top' | 'bottom' | 'left' | 'right'> = [preferredSide];
-  if (preferredSide === 'top') sides.push('bottom', 'left', 'right');
-  else if (preferredSide === 'bottom') sides.push('top', 'left', 'right');
-  else if (preferredSide === 'left') sides.push('right', 'top', 'bottom');
-  else sides.push('left', 'top', 'bottom');
+  const fallbacks: Record<string, Array<'top' | 'bottom' | 'left' | 'right'>> = {
+    top: ['bottom', 'left', 'right'],
+    bottom: ['top', 'left', 'right'],
+    left: ['right', 'top', 'bottom'],
+    right: ['left', 'top', 'bottom'],
+  };
 
-  for (const side of sides) {
-    let top = 0;
-    let left = 0;
-    let arrowTop = 0;
-    let arrowLeft = 0;
-    let arrowRotation = '';
-
-    if (side === 'top') {
-      top = triggerRect.top - tooltipRect.height - TOOLTIP_OFFSET;
-      left = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
-      arrowTop = tooltipRect.height - 1;
-      arrowLeft = tooltipRect.width / 2 - ARROW_SIZE;
-      arrowRotation = 'rotate(180deg)';
-    } else if (side === 'bottom') {
-      top = triggerRect.bottom + TOOLTIP_OFFSET;
-      left = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
-      arrowTop = -ARROW_SIZE * 2 + 1;
-      arrowLeft = tooltipRect.width / 2 - ARROW_SIZE;
-      arrowRotation = 'rotate(0deg)';
-    } else if (side === 'left') {
-      top = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
-      left = triggerRect.left - tooltipRect.width - TOOLTIP_OFFSET;
-      arrowTop = tooltipRect.height / 2 - ARROW_SIZE;
-      arrowLeft = tooltipRect.width - 1;
-      arrowRotation = 'rotate(270deg)';
-    } else {
-      top = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
-      left = triggerRect.right + TOOLTIP_OFFSET;
-      arrowTop = tooltipRect.height / 2 - ARROW_SIZE;
-      arrowLeft = -ARROW_SIZE * 2 + 1;
-      arrowRotation = 'rotate(90deg)';
-    }
-
-    // Clamp to viewport
-    left = Math.max(VIEWPORT_PADDING, Math.min(left, vw - tooltipRect.width - VIEWPORT_PADDING));
-    top = Math.max(VIEWPORT_PADDING, Math.min(top, vh - tooltipRect.height - VIEWPORT_PADDING));
-
-    // Check if fits
-    if (top >= VIEWPORT_PADDING && top + tooltipRect.height <= vh - VIEWPORT_PADDING) {
-      return { top, left, arrowTop, arrowLeft, arrowRotation, actualSide: side };
+  // Pick first side that fits, starting with preferred
+  let side = preferredSide;
+  if (!fitsInViewport(side, triggerRect, tooltipRect)) {
+    for (const fb of fallbacks[preferredSide]) {
+      if (fitsInViewport(fb, triggerRect, tooltipRect)) {
+        side = fb;
+        break;
+      }
     }
   }
 
-  // Fallback to preferred side
-  return {
-    top: triggerRect.top - tooltipRect.height - TOOLTIP_OFFSET,
-    left: triggerRect.left + triggerRect.width / 2 - MAX_WIDTH / 2,
-    arrowTop: 0,
-    arrowLeft: MAX_WIDTH / 2 - ARROW_SIZE,
-    arrowRotation: 'rotate(180deg)',
-    actualSide: 'top',
-  };
+  let top = 0;
+  let left = 0;
+  let arrowTop = 0;
+  let arrowLeft = 0;
+  let arrowRotation = '';
+
+  if (side === 'top') {
+    top = triggerRect.top - tooltipRect.height - TOOLTIP_OFFSET;
+    left = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
+    arrowTop = tooltipRect.height - 1;
+    arrowLeft = tooltipRect.width / 2 - ARROW_SIZE;
+    arrowRotation = 'rotate(180deg)';
+  } else if (side === 'bottom') {
+    top = triggerRect.bottom + TOOLTIP_OFFSET;
+    left = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
+    arrowTop = -ARROW_SIZE * 2 + 1;
+    arrowLeft = tooltipRect.width / 2 - ARROW_SIZE;
+    arrowRotation = 'rotate(0deg)';
+  } else if (side === 'left') {
+    top = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
+    left = triggerRect.left - tooltipRect.width - TOOLTIP_OFFSET;
+    arrowTop = tooltipRect.height / 2 - ARROW_SIZE;
+    arrowLeft = tooltipRect.width - 1;
+    arrowRotation = 'rotate(270deg)';
+  } else {
+    top = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2;
+    left = triggerRect.right + TOOLTIP_OFFSET;
+    arrowTop = tooltipRect.height / 2 - ARROW_SIZE;
+    arrowLeft = -ARROW_SIZE * 2 + 1;
+    arrowRotation = 'rotate(90deg)';
+  }
+
+  // Clamp to viewport (after side selection)
+  left = Math.max(VIEWPORT_PADDING, Math.min(left, vw - tooltipRect.width - VIEWPORT_PADDING));
+  top = Math.max(VIEWPORT_PADDING, Math.min(top, vh - tooltipRect.height - VIEWPORT_PADDING));
+
+  return { top, left, arrowTop, arrowLeft, arrowRotation, actualSide: side };
 }
 
 export function Tooltip({
@@ -120,6 +137,7 @@ export function Tooltip({
   const timerRef = useRef<number>(0);
   const triggerRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
   const show = useCallback(() => {
     if (disabled) return;
@@ -160,6 +178,7 @@ export function Tooltip({
   if (!isValidElement(children)) return children;
 
   const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
+    'aria-describedby': visible ? tooltipId : undefined,
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
       // Forward ref if original child had one
@@ -195,6 +214,7 @@ export function Tooltip({
     ? createPortal(
         <div
           ref={tooltipRef}
+          id={tooltipId}
           role="tooltip"
           className="pointer-events-none fixed z-[9999]"
           style={{

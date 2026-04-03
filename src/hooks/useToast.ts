@@ -26,7 +26,8 @@ const DEFAULT_DURATION_MS: Record<ToastType, number> = {
 };
 
 const toastTimers = new Map<string, number>();
-const toastRemaining = new Map<string, number>();
+/** Tracks scheduling state: { startedAt, remainingMs } */
+const toastSchedule = new Map<string, { startedAt: number; remainingMs: number }>();
 
 function clearToastTimer(id: string) {
   const timerId = toastTimers.get(id);
@@ -38,16 +39,13 @@ function clearToastTimer(id: string) {
 
 function scheduleRemoval(id: string, delayMs: number) {
   clearToastTimer(id);
-  toastRemaining.set(id, delayMs);
-  const startTime = Date.now();
+  toastSchedule.set(id, { startedAt: Date.now(), remainingMs: delayMs });
   const timerId = window.setTimeout(() => {
     clearToastTimer(id);
-    toastRemaining.delete(id);
+    toastSchedule.delete(id);
     useToastStore.getState().dismissToast(id);
   }, delayMs);
   toastTimers.set(id, timerId);
-  // Store start time for remaining calculation
-  toastRemaining.set(id, startTime);
 }
 
 export const useToastStore = create<ToastState>((set) => ({
@@ -66,34 +64,30 @@ export const useToastStore = create<ToastState>((set) => ({
   },
   dismissToast: (id) => {
     clearToastTimer(id);
-    toastRemaining.delete(id);
+    toastSchedule.delete(id);
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
     }));
   },
   pauseToast: (id) => {
-    const startTime = toastRemaining.get(id);
-    if (startTime === undefined) return;
-    const elapsed = Date.now() - startTime;
+    const schedule = toastSchedule.get(id);
+    if (!schedule) return;
+    const elapsed = Date.now() - schedule.startedAt;
+    const remaining = Math.max(schedule.remainingMs - elapsed, 500);
     clearToastTimer(id);
-    // Find toast and compute remaining time
-    const toast = useToastStore.getState().toasts.find((t) => t.id === id);
-    if (toast) {
-      const remaining = Math.max(toast.durationMs - elapsed, 500);
-      toastRemaining.set(id, -(remaining)); // negative = paused remaining ms
-    }
+    // Store remaining with startedAt=0 to signal paused state
+    toastSchedule.set(id, { startedAt: 0, remainingMs: remaining });
   },
   resumeToast: (id) => {
-    const val = toastRemaining.get(id);
-    if (val === undefined || val >= 0) return;
-    const remaining = -val;
-    scheduleRemoval(id, remaining);
+    const schedule = toastSchedule.get(id);
+    if (!schedule || schedule.startedAt !== 0) return; // not paused
+    scheduleRemoval(id, schedule.remainingMs);
   },
   clearToasts: () => {
     for (const id of toastTimers.keys()) {
       clearToastTimer(id);
     }
-    toastRemaining.clear();
+    toastSchedule.clear();
     set({ toasts: [] });
   },
 }));

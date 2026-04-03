@@ -130,13 +130,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
-      className={getButtonClasses({ size, variant, icon, active, loading, className })}
+      className={getButtonClasses({ size, variant, icon, active, loading, className: `${className} relative` })}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       {...rest}
     >
-      {loading && <Spinner size={size} />}
-      {children}
+      <span className={loading ? 'opacity-0' : undefined}>{children}</span>
+      {loading && (
+        <span
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <Spinner size={size} />
+        </span>
+      )}
     </button>
   );
 });

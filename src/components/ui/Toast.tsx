@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useToast, type ToastType } from '../../hooks/useToast';
 import { Z } from '../../utils/zIndex';
 
@@ -49,31 +49,33 @@ function ToastIcon({ type }: { type: ToastType }) {
   );
 }
 
-/* ── Progress bar (counts down from 100% to 0%) ── */
-function ProgressBar({ durationMs, createdAt, paused }: { durationMs: number; createdAt: number; paused: boolean }) {
-  const [progress, setProgress] = useState(100);
-  const rafRef = useRef<number>(0);
-
-  const tick = useCallback(() => {
-    if (paused) return;
-    const elapsed = Date.now() - createdAt;
-    const pct = Math.max(0, 100 - (elapsed / durationMs) * 100);
-    setProgress(pct);
-    if (pct > 0) {
-      rafRef.current = requestAnimationFrame(tick);
-    }
-  }, [durationMs, createdAt, paused]);
+/* ── Progress bar (CSS animation: 100% → 0% width) ── */
+function ProgressBar({ durationMs, paused }: { durationMs: number; paused: boolean }) {
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [tick]);
+    const el = barRef.current;
+    if (!el) return;
+    if (paused) {
+      // Freeze at current width
+      const currentWidth = el.getBoundingClientRect().width;
+      const parentWidth = el.parentElement?.getBoundingClientRect().width ?? 1;
+      el.style.animationPlayState = 'paused';
+      el.style.width = `${(currentWidth / parentWidth) * 100}%`;
+    } else {
+      el.style.animationPlayState = 'running';
+    }
+  }, [paused]);
 
   return (
     <div className="absolute bottom-0 left-0 right-0 h-[2px] overflow-hidden rounded-b-lg">
       <div
-        className="h-full bg-white/20 transition-none"
-        style={{ width: `${progress}%` }}
+        ref={barRef}
+        className="h-full bg-white/20"
+        style={{
+          width: '100%',
+          animation: `toast-progress ${durationMs}ms linear forwards`,
+        }}
       />
     </div>
   );
@@ -143,7 +145,7 @@ function ToastItem({
           </svg>
         </button>
       </div>
-      <ProgressBar durationMs={toast.durationMs} createdAt={toast.createdAt} paused={paused} />
+      <ProgressBar durationMs={toast.durationMs} paused={paused} />
     </div>
   );
 }

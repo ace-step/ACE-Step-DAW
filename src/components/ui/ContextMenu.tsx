@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 /* ─── Shared context-menu design tokens ──────────────────────────────────── */
 export const CONTEXT_MENU = {
@@ -20,13 +20,18 @@ export const CONTEXT_MENU = {
 /* ─── Entrance/exit animation helper ─────────────────────────────────────── */
 
 function useMenuAnimation(ref: React.RefObject<HTMLDivElement | null>) {
-  useEffect(() => {
+  // Set initial state synchronously to avoid 1-frame flash
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Start with entrance state
     el.style.opacity = '0';
     el.style.transform = 'scale(0.95)';
     el.style.transition = 'opacity 150ms ease-out, transform 150ms ease-out';
+  }, [ref]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
     // Trigger entrance on next frame
     requestAnimationFrame(() => {
       el.style.opacity = '1';
@@ -153,7 +158,7 @@ export function ContextMenuItem({
         e.currentTarget.style.background = danger
           ? CONTEXT_MENU.dangerHoverBg
           : CONTEXT_MENU.hoverBg;
-        if (!color) e.currentTarget.style.color = '#fff';
+        if (!danger && !color) e.currentTarget.style.color = '#fff';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent';

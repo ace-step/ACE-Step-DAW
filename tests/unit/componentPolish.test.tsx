@@ -25,14 +25,18 @@ describe('Button — polish additions', () => {
     expect(btn.className).not.toContain('transition-[color,background-color,transform]');
   });
 
-  it('renders loading spinner when loading=true', () => {
+  it('renders loading spinner overlay when loading=true', () => {
     render(<Button loading>Saving</Button>);
     const btn = screen.getByRole('button');
     expect(btn).toBeDisabled();
     expect(btn.getAttribute('aria-busy')).toBe('true');
-    // SVG spinner present
+    // SVG spinner present in overlay
     const svg = btn.querySelector('svg.animate-spin');
     expect(svg).not.toBeNull();
+    // Children hidden with opacity-0
+    const childSpan = btn.querySelector('span.opacity-0');
+    expect(childSpan).not.toBeNull();
+    expect(childSpan?.textContent).toBe('Saving');
   });
 
   it('does not render spinner when loading=false', () => {
@@ -40,6 +44,8 @@ describe('Button — polish additions', () => {
     const btn = screen.getByRole('button');
     expect(btn.querySelector('svg.animate-spin')).toBeNull();
     expect(btn.getAttribute('aria-busy')).toBeNull();
+    // Children visible (no opacity-0 class)
+    expect(btn.querySelector('span.opacity-0')).toBeNull();
   });
 
   it('loading disables button even without disabled prop', () => {

@@ -78,7 +78,7 @@ describe('project templates', () => {
 
     it('captures generation defaults', () => {
       const template = useProjectStore.getState().saveProjectAsTemplate('Gen Defaults');
-      expect(template.generationDefaults).toBeDefined();
+      expect(template.generationDefaults).not.toBeUndefined();
       expect(template.generationDefaults.inferenceSteps).toBeGreaterThan(0);
     });
   });

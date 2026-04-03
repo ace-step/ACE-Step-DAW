@@ -42,7 +42,7 @@ describe('sliceClipToMidi', () => {
       .project!.tracks.find((t) => t.id === trackId)!
       .clips.find((c) => c.id === clipId)!;
 
-    expect(clip.midiData).toBeDefined();
+    expect(clip.midiData).not.toBeUndefined();
     // 4 slices: [0, 0.5), [0.5, 1.5), [1.5, 3.0), [3.0, 4.0)
     expect(clip.midiData!.notes).toHaveLength(4);
   });
@@ -101,7 +101,7 @@ describe('sliceClipToMidi', () => {
       .project!.tracks.find((t) => t.id === trackId)!
       .clips.find((c) => c.id === clipId)!;
 
-    expect(clip.midiData).toBeDefined();
+    expect(clip.midiData).not.toBeUndefined();
     expect(clip.midiData!.notes).toHaveLength(1);
     expect(clip.midiData!.notes[0].startBeat).toBe(0);
   });

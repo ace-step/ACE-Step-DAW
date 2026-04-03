@@ -27,7 +27,7 @@ describe('updateWavetableSettings store action', () => {
     useProjectStore.getState().updateWavetableSettings(track.id, { position: 0.5 });
 
     const updated = getTrack(track.id);
-    expect(updated.wavetableSettings).toBeDefined();
+    expect(updated.wavetableSettings).not.toBeUndefined();
     expect(updated.wavetableSettings!.position).toBe(0.5);
     // Should have default waveforms
     expect(updated.wavetableSettings!.waveforms).toHaveLength(2);

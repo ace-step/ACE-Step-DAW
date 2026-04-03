@@ -36,7 +36,7 @@ describe('follow actions store', () => {
       const { track } = addTrackWithClips(2);
       const session = useProjectStore.getState().project!.session!;
       const slot = session.slots.find((s) => s.trackId === track.id && s.clipId !== null);
-      expect(slot).toBeDefined();
+      expect(slot).not.toBeUndefined();
 
       useProjectStore.getState().setSessionSlotFollowAction(slot!.id, { actionA: 'next' });
       const updatedSession = useProjectStore.getState().project!.session!;

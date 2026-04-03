@@ -88,7 +88,7 @@ describe('EffectsEngine sidechain management', () => {
     const mockSource = { context: {} } as unknown as AudioNode;
     effectsEngine.connectSidechain('bass-track', 'fx-1', mockSource, compressorEffect.params as any);
     const output = effectsEngine.getOutputNode('bass-track');
-    expect(output).toBeDefined();
+    expect(output).not.toBeUndefined();
   });
 
   it('returns null chain endpoints when the track FX chain is globally bypassed', () => {

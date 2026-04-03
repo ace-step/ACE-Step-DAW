@@ -70,7 +70,7 @@ describe('project action API', () => {
     const track = useProjectStore.getState().addTrack('drums', 'sequencer');
     const rowId = useProjectStore.getState().project?.tracks[0]?.sequencerPattern?.rows[0]?.id;
 
-    expect(rowId).toBeDefined();
+    expect(rowId).not.toBeUndefined();
 
     const result = actionApi.toggleSequencerStep({
       trackId: track.id,

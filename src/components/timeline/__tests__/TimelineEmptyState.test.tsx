@@ -18,7 +18,7 @@ describe('TimelineEmptyState', () => {
     render(<TimelineEmptyState />);
     expect(
       screen.getByText(/drop audio files here or click \+ track to get started/i),
-    ).toBeDefined();
+    ).not.toBeUndefined();
   });
 
   it('renders a music note icon', () => {
@@ -31,7 +31,7 @@ describe('TimelineEmptyState', () => {
   it('renders a new track action button', () => {
     render(<TimelineEmptyState />);
     const button = screen.getByRole('button', { name: /\+ new track/i });
-    expect(button).toBeDefined();
+    expect(button).not.toBeUndefined();
   });
 
   it('clicking new track button calls addTrack', () => {
@@ -45,7 +45,7 @@ describe('TimelineEmptyState', () => {
     render(<TimelineEmptyState />);
     expect(
       screen.getByText(/create tracks, generate ai music, or drag loops/i),
-    ).toBeDefined();
+    ).not.toBeUndefined();
   });
 
   it('is not visible when there is 1 or more tracks', () => {

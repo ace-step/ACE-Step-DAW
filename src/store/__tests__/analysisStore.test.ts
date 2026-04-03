@@ -13,7 +13,7 @@ describe('analysisStore', () => {
       const jobId = useAnalysisStore.getState().createJob('clip-1');
       const job = useAnalysisStore.getState().jobs[jobId];
 
-      expect(job).toBeDefined();
+      expect(job).not.toBeUndefined();
       expect(job.clipId).toBe('clip-1');
       expect(job.status).toBe('idle');
       expect(job.progress).toBe(0);
@@ -96,7 +96,7 @@ describe('analysisStore', () => {
   describe('clearJob', () => {
     it('removes a job from tracking', () => {
       const jobId = useAnalysisStore.getState().createJob('clip-1');
-      expect(useAnalysisStore.getState().jobs[jobId]).toBeDefined();
+      expect(useAnalysisStore.getState().jobs[jobId]).not.toBeUndefined();
 
       useAnalysisStore.getState().clearJob(jobId);
       expect(useAnalysisStore.getState().jobs[jobId]).toBeUndefined();

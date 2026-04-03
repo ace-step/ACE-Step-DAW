@@ -98,7 +98,7 @@ describe('TrackNode sends', () => {
       node.connectSend('ret1', returnInput as unknown as AudioNode, 0.7, false);
       const sends = (node as any).sendGains;
       const send = sends.get('ret1');
-      expect(send).toBeDefined();
+      expect(send).not.toBeUndefined();
       expect(send.pre.gain.value).toBe(0);
       expect(send.post.gain.value).toBe(0.7);
     });

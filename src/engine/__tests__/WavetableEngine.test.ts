@@ -63,7 +63,7 @@ describe('WavetableEngine', () => {
     it('creates a synth with custom partials', () => {
       const settings = makeSettings();
       const synth = wavetableEngine.ensureTrackSynth('test-track', settings);
-      expect(synth).toBeDefined();
+      expect(synth).not.toBeUndefined();
       expect(mockSynthSet).toHaveBeenCalledWith(
         expect.objectContaining({
           oscillator: expect.objectContaining({ type: 'custom' }),

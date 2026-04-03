@@ -70,7 +70,7 @@ describe('SynthEngine FM integration', () => {
         outputGain: 0,
       };
       const synth = synthEngine.ensureFmSynth('test-track', params);
-      expect(synth).toBeDefined();
+      expect(synth).not.toBeUndefined();
       expect(mockFMSynthSet).toHaveBeenCalled();
     });
 
@@ -153,7 +153,7 @@ describe('SynthEngine FM integration', () => {
       (algorithm) => {
         const params = { ...baseParams, algorithm };
         const synth = synthEngine.ensureFmSynth(`test-${algorithm}`, params);
-        expect(synth).toBeDefined();
+        expect(synth).not.toBeUndefined();
         synthEngine.removeFmSynth(`test-${algorithm}`);
       },
     );

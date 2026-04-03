@@ -124,9 +124,9 @@ describe('SubtractiveEngine', () => {
     it('creates a new instance for a track', () => {
       const settings = makeSettings();
       const instance = engine.ensureTrackSynth('track-1', settings);
-      expect(instance).toBeDefined();
-      expect(instance.synth).toBeDefined();
-      expect(instance.output).toBeDefined();
+      expect(instance).not.toBeUndefined();
+      expect(instance.synth).not.toBeUndefined();
+      expect(instance.output).not.toBeUndefined();
       expect(instance.settings.oscillator.waveform).toBe('sawtooth');
     });
 

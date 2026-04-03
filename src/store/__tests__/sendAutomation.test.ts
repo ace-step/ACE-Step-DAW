@@ -46,7 +46,7 @@ describe('send amount automation', () => {
     const lane = lanes.find(
       (l) => l.trackId === trackId && automationParamEquals(l.parameter, param),
     );
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane!.points.length).toBeGreaterThanOrEqual(0);
   });
 
@@ -60,7 +60,7 @@ describe('send amount automation', () => {
     const lane = lanes.find(
       (l) => l.trackId === trackId && automationParamEquals(l.parameter, param),
     );
-    expect(lane).toBeDefined();
+    expect(lane).not.toBeUndefined();
     expect(lane!.points).toHaveLength(2);
     expect(lane!.points[0].value).toBe(0.3);
     expect(lane!.points[1].value).toBe(0.8);

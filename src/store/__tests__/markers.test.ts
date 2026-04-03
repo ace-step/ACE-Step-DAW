@@ -19,7 +19,7 @@ describe('markers', () => {
     expect(markers[0].time).toBe(10);
     expect(markers[1].name).toBe('Verse');
     expect(markers[1].time).toBe(5);
-    expect(markers[0].id).toBeDefined();
+    expect(markers[0].id).not.toBeUndefined();
     expect(markers[0].color).toBeTruthy();
   });
 

@@ -25,7 +25,7 @@ describe('session clip color', () => {
     store.addTrack('drums');
     const session = useProjectStore.getState().project?.session;
     const slot = session?.slots[0];
-    expect(slot).toBeDefined();
+    expect(slot).not.toBeUndefined();
 
     useProjectStore.getState().setSessionSlotColor(slot!.id, '#ef4444');
     const updated = useProjectStore.getState().project?.session?.slots.find(s => s.id === slot!.id);
@@ -37,7 +37,7 @@ describe('session clip color', () => {
     store.addTrack('drums');
     const session = useProjectStore.getState().project?.session;
     const slot = session?.slots[0];
-    expect(slot).toBeDefined();
+    expect(slot).not.toBeUndefined();
 
     useProjectStore.getState().setSessionSlotColor(slot!.id, '#ef4444');
     useProjectStore.getState().setSessionSlotColor(slot!.id, null);

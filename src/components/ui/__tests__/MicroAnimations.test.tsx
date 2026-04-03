@@ -31,7 +31,7 @@ describe('Toast slide-in animation', () => {
   it('renders type-specific SVG icon', () => {
     render(<ToastContainer />);
     const toastItem = screen.getByTestId('toast-item');
-    expect(toastItem.querySelector('svg')).toBeTruthy();
+    expect(toastItem.querySelector('svg')).not.toBeNull();
   });
 
   it('renders progress bar', () => {
@@ -40,7 +40,7 @@ describe('Toast slide-in animation', () => {
     // Progress bar is the last child
     const progressTrack = toastItem.lastElementChild;
     expect(progressTrack).toBeTruthy();
-    expect(progressTrack?.querySelector('div')).toBeTruthy();
+    expect(progressTrack?.querySelector('div')).not.toBeNull();
   });
 });
 

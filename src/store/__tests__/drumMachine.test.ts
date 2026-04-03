@@ -17,7 +17,7 @@ describe('drumMachine store actions', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
       expect(track.trackType).toBe('drumMachine');
       expect(track.drumKit).toBe('808');
-      expect(track.drumMachine).toBeDefined();
+      expect(track.drumMachine).not.toBeUndefined();
       expect(track.drumMachine!.pads).toHaveLength(16);
       expect(track.drumMachine!.kitName).toBe('808');
     });

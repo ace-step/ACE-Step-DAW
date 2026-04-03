@@ -5,12 +5,12 @@ import { EmptyState } from '../EmptyState';
 describe('EmptyState', () => {
   it('renders title text', () => {
     render(<EmptyState title="No items found" />);
-    expect(screen.getByText('No items found')).toBeDefined();
+    screen.getByText('No items found'); // getBy* throws if not found
   });
 
   it('renders description when provided', () => {
     render(<EmptyState title="Empty" description="Try adding something" />);
-    expect(screen.getByText('Try adding something')).toBeDefined();
+    screen.getByText('Try adding something'); // getBy* throws if not found
   });
 
   it('does not render description when not provided', () => {
@@ -26,7 +26,7 @@ describe('EmptyState', () => {
         icon={<svg data-testid="test-icon" />}
       />,
     );
-    expect(screen.getByTestId('test-icon')).toBeDefined();
+    screen.getByTestId('test-icon'); // getBy* throws if not found
   });
 
   it('renders action button when provided', () => {
@@ -38,7 +38,7 @@ describe('EmptyState', () => {
       />,
     );
     const button = screen.getByRole('button', { name: 'Add Item' });
-    expect(button).toBeDefined();
+    expect(button).not.toBeUndefined();
     fireEvent.click(button);
     expect(onClick).toHaveBeenCalledOnce();
   });

@@ -25,7 +25,7 @@ describe('FM Presets', () => {
 
   it('getFmPresetById finds a preset', () => {
     const preset = getFmPresetById('fm-electric-piano');
-    expect(preset).toBeDefined();
+    expect(preset).not.toBeUndefined();
     expect(preset!.name).toBe('FM Electric Piano');
   });
 

@@ -11,16 +11,16 @@ describe('starter template catalog', () => {
 
   it('returns a ProjectTemplate for template starters', () => {
     const templateStarter = ONBOARDING_STARTERS.find((s) => s.kind === 'template');
-    expect(templateStarter).toBeDefined();
+    expect(templateStarter).not.toBeUndefined();
     const template = getStarterTemplate(templateStarter!.id);
-    expect(template).toBeDefined();
+    expect(template).not.toBeUndefined();
     expect(template!.name).toBe(templateStarter!.title);
     expect(template!.bpm).toBe(templateStarter!.bpm);
   });
 
   it('instantiates a demo project with tracks and clips', () => {
     const demoStarter = ONBOARDING_STARTERS.find((s) => s.kind === 'demo');
-    expect(demoStarter).toBeDefined();
+    expect(demoStarter).not.toBeUndefined();
     const project = instantiateDemoProject(demoStarter!.id);
     expect(project.name).toBe(demoStarter!.title);
     expect(project.tracks.length).toBeGreaterThan(0);

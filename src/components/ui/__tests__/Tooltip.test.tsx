@@ -32,8 +32,8 @@ describe('Tooltip component', () => {
       vi.advanceTimersByTime(500);
     });
 
-    expect(screen.getByRole('tooltip')).toBeDefined();
-    expect(screen.getByText('Help text')).toBeDefined();
+    screen.getByRole('tooltip'); // getBy* throws if not found
+    screen.getByText('Help text'); // getBy* throws if not found
   });
 
   it('hides tooltip on mouse leave', () => {
@@ -47,7 +47,7 @@ describe('Tooltip component', () => {
     act(() => {
       vi.advanceTimersByTime(0);
     });
-    expect(screen.getByRole('tooltip')).toBeDefined();
+    screen.getByRole('tooltip'); // getBy* throws if not found
 
     fireEvent.mouseLeave(screen.getByRole('button'));
     expect(screen.queryByRole('tooltip')).toBeNull();
@@ -65,7 +65,7 @@ describe('Tooltip component', () => {
       vi.advanceTimersByTime(0);
     });
 
-    expect(screen.getByText('Cmd+S')).toBeDefined();
+    screen.getByText('Cmd+S'); // getBy* throws if not found
   });
 
   it('does not show when disabled', () => {

@@ -72,8 +72,8 @@ describe('Chorus automation specs', () => {
     for (const param of ['frequency', 'delayTime', 'depth', 'feedback', 'wet']) {
       const spec = getEffectAutomationSpec('chorus', param);
       expect(spec, `chorus.${param}`).not.toBeNull();
-      expect(spec!.min).toBeDefined();
-      expect(spec!.max).toBeDefined();
+      expect(spec!.min).not.toBeUndefined();
+      expect(spec!.max).not.toBeUndefined();
       expect(spec!.label).toBeTruthy();
       expect(spec!.color).toBeTruthy();
     }

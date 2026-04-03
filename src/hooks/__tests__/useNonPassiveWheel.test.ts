@@ -21,7 +21,7 @@ describe('useNonPassiveWheel', () => {
     });
 
     const call = addSpy.mock.calls.find(([type]) => type === 'wheel');
-    expect(call).toBeDefined();
+    expect(call).not.toBeUndefined();
     expect(call![2]).toEqual({ passive: false });
 
     addSpy.mockRestore();
@@ -77,7 +77,7 @@ describe('useNonPassiveWheel', () => {
     unmount();
 
     const call = removeSpy.mock.calls.find(([type]) => type === 'wheel');
-    expect(call).toBeDefined();
+    expect(call).not.toBeUndefined();
 
     removeSpy.mockRestore();
   });
@@ -127,7 +127,7 @@ describe('useNonPassiveWheel', () => {
     });
 
     const call = addSpy.mock.calls.find(([type]) => type === 'wheel');
-    expect(call).toBeDefined();
+    expect(call).not.toBeUndefined();
     expect(call![2]).toEqual({ passive: false });
 
     // Handler should work
@@ -152,7 +152,7 @@ describe('useNonPassiveWheel', () => {
     });
 
     const call = removeSpy.mock.calls.find(([type]) => type === 'wheel');
-    expect(call).toBeDefined();
+    expect(call).not.toBeUndefined();
 
     // Handler should no longer fire
     div.dispatchEvent(new WheelEvent('wheel', { deltaY: 10 }));

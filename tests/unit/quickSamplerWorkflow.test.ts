@@ -20,7 +20,7 @@ describe('Quick Sampler workflow', () => {
         sampleDuration: 0.5,
       });
 
-      expect(track).toBeDefined();
+      expect(track).not.toBeUndefined();
       expect(track!.trackType).toBe('pianoRoll');
       expect(track!.synthPreset).toBe('sampler');
       expect(track!.displayName).toBe('Kick');
@@ -73,7 +73,7 @@ describe('Quick Sampler workflow', () => {
         sampleDuration: 2.0,
       });
 
-      expect(updated).toBeDefined();
+      expect(updated).not.toBeUndefined();
       expect(updated!.id).toBe(original.id);
       expect(updated!.synthPreset).toBe('sampler');
       expect(updated!.displayName).toBe('Updated Sampler');
@@ -96,7 +96,7 @@ describe('Quick Sampler workflow', () => {
         sampleName: 'Undoable',
       });
 
-      expect(track).toBeDefined();
+      expect(track).not.toBeUndefined();
       useProjectStore.getState().undo();
 
       const tracks = useProjectStore.getState().project!.tracks;
@@ -134,7 +134,7 @@ describe('Quick Sampler workflow', () => {
 
       const samplerTrack = store.createQuickSamplerFromClip(track.id, clip.id);
 
-      expect(samplerTrack).toBeDefined();
+      expect(samplerTrack).not.toBeUndefined();
       expect(samplerTrack!.trackType).toBe('pianoRoll');
       expect(samplerTrack!.synthPreset).toBe('sampler');
       expect(samplerTrack!.sampler!.audioKey).toBe('audio:proj:clip-1:iso:v1');

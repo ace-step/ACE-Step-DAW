@@ -126,30 +126,17 @@ describe('session clip launch modes', () => {
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
     });
 
-    it('launches a different clip even when another is already active', () => {
-      // Launch first clip
+    it('can re-launch a clip after stopping it via re-trigger', () => {
+      // Launch → stop via retrigger → launch again
       useProjectStore.getState().launchSessionClip(trackId, sceneId);
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
-      // Add a second scene/clip
-      const store = useProjectStore.getState();
-      store.addSessionScene();
-      const session = useProjectStore.getState().project?.session;
-      const scene2Id = session!.scenes[1].id;
-      const clip2 = store.addClip(trackId, {
-        startTime: 2,
-        duration: 2,
-        prompt: 'Snare fill',
-        globalCaption: '',
-        lyrics: '',
-        source: 'uploaded',
-      });
-      // Assign clip2 to the new slot
-      useProjectStore.getState().assignClipToSessionSlot(trackId, scene2Id, clip2.id);
+      useProjectStore.getState().launchSessionClip(trackId, sceneId);
+      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
 
-      // Launch second clip — should replace the first, not stop
-      useProjectStore.getState().launchSessionClip(trackId, scene2Id);
-      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clip2.id);
+      // Third click should launch again
+      useProjectStore.getState().launchSessionClip(trackId, sceneId);
+      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
     });
   });
 

@@ -51,7 +51,8 @@ export function ConvolverIRCurve({
     const totalLength = getIRLength(irType, preDelay);
 
     const xForT = (t: number) => PAD_LEFT + ((t / totalLength) * (width - PAD_LEFT));
-    const yForAmp = (a: number) => 2 + drawH * (1 - a * 0.85);
+    const PAD_TOP = 2;
+    const yForAmp = (a: number) => PAD_TOP + (drawH - PAD_TOP * 2) * (1 - a * 0.85);
 
     // ── Background ──────────────────────────────────────────────────────────
     ctx.clearRect(0, 0, width, height);

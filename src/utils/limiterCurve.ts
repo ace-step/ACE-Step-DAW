@@ -16,7 +16,7 @@ export interface LimiterTransferPoint {
  * @param style    Limiting style affects knee softness
  * @param minDb    Minimum dB for display range
  * @param maxDb    Maximum dB for display range
- * @param steps    Number of points
+ * @param steps    Number of intervals between minDb and maxDb; returns steps + 1 points including both endpoints
  */
 export function generateLimiterCurve(
   ceiling: number,

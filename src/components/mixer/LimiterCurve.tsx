@@ -53,7 +53,7 @@ export function LimiterCurve({
     const PAD = 2;
 
     const xForDb = (db: number) => PAD + ((db - MIN_DB) / DB_RANGE) * (width - PAD * 2);
-    const yForDb = (db: number) => PAD + drawH * (1 - (db - MIN_DB) / DB_RANGE);
+    const yForDb = (db: number) => PAD + (drawH - PAD * 2) * (1 - (db - MIN_DB) / DB_RANGE);
 
     // ── Background ──────────────────────────────────────────────────────────
     ctx.clearRect(0, 0, width, height);
@@ -118,7 +118,7 @@ export function LimiterCurve({
     ctx.textAlign = 'right';
     ctx.fillText(`${ceiling.toFixed(1)} dB`, width - 4, ceilY - 3);
 
-    // ── Gain reduction region fill ──────────────────────────────────────────
+    // ── Fill area between the transfer curve and the unity line (gain-reduction region) ──
     const pts = generateLimiterCurve(ceiling, gain, style, MIN_DB, MAX_DB, 200);
 
     // Fill area between the transfer curve and the ceiling

@@ -38,6 +38,7 @@ const IR_PROFILES: Record<FactoryIRType, IRProfile> = {
 export function generateIREnvelope(
   irType: FactoryIRType,
   preDelay: number,
+  /** Number of intervals; returns steps + 1 points including both endpoints */
   steps: number = 160,
 ): IREnvelopePoint[] {
   const profile = IR_PROFILES[irType];

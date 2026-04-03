@@ -61,7 +61,7 @@ export function Knob({
   // Visual smoothing — display angle lags ~3 frames behind actual value for inertia feel.
   // The audio parameter updates instantly; only the SVG arc is smoothed.
   const displayValueRef = useRef(value);
-  const [displayValue_smoothed, setDisplayValueSmoothed] = useState(value);
+  const [displayValueSmoothed, setDisplayValueSmoothed] = useState(value);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
@@ -215,7 +215,7 @@ export function Knob({
   const strokeWidth = Math.max(3, s / 7);
   const startAngle = -arc / 2 - 90;
   const endAngle = arc / 2 - 90;
-  const angle = valueToAngle(isDragging ? displayValue_smoothed : value, min, max, arc);
+  const angle = valueToAngle(isDragging ? displayValueSmoothed : value, min, max, arc);
 
   function polarToXY(deg: number, r: number) {
     const rad = (deg * Math.PI) / 180;

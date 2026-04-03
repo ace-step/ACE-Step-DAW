@@ -307,7 +307,7 @@ function EffectDevice({
           ? 'w-full h-full'
           : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
       }`}
-      data-bypassed={!effect.enabled ? 'true' : undefined}
+      data-bypassed={!effect.enabled ? 'true' : 'false'}
       style={fullWidth ? undefined : {
         backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
         border: `1px solid ${color}22`,
@@ -328,7 +328,12 @@ function EffectDevice({
           background: `${color}14`,
           borderBottom: `1px solid ${color}18`,
         }}
-        onMouseDown={!fullWidth ? (e) => { if (e.button === 0 && e.target === e.currentTarget) onDragStart(index); } : undefined}
+        onMouseDown={!fullWidth ? (e) => {
+          if (e.button !== 0) return;
+          const target = e.target as HTMLElement | null;
+          if (target?.closest('button, a, input, select, textarea')) return;
+          onDragStart(index);
+        } : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();

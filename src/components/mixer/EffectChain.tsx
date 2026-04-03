@@ -266,6 +266,40 @@ const MoreVertical = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
 );
 
+/**
+ * Width tier for compact card view.
+ * - compact: simple effects (1-2 knobs, no visualization)
+ * - standard: medium effects (3-4 knobs or visualization)
+ * - wide: complex effects (5+ knobs, visualization + mode + extra sections)
+ */
+type WidthTier = 'compact' | 'standard' | 'wide';
+const EFFECT_WIDTH_TIER: Record<TrackEffectType, WidthTier> = {
+  eq3: 'standard',
+  parametricEq: 'wide',
+  compressor: 'wide',
+  reverb: 'compact',
+  delay: 'standard',
+  distortion: 'standard',
+  filter: 'standard',
+  chorus: 'standard',
+  flanger: 'standard',
+  phaser: 'standard',
+  convolver: 'standard',
+  gate: 'wide',
+  deesser: 'standard',
+  transientShaper: 'compact',
+  limiter: 'standard',
+  saturation: 'standard',
+  stereoImager: 'standard',
+  algorithmicReverb: 'wide',
+  noiseReduction: 'compact',
+};
+const WIDTH_TIER_CLASSES: Record<WidthTier, string> = {
+  compact: 'min-w-[160px] max-w-[200px]',
+  standard: 'min-w-[200px] max-w-[260px]',
+  wide: 'min-w-[260px] max-w-[320px]',
+};
+
 function EffectDevice({
   effect, track, index, onDragStart, onDragOver, isDragOver, fullWidth = false,
 }: {
@@ -328,7 +362,7 @@ function EffectDevice({
       className={`flex flex-col transition-all ${
         fullWidth
           ? 'w-full h-full'
-          : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
+          : `${WIDTH_TIER_CLASSES[EFFECT_WIDTH_TIER[effect.type]]} rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
       } ${!effect.enabled ? 'opacity-40' : ''}`}
       style={fullWidth ? undefined : {
         backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
@@ -454,10 +488,13 @@ function EffectDevice({
 
       {/* ── Body ── */}
       <div
-        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'}
-        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
+        className={fullWidth
+          ? 'flex-1 overflow-y-auto'
+          : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'
+        }
+        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '400px' }}
       >
-        <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[280px]'}>
+        <div className={fullWidth ? 'h-full flex flex-col justify-center' : ''}>
           <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>

@@ -6,7 +6,7 @@ describe('Button component', () => {
   describe('rendering', () => {
     it('renders children text', () => {
       render(<Button>Click me</Button>);
-      expect(screen.getByRole('button', { name: 'Click me' })).toBeDefined();
+      screen.getByRole('button', { name: 'Click me' }); // getBy* throws if not found
     });
 
     it('renders as a button element by default', () => {
@@ -17,7 +17,7 @@ describe('Button component', () => {
 
     it('forwards additional HTML attributes', () => {
       render(<Button title="My tooltip" data-testid="my-btn">Test</Button>);
-      expect(screen.getByTestId('my-btn')).toBeDefined();
+      screen.getByTestId('my-btn'); // getBy* throws if not found
       expect(screen.getByRole('button').getAttribute('title')).toBe('My tooltip');
     });
   });
@@ -189,7 +189,7 @@ describe('Button component', () => {
     it('renders a spinner when loading', () => {
       render(<Button loading>Save</Button>);
       const btn = screen.getByRole('button');
-      expect(btn.querySelector('svg')).toBeTruthy();
+      expect(btn.querySelector('svg')).not.toBeNull();
     });
 
     it('sets aria-busy when loading', () => {

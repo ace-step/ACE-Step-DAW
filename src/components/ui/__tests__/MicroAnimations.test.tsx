@@ -39,7 +39,7 @@ describe('Toast slide-in animation', () => {
     const toastItem = screen.getByTestId('toast-item');
     // Progress bar is the last child
     const progressTrack = toastItem.lastElementChild;
-    expect(progressTrack).toBeTruthy();
+    expect(progressTrack).not.toBeNull();
     expect(progressTrack?.querySelector('div')).not.toBeNull();
   });
 });

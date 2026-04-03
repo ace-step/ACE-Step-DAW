@@ -90,9 +90,9 @@ describe('Clip resize handle width and fade visuals', () => {
     const headerRail = container.querySelector('[data-testid="clip-header-rail"]') as HTMLElement;
     const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
 
-    expect(headerRail).toBeTruthy();
+    expect(headerRail).not.toBeNull();
     expect(headerRail.getAttribute('aria-label')).toBe('Move clip clip-1');
-    expect(bodySurface).toBeTruthy();
+    expect(bodySurface).not.toBeNull();
     expect(bodySurface.style.background).toContain('253, 251, 246');
   });
 
@@ -122,7 +122,7 @@ describe('Clip resize handle width and fade visuals', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeInDuration: 1 });
     const { container } = renderClip();
     const fadeIn = container.querySelector('[data-testid="fade-in-overlay"]') as HTMLElement;
-    expect(fadeIn).toBeTruthy();
+    expect(fadeIn).not.toBeNull();
     expect(fadeIn.style.clipPath).toBe('polygon(0 0, 100% 0, 0 100%)');
   });
 
@@ -130,7 +130,7 @@ describe('Clip resize handle width and fade visuals', () => {
     useProjectStore.getState().setClipFade('clip-1', { fadeOutDuration: 1 });
     const { container } = renderClip();
     const fadeOut = container.querySelector('[data-testid="fade-out-overlay"]') as HTMLElement;
-    expect(fadeOut).toBeTruthy();
+    expect(fadeOut).not.toBeNull();
     expect(fadeOut.style.clipPath).toBe('polygon(0 0, 100% 0, 100% 100%)');
   });
 

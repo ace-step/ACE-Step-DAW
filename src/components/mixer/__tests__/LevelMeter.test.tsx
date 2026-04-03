@@ -21,7 +21,7 @@ describe('LevelMeter', () => {
   it('renders a canvas element for meter display', () => {
     render(<LevelMeter trackId="track-1" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas).not.toBeUndefined();
+    expect(canvas).not.toBeNull();
     expect(canvas.tagName.toLowerCase()).toBe('canvas');
   });
 

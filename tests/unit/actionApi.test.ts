@@ -123,7 +123,7 @@ describe('project action API', () => {
     }
 
     expect(success.value.clipId).toBe(clip.id);
-    expect(success.value.noteId).toBeTruthy();
+    expect(typeof success.value.noteId).toBe('string');
     expect(actionApi.getLastError()).toBeNull();
 
     const exported = actionApi.exportMidiClip({ clipId: clip.id });

@@ -229,7 +229,7 @@ function AutomationControlShell({
 
 /**
  * Knob size tiers — 2-tier system for visual parameter hierarchy.
- * Primary: most important 1-3 parameters (prominently displayed).
+ * Primary: most important parameters for an effect (prominently displayed).
  * Secondary: supporting/fine-tune parameters (visually recessed).
  */
 const KNOB_PRIMARY = 56;

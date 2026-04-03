@@ -116,12 +116,18 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 /* #548 — Focus-visible indicators for keyboard accessibility */
+/* Enhanced with glow spread for better visibility (#1124) */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--color-daw-focus-ring);
   outline-offset: 1px;
+  box-shadow:
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000),
+    var(--tw-shadow, 0 0 #0000),
+    0 0 0 4px var(--color-daw-focus-ring);
 }
 
 /* #556 — Webkit/Chromium scrollbar styling */
@@ -175,6 +181,63 @@ select:focus-visible,
   .daw-glass-subtle {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+/* ── Micro-interactions — hover, active, drag state feedback (#1124) ── */
+
+/* Interactive button: smooth hover + press feedback */
+.daw-btn-interactive {
+  transition: box-shadow var(--duration-normal) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.daw-btn-interactive:hover {
+  box-shadow: var(--daw-shadow-sm);
+}
+.daw-btn-interactive:active {
+  transform: scale(0.97);
+  box-shadow: var(--daw-shadow-inset);
+}
+
+/* Clip block hover: border brightening */
+.daw-clip-interactive {
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.daw-clip-interactive:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Drag lift: element elevates when being dragged */
+.daw-drag-lift {
+  transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-out), opacity var(--duration-normal) var(--ease-out);
+}
+.daw-drag-lift[data-dragging="true"] {
+  transform: scale(1.02);
+  box-shadow: var(--daw-shadow-lg);
+  opacity: 0.9;
+}
+
+/* Scroll edge fades — horizontal and vertical */
+.daw-scroll-fade-x {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+.daw-scroll-fade-y {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent);
+}
+
+/* Reduced motion: simplify micro-interactions */
+@media (prefers-reduced-motion: reduce) {
+  .daw-btn-interactive,
+  .daw-clip-interactive,
+  .daw-drag-lift {
+    transition: none;
+  }
+  .daw-btn-interactive:active {
+    transform: none;
+  }
+  .daw-drag-lift[data-dragging="true"] {
+    transform: none;
   }
 }
 

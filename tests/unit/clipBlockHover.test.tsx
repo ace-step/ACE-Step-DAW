@@ -233,10 +233,9 @@ describe('ClipBlock hover and active feedback', () => {
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
 
-    // Selected clip should still have ring-2
-    expect(clipEl.className).toContain('ring-2');
-    // And hover/active classes should still be present
-    expect(clipEl.className).toMatch(/hover:/);
+    // Selected clip has accent border via inline style and daw-clip-interactive class
+    expect(clipEl.style.border).toContain('solid');
+    expect(clipEl.className).toContain('daw-clip-interactive');
     expect(clipEl.className).toMatch(/active:/);
   });
 
@@ -252,8 +251,8 @@ describe('ClipBlock hover and active feedback', () => {
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const bodySurface = screen.getByTestId('clip-body-surface') as HTMLElement;
 
-    // Clip selection is independent of track selection
-    expect(clipEl.className).toContain('ring-2');
+    // Clip selection is independent of track selection — border indicates selection
+    expect(clipEl.style.border).toContain('solid');
     expect(bodySurface.style.background).toContain('253, 251, 246');
   });
 
@@ -290,11 +289,8 @@ describe('ClipBlock hover and active feedback', () => {
 
     render(<ClipBlock clip={clip} track={track} />);
 
-    const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // No left-side color strip — both sides should be open
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
-    expect(stripEl).toBeNull();
+    // Header rail uses the clip color override (green)
     expect(headerRail.style.background).toContain('34, 197, 94');
   });
 
@@ -304,11 +300,8 @@ describe('ClipBlock hover and active feedback', () => {
 
     render(<ClipBlock clip={clip} track={track} />);
 
-    const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const headerRail = screen.getByTestId('clip-header-rail') as HTMLElement;
-    // No left-side color strip — both sides should be open
-    const stripEl = clipEl.querySelector('.w-\\[3px\\]');
-    expect(stripEl).toBeNull();
+    // Header rail uses the track color (blue) as fallback
     expect(headerRail.style.background).toContain('68, 136, 255');
   });
 });

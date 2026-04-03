@@ -49,9 +49,10 @@ interface ChannelStripProps {
   track: Track;
   faderHeight: number;
   returnTracks: ReturnTrack[];
+  anySoloed: boolean;
 }
 
-const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, returnTracks }: ChannelStripProps) {
+const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, returnTracks, anySoloed }: ChannelStripProps) {
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const renameTrack = useProjectStore((s) => s.renameTrack);
   const updateTrackMixer = useProjectStore((s) => s.updateTrackMixer);
@@ -83,7 +84,6 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
   const effects = track.effects ?? [];
   const effectsBypassed = track.effectsBypassed ?? false;
   const sends = track.sends ?? [];
-  const anySoloed = useProjectStore((s) => s.project?.tracks.some((t) => t.soloed) ?? false);
   const isImpliedMute = anySoloed && !track.soloed;
   const isSelected = useUIStore((s) => s.keyboardContext.scope === 'mixer' && s.keyboardContext.trackId === track.id);
 
@@ -549,6 +549,7 @@ export function MixerPanel() {
   if (!project) return null;
 
   const returnTracks = project.returnTracks ?? [];
+  const anySoloed = project.tracks.some((t) => t.soloed);
   const visibleMixerHeight = Math.max(mixerHeight, MIXER_MIN_VISIBLE_HEIGHT);
   const focusedTrackName = project.tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'None';
   const faderHeight = Math.max(
@@ -600,7 +601,7 @@ export function MixerPanel() {
             </div>
           )}
           {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (
-            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} />
+            <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} anySoloed={anySoloed} />
           ))}
           {returnTracks.length > 0 && (
             <>

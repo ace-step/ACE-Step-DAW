@@ -23,9 +23,9 @@ import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuS
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
 
-/** SVG icon map for track types — cleaner than emoji at small sizes. */
-function TrackTypeIcon({ trackType, size = 10 }: { trackType: string; size?: number }) {
-  const typeInfo = TRACK_TYPE_CATALOG[trackType as keyof typeof TRACK_TYPE_CATALOG];
+/** Track type abbreviation badge — compact label showing track type (e.g. STM, MIX, PNO). */
+function TrackTypeIcon({ trackType, size = 10 }: { trackType: keyof typeof TRACK_TYPE_CATALOG; size?: number }) {
+  const typeInfo = TRACK_TYPE_CATALOG[trackType];
   if (!typeInfo) return null;
   const abbr = typeInfo.abbr;
   return (
@@ -272,13 +272,15 @@ export const TrackHeader = React.memo(function TrackHeader({
       data-group={track.isGroup ? 'true' : undefined}
       data-child={isChild ? 'true' : undefined}
       aria-label={track.isGroup ? `Group track: ${track.displayName}${track.collapsed ? ' (collapsed)' : ''}` : `Track: ${track.displayName}`}
-      className={`relative flex items-center gap-2 border-b group select-none transition-[background-color] duration-100 hover:brightness-[1.04] ${
+      className={`relative flex items-center gap-2 border-b group select-none transition-[background-color,filter] duration-100 hover:brightness-[1.04] ${
         isDragOver ? 'bg-daw-hover-subtle' : ''
       } ${isImpliedMute ? 'daw-implied-mute' : ''} ${track.soloed ? 'daw-soloed' : ''}`}
       style={{
         backgroundColor: isDragOver ? undefined : headerBackgroundColor,
         borderColor: 'transparent',
-        borderImage: `linear-gradient(90deg, transparent 0%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 10%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 90%, transparent 100%) 1`,
+        borderImage: isDragOver
+          ? undefined
+          : `linear-gradient(90deg, transparent 0%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 10%, ${ARRANGEMENT_ROW_SEPARATOR_COLOR} 90%, transparent 100%) 1`,
         height: rowHeight,
         paddingLeft: isCollapsed ? 0 : isChild ? 24 : 8,
         paddingRight: isCollapsed ? 0 : 8,

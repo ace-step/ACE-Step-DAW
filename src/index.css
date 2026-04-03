@@ -123,7 +123,11 @@ select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--color-daw-focus-ring);
   outline-offset: 1px;
-  box-shadow: 0 0 0 4px var(--color-daw-focus-ring);
+  box-shadow:
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000),
+    var(--tw-shadow, 0 0 #0000),
+    0 0 0 4px var(--color-daw-focus-ring);
 }
 
 /* #556 — Webkit/Chromium scrollbar styling */
@@ -184,7 +188,7 @@ select:focus-visible,
 
 /* Interactive button: smooth hover + press feedback */
 .daw-btn-interactive {
-  transition: background-color 200ms ease-out, box-shadow 200ms ease-out, transform 100ms ease-out;
+  transition: box-shadow var(--duration-normal) var(--ease-out), transform var(--duration-fast) var(--ease-out);
 }
 .daw-btn-interactive:hover {
   box-shadow: var(--daw-shadow-sm);
@@ -196,7 +200,7 @@ select:focus-visible,
 
 /* Clip block hover: border brightening */
 .daw-clip-interactive {
-  transition: border-color 100ms ease-out, box-shadow 200ms ease-out;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 .daw-clip-interactive:hover {
   border-color: rgba(255, 255, 255, 0.2);
@@ -204,7 +208,7 @@ select:focus-visible,
 
 /* Drag lift: element elevates when being dragged */
 .daw-drag-lift {
-  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease-out, opacity 200ms ease-out;
+  transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-out), opacity var(--duration-normal) var(--ease-out);
 }
 .daw-drag-lift[data-dragging="true"] {
   transform: scale(1.02);

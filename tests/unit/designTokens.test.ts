@@ -150,16 +150,21 @@ describe('Design System Tokens (index.css)', () => {
       expect(indexCss).toContain('mask-image: linear-gradient');
     });
 
-    it('enhanced focus ring has glow spread', () => {
-      expect(indexCss).toContain('box-shadow: 0 0 0 4px var(--color-daw-focus-ring)');
+    it('enhanced focus ring has glow spread composed with Tailwind', () => {
+      expect(indexCss).toContain('0 0 0 4px var(--color-daw-focus-ring)');
+      expect(indexCss).toContain('var(--tw-ring-shadow');
     });
 
     it('disables micro-interaction transitions in reduced motion', () => {
       const reducedMotionBlocks = indexCss.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\n\}/g) ?? [];
-      const hasMicroInteractionDisable = reducedMotionBlocks.some((block) =>
-        block.includes('.daw-btn-interactive')
-      );
-      expect(hasMicroInteractionDisable).toBe(true);
+      const reducedMotionCss = reducedMotionBlocks.join('\n');
+
+      expect(reducedMotionBlocks.length).toBeGreaterThan(0);
+      expect(reducedMotionCss).toMatch(/\.daw-btn-interactive[\s\S]*?transition\s*:\s*none/);
+      expect(reducedMotionCss).toMatch(/\.daw-clip-interactive[\s\S]*?transition\s*:\s*none/);
+      expect(reducedMotionCss).toMatch(/\.daw-drag-lift[\s\S]*?transition\s*:\s*none/);
+      expect(reducedMotionCss).toMatch(/\.daw-btn-interactive:active[\s\S]*?transform\s*:\s*none/);
+      expect(reducedMotionCss).toMatch(/\[data-dragging="true"\][\s\S]*?transform\s*:\s*none/);
     });
   });
 

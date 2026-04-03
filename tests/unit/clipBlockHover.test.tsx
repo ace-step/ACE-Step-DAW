@@ -233,10 +233,9 @@ describe('ClipBlock hover and active feedback', () => {
 
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
 
-    // Selected clip should still have ring-2
-    expect(clipEl.className).toContain('ring-2');
-    // And hover/active classes should still be present
-    expect(clipEl.className).toMatch(/hover:/);
+    // Selected clip has accent border via inline style and daw-clip-interactive class
+    expect(clipEl.style.border).toContain('solid');
+    expect(clipEl.className).toContain('daw-clip-interactive');
     expect(clipEl.className).toMatch(/active:/);
   });
 
@@ -252,8 +251,8 @@ describe('ClipBlock hover and active feedback', () => {
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
     const bodySurface = screen.getByTestId('clip-body-surface') as HTMLElement;
 
-    // Clip selection is independent of track selection
-    expect(clipEl.className).toContain('ring-2');
+    // Clip selection is independent of track selection — border indicates selection
+    expect(clipEl.style.border).toContain('solid');
     expect(bodySurface.style.background).toContain('253, 251, 246');
   });
 

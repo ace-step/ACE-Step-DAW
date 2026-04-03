@@ -9,9 +9,7 @@ export interface ClipPresentation {
   bodyBorderColor: string;
   bodyInnerShadow: string;
   containerShadow: string;
-  selectionRingColor: string;
   clipBorder: string;
-  hoverBorder: string;
 }
 
 export function getClipPresentation(clipColor: string, isSelected: boolean): ClipPresentation {
@@ -25,9 +23,7 @@ export function getClipPresentation(clipColor: string, isSelected: boolean): Cli
       bodyBorderColor: 'rgba(255, 255, 255, 0.92)',
       bodyInnerShadow: 'inset 0 1px 3px rgba(0,0,0,0.15)',
       containerShadow: `0 0 0 2px rgba(255,255,255,0.96), 0 0 12px ${hexToRgba(clipColor, 0.3)}, 0 14px 28px rgba(0,0,0,0.22)`,
-      selectionRingColor: 'rgba(255,255,255,0.96)',
       clipBorder: `1px solid rgba(255,255,255,0.96)`,
-      hoverBorder: `1px solid rgba(255,255,255,1)`,
     };
   }
 
@@ -40,8 +36,6 @@ export function getClipPresentation(clipColor: string, isSelected: boolean): Cli
     bodyBorderColor: hexToRgba(clipColor, 0.34),
     bodyInnerShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)',
     containerShadow: '0 8px 18px rgba(0,0,0,0.14)',
-    selectionRingColor: hexToRgba(clipColor, 0.42),
     clipBorder: `1px solid ${hexToRgba(clipColor, 0.5)}`,
-    hoverBorder: `1px solid ${hexToRgba(clipColor, 0.7)}`,
   };
 }

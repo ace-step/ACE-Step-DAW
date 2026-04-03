@@ -291,7 +291,7 @@ describe('projectStore', () => {
     it('creates a default effect automation lane once and removes it when the effect is deleted', () => {
       const track = useProjectStore.getState().addTrack('drums');
       const effectId = useProjectStore.getState().addTrackEffect(track.id, 'filter');
-      expect(effectId).toBeDefined();
+      expect(typeof effectId).toBe('string');
 
       const filterParameter = {
         type: 'effect',

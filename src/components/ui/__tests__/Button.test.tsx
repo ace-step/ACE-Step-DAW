@@ -212,7 +212,7 @@ describe('Button component', () => {
 
     it('preserves button width by keeping children visible', () => {
       render(<Button loading>Save</Button>);
-      expect(screen.getByText('Save')).toBeDefined();
+      screen.getByText('Save'); // getBy* throws if not found
     });
   });
 
@@ -232,8 +232,8 @@ describe('Button component', () => {
           <Button>B</Button>
         </ButtonGroup>,
       );
-      expect(screen.getByText('A')).toBeDefined();
-      expect(screen.getByText('B')).toBeDefined();
+      screen.getByText('A'); // getBy* throws if not found
+      screen.getByText('B');
     });
 
     it('has role="group"', () => {
@@ -242,7 +242,7 @@ describe('Button component', () => {
           <Button>A</Button>
         </ButtonGroup>,
       );
-      expect(screen.getByRole('group')).toBeDefined();
+      screen.getByRole('group'); // getBy* throws if not found
     });
   });
 });

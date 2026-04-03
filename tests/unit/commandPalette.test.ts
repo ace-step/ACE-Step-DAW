@@ -173,8 +173,8 @@ describe('commandPalette', () => {
     const zoomSelection = commands.find((command) => command.id === 'view:zoom-to-selection');
     const fitProject = commands.find((command) => command.id === 'view:zoom-to-fit-project');
 
-    expect(zoomSelection).toBeTruthy();
-    expect(fitProject).toBeTruthy();
+    expect(zoomSelection).not.toBeUndefined();
+    expect(fitProject).not.toBeUndefined();
 
     await zoomSelection?.execute();
     expect(useUIStore.getState().timelineZoomRequest).toEqual({

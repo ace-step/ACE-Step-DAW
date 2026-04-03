@@ -145,12 +145,12 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().updateClip('clip-1', { startTime: 10 });
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       // contextWindow should now be relative offsets
       const ctx = movedClip!.generationParams?.contextWindow;
-      expect(ctx).toBeDefined();
+      expect(ctx).not.toBeUndefined();
       expect(ctx).toHaveProperty('offsetStart');
       expect(ctx).toHaveProperty('offsetEnd');
       expect(ctx).toHaveProperty('trackIds');
@@ -206,7 +206,7 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().moveClipToTrack('clip-1', 'track-2', 10);
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       const ctx = movedClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };
@@ -226,7 +226,7 @@ describe('clip move — contextWindow migration', () => {
       useProjectStore.getState().batchMoveClips(['clip-1'], 4.5);
 
       const movedClip = useProjectStore.getState().getClipById('clip-1');
-      expect(movedClip).toBeDefined();
+      expect(movedClip).not.toBeUndefined();
       expect(movedClip!.startTime).toBe(10);
 
       const ctx = movedClip!.generationParams?.contextWindow as { offsetStart: number; offsetEnd: number; trackIds: string[] };

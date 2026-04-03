@@ -105,7 +105,8 @@ describe('Clip resize handle width and fade visuals', () => {
 
     // Clip selection is independent of track selection
     expect(bodySurface.style.background).toContain('253, 251, 246');
-    expect(clipEl.className).toContain('ring-2');
+    // Selected clip has accent border and outer glow via boxShadow (no ring-2 class)
+    expect(clipEl.style.border).toContain('solid');
   });
 
   it('does not render fade controls or overlays for zero-fade clips', () => {

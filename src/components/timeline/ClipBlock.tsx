@@ -234,20 +234,18 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     <>
       <div
         ref={clipBlockRef}
-        className={`absolute top-1 bottom-1 rounded-md select-none overflow-hidden
-          transition-[filter,box-shadow] duration-200
-          hover:brightness-110 hover:ring-1 hover:ring-white/10
+        className={`absolute top-1 bottom-1 rounded-[3px] select-none overflow-hidden
+          daw-clip-interactive
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
-          ${isSelected ? 'ring-2 ring-offset-1 ring-offset-transparent' : ''}
         `}
         style={{
           left,
           width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
+          border: clipPresentation.clipBorder,
           contain: 'layout style paint',
           zIndex: 1,
-          ...(isSelected ? { '--tw-ring-color': clipPresentation.selectionRingColor } as React.CSSProperties : {}),
         }}
         data-clip-block
         data-clip-id={clip.id}
@@ -265,7 +263,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           data-clip-header-rail="true"
           data-testid="clip-header-rail"
           aria-label={`Move clip ${clip.id}`}
-          className="absolute left-0 right-0 top-0 z-[6] flex items-center rounded-t-md border-b px-2"
+          className="absolute left-0 right-0 top-0 z-[6] flex items-center rounded-t-[3px] border-b px-2"
           style={{
             height: HEADER_RAIL_HEIGHT_PX,
             background: clipPresentation.headerBackground,
@@ -275,31 +273,42 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
         {/* Body surface */}
         <div
-          className="absolute left-0 right-0 bottom-0 rounded-b-md overflow-hidden"
+          className="absolute left-0 right-0 bottom-0 rounded-b-[3px] overflow-hidden"
           data-testid="clip-body-surface"
           style={{
             top: HEADER_RAIL_HEIGHT_PX,
             background: clipPresentation.bodyBackground,
             borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
             borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
+            boxShadow: clipPresentation.bodyInnerShadow,
           }}
         />
 
-        {/* Resize handles */}
+        {/* Resize handles — accent-colored edge strips visible on hover */}
         <div
-          className="absolute top-0 left-0 w-[16px] z-10"
+          className="absolute top-0 left-0 w-[16px] z-10 group/resize-left"
           data-testid="resize-handle-left"
           style={{ cursor: CURSOR_BRACKET_LEFT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('left')}
           onMouseLeave={handleResizeHandleLeave}
-        />
+        >
+          <div
+            className="absolute top-0 left-0 bottom-0 w-[3px] rounded-l-[3px] opacity-0 group-hover/resize-left:opacity-100 transition-opacity duration-150"
+            style={{ backgroundColor: 'var(--color-daw-accent, #5e59ff)' }}
+          />
+        </div>
         <div
-          className="absolute top-0 right-0 w-[16px] z-10"
+          className="absolute top-0 right-0 w-[16px] z-10 group/resize-right"
           data-testid="resize-handle-right"
           style={{ cursor: CURSOR_BRACKET_RIGHT, height: HEADER_RAIL_HEIGHT_PX }}
           onMouseEnter={handleResizeHandleEnter('right')}
           onMouseLeave={handleResizeHandleLeave}
-        />
+        >
+          <div
+            className="absolute top-0 right-0 bottom-0 w-[3px] rounded-r-[3px] opacity-0 group-hover/resize-right:opacity-100 transition-opacity duration-150"
+            style={{ backgroundColor: 'var(--color-daw-accent, #5e59ff)' }}
+          />
+        </div>
 
         {/* Waveform */}
         <div

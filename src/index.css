@@ -66,6 +66,7 @@
   --color-daw-grid-beat: #33363d;
   --color-daw-grid-eighth: #292c32;
   --color-daw-grid-sub: #262930;
+  --color-daw-grid-bar-shading: rgba(0, 0, 0, 0.03);
   --color-daw-track-selected: #545a5d;
   --color-daw-region-audio: #5a9fd4;
   --color-daw-region-midi: #87d65a;
@@ -198,12 +199,12 @@ select:focus-visible,
   box-shadow: var(--daw-shadow-inset);
 }
 
-/* Clip block hover: border brightening */
+/* Clip block hover: subtle brightness lift (border handled per-clip via inline styles) */
 .daw-clip-interactive {
-  transition: border-color var(--duration-fast) var(--ease-out);
+  transition: filter var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 .daw-clip-interactive:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  filter: brightness(1.08);
 }
 
 /* Drag lift: element elevates when being dragged */

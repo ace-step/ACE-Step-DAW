@@ -560,7 +560,7 @@ export function Timeline() {
                 />
               )}
 
-              {/* Live select drag overlay */}
+              {/* Live select drag overlay — accent-tinted with smooth fill */}
               {selDrag && (
                 <div
                   className="absolute pointer-events-none z-10"
@@ -569,11 +569,9 @@ export function Timeline() {
                     width: selDrag.width,
                     top: selDrag.top,
                     height: selDrag.height,
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderLeft: '1px solid rgba(255, 255, 255, 0.8)',
-                    borderRight: '1px solid rgba(255, 255, 255, 0.8)',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.8)',
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.8)',
+                    background: 'rgba(94, 89, 255, 0.10)',
+                    border: '1px solid rgba(94, 89, 255, 0.7)',
+                    borderRadius: 1,
                   }}
                 />
               )}

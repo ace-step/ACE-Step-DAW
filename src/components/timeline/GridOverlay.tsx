@@ -48,8 +48,8 @@ export function GridOverlay() {
   const timelineViewportWidth = useUIStore((s) => s.timelineViewportWidth);
   const isMetaDown = useMetaKeyDown();
 
-  const lines = useMemo(() => {
-    if (!project) return [];
+  const { lines, barShading } = useMemo(() => {
+    if (!project) return { lines: [], barShading: [] };
 
     const {
       tempoMap,
@@ -93,7 +93,18 @@ export function GridOverlay() {
           outOfRange: false,
         });
       }
-      return result;
+
+      // Alternating bar shading — every other bar gets a subtle darker background
+      const shading: { x: number; width: number }[] = [];
+      const barWidthPx = barDuration * pixelsPerSecond;
+      const totalBars = Math.ceil(visibleDuration / barDuration);
+      for (let bar = 0; bar < totalBars; bar++) {
+        if (bar % 2 === 1) {
+          shading.push({ x: bar * barWidthPx, width: barWidthPx });
+        }
+      }
+
+      return { lines: result, barShading: shading };
     }
 
     // Tempo-map/time-sig-aware path: iterate by bars so mixed meters align cleanly.
@@ -101,6 +112,7 @@ export function GridOverlay() {
     const divisions = getVisibleDivisions(beatPx);
     const finest = Math.min(...divisions);
     const result: { x: number; strength: GridStrength; outOfRange: boolean }[] = [];
+    const shading: { x: number; width: number }[] = [];
 
     for (let bar = 1; bar <= effectiveMeasures; bar++) {
       const barBeat = getBeatAtBar(bar, timeSignatureMap, timeSignature, timeSignatureDenominator);
@@ -118,6 +130,16 @@ export function GridOverlay() {
       const eighthDuration = unitDuration * 0.5;
       const stepBeats = beatLength * finest;
 
+      // Alternating bar shading for tempo-map path
+      if (bar % 2 === 0) {
+        const nextBarBeat = getBeatAtBar(bar + 1, timeSignatureMap, timeSignature, timeSignatureDenominator);
+        const nextBarTime = beatToTime(nextBarBeat, tempoMap, bpm);
+        shading.push({
+          x: barTime * pixelsPerSecond,
+          width: (nextBarTime - barTime) * pixelsPerSecond,
+        });
+      }
+
       // Iterate through all subdivisions within this bar
       for (let subBeat = stepBeats; subBeat < barDurationBeats; subBeat += stepBeats) {
         const time = beatToTime(barBeat + subBeat, tempoMap, bpm);
@@ -128,7 +150,7 @@ export function GridOverlay() {
         result.push({ x: time * pixelsPerSecond, strength, outOfRange: false });
       }
     }
-    return result;
+    return { lines: result, barShading: shading };
   }, [project, pixelsPerSecond, timelineViewportWidth]);
 
   if (!project) return null;
@@ -144,6 +166,19 @@ export function GridOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none" style={{ width: totalWidth, minHeight: '100vh' }}>
+      {/* Alternating bar shading — every other bar gets a subtle darker background */}
+      {barShading.map((shade, i) => (
+        <div
+          key={`shade-${i}`}
+          className="absolute top-0 bottom-0"
+          data-testid="grid-bar-shading"
+          style={{
+            left: shade.x,
+            width: shade.width,
+            backgroundColor: 'var(--color-daw-grid-bar-shading)',
+          }}
+        />
+      ))}
       {lines.map((line, i) => {
         const color = colors[line.strength];
         return (

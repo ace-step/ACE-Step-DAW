@@ -382,7 +382,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
         data-timeline-lane
         data-testid={`track-lane-${track.id}`}
         data-lane-surface={shouldHighlightEmptyLane ? 'empty' : 'default'}
-        className={`relative border-b ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
+        className={`relative border-b group/lane ${ARRANGEMENT_ROW_BORDER_CLASS} ${fileDragOver ? 'bg-blue-900/20' : ''}`}
         style={{
           width: totalWidth,
           height: rowHeight,
@@ -418,6 +418,18 @@ function TrackLaneInner({ track }: TrackLaneProps) {
               opacity: EMPTY_LANE_SURFACE_OVERLAY_OPACITY,
             }}
           />
+        )}
+
+        {/* Empty lane hover hint — appears when hovering empty audio/stems tracks */}
+        {shouldHighlightEmptyLane && !fileDragOver && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 group-hover/lane:opacity-100 transition-opacity duration-300"
+            data-testid="empty-lane-hint"
+          >
+            <span className="text-[10px] text-zinc-500 select-none">
+              Drag clips here or double-click to create
+            </span>
+          </div>
         )}
 
         {/* Drop ghost preview — shows where the clip will land */}

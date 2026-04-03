@@ -340,43 +340,52 @@ function EffectDevice({
       <div
         className={`flex items-center select-none shrink-0 ${
           fullWidth
-            ? 'gap-2 px-4 py-1.5'
-            : 'gap-1.5 px-2 py-1.5 rounded-t-lg'
+            ? 'gap-2 px-4 py-2'
+            : 'gap-1.5 px-2 py-2 rounded-t-lg cursor-grab active:cursor-grabbing'
         }`}
         style={{
-          background: `${color}0a`,
-          borderBottom: `1px solid ${color}15`,
+          background: `${color}0f`,
+          borderBottom: `1px solid ${color}18`,
+          minHeight: 28,
         }}
+        onMouseDown={!fullWidth ? (e) => { if ((e.target as HTMLElement).closest('button')) return; onDragStart(index); } : undefined}
       >
-        {/* Drag handle (compact view only) */}
-        {!fullWidth && (
-          <div
-            className="cursor-grab active:cursor-grabbing opacity-30 hover:opacity-70 transition-opacity"
-            onMouseDown={(e) => { e.stopPropagation(); onDragStart(index); }}
-          >
-            <GripVertical className="h-3 w-3 text-white/50" />
-          </div>
-        )}
+        {/* Bypass toggle — Ableton-style circle indicator */}
+        <button
+          className={`h-[18px] w-[18px] flex items-center justify-center transition-all rounded-full shrink-0 ${
+            effect.enabled
+              ? 'bg-green-400/20 text-green-400 hover:bg-green-400/30'
+              : 'bg-white/5 text-white/20 hover:bg-white/10 hover:text-white/40'
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
+          }}
+          title={effect.enabled ? 'Bypass effect' : 'Enable effect'}
+          aria-label={`${effect.enabled ? 'Bypass' : 'Enable'} ${EFFECT_DISPLAY_NAMES[effect.type]}`}
+        >
+          <Power className="h-3 w-3" />
+        </button>
 
-        {/* Effect name */}
+        {/* Effect name — click to collapse */}
         <button
           onClick={() => !fullWidth && setCollapsed(!collapsed)}
           className={`font-semibold flex-1 truncate text-left transition-colors ${
-            fullWidth ? 'text-[12px]' : 'text-[10px]'
+            fullWidth ? 'text-[12px]' : 'text-[11px]'
           }`}
           style={{ color: `${color}dd` }}
         >
           {EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}
         </button>
 
-        {/* Preset selector — custom dropdown */}
+        {/* Preset selector */}
         <div className="relative">
           <button
-            className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors"
+            className="flex items-center gap-0.5 text-[10px] text-white/40 hover:text-white/60 transition-colors px-1 py-0.5 rounded hover:bg-white/5"
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
           >
             Presets
-            <ChevronDown className="h-2.5 w-2.5" />
+            <ChevronDown className="h-3 w-3" />
           </button>
           {showPresets && (
             <div
@@ -386,7 +395,7 @@ function EffectDevice({
               {presets.map((preset, i) => (
                 <button
                   key={i}
-                  className="w-full text-left px-3 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
+                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
                   onClick={() => { applyPreset(i); setShowPresets(false); }}
                 >
                   {preset.name}
@@ -396,23 +405,23 @@ function EffectDevice({
           )}
         </div>
 
-        {/* Bypass toggle */}
-        <button
-          className={`h-5 w-5 flex items-center justify-center transition-colors rounded ${effect.enabled ? 'text-green-400 hover:text-green-300' : 'text-white/20 hover:text-white/40'}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
-          }}
-          title={effect.enabled ? 'Bypass' : 'Enable'}
-        >
-          <Power className="h-3 w-3" />
-        </button>
+        {/* Collapse chevron (compact view only) */}
+        {!fullWidth && (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="h-5 w-5 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors rounded hover:bg-white/5"
+            aria-label={collapsed ? 'Expand effect' : 'Collapse effect'}
+          >
+            {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        )}
 
-        {/* More menu */}
+        {/* More menu (delete, move, duplicate) */}
         <div className="relative" ref={menuRef}>
           <button
-            className="h-4 w-4 flex items-center justify-center text-white/20 hover:text-white/50"
+            className="h-5 w-5 flex items-center justify-center text-white/20 hover:text-white/50 transition-colors rounded hover:bg-white/5"
             onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+            aria-label="Effect options"
           >
             <MoreVertical className="h-3 w-3" />
           </button>

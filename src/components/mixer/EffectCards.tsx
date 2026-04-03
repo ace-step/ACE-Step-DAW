@@ -1559,24 +1559,30 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
  * These fallback hex values match the CSS vars for use in non-CSS contexts (canvas, SVG).
  */
 export const EFFECT_COLORS: Record<TrackEffectType, string> = {
+  /* EQ family (cool blue) */
   eq3: '#5b8ac4',
   parametricEq: '#6b9fd4',
+  /* Dynamics family (warm amber/gold) */
   compressor: '#c4993b',
-  reverb: '#8b6fc0',
-  delay: '#9478c4',
-  distortion: '#c46454',
-  filter: '#4a9da8',
-  chorus: '#5aa8b4',
-  flanger: '#4dab94',
-  phaser: '#c48a54',
-  convolver: '#a07cc8',
   gate: '#b8903a',
   deesser: '#c4a654',
   transientShaper: '#b89340',
   limiter: '#d4a040',
-  saturation: '#c46454',
-  stereoImager: '#7a8ab4',
+  /* Time-based family (deep purple/violet) */
+  reverb: '#8b6fc0',
+  delay: '#9478c4',
+  convolver: '#a07cc8',
   algorithmicReverb: '#7a6fb8',
+  /* Modulation family (teal/cyan) */
+  filter: '#4a9da8',
+  chorus: '#5aa8b4',
+  flanger: '#4dab94',
+  phaser: '#58a8a0',
+  /* Distortion family (warm red/coral) */
+  distortion: '#c46454',
+  saturation: '#b87060',
+  /* Utility (neutral) */
+  stereoImager: '#7a8ab4',
   noiseReduction: '#8a8a8a',
 };
 
@@ -1599,10 +1605,10 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     deesser: '--fx-deesser',
     transientShaper: '--fx-transient-shaper',
     limiter: '--fx-limiter',
-    saturation: '--fx-distortion',
-    stereoImager: '--fx-filter',
+    saturation: '--fx-saturation',
+    stereoImager: '--fx-stereo-imager',
     algorithmicReverb: '--fx-reverb',
-    noiseReduction: '--fx-filter',
+    noiseReduction: '--fx-noise-reduction',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

@@ -272,12 +272,19 @@ function EffectDevice({
     return () => document.removeEventListener('click', close);
   }, [showPresets]);
 
-  // Close context menu on outside click
+  // Close context menu on outside click, right-click elsewhere, or Escape
   useEffect(() => {
     if (!ctxMenu) return;
     const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
     document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    document.addEventListener('contextmenu', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('contextmenu', close);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [ctxMenu]);
 
   const applyPreset = (presetIdx: number) => {
@@ -322,8 +329,8 @@ function EffectDevice({
           minHeight: 28,
         }}
         onMouseDown={fullWidth ? undefined : (e) => {
-          // Allow drag from entire title bar (except buttons)
-          if ((e.target as HTMLElement).closest('button')) return;
+          // Allow drag from entire title bar (except interactive controls)
+          if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
           e.stopPropagation();
           onDragStart(index);
         }}
@@ -331,26 +338,36 @@ function EffectDevice({
           if (fullWidth) return;
           e.preventDefault();
           e.stopPropagation();
+          setShowPresets(false);
           setCtxMenu({ x: e.clientX, y: e.clientY });
         }}
       >
         {/* LED-style bypass indicator */}
         <button
-          className="shrink-0 transition-all duration-150"
+          data-no-drag
+          type="button"
+          aria-label={effect.enabled ? 'Bypass effect' : 'Enable effect'}
+          aria-pressed={effect.enabled}
+          className="shrink-0 inline-flex items-center justify-center p-[6px] -m-[6px] rounded-full transition-all duration-150"
           onClick={(e) => {
             e.stopPropagation();
             updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
           }}
           title={effect.enabled ? 'Bypass effect' : 'Enable effect'}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            backgroundColor: effect.enabled ? color : 'transparent',
-            border: `1.5px solid ${effect.enabled ? color : 'rgba(255,255,255,0.2)'}`,
-            boxShadow: effect.enabled ? `0 0 6px ${color}80` : 'none',
-          }}
-        />
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 8,
+              height: 8,
+              display: 'block',
+              borderRadius: '50%',
+              backgroundColor: effect.enabled ? color : 'transparent',
+              border: `1.5px solid ${effect.enabled ? color : 'rgba(255,255,255,0.2)'}`,
+              boxShadow: effect.enabled ? `0 0 6px ${color}80` : 'none',
+            }}
+          />
+        </button>
 
         {/* Effect name — click to collapse in compact view */}
         <button
@@ -364,7 +381,7 @@ function EffectDevice({
         </button>
 
         {/* Preset selector */}
-        <div className="relative">
+        <div className="relative" data-no-drag>
           <button
             className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors px-1 py-0.5 rounded hover:bg-white/[0.06]"
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
@@ -393,6 +410,7 @@ function EffectDevice({
         {/* Collapse chevron (compact view only) */}
         {!fullWidth && (
           <button
+            data-no-drag
             className="h-4 w-4 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors"
             onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
           >
@@ -408,7 +426,7 @@ function EffectDevice({
       {ctxMenu && (
         <div
           className="fixed bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl py-1 min-w-[130px]"
-          style={{ left: ctxMenu.x, top: ctxMenu.y, zIndex: 9999 }}
+          style={{ left: Math.min(ctxMenu.x, window.innerWidth - 160), top: Math.min(ctxMenu.y, window.innerHeight - 200), zIndex: 9999 }}
           onClick={(e) => e.stopPropagation()}
         >
           <button

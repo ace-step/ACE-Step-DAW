@@ -34,6 +34,9 @@ const IR_PROFILES: Record<FactoryIRType, IRProfile> = {
 /**
  * Generate synthetic IR envelope for visualization.
  * Returns points representing the IR waveform shape.
+ *
+ * @param irType    Factory IR preset type
+ * @param preDelay  Pre-delay in milliseconds (converted to seconds internally)
  */
 export function generateIREnvelope(
   irType: FactoryIRType,

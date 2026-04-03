@@ -15,6 +15,7 @@ import { FilterResponseCurve } from './FilterResponseCurve';
 import { ModulationDisplay } from './ModulationDisplay';
 import { ConvolverIRCurve } from './ConvolverIRCurve';
 import { LimiterCurve } from './LimiterCurve';
+import { drawCanvasBackground, LABEL_AREA_BG } from '../../utils/canvasTheme';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -289,15 +290,11 @@ export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500, color 
     const labelH = 13;
     const drawH = H - labelH;
 
-    // Background
-    const grad = ctx.createRadialGradient(W / 2, drawH / 2, 0, W / 2, drawH / 2, W * 0.6);
-    grad.addColorStop(0, 'rgba(12, 16, 28, 0.92)');
-    grad.addColorStop(1, 'rgba(4, 6, 14, 0.98)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    // Background (shared canvas theme)
+    drawCanvasBackground(ctx, W, H, color);
 
     // Label area
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.fillStyle = LABEL_AREA_BG;
     ctx.fillRect(0, drawH, W, labelH);
 
     // Frequency grid (log scale 20Hz–20kHz)

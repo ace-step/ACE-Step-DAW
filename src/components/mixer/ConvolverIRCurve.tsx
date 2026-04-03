@@ -19,7 +19,7 @@ interface ConvolverIRCurveProps {
   wet: number;         // Dry/wet mix 0–1
   width?: number;
   height?: number;
-  color?: string;
+  color: string;
 }
 
 export function ConvolverIRCurve({
@@ -28,7 +28,7 @@ export function ConvolverIRCurve({
   wet,
   width = 160,
   height = 100,
-  color = '#a07cc8',
+  color,
 }: ConvolverIRCurveProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

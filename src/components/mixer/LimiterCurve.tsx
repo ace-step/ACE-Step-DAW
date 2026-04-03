@@ -19,7 +19,7 @@ interface LimiterCurveProps {
   style: 'transparent' | 'aggressive' | 'warm';
   width?: number;
   height?: number;
-  color?: string;
+  color: string;
 }
 
 export function LimiterCurve({
@@ -28,7 +28,7 @@ export function LimiterCurve({
   style,
   width = 160,
   height = 100,
-  color = '#d4a040',
+  color,
 }: LimiterCurveProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

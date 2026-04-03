@@ -85,10 +85,10 @@ describe('MixerPanel', () => {
     it('has visual separators between control sections', () => {
       render(<MixerPanel />);
       const strip = screen.getAllByTestId('channel-strip')[0];
-      // The scrollable area should contain separator divs with border-t
+      // The scrollable area should contain separator divs (gradient h-px elements)
       const scrollArea = strip.querySelector('.overflow-y-auto');
       expect(scrollArea).toBeInTheDocument();
-      const separators = scrollArea!.querySelectorAll('.border-t.border-\\[\\#3a3a3a\\]');
+      const separators = scrollArea!.querySelectorAll('.h-px');
       // There should be 4 separators: after pan, after inserts, after sends, after EQ
       expect(separators.length).toBe(4);
     });

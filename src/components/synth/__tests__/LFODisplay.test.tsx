@@ -7,7 +7,7 @@ describe('LFODisplay', () => {
 
   it('renders LFO label', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByText('LFO')).toBeDefined();
+    screen.getByText('LFO'); // getBy* throws if not found
   });
 
   it('renders a canvas element for the waveform', () => {
@@ -17,8 +17,8 @@ describe('LFODisplay', () => {
 
   it('renders rate and depth knobs', () => {
     render(<LFODisplay lfo={defaultLfo} onChange={vi.fn()} />);
-    expect(screen.getByLabelText('Rate knob')).toBeDefined();
-    expect(screen.getByLabelText('Depth knob')).toBeDefined();
+    screen.getByLabelText('Rate knob'); // getBy* throws if not found
+    screen.getByLabelText('Depth knob');
   });
 
   it('renders shape selector buttons', () => {

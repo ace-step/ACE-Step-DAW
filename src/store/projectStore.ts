@@ -5205,9 +5205,9 @@ export const useProjectStore = create<ProjectState>()(
     const slot = session.slots.find((candidate) => candidate.trackId === trackId && candidate.sceneId === sceneId);
     if (!slot?.clipId || !track.clips.some((clip) => clip.id === slot.clipId)) return;
 
-    // Toggle mode: if the clip is already active, stop the track instead of re-launching
-    const launchMode = slot.launchMode ?? 'trigger';
-    if (launchMode === 'toggle' && session.activeClipIdsByTrackId[trackId] === slot.clipId) {
+    // Re-trigger toggle: clicking an already-playing clip stops it (standard DAW behavior).
+    // This applies to all launch modes — re-clicking the active clip always acts as stop.
+    if (session.activeClipIdsByTrackId[trackId] === slot.clipId) {
       get().stopSessionTrack(trackId);
       return;
     }

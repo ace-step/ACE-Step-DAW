@@ -79,7 +79,7 @@ describe('session clip launch modes', () => {
       useProjectStore.getState().launchSessionClip(trackId, sceneId);
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
-      // Second launch of same clip — toggle mode should stop it
+      // Second launch of same clip — should stop it
       useProjectStore.getState().launchSessionClip(trackId, sceneId);
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
     });
@@ -94,13 +94,47 @@ describe('session clip launch modes', () => {
     });
   });
 
+  describe('re-trigger stops active clip (all launch modes)', () => {
+    it.each(['trigger', 'gate', 'toggle', 'repeat'] as const)(
+      'stops the active clip on re-click in %s mode',
+      (mode) => {
+        const session = useProjectStore.getState().project?.session;
+        const slot = session?.slots.find((s) => s.trackId === trackId && s.sceneId === sceneId);
+        if (mode !== 'trigger') {
+          useProjectStore.getState().setSessionSlotLaunchMode(slot!.id, mode);
+        }
+
+        // First launch
+        useProjectStore.getState().launchSessionClip(trackId, sceneId);
+        expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
+
+        // Re-click same clip — should stop
+        useProjectStore.getState().launchSessionClip(trackId, sceneId);
+        expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+      },
+    );
+  });
+
   describe('trigger mode (default)', () => {
-    it('always launches the clip regardless of active state', () => {
+    it('stops the clip when re-triggering the same active clip', () => {
       // Launch once
       useProjectStore.getState().launchSessionClip(trackId, sceneId);
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
 
-      // Launch again — trigger mode should not stop, just re-launch
+      // Launch again — re-clicking an active clip always stops it (standard DAW toggle)
+      useProjectStore.getState().launchSessionClip(trackId, sceneId);
+      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+    });
+
+    it('can re-launch a clip after stopping it via re-trigger', () => {
+      // Launch → stop via retrigger → launch again
+      useProjectStore.getState().launchSessionClip(trackId, sceneId);
+      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
+
+      useProjectStore.getState().launchSessionClip(trackId, sceneId);
+      expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBeNull();
+
+      // Third click should launch again
       useProjectStore.getState().launchSessionClip(trackId, sceneId);
       expect(useProjectStore.getState().project?.session?.activeClipIdsByTrackId[trackId]).toBe(clipId);
     });

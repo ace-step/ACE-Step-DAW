@@ -146,6 +146,38 @@ select:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Surface Depth & Layering — theme-aware shadows and glass effects ── */
+/* Shadow utilities: use var() from theme tokens applied by applyTheme() */
+.daw-shadow-sm { box-shadow: var(--daw-shadow-sm); }
+.daw-shadow-md { box-shadow: var(--daw-shadow-md); }
+.daw-shadow-lg { box-shadow: var(--daw-shadow-lg); }
+.daw-shadow-xl { box-shadow: var(--daw-shadow-xl); }
+.daw-shadow-inset { box-shadow: var(--daw-shadow-inset); }
+
+/* Glass panel effect: frosted background + backdrop blur + themed border */
+.daw-glass {
+  background: var(--daw-glass-bg);
+  border: 1px solid var(--daw-glass-border);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Lighter glass variant for subtle overlays */
+.daw-glass-subtle {
+  background: var(--daw-glass-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* Reduced motion: disable backdrop blur (performance-heavy) */
+@media (prefers-reduced-motion: reduce) {
+  .daw-glass,
+  .daw-glass-subtle {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 .arrangement-scrollbar-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;

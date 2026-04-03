@@ -75,5 +75,14 @@ export const flStudioTheme: ThemeDefinition = {
     'daw-slider-thumb-hover': '#30d888',
     // Focus ring — green
     'daw-focus-ring': 'rgba(30, 193, 115, 0.5)',
+    // Shadows — FL Studio: deep dark for high contrast
+    'daw-shadow-sm': '0 1px 3px rgba(0, 0, 0, 0.5)',
+    'daw-shadow-md': '0 2px 8px rgba(0, 0, 0, 0.6)',
+    'daw-shadow-lg': '0 4px 16px rgba(0, 0, 0, 0.7)',
+    'daw-shadow-xl': '0 8px 24px rgba(0, 0, 0, 0.8)',
+    'daw-shadow-inset': 'inset 0 1px 4px rgba(0, 0, 0, 0.4)',
+    // Glass — darker, less transparent (FL prefers density)
+    'daw-glass-bg': 'rgba(12, 14, 17, 0.9)',
+    'daw-glass-border': 'rgba(52, 68, 78, 0.4)',
   },
 };

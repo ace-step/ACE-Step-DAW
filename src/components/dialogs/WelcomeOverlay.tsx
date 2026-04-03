@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Z } from '../../utils/zIndex';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 const STORAGE_KEY = 'ace-step-welcome-seen';
 
@@ -32,6 +33,8 @@ export function WelcomeOverlay() {
   });
 
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, visible);
 
   const dismiss = useCallback(() => {
     setVisible(false);
@@ -69,6 +72,7 @@ export function WelcomeOverlay() {
       onMouseDown={(e) => e.target === e.currentTarget && dismiss()}
     >
       <div
+        ref={dialogRef}
         className="w-[420px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

@@ -372,6 +372,15 @@ select:focus-visible,
   }
 }
 
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 @keyframes fx-card-enter {
   from {
     opacity: 0;
@@ -390,6 +399,11 @@ select:focus-visible,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* Preserve functional loading spinners under reduced-motion */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
   @keyframes fx-card-enter {
     from { opacity: 1; transform: none; }
     to { opacity: 1; transform: none; }
@@ -398,6 +412,41 @@ select:focus-visible,
     from { opacity: 0; }
     to { opacity: 0; }
   }
+}
+
+/* ── High Contrast: boost borders, text, and focus indicators ── */
+@media (prefers-contrast: more) {
+  :root {
+    --color-daw-border: #666;
+    --color-daw-border-strong: #555;
+    --color-daw-text-muted: #bbb;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline-width: 3px;
+    box-shadow: 0 0 0 5px var(--color-daw-focus-ring);
+  }
+
+  /* Ensure muted/disabled states remain distinguishable */
+  .daw-implied-mute {
+    opacity: 0.5;
+  }
+}
+
+/* ── Screen reader only utility ── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════

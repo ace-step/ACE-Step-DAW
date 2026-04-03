@@ -116,6 +116,8 @@ export function AIToolsSubmenu({
       onKeyDown={handleTriggerKeyDown}
     >
       <button
+        data-menu-item
+        role="menuitem"
         className="w-full text-left flex items-center justify-between cursor-pointer"
         style={{
           padding: '5px 12px',

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { Button, getButtonClasses } from '../Button';
+import { Button, ButtonGroup, getButtonClasses } from '../Button';
 
 describe('Button component', () => {
   describe('rendering', () => {
@@ -182,6 +182,67 @@ describe('Button component', () => {
       expect(classes).toContain('rounded-md');
       expect(classes).toContain('px-3');
       expect(classes).toContain('bg-daw-surface-2');
+    });
+  });
+
+  describe('loading state', () => {
+    it('renders a spinner when loading', () => {
+      render(<Button loading>Save</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.querySelector('svg')).toBeTruthy();
+    });
+
+    it('sets aria-busy when loading', () => {
+      render(<Button loading>Save</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('disables the button when loading', () => {
+      render(<Button loading>Save</Button>);
+      expect(screen.getByRole('button')).toHaveProperty('disabled', true);
+    });
+
+    it('does not fire onClick when loading', () => {
+      const onClick = vi.fn();
+      render(<Button loading onClick={onClick}>Save</Button>);
+      fireEvent.click(screen.getByRole('button'));
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('preserves button width by keeping children visible', () => {
+      render(<Button loading>Save</Button>);
+      expect(screen.getByText('Save')).toBeDefined();
+    });
+  });
+
+  describe('icon button circle styling', () => {
+    it('applies rounded-full for icon buttons', () => {
+      render(<Button icon>X</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.className).toContain('rounded-full');
+    });
+  });
+
+  describe('ButtonGroup', () => {
+    it('renders children within a group', () => {
+      render(
+        <ButtonGroup>
+          <Button>A</Button>
+          <Button>B</Button>
+        </ButtonGroup>,
+      );
+      expect(screen.getByText('A')).toBeDefined();
+      expect(screen.getByText('B')).toBeDefined();
+    });
+
+    it('has role="group"', () => {
+      render(
+        <ButtonGroup>
+          <Button>A</Button>
+        </ButtonGroup>,
+      );
+      expect(screen.getByRole('group')).toBeDefined();
     });
   });
 });

@@ -8,6 +8,7 @@ import { MasteringPanel } from './MasteringPanel';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import { VerticalFader } from './VerticalFader';
 import { SidechainRoutingOverlay } from './SidechainRoutingOverlay';
+import { EmptyState } from '../ui/EmptyState';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -596,8 +597,19 @@ export function MixerPanel() {
         <SidechainRoutingOverlay containerRef={channelStripContainerRef} />
         <div ref={channelStripContainerRef} className="flex items-stretch h-full">
           {project.tracks.length === 0 && (
-            <div className="flex-1 flex items-center justify-center text-sm text-zinc-600">
-              Add tracks to see mixer channels
+            <div className="flex-1">
+              <EmptyState
+                icon={
+                  <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="2" width="3" height="20" rx="1" />
+                    <rect x="10.5" y="6" width="3" height="16" rx="1" />
+                    <rect x="17" y="4" width="3" height="18" rx="1" />
+                  </svg>
+                }
+                title="No mixer channels"
+                description="Add tracks to your project to see mixer channels here"
+                compact
+              />
             </div>
           )}
           {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (

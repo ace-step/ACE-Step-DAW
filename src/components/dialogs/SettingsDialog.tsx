@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
@@ -121,6 +122,8 @@ export function SettingsDialog() {
   const [initLoadingLego, setInitLoadingLego] = useState(false);
   const [initLoadingLm, setInitLoadingLm] = useState(false);
   const [llmInitialized, setLlmInitialized] = useState(false);
+  const settingsDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(settingsDialogRef, show);
   const [selectedLmModel, setSelectedLmModel] = useState('');
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
@@ -311,10 +314,10 @@ export function SettingsDialog() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setShow(false); }}>
-      <div className="w-[400px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setShow(false); }}>
+      <div ref={settingsDialogRef} className="w-[400px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
-          <h2 className="text-sm font-medium">Settings</h2>
+          <h2 id="settings-dialog-title" className="text-sm font-medium">Settings</h2>
           <button
             onClick={() => setShow(false)}
             className="text-zinc-400 hover:text-zinc-300 text-lg leading-none"

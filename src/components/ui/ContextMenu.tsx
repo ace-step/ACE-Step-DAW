@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 /* ─── Shared context-menu design tokens ──────────────────────────────────── */
 export const CONTEXT_MENU = {
@@ -17,6 +17,24 @@ export const CONTEXT_MENU = {
   backdropFilter: 'blur(16px) saturate(1.2)',
 } as const;
 
+/* ─── Entrance/exit animation helper ─────────────────────────────────────── */
+
+function useMenuAnimation(ref: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Start with entrance state
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.95)';
+    el.style.transition = 'opacity 150ms ease-out, transform 150ms ease-out';
+    // Trigger entrance on next frame
+    requestAnimationFrame(() => {
+      el.style.opacity = '1';
+      el.style.transform = 'scale(1)';
+    });
+  }, [ref]);
+}
+
 /* ─── Overlay + positioned wrapper ───────────────────────────────────────── */
 
 interface ContextMenuWrapperProps {
@@ -30,7 +48,7 @@ interface ContextMenuWrapperProps {
 
 /**
  * Renders a fixed-position context menu with a click-away backdrop.
- * Clamps position so the menu stays on-screen.
+ * Clamps position so the menu stays on-screen. Animates entrance.
  */
 export function ContextMenuWrapper({
   x,
@@ -40,8 +58,20 @@ export function ContextMenuWrapper({
   minWidth = CONTEXT_MENU.minWidth,
   testId,
 }: ContextMenuWrapperProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const clampedX = Math.min(x, window.innerWidth - (minWidth + 20));
   const clampedY = Math.min(y, window.innerHeight - 100);
+
+  useMenuAnimation(menuRef);
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   return (
     <>
@@ -54,17 +84,14 @@ export function ContextMenuWrapper({
         }}
       />
       <div
-        className="fixed z-50"
+        ref={menuRef}
+        className="fixed z-50 daw-glass"
         data-testid={testId}
         style={{
           left: clampedX,
           top: clampedY,
-          background: CONTEXT_MENU.bg,
-          border: `1px solid ${CONTEXT_MENU.border}`,
           borderRadius: CONTEXT_MENU.borderRadius,
           boxShadow: CONTEXT_MENU.shadow,
-          backdropFilter: CONTEXT_MENU.backdropFilter,
-          WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
           padding: '4px 0',
           minWidth,
         }}
@@ -86,6 +113,8 @@ interface ContextMenuItemProps {
   shortcut?: string;
   /** Override text color for accent items */
   color?: string;
+  /** Optional icon element (16x16 recommended) rendered left of label */
+  icon?: ReactNode;
   className?: string;
 }
 
@@ -96,6 +125,7 @@ export function ContextMenuItem({
   disabled,
   shortcut,
   color,
+  icon,
   className,
 }: ContextMenuItemProps) {
   const textColor = danger
@@ -106,9 +136,9 @@ export function ContextMenuItem({
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      className={`w-full text-left flex items-center justify-between transition-colors ${
+      className={`w-full text-left flex items-center gap-2 transition-colors ${
         disabled
-          ? 'cursor-not-allowed'
+          ? 'cursor-not-allowed opacity-40'
           : 'cursor-pointer'
       } ${className ?? ''}`}
       style={{
@@ -116,7 +146,7 @@ export function ContextMenuItem({
         fontSize: CONTEXT_MENU.fontSize,
         border: 'none',
         background: 'transparent',
-        color: disabled ? '#555' : textColor,
+        color: disabled ? CONTEXT_MENU.textDim : textColor,
       }}
       onMouseEnter={(e) => {
         if (disabled) return;
@@ -127,14 +157,19 @@ export function ContextMenuItem({
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent';
-        e.currentTarget.style.color = disabled ? '#555' : textColor;
+        e.currentTarget.style.color = disabled ? CONTEXT_MENU.textDim : textColor;
       }}
     >
-      <span>{label}</span>
-      {shortcut && (
-        <span style={{ fontSize: 10, color: '#666', marginLeft: 12 }}>
-          {shortcut}
+      {icon && (
+        <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center" aria-hidden="true">
+          {icon}
         </span>
+      )}
+      <span className="flex-1">{label}</span>
+      {shortcut && (
+        <kbd className="ml-3 font-mono text-[10px] text-zinc-600">
+          {shortcut}
+        </kbd>
       )}
     </button>
   );
@@ -145,10 +180,10 @@ export function ContextMenuItem({
 export function ContextMenuSeparator() {
   return (
     <div
+      className="mx-2 my-1"
       style={{
-        margin: '4px 8px',
         height: 1,
-        background: CONTEXT_MENU.separatorColor,
+        background: `linear-gradient(to right, transparent, ${CONTEXT_MENU.separatorColor} 20%, ${CONTEXT_MENU.separatorColor} 80%, transparent)`,
       }}
     />
   );
@@ -165,19 +200,19 @@ interface ContextMenuSubmenuProps {
  * Does NOT include positioning logic — the parent decides left/top.
  */
 export function ContextMenuSubmenu({ children }: ContextMenuSubmenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useMenuAnimation(ref);
+
   return (
     <div
+      ref={ref}
+      className="z-50 daw-glass"
       style={{
-        background: CONTEXT_MENU.bg,
-        border: `1px solid ${CONTEXT_MENU.border}`,
         borderRadius: CONTEXT_MENU.borderRadius,
         boxShadow: CONTEXT_MENU.shadow,
-        backdropFilter: CONTEXT_MENU.backdropFilter,
-        WebkitBackdropFilter: CONTEXT_MENU.backdropFilter,
         padding: '4px 0',
         minWidth: 130,
       }}
-      className="z-50"
     >
       {children}
     </div>

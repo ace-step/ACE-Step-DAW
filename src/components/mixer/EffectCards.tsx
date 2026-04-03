@@ -13,6 +13,8 @@ import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { DelayTapTimeline } from './DelayTapTimeline';
 import { FilterResponseCurve } from './FilterResponseCurve';
 import { ModulationDisplay } from './ModulationDisplay';
+import { ConvolverIRCurve } from './ConvolverIRCurve';
+import { LimiterCurve } from './LimiterCurve';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -242,7 +244,7 @@ export function EQ3Card({ effect, trackId }: { effect: TrackEffect & { type: 'eq
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.eq3}
-      visualization={<EQCurve low={p.low} mid={p.mid} high={p.high} />}
+      visualization={<EQCurve low={p.low} mid={p.mid} high={p.high} lowFreq={p.lowFrequency} highFreq={p.highFrequency} color={EFFECT_COLORS.eq3} />}
       footer={
         <div className="flex gap-2">
           <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'eq3', param: 'lowFrequency' }} normalizedValue={normalizeEffectParamValue('eq3', 'lowFrequency', p.lowFrequency) ?? 0.5}>
@@ -267,8 +269,10 @@ export function EQ3Card({ effect, trackId }: { effect: TrackEffect & { type: 'eq
   );
 }
 
-export function EQCurve({ low, mid, high }: { low: number; mid: number; high: number }) {
+export function EQCurve({ low, mid, high, lowFreq = 400, highFreq = 2500, color = EFFECT_COLORS.eq3 }: { low: number; mid: number; high: number; lowFreq?: number; highFreq?: number; color?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const W = 200;
+  const H = 80;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -277,37 +281,135 @@ export function EQCurve({ low, mid, high }: { low: number; mid: number; high: nu
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const w = 150; const h = 40;
-    canvas.width = w * dpr; canvas.height = h * dpr;
-    canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = `${W}px`; canvas.style.height = `${H}px`;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, W, H);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+    const labelH = 13;
+    const drawH = H - labelH;
 
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(168, 85, 247, 0.8)';
-    ctx.lineWidth = 2;
-    const centerY = h / 2;
-    const scale = h / 30;
+    // Background
+    const grad = ctx.createRadialGradient(W / 2, drawH / 2, 0, W / 2, drawH / 2, W * 0.6);
+    grad.addColorStop(0, 'rgba(12, 16, 28, 0.92)');
+    grad.addColorStop(1, 'rgba(4, 6, 14, 0.98)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
 
-    for (let x = 0; x <= w; x++) {
-      const t = x / w;
-      let gain = 0;
-      if (t < 0.33) { gain = low * (1 - t * 3) + mid * (t * 3); }
-      else if (t < 0.66) { gain = mid; }
-      else { const lt = (t - 0.66) / 0.34; gain = mid * (1 - lt) + high * lt; }
-      const y = centerY - gain * scale;
-      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    // Label area
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.fillRect(0, drawH, W, labelH);
+
+    // Frequency grid (log scale 20Hz–20kHz)
+    const MIN_F = 20;
+    const MAX_F = 20000;
+    const logMin = Math.log10(MIN_F);
+    const logMax = Math.log10(MAX_F);
+    const xForFreq = (f: number) => ((Math.log10(f) - logMin) / (logMax - logMin)) * W;
+
+    const gridFreqs = [100, 1000, 10000];
+    const labelFreqs: Record<number, string> = { 100: '100', 1000: '1k', 10000: '10k' };
+    ctx.font = '7px monospace';
+    for (const f of gridFreqs) {
+      const x = xForFreq(f);
+      ctx.strokeStyle = f === 1000 ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, drawH);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, drawH);
+      ctx.lineTo(x, drawH + 3);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.textAlign = 'center';
+      ctx.fillText(labelFreqs[f], x, H - 2);
     }
-    ctx.stroke();
-    ctx.lineTo(w, centerY); ctx.lineTo(0, centerY); ctx.closePath();
-    ctx.fillStyle = 'rgba(168, 85, 247, 0.1)'; ctx.fill();
-  }, [low, mid, high]);
 
-  return <canvas ref={canvasRef} className="rounded" style={{ width: 150, height: 40 }} />;
+    // dB grid lines
+    const centerY = drawH / 2;
+    const dbRange = 15;
+    const yForDb = (db: number) => centerY - (db / dbRange) * (drawH / 2 - 2);
+
+    for (const db of [-6, 0, 6]) {
+      const y = yForDb(db);
+      ctx.strokeStyle = db === 0 ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    // Crossover frequency markers
+    const lowX = xForFreq(lowFreq);
+    const highX = xForFreq(highFreq);
+    ctx.strokeStyle = `${color}25`;
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(lowX, 2); ctx.lineTo(lowX, drawH - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(highX, 2); ctx.lineTo(highX, drawH - 2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // EQ curve — smooth 3-band with shelving
+    ctx.beginPath();
+    for (let px = 0; px <= W; px++) {
+      const freq = Math.pow(10, logMin + (px / W) * (logMax - logMin));
+      let gain = 0;
+      const logF = Math.log10(freq);
+      const logLow = Math.log10(lowFreq);
+      const logHigh = Math.log10(highFreq);
+      const crossoverWidth = 0.5;
+
+      if (logF <= logLow - crossoverWidth) gain = low;
+      else if (logF <= logLow + crossoverWidth) {
+        const t = (logF - (logLow - crossoverWidth)) / (2 * crossoverWidth);
+        const s = t * t * (3 - 2 * t);
+        gain = low * (1 - s) + mid * s;
+      } else if (logF <= logHigh - crossoverWidth) gain = mid;
+      else if (logF <= logHigh + crossoverWidth) {
+        const t = (logF - (logHigh - crossoverWidth)) / (2 * crossoverWidth);
+        const s = t * t * (3 - 2 * t);
+        gain = mid * (1 - s) + high * s;
+      } else gain = high;
+
+      const y = yForDb(gain);
+      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+
+    ctx.save();
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = `${color}60`;
+    ctx.strokeStyle = `${color}cc`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.lineTo(W, centerY); ctx.lineTo(0, centerY); ctx.closePath();
+    const fillGrad = ctx.createLinearGradient(0, 0, 0, drawH);
+    fillGrad.addColorStop(0, `${color}20`);
+    fillGrad.addColorStop(0.5, `${color}08`);
+    fillGrad.addColorStop(1, `${color}20`);
+    ctx.fillStyle = fillGrad;
+    ctx.fill();
+
+    // Badge
+    ctx.font = '7px monospace';
+    const badge = 'EQ3';
+    const badgeW = ctx.measureText(badge).width + 6;
+    ctx.fillStyle = `${color}20`;
+    ctx.beginPath();
+    ctx.roundRect(W - badgeW - 2, H - 12, badgeW, 10, 2);
+    ctx.fill();
+    ctx.fillStyle = `${color}cc`;
+    ctx.textAlign = 'center';
+    ctx.fillText(badge, W - badgeW / 2 - 2, H - 4);
+  }, [low, mid, high, lowFreq, highFreq, color]);
+
+  return <canvas ref={canvasRef} className="rounded" style={{ width: W, height: H }} data-testid="eq3-curve" />;
 }
 
 const PARAMETRIC_EQ_CANVAS_WIDTH = 220;
@@ -1126,6 +1228,16 @@ export function ConvolverCard({ effect, trackId }: { effect: TrackEffect & { typ
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.convolver}
+      visualization={
+        p.irType !== 'custom' ? (
+          <ConvolverIRCurve
+            irType={p.irType}
+            preDelay={p.preDelay}
+            wet={p.wet}
+            color={EFFECT_COLORS.convolver}
+          />
+        ) : undefined
+      }
       mode={
         <div className="flex items-center gap-2 w-full">
           <span className="text-[10px] text-white/50 w-6">IR</span>
@@ -1325,7 +1437,15 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
 
   return (
     <EffectCardLayout
-      color="#d4a040"
+      color={EFFECT_COLORS.limiter}
+      visualization={
+        <LimiterCurve
+          ceiling={p.ceiling}
+          gain={p.gain}
+          style={p.style}
+          color={EFFECT_COLORS.limiter}
+        />
+      }
       mode={
         <>
           {(['transparent', 'aggressive', 'warm'] as LimiterParams['style'][]).map((s) => (
@@ -1343,16 +1463,16 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'gain' }} normalizedValue={normalizeEffectParamValue('limiter', 'gain', p.gain) ?? 0.5}>
-        <Knob value={p.gain} onChange={(v) => update({ gain: v })} min={-12} max={24} defaultValue={0} label="Gain" unit=" dB" size={56} step={0.5} color="#d4a040" />
+        <Knob value={p.gain} onChange={(v) => update({ gain: v })} min={-12} max={24} defaultValue={0} label="Gain" unit=" dB" size={56} step={0.5} color={EFFECT_COLORS.limiter} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'ceiling' }} normalizedValue={normalizeEffectParamValue('limiter', 'ceiling', p.ceiling) ?? 0.5}>
-        <Knob value={p.ceiling} onChange={(v) => update({ ceiling: v })} min={-12} max={0} defaultValue={-0.3} label="Ceiling" unit=" dB" size={56} step={0.1} color="#d4a040" />
+        <Knob value={p.ceiling} onChange={(v) => update({ ceiling: v })} min={-12} max={0} defaultValue={-0.3} label="Ceiling" unit=" dB" size={56} step={0.1} color={EFFECT_COLORS.limiter} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'release' }} normalizedValue={normalizeEffectParamValue('limiter', 'release', p.release) ?? 0.5}>
-        <Knob value={p.release * 1000} onChange={(v) => update({ release: v / 1000 })} min={1} max={1000} defaultValue={100} label="Release" unit=" ms" size={56} step={1} color="#d4a040" />
+        <Knob value={p.release * 1000} onChange={(v) => update({ release: v / 1000 })} min={1} max={1000} defaultValue={100} label="Release" unit=" ms" size={56} step={1} color={EFFECT_COLORS.limiter} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'lookahead' }} normalizedValue={normalizeEffectParamValue('limiter', 'lookahead', p.lookahead) ?? 0.5}>
-        <Knob value={p.lookahead * 1000} onChange={(v) => update({ lookahead: v / 1000 })} min={0} max={20} defaultValue={5} label="L.Ahead" unit=" ms" size={56} step={0.5} color="#d4a040" />
+        <Knob value={p.lookahead * 1000} onChange={(v) => update({ lookahead: v / 1000 })} min={0} max={20} defaultValue={5} label="L.Ahead" unit=" ms" size={56} step={0.5} color={EFFECT_COLORS.limiter} />
       </AutomationControlShell>
     </EffectCardLayout>
   );

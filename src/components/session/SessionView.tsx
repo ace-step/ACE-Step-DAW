@@ -121,6 +121,7 @@ export function SessionView() {
 
   const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
   const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
+  const launchSessionSceneProject = useProjectStore((s) => s.launchSessionScene);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
@@ -329,17 +330,23 @@ export function SessionView() {
                         type="text"
                         value={editingSceneName}
                         onChange={(e) => setEditingSceneName(e.target.value)}
-                        onBlur={() => {
-                          if (editingSceneName.trim() && currentScene) {
+                        onBlur={(e) => {
+                          const wasCanceled = e.currentTarget.dataset.renameCanceled === 'true';
+                          if (!wasCanceled && editingSceneName.trim() && currentScene) {
                             updateSessionSceneProperties(currentScene.id, { name: editingSceneName.trim() });
                           }
+                          delete e.currentTarget.dataset.renameCanceled;
                           setEditingSceneId(null);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          if (e.key === 'Escape') setEditingSceneId(null);
+                          if (e.key === 'Escape') {
+                            (e.target as HTMLInputElement).dataset.renameCanceled = 'true';
+                            setEditingSceneId(null);
+                          }
                         }}
                         className="w-full bg-[#1a1a1a] border border-daw-accent rounded px-1 py-0.5 text-sm font-semibold text-zinc-100 outline-none"
+                        aria-label={`Rename scene ${sceneIndex + 1}`}
                         data-testid={`scene-name-input-${sceneIndex}`}
                         autoFocus
                         onPointerDown={(e) => e.stopPropagation()}
@@ -351,7 +358,11 @@ export function SessionView() {
                     )}
                   </div>
                   <button
-                    onClick={() => void launchSessionScene(sceneIndex, sceneLaunches)}
+                    onClick={() => {
+                      // Call projectStore to apply tempo/timeSig overrides and manage session state
+                      if (currentScene) launchSessionSceneProject(currentScene.id);
+                      void launchSessionScene(sceneIndex, sceneLaunches);
+                    }}
                     disabled={sceneLaunches.length === 0}
                     className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30 shrink-0"
                     aria-label={`Launch scene ${sceneIndex + 1}`}

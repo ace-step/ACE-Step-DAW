@@ -106,7 +106,7 @@ export function GateCurve({
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(points[i].y);
+      const y = yForDb(Math.max(MIN_DB, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -121,7 +121,7 @@ export function GateCurve({
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(points[i].y);
+      const y = yForDb(Math.max(MIN_DB, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }

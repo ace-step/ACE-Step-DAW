@@ -22,7 +22,7 @@ describe('limiterCurve', () => {
 
     it('warm style approaches but never exceeds ceiling', () => {
       const result = limiterTransfer(0, -0.3, 0, 'warm');
-      expect(result).toBeLessThanOrEqual(0);
+      expect(result).toBeLessThanOrEqual(-0.3 + 0.001);
       expect(result).toBeGreaterThan(-5);
     });
 

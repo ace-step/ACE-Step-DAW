@@ -96,17 +96,20 @@ export function LimiterCurve({
     // Transfer curve
     const points = generateLimiterCurve(ceiling, gain, style, MIN_DB, MAX_DB, 200);
 
+    // Clamp helper to keep dB values within visible plot bounds
+    const clampDb = (db: number) => Math.max(MIN_DB, Math.min(db, MAX_DB));
+
     // Fill area between curve and unity
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.min(points[i].y, MAX_DB));
+      const y = yForDb(clampDb(points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     for (let i = points.length - 1; i >= 0; i--) {
       const boosted = points[i].x + gain;
-      ctx.lineTo(xForDb(points[i].x), yForDb(Math.min(boosted, MAX_DB)));
+      ctx.lineTo(xForDb(points[i].x), yForDb(clampDb(boosted)));
     }
     ctx.closePath();
     ctx.fillStyle = `${color}15`;
@@ -116,7 +119,7 @@ export function LimiterCurve({
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.min(points[i].y, MAX_DB));
+      const y = yForDb(clampDb(points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }

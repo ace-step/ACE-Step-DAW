@@ -11,7 +11,7 @@
  */
 import { expect, test } from '@playwright/test';
 
-test.describe('Generation Panel', () => {
+test.describe('Generation Panel @critical', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');

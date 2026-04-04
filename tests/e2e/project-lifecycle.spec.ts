@@ -12,7 +12,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Project Lifecycle', () => {
+test.describe('Project Lifecycle @critical', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Wait for the app to fully load

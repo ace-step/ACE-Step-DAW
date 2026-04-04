@@ -10,7 +10,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Transport Controls', () => {
+test.describe('Transport Controls @critical', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');

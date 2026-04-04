@@ -648,6 +648,8 @@ export interface ProjectState extends MidiSliceActions {
   setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
+  /** Update oscillator waveform type on a synth track. */
+  updateSynthOscillatorType: (trackId: string, oscillatorType: 'sine' | 'triangle' | 'sawtooth' | 'square') => void;
   /** Update ADSR envelope on a synth track. */
   updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
   /** Update filter settings on a synth track. */
@@ -3306,6 +3308,20 @@ export const useProjectStore = create<ProjectState>()(
         : unifiedPreset.instrument.kind === 'fm' ? unifiedPreset.instrument.fallbackPreset
         : unifiedPreset.instrument.kind === 'wavetable' ? unifiedPreset.instrument.fallbackPreset
         : 'piano';
+      // Extract editable params from the unified instrument for the parameter editor.
+      const inst = unifiedPreset.instrument;
+      const editableFields: Partial<Track> = {};
+      if (inst.kind === 'subtractive') {
+        editableFields.synthOscillatorType = inst.settings.oscillator.waveform;
+        editableFields.synthEnvelope = { ...inst.settings.ampEnvelope };
+        if (inst.settings.filter.enabled) {
+          editableFields.synthFilter = {
+            type: inst.settings.filter.type,
+            frequency: inst.settings.filter.cutoffHz,
+            Q: inst.settings.filter.resonance,
+          };
+        }
+      }
       set({
         project: {
           ...state.project,
@@ -3315,6 +3331,7 @@ export const useProjectStore = create<ProjectState>()(
               ? {
                   ...t,
                   synthPresetDefinitionId: presetId,
+                  ...editableFields,
                   ...syncTrackInstrumentFields(t, {
                     instrument: structuredClone(unifiedPreset.instrument),
                     synthPreset: legacyPreset,
@@ -3355,6 +3372,18 @@ export const useProjectStore = create<ProjectState>()(
         outputGain: presetDef.outputGain ?? base.settings.outputGain,
       },
     };
+    // Populate editable fields from legacy preset definition.
+    const legacyEditableFields: Partial<Track> = {
+      synthOscillatorType: presetDef.waveform,
+      synthEnvelope: { ...presetDef.envelope },
+    };
+    if (presetDef.filter?.enabled) {
+      legacyEditableFields.synthFilter = {
+        type: presetDef.filter.type ?? 'lowpass',
+        frequency: presetDef.filter.cutoffHz ?? 1000,
+        Q: presetDef.filter.resonance ?? 1,
+      };
+    }
     set({
       project: {
         ...state.project,
@@ -3364,12 +3393,28 @@ export const useProjectStore = create<ProjectState>()(
             ? {
                 ...t,
                 synthPresetDefinitionId: presetId,
+                ...legacyEditableFields,
                 ...syncTrackInstrumentFields(t, {
                   instrument,
                   synthPreset: presetDef.legacyPreset,
                 }),
               }
             : t,
+        ),
+      },
+    });
+  },
+
+  updateSynthOscillatorType: (trackId, oscillatorType) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update oscillator type', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, synthOscillatorType: oscillatorType } : t,
         ),
       },
     });

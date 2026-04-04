@@ -21,9 +21,25 @@ class SynthEngineAdapter implements InstrumentEngine {
     void synthEngine.playNote(trackId, pitch, velocity, duration, 'piano');
   }
 
-  setParameter(_trackId: string, _name: string, _value: number | string | boolean): void {
-    // Subtractive synth parameters are not yet dynamically settable.
-    // This will be wired up when the synth UI gets real-time param control.
+  setParameter(trackId: string, name: string, value: number | string | boolean): void {
+    switch (name) {
+      case 'oscillatorType':
+        synthEngine.setOscillatorType(trackId, value as 'sine' | 'triangle' | 'sawtooth' | 'square');
+        break;
+      case 'attack':
+      case 'decay':
+      case 'sustain':
+      case 'release':
+        synthEngine.setEnvelope(trackId, { [name]: value as number });
+        break;
+      case 'filterType':
+      case 'filterFrequency':
+      case 'filterQ': {
+        const key = name === 'filterType' ? 'type' : name === 'filterFrequency' ? 'frequency' : 'Q';
+        synthEngine.setFilter(trackId, { [key]: value });
+        break;
+      }
+    }
   }
 
   releaseAll(): void {

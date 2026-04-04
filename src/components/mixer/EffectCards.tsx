@@ -13,6 +13,14 @@ import { ReverbDecayCurve } from './ReverbDecayCurve';
 import { DelayTapTimeline } from './DelayTapTimeline';
 import { FilterResponseCurve } from './FilterResponseCurve';
 import { ModulationDisplay } from './ModulationDisplay';
+import { GateCurve } from './GateCurve';
+import { DeEsserDisplay } from './DeEsserDisplay';
+import { TransientShaperDisplay } from './TransientShaperDisplay';
+import { LimiterCurve } from './LimiterCurve';
+import { SaturationCurve } from './SaturationCurve';
+import { StereoFieldDisplay } from './StereoFieldDisplay';
+import { NoiseReductionDisplay } from './NoiseReductionDisplay';
+import { ConvolverDisplay } from './ConvolverDisplay';
 import { useProjectStore } from '../../store/projectStore';
 import { effectsEngine } from '../../engine/EffectsEngine';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
@@ -1140,6 +1148,16 @@ export function ConvolverCard({ effect, trackId }: { effect: TrackEffect & { typ
           </select>
         </div>
       }
+      visualization={
+        <ConvolverDisplay
+          irType={p.irType}
+          wet={p.wet}
+          preDelay={p.preDelay / 1000}
+          width={220}
+          height={80}
+          color={EFFECT_COLORS.convolver}
+        />
+      }
       footer={
         <div className="flex flex-col gap-1.5">
           {p.irType === 'custom' && (
@@ -1198,6 +1216,17 @@ export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'g
             </button>
           ))}
         </>
+      }
+      visualization={
+        <GateCurve
+          threshold={p.threshold}
+          range={p.range}
+          hysteresis={p.hysteresis}
+          mode={p.mode}
+          width={220}
+          height={120}
+          color="#b8903a"
+        />
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'gate', param: 'threshold' }} normalizedValue={normalizeEffectParamValue('gate', 'threshold', p.threshold) ?? 0.5}>
@@ -1260,6 +1289,18 @@ export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type:
           </button>
         </>
       }
+      visualization={
+        <DeEsserDisplay
+          frequency={p.frequency}
+          bandwidth={p.bandwidth}
+          threshold={p.threshold}
+          range={p.range}
+          mode={p.mode}
+          width={220}
+          height={100}
+          color="#c4a654"
+        />
+      }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'deesser', param: 'frequency' }} normalizedValue={normalizeEffectParamValue('deesser', 'frequency', p.frequency) ?? 0.5}>
         <Knob value={p.frequency} onChange={(v) => update({ frequency: v })} min={2000} max={16000} defaultValue={7000} label="Freq" unit=" Hz" size={56} step={100} color="#c4a654" />
@@ -1292,6 +1333,15 @@ export function TransientShaperCard({ effect, trackId }: { effect: TrackEffect &
   return (
     <EffectCardLayout
       color="#b89340"
+      visualization={
+        <TransientShaperDisplay
+          attack={p.attack}
+          sustain={p.sustain}
+          width={220}
+          height={100}
+          color="#b89340"
+        />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'mix' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'mix', p.mix) ?? 1}>
           <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#b89340" />
@@ -1340,6 +1390,16 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
             </button>
           ))}
         </>
+      }
+      visualization={
+        <LimiterCurve
+          ceiling={p.ceiling}
+          gain={p.gain}
+          style={p.style}
+          width={220}
+          height={120}
+          color="#d4a040"
+        />
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'limiter', param: 'gain' }} normalizedValue={normalizeEffectParamValue('limiter', 'gain', p.gain) ?? 0.5}>
@@ -1396,6 +1456,15 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
           ))}
         </>
       }
+      visualization={
+        <SaturationCurve
+          drive={p.drive}
+          saturationType={p.saturationType}
+          width={220}
+          height={120}
+          color="#c46454"
+        />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'mix' }} normalizedValue={normalizeEffectParamValue('saturation', 'mix', p.mix) ?? 0.5}>
           <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#c46454" />
@@ -1431,7 +1500,21 @@ export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { 
   };
 
   return (
-    <EffectCardLayout color="#7a8ab4">
+    <EffectCardLayout
+      color="#7a8ab4"
+      visualization={
+        <StereoFieldDisplay
+          width_param={p.width}
+          midGain={p.midGain}
+          sideGain={p.sideGain}
+          monoFreq={p.monoFreq}
+          pan={p.pan ?? 0}
+          canvasWidth={220}
+          canvasHeight={120}
+          color="#7a8ab4"
+        />
+      }
+    >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'width' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'width', p.width) ?? 0.5}>
         <Knob value={p.width} onChange={(v) => update({ width: v })} min={0} max={2} defaultValue={1} label="Width" size={56} step={0.01} color="#7a8ab4"
           formatValue={(v) => v === 0 ? 'Mono' : v === 1 ? '100%' : `${Math.round(v * 100)}%`}
@@ -1533,6 +1616,17 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
               onClick={() => update({ mode: m })}>{m}</button>
           ))}
         </>
+      }
+      visualization={
+        <NoiseReductionDisplay
+          threshold={p.threshold}
+          amount={p.amount}
+          mode={p.mode === 'fast' ? 'aggressive' : p.mode === 'smooth' ? 'gentle' : 'standard'}
+          hfEmphasis={p.hfEmphasis}
+          width={220}
+          height={100}
+          color="#8a8a8a"
+        />
       }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'noiseReduction', param: 'mix' }} normalizedValue={normalizeEffectParamValue('noiseReduction', 'mix', p.mix) ?? 1}>

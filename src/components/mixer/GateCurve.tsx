@@ -84,9 +84,9 @@ export function GateCurve({
     ctx.lineTo(threshX, height);
     ctx.stroke();
 
-    // Hysteresis zone (close threshold)
+    // Hysteresis zone (close threshold), clamped to plot bounds
     if (hysteresis > 0) {
-      const closeX = xForDb(threshold - hysteresis);
+      const closeX = xForDb(Math.max(MIN_DB, threshold - hysteresis));
       ctx.strokeStyle = `${color}40`;
       ctx.beginPath();
       ctx.moveTo(closeX, 0);

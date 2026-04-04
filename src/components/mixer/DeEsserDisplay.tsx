@@ -118,7 +118,7 @@ export function DeEsserDisplay({
     ctx.setLineDash([]);
 
     // Range indicator (how much reduction below threshold)
-    const rangeY = dbToY(threshold - range);
+    const rangeY = dbToY(Math.max(dbMin, threshold - range));
     const rangeTopY = Math.min(threshY, rangeY);
     const rangeHeight = Math.abs(rangeY - threshY);
     ctx.fillStyle = `${color}12`;

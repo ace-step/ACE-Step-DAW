@@ -27,6 +27,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
       if (listenersRef.current) {
         document.removeEventListener('pointermove', listenersRef.current.move);
         document.removeEventListener('pointerup', listenersRef.current.up);
+        document.removeEventListener('pointercancel', listenersRef.current.up);
         listenersRef.current = null;
       }
     };
@@ -48,15 +49,19 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
     update(e.clientX);
 
     const onMove = (pe: PointerEvent) => update(pe.clientX);
-    const onUp = (pe: PointerEvent) => {
-      track.releasePointerCapture(pe.pointerId);
+    const cleanup = (pe: PointerEvent) => {
+      if (track.hasPointerCapture(pe.pointerId)) {
+        track.releasePointerCapture(pe.pointerId);
+      }
       document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointerup', cleanup);
+      document.removeEventListener('pointercancel', cleanup);
       listenersRef.current = null;
     };
-    listenersRef.current = { move: onMove, up: onUp };
+    listenersRef.current = { move: onMove, up: cleanup };
     document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointerup', cleanup);
+    document.addEventListener('pointercancel', cleanup);
   }, [clamp, onChange, min, max]);
 
   const norm = (value - min) / (max - min);

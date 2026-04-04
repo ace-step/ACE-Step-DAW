@@ -39,6 +39,14 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
     const track = trackRef.current;
     if (!track) return;
 
+    // Clean up any existing drag session before starting a new one
+    if (listenersRef.current) {
+      document.removeEventListener('pointermove', listenersRef.current.move);
+      document.removeEventListener('pointerup', listenersRef.current.up);
+      document.removeEventListener('pointercancel', listenersRef.current.up);
+      listenersRef.current = null;
+    }
+
     track.setPointerCapture(e.pointerId);
 
     const update = (clientX: number) => {

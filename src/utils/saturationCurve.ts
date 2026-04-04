@@ -55,8 +55,12 @@ export function saturationTransfer(x: number, drive: number, type: SaturationTyp
       break;
 
     case 'hard':
-      // Hard clip with slight rounding
-      y = Math.max(-1, Math.min(1, k * x * 0.5));
+      // Hard clip: at drive=0 → unity, at drive=1 → aggressive clipping
+      // Blend from unity (x) to hard-clipped (clamp(k*x)) based on drive
+      y = Math.max(-1, Math.min(1, k * x));
+      // Crossfade with dry signal so low drive stays near unity
+      y = x * (1 - drive) + y * drive;
+      y = Math.max(-1, Math.min(1, y));
       break;
 
     default:

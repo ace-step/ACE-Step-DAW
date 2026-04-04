@@ -6,9 +6,7 @@ import { useRef, useEffect } from 'react';
 import { generateGateCurve } from '../../utils/gateCurve';
 import { fillBackground, GRID_COLOR, LABEL_COLOR } from '../../utils/canvasTheme';
 
-const MIN_DB = -80;
 const MAX_DB = 0;
-const DB_LABELS = [-60, -40, -20, 0];
 
 interface GateCurveProps {
   threshold: number;
@@ -44,8 +42,12 @@ export function GateCurve({
       ctx.scale(dpr, dpr);
     }
 
-    const xForDb = (db: number) => ((db - MIN_DB) / (MAX_DB - MIN_DB)) * width;
-    const yForDb = (db: number) => height - ((db - MIN_DB) / (MAX_DB - MIN_DB)) * height;
+    // Expand Y-domain so the full gate range is visible
+    const minDb = Math.min(-80, range - 20);
+    const dbLabels = [-60, -40, -20, 0].filter(db => db >= minDb);
+
+    const xForDb = (db: number) => ((db - minDb) / (MAX_DB - minDb)) * width;
+    const yForDb = (db: number) => height - ((db - minDb) / (MAX_DB - minDb)) * height;
 
     ctx.clearRect(0, 0, width, height);
     fillBackground(ctx, width, height);
@@ -56,7 +58,7 @@ export function GateCurve({
     ctx.font = '8px monospace';
     ctx.fillStyle = LABEL_COLOR;
 
-    for (const db of DB_LABELS) {
+    for (const db of dbLabels) {
       const x = xForDb(db);
       const y = yForDb(db);
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
@@ -70,7 +72,7 @@ export function GateCurve({
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(xForDb(MIN_DB), yForDb(MIN_DB));
+    ctx.moveTo(xForDb(minDb), yForDb(minDb));
     ctx.lineTo(xForDb(MAX_DB), yForDb(MAX_DB));
     ctx.stroke();
     ctx.setLineDash([]);
@@ -86,7 +88,7 @@ export function GateCurve({
 
     // Hysteresis zone (close threshold), clamped to plot bounds
     if (hysteresis > 0) {
-      const closeX = xForDb(Math.max(MIN_DB, threshold - hysteresis));
+      const closeX = xForDb(Math.max(minDb, threshold - hysteresis));
       ctx.strokeStyle = `${color}40`;
       ctx.beginPath();
       ctx.moveTo(closeX, 0);
@@ -100,13 +102,13 @@ export function GateCurve({
     ctx.setLineDash([]);
 
     // Transfer curve
-    const points = generateGateCurve(threshold, range, hysteresis, mode, MIN_DB, MAX_DB, 200);
+    const points = generateGateCurve(threshold, range, hysteresis, mode, minDb, MAX_DB, 200);
 
     // Fill area between curve and unity (attenuation region)
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.max(MIN_DB, points[i].y));
+      const y = yForDb(Math.max(minDb, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -121,7 +123,7 @@ export function GateCurve({
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.max(MIN_DB, points[i].y));
+      const y = yForDb(Math.max(minDb, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }

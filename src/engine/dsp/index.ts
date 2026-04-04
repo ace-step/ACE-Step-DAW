@@ -35,6 +35,10 @@ export type {
 
 export { ToneDSPFactory, getDSPFactory, setDSPFactory } from './ToneAdapter';
 
+// AudioWorklet infrastructure (Phase 1)
+export { RingBuffer, nextPowerOf2 } from './RingBuffer';
+export { ParamBuffer } from './ParamBuffer';
+
 // WASM DSP (optional acceleration path)
 export {
   WasmEffectNode,

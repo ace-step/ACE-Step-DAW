@@ -2884,6 +2884,7 @@ export const useProjectStore = create<ProjectState>()(
       set({
         project: {
           ...project,
+          updatedAt: Date.now(),
           tracks: project.tracks.map(t =>
             t.id === track.id ? { ...t, videoSettings: { ...DEFAULT_VIDEO_TRACK_SETTINGS } } : t,
           ),

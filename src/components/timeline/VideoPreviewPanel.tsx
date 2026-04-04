@@ -59,7 +59,10 @@ function VideoPreviewPanelInner({ track }: VideoPreviewPanelProps) {
     >
       {hasVideo ? (
         <>
-          {/* Video element — will be connected to actual blob in full implementation */}
+          {/* Video element stub — not yet wired to IndexedDB blob or transport sync.
+              Future PR will: load blob via videoStorageService → createObjectURL → set src,
+              sync videoRef.currentTime via VideoSyncEngine on transport updates,
+              and clean up object URLs on unmount. */}
           <video
             ref={videoRef}
             className="w-full h-full object-contain bg-black"

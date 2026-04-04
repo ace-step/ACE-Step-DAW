@@ -57,14 +57,24 @@ export function buildFilmstripConfig(params: FilmstripBuildParams): FilmstripCon
   const intervalSeconds = computeThumbnailInterval(params.pixelsPerSecond);
   const totalThumbnails = computeThumbnailCount(params.videoDuration, intervalSeconds);
 
-  // Compute aspect-ratio-corrected thumbnail height
-  const aspectRatio = params.sourceHeight / params.sourceWidth;
-  const thumbnailHeight = Math.round(FILMSTRIP_THUMBNAIL_WIDTH * aspectRatio);
+  // Compute aspect-ratio-corrected thumbnail height when source dimensions are valid.
+  // If metadata probing yields unknown/invalid dimensions, fall back to the default 16:9 height.
+  const hasValidSourceDimensions =
+    Number.isFinite(params.sourceWidth) &&
+    Number.isFinite(params.sourceHeight) &&
+    params.sourceWidth > 0 &&
+    params.sourceHeight > 0;
+  const thumbnailHeight = hasValidSourceDimensions
+    ? Math.max(
+        Math.round((FILMSTRIP_THUMBNAIL_WIDTH * params.sourceHeight) / params.sourceWidth),
+        1,
+      )
+    : FILMSTRIP_THUMBNAIL_HEIGHT;
 
   return {
     intervalSeconds,
     thumbnailWidth: FILMSTRIP_THUMBNAIL_WIDTH,
-    thumbnailHeight: Math.max(thumbnailHeight, 1),
+    thumbnailHeight,
     totalThumbnails,
   };
 }

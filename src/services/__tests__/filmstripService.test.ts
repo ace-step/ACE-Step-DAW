@@ -77,6 +77,29 @@ describe('filmstripService', () => {
       expect(config.thumbnailHeight).toBeGreaterThan(90);
     });
 
+    it('falls back to default 16:9 height when source dimensions are zero', () => {
+      const config = buildFilmstripConfig({
+        videoDuration: 60,
+        pixelsPerSecond: 50,
+        sourceWidth: 0,
+        sourceHeight: 0,
+      });
+
+      expect(config.thumbnailWidth).toBe(160);
+      expect(config.thumbnailHeight).toBe(90); // default FILMSTRIP_THUMBNAIL_HEIGHT
+    });
+
+    it('falls back to default height for NaN dimensions', () => {
+      const config = buildFilmstripConfig({
+        videoDuration: 60,
+        pixelsPerSecond: 50,
+        sourceWidth: NaN,
+        sourceHeight: NaN,
+      });
+
+      expect(config.thumbnailHeight).toBe(90);
+    });
+
     it('handles very short videos', () => {
       const config = buildFilmstripConfig({
         videoDuration: 1,

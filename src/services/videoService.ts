@@ -116,14 +116,33 @@ export interface VideoMetadataResult {
   width: number;
   height: number;
   duration: number;
+  /**
+   * Codec string from container parser. Empty string when only HTMLVideoElement
+   * probing is available — call sites should treat '' as "unknown" and not rely
+   * on this for codec classification. Full mp4box parsing is planned for a future PR.
+   */
   codec: string;
+  /**
+   * Frame rate estimate. Defaults to 30 when only HTMLVideoElement probing is
+   * available — accurate values require container parsing (mp4box). Call sites
+   * should treat this as an estimate, not authoritative.
+   */
   frameRate: number;
+  /**
+   * Whether the video has an audio stream. May be false-negative in browsers
+   * that don't support HTMLVideoElement.audioTracks (most browsers). Accurate
+   * detection requires container parsing (mp4box).
+   */
   hasAudioStream: boolean;
 }
 
 /**
  * Extract metadata from a video file using an HTMLVideoElement probe.
  * This loads just enough of the file to read dimensions and duration.
+ *
+ * **Limitations**: codec, frameRate, and hasAudioStream are estimates only.
+ * Accurate values require container-level parsing (mp4box) which is planned
+ * for a future PR. Width, height, and duration are reliable from this probe.
  */
 export function extractVideoMetadata(file: File): Promise<VideoMetadataResult> {
   return new Promise((resolve, reject) => {
@@ -140,15 +159,18 @@ export function extractVideoMetadata(file: File): Promise<VideoMetadataResult> {
     };
 
     video.addEventListener('loadedmetadata', () => {
+      // audioTracks is non-standard; most browsers don't support it.
+      // Default to false — accurate detection needs container parsing.
+      const videoEl = video as unknown as { audioTracks?: { length: number } };
+      const hasAudio = (videoEl.audioTracks?.length ?? 0) > 0;
+
       const metadata: VideoMetadataResult = {
         width: video.videoWidth,
         height: video.videoHeight,
         duration: video.duration,
-        codec: '', // Will be populated by container parser (mp4box) in full implementation
-        frameRate: 30, // Default; accurate value from container parser
-        hasAudioStream: (video as unknown as { audioTracks?: { length: number } }).audioTracks?.length
-          ? (video as unknown as { audioTracks: { length: number } }).audioTracks.length > 0
-          : false,
+        codec: '',    // Requires mp4box container parsing (future PR)
+        frameRate: 30, // Estimate; requires container parsing for accuracy
+        hasAudioStream: hasAudio,
       };
       cleanup();
       resolve(metadata);

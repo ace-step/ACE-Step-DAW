@@ -34,9 +34,10 @@ describe('saturationCurve', () => {
     it('tape type adds even-harmonic asymmetry', () => {
       const pos = saturationTransfer(0.7, 0.6, 'tape');
       const neg = saturationTransfer(-0.7, 0.6, 'tape');
-      // Tape asymmetry means |pos| and |neg| differ
       expect(pos).toBeGreaterThan(0);
       expect(neg).toBeLessThan(0);
+      // Tape asymmetry: magnitudes should differ (even harmonics)
+      expect(Math.abs(pos)).not.toBeCloseTo(Math.abs(neg), 2);
     });
 
     it('transistor type applies harder clipping', () => {

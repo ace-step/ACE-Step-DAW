@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 
 interface HSliderProps {
@@ -18,11 +18,27 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
   const clamp = useCallback((nextValue: number) => clampValue(nextValue, min, max), [min, max]);
   const step = (max - min) / 100;
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Store active listeners in a ref so cleanup can remove them on unmount
+  const listenersRef = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Clean up any active drag listeners on unmount
+      if (listenersRef.current) {
+        document.removeEventListener('pointermove', listenersRef.current.move);
+        document.removeEventListener('pointerup', listenersRef.current.up);
+        listenersRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const track = trackRef.current;
     if (!track) return;
+
+    track.setPointerCapture(e.pointerId);
 
     const update = (clientX: number) => {
       const rect = track.getBoundingClientRect();
@@ -31,10 +47,16 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
     };
     update(e.clientX);
 
-    const onMove = (me: MouseEvent) => update(me.clientX);
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    const onMove = (pe: PointerEvent) => update(pe.clientX);
+    const onUp = (pe: PointerEvent) => {
+      track.releasePointerCapture(pe.pointerId);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      listenersRef.current = null;
+    };
+    listenersRef.current = { move: onMove, up: onUp };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
   }, [clamp, onChange, min, max]);
 
   const norm = (value - min) / (max - min);
@@ -57,7 +79,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={Math.round(value * 1000) / 1000}
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         onDoubleClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

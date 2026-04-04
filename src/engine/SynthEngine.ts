@@ -471,6 +471,45 @@ class SynthEngine {
     }
   }
 
+  /**
+   * Update the oscillator waveform on a live synth instance.
+   * Falls back to base type if a partial type (e.g. 'triangle8') was set by preset.
+   */
+  setOscillatorType(trackId: string, type: 'sine' | 'triangle' | 'sawtooth' | 'square'): void {
+    const instance = this.synths.get(trackId);
+    if (!instance) return;
+    instance.synth.set({ oscillator: { type } });
+    // Also update unison voices
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.set({ oscillator: { type } });
+      }
+    }
+  }
+
+  /** Update the amplitude envelope on a live synth instance. */
+  setEnvelope(trackId: string, envelope: { attack?: number; decay?: number; sustain?: number; release?: number }): void {
+    const instance = this.synths.get(trackId);
+    if (!instance) return;
+    instance.synth.set({ envelope });
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.set({ envelope });
+      }
+    }
+  }
+
+  /** Update the filter settings (type, frequency, Q) on a live synth's filter node. */
+  setFilter(trackId: string, filter: { type?: string; frequency?: number; Q?: number }): void {
+    const instance = this.synths.get(trackId);
+    if (!instance?.filter) return;
+    if (filter.type) instance.filter.type = filter.type as BiquadFilterType;
+    if (filter.frequency !== undefined) instance.filter.frequency.value = filter.frequency;
+    if (filter.Q !== undefined) instance.filter.Q.value = filter.Q;
+  }
+
   removeTrackSynth(trackId: string) {
     this.disposeUnisonVoices(trackId);
     const instance = this.synths.get(trackId);

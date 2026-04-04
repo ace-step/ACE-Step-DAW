@@ -1,16 +1,28 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope, UnisonSettings } from '../../types/project';
+import { OscillatorSelector } from './OscillatorSelector';
 import { ADSREnvelopeEditor } from './ADSREnvelopeEditor';
 import { SynthFilterControls } from './SynthFilterControls';
 import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeEditor';
 import { LFODisplay } from './LFODisplay';
 import { UnisonControls } from './UnisonControls';
+import { synthEngine } from '../../engine/SynthEngine';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
 const DEFAULT_FILTER: SynthFilter = { type: 'lowpass', frequency: 1000, Q: 1 };
 const DEFAULT_LFO: SynthLfo = { rate: 1, depth: 0.5, shape: 'sine' };
 const DEFAULT_UNISON: UnisonSettings = { voices: 1, detune: 0, spread: 0 };
+
+/** Map legacy synthPreset names to their default oscillator waveforms. */
+export const PRESET_DEFAULT_OSCILLATOR: Record<string, 'sine' | 'triangle' | 'sawtooth' | 'square'> = {
+  piano: 'triangle',
+  strings: 'sawtooth',
+  pad: 'sine',
+  lead: 'square',
+  bass: 'sawtooth',
+  organ: 'sine',
+};
 
 interface SynthParameterEditorProps {
   trackId: string;
@@ -18,12 +30,52 @@ interface SynthParameterEditorProps {
 
 export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
   const track = useProjectStore((s) => s.project?.tracks.find((t) => t.id === trackId));
+  const updateSynthOscillatorType = useProjectStore((s) => s.updateSynthOscillatorType);
   const updateSynthEnvelope = useProjectStore((s) => s.updateSynthEnvelope);
   const updateSynthFilter = useProjectStore((s) => s.updateSynthFilter);
   const updateSynthLfo = useProjectStore((s) => s.updateSynthLfo);
   const updateFilterEnvelope = useProjectStore((s) => s.updateFilterEnvelope);
   const updateUnisonSettings = useProjectStore((s) => s.updateUnisonSettings);
 
+  // Push parameter changes to the live SynthEngine for real-time audio feedback.
+  const prevOscRef = useRef<string | undefined>(undefined);
+  const prevEnvRef = useRef<SynthEnvelope | undefined>(undefined);
+  const prevFilterRef = useRef<SynthFilter | undefined>(undefined);
+
+  const oscillatorType = track?.synthOscillatorType
+    ?? PRESET_DEFAULT_OSCILLATOR[track?.synthPreset ?? 'piano']
+    ?? 'triangle';
+  const envelope = track?.synthEnvelope ?? DEFAULT_ENVELOPE;
+  const filter = track?.synthFilter ?? DEFAULT_FILTER;
+
+  useEffect(() => {
+    if (!track) return;
+    if (prevOscRef.current !== undefined && prevOscRef.current !== oscillatorType) {
+      synthEngine.setOscillatorType(trackId, oscillatorType);
+    }
+    prevOscRef.current = oscillatorType;
+  }, [trackId, oscillatorType, track]);
+
+  useEffect(() => {
+    if (!track) return;
+    if (prevEnvRef.current !== undefined && prevEnvRef.current !== envelope) {
+      synthEngine.setEnvelope(trackId, envelope);
+    }
+    prevEnvRef.current = envelope;
+  }, [trackId, envelope, track]);
+
+  useEffect(() => {
+    if (!track) return;
+    if (prevFilterRef.current !== undefined && prevFilterRef.current !== filter) {
+      synthEngine.setFilter(trackId, filter);
+    }
+    prevFilterRef.current = filter;
+  }, [trackId, filter, track]);
+
+  const onOscillatorChange = useCallback(
+    (waveform: 'sine' | 'triangle' | 'sawtooth' | 'square') => updateSynthOscillatorType(trackId, waveform),
+    [trackId, updateSynthOscillatorType],
+  );
   const onEnvelopeChange = useCallback(
     (updates: Partial<SynthEnvelope>) => updateSynthEnvelope(trackId, updates),
     [trackId, updateSynthEnvelope],
@@ -47,25 +99,26 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
 
   if (!track) return null;
 
-  const envelope = track.synthEnvelope ?? DEFAULT_ENVELOPE;
-  const filter = track.synthFilter ?? DEFAULT_FILTER;
   const lfo = track.synthLfo ?? DEFAULT_LFO;
   const filterEnvelope = track.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE;
   const unison = track.unisonSettings ?? DEFAULT_UNISON;
 
   return (
-    <div className="flex flex-col gap-4 p-3 bg-[#222] rounded-lg border border-[#333]" data-track-id={trackId}>
-      <div className="text-xs text-zinc-300 font-medium uppercase tracking-wider">
-        Synth Parameters
-      </div>
+    <div
+      className="flex gap-4 px-3 py-2 bg-[#1e1e22] border-b border-[#2a2a2a] overflow-x-auto"
+      data-testid="synth-parameter-editor"
+      data-track-id={trackId}
+    >
+      <OscillatorSelector waveform={oscillatorType} onChange={onOscillatorChange} />
+      <div className="w-px bg-[#333] self-stretch shrink-0" />
       <ADSREnvelopeEditor envelope={envelope} onChange={onEnvelopeChange} />
-      <div className="h-px bg-[#333]" />
+      <div className="w-px bg-[#333] self-stretch shrink-0" />
       <SynthFilterControls filter={filter} onChange={onFilterChange} />
-      <div className="h-px bg-[#333]" />
+      <div className="w-px bg-[#333] self-stretch shrink-0" />
       <FilterEnvelopeEditor envelope={filterEnvelope} onChange={onFilterEnvelopeChange} />
-      <div className="h-px bg-[#333]" />
+      <div className="w-px bg-[#333] self-stretch shrink-0" />
       <LFODisplay lfo={lfo} onChange={onLfoChange} />
-      <div className="h-px bg-[#333]" />
+      <div className="w-px bg-[#333] self-stretch shrink-0" />
       <UnisonControls settings={unison} onChange={onUnisonChange} />
     </div>
   );

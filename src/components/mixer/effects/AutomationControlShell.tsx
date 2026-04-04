@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { ContextMenuWrapper, ContextMenuItem } from '../../ui/ContextMenu';
 import { useProjectStore } from '../../../store/projectStore';
-import { getEffectAutomationLabel, normalizeEffectParamValue } from '../../../utils/effectAutomation';
+import { getEffectAutomationLabel } from '../../../utils/effectAutomation';
 import { automationParamEquals } from '../../../types/project';
 import type {
   AutomationParameter,

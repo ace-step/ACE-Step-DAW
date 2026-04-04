@@ -2,7 +2,7 @@
  * HSlider — Reusable horizontal slider component.
  * Extracted from EffectCards.tsx.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 
 interface HSliderProps {
@@ -22,11 +22,35 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
   const clamp = useCallback((nextValue: number) => clampValue(nextValue, min, max), [min, max]);
   const step = (max - min) / 100;
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Store active listeners in a ref so cleanup can remove them on unmount
+  const listenersRef = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (listenersRef.current) {
+        document.removeEventListener('pointermove', listenersRef.current.move);
+        document.removeEventListener('pointerup', listenersRef.current.up);
+        document.removeEventListener('pointercancel', listenersRef.current.up);
+        listenersRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const track = trackRef.current;
     if (!track) return;
+
+    // Clean up any existing drag session before starting a new one
+    if (listenersRef.current) {
+      document.removeEventListener('pointermove', listenersRef.current.move);
+      document.removeEventListener('pointerup', listenersRef.current.up);
+      document.removeEventListener('pointercancel', listenersRef.current.up);
+      listenersRef.current = null;
+    }
+
+    track.setPointerCapture(e.pointerId);
 
     const update = (clientX: number) => {
       const rect = track.getBoundingClientRect();
@@ -35,10 +59,20 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
     };
     update(e.clientX);
 
-    const onMove = (me: MouseEvent) => update(me.clientX);
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    const onMove = (pe: PointerEvent) => update(pe.clientX);
+    const cleanup = (pe: PointerEvent) => {
+      if (track.hasPointerCapture(pe.pointerId)) {
+        track.releasePointerCapture(pe.pointerId);
+      }
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', cleanup);
+      document.removeEventListener('pointercancel', cleanup);
+      listenersRef.current = null;
+    };
+    listenersRef.current = { move: onMove, up: cleanup };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', cleanup);
+    document.addEventListener('pointercancel', cleanup);
   }, [clamp, onChange, min, max]);
 
   const norm = (value - min) / (max - min);
@@ -53,9 +87,15 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
       )}
       <div
         ref={trackRef}
-        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150"
+        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150 focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/30"
         style={{ width, height: 4 }}
-        onMouseDown={handleMouseDown}
+        role="slider"
+        tabIndex={0}
+        aria-label={`${label ?? 'Control'} slider`}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={Math.round(value * 1000) / 1000}
+        onPointerDown={handlePointerDown}
         onDoubleClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -66,7 +106,14 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
           e.stopPropagation();
           setShowPrecisionInput(true);
         }}
-        aria-label={`${label ?? 'Control'} slider`}
+        onKeyDown={(e) => {
+          let next: number | null = null;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(value + step);
+          else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(value - step);
+          else if (e.key === 'Home') next = min;
+          else if (e.key === 'End') next = max;
+          if (next !== null) { e.preventDefault(); onChange(next); }
+        }}
       >
         {/* Track background */}
         <div className="absolute inset-0 rounded-sm bg-white/[0.06]" />

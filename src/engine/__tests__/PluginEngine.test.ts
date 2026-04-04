@@ -61,12 +61,11 @@ describe('PluginEngine', () => {
     const plugin2 = makePlugin();
     const ctx = makeCtx();
 
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, ctx);
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, ctx);
+    const firstNode = engine.addPlugin('track-1', 'inst-1', plugin1 as never, ctx);
+    const secondNode = engine.addPlugin('track-1', 'inst-2', plugin2 as never, ctx);
 
     // The first plugin's output should be connected to second's input
-    const firstNode = plugin1.createAudioNode();
-    expect(firstNode.outputNode.connect).toHaveBeenCalled();
+    expect(firstNode.outputNode.connect).toHaveBeenCalledWith(secondNode.inputNode);
   });
 
   // ── removePlugin ──

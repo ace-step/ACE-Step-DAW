@@ -1,6 +1,7 @@
 /**
  * RecordingEngine unit tests — focused on state management and public API.
- * Browser API tests (getUserMedia, MediaRecorder, AudioContext) are mocked.
+ * Uses vi.resetModules() + dynamic import per test so the singleton
+ * recordingEngine is re-created and state cannot leak between tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -14,12 +15,13 @@ vi.mock('tone', () => ({
   })),
 }));
 
-// Must use dynamic import since RecordingEngine uses browser APIs at module level
-import { recordingEngine } from '../RecordingEngine';
+let recordingEngine: (typeof import('../RecordingEngine'))['recordingEngine'];
 
 describe('RecordingEngine', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
+    ({ recordingEngine } = await import('../RecordingEngine'));
   });
 
   // ── Initial state ──
@@ -49,15 +51,11 @@ describe('RecordingEngine', () => {
   it('sets count-in to 2bars', () => {
     recordingEngine.setCountInLength('2bars');
     expect(recordingEngine.getCountInLength()).toBe('2bars');
-    // Reset
-    recordingEngine.setCountInLength('1bar');
   });
 
   it('sets count-in to off', () => {
     recordingEngine.setCountInLength('off');
     expect(recordingEngine.getCountInLength()).toBe('off');
-    // Reset
-    recordingEngine.setCountInLength('1bar');
   });
 
   // ── Monitoring ──
@@ -71,8 +69,6 @@ describe('RecordingEngine', () => {
     recordingEngine.setMonitoring('track-1', true);
     expect(recordingEngine.getMonitoring('track-1')).toBe(true);
     expect(recordingEngine.getMonitoring('track-2')).toBe(false);
-    // Cleanup
-    recordingEngine.setMonitoring('track-1', false);
   });
 
   it('disables monitoring for a track', () => {
@@ -115,27 +111,19 @@ describe('RecordingEngine', () => {
   // ── Recording without permission ──
 
   it('fails to start recording without permission', async () => {
-    // Mock getUserMedia to fail
     const originalNavigator = globalThis.navigator;
-    Object.defineProperty(globalThis, 'navigator', {
-      value: {
-        mediaDevices: {
-          getUserMedia: vi.fn().mockRejectedValue(new Error('NotAllowed')),
-          enumerateDevices: vi.fn().mockResolvedValue([]),
-        },
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockRejectedValue(new Error('NotAllowed')),
+        enumerateDevices: vi.fn().mockResolvedValue([]),
       },
-      writable: true,
-      configurable: true,
     });
 
-    const result = await recordingEngine.startRecording('track-1', 'region-1', 0);
-    expect(result).toBe(false);
-
-    // Restore
-    Object.defineProperty(globalThis, 'navigator', {
-      value: originalNavigator,
-      writable: true,
-      configurable: true,
-    });
+    try {
+      const result = await recordingEngine.startRecording('track-1', 'region-1', 0);
+      expect(result).toBe(false);
+    } finally {
+      vi.stubGlobal('navigator', originalNavigator);
+    }
   });
 });

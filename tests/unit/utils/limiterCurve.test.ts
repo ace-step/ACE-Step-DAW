@@ -17,6 +17,27 @@ describe('limiterTransfer', () => {
     }
   });
 
+  it('does not amplify beyond boosted input when still below ceiling', () => {
+    const ceiling = -0.3;
+    const styles: LimiterStyle[] = ['transparent', 'aggressive', 'warm'];
+    const cases = [
+      { input: -0.35, gain: 0 },
+      { input: -0.5, gain: 0.1 },
+      { input: -0.6, gain: 0.2 },
+      { input: -1.0, gain: 0.5 },
+    ];
+
+    for (const style of styles) {
+      for (const { input, gain } of cases) {
+        const boostedInput = input + gain;
+        expect(boostedInput).toBeLessThan(ceiling);
+
+        const output = limiterTransfer(input, ceiling, gain, style);
+        expect(output).toBeLessThanOrEqual(boostedInput + 1e-9);
+      }
+    }
+  });
+
   it('gain boost shifts the curve', () => {
     const withGain = limiterTransfer(-20, -0.3, 6, 'transparent');
     const withoutGain = limiterTransfer(-20, -0.3, 0, 'transparent');

@@ -63,14 +63,18 @@ export function LimiterCurve({
       ctx.fillText(`${db}`, 2, y - 2);
     }
 
-    // Unity line (45°)
+    // Unity line (45°), offset by input gain and clamped to visible plot bounds
+    const unityStartDb = Math.max(MIN_DB, MIN_DB - gain);
+    const unityEndDb = Math.min(MAX_DB, MAX_DB - gain);
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(xForDb(MIN_DB), yForDb(MIN_DB));
-    ctx.lineTo(xForDb(MAX_DB), yForDb(MAX_DB));
-    ctx.stroke();
+    if (unityStartDb <= unityEndDb) {
+      ctx.beginPath();
+      ctx.moveTo(xForDb(unityStartDb), yForDb(Math.min(unityStartDb + gain, MAX_DB)));
+      ctx.lineTo(xForDb(unityEndDb), yForDb(Math.min(unityEndDb + gain, MAX_DB)));
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
 
     // Ceiling line (horizontal)

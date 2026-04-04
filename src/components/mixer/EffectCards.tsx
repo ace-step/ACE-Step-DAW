@@ -1504,7 +1504,7 @@ export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { 
       color="#7a8ab4"
       visualization={
         <StereoFieldDisplay
-          width_param={p.width}
+          widthAmount={p.width}
           midGain={p.midGain}
           sideGain={p.sideGain}
           monoFreq={p.monoFreq}

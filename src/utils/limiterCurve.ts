@@ -29,25 +29,25 @@ export function limiterTransfer(
 
   switch (style) {
     case 'transparent': {
-      // Very gentle knee into hard ceiling
+      // Very gentle knee into hard ceiling without amplifying below-ceiling signals
       if (boosted >= ceiling) return ceiling;
-      const diff = ceiling - boosted;
       const knee = 6;
-      if (diff < knee) {
-        return ceiling - (diff * diff) / (2 * knee);
-      }
-      return boosted;
+      const kneeStart = ceiling - knee;
+      if (boosted <= kneeStart) return boosted;
+      const t = (boosted - kneeStart) / knee;
+      const reduction = (knee * 0.5) * t * t;
+      return Math.min(boosted, ceiling - knee + knee * t - reduction);
     }
 
     case 'aggressive': {
-      // Tighter knee, earlier engagement
+      // Tighter knee, earlier engagement, still attenuation-only
       if (boosted >= ceiling) return ceiling;
-      const diff = ceiling - boosted;
       const knee = 3;
-      if (diff < knee) {
-        return ceiling - (diff * diff) / (2 * knee);
-      }
-      return boosted;
+      const kneeStart = ceiling - knee;
+      if (boosted <= kneeStart) return boosted;
+      const t = (boosted - kneeStart) / knee;
+      const reduction = (knee * 0.5) * t * t;
+      return Math.min(boosted, ceiling - knee + knee * t - reduction);
     }
 
     case 'warm': {

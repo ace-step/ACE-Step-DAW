@@ -117,10 +117,12 @@ export function DeEsserDisplay({
     ctx.beginPath(); ctx.moveTo(0, threshY); ctx.lineTo(width, threshY); ctx.stroke();
     ctx.setLineDash([]);
 
-    // Range indicator (how much reduction)
-    const rangeY = dbToY(threshold + range);
+    // Range indicator (how much reduction below threshold)
+    const rangeY = dbToY(threshold - range);
+    const rangeTopY = Math.min(threshY, rangeY);
+    const rangeHeight = Math.abs(rangeY - threshY);
     ctx.fillStyle = `${color}12`;
-    ctx.fillRect(bandLeft, threshY, bandWidth, rangeY - threshY);
+    ctx.fillRect(bandLeft, rangeTopY, bandWidth, rangeHeight);
 
     // Labels
     ctx.font = '8px monospace';

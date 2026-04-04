@@ -6,7 +6,7 @@ import { useRef, useEffect } from 'react';
 import { fillBackground, GRID_COLOR } from '../../utils/canvasTheme';
 
 interface StereoFieldDisplayProps {
-  width_param: number;  // 0 to 2 (0=mono, 1=normal, 2=wide)
+  widthAmount: number;  // 0 to 2 (0=mono, 1=normal, 2=wide)
   midGain: number;      // dB
   sideGain: number;     // dB
   monoFreq: number;     // Hz (mono below this frequency)
@@ -17,7 +17,7 @@ interface StereoFieldDisplayProps {
 }
 
 export function StereoFieldDisplay({
-  width_param,
+  widthAmount,
   midGain,
   sideGain,
   monoFreq,
@@ -72,7 +72,7 @@ export function StereoFieldDisplay({
     ctx.fillText('M', cx, cy - maxR - 3);
 
     // Draw stereo field shape (ellipse representing width)
-    const widthFactor = Math.max(0.05, width_param);
+    const widthFactor = Math.max(0.05, widthAmount);
     const midFactor = Math.pow(10, midGain / 20);
     const sideFactor = Math.pow(10, sideGain / 20);
 
@@ -121,8 +121,8 @@ export function StereoFieldDisplay({
     ctx.font = '8px monospace';
     ctx.fillStyle = `${color}80`;
     ctx.textAlign = 'right';
-    ctx.fillText(`W:${(width_param * 100).toFixed(0)}%`, w - 3, h - 3);
-  }, [width_param, midGain, sideGain, monoFreq, pan, canvasWidth, canvasHeight, color]);
+    ctx.fillText(`W:${(widthAmount * 100).toFixed(0)}%`, w - 3, h - 3);
+  }, [widthAmount, midGain, sideGain, monoFreq, pan, canvasWidth, canvasHeight, color]);
 
   return (
     <canvas

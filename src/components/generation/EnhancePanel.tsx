@@ -5,15 +5,17 @@ import { useUIStore, getBottomPanelHeight, isAnyModalOpen } from '../../store/ui
 import { generateCoverClip } from '../../services/generationPipeline';
 import { generateRepaintClip } from '../../services/generationPipeline';
 import { modelSupportsTaskType, isModelInventoryLoaded, isModelReady } from '../../services/aceStepApi';
-import { DualRangeSlider } from '../ui/DualRangeSlider';
 import { Z } from '../../utils/zIndex';
 import { WaveformPreview } from './WaveformPreview';
-import { WaveformRangeSelector } from './WaveformRangeSelector';
 import { useEnhancePlayback } from '../../hooks/useEnhancePlayback';
 import { computeWaveformPeaks } from '../../utils/waveformPeaks';
 import type { RepaintMode } from '../../types/api';
 import { ENHANCE_PRESETS, surpriseMe } from '../../constants/enhancePresets';
 import type { EnhancementNode } from '../../types/enhance';
+import { VersionTreeNodes } from './VersionTree';
+import { EnhanceCoverControls } from './EnhanceCoverControls';
+import { EnhanceRepaintControls } from './EnhanceRepaintControls';
+import { ResultsPanel, type ResultEntry, type ABSide } from './ResultsPanel';
 
 const ENHANCER_BASE_BOTTOM = 60;
 
@@ -39,77 +41,6 @@ interface SessionEntry {
   id: string;
   label: string;
   timestamp: number;
-}
-
-interface ResultEntry {
-  id: string;
-  clipId: string;
-  audioKey: string;
-  title: string;
-  duration: string;
-  durationSec: number;
-  peaks: number[];
-  timestamp: number;
-  status: 'generating' | 'ready' | 'error';
-  error?: string;
-}
-
-type ABSide = 'A' | 'B';
-
-/** Recursive version tree node renderer */
-function VersionTreeNodes({
-  nodes,
-  getChildren,
-  activeNodeId,
-  onNodeClick,
-  depth,
-}: {
-  nodes: EnhancementNode[];
-  getChildren: (parentId: string) => EnhancementNode[];
-  activeNodeId: string | null;
-  onNodeClick: (node: EnhancementNode) => void;
-  depth: number;
-}) {
-  return (
-    <>
-      {nodes.map((node, idx) => {
-        const isActive = node.id === activeNodeId;
-        const children = getChildren(node.id);
-        const versionNum = idx + 1 + depth;
-        return (
-          <div key={node.id}>
-            <button
-              data-testid={`version-tree-node-${node.id}`}
-              onClick={() => onNodeClick(node)}
-              className={`w-full text-left py-1.5 rounded-md text-[10px] transition-colors truncate flex items-center gap-1.5 ${
-                isActive
-                  ? 'bg-[#2a2a2e] text-teal-300'
-                  : 'text-zinc-500 hover:bg-[#222226] hover:text-zinc-300'
-              }`}
-              style={{ paddingLeft: `${8 + depth * 10}px` }}
-            >
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                isActive ? 'bg-teal-400' : 'bg-zinc-600'
-              }`} />
-              <span className="truncate">
-                v{versionNum} ({node.label})
-                {isActive && ' \u2190'}
-              </span>
-            </button>
-            {children.length > 0 && (
-              <VersionTreeNodes
-                nodes={children}
-                getChildren={getChildren}
-                activeNodeId={activeNodeId}
-                onNodeClick={onNodeClick}
-                depth={depth + 1}
-              />
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
 }
 
 export function EnhancePanel() {
@@ -846,249 +777,39 @@ export function EnhancePanel() {
 
           {/* === COVER MODE CONTROLS === */}
           {mode === 'cover' && (
-            <>
-              {/* Lyrics */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide mb-1">
-                  Lyrics
-                </label>
-                <textarea
-                  data-testid="enhance-lyrics-input"
-                  value={lyrics}
-                  onChange={(e) => setLyrics(e.target.value)}
-                  placeholder="Override lyrics for this enhancement..."
-                  rows={3}
-                  className="w-full bg-[#161618] border border-[#333] rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-500/60 font-mono"
-                />
-              </div>
-
-              {/* Quick Styles presets */}
-              <div>
-                <button
-                  data-testid="quick-styles-toggle"
-                  onClick={() => setQuickStylesOpen((v) => !v)}
-                  className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 uppercase tracking-wide mb-1 hover:text-zinc-300 transition-colors"
-                >
-                  <svg
-                    className={`w-3 h-3 transition-transform ${quickStylesOpen ? 'rotate-90' : ''}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Quick Styles
-                </button>
-                {quickStylesOpen && (
-                  <div data-testid="quick-styles-grid" className="flex flex-wrap gap-1.5 mb-2">
-                    {ENHANCE_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        data-testid={`preset-${preset.id}`}
-                        onClick={() => {
-                          setCaption(preset.caption);
-                          setConsistency(preset.consistency);
-                        }}
-                        className="px-2.5 py-1 rounded-full bg-[#2a2a2e] hover:bg-[#3a3a3e] text-[10px] text-zinc-300 transition-colors whitespace-nowrap border border-[#3a3a3a] hover:border-teal-500/40"
-                      >
-                        {preset.icon} {preset.label}
-                      </button>
-                    ))}
-                    <button
-                      data-testid="preset-surprise-me"
-                      onClick={() => {
-                        const result = surpriseMe();
-                        setCaption(result.caption);
-                        setConsistency(result.consistency);
-                      }}
-                      className="px-2.5 py-1 rounded-full bg-gradient-to-r from-purple-600/30 to-pink-600/30 hover:from-purple-600/50 hover:to-pink-600/50 text-[10px] text-zinc-200 transition-all whitespace-nowrap border border-purple-500/30 hover:border-purple-400/60 font-medium"
-                    >
-                      {'\u{1F3B2}'} Surprise Me
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Styles (caption) */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide mb-1">
-                  Styles
-                </label>
-                <textarea
-                  data-testid="enhance-styles-input"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="e.g. jazz arrangement, acoustic guitar, slow tempo..."
-                  rows={2}
-                  className="w-full bg-[#161618] border border-[#333] rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-teal-500/60"
-                />
-              </div>
-
-              {/* Consistency */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-500 uppercase tracking-wide mb-2">
-                  Consistency
-                </label>
-                <div className="flex gap-1" data-testid="enhance-consistency-toggle">
-                  {(['low', 'medium', 'high'] as ConsistencyLevel[]).map((level) => (
-                    <button
-                      key={level}
-                      onClick={() => setConsistency(level)}
-                      className={`flex-1 py-1.5 rounded-md text-[11px] font-medium capitalize transition-colors ${
-                        consistency === level
-                          ? 'bg-teal-600 text-white'
-                          : 'bg-[#161618] text-zinc-500 hover:bg-[#2a2a2e] hover:text-zinc-300'
-                      }`}
-                    >
-                      {level}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Create new vs replace */}
-              <div className="flex items-center gap-3 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={createNew}
-                    onChange={(e) => setCreateNew(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-[#444] bg-[#222] accent-teal-500"
-                  />
-                  <span className="text-[10px] text-zinc-400">Create new clip (leave original intact)</span>
-                </label>
-              </div>
-            </>
+            <EnhanceCoverControls
+              lyrics={lyrics}
+              onLyricsChange={setLyrics}
+              caption={caption}
+              onCaptionChange={setCaption}
+              consistency={consistency}
+              onConsistencyChange={setConsistency}
+              createNew={createNew}
+              onCreateNewChange={setCreateNew}
+              quickStylesOpen={quickStylesOpen}
+              onQuickStylesToggle={() => setQuickStylesOpen((v) => !v)}
+            />
           )}
 
           {/* === REPAINT MODE CONTROLS === */}
           {mode === 'repaint' && clip && (
-            <>
-              {/* Repaint range — waveform selector */}
-              <div className="bg-[#222]/60 rounded px-3 pt-2 pb-2 border border-[#3a3a3a]">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium text-zinc-300">Repaint range</span>
-                  <span className="text-[10px] font-mono text-rose-300">
-                    {fmt(selStart)} — {fmt(selEnd)}
-                  </span>
-                </div>
-                <WaveformRangeSelector
-                  peaks={sourcePeaks}
-                  duration={clip.duration || 0}
-                  rangeStart={clip.duration > 0 ? (selStart - clipStart) / clip.duration : 0}
-                  rangeEnd={clip.duration > 0 ? (selEnd - clipStart) / clip.duration : 1}
-                  onRangeChange={(s, e) => {
-                    handleRangeChange(
-                      clipStart + s * clip.duration,
-                      clipStart + e * clip.duration,
-                    );
-                  }}
-                  bpm={project?.bpm}
-                  snapToGrid={true}
-                />
-                <div className="flex gap-4 mt-1">
-                  <span className="flex items-center gap-1 text-[8px] text-zinc-400">
-                    <span className="inline-block w-3 h-2 rounded-sm bg-black/55 border border-zinc-600/50" />
-                    Keep
-                  </span>
-                  <span className="flex items-center gap-1 text-[8px] text-rose-400">
-                    <span className="inline-block w-3 h-2 rounded-sm bg-rose-600/20 border border-rose-500/60" />
-                    Regenerate
-                  </span>
-                </div>
-              </div>
-
-              {/* Prompt */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
-                  Prompt for this section
-                </label>
-                <textarea
-                  data-testid="enhance-repaint-prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe how this section should sound..."
-                  rows={3}
-                  className="w-full bg-[#222] border border-[#444] rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-rose-500/60"
-                />
-              </div>
-
-              {/* Global caption */}
-              <div>
-                <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
-                  Global song description
-                  <span className="ml-1 normal-case font-normal text-zinc-600">(optional)</span>
-                </label>
-                <textarea
-                  data-testid="enhance-global-caption"
-                  value={globalCaption}
-                  onChange={(e) => setGlobalCaption(e.target.value)}
-                  placeholder="e.g. upbeat pop song..."
-                  rows={2}
-                  className="w-full bg-[#222] border border-[#444] rounded px-2.5 py-2 text-xs text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:border-rose-500/60"
-                />
-              </div>
-
-              {/* Repaint mode & strength */}
-              <div className="bg-[#222]/60 rounded px-3 py-2.5 border border-[#3a3a3a] space-y-2.5">
-                <div>
-                  <label className="block text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">
-                    Repaint mode
-                  </label>
-                  <div className="flex gap-1" data-testid="enhance-repaint-mode-toggle">
-                    {(['conservative', 'balanced', 'aggressive'] as const).map((rm) => (
-                      <button
-                        key={rm}
-                        onClick={() => setRepaintMode(rm)}
-                        className={`flex-1 px-2 py-1.5 rounded text-[10px] font-medium transition-colors ${
-                          repaintMode === rm
-                            ? 'bg-rose-600/80 text-white border border-rose-500'
-                            : 'bg-[#333] text-zinc-400 border border-[#444] hover:bg-[#3a3a3a]'
-                        }`}
-                      >
-                        {rm.charAt(0).toUpperCase() + rm.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[8px] text-zinc-600 mt-1">
-                    {repaintMode === 'conservative' && 'Maximum source preservation — subtle changes only.'}
-                    {repaintMode === 'balanced' && 'Tunable blend between source preservation and fresh generation.'}
-                    {repaintMode === 'aggressive' && 'Pure diffusion — fully regenerates the region.'}
-                  </p>
-                </div>
-
-                {repaintMode === 'balanced' && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-medium text-zinc-400">
-                        Repaint strength
-                      </label>
-                      <span className="text-[10px] font-mono text-rose-300">{repaintStrength.toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={repaintStrength}
-                      onChange={(e) => setRepaintStrength(Number(e.target.value))}
-                      className="w-full h-1.5 accent-rose-500 cursor-pointer"
-                    />
-                    <div className="flex justify-between text-[8px] text-zinc-600 mt-0.5">
-                      <span>Preserve source</span>
-                      <span>Fresh generation</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {mode === 'repaint' && (
-                <p className="text-[10px] text-zinc-600">
-                  Only the selected range will be regenerated. Audio outside the repaint region is preserved.
-                </p>
-              )}
-            </>
+            <EnhanceRepaintControls
+              sourcePeaks={sourcePeaks}
+              clipDuration={clip.duration || 0}
+              clipStart={clipStart}
+              selStart={selStart}
+              selEnd={selEnd}
+              onRangeChange={handleRangeChange}
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              globalCaption={globalCaption}
+              onGlobalCaptionChange={setGlobalCaption}
+              repaintMode={repaintMode}
+              onRepaintModeChange={setRepaintMode}
+              repaintStrength={repaintStrength}
+              onRepaintStrengthChange={setRepaintStrength}
+              bpm={project?.bpm}
+            />
           )}
 
           {/* Enhance button */}
@@ -1111,160 +832,26 @@ export function EnhancePanel() {
       </div>
 
       {/* Right Panel — Results */}
-      <div data-testid="enhance-results" className="w-[220px] min-w-[220px] flex flex-col bg-[#1a1a1e]">
-        <div className="px-3 py-3 border-b border-[#3a3a3a]">
-          <p className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">Results</p>
-        </div>
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
-          {results.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <svg className="w-8 h-8 text-zinc-700 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M9 18V5l12-2v13" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
-              </svg>
-              <p className="text-[11px] text-zinc-600">
-                Enhanced results will appear here
-              </p>
-            </div>
-          ) : (
-            results.map((r, idx) => {
-              const isPlaying = playback.playingId === r.id;
-              const isSelected = r.id === selectedResultId;
-              return (
-                <div
-                  key={r.id}
-                  data-testid={`result-item-${idx}`}
-                  onClick={() => { setSelectedResultId(r.id); setMiniPlayerIdx(idx); }}
-                  className={`rounded-md transition-colors group cursor-pointer ${
-                    isSelected ? 'bg-[#2a2a30] ring-1 ring-zinc-600' : 'hover:bg-[#222226]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 px-2 py-2">
-                    {r.status === 'generating' ? (
-                      <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                        <div className="w-4 h-4 border-2 border-zinc-600 border-t-teal-400 rounded-full animate-spin" />
-                      </div>
-                    ) : r.status === 'error' ? (
-                      <div className="w-6 h-6 flex items-center justify-center rounded-full bg-red-900/50 text-red-400 flex-shrink-0">
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
-                      </div>
-                    ) : (
-                    <button
-                      data-testid={`result-play-btn-${idx}`}
-                      onClick={(e) => { e.stopPropagation(); handleResultPlay(r.id, r.audioKey); }}
-                      className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors flex-shrink-0 ${
-                        isPlaying
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-[#2a2a2e] text-zinc-400 hover:text-zinc-200'
-                      }`}
-                      aria-label={isPlaying ? 'Stop result' : 'Play result'}
-                    >
-                      {isPlaying ? (
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-                      ) : (
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                      )}
-                    </button>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[11px] truncate ${r.status === 'error' ? 'text-red-400' : 'text-zinc-300'}`}>
-                        {r.title}
-                        {canAB && isSelected && (
-                          <span className={`ml-1 ${abSide === 'B' ? 'text-violet-400 font-bold' : 'text-zinc-600'}`}>B</span>
-                        )}
-                      </p>
-                      <p className="text-[10px] text-zinc-600">
-                        {r.status === 'generating' ? 'Generating...' : r.status === 'error' ? (r.error ?? 'Failed') : r.duration}
-                      </p>
-                    </div>
-                    {r.audioKey && (
-                      <button
-                        data-testid={`use-as-source-btn-${idx}`}
-                        onClick={(e) => { e.stopPropagation(); handleUseAsSource(r); }}
-                        className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[9px] font-medium bg-teal-700/50 text-teal-300 hover:bg-teal-600/60 transition-all whitespace-nowrap"
-                        title="Use this result as source for next enhancement"
-                      >
-                        Use as Source
-                      </button>
-                    )}
-                  </div>
-                  {/* Result waveform */}
-                  {r.peaks.length > 0 && (
-                    <div className="px-2 pb-2">
-                      <WaveformPreview
-                        peaks={r.peaks}
-                        color="#8b5cf6"
-                        height={24}
-                        playbackProgress={isPlaying ? playback.progress : 0}
-                        data-testid={`result-waveform-${idx}`}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Mini player */}
-        {results.length > 0 && (
-          <div className="border-t border-[#3a3a3a] px-3 py-2.5" data-testid="mini-player">
-            <div className="flex items-center gap-2">
-              <button
-                data-testid="mini-prev-btn"
-                onClick={handleMiniPrev}
-                disabled={miniPlayerIdx <= 0}
-                className={`transition-colors ${miniPlayerIdx <= 0 ? 'text-zinc-700' : 'text-zinc-500 hover:text-zinc-300'}`}
-                aria-label="Previous"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
-              </button>
-              <button
-                data-testid="mini-play-btn"
-                onClick={handleMiniPlay}
-                className={`transition-colors ${miniIsPlaying ? 'text-violet-400' : 'text-zinc-300 hover:text-white'}`}
-                aria-label={miniIsPlaying ? 'Pause' : 'Play'}
-              >
-                {miniIsPlaying ? (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-                ) : (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                )}
-              </button>
-              <button
-                data-testid="mini-next-btn"
-                onClick={handleMiniNext}
-                disabled={miniPlayerIdx >= results.length - 1}
-                className={`transition-colors ${miniPlayerIdx >= results.length - 1 ? 'text-zinc-700' : 'text-zinc-500 hover:text-zinc-300'}`}
-                aria-label="Next"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M16 18h2V6h-2zm-2-6L5.5 6v12z" /></svg>
-              </button>
-              <div
-                data-testid="mini-progress-bar"
-                className="flex-1 mx-1.5 cursor-pointer"
-                onClick={handleMiniSeek}
-              >
-                <div className="h-1 bg-[#2a2a2e] rounded-full relative">
-                  <div
-                    className="h-1 bg-violet-600 rounded-full transition-[width] duration-75"
-                    style={{ width: `${miniProgress * 100}%` }}
-                  />
-                </div>
-              </div>
-              {miniResult && (
-                <span className="text-[9px] text-zinc-600 font-mono whitespace-nowrap">
-                  {miniResult.duration !== '--:--' ? miniResult.duration : ''}
-                </span>
-              )}
-            </div>
-            {miniResult && (
-              <p className="text-[9px] text-zinc-500 truncate mt-1">{miniResult.title}</p>
-            )}
-          </div>
-        )}
-      </div>
+      <ResultsPanel
+        results={results}
+        selectedResultId={selectedResultId}
+        onSelectResult={(id, idx) => { setSelectedResultId(id); setMiniPlayerIdx(idx); }}
+        onResultPlay={handleResultPlay}
+        onUseAsSource={handleUseAsSource}
+        playingId={playback.playingId}
+        playbackProgress={playback.progress}
+        canAB={canAB}
+        abSide={abSide}
+        miniResult={miniResult}
+        miniPlayerIdx={miniPlayerIdx}
+        miniIsPlaying={miniIsPlaying}
+        miniProgress={miniProgress}
+        onMiniPrev={handleMiniPrev}
+        onMiniNext={handleMiniNext}
+        onMiniPlay={handleMiniPlay}
+        onMiniSeek={handleMiniSeek}
+        resultsLength={results.length}
+      />
     </div>
     </>
   );

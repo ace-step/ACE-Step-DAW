@@ -23,7 +23,7 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   reverb: '#8b6fc0',
   delay: '#9478c4',
   convolver: '#a07cc8',
-  algorithmicReverb: '#8b6fc0',
+  algorithmicReverb: '#7a6fb8',
   /* Modulation family (teal/cyan) */
   filter: '#4a9da8',
   chorus: '#5aa8b4',
@@ -58,7 +58,7 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     limiter: '--fx-limiter',
     saturation: '--fx-saturation',
     stereoImager: '--fx-stereo-imager',
-    algorithmicReverb: '--fx-reverb',
+    algorithmicReverb: '--fx-algorithmic-reverb',
     noiseReduction: '--fx-noise-reduction',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();

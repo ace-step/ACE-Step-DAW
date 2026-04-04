@@ -55,6 +55,7 @@ describe('detectPitchFrames', () => {
     const sampleRate = 44100;
     const samples = new Float32Array(sampleRate); // 1 second of silence
     const frames = detectPitchFrames(samples, sampleRate);
+    expect(frames.length).toBeGreaterThan(0);
     for (const frame of frames) {
       expect(frame.frequency).toBeNull();
       expect(frame.confidence).toBe(0);
@@ -117,7 +118,8 @@ describe('detectPitchFrames', () => {
       minFrequency: 500,
       maxFrequency: 1000,
     });
-    // All frames should have null frequency (440 < 500 min)
+    // Analysis should still produce frames, but all with null frequency
+    expect(frames.length).toBeGreaterThan(0);
     for (const frame of frames) {
       expect(frame.frequency).toBeNull();
     }

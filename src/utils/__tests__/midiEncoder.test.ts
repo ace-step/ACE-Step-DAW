@@ -181,12 +181,15 @@ describe('encodeMidiFile', () => {
     const buffer = encodeMidiFile([note]);
     const bytes = readBytes(buffer);
 
+    let found = false;
     for (let i = 0; i < bytes.length - 2; i++) {
       if ((bytes[i] & 0xf0) === 0x90 && bytes[i + 1] === 60) {
         expect(bytes[i + 2]).toBeLessThanOrEqual(127);
+        found = true;
         break;
       }
     }
+    expect(found).toBe(true);
   });
 
   it('handles zero velocity note', () => {
@@ -194,12 +197,15 @@ describe('encodeMidiFile', () => {
     const buffer = encodeMidiFile([note]);
     const bytes = readBytes(buffer);
 
+    let found = false;
     for (let i = 0; i < bytes.length - 2; i++) {
       if ((bytes[i] & 0xf0) === 0x90 && bytes[i + 1] === 60) {
         expect(bytes[i + 2]).toBe(0);
+        found = true;
         break;
       }
     }
+    expect(found).toBe(true);
   });
 
   it('encodes multiple notes correctly', () => {

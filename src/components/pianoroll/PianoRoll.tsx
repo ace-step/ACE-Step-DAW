@@ -13,6 +13,8 @@ import { SynthPresetBrowser } from './SynthPresetBrowser';
 import { getSynthPresetById, type SynthPresetCategory } from '../../data/synthPresets';
 import { createUserPreset, getPresetById, type InstrumentPresetCategory } from '../../data/instrumentPresets';
 import { TransformMenu } from './TransformMenu';
+import { ChordSuggestionPanel } from './ChordSuggestionPanel';
+import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 
 function clamp(value: number, min: number, max: number): number {
@@ -70,6 +72,8 @@ export function PianoRoll() {
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
+  const chordPanelOpen = useChordSuggestionStore((s) => s.panelOpen);
+  const toggleChordPanel = useChordSuggestionStore((s) => s.togglePanel);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -396,6 +400,18 @@ export function PianoRoll() {
           </button>
         )}
 
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            chordPanelOpen
+              ? 'bg-cyan-600/40 text-cyan-200'
+              : 'bg-cyan-600/15 text-cyan-100 hover:bg-cyan-600/30'
+          }`}
+          onClick={toggleChordPanel}
+          title="Toggle AI chord suggestion panel"
+        >
+          AI Chords
+        </button>
+
         {clip && (
           <button
             className="px-2 py-1 rounded text-[10px] bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-colors"
@@ -454,6 +470,8 @@ export function PianoRoll() {
           </button>
         </div>
       </div>
+
+      {chordPanelOpen && <ChordSuggestionPanel />}
 
       {track.synthPreset === 'sampler' && (
         <div

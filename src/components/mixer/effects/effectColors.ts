@@ -23,7 +23,7 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   reverb: '#8b6fc0',
   delay: '#9478c4',
   convolver: '#a07cc8',
-  algorithmicReverb: '#7a6fb8',
+  algorithmicReverb: '#8b6fc0',
   /* Modulation family (teal/cyan) */
   filter: '#4a9da8',
   chorus: '#5aa8b4',

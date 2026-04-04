@@ -7,8 +7,6 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useProjectStore } from '../../src/store/projectStore';
-import { useTransportStore } from '../../src/store/transportStore';
-import { useUIStore } from '../../src/store/uiStore';
 import { resetAllStores, createTestProject } from './setup';
 
 describe('Mixer → Store Integration', () => {
@@ -22,7 +20,7 @@ describe('Mixer → Store Integration', () => {
   // ── Volume ──
 
   it('updates track volume and persists in project state', () => {
-    useProjectStore.getState().updateTrackMixer(tracks.vocals.id, { volume: 0.75 });
+    useProjectStore.getState().updateTrack(tracks.vocals.id, { volume: 0.75 });
 
     const project = useProjectStore.getState().project!;
     const vocal = project.tracks.find((t) => t.id === tracks.vocals.id);
@@ -30,7 +28,7 @@ describe('Mixer → Store Integration', () => {
   });
 
   it('allows volume values above 1.0 (for boost)', () => {
-    useProjectStore.getState().updateTrackMixer(tracks.vocals.id, { volume: 1.5 });
+    useProjectStore.getState().updateTrack(tracks.vocals.id, { volume: 1.5 });
 
     const project = useProjectStore.getState().project!;
     const vocal = project.tracks.find((t) => t.id === tracks.vocals.id);
@@ -166,7 +164,7 @@ describe('Mixer → Store Integration', () => {
       (t) => t.id === tracks.vocals.id
     )!.volume;
 
-    useProjectStore.getState().updateTrackMixer(tracks.vocals.id, { volume: 0.3 });
+    useProjectStore.getState().updateTrack(tracks.vocals.id, { volume: 0.3 });
 
     const afterChange = useProjectStore.getState().project!.tracks.find(
       (t) => t.id === tracks.vocals.id

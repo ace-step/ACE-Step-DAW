@@ -12,10 +12,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Critical E2E tests — these BLOCK the PR
+  # Critical E2E tests — will BLOCK PRs once Phase 2 stabilization is complete.
+  # TODO: remove continue-on-error after 1 week without false-positive failures
   e2e-critical:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

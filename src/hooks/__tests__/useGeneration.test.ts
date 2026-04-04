@@ -24,7 +24,10 @@ describe('useGeneration', () => {
   });
 
   it('exposes jobs and isGenerating from store', () => {
-    useGenerationStore.setState({ isGenerating: true, jobs: [{ id: 'j1' } as never] });
+    useGenerationStore.setState({
+      isGenerating: true,
+      jobs: [{ id: 'j1' } as unknown as ReturnType<typeof useGenerationStore.getState>['jobs'][number]],
+    });
     const { result } = renderHook(() => useGeneration());
 
     expect(result.current.isGenerating).toBe(true);

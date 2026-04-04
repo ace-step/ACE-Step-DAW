@@ -3414,9 +3414,27 @@ export const useProjectStore = create<ProjectState>()(
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId ? { ...t, synthOscillatorType: oscillatorType } : t,
-        ),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const nextTrack: typeof t = { ...t, synthOscillatorType: oscillatorType };
+          // Keep the modern instrument model in sync with the legacy field.
+          if (t.instrument?.kind === 'subtractive') {
+            return {
+              ...nextTrack,
+              instrument: {
+                ...t.instrument,
+                settings: {
+                  ...t.instrument.settings,
+                  oscillator: {
+                    ...t.instrument.settings.oscillator,
+                    waveform: oscillatorType,
+                  },
+                },
+              },
+            };
+          }
+          return nextTrack;
+        }),
       },
     });
   },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope, UnisonSettings } from '../../types/project';
 import { OscillatorSelector } from './OscillatorSelector';
@@ -7,7 +7,6 @@ import { SynthFilterControls } from './SynthFilterControls';
 import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeEditor';
 import { LFODisplay } from './LFODisplay';
 import { UnisonControls } from './UnisonControls';
-import { synthEngine } from '../../engine/SynthEngine';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
 const DEFAULT_FILTER: SynthFilter = { type: 'lowpass', frequency: 1000, Q: 1 };
@@ -37,40 +36,10 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
   const updateFilterEnvelope = useProjectStore((s) => s.updateFilterEnvelope);
   const updateUnisonSettings = useProjectStore((s) => s.updateUnisonSettings);
 
-  // Push parameter changes to the live SynthEngine for real-time audio feedback.
-  const prevOscRef = useRef<string | undefined>(undefined);
-  const prevEnvRef = useRef<SynthEnvelope | undefined>(undefined);
-  const prevFilterRef = useRef<SynthFilter | undefined>(undefined);
-
-  const oscillatorType = track?.synthOscillatorType
-    ?? PRESET_DEFAULT_OSCILLATOR[track?.synthPreset ?? 'piano']
-    ?? 'triangle';
-  const envelope = track?.synthEnvelope ?? DEFAULT_ENVELOPE;
-  const filter = track?.synthFilter ?? DEFAULT_FILTER;
-
-  useEffect(() => {
-    if (!track) return;
-    if (prevOscRef.current !== undefined && prevOscRef.current !== oscillatorType) {
-      synthEngine.setOscillatorType(trackId, oscillatorType);
-    }
-    prevOscRef.current = oscillatorType;
-  }, [trackId, oscillatorType, track]);
-
-  useEffect(() => {
-    if (!track) return;
-    if (prevEnvRef.current !== undefined && prevEnvRef.current !== envelope) {
-      synthEngine.setEnvelope(trackId, envelope);
-    }
-    prevEnvRef.current = envelope;
-  }, [trackId, envelope, track]);
-
-  useEffect(() => {
-    if (!track) return;
-    if (prevFilterRef.current !== undefined && prevFilterRef.current !== filter) {
-      synthEngine.setFilter(trackId, filter);
-    }
-    prevFilterRef.current = filter;
-  }, [trackId, filter, track]);
+  // Parameter changes are persisted to the store and synced to the modern
+  // instrument model (track.instrument.settings). The active playback engine
+  // (subtractiveEngine) reads from the instrument model when ensuring synths,
+  // so changes take effect on the next note trigger or playback start.
 
   const onOscillatorChange = useCallback(
     (waveform: 'sine' | 'triangle' | 'sawtooth' | 'square') => updateSynthOscillatorType(trackId, waveform),
@@ -99,6 +68,11 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
 
   if (!track) return null;
 
+  const oscillatorType = track.synthOscillatorType
+    ?? PRESET_DEFAULT_OSCILLATOR[track.synthPreset ?? 'piano']
+    ?? 'triangle';
+  const envelope = track.synthEnvelope ?? DEFAULT_ENVELOPE;
+  const filter = track.synthFilter ?? DEFAULT_FILTER;
   const lfo = track.synthLfo ?? DEFAULT_LFO;
   const filterEnvelope = track.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE;
   const unison = track.unisonSettings ?? DEFAULT_UNISON;

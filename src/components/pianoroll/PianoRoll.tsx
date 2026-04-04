@@ -380,8 +380,10 @@ export function PianoRoll() {
           onChange={(e) => {
             const preset = e.target.value as typeof track.synthPreset;
             updateTrack(track.id, { synthPreset: preset });
-            // Clear custom parameter overrides so the new preset defaults take effect
-            updateSynthOscillatorType(track.id, PRESET_DEFAULT_OSCILLATOR[preset ?? 'piano'] ?? 'triangle');
+            // Reset oscillator to preset default (skip for sampler — no synth params)
+            if (preset !== 'sampler') {
+              updateSynthOscillatorType(track.id, PRESET_DEFAULT_OSCILLATOR[preset ?? 'piano'] ?? 'triangle');
+            }
           }}
           className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300"
         >

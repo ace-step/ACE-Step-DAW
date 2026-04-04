@@ -471,10 +471,7 @@ class SynthEngine {
     }
   }
 
-  /**
-   * Update the oscillator waveform on a live synth instance.
-   * Falls back to base type if a partial type (e.g. 'triangle8') was set by preset.
-   */
+  /** Update the oscillator waveform on a live synth instance and any unison voices. */
   setOscillatorType(trackId: string, type: 'sine' | 'triangle' | 'sawtooth' | 'square'): void {
     const instance = this.synths.get(trackId);
     if (!instance) return;
@@ -501,13 +498,25 @@ class SynthEngine {
     }
   }
 
+  /** Ensure a filter node exists in the signal chain for a track synth. */
+  private ensureTrackFilter(instance: SynthInstance): Tone.Filter {
+    if (instance.filter) return instance.filter;
+    const filter = new Tone.Filter({ type: 'lowpass', frequency: 20000, Q: 0 });
+    instance.synth.disconnect();
+    instance.synth.connect(filter);
+    filter.connect(instance.gain);
+    instance.filter = filter;
+    return filter;
+  }
+
   /** Update the filter settings (type, frequency, Q) on a live synth's filter node. */
   setFilter(trackId: string, filter: { type?: string; frequency?: number; Q?: number }): void {
     const instance = this.synths.get(trackId);
-    if (!instance?.filter) return;
-    if (filter.type) instance.filter.type = filter.type as BiquadFilterType;
-    if (filter.frequency !== undefined) instance.filter.frequency.value = filter.frequency;
-    if (filter.Q !== undefined) instance.filter.Q.value = filter.Q;
+    if (!instance) return;
+    const filterNode = this.ensureTrackFilter(instance);
+    if (filter.type) filterNode.type = filter.type as BiquadFilterType;
+    if (filter.frequency !== undefined) filterNode.frequency.value = filter.frequency;
+    if (filter.Q !== undefined) filterNode.Q.value = filter.Q;
   }
 
   removeTrackSynth(trackId: string) {

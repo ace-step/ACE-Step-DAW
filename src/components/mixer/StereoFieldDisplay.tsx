@@ -77,8 +77,9 @@ export function StereoFieldDisplay({
     const sideFactor = Math.pow(10, sideGain / 20);
 
     // Ellipse: height = mid level, width = side level * width
-    const ellipseW = maxR * widthFactor * sideFactor * 0.8;
-    const ellipseH = maxR * midFactor * 0.8;
+    // Clamp so boosted gains stay within display bounds
+    const ellipseW = Math.min(maxR, maxR * widthFactor * sideFactor * 0.8);
+    const ellipseH = Math.min(maxR, maxR * midFactor * 0.8);
 
     // Pan offset
     const panOffset = pan * maxR * 0.3;

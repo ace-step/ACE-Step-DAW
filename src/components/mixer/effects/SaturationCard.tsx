@@ -3,6 +3,7 @@ import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
 import { SaturationCurve } from '../SaturationCurve';
 import { AutomationControlShell } from './AutomationControlShell';
+import { EFFECT_COLORS } from './effectColors';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
 import { normalizeEffectParamValue } from '../../../utils/effectAutomation';
@@ -28,14 +29,14 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
 
   return (
     <EffectCardLayout
-      color="#c46454"
+      color={EFFECT_COLORS.saturation}
       visualization={
         <SaturationCurve
           drive={p.drive}
           saturationType={p.saturationType}
           width={220}
           height={100}
-          color="#c46454"
+          color={EFFECT_COLORS.saturation}
         />
       }
       mode={
@@ -55,21 +56,21 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
       }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'mix' }} normalizedValue={normalizeEffectParamValue('saturation', 'mix', p.mix) ?? 0.5}>
-          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#c46454" />
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color={EFFECT_COLORS.saturation} />
         </AutomationControlShell>
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'drive' }} normalizedValue={normalizeEffectParamValue('saturation', 'drive', p.drive) ?? 0.5}>
-        <Knob value={p.drive} onChange={(v) => update({ drive: v })} min={0} max={1} defaultValue={0.3} label="Drive" size={56} step={0.01} color="#c46454" />
+        <Knob value={p.drive} onChange={(v) => update({ drive: v })} min={0} max={1} defaultValue={0.3} label="Drive" size={56} step={0.01} color={EFFECT_COLORS.saturation} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'harmonicMix' }} normalizedValue={normalizeEffectParamValue('saturation', 'harmonicMix', p.harmonicMix) ?? 0.5}>
-        <Knob value={p.harmonicMix} onChange={(v) => update({ harmonicMix: v })} min={-1} max={1} defaultValue={0} label="Harmonics" size={56} step={0.01} color="#c46454" />
+        <Knob value={p.harmonicMix} onChange={(v) => update({ harmonicMix: v })} min={-1} max={1} defaultValue={0} label="Harmonics" size={56} step={0.01} color={EFFECT_COLORS.saturation} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'inputGain' }} normalizedValue={normalizeEffectParamValue('saturation', 'inputGain', p.inputGain) ?? 0.5}>
-        <Knob value={p.inputGain} onChange={(v) => update({ inputGain: v })} min={-12} max={12} defaultValue={0} label="Input" unit=" dB" size={56} step={0.5} color="#c46454" />
+        <Knob value={p.inputGain} onChange={(v) => update({ inputGain: v })} min={-12} max={12} defaultValue={0} label="Input" unit=" dB" size={56} step={0.5} color={EFFECT_COLORS.saturation} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'saturation', param: 'outputGain' }} normalizedValue={normalizeEffectParamValue('saturation', 'outputGain', p.outputGain) ?? 0.5}>
-        <Knob value={p.outputGain} onChange={(v) => update({ outputGain: v })} min={-12} max={12} defaultValue={0} label="Output" unit=" dB" size={56} step={0.5} color="#c46454" />
+        <Knob value={p.outputGain} onChange={(v) => update({ outputGain: v })} min={-12} max={12} defaultValue={0} label="Output" unit=" dB" size={56} step={0.5} color={EFFECT_COLORS.saturation} />
       </AutomationControlShell>
     </EffectCardLayout>
   );

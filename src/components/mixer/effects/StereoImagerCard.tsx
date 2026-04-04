@@ -26,7 +26,7 @@ export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { 
           midGain={p.midGain}
           sideGain={p.sideGain}
           monoFreq={p.monoFreq}
-          pan={0}
+          pan={p.pan}
           canvasWidth={220}
           canvasHeight={100}
           color="#7a8ab4"

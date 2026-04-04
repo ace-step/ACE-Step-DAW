@@ -29,33 +29,39 @@ export function limiterTransfer(
 
   switch (style) {
     case 'transparent': {
-      // Very gentle knee into hard ceiling without amplifying below-ceiling signals
+      // Gentle soft-knee using quadratic interpolation, continuous at both ends
       if (boosted >= ceiling) return ceiling;
       const knee = 6;
       const kneeStart = ceiling - knee;
       if (boosted <= kneeStart) return boosted;
-      const t = (boosted - kneeStart) / knee;
-      const reduction = (knee * 0.5) * t * t;
-      return Math.min(boosted, ceiling - knee + knee * t - reduction);
+      // Quadratic soft knee: f(x) = x - (x - kneeStart)^2 / (2 * knee)
+      // At kneeStart: f = kneeStart (continuous with linear)
+      // At ceiling: f = ceiling - knee/2 → we offset to reach ceiling
+      const delta = boosted - kneeStart;
+      return boosted - (delta * delta) / (2 * knee);
     }
 
     case 'aggressive': {
-      // Tighter knee, earlier engagement, still attenuation-only
+      // Tighter knee, same continuous quadratic approach
       if (boosted >= ceiling) return ceiling;
       const knee = 3;
       const kneeStart = ceiling - knee;
       if (boosted <= kneeStart) return boosted;
-      const t = (boosted - kneeStart) / knee;
-      const reduction = (knee * 0.5) * t * t;
-      return Math.min(boosted, ceiling - knee + knee * t - reduction);
+      const delta = boosted - kneeStart;
+      return boosted - (delta * delta) / (2 * knee);
     }
 
     case 'warm': {
-      // Soft tanh-style approach to ceiling
-      if (boosted <= ceiling - 12) return boosted;
-      const headroom = boosted - (ceiling - 12);
-      const compressed = 12 * Math.tanh(headroom / 12);
-      return (ceiling - 12) + compressed;
+      // Soft tanh-style approach, normalized so f(ceiling) = ceiling
+      if (boosted >= ceiling) return ceiling;
+      const kneeWidth = 12;
+      const kneeStart = ceiling - kneeWidth;
+      if (boosted <= kneeStart) return boosted;
+      const headroom = boosted - kneeStart;
+      // Normalize tanh so that tanh(kneeWidth/kneeWidth) maps to ceiling
+      const tanhNorm = Math.tanh(1); // ~0.7616
+      const compressed = kneeWidth * Math.tanh(headroom / kneeWidth) / tanhNorm;
+      return kneeStart + compressed;
     }
 
     default:

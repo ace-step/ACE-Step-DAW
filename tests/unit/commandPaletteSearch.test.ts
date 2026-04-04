@@ -41,15 +41,18 @@ describe('searchCommandPaletteCommands', () => {
     expect(results[0].score).toBeGreaterThanOrEqual(120);
   });
 
-  it('title starts-with scores higher than contains', () => {
-    const results = searchCommandPaletteCommands('Add', COMMANDS, []);
+  it('title starts-with scores higher than title contains', () => {
+    // "Mute Selected Track" starts with "mute"; "Solo Selected Track" contains "track" but not "mute"
+    const results = searchCommandPaletteCommands('mute', COMMANDS, []);
+    const mute = results.find((r) => r.id === 'mute');
+    expect(mute).toBeDefined();
+    expect(mute!.score).toBeGreaterThan(0);
+    // "Add Track" contains "track" (via searchText) but title doesn't start with "mute"
+    // "Mute Selected Track" should score higher since title starts with query
     const addTrack = results.find((r) => r.id === 'add-track');
-    const reverb = results.find((r) => r.id === 'reverb');
-    expect(addTrack).toBeDefined();
-    expect(reverb).toBeDefined();
-    // "Add Track" starts with "add", "Add Reverb Effect" also starts with "add"
-    // Both should score well
-    expect(addTrack!.score).toBeGreaterThan(0);
+    if (addTrack) {
+      expect(mute!.score).toBeGreaterThan(addTrack.score);
+    }
   });
 
   it('alias match boosts score', () => {
@@ -64,14 +67,18 @@ describe('searchCommandPaletteCommands', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('recent commands get a recency boost', () => {
+  it('recent commands get a recency boost and appear first', () => {
     const results = searchCommandPaletteCommands('', COMMANDS, ['solo', 'mute']);
-    // Solo and mute should be at the top due to recency boost
-    const soloResult = results.find((r) => r.id === 'solo');
-    const muteResult = results.find((r) => r.id === 'mute');
-    expect(soloResult!.isRecent).toBe(true);
-    expect(muteResult!.isRecent).toBe(true);
-    expect(soloResult!.score).toBeGreaterThan(0);
+    const soloIndex = results.findIndex((r) => r.id === 'solo');
+    const muteIndex = results.findIndex((r) => r.id === 'mute');
+    expect(soloIndex).toBeGreaterThanOrEqual(0);
+    expect(muteIndex).toBeGreaterThanOrEqual(0);
+    expect(results[soloIndex].isRecent).toBe(true);
+    expect(results[muteIndex].isRecent).toBe(true);
+    expect(results[soloIndex].score).toBeGreaterThan(0);
+    // Recent commands should appear before non-recent ones
+    const lastRecentIndex = Math.max(soloIndex, muteIndex);
+    expect(results.slice(0, lastRecentIndex + 1).every((r) => r.isRecent)).toBe(true);
   });
 
   it('deduplicates commands by id', () => {

@@ -28,7 +28,7 @@ describe('resolveContextWindow', () => {
   it('returns null when generationParams has no contextWindow', () => {
     const clip = makeClip({
       generationParams: {
-        type: 'stems-lego',
+        type: 'lego',
         prompt: 'test',
         lyrics: '',
       },
@@ -40,7 +40,7 @@ describe('resolveContextWindow', () => {
     const clip = makeClip({
       startTime: 10,
       generationParams: {
-        type: 'stems-lego',
+        type: 'lego',
         prompt: 'test',
         lyrics: '',
         contextWindow: {
@@ -61,13 +61,13 @@ describe('resolveContextWindow', () => {
   it('resolves legacy absolute format', () => {
     const clip = makeClip({
       generationParams: {
-        type: 'stems-lego',
+        type: 'lego',
         prompt: 'test',
         lyrics: '',
         contextWindow: {
           startTime: 0,
           endTime: 20,
-        } as any, // legacy format
+        }, // legacy format
       },
     });
 
@@ -82,7 +82,7 @@ describe('resolveContextWindow', () => {
     const clip = makeClip({
       startTime: 5,
       generationParams: {
-        type: 'stems-lego',
+        type: 'lego',
         prompt: 'test',
         lyrics: '',
         contextWindow: {
@@ -103,7 +103,7 @@ describe('resolveContextWindow', () => {
     const clip = makeClip({
       startTime: 0,
       generationParams: {
-        type: 'stems-lego',
+        type: 'lego',
         prompt: 'test',
         lyrics: '',
         contextWindow: {

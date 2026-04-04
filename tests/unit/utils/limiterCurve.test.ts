@@ -44,13 +44,22 @@ describe('limiterTransfer', () => {
     expect(withGain).toBeGreaterThan(withoutGain);
   });
 
-  it('warm style has softer knee than aggressive', () => {
-    // At a point close to ceiling, warm should compress more gradually
-    const warm = limiterTransfer(-5, -0.3, 0, 'warm');
-    const aggressive = limiterTransfer(-5, -0.3, 0, 'aggressive');
-    // Both should be close to their respective ceiling approaches
-    expect(warm).toBeLessThanOrEqual(-0.3);
-    expect(aggressive).toBeLessThanOrEqual(-0.3);
+  it('different styles have different knee widths', () => {
+    const ceiling = -0.3;
+    // Well above all knees — all styles should return ceiling
+    const agg = limiterTransfer(10, ceiling, 0, 'aggressive');
+    const trans = limiterTransfer(10, ceiling, 0, 'transparent');
+    const warm = limiterTransfer(10, ceiling, 0, 'warm');
+    expect(agg).toBe(ceiling);
+    expect(trans).toBe(ceiling);
+    expect(warm).toBe(ceiling);
+
+    // At ceiling - 2: aggressive (halfKnee=1.5) is in passthrough,
+    // but warm (halfKnee=4.5) is in knee and reducing
+    const aggBelow = limiterTransfer(-2.3, ceiling, 0, 'aggressive');
+    const warmBelow = limiterTransfer(-2.3, ceiling, 0, 'warm');
+    expect(aggBelow).toBe(-2.3); // passthrough (below knee start at -1.8)
+    expect(warmBelow).toBeLessThan(-2.3); // warm is already reducing
   });
 });
 

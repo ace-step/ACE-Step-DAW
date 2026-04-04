@@ -25,9 +25,10 @@ Before writing ANY code (except pure questions or trivial typos <3 lines):
 
 When no specific task is given:
 1. Search open issues: P0 first, then P1, P2
-2. Pick the highest priority unassigned issue
+2. Pick the highest priority unassigned issue **authored by `ChuxiJ` only** (see `issue-triage.md`)
 3. If no issues exist, spawn discovery agents (`@tester`, `@refactorer`, `@researcher`) to create issues
 4. Never start coding without an issue number
+5. Never work on issues or PRs from third-party contributors — admin handles those manually
 
 ## Quality Gates (ALL must pass before commit)
 

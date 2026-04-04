@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import type { AutomationLane, AutomationParameter, AutomationPoint, AutomationCurveType, AutomationRecordingMode, LFOShape } from '../../types/project';
 import { getEffectAutomationColor, getEffectAutomationLabel } from '../../utils/effectAutomation';
 import { getTimelineVisualDuration } from '../../utils/timelineZoom';
+import { detectAutomationLfoConflicts } from '../../utils/automationLfoConflict';
 
 const LANE_HEIGHT = 60;
 const POINT_RADIUS = 4;
@@ -74,6 +75,15 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
     if (!send) return null;
     const rt = (s.project?.returnTracks ?? []).find((r) => r.id === send.returnTrackId);
     return rt?.name ?? null;
+  });
+
+  // Detect automation + effect LFO conflicts for this lane
+  const hasLfoConflict = useProjectStore((s) => {
+    if (lane.parameter.type !== 'effect') return false;
+    const track = s.project?.tracks.find((t) => t.id === trackId);
+    if (!track) return false;
+    const conflicts = detectAutomationLfoConflicts(track, [lane]);
+    return conflicts.length > 0;
   });
 
   const [showLFODialog, setShowLFODialog] = useState(false);
@@ -205,6 +215,14 @@ export function AutomationLaneView({ trackId, lane }: AutomationLaneViewProps) {
         style={{ color }}
       >
         <span className="opacity-50 pointer-events-none">{paramLabel}</span>
+        {hasLfoConflict && (
+          <span
+            className="text-amber-400 opacity-80 text-[9px] font-bold"
+            title="Automation + LFO active on same parameter. Automation controls LFO center."
+          >
+            LFO
+          </span>
+        )}
 
         {/* Recording mode selector */}
         <select

@@ -1270,14 +1270,19 @@ class EffectsEngine {
       case 'filter': {
         const filter = effectNode.node as Tone.Filter;
         if (target.param === 'frequency') {
-          const currentFrequency = Number(filter.frequency.value);
-          filter.frequency.value = value;
           if (effectNode.lfo) {
-            const depth = currentFrequency > 0
-              ? Math.max(0, Math.min(1, (effectNode.lfo.max - currentFrequency) / currentFrequency))
-              : 0;
-            effectNode.lfo.min = Math.max(20, value * (1 - depth));
-            effectNode.lfo.max = Math.min(20000, value * (1 + depth));
+            // When LFO is active, automation controls the LFO center point.
+            // Read the stored depth from the effect params to avoid drift.
+            const effectState = useProjectStore.getState().project?.tracks
+              .find((t) => t.id === trackId)
+              ?.effects?.find((e) => e.id === effectId);
+            const lfoDepth = effectState?.type === 'filter'
+              ? (effectState.params as import('../types/project').FilterParams).lfoDepth
+              : 0.5;
+            effectNode.lfo.min = Math.max(20, value * (1 - lfoDepth));
+            effectNode.lfo.max = Math.min(20000, value * (1 + lfoDepth));
+          } else {
+            filter.frequency.value = value;
           }
         }
         if (target.param === 'resonance') filter.Q.value = value;
@@ -1301,7 +1306,24 @@ class EffectsEngine {
       case 'flanger': {
         const flanger = effectNode.node as Tone.FeedbackDelay;
         if (target.param === 'frequency' && effectNode.lfo) effectNode.lfo.frequency.value = value;
-        if (target.param === 'delayTime') flanger.delayTime.value = value / 1000;
+        if (target.param === 'delayTime') {
+          if (effectNode.lfo) {
+            // When LFO is active, automation controls the LFO center for delayTime.
+            // Read depth from effect params to compute correct range.
+            const effectState = useProjectStore.getState().project?.tracks
+              .find((t) => t.id === trackId)
+              ?.effects?.find((e) => e.id === effectId);
+            const depth = effectState?.type === 'flanger'
+              ? (effectState.params as import('../types/project').FlangerParams).depth
+              : 0.7;
+            const delaySec = value / 1000;
+            effectNode.lfo.max = Math.max(0.001, delaySec * depth);
+            // Also update the direct value since the LFO modulates around it
+            flanger.delayTime.value = delaySec;
+          } else {
+            flanger.delayTime.value = value / 1000;
+          }
+        }
         if (target.param === 'depth' && effectNode.lfo) {
           const delayMs = Number(flanger.delayTime.value) * 1000;
           effectNode.lfo.max = Math.max(0.001, delayMs / 1000 * value);

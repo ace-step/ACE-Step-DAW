@@ -1,6 +1,7 @@
 import { Knob } from '../../ui/Knob';
 import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { SaturationCurve } from '../SaturationCurve';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -28,6 +29,15 @@ export function SaturationCard({ effect, trackId }: { effect: TrackEffect & { ty
   return (
     <EffectCardLayout
       color="#c46454"
+      visualization={
+        <SaturationCurve
+          drive={p.drive}
+          saturationType={p.saturationType}
+          width={220}
+          height={100}
+          color="#c46454"
+        />
+      }
       mode={
         <>
           {(Object.keys(SATURATION_TYPE_LABELS) as SaturationType[]).map((st) => (

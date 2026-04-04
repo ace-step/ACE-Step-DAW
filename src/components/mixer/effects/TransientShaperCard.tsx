@@ -1,6 +1,7 @@
 import { Knob } from '../../ui/Knob';
 import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { TransientShaperDisplay } from '../TransientShaperDisplay';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -20,6 +21,15 @@ export function TransientShaperCard({ effect, trackId }: { effect: TrackEffect &
   return (
     <EffectCardLayout
       color="#b89340"
+      visualization={
+        <TransientShaperDisplay
+          attack={p.attack}
+          sustain={p.sustain}
+          width={220}
+          height={100}
+          color="#b89340"
+        />
+      }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'transientShaper', param: 'mix' }} normalizedValue={normalizeEffectParamValue('transientShaper', 'mix', p.mix) ?? 1}>
           <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#b89340" />

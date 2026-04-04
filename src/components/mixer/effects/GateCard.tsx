@@ -1,5 +1,6 @@
 import { Knob } from '../../ui/Knob';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { GateCurve } from '../GateCurve';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -19,6 +20,17 @@ export function GateCard({ effect, trackId }: { effect: TrackEffect & { type: 'g
   return (
     <EffectCardLayout
       color="#b8903a"
+      visualization={
+        <GateCurve
+          threshold={p.threshold}
+          range={p.range}
+          hysteresis={p.hysteresis}
+          mode={p.mode}
+          width={220}
+          height={100}
+          color="#b8903a"
+        />
+      }
       mode={
         <>
           {(['gate', 'expander'] as GateParams['mode'][]).map((m) => (

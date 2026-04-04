@@ -1,5 +1,6 @@
 import { Knob } from '../../ui/Knob';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { DeEsserDisplay } from '../DeEsserDisplay';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -19,6 +20,18 @@ export function DeEsserCard({ effect, trackId }: { effect: TrackEffect & { type:
   return (
     <EffectCardLayout
       color="#c4a654"
+      visualization={
+        <DeEsserDisplay
+          frequency={p.frequency}
+          bandwidth={p.bandwidth}
+          threshold={p.threshold}
+          range={p.range}
+          mode={p.mode}
+          width={220}
+          height={100}
+          color="#c4a654"
+        />
+      }
       mode={
         <>
           {(['wideband', 'split'] as DeEsserParams['mode'][]).map((m) => (

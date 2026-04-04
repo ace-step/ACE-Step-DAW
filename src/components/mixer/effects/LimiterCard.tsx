@@ -1,5 +1,6 @@
 import { Knob } from '../../ui/Knob';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { LimiterCurve } from '../LimiterCurve';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -19,6 +20,16 @@ export function LimiterCard({ effect, trackId }: { effect: TrackEffect & { type:
   return (
     <EffectCardLayout
       color="#d4a040"
+      visualization={
+        <LimiterCurve
+          ceiling={p.ceiling}
+          gain={p.gain}
+          style={p.style}
+          width={220}
+          height={100}
+          color="#d4a040"
+        />
+      }
       mode={
         <>
           {(['transparent', 'aggressive', 'warm'] as LimiterParams['style'][]).map((s) => (

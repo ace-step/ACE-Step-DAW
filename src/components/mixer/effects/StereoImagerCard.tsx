@@ -1,5 +1,6 @@
 import { Knob } from '../../ui/Knob';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { StereoFieldDisplay } from '../StereoFieldDisplay';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -17,7 +18,21 @@ export function StereoImagerCard({ effect, trackId }: { effect: TrackEffect & { 
   };
 
   return (
-    <EffectCardLayout color="#7a8ab4">
+    <EffectCardLayout
+      color="#7a8ab4"
+      visualization={
+        <StereoFieldDisplay
+          widthAmount={p.width}
+          midGain={p.midGain}
+          sideGain={p.sideGain}
+          monoFreq={p.monoFreq}
+          pan={0}
+          canvasWidth={220}
+          canvasHeight={100}
+          color="#7a8ab4"
+        />
+      }
+    >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'stereoImager', param: 'width' }} normalizedValue={normalizeEffectParamValue('stereoImager', 'width', p.width) ?? 0.5}>
         <Knob value={p.width} onChange={(v) => update({ width: v })} min={0} max={2} defaultValue={1} label="Width" size={56} step={0.01} color="#7a8ab4"
           formatValue={(v) => v === 0 ? 'Mono' : v === 1 ? '100%' : `${Math.round(v * 100)}%`}

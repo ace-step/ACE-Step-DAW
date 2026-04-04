@@ -1,6 +1,7 @@
 import { Knob } from '../../ui/Knob';
 import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { ConvolverDisplay } from '../ConvolverDisplay';
 import { AutomationControlShell } from './AutomationControlShell';
 import { EFFECT_COLORS } from './effectColors';
 import { useProjectStore } from '../../../store/projectStore';
@@ -29,6 +30,16 @@ export function ConvolverCard({ effect, trackId }: { effect: TrackEffect & { typ
   return (
     <EffectCardLayout
       color={EFFECT_COLORS.convolver}
+      visualization={
+        <ConvolverDisplay
+          irType={p.irType}
+          wet={p.wet}
+          preDelay={p.preDelay / 1000}
+          width={220}
+          height={80}
+          color={EFFECT_COLORS.convolver}
+        />
+      }
       mode={
         <div className="flex items-center gap-2 w-full">
           <span className="text-[10px] text-white/50 w-6">IR</span>

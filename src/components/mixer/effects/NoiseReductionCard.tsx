@@ -1,6 +1,7 @@
 import { Knob } from '../../ui/Knob';
 import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
+import { NoiseReductionDisplay } from '../NoiseReductionDisplay';
 import { AutomationControlShell } from './AutomationControlShell';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
@@ -19,6 +20,17 @@ export function NoiseReductionCard({ effect, trackId }: { effect: TrackEffect & 
   return (
     <EffectCardLayout
       color="#8a8a8a"
+      visualization={
+        <NoiseReductionDisplay
+          threshold={p.threshold}
+          amount={p.amount}
+          mode={p.mode}
+          hfEmphasis={p.hfEmphasis}
+          width={220}
+          height={100}
+          color="#8a8a8a"
+        />
+      }
       mode={
         <>
           {(['fast', 'smooth'] as NoiseGateReductionParams['mode'][]).map((m) => (

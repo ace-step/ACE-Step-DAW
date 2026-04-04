@@ -55,7 +55,7 @@ describe('MidiCaptureService', () => {
     const secPerBeat = 60 / bpm; // 0.5s
     const barDuration = timeSig * secPerBeat; // 2s
 
-    // Play a note at bar 2, beat 1 (time = 4.0s)
+    // Play a note at bar 3, beat 1 (time = 4.0s)
     service.noteOn('track-1', 60, 0.9, 4.0);
     service.noteOff('track-1', 60, 4.5);
 

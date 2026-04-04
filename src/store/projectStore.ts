@@ -8744,9 +8744,12 @@ export const useProjectStore = create<ProjectState>()(
       t.id === trackId ? { ...t, clips: [...t.clips, clip] } : t,
     );
 
-    // Auto-assign captured clip to session slot so it appears in the session grid
+    // Auto-assign captured clip to session slot so it appears in the session grid.
+    // Reuse the existing normalized session when available to avoid the extra
+    // project-wide recomputation performed by ensureProjectSession(...).
+    const normalizedSession = state.project.session ?? ensureProjectSession(state.project).session!;
     const session = autoAssignClipToSession(
-      ensureProjectSession(state.project).session!,
+      normalizedSession,
       trackId,
       clip.id,
     );

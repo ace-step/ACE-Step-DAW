@@ -77,8 +77,12 @@ export function StereoFieldDisplay({
     const sideFactor = Math.pow(10, sideGain / 20);
 
     // Ellipse: height = mid level, width = side level * width
-    const ellipseW = maxR * widthFactor * sideFactor * 0.8;
-    const ellipseH = maxR * midFactor * 0.8;
+    // Soft-normalize so the ellipse stays within the plot radius
+    const rawEllipseW = maxR * widthFactor * sideFactor * 0.8;
+    const rawEllipseH = maxR * midFactor * 0.8;
+    const ellipseScale = Math.min(1, maxR / Math.max(rawEllipseW, rawEllipseH, 1));
+    const ellipseW = rawEllipseW * ellipseScale;
+    const ellipseH = rawEllipseH * ellipseScale;
 
     // Pan offset
     const panOffset = pan * maxR * 0.3;

@@ -22,40 +22,37 @@ export function limiterTransfer(
 ): number {
   const boosted = inputDb + gain;
 
-  if (boosted <= ceiling - 6) {
-    // Well below ceiling — linear pass-through
-    return boosted;
-  }
-
   switch (style) {
     case 'transparent': {
-      // Very gentle knee into hard ceiling without amplifying below-ceiling signals
+      // Gentle 6dB soft knee: continuous from pass-through to hard ceiling
       if (boosted >= ceiling) return ceiling;
       const knee = 6;
       const kneeStart = ceiling - knee;
       if (boosted <= kneeStart) return boosted;
+      // Quadratic knee: output = kneeStart + knee * t^2
+      // At t=0: output = kneeStart (matches pass-through)
+      // At t=1: output = kneeStart + knee = ceiling (matches ceiling)
+      // Slope transitions from 0 at t=0 toward 2 at t=1 (gentle start)
       const t = (boosted - kneeStart) / knee;
-      const reduction = (knee * 0.5) * t * t;
-      return Math.min(boosted, ceiling - knee + knee * t - reduction);
+      return kneeStart + knee * t * t;
     }
 
     case 'aggressive': {
-      // Tighter knee, earlier engagement, still attenuation-only
+      // Tight 3dB knee for punchier limiting
       if (boosted >= ceiling) return ceiling;
       const knee = 3;
       const kneeStart = ceiling - knee;
       if (boosted <= kneeStart) return boosted;
       const t = (boosted - kneeStart) / knee;
-      const reduction = (knee * 0.5) * t * t;
-      return Math.min(boosted, ceiling - knee + knee * t - reduction);
+      return kneeStart + knee * t * t;
     }
 
     case 'warm': {
-      // Soft tanh-style approach to ceiling
-      if (boosted <= ceiling - 12) return boosted;
-      const headroom = boosted - (ceiling - 12);
-      const compressed = 12 * Math.tanh(headroom / 12);
-      return (ceiling - 12) + compressed;
+      // Pass-through up to ceiling, then soft tanh saturation above
+      if (boosted <= ceiling) return boosted;
+      const overshoot = boosted - ceiling;
+      const compressed = 12 * Math.tanh(overshoot / 12);
+      return Math.min(ceiling, ceiling + compressed - overshoot);
     }
 
     default:

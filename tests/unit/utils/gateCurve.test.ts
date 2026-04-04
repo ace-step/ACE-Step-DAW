@@ -20,10 +20,15 @@ describe('gateTransfer', () => {
     expect(result).toBeLessThan(-22);
   });
 
-  it('expander mode provides gradual expansion', () => {
-    const result = gateTransfer(-40, -20, -80, 4, 'expander');
-    expect(result).toBeLessThan(-40); // Expanded (pushed further down)
-    expect(result).toBeGreaterThan(-120); // But not infinite
+  it('expander mode reduces signal proportionally below threshold', () => {
+    const inputDb = -40;
+    const threshold = -20;
+    const range = -80;
+    const result = gateTransfer(inputDb, threshold, range, 4, 'expander');
+    // Engine uses: reduction = min(belowDb * 0.5, abs(range))
+    // belowDb = 20, reduction = min(10, 80) = 10
+    const expectedReduction = Math.min((threshold - inputDb) * 0.5, Math.abs(range));
+    expect(result).toBeCloseTo(inputDb - expectedReduction, 5);
   });
 });
 

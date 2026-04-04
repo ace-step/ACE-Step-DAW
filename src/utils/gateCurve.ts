@@ -32,10 +32,11 @@ export function gateTransfer(
   }
 
   // Expander mode: gradual expansion below threshold
+  // Matches engine behavior: fixed 0.5 slope, capped by abs(range)
   if (inputDb >= threshold) return inputDb;
-  const diff = threshold - inputDb;
-  const expansionRatio = -range / 80; // Convert range to expansion amount
-  return inputDb - diff * expansionRatio;
+  const belowDb = threshold - inputDb;
+  const reductionDb = Math.min(belowDb * 0.5, Math.abs(range));
+  return inputDb - reductionDb;
 }
 
 /**

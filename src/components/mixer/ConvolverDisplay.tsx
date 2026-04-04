@@ -95,7 +95,12 @@ export function ConvolverDisplay({
     }
 
     // Generate synthetic IR waveform
-    const rand = seededRandom(irType.length * 137);
+    // Simple string hash for unique waveform per IR type
+    let hash = 0;
+    for (let i = 0; i < irType.length; i++) {
+      hash = ((hash << 5) - hash + irType.charCodeAt(i)) | 0;
+    }
+    const rand = seededRandom(Math.abs(hash) + 1);
     const steps = 300;
     const maxAmp = height * 0.4 * wet;
 

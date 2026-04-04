@@ -21,7 +21,7 @@ export default defineConfig({
         inline: [/@strudel\/.*/],
       },
     },
-    include: ['src/**/*.test.{ts,tsx}', 'tests/unit/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'tests/unit/**/*.test.{ts,tsx}', 'tests/integration/**/*.test.{ts,tsx}'],
     exclude: ['tests/e2e/**'],
     coverage: {
       provider: 'v8',

@@ -104,7 +104,7 @@ class EngineWorkletProcessor extends AudioWorkletProcessor {
         if (msg.audioSab) {
           this._audioBuffer = new WorkletRingBuffer(msg.audioSab, this._channels);
         }
-        if (msg.paramSab && msg.paramCount) {
+        if (msg.paramSab && typeof msg.paramCount === 'number') {
           this._paramBuffer = new WorkletParamBuffer(msg.paramSab, msg.paramCount);
         }
         this.port.postMessage({ type: 'ready' });
@@ -130,6 +130,7 @@ class EngineWorkletProcessor extends AudioWorkletProcessor {
     if (!output || output.length === 0) return true;
 
     const blockSize = output[0].length; // typically 128
+    const channels = Math.min(this._channels, output.length);
 
     if (this._state !== 'playing' || !this._audioBuffer) {
       // Output silence when stopped or not initialized
@@ -139,8 +140,9 @@ class EngineWorkletProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // Read audio from ring buffer
-    const framesRead = this._audioBuffer.readDeinterleaved(output, blockSize);
+    // Read audio from ring buffer (clamped to actual output channels)
+    const channelArrays = output.slice(0, channels);
+    const framesRead = this._audioBuffer.readDeinterleaved(channelArrays, blockSize);
 
     if (framesRead < blockSize) {
       // Underrun — fill remaining with silence

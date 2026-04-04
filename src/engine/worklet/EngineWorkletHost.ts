@@ -35,6 +35,9 @@ export interface DropoutInfo {
   timestamp: number;
 }
 
+/** Track which AudioContexts have already registered the processor. */
+const _registeredContexts = new WeakSet<AudioContext>();
+
 export class EngineWorkletHost {
   private _ctx: AudioContext;
   private _node: AudioWorkletNode | null = null;
@@ -80,13 +83,20 @@ export class EngineWorkletHost {
    * Returns true on success, false if fallback is needed.
    */
   async initialize(): Promise<boolean> {
-    if (this._state !== 'uninitialized') return this._state === 'ready';
+    if (this._state !== 'uninitialized') {
+      return this._state === 'ready' ||
+        this._state === 'playing' ||
+        this._state === 'stopped';
+    }
 
     this._setState('initializing');
 
     try {
-      // Register the worklet processor
-      await this._ctx.audioWorklet.addModule('/engine-worklet-processor.js');
+      // Register the worklet processor (cached per AudioContext)
+      if (!_registeredContexts.has(this._ctx)) {
+        await this._ctx.audioWorklet.addModule('/engine-worklet-processor.js');
+        _registeredContexts.add(this._ctx);
+      }
 
       // Allocate shared buffers
       this._audioBuffer = RingBuffer.create(this._bufferSize, this._channels);
@@ -118,6 +128,12 @@ export class EngineWorkletHost {
       return true;
     } catch (err) {
       console.warn('[EngineWorkletHost] Initialization failed:', err);
+      // Clean up partially created resources
+      this._node?.disconnect();
+      this._node?.port.close();
+      this._node = null;
+      this._audioBuffer = null;
+      this._paramBuffer = null;
       this._setState('error');
       return false;
     }
@@ -204,18 +220,34 @@ export class EngineWorkletHost {
 
   private _waitForReady(timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      const port = this._node!.port;
+      const originalHandler = port.onmessage;
+      let settled = false;
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        port.onmessage = originalHandler;
+      };
+
       const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error('Worklet ready timeout'));
       }, timeoutMs);
 
-      const originalHandler = this._node!.port.onmessage;
-      this._node!.port.onmessage = (e) => {
+      port.onmessage = (e) => {
+        if (settled) {
+          originalHandler?.call(port, e);
+          return;
+        }
+
         if (e.data.type === 'ready') {
-          clearTimeout(timeout);
-          this._node!.port.onmessage = originalHandler;
+          settled = true;
+          cleanup();
           resolve();
         } else {
-          originalHandler?.call(this._node!.port, e);
+          originalHandler?.call(port, e);
         }
       };
     });

@@ -146,6 +146,17 @@ describe('BlockRenderer', () => {
     expect(block2.events).toHaveLength(0);
   });
 
+  it('stopped nextBlock does not consume events', () => {
+    const br = new BlockRenderer(SAMPLE_RATE);
+    br.scheduleEvent({ sampleTime: 10, type: 'test', data: null });
+    br.stop();
+    br.nextBlock(128); // should NOT consume the event
+    br.play(0);
+    const block = br.nextBlock(128);
+    expect(block.events).toHaveLength(1);
+    expect(block.events[0].type).toBe('test');
+  });
+
   it('scheduleEvent maintains sorted order', () => {
     const br = new BlockRenderer(SAMPLE_RATE);
     br.scheduleEvent({ sampleTime: 300, type: 'c', data: null });

@@ -118,6 +118,11 @@ export class BlockRenderer {
     const startSample = this._position;
     const endSample = startSample + blockSize;
 
+    // When stopped, return empty block without consuming events
+    if (!this._isPlaying) {
+      return { startSample, endSample, events: [] };
+    }
+
     // Collect events in this block's range
     const blockEvents: ScheduledEvent[] = [];
     let removeCount = 0;
@@ -138,9 +143,7 @@ export class BlockRenderer {
     }
 
     // Advance position
-    if (this._isPlaying) {
-      this._position = endSample;
-    }
+    this._position = endSample;
 
     return {
       startSample,

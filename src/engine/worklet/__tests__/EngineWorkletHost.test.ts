@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EngineWorkletHost } from '../EngineWorkletHost';
 
 // Mock AudioWorkletNode and AudioContext
@@ -43,6 +43,10 @@ describe('EngineWorkletHost', () => {
   beforeEach(() => {
     ctx = createMockContext();
     host = new EngineWorkletHost({ context: ctx });
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 

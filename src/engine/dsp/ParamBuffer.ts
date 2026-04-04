@@ -1,20 +1,23 @@
 /**
  * ParamBuffer — Atomic parameter transport between main thread and AudioWorklet.
  *
- * Uses a SharedArrayBuffer with Atomics.store/load for lock-free, glitch-free
- * parameter updates. The main thread writes parameter values, and the worklet
- * reads them atomically each process() call.
+ * Uses a single SharedArrayBuffer for lock-free parameter updates. The main
+ * thread writes Float32 parameter values and marks the corresponding Int32
+ * dirty flag; the worklet reads the value and consumes the dirty flag during
+ * process() calls.
  *
  * Layout:
- *   Float64Array[0..N-1] — parameter slots (one per automatable param)
+ *   Int32Array[0..N-1]   — dirty flags (one per parameter slot)
+ *   Float32Array[0..N-1] — parameter values, stored immediately after the
+ *                          dirty-flag region in the same SharedArrayBuffer
  *
- * Float64 is used for precision-safe parameter values (frequency in Hz,
- * gain in dB, etc.). Atomics on Float64 require BigInt-based SharedArrayBuffer
- * on some engines, so we use a dual-buffer approach: Float64 for storage,
- * Int32 for dirty flags.
- *
- * Simplified approach: use Float32Array for parameters (sufficient precision
- * for audio params) with Uint32Array dirty-flag overlay.
+ * Precision/storage notes:
+ *   - Parameter values are stored as Float32, which is sufficient for audio
+ *     parameter transport and matches Web Audio AudioParam precision.
+ *   - Atomics are used on the Int32 dirty-flag region; the float values
+ *     are read/written via the Float32Array view. The dirty flag's
+ *     Atomics.exchange provides a happens-before edge that ensures the
+ *     float write is visible to the consuming thread.
  */
 
 const BYTES_PER_PARAM = 4; // Float32
@@ -51,10 +54,13 @@ export class ParamBuffer {
 
   /**
    * Set a parameter value (main thread side).
-   * Thread-safe via Atomics.
+   * The float write is followed by Atomics.store on the dirty flag, which
+   * acts as a release fence — ensuring the float value is visible to any
+   * thread that subsequently reads the dirty flag via Atomics.exchange/load.
    */
   set(index: number, value: number): void {
     this._params[index] = value;
+    // Release: ensures the float write above is visible before dirty is set
     Atomics.store(this._dirty, index, 1);
   }
 

@@ -42,12 +42,14 @@ export function GateCurve({
       ctx.scale(dpr, dpr);
     }
 
-    // Expand Y-domain so the full gate range is visible
-    const minDb = Math.min(-80, range - 20);
-    const dbLabels = [-60, -40, -20, 0].filter(db => db >= minDb);
+    // X-domain: input range (fixed)
+    const minXDb = -80;
+    // Y-domain: expand to show full gate attenuation (input + range can go very low)
+    const minYDb = Math.min(-80, threshold + range - 10);
+    const dbLabels = [-60, -40, -20, 0].filter(db => db >= minYDb);
 
-    const xForDb = (db: number) => ((db - minDb) / (MAX_DB - minDb)) * width;
-    const yForDb = (db: number) => height - ((db - minDb) / (MAX_DB - minDb)) * height;
+    const xForDb = (db: number) => ((db - minXDb) / (MAX_DB - minXDb)) * width;
+    const yForDb = (db: number) => height - ((db - minYDb) / (MAX_DB - minYDb)) * height;
 
     ctx.clearRect(0, 0, width, height);
     fillBackground(ctx, width, height);
@@ -72,7 +74,7 @@ export function GateCurve({
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(xForDb(minDb), yForDb(minDb));
+    ctx.moveTo(xForDb(minXDb), yForDb(minXDb));
     ctx.lineTo(xForDb(MAX_DB), yForDb(MAX_DB));
     ctx.stroke();
     ctx.setLineDash([]);
@@ -88,7 +90,7 @@ export function GateCurve({
 
     // Hysteresis zone (close threshold), clamped to plot bounds
     if (hysteresis > 0) {
-      const closeX = xForDb(Math.max(minDb, threshold - hysteresis));
+      const closeX = xForDb(Math.max(minXDb, threshold - hysteresis));
       ctx.strokeStyle = `${color}40`;
       ctx.beginPath();
       ctx.moveTo(closeX, 0);
@@ -102,13 +104,13 @@ export function GateCurve({
     ctx.setLineDash([]);
 
     // Transfer curve
-    const points = generateGateCurve(threshold, range, hysteresis, mode, minDb, MAX_DB, 200);
+    const points = generateGateCurve(threshold, range, hysteresis, mode, minXDb, MAX_DB, 200);
 
     // Fill area between curve and unity (attenuation region)
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.max(minDb, points[i].y));
+      const y = yForDb(Math.max(minYDb, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -123,7 +125,7 @@ export function GateCurve({
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {
       const x = xForDb(points[i].x);
-      const y = yForDb(Math.max(minDb, points[i].y));
+      const y = yForDb(Math.max(minYDb, points[i].y));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }

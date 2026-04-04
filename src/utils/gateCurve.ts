@@ -1,7 +1,9 @@
 /**
  * gateCurve.ts — Pure math for gate/expander transfer curve visualization.
  *
- * Shows the gate behavior: below threshold, signal is attenuated by range dB.
+ * Gate mode: below threshold, signal is attenuated by range dB (hard cut).
+ * Expander mode: below threshold, signal is progressively attenuated
+ * proportional to distance from threshold (gentle expansion).
  * The hysteresis creates a dead zone between open and close thresholds.
  */
 

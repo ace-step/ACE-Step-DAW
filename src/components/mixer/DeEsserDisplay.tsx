@@ -132,7 +132,8 @@ export function DeEsserDisplay({
 
     ctx.fillStyle = '#ef4444aa';
     ctx.textAlign = 'left';
-    ctx.fillText(`${threshold}dB`, 2, threshY - 2);
+    const thresholdLabelY = Math.max(8, threshY - 2);
+    ctx.fillText(`${threshold}dB`, 2, thresholdLabelY);
   }, [frequency, bandwidth, threshold, range, mode, width, height, color]);
 
   return (

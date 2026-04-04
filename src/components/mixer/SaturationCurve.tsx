@@ -27,7 +27,7 @@ export function SaturationCurve({
   saturationType,
   width = 160,
   height = 120,
-  color = '#c46454',
+  color = '#b87060',
 }: SaturationCurveProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

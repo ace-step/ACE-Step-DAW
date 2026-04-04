@@ -55,12 +55,15 @@ function VideoClipBlockInner({ clip, track }: VideoClipBlockProps) {
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         data-testid="video-clip-block"
+        data-clip-id={clip.id}
+        data-track-id={track.id}
+        aria-label={`Video clip: ${clip.prompt || 'Video Clip'}, ${Math.round(clip.duration)}s`}
       >
         {/* Filmstrip background placeholder — solid gradient until filmstrip generation */}
         <div
           className="absolute inset-0"
           style={{
-            background: 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, var(--daw-surface) 0%, var(--daw-surface-2) 50%, var(--daw-surface) 100%)',
             opacity: track.videoSettings?.filmstripOpacity ?? 0.8,
           }}
         />

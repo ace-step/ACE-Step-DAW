@@ -568,7 +568,7 @@ export const TrackHeader = React.memo(function TrackHeader({
             </div>
             ) : (
               <div data-primary-actions className="flex items-center gap-1">
-                <span className="text-[9px] text-[#64748b] font-medium">🎬 VID</span>
+                <span className="text-[9px] text-zinc-500 font-medium">🎬 VID</span>
               </div>
             )}
           </div>

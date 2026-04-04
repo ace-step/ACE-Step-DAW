@@ -2900,15 +2900,20 @@ export const useProjectStore = create<ProjectState>()(
     if (!state.project) return undefined;
 
     const track = state.project.tracks.find(t => t.id === trackId);
-    if (!track || track.trackType !== 'video') return undefined;
+    if (!track || track.trackType !== 'video') {
+      toastError('Cannot add video clip to a non-video track');
+      return undefined;
+    }
 
     const clip = get().addClip(trackId, {
       startTime: clipData.startTime,
       duration: clipData.duration,
       prompt: '',
+      globalCaption: '',
       lyrics: '',
+      source: 'uploaded',
       videoMeta: clipData.videoMeta,
-    } as Omit<Clip, 'id' | 'trackId' | 'generationStatus' | 'generationJobId' | 'cumulativeMixKey' | 'isolatedAudioKey' | 'waveformPeaks'>);
+    });
 
     return clip;
   },

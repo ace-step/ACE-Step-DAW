@@ -33,17 +33,19 @@ function VideoPreviewPanelInner({ track }: VideoPreviewPanelProps) {
     );
   }, [track.clips, currentTime]);
 
-  // Format timecode HH:MM:SS:FF
+  // Format timecode HH:MM:SS:FF using integer nominal frame rate
+  // (e.g., 29.97fps → 30 nominal for SMPTE non-drop-frame display)
   const timecode = useMemo(() => {
     if (!activeClip?.videoMeta) return '00:00:00:00';
     const frameRate = activeClip.videoMeta.frameRate || 30;
+    const nominalFps = Math.ceil(frameRate); // 29.97 → 30, 23.976 → 24
     const elapsed = currentTime - activeClip.startTime;
     const videoTime = (activeClip.videoMeta.sourceOffset || 0) + elapsed;
     const totalFrames = Math.floor(videoTime * frameRate);
-    const hours = Math.floor(totalFrames / (frameRate * 3600));
-    const minutes = Math.floor((totalFrames % (frameRate * 3600)) / (frameRate * 60));
-    const seconds = Math.floor((totalFrames % (frameRate * 60)) / frameRate);
-    const frames = totalFrames % Math.round(frameRate);
+    const hours = Math.floor(totalFrames / (nominalFps * 3600));
+    const minutes = Math.floor((totalFrames % (nominalFps * 3600)) / (nominalFps * 60));
+    const seconds = Math.floor((totalFrames % (nominalFps * 60)) / nominalFps);
+    const frames = totalFrames % nominalFps;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
   }, [activeClip, currentTime]);
 

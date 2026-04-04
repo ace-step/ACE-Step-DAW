@@ -79,7 +79,7 @@ export class VideoSyncEngine {
 
     // After clip end
     const clipEnd = clipStartTime + clipDuration;
-    if (transportTime > clipEnd) return -1;
+    if (transportTime >= clipEnd) return -1;
 
     const elapsed = transportTime - clipStartTime;
     const videoTime = sourceOffset + elapsed;

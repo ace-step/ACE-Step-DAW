@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  VideoSyncEngine,
-  type VideoSyncState,
-} from '../VideoSyncEngine';
+import { VideoSyncEngine } from '../VideoSyncEngine';
 
 describe('VideoSyncEngine', () => {
   let engine: VideoSyncEngine;
@@ -76,6 +73,17 @@ describe('VideoSyncEngine', () => {
     it('returns -1 when transport is after clip end', () => {
       const videoTime = VideoSyncEngine.computeVideoTime({
         transportTime: 40,
+        clipStartTime: 5,
+        sourceOffset: 0,
+        clipDuration: 30,
+        videoDuration: 60,
+      });
+      expect(videoTime).toBe(-1);
+    });
+
+    it('returns -1 when transport is exactly at clip end', () => {
+      const videoTime = VideoSyncEngine.computeVideoTime({
+        transportTime: 35,
         clipStartTime: 5,
         sourceOffset: 0,
         clipDuration: 30,

@@ -27,15 +27,9 @@ export function limiterTransfer(
     return boosted;
   }
 
-  // Cubic Hermite soft-knee: continuous value AND derivative at both
-  // kneeStart (slope=1, value=kneeStart) and ceiling (slope=0, value=ceiling).
-  // t = (boosted - kneeStart) / knee, t ∈ [0,1]
-  // h(t) = kneeStart + knee * t * (1 + t * (t - 2))
-  //       = kneeStart + knee * (3t² - 2t³)  ... wait, we need slope=1 at t=0.
-  // Using Hermite basis: p(t) = kneeStart + knee * (t - t²)  ... no.
-  // Correct Hermite: f(t) = (1-t)²(1+2t)·p0 + t²(3-2t)·p1 + t(1-t)²·m0 + t²(t-1)·m1
-  // p0=kneeStart, p1=ceiling, m0=knee (slope=1 scaled by interval), m1=0
-  // f(t) = (1-t)²(1+2t)·kneeStart + t²(3-2t)·ceiling + t(1-t)²·knee
+  // Cubic Hermite soft-knee: C1 continuous at kneeStart (slope=1) and ceiling (slope=0).
+  // Uses Hermite basis with p0=kneeStart, p1=ceiling, m0=knee (unit slope), m1=0.
+  // f(t) = (1-t)²(1+2t)·p0 + t²(3-2t)·p1 + t(1-t)²·m0, where t ∈ [0,1]
   const softKnee = (b: number, knee: number): number => {
     const kneeStart = ceiling - knee;
     if (b <= kneeStart) return b;

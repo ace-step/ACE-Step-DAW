@@ -26,6 +26,14 @@ const IR_SHAPES: Record<string, { duration: number; earlyDensity: number; decayR
   ambient:     { duration: 3.0,  earlyDensity: 0.2, decayRate: 1.0 },
 };
 
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) || 1;
+}
+
 function seededRandom(seed: number): () => number {
   let s = seed;
   return () => {
@@ -95,7 +103,7 @@ export function ConvolverDisplay({
     }
 
     // Generate synthetic IR waveform
-    const rand = seededRandom(irType.length * 137);
+    const rand = seededRandom(hashString(irType));
     const steps = 300;
     const maxAmp = height * 0.4 * wet;
 
@@ -136,7 +144,7 @@ export function ConvolverDisplay({
     ctx.fill();
 
     // Draw waveform outline
-    const rand2 = seededRandom(irType.length * 137);
+    const rand2 = seededRandom(hashString(irType));
     ctx.beginPath();
     for (let i = 0; i <= steps; i++) {
       const t = preDelay + (i / steps) * shape.duration;

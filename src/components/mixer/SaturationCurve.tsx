@@ -19,6 +19,7 @@ interface SaturationCurveProps {
   saturationType: SaturationType;
   width?: number;
   height?: number;
+  /** Accent color as 6-digit hex (e.g. '#b87060'). Hex-alpha suffixes are appended for fills. */
   color?: string;
 }
 

@@ -49,8 +49,14 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
       )}
       <div
         ref={trackRef}
-        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150"
+        className="group relative cursor-pointer rounded-sm hover:brightness-125 transition-[filter] duration-150 focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/30"
         style={{ width, height: 4 }}
+        role="slider"
+        tabIndex={0}
+        aria-label={`${label ?? 'Control'} slider`}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={Math.round(value * 1000) / 1000}
         onMouseDown={handleMouseDown}
         onDoubleClick={(e) => {
           e.preventDefault();
@@ -62,7 +68,14 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
           e.stopPropagation();
           setShowPrecisionInput(true);
         }}
-        aria-label={`${label ?? 'Control'} slider`}
+        onKeyDown={(e) => {
+          let next: number | null = null;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(value + step);
+          else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(value - step);
+          else if (e.key === 'Home') next = min;
+          else if (e.key === 'End') next = max;
+          if (next !== null) { e.preventDefault(); onChange(next); }
+        }}
       >
         {/* Track background */}
         <div className="absolute inset-0 rounded-sm bg-white/[0.06]" />

@@ -1,11 +1,12 @@
 /**
  * ToneAdapter — Tone.js implementation of the DSP Provider interfaces.
  *
- * Wraps Tone.js audio nodes behind the IDSPFactory / IDSPNode interfaces,
- * isolating all direct Tone.js imports to this single file.
+ * Centralizes Tone.js-backed DSP factory and node wrapping for the
+ * IDSPFactory / IDSPNode abstraction used by the newer DSP layer.
  *
- * When future backends (AudioWorklet, Rust WASM) are ready, a new factory
- * implementation replaces this one — no engine code changes required.
+ * As additional backends (for example AudioWorklet or Rust WASM) are added,
+ * they can provide alternate factory implementations behind the same
+ * abstraction with minimal engine-facing changes.
  */
 
 import * as Tone from 'tone';
@@ -54,6 +55,26 @@ import type {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Extract the native AudioParam from a Tone.js Param/Signal.
+ *
+ * Tone.Param stores the native AudioParam as its `.input` property.
+ * We walk the `.input` chain (same as node unwrapping) to reach it.
+ * Falls back to treating the object itself as AudioParam if unwrapping fails.
+ */
+function toNativeParam(toneParam: unknown): AudioParam {
+  let current = toneParam;
+  for (let i = 0; i < 3; i++) {
+    if (!current || typeof current !== 'object') break;
+    // Native AudioParam has no `.input` sub-property — stop if we reach one
+    if (typeof AudioParam !== 'undefined' && current instanceof AudioParam) return current;
+    const next = (current as Record<string, unknown>).input;
+    if (!next || next === current) break;
+    current = next;
+  }
+  return current as AudioParam;
+}
 
 /**
  * Unwrap a Tone.js node to its underlying native AudioNode.
@@ -131,8 +152,7 @@ class ToneGain extends ToneNodeWrapper implements IDSPGain {
   }
 
   get gain(): AudioParam {
-    return (this._gain.gain as unknown as { _param: AudioParam })._param ??
-      unwrapToNative(this._gain.gain, 'input') as unknown as AudioParam;
+    return toNativeParam(this._gain.gain);
   }
 }
 
@@ -153,20 +173,9 @@ class ToneFilter extends ToneNodeWrapper implements IDSPFilter {
   get type(): BiquadFilterType { return this._filter.type as BiquadFilterType; }
   set type(v: BiquadFilterType) { this._filter.type = v; }
 
-  get frequency(): AudioParam {
-    return (this._filter.frequency as unknown as { _param: AudioParam })._param ??
-      this._filter.frequency as unknown as AudioParam;
-  }
-
-  get Q(): AudioParam {
-    return (this._filter.Q as unknown as { _param: AudioParam })._param ??
-      this._filter.Q as unknown as AudioParam;
-  }
-
-  get gain(): AudioParam {
-    return (this._filter.gain as unknown as { _param: AudioParam })._param ??
-      this._filter.gain as unknown as AudioParam;
-  }
+  get frequency(): AudioParam { return toNativeParam(this._filter.frequency); }
+  get Q(): AudioParam { return toNativeParam(this._filter.Q); }
+  get gain(): AudioParam { return toNativeParam(this._filter.gain); }
 }
 
 class ToneCompressor extends ToneNodeWrapper implements IDSPCompressor {
@@ -645,13 +654,16 @@ class ToneBufferSource extends ToneNodeWrapper implements IDSPBufferSource {
 
   get buffer(): AudioBuffer | null {
     const buf = this._src.buffer;
-    return buf ? (buf as unknown as AudioBuffer) : null;
+    if (!buf) return null;
+    return buf.get() as AudioBuffer | null;
   }
 
   set buffer(v: AudioBuffer | null) {
-    if (v) {
-      this._src.buffer = new Tone.ToneAudioBuffer(v);
+    if (v === null) {
+      this._src.buffer = new Tone.ToneAudioBuffer();
+      return;
     }
+    this._src.buffer = new Tone.ToneAudioBuffer(v);
   }
 
   get playbackRate(): number { return this._src.playbackRate.value; }

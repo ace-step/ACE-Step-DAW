@@ -8,9 +8,9 @@
  * Future implementations: custom AudioWorklet DSP, Rust WASM, etc.
  *
  * Design principle: every interface exposes the *minimum* surface area
- * needed by existing engine code.  The `nativeNode` escape hatch allows
- * gradual migration — engines can still reach the underlying AudioNode
- * when the abstraction doesn't yet cover a use-case.
+ * needed by existing engine code.  The `inputNode`/`outputNode` escape
+ * hatch allows gradual migration — engines can still reach the underlying
+ * AudioNode(s) when the abstraction doesn't yet cover a use-case.
  */
 
 // ---------------------------------------------------------------------------
@@ -124,6 +124,8 @@ export interface IDSPLFO extends IDSPNode {
   max: number;
   start(): void;
   stop(): void;
+  /** Connect this LFO's output to an AudioParam for modulation. */
+  connectParam(destination: AudioParam): void;
 }
 
 export interface IDSPPanner extends IDSPNode {

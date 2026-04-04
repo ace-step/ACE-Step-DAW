@@ -88,29 +88,6 @@ function applyParametricEqFilters(
   previous.connect(output);
 }
 
-/**
- * Unwrap a DSP node to its underlying native AudioNode.
- * For IDSPNode wrappers, this just reads .inputNode / .outputNode.
- * For raw objects (legacy), walks the .input/.output chain.
- */
-function unwrapToNative(node: unknown, prop: 'input' | 'output'): AudioNode {
-  // IDSPNode path: direct access
-  if (node && typeof node === 'object' && 'inputNode' in node && 'outputNode' in node) {
-    return (prop === 'input'
-      ? (node as IDSPNode).inputNode
-      : (node as IDSPNode).outputNode);
-  }
-  // Legacy path: walk the chain
-  let current = node;
-  for (let i = 0; i < 3; i++) {
-    if (!current || typeof current !== 'object') break;
-    const next = (current as Record<string, unknown>)[prop];
-    if (!next || next === current || typeof next !== 'object') break;
-    current = next;
-  }
-  return current as AudioNode;
-}
-
 function getEffectInput(effectNode: EffectNode): AudioNode {
   return effectNode.inputNode ?? effectNode.node.inputNode;
 }
@@ -203,7 +180,7 @@ function createNode(effect: TrackEffect): EffectNode {
           min: Math.max(20, p.frequency * (1 - p.lfoDepth)),
           max: Math.min(20000, p.frequency * (1 + p.lfoDepth)),
         });
-        lfo.connectParam!(node.frequency);
+        lfo.connectParam(node.frequency);
         lfo.start();
       }
       return { id: effect.id, type: effect.type, node, lfo };
@@ -232,7 +209,7 @@ function createNode(effect: TrackEffect): EffectNode {
         min: 0.0005,
         max: Math.max(0.001, p.delayTime / 1000 * p.depth),
       });
-      lfo.connectParam!(node.delayTime);
+      lfo.connectParam(node.delayTime);
       lfo.start();
       return { id: effect.id, type: effect.type, node, lfo };
     }
@@ -1060,7 +1037,7 @@ class EffectsEngine {
             min: Math.max(20, p.frequency * (1 - p.lfoDepth)),
             max: Math.min(20000, p.frequency * (1 + p.lfoDepth)),
           });
-          lfo.connectParam!(filt.frequency);
+          lfo.connectParam(filt.frequency);
           lfo.start();
           effectNode.lfo = lfo;
         } else if (!p.lfoEnabled && effectNode.lfo) {

@@ -475,15 +475,14 @@ describe('ToneDSPFactory', () => {
       expect(synth).toBeDefined();
     });
 
-    it('supports triggerAttackRelease', () => {
+    it('delegates triggerAttackRelease without error', () => {
       const synth = factory.createPolySynth();
-      synth.triggerAttackRelease('C4', '8n');
-      // Mock should have been called
+      expect(() => synth.triggerAttackRelease('C4', '8n')).not.toThrow();
     });
 
-    it('supports releaseAll', () => {
+    it('delegates releaseAll without error', () => {
       const synth = factory.createPolySynth();
-      synth.releaseAll();
+      expect(() => synth.releaseAll()).not.toThrow();
     });
   });
 

@@ -1,13 +1,8 @@
-/**
- * Tests for useGeneration hook — generateAll and generateClip.
- */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useGenerationStore } from '../../store/generationStore';
-import { useProjectStore } from '../../store/projectStore';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockGenerateAllTracks = vi.fn().mockResolvedValue(undefined);
-const mockGenerateSingleClip = vi.fn().mockResolvedValue(undefined);
+const mockGenerateAllTracks = vi.fn();
+const mockGenerateSingleClip = vi.fn();
 
 vi.mock('../../services/generationPipeline', () => ({
   generateAllTracks: (...args: unknown[]) => mockGenerateAllTracks(...args),
@@ -15,70 +10,101 @@ vi.mock('../../services/generationPipeline', () => ({
 }));
 
 import { useGeneration } from '../useGeneration';
+import { useProjectStore } from '../../store/projectStore';
+import { useGenerationStore } from '../../store/generationStore';
 
 describe('useGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGenerationStore.setState({ isGenerating: false, jobs: [] });
-    useProjectStore.setState({ project: null });
-    useProjectStore.getState().createProject({ name: 'Test' });
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useProjectStore.getState().createProject({ name: 'Gen Test' });
+    mockGenerateAllTracks.mockResolvedValue(undefined);
+    mockGenerateSingleClip.mockResolvedValue(undefined);
   });
 
-  it('returns isGenerating and jobs from store', () => {
-    const { result } = renderHook(() => useGeneration());
-    expect(result.current.isGenerating).toBe(false);
-    expect(result.current.jobs).toEqual([]);
-  });
-
-  it('generateAll calls generateAllTracks when project exists', async () => {
+  it('exposes jobs and isGenerating from store', () => {
+    useGenerationStore.setState({ isGenerating: true, jobs: [{ id: 'j1' } as never] });
     const { result } = renderHook(() => useGeneration());
 
-    await act(async () => { await result.current.generateAll(); });
-
-    expect(mockGenerateAllTracks).toHaveBeenCalled();
+    expect(result.current.isGenerating).toBe(true);
+    expect(result.current.jobs).toHaveLength(1);
   });
 
-  it('generateAll does nothing when already generating', async () => {
-    useGenerationStore.setState({ isGenerating: true });
-    const { result } = renderHook(() => useGeneration());
+  // ── generateAll ──
 
-    await act(async () => { await result.current.generateAll(); });
-
-    expect(mockGenerateAllTracks).not.toHaveBeenCalled();
-  });
-
-  it('generateAll does nothing without a project', async () => {
-    useProjectStore.setState({ project: null });
-    const { result } = renderHook(() => useGeneration());
-
-    await act(async () => { await result.current.generateAll(); });
-
-    expect(mockGenerateAllTracks).not.toHaveBeenCalled();
-  });
-
-  it('generateClip calls generateSingleClip with clipId', async () => {
-    const { result } = renderHook(() => useGeneration());
-
-    await act(async () => { await result.current.generateClip('clip-1'); });
-
-    expect(mockGenerateSingleClip).toHaveBeenCalledWith('clip-1', undefined);
-  });
-
-  it('generateClip passes options through', async () => {
+  it('calls generateAllTracks when project exists and not generating', async () => {
     const { result } = renderHook(() => useGeneration());
 
     await act(async () => {
-      await result.current.generateClip('clip-1', { sharedSeed: 42 });
+      await result.current.generateAll();
     });
 
-    expect(mockGenerateSingleClip).toHaveBeenCalledWith('clip-1', { sharedSeed: 42 });
+    expect(mockGenerateAllTracks).toHaveBeenCalledTimes(1);
   });
 
-  it('generateClip does nothing when already generating', async () => {
+  it('does not call generateAllTracks when project is null', async () => {
+    useProjectStore.setState({ project: null });
+    const { result } = renderHook(() => useGeneration());
+
+    await act(async () => {
+      await result.current.generateAll();
+    });
+
+    expect(mockGenerateAllTracks).not.toHaveBeenCalled();
+  });
+
+  it('does not call generateAllTracks when already generating', async () => {
     useGenerationStore.setState({ isGenerating: true });
     const { result } = renderHook(() => useGeneration());
 
-    await act(async () => { await result.current.generateClip('clip-1'); });
+    await act(async () => {
+      await result.current.generateAll();
+    });
+
+    expect(mockGenerateAllTracks).not.toHaveBeenCalled();
+  });
+
+  // ── generateClip ──
+
+  it('calls generateSingleClip with clipId', async () => {
+    const { result } = renderHook(() => useGeneration());
+
+    await act(async () => {
+      await result.current.generateClip('clip-42');
+    });
+
+    expect(mockGenerateSingleClip).toHaveBeenCalledWith('clip-42', undefined);
+  });
+
+  it('passes sharedSeed option through to generateSingleClip', async () => {
+    const { result } = renderHook(() => useGeneration());
+
+    await act(async () => {
+      await result.current.generateClip('clip-42', { sharedSeed: 123 });
+    });
+
+    expect(mockGenerateSingleClip).toHaveBeenCalledWith('clip-42', { sharedSeed: 123 });
+  });
+
+  it('does not call generateSingleClip when project is null', async () => {
+    useProjectStore.setState({ project: null });
+    const { result } = renderHook(() => useGeneration());
+
+    await act(async () => {
+      await result.current.generateClip('clip-42');
+    });
+
+    expect(mockGenerateSingleClip).not.toHaveBeenCalled();
+  });
+
+  it('does not call generateSingleClip when already generating', async () => {
+    useGenerationStore.setState({ isGenerating: true });
+    const { result } = renderHook(() => useGeneration());
+
+    await act(async () => {
+      await result.current.generateClip('clip-42');
+    });
 
     expect(mockGenerateSingleClip).not.toHaveBeenCalled();
   });

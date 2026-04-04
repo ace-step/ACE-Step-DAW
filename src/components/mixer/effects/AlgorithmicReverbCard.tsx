@@ -3,6 +3,7 @@ import { HSlider } from '../../ui/HSlider';
 import { EffectCardLayout } from '../EffectCardLayout';
 import { ReverbDecayCurve } from '../ReverbDecayCurve';
 import { AutomationControlShell } from './AutomationControlShell';
+import { EFFECT_COLORS } from './effectColors';
 import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
 import { normalizeEffectParamValue } from '../../../utils/effectAutomation';
@@ -23,7 +24,7 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
 
   return (
     <EffectCardLayout
-      color="#7a6fb8"
+      color={EFFECT_COLORS.algorithmicReverb}
       visualization={
         <ReverbDecayCurve
           decay={p.decay}
@@ -33,7 +34,7 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
           reverbType={p.reverbType}
           width={160}
           height={100}
-          color="#7a6fb8"
+          color={EFFECT_COLORS.algorithmicReverb}
         />
       }
       mode={
@@ -46,21 +47,21 @@ export function AlgorithmicReverbCard({ effect, trackId }: { effect: TrackEffect
       }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'mix' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'mix', p.mix) ?? 0.25}>
-          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color="#7a6fb8" />
+          <HSlider value={p.mix} onChange={(v) => update({ mix: v })} label="Dry/Wet" displayValue={`${Math.round(p.mix * 100)}%`} color={EFFECT_COLORS.algorithmicReverb} />
         </AutomationControlShell>
       }
     >
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'decay' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'decay', p.decay) ?? 0.5}>
-        <Knob value={p.decay} onChange={(v) => update({ decay: v })} min={0.1} max={20} defaultValue={2.5} label="Decay" unit="s" size={56} step={0.1} color="#7a6fb8" />
+        <Knob value={p.decay} onChange={(v) => update({ decay: v })} min={0.1} max={20} defaultValue={2.5} label="Decay" unit="s" size={56} step={0.1} color={EFFECT_COLORS.algorithmicReverb} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'size' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'size', p.size) ?? 0.5}>
-        <Knob value={p.size} onChange={(v) => update({ size: v })} min={0} max={1} defaultValue={0.6} label="Size" size={56} step={0.01} color="#7a6fb8" />
+        <Knob value={p.size} onChange={(v) => update({ size: v })} min={0} max={1} defaultValue={0.6} label="Size" size={56} step={0.01} color={EFFECT_COLORS.algorithmicReverb} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'damping' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'damping', p.damping) ?? 0.5}>
-        <Knob value={p.damping} onChange={(v) => update({ damping: v })} min={0} max={1} defaultValue={0.4} label="Damping" size={56} step={0.01} color="#7a6fb8" />
+        <Knob value={p.damping} onChange={(v) => update({ damping: v })} min={0} max={1} defaultValue={0.4} label="Damping" size={56} step={0.01} color={EFFECT_COLORS.algorithmicReverb} />
       </AutomationControlShell>
       <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'algorithmicReverb', param: 'preDelay' }} normalizedValue={normalizeEffectParamValue('algorithmicReverb', 'preDelay', p.preDelay) ?? 0.5}>
-        <Knob value={p.preDelay} onChange={(v) => update({ preDelay: v })} min={0} max={200} defaultValue={20} label="Pre-Dly" unit="ms" size={56} step={1} color="#7a6fb8" />
+        <Knob value={p.preDelay} onChange={(v) => update({ preDelay: v })} min={0} max={200} defaultValue={20} label="Pre-Dly" unit="ms" size={56} step={1} color={EFFECT_COLORS.algorithmicReverb} />
       </AutomationControlShell>
     </EffectCardLayout>
   );

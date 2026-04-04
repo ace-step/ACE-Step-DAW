@@ -22,28 +22,22 @@ export function limiterTransfer(
 ): number {
   const boosted = inputDb + gain;
 
-  if (boosted <= ceiling - 6) {
-    // Well below ceiling — linear pass-through
-    return boosted;
-  }
-
-  // Cubic Hermite soft-knee: C1 continuous at kneeStart (slope=1) and ceiling (slope=0).
-  // Uses Hermite basis with p0=kneeStart, p1=ceiling, m0=knee (unit slope), m1=0.
-  // f(t) = (1-t)²(1+2t)·p0 + t²(3-2t)·p1 + t(1-t)²·m0, where t ∈ [0,1]
+  // Standard soft-knee limiter (Zölzer formula, ratio → ∞).
+  // Knee of width K is centered on the ceiling:
+  //   kneeStart = ceiling - K/2,  kneeEnd = ceiling + K/2
+  // In the knee region: output = input - (input - ceiling + K/2)² / (2K)
+  // This is C1 continuous: slope=1 at kneeStart, slope=0 at kneeEnd.
   const softKnee = (b: number, knee: number): number => {
-    const kneeStart = ceiling - knee;
-    if (b <= kneeStart) return b;
-    if (b >= ceiling) return ceiling;
-    const t = (b - kneeStart) / knee;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    // Hermite interpolation: value=kneeStart→ceiling, slope=1→0
-    return (1 - t2 * (3 - 2 * t)) * kneeStart + t2 * (3 - 2 * t) * ceiling + (t - 2 * t2 + t3) * knee;
+    const halfKnee = knee / 2;
+    if (b <= ceiling - halfKnee) return b;
+    if (b >= ceiling + halfKnee) return ceiling;
+    const delta = b - ceiling + halfKnee;
+    return b - (delta * delta) / (2 * knee);
   };
 
   switch (style) {
     case 'transparent':
-      // Gentle 6dB soft knee
+      // Gentle 6dB soft knee centered on ceiling
       return softKnee(boosted, 6);
 
     case 'aggressive':

@@ -4,8 +4,10 @@ import { limiterTransfer, generateLimiterCurve, type LimiterStyle } from '../../
 describe('limiterCurve', () => {
   describe('limiterTransfer', () => {
     it('passes signal well below ceiling unchanged', () => {
+      // Well below kneeStart (ceiling - halfKnee)
       expect(limiterTransfer(-30, -0.3, 0, 'transparent')).toBeCloseTo(-30, 5);
       expect(limiterTransfer(-40, -0.3, 0, 'aggressive')).toBeCloseTo(-40, 5);
+      expect(limiterTransfer(-20, -0.3, 0, 'warm')).toBeCloseTo(-20, 5);
     });
 
     it('transparent style never exceeds ceiling', () => {
@@ -30,6 +32,27 @@ describe('limiterCurve', () => {
       const noGain = limiterTransfer(-20, -0.3, 0, 'transparent');
       const withGain = limiterTransfer(-20, -0.3, 6, 'transparent');
       expect(withGain).toBeGreaterThan(noGain);
+    });
+
+    it('warm style begins bending within its 12dB knee region', () => {
+      const ceiling = -0.3;
+      // Warm has 12dB knee centered on ceiling: kneeStart = ceiling - 6 = -6.3
+      const inputInKnee = ceiling - 4; // -4.3, inside knee
+      const result = limiterTransfer(inputInKnee, ceiling, 0, 'warm');
+      // Should be attenuated below pass-through (limiter reducing signal)
+      expect(result).toBeLessThan(inputInKnee);
+      // But only slightly — not a full knee's worth of reduction
+      expect(result).toBeGreaterThan(inputInKnee - 3);
+    });
+
+    it('knee region is continuous at boundaries', () => {
+      const ceiling = -0.3;
+      // At kneeStart (ceiling - halfKnee), output should equal input (C0 continuous)
+      const kneeStart = ceiling - 3; // transparent 6dB knee, halfKnee=3
+      expect(limiterTransfer(kneeStart, ceiling, 0, 'transparent')).toBeCloseTo(kneeStart, 5);
+      // At kneeEnd (ceiling + halfKnee), output should equal ceiling (C0 continuous)
+      const kneeEnd = ceiling + 3;
+      expect(limiterTransfer(kneeEnd, ceiling, 0, 'transparent')).toBeCloseTo(ceiling, 5);
     });
 
     it('all styles produce monotonically non-decreasing output', () => {

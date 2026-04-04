@@ -52,3 +52,4 @@ src/wasm/pkg/.gitignore
 # ONNX models (too large for git, download via script)
 public/models/*.onnx
 .gstack/
+coverage/

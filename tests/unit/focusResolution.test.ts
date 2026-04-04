@@ -41,10 +41,15 @@ describe('resolveFocusedTrackId', () => {
   it('falls back to openPianoRollTrackId when no keyboard context', () => {
     useProjectStore.getState().createProject({ bpm: 120, timeSignature: 4 });
     const store = useProjectStore.getState();
-    const track1 = store.addTrack('drums');
+    store.addTrack('drums');
     const track2 = store.addTrack('bass');
 
     useUIStore.getState().setOpenPianoRoll(track2.id);
+    // Clear keyboardContext.trackId so the fallback to openPianoRollTrackId is exercised
+    useUIStore.setState((state) => ({
+      ...state,
+      keyboardContext: { ...state.keyboardContext, trackId: null },
+    }));
 
     expect(resolveFocusedTrackId()).toBe(track2.id);
   });

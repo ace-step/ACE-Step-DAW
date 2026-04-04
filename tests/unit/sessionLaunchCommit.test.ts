@@ -32,7 +32,9 @@ describe('commitPendingSessionLaunches', () => {
     });
 
     const session = useProjectStore.getState().project?.session;
+    expect(session).toBeDefined();
     const scene = session?.scenes[0];
+    expect(scene).toBeDefined();
 
     // Make sure transport is playing so launch is quantized
     useTransportStore.setState({ currentTime: 0.5, isPlaying: true });
@@ -40,6 +42,7 @@ describe('commitPendingSessionLaunches', () => {
 
     let pending = useProjectStore.getState().project?.session?.pendingLaunches ?? [];
     expect(pending.length).toBeGreaterThanOrEqual(1);
+    expect(pending[0]).toBeDefined();
 
     // Advance time past the execute-at point
     const executeAt = pending[0].executeAt;
@@ -66,13 +69,17 @@ describe('commitPendingSessionLaunches', () => {
     });
 
     const session = useProjectStore.getState().project?.session;
+    expect(session).toBeDefined();
     const scene = session?.scenes[0];
+    expect(scene).toBeDefined();
 
     useTransportStore.setState({ currentTime: 0.5, isPlaying: true });
     useProjectStore.getState().launchSessionClip(track.id, scene!.id);
 
     const pending = useProjectStore.getState().project?.session?.pendingLaunches ?? [];
-    const executeAt = pending[0]?.executeAt ?? 100;
+    expect(pending.length).toBeGreaterThanOrEqual(1);
+    expect(pending[0]).toBeDefined();
+    const executeAt = pending[0].executeAt;
 
     // Commit at time BEFORE executeAt
     useProjectStore.getState().commitPendingSessionLaunches(executeAt - 1);
@@ -103,11 +110,20 @@ describe('commitPendingSessionLaunches', () => {
     });
 
     const session = useProjectStore.getState().project?.session;
+    expect(session).toBeDefined();
     const scene = session?.scenes[0];
+    expect(scene).toBeDefined();
 
-    // Immediate launch (not playing)
-    useTransportStore.setState({ currentTime: 0, isPlaying: false });
+    // Queue scene launch while playing (quantized)
+    useTransportStore.setState({ currentTime: 0.5, isPlaying: true });
     useProjectStore.getState().launchSessionScene(scene!.id);
+
+    const pending = useProjectStore.getState().project?.session?.pendingLaunches ?? [];
+    expect(pending.length).toBeGreaterThanOrEqual(1);
+    expect(pending[0]).toBeDefined();
+
+    // Commit past the executeAt time
+    useProjectStore.getState().commitPendingSessionLaunches(pending[0].executeAt + 0.01);
 
     const active = useProjectStore.getState().project?.session?.activeClipIdsByTrackId;
     expect(active?.[track1.id]).toBe(clip1.id);

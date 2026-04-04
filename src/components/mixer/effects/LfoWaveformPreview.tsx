@@ -60,7 +60,7 @@ export function LfoWaveformPreview({
   width = 48,
   height = 20,
 }: LfoWaveformPreviewProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const groupRef = useRef<SVGGElement>(null);
   const animRef = useRef<number>(0);
   const offsetRef = useRef(0);
 
@@ -69,10 +69,11 @@ export function LfoWaveformPreview({
     [shape, width, height, depth],
   );
 
-  // Animate the waveform by shifting it horizontally based on rate
+  // Animate the waveform by shifting the <g> wrapper horizontally based on rate.
+  // Uses a ref to the <g> element to avoid querySelector per frame.
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg || rate <= 0) return;
+    const group = groupRef.current;
+    if (!group || rate <= 0) return;
 
     let lastTime = performance.now();
     offsetRef.current = 0;
@@ -82,11 +83,8 @@ export function LfoWaveformPreview({
       lastTime = now;
       offsetRef.current = (offsetRef.current + dt * rate) % 1;
 
-      const pathEl = svg.querySelector('path');
-      if (pathEl) {
-        const shift = -offsetRef.current * width;
-        pathEl.setAttribute('transform', `translate(${shift.toFixed(1)}, 0)`);
-      }
+      const shift = -offsetRef.current * width;
+      group.setAttribute('transform', `translate(${shift.toFixed(1)}, 0)`);
       animRef.current = requestAnimationFrame(animate);
     };
 
@@ -96,7 +94,6 @@ export function LfoWaveformPreview({
 
   return (
     <svg
-      ref={svgRef}
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
@@ -104,8 +101,8 @@ export function LfoWaveformPreview({
       aria-label="LFO waveform preview"
       style={{ overflow: 'hidden' }}
     >
-      {/* Render two copies for seamless scrolling */}
-      <g>
+      {/* Wrapping <g> is translated by the animation — moves both paths together */}
+      <g ref={groupRef} data-testid="lfo-scroll-group">
         <path
           d={pathD}
           fill="none"

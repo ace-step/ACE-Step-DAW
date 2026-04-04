@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectBpm, computeStretchRate, computeWarpedSegments, type WarpSegment } from '../audioWarp';
+import { detectBpm, computeStretchRate, computeWarpedSegments } from '../audioWarp';
 
 // ─── computeStretchRate ─────────────────────────────────────────────────────
 

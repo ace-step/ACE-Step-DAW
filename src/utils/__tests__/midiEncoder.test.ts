@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { encodeMidiFile, type MidiExportTrack, type MidiExportOptions } from '../midiEncoder';
+import { encodeMidiFile, type MidiExportTrack } from '../midiEncoder';
 import type { MidiNote } from '../../types/project';
 
 function makeNote(overrides: Partial<MidiNote> = {}): MidiNote {

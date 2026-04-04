@@ -7,7 +7,7 @@
  */
 
 export interface DragPayload {
-  type: 'loop' | 'asset' | 'file';
+  type: 'loop' | 'asset' | 'file' | 'videoFile';
   /** Duration of the dragged item in seconds (if known). */
   duration?: number;
   /** Display name for the ghost preview. */

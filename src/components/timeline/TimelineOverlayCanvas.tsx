@@ -25,19 +25,28 @@ export function TimelineOverlayCanvas({
   selDrag,
 }: TimelineOverlayCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.scale(dpr, dpr);
+    // Only resize canvas when dimensions change (avoids expensive backing store reallocation)
+    const metrics = canvasMetricsRef.current;
+    const needsResize =
+      !metrics || metrics.width !== width || metrics.height !== height || metrics.dpr !== dpr;
+
+    if (needsResize) {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvasMetricsRef.current = { width, height, dpr };
+    }
+
     ctx.clearRect(0, 0, width, height);
 
     // Context drag overlay (blue tint)

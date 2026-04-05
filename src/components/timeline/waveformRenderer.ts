@@ -89,31 +89,48 @@ export function getMinMaxForColumn(
 }
 
 /**
- * Draw one channel's waveform (filled shape) onto the canvas.
- * Draws the positive envelope left-to-right, then negative right-to-left as a filled path.
+ * Precompute min/max for all columns of a channel.
+ * Avoids triple-scanning the same peak range (fill upper, fill lower, envelope).
  */
-function drawChannelWaveform(
-  ctx: CanvasRenderingContext2D,
+function precomputeChannelMinMax(
   peaks: number[],
   peakSlice: VisiblePeakSlice,
   columnCount: number,
+  channelOffset: number,
+): Array<{ max: number; min: number }> {
+  const result: Array<{ max: number; min: number }> = new Array(columnCount);
+  for (let i = 0; i < columnCount; i++) {
+    result[i] = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+  }
+  return result;
+}
+
+/**
+ * Draw one channel's waveform (filled shape + peak envelope) onto the canvas.
+ * Uses precomputed min/max to avoid redundant peak scans.
+ */
+function drawChannelComplete(
+  ctx: CanvasRenderingContext2D,
+  columnMinMax: Array<{ max: number; min: number }>,
+  columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
   color: string,
   fillOpacity: number,
+  strokeOpacity: number,
+  lineWidth: number,
 ): void {
-  if (columnCount <= 0 || peakSlice.numBars <= 0) return;
+  if (columnCount <= 0) return;
 
+  // --- Filled waveform shape ---
   ctx.beginPath();
 
   // Upper contour (max values, left to right)
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - columnMinMax[i].max * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }
@@ -121,8 +138,7 @@ function drawChannelWaveform(
   // Lower contour (min values, right to left)
   for (let i = columnCount - 1; i >= 0; i--) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yBottom = centerY - min * maxAmplitude;
+    const yBottom = centerY - columnMinMax[i].min * maxAmplitude;
     ctx.lineTo(x, yBottom);
   }
 
@@ -130,33 +146,12 @@ function drawChannelWaveform(
   ctx.fillStyle = color;
   ctx.globalAlpha = fillOpacity;
   ctx.fill();
-  ctx.globalAlpha = 1;
-}
 
-/**
- * Draw a peak envelope highlight line (positive peaks only) for one channel.
- */
-function drawPeakEnvelopeLine(
-  ctx: CanvasRenderingContext2D,
-  peaks: number[],
-  peakSlice: VisiblePeakSlice,
-  columnCount: number,
-  columnWidth: number,
-  leftPx: number,
-  channelOffset: number,
-  centerY: number,
-  maxAmplitude: number,
-  color: string,
-  strokeOpacity: number,
-  lineWidth: number,
-): void {
-  if (columnCount <= 0 || peakSlice.numBars <= 0) return;
-
+  // --- Peak envelope highlight line ---
   ctx.beginPath();
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - columnMinMax[i].max * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }
@@ -219,10 +214,16 @@ export function drawWaveform(params: WaveformRenderParams): void {
   const columnWidth = waveformLayout.widthPx / columnCount;
   const scaledAmplitude = (height * 0.23) * Math.min(1, trackVolume);
 
+  // Apply opacity as overall multiplier (matches SVG opacityClassName behavior).
+  // Internal opacities: fill 0.6, stroke 1.0, divider 0.2 — all scaled by the overall opacity.
+  const fillAlpha = 0.6 * opacity;
+  const strokeAlpha = 1.0 * opacity;
+  const dividerAlpha = 0.2 * opacity;
+
   // Center divider
   const centerDividerY = height * 0.5;
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.2;
+  ctx.globalAlpha = dividerAlpha;
   ctx.lineWidth = 0.5;
   ctx.beginPath();
   ctx.moveTo(waveformLayout.leftPx, centerDividerY);
@@ -230,26 +231,20 @@ export function drawWaveform(params: WaveformRenderParams): void {
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // Left channel (centered at 25%)
-  const leftCenterY = height * 0.25;
-  drawChannelWaveform(
-    ctx, peaks, peakSlice, columnCount, columnWidth,
-    waveformLayout.leftPx, 0, leftCenterY, scaledAmplitude, color, opacity,
-  );
-  drawPeakEnvelopeLine(
-    ctx, peaks, peakSlice, columnCount, columnWidth,
-    waveformLayout.leftPx, 0, leftCenterY, scaledAmplitude, color, 1, 0.8,
+  // Precompute min/max for both channels (single scan per channel)
+  const leftMinMax = precomputeChannelMinMax(peaks, peakSlice, columnCount, 0);
+  const rightMinMax = precomputeChannelMinMax(peaks, peakSlice, columnCount, 2);
+
+  // Left channel (centered at 25%) — fill + envelope in one pass
+  drawChannelComplete(
+    ctx, leftMinMax, columnCount, columnWidth,
+    waveformLayout.leftPx, height * 0.25, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8,
   );
 
-  // Right channel (centered at 75%)
-  const rightCenterY = height * 0.75;
-  drawChannelWaveform(
-    ctx, peaks, peakSlice, columnCount, columnWidth,
-    waveformLayout.leftPx, 2, rightCenterY, scaledAmplitude, color, opacity,
-  );
-  drawPeakEnvelopeLine(
-    ctx, peaks, peakSlice, columnCount, columnWidth,
-    waveformLayout.leftPx, 2, rightCenterY, scaledAmplitude, color, 1, 0.8,
+  // Right channel (centered at 75%) — fill + envelope in one pass
+  drawChannelComplete(
+    ctx, rightMinMax, columnCount, columnWidth,
+    waveformLayout.leftPx, height * 0.75, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8,
   );
 }
 

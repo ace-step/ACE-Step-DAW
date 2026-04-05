@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { drawMidiThumbnail } from './waveformRenderer';
+import { HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 import type { MidiClipData } from '../../types/project';
 
 interface CanvasClipMidiThumbnailProps {
@@ -54,7 +55,7 @@ export function CanvasClipMidiThumbnail({
   }
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: 14 }}>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: HEADER_RAIL_HEIGHT_PX }}>
       <canvas
         ref={canvasRef}
         style={{ width, height }}

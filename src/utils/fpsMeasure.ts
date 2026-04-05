@@ -34,6 +34,7 @@ export class FpsMeasure {
   private running = false;
 
   start(): void {
+    if (this.running) this.stop();
     this.frameTimes = [];
     this.lastTimestamp = null;
     this.running = true;

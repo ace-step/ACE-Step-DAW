@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { TimelineOverlayCanvas } from '../TimelineOverlayCanvas';
 
-// Mock canvas getContext since jsdom doesn't support it
 const mockCtx = {
   scale: vi.fn(),
+  setTransform: vi.fn(),
   clearRect: vi.fn(),
   fillRect: vi.fn(),
   fillStyle: '',
@@ -18,7 +18,16 @@ const mockCtx = {
   roundRect: vi.fn(),
 };
 
-HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(mockCtx);
+let getContextSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx as unknown as CanvasRenderingContext2D);
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  getContextSpy.mockRestore();
+});
 
 describe('TimelineOverlayCanvas', () => {
   it('renders nothing when no drags', () => {
@@ -55,9 +64,6 @@ describe('TimelineOverlayCanvas', () => {
   });
 
   it('calls canvas drawing APIs for context drag', () => {
-    mockCtx.fillRect.mockClear();
-    mockCtx.stroke.mockClear();
-
     render(
       <TimelineOverlayCanvas
         width={1000}

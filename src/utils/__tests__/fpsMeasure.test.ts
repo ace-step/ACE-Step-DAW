@@ -8,6 +8,7 @@ describe('FpsMeasure', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('returns empty report before start', () => {

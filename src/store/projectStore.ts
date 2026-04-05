@@ -118,7 +118,7 @@ import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { getSynthPresetById } from '../data/synthPresets';
 import { getPresetById, type InstrumentPreset } from '../data/instrumentPresets';
-import { detectClipGroups, resolveFollowAction, rollFollowAction } from '../utils/followActions';
+import { detectClipGroups, resolveFollowAction, rollFollowAction, resolveSceneFollowAction } from '../utils/followActions';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { DEFAULT_MODULATION_SETTINGS } from '../types/project';
@@ -768,6 +768,7 @@ export interface ProjectState extends MidiSliceActions {
   setSessionSlotFollowAction: (slotId: string, config: Partial<import('../types/project').FollowActionConfig>) => void;
   setSessionFollowActionsEnabled: (enabled: boolean) => void;
   scheduleFollowAction: (trackId: string, currentSlotId: string, launchTime: number) => void;
+  scheduleSceneFollowAction: (sceneId: string, launchTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
@@ -5264,6 +5265,8 @@ export const useProjectStore = create<ProjectState>()(
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, executeAt, 'stop');
       }
       set({ project: nextProject });
+      // Schedule scene follow action (e.g., auto-advance to next scene)
+      get().scheduleSceneFollowAction(sceneId, executeAt);
       return;
     }
 
@@ -5355,12 +5358,15 @@ export const useProjectStore = create<ProjectState>()(
       },
     };
 
+    // Collect scene launches that need follow action scheduling
+    const sceneLaunchesForFollowAction: Array<{ sceneId: string; executeAt: number }> = [];
+
     for (const launch of ready) {
       if (launch.type === 'clip' && launch.trackId) {
         nextProject = applySessionTrackLaunch(nextProject, launch.trackId, launch.clipId ?? null, launch.executeAt, 'clip', launch.sceneId ?? null);
         continue;
       }
-      if (launch.type === 'scene' && launch.sceneId) {
+      if ((launch.type === 'scene' || launch.type === 'scene-follow-action') && launch.sceneId) {
         const nextSession = ensureProjectSession(nextProject).session!;
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId);
@@ -5369,6 +5375,7 @@ export const useProjectStore = create<ProjectState>()(
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
         }
+        sceneLaunchesForFollowAction.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
         continue;
       }
       if (launch.type === 'stop-track' && launch.trackId) {
@@ -5392,6 +5399,11 @@ export const useProjectStore = create<ProjectState>()(
     }
 
     set({ project: nextProject });
+
+    // Schedule scene follow actions after state is updated
+    for (const { sceneId, executeAt } of sceneLaunchesForFollowAction) {
+      get().scheduleSceneFollowAction(sceneId, executeAt);
+    }
   },
 
   setSessionSlotFollowAction: (slotId, config) => {
@@ -5482,6 +5494,47 @@ export const useProjectStore = create<ProjectState>()(
         session: nextSession,
       },
     });
+  },
+
+  scheduleSceneFollowAction: (sceneId, launchTime) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+
+    // Check global toggle (default true)
+    if (session.followActionsEnabled === false) return;
+
+    const currentScene = session.scenes.find((s) => s.id === sceneId);
+    if (!currentScene?.followAction || currentScene.followAction === 'none') return;
+
+    const targetScene = resolveSceneFollowAction(
+      currentScene.followAction,
+      currentScene,
+      session.scenes,
+    );
+
+    // Calculate fire time using scene followActionTime (in bars, default 1)
+    const bars = currentScene.followActionTime ?? 1;
+    const beatsPerBar = state.project.timeSignature ?? 4;
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const executeAt = launchTime + bars * beatsPerBar * beatDuration;
+
+    if (targetScene) {
+      // Queue a scene launch at the calculated time
+      const nextSession = queuePendingSessionLaunch(session, {
+        type: 'scene-follow-action',
+        sceneId: targetScene.id,
+        executeAt,
+      });
+      set({ project: { ...state.project, session: nextSession } });
+    } else {
+      // 'stop' or no valid target — queue stop-all
+      const nextSession = queuePendingSessionLaunch(session, {
+        type: 'stop-all',
+        executeAt,
+      });
+      set({ project: { ...state.project, session: nextSession } });
+    }
   },
 
   startSessionArrangementRecording: (startTime) => {

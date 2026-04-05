@@ -7367,7 +7367,7 @@ export const useProjectStore = create<ProjectState>()(
     );
     if (existingLane) return;
 
-    // Warn if this automation lane conflicts with an active LFO
+    // Warn if this automation lane conflicts with an active LFO (#1023)
     if (parameter.type === 'effect') {
       const track = state.project.tracks.find((t) => t.id === trackId);
       if (track) {

@@ -1501,6 +1501,22 @@ class EffectsEngine {
     return this.chains.get(trackId) ?? [];
   }
 
+  /**
+   * Check if an effect parameter has an active LFO modulating it.
+   * Used to detect automation/LFO conflicts.
+   */
+  hasLfoOnParam(trackId: string, effectId: string, param: string): boolean {
+    const nodes = this.chains.get(trackId);
+    if (!nodes) return false;
+    const effectNode = nodes.find((n) => n.id === effectId);
+    if (!effectNode || !effectNode.lfo) return false;
+
+    // Filter LFO targets frequency, flanger LFO targets delayTime
+    if (effectNode.type === 'filter' && param === 'frequency') return true;
+    if (effectNode.type === 'flanger' && (param === 'delayTime' || param === 'frequency')) return true;
+    return false;
+  }
+
   getInputNode(trackId: string): AudioNode | null {
     if (this.bypassedTracks.get(trackId)) return null;
     // WASM path: AudioWorkletNode is both input and output

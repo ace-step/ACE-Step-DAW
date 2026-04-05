@@ -32,6 +32,8 @@ interface SynthPresetBrowserProps {
   /** Unified user presets (all instrument kinds). */
   userInstrumentPresets?: InstrumentPreset[];
   onDeleteUserPreset?: (presetId: string) => void;
+  /** Called to preview/audition a preset before applying it. */
+  onPreviewPreset?: (presetId: string) => void;
 }
 
 export function SynthPresetBrowser({
@@ -41,6 +43,7 @@ export function SynthPresetBrowser({
   userPresets: _legacyUserPresets,
   userInstrumentPresets = [],
   onDeleteUserPreset,
+  onPreviewPreset,
 }: SynthPresetBrowserProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<InstrumentPresetCategory | null>(null);
@@ -345,6 +348,19 @@ export function SynthPresetBrowser({
                     >
                       {preset.name}
                     </button>
+                    {onPreviewPreset && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPreviewPreset(preset.id);
+                        }}
+                        className="text-zinc-500 hover:text-blue-400 text-[11px] shrink-0 transition-colors"
+                        aria-label={`Preview ${preset.name}`}
+                        title={`Preview ${preset.name}`}
+                      >
+                        &#9654;
+                      </button>
+                    )}
                     {kindFilter === 'all' && kindBadge(preset.instrumentKind)}
                     {!preset.isFactory && (
                       <span className="text-[9px] text-zinc-500 shrink-0">user</span>

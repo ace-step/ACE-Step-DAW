@@ -8699,7 +8699,7 @@ export const useProjectStore = create<ProjectState>()(
 
     const bpm = state.project.bpm;
     const timeSig = state.project.timeSignature;
-    const bars = options?.bars ?? 4;
+    const bars = options?.bars ?? 8;
 
     const result = captureService.drain(trackId, captureTime, bpm, timeSig, bars);
     if (!result) return undefined;

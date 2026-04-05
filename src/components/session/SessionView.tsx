@@ -3,6 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
+import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
 import { getSessionClips } from '../../utils/sessionClips';
 import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } from '../../hooks/useSessionDragDrop';
@@ -99,8 +100,10 @@ export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
   const setSessionSlotQuantization = useProjectStore((s) => s.setSessionSlotQuantization);
+  const captureMidi = useProjectStore((s) => s.captureMidi);
   const launchedSessionClips = useTransportStore((s) => s.launchedSessionClips);
   const currentTime = useTransportStore((s) => s.currentTime);
+  const armedTrackIds = useTransportStore((s) => s.armedTrackIds);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
@@ -128,6 +131,17 @@ export function SessionView() {
   const [showSessionMixer, setShowSessionMixer] = useState(false);
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
   const [editingSceneName, setEditingSceneName] = useState('');
+  const [captureBarCount, setCaptureBarCount] = useState(8);
+
+  const hasArmedTrack = armedTrackIds.length > 0;
+  const captureService = useMemo(() => getMidiCaptureService(), []);
+  const armedTrackHasBuffer = hasArmedTrack && captureService.hasEvents(armedTrackIds[0]);
+
+  const handleCaptureMidi = useCallback(() => {
+    if (!hasArmedTrack) return;
+    const targetTrackId = armedTrackIds[0];
+    captureMidi(targetTrackId, currentTime, captureService, { bars: captureBarCount, quantize: '1/16' });
+  }, [hasArmedTrack, armedTrackIds, currentTime, captureMidi, captureService, captureBarCount]);
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -244,6 +258,35 @@ export function SessionView() {
             >
               {sessionArrangementRecording ? 'Stop Arrangement Record' : 'Record to Arrangement'}
             </button>
+            {/* MIDI Retroactive Capture */}
+            <div className="flex items-center gap-1">
+              <select
+                aria-label="Capture buffer length in bars"
+                value={captureBarCount}
+                onChange={(e) => setCaptureBarCount(Number(e.target.value))}
+                className="bg-[#111] border border-[#333] rounded px-1.5 py-1 text-[10px] text-zinc-300"
+              >
+                {[2, 4, 8, 16, 32].map((b) => (
+                  <option key={b} value={b}>{b} bars</option>
+                ))}
+              </select>
+              <button
+                onClick={handleCaptureMidi}
+                disabled={!hasArmedTrack}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                  hasArmedTrack && armedTrackHasBuffer
+                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50'
+                    : hasArmedTrack
+                      ? 'bg-[#2a2a2a] text-zinc-300 hover:bg-[#343434]'
+                      : 'bg-[#2a2a2a] text-zinc-500 opacity-50 cursor-not-allowed'
+                }`}
+                aria-label="Capture MIDI from rolling buffer"
+                title={hasArmedTrack ? `Capture last ${captureBarCount} bars of MIDI input` : 'Arm a track to enable MIDI capture'}
+              >
+                Capture MIDI
+              </button>
+            </div>
+
             <button
               onClick={() => void stopAllSessionClips()}
               className="px-3 py-1.5 rounded-md bg-[#2a2a2a] text-[11px] font-medium text-zinc-300 hover:bg-[#343434] transition-colors"

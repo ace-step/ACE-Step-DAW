@@ -575,7 +575,7 @@ export function useKeyboardShortcuts() {
         const captureService = getMidiCaptureService();
         const targetTrackId = transport.armedTrackIds[0];
         if (targetTrackId) {
-          project.captureMidi(targetTrackId, transport.currentTime, captureService);
+          project.captureMidi(targetTrackId, transport.currentTime, captureService, { bars: 8, quantize: '1/16' });
         }
         return;
       }

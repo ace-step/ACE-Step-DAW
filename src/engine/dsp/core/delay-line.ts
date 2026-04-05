@@ -7,7 +7,7 @@
  * Part of Phase 2: Core DSP Library (#1123).
  */
 
-import { cubicInterpolate, ANTI_DENORMAL } from './dsp-utils';
+import { cubicInterpolate } from './dsp-utils';
 
 /** Round up to next power of 2. */
 function nextPow2(n: number): number {
@@ -32,7 +32,7 @@ export class DelayLine {
 
   /** Push one sample into the delay line. */
   push(sample: number): void {
-    this._buf[this._writePos & this._mask] = sample + ANTI_DENORMAL - ANTI_DENORMAL;
+    this._buf[this._writePos & this._mask] = sample;
     this._writePos++;
   }
 

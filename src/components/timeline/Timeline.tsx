@@ -541,13 +541,26 @@ export function Timeline() {
               />
 
               {/* Canvas-based selection overlays for smooth drag performance.
-                  Sized to viewport (not totalWidth) to avoid exceeding browser canvas limits. */}
-              <TimelineOverlayCanvas
-                width={Math.min(totalWidth, viewportWidth + 200)}
-                height={trackAreaRef.current?.clientHeight ?? 0}
-                ctxDrag={ctxDrag}
-                selDrag={selDrag}
-              />
+                  Viewport-anchored (sticky) so drag rectangles remain visible during scroll,
+                  while canvas size stays within browser limits. */}
+              {(ctxDrag || selDrag) && (
+                <div
+                  className="pointer-events-none sticky left-0 z-10"
+                  style={{
+                    position: 'sticky',
+                    width: viewportWidth,
+                    height: trackAreaRef.current?.clientHeight ?? 0,
+                    marginBottom: -(trackAreaRef.current?.clientHeight ?? 0),
+                  }}
+                >
+                  <TimelineOverlayCanvas
+                    width={viewportWidth}
+                    height={trackAreaRef.current?.clientHeight ?? 0}
+                    ctxDrag={ctxDrag ? { ...ctxDrag, left: ctxDrag.left - (scrollRef.current?.scrollLeft ?? 0) } : null}
+                    selDrag={selDrag ? { ...selDrag, left: selDrag.left - (scrollRef.current?.scrollLeft ?? 0) } : null}
+                  />
+                </div>
+              )}
               {arrangementRows.map((row) => (row.kind === 'track' ? (
                 <TrackLane key={row.track.id} track={row.track} />
               ) : (

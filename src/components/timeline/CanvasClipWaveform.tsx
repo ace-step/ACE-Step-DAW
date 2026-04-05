@@ -1,6 +1,9 @@
-import { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
+import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
 import { drawWaveform } from './waveformRenderer';
 import type { StretchMode } from '../../types/project';
+
+/** Safe max canvas dimension to stay within browser limits (most: 16384–32768). */
+const MAX_CANVAS_CSS_PX = 16384;
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;
@@ -34,6 +37,10 @@ export function CanvasClipWaveform({
   const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
   const [measuredHeight, setMeasuredHeight] = useState(0);
 
+  // Cap width to browser canvas limit — used for both backing store AND CSS width
+  const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+  const safeWidth = useMemo(() => Math.min(width, MAX_CANVAS_CSS_PX / dpr), [width, dpr]);
+
   // Measure the container height (replaces SVG height="100%")
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -52,15 +59,12 @@ export function CanvasClipWaveform({
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !peaks || peaks.length === 0 || width <= 0 || measuredHeight <= 0) return;
+    if (!canvas || !peaks || peaks.length === 0 || safeWidth <= 0 || measuredHeight <= 0) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    // Cap backing store to safe browser canvas limit (most browsers: 16384–32768px)
-    const safeWidth = Math.min(width, 16384 / dpr);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Only resize backing store when dimensions change (avoids expensive reallocation)
+    // Only resize backing store when dimensions change
     const metrics = canvasMetricsRef.current;
     const needsResize =
       !metrics || metrics.width !== safeWidth || metrics.height !== measuredHeight || metrics.dpr !== dpr;
@@ -89,7 +93,7 @@ export function CanvasClipWaveform({
       trackVolume,
       opacity,
     });
-  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, measuredHeight, color, trackVolume, opacity]);
+  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, safeWidth, measuredHeight, color, trackVolume, opacity, dpr]);
 
   useEffect(() => {
     draw();
@@ -103,7 +107,7 @@ export function CanvasClipWaveform({
     <div ref={containerRef} className="absolute inset-0 overflow-hidden">
       <canvas
         ref={canvasRef}
-        style={{ width, height: measuredHeight || '100%' }}
+        style={{ width: safeWidth, height: measuredHeight || '100%' }}
         data-testid="waveform-canvas"
       />
     </div>

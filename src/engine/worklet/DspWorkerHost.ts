@@ -124,9 +124,18 @@ export class DspWorkerHost {
           resolve(false);
         };
 
+        // Persistent error handler for post-initialization errors
+        const persistentErrorHandler = (e: ErrorEvent) => {
+          this._setState('error');
+          this._onError?.(e.message || 'DSP worker runtime error');
+        };
+
         const cleanup = () => {
           clearTimeout(timeout);
           worker.onmessage = origHandler;
+          // Restore persistent error handlers so post-init errors aren't silently dropped
+          worker.onerror = persistentErrorHandler;
+          worker.onmessageerror = null;
         };
 
         const timeout = setTimeout(() => {

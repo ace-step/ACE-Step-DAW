@@ -478,7 +478,11 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
   }
 
   dispose(): void {
-    try { this._lfo.stop(); } catch { /* already stopped */ }
+    try { this._lfo.stop(); } catch { /* */ }
+    try { this._lfo.disconnect(); } catch { /* */ }
+    try { this._lfoGain.disconnect(); } catch { /* */ }
+    try { this._delay.disconnect(); } catch { /* */ }
+    try { this._feedbackNode.disconnect(); } catch { /* */ }
     super.dispose();
   }
 }
@@ -488,6 +492,7 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   private readonly _lfo: OscillatorNode;
   private readonly _lfoGain: GainNode;
   private readonly _lfoDcGain: GainNode;
+  private readonly _lfoDcSource: AudioBufferSourceNode;
   private readonly _mix: DryWetMix;
   private _frequency: number;
   private _octaves: number;
@@ -551,6 +556,7 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
     this._lfo = lfo;
     this._lfoGain = lfoGain;
     this._lfoDcGain = lfoDcGain;
+    this._lfoDcSource = lfoDcSource;
     this._mix = mix;
     this._frequency = freq;
     this._octaves = oct;
@@ -601,7 +607,12 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   set wet(v: number) { this._mix.wet = v; }
 
   dispose(): void {
-    try { this._lfo.stop(); } catch { /* already stopped */ }
+    try { this._lfo.stop(); } catch { /* */ }
+    try { this._lfo.disconnect(); } catch { /* */ }
+    try { this._lfoGain.disconnect(); } catch { /* */ }
+    try { this._lfoDcSource.stop(); } catch { /* */ }
+    try { this._lfoDcSource.disconnect(); } catch { /* */ }
+    try { this._lfoDcGain.disconnect(); } catch { /* */ }
     super.dispose();
   }
 }

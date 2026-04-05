@@ -164,8 +164,8 @@ describe('WikiLintService', () => {
       expect(report.devStats).toBeTruthy();
     });
 
-    it('counts severity levels correctly', async () => {
-      // Empty wikis will have gap warnings
+    it('counts severity levels correctly', () => {
+      // Empty wikis produce gap info-level results
       const report = lintService.generateHealthReport();
       expect(report.totalIssues).toBeGreaterThan(0);
       expect(report.warnings + report.infos).toBeGreaterThan(0);

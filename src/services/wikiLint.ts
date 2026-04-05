@@ -157,7 +157,16 @@ export class WikiLintService {
   // ─── Custom Rules ──────────────────────────────────────────────────
 
   addRule(rule: LintRule, executor: LintRuleExecutor): void {
-    this.customRules.push({ rule, executor });
+    // Wrap executor to enforce rule metadata on results
+    const wrappedExecutor: LintRuleExecutor = () => {
+      return executor().map(result => ({
+        ...result,
+        ruleId: rule.id,
+        severity: result.severity ?? rule.severity,
+        category: result.category ?? rule.category,
+      }));
+    };
+    this.customRules.push({ rule, executor: wrappedExecutor });
   }
 
   // ─── Health Report ──────────────────────────────────────────────────

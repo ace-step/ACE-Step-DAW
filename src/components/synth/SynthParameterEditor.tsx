@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope, UnisonSettings, SubtractiveInstrumentSettings } from '../../types/project';
+import type { SoundDesignSuggestion } from '../../services/soundDesignAssistant';
 import { OscillatorSelector } from './OscillatorSelector';
 import { ADSREnvelopeEditor } from './ADSREnvelopeEditor';
 import { SynthFilterControls } from './SynthFilterControls';
@@ -70,7 +71,7 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
   const [showAiPanel, setShowAiPanel] = useState(false);
 
   const handleAiApply = useCallback(
-    (changes: Partial<SubtractiveInstrumentSettings>) => {
+    (changes: SoundDesignSuggestion['changes']) => {
       if (changes.oscillator?.waveform) {
         updateSynthOscillatorType(trackId, changes.oscillator.waveform);
       }
@@ -78,12 +79,18 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
         updateSynthEnvelope(trackId, changes.ampEnvelope);
       }
       if (changes.filter) {
-        const { enabled: _e, ...filterUpdates } = changes.filter;
-        updateSynthFilter(trackId, filterUpdates as Partial<SynthFilter>);
+        const filterUpdates: Partial<SynthFilter> = {};
+        if (changes.filter.cutoffHz !== undefined) filterUpdates.frequency = changes.filter.cutoffHz;
+        if (changes.filter.resonance !== undefined) filterUpdates.Q = changes.filter.resonance;
+        if (changes.filter.type !== undefined) filterUpdates.type = changes.filter.type;
+        updateSynthFilter(trackId, filterUpdates);
       }
       if (changes.lfo) {
-        const { enabled: _e, retrigger: _r, ...lfoUpdates } = changes.lfo;
-        updateSynthLfo(trackId, lfoUpdates as Partial<SynthLfo>);
+        const lfoUpdates: Partial<SynthLfo> = {};
+        if (changes.lfo.rateHz !== undefined) lfoUpdates.rate = changes.lfo.rateHz;
+        if (changes.lfo.waveform !== undefined) lfoUpdates.shape = changes.lfo.waveform;
+        if (changes.lfo.depth !== undefined) lfoUpdates.depth = changes.lfo.depth;
+        updateSynthLfo(trackId, lfoUpdates);
       }
       if (changes.filterEnvelope) {
         updateFilterEnvelope(trackId, changes.filterEnvelope);

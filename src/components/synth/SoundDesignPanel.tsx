@@ -9,7 +9,7 @@ import type { SubtractiveInstrumentSettings, InstrumentKind } from '../../types/
 interface Props {
   currentSettings: SubtractiveInstrumentSettings;
   instrumentKind: InstrumentKind;
-  onApply: (changes: Partial<SubtractiveInstrumentSettings>) => void;
+  onApply: (changes: SoundDesignSuggestion['changes']) => void;
 }
 
 function formatParamValue(val: unknown): string {

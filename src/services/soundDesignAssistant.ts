@@ -19,13 +19,15 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
+type DeepPartial<T> = { [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P] };
+
 export interface SoundDesignSuggestion {
   /** Human-readable name for this suggestion. */
   name?: string;
   /** What this change does. */
   description: string;
   /** Partial parameter overrides to apply. */
-  changes: Partial<SubtractiveInstrumentSettings>;
+  changes: DeepPartial<SubtractiveInstrumentSettings>;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,7 +36,7 @@ export interface SoundDesignSuggestion {
 
 interface KeywordRule {
   patterns: RegExp[];
-  apply: (current: SubtractiveInstrumentSettings) => Partial<SubtractiveInstrumentSettings>;
+  apply: (current: SubtractiveInstrumentSettings) => DeepPartial<SubtractiveInstrumentSettings>;
   description: string;
 }
 
@@ -44,7 +46,6 @@ const KEYWORD_RULES: KeywordRule[] = [
     patterns: [/\bwarm\b/i, /\bwarmer\b/i, /\bmellow\b/i],
     apply: (current) => ({
       filter: {
-        ...current.filter,
         enabled: true,
         type: 'lowpass',
         cutoffHz: current.filter.enabled ? Math.max(200, current.filter.cutoffHz * 0.7) : 1200,
@@ -57,7 +58,6 @@ const KEYWORD_RULES: KeywordRule[] = [
     patterns: [/\bbright\b/i, /\bbrighter\b/i, /\bcrisp\b/i, /\bshimmer/i],
     apply: (current) => ({
       filter: {
-        ...current.filter,
         enabled: true,
         type: 'lowpass',
         cutoffHz: current.filter.enabled ? Math.min(18000, current.filter.cutoffHz * 1.5) : 8000,
@@ -70,7 +70,6 @@ const KEYWORD_RULES: KeywordRule[] = [
     patterns: [/\bdark\b/i, /\bdarker\b/i, /\bsubdued\b/i],
     apply: (current) => ({
       filter: {
-        ...current.filter,
         enabled: true,
         type: 'lowpass',
         cutoffHz: current.filter.enabled ? Math.max(100, current.filter.cutoffHz * 0.5) : 800,
@@ -106,7 +105,6 @@ const KEYWORD_RULES: KeywordRule[] = [
     patterns: [/\blong release\b/i, /\bsustain/i, /\breverb(?:erant)?\b/i],
     apply: (current) => ({
       ampEnvelope: {
-        ...current.ampEnvelope,
         sustain: Math.max(current.ampEnvelope.sustain, 0.7),
         release: Math.max(current.ampEnvelope.release, 2.0),
       },
@@ -117,29 +115,29 @@ const KEYWORD_RULES: KeywordRule[] = [
   // ── Oscillator character ──────────────────────────────────────────────
   {
     patterns: [/\bsaw\b/i, /\bsaw(?:tooth)?\b/i, /\bbrassi?\b/i],
-    apply: (current) => ({
-      oscillator: { ...current.oscillator, waveform: 'sawtooth' },
+    apply: () => ({
+      oscillator: { waveform: 'sawtooth' as const },
     }),
     description: 'Sawtooth waveform for brassy/rich tone',
   },
   {
     patterns: [/\bsquare\b/i, /\bhollow\b/i, /\breedy\b/i],
-    apply: (current) => ({
-      oscillator: { ...current.oscillator, waveform: 'square' },
+    apply: () => ({
+      oscillator: { waveform: 'square' as const },
     }),
     description: 'Square waveform for hollow/reedy tone',
   },
   {
     patterns: [/\bsine\b/i, /\bpure\b/i, /\bsub\b/i, /\bclean\b/i],
-    apply: (current) => ({
-      oscillator: { ...current.oscillator, waveform: 'sine' },
+    apply: () => ({
+      oscillator: { waveform: 'sine' as const },
     }),
     description: 'Sine waveform for pure/clean tone',
   },
   {
     patterns: [/\btriangle\b/i, /\bsoft\b(?!.*attack)/i, /\bgentle\b/i],
-    apply: (current) => ({
-      oscillator: { ...current.oscillator, waveform: 'triangle' },
+    apply: () => ({
+      oscillator: { waveform: 'triangle' as const },
     }),
     description: 'Triangle waveform for soft/gentle tone',
   },
@@ -165,7 +163,6 @@ const KEYWORD_RULES: KeywordRule[] = [
     patterns: [/\baggressive\b/i, /\bdistort/i, /\bdirty\b/i, /\bgritty\b/i, /\bnasty\b/i],
     apply: (current) => ({
       filter: {
-        ...current.filter,
         enabled: true,
         drive: Math.max(current.filter.drive, 0.5),
         resonance: Math.max(current.filter.resonance, 3),
@@ -177,15 +174,15 @@ const KEYWORD_RULES: KeywordRule[] = [
   // ── LFO / modulation ─────────────────────────────────────────────────
   {
     patterns: [/\bwobbl/i, /\blfo\b/i, /\bpuls(e|ing)\b/i],
-    apply: (current) => ({
-      lfo: { ...current.lfo, enabled: true, target: 'filterCutoff', rateHz: 3, depth: 0.5, waveform: 'sine', retrigger: false },
+    apply: () => ({
+      lfo: { enabled: true, target: 'filterCutoff', rateHz: 3, depth: 0.5, waveform: 'sine', retrigger: false },
     }),
     description: 'LFO modulation on filter cutoff',
   },
   {
     patterns: [/\bvibrato\b/i, /\btremolo\b/i],
-    apply: (current) => ({
-      lfo: { ...current.lfo, enabled: true, target: 'pitch', rateHz: 5, depth: 0.1, waveform: 'sine', retrigger: false },
+    apply: () => ({
+      lfo: { enabled: true, target: 'pitch', rateHz: 5, depth: 0.1, waveform: 'sine', retrigger: false },
     }),
     description: 'Pitch vibrato modulation',
   },
@@ -210,7 +207,7 @@ export function interpretSoundDescription(
   currentSettings: SubtractiveInstrumentSettings,
 ): SoundDesignSuggestion {
   const appliedDescriptions: string[] = [];
-  let changes: Partial<SubtractiveInstrumentSettings> = {};
+  let changes: DeepPartial<SubtractiveInstrumentSettings> = {};
 
   for (const rule of KEYWORD_RULES) {
     const matched = rule.patterns.some((p) => p.test(description));
@@ -224,7 +221,7 @@ export function interpretSoundDescription(
   // If nothing matched, provide a generic warm pad suggestion
   if (appliedDescriptions.length === 0) {
     changes = {
-      filter: { ...currentSettings.filter, enabled: true, type: 'lowpass', cutoffHz: 3000, resonance: 1 },
+      filter: { enabled: true, type: 'lowpass', cutoffHz: 3000, resonance: 1 },
     };
     appliedDescriptions.push('Applied generic filter shaping');
   }
@@ -240,26 +237,27 @@ export function generateVariations(
   _instrumentKind: InstrumentKind,
   count: number,
 ): SoundDesignSuggestion[] {
-  const variationRecipes: { name: string; description: string; apply: (base: SubtractiveInstrumentSettings) => Partial<SubtractiveInstrumentSettings> }[] = [
+  const clampedCount = Math.max(0, Math.min(count, 8));
+  const variationRecipes: { name: string; description: string; apply: (base: SubtractiveInstrumentSettings) => DeepPartial<SubtractiveInstrumentSettings> }[] = [
     {
       name: 'Brighter',
       description: 'Opened up filter for more brightness',
       apply: (b) => ({
-        filter: { ...b.filter, enabled: true, cutoffHz: Math.min(18000, (b.filter.cutoffHz || 2000) * 1.5), resonance: Math.max(b.filter.resonance, 1.5) },
+        filter: { enabled: true, cutoffHz: Math.min(18000, (b.filter.cutoffHz || 2000) * 1.5), resonance: Math.max(b.filter.resonance, 1.5) },
       }),
     },
     {
       name: 'Warmer',
       description: 'Reduced highs for warmth',
       apply: (b) => ({
-        filter: { ...b.filter, enabled: true, cutoffHz: Math.max(200, (b.filter.cutoffHz || 2000) * 0.6) },
+        filter: { enabled: true, cutoffHz: Math.max(200, (b.filter.cutoffHz || 2000) * 0.6) },
       }),
     },
     {
       name: 'Wider',
       description: 'Added unison detune for width',
       apply: (b) => ({
-        unison: { ...b.unison, voices: Math.max(b.unison.voices, 3), detuneCents: 20, stereoSpread: 0.8 },
+        unison: { voices: Math.max(b.unison.voices, 3), detuneCents: 20, stereoSpread: 0.8 },
       }),
     },
     {
@@ -273,34 +271,34 @@ export function generateVariations(
       name: 'Spacious',
       description: 'Extended release for spacious feel',
       apply: (b) => ({
-        ampEnvelope: { ...b.ampEnvelope, attack: Math.max(b.ampEnvelope.attack, 0.1), release: Math.max(b.ampEnvelope.release, 2.5) },
+        ampEnvelope: { attack: Math.max(b.ampEnvelope.attack, 0.1), release: Math.max(b.ampEnvelope.release, 2.5) },
       }),
     },
     {
       name: 'Aggressive',
       description: 'Added drive and resonance',
       apply: (b) => ({
-        filter: { ...b.filter, enabled: true, drive: Math.max(b.filter.drive, 0.6), resonance: Math.max(b.filter.resonance, 4) },
+        filter: { enabled: true, drive: Math.max(b.filter.drive, 0.6), resonance: Math.max(b.filter.resonance, 4) },
       }),
     },
     {
       name: 'Subtle Vibrato',
       description: 'Added gentle pitch vibrato',
-      apply: (b) => ({
-        lfo: { ...b.lfo, enabled: true, target: 'pitch', rateHz: 5, depth: 0.08, waveform: 'sine', retrigger: false },
+      apply: () => ({
+        lfo: { enabled: true, target: 'pitch', rateHz: 5, depth: 0.08, waveform: 'sine', retrigger: false },
       }),
     },
     {
       name: 'Detuned',
       description: 'Thick detuned unison',
-      apply: (b) => ({
-        unison: { ...b.unison, voices: 5, detuneCents: 25, stereoSpread: 0.6, blend: 0.5 },
-        oscillator: { ...b.oscillator, waveform: 'sawtooth' },
+      apply: () => ({
+        unison: { voices: 5, detuneCents: 25, stereoSpread: 0.6, blend: 0.5 },
+        oscillator: { waveform: 'sawtooth' as const },
       }),
     },
   ];
 
-  return variationRecipes.slice(0, count).map((recipe) => ({
+  return variationRecipes.slice(0, clampedCount).map((recipe) => ({
     name: recipe.name,
     description: recipe.description,
     changes: recipe.apply(base),
@@ -311,7 +309,7 @@ export function generateVariations(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function deepMerge<T extends Record<string, unknown>>(a: T, b: Partial<T>): T {
+function deepMerge<T extends Record<string, unknown>>(a: T, b: DeepPartial<T>): T {
   const result = { ...a } as Record<string, unknown>;
   for (const key of Object.keys(b)) {
     const bVal = (b as Record<string, unknown>)[key];

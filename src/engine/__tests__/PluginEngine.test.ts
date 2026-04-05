@@ -1,229 +1,425 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock pluginRegistry
-const mockDisposeInstance = vi.fn();
-const mockGetInstance = vi.fn();
-const mockIsRegistered = vi.fn();
-const mockCreateInstance = vi.fn();
-
-vi.mock('../PluginRegistry', () => ({
-  pluginRegistry: {
-    disposeInstance: (...args: unknown[]) => mockDisposeInstance(...args),
-    getInstance: (...args: unknown[]) => mockGetInstance(...args),
-    isRegistered: (...args: unknown[]) => mockIsRegistered(...args),
-    createInstance: (...args: unknown[]) => mockCreateInstance(...args),
-  },
-}));
-
+/**
+ * Tests for PluginEngine — plugin chain management on tracks.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { pluginRegistry } from '../PluginRegistry';
 import { PluginEngine } from '../PluginEngine';
+import type { WAPPlugin, PluginAudioNode, PluginInstance } from '../../types/plugin';
 
-function makePlugin(overrides: Record<string, unknown> = {}) {
-  const inputNode = { connect: vi.fn() };
-  const outputNode = { connect: vi.fn(), disconnect: vi.fn() };
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function makeAudioNode(): AudioNode {
   return {
-    createAudioNode: vi.fn(() => ({ inputNode, outputNode })),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  } as unknown as AudioNode;
+}
+
+function makePluginAudioNode(hasInput = true): PluginAudioNode {
+  return {
+    inputNode: hasInput ? makeAudioNode() : null,
+    outputNode: makeAudioNode(),
+  };
+}
+
+function createMockPlugin(overrides: Partial<WAPPlugin> = {}): WAPPlugin {
+  const audioNode = makePluginAudioNode();
+  return {
+    name: 'Test Plugin',
+    pluginType: 'effect',
+    version: '1.0.0',
+    author: 'Test',
+    description: 'A test plugin',
+    createAudioNode: vi.fn(() => audioNode),
+    getParameterDescriptors: vi.fn(() => []),
     setParameter: vi.fn(),
+    getParameter: vi.fn(),
+    getParameters: vi.fn(() => ({})),
     dispose: vi.fn(),
-    noteOn: vi.fn(),
-    noteOff: vi.fn(),
-    latencySamples: 0,
     ...overrides,
   };
 }
 
-function makeCtx() {
-  return {} as unknown as AudioContext;
+function createMockAudioContext(): AudioContext {
+  return {} as AudioContext;
 }
+
+function makePluginInstance(overrides: Partial<PluginInstance> = {}): PluginInstance {
+  return {
+    id: 'inst-1',
+    pluginId: 'test-fx',
+    enabled: true,
+    params: {},
+    manifest: {
+      id: 'test-fx',
+      name: 'Test',
+      pluginType: 'effect',
+      version: '1.0.0',
+      author: 'Test',
+      description: 'Test',
+      parameters: [],
+    },
+    ...overrides,
+  };
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('PluginEngine', () => {
   let engine: PluginEngine;
+  let ctx: AudioContext;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     engine = new PluginEngine();
+    ctx = createMockAudioContext();
   });
 
-  // ── addPlugin ──
+  // ── addPlugin ──────────────────────────────────────────────────────────
 
-  it('adds a plugin and returns its audio node', () => {
-    const plugin = makePlugin();
-    const ctx = makeCtx();
+  describe('addPlugin', () => {
+    it('adds a plugin and returns its audio node', () => {
+      const plugin = createMockPlugin();
+      const audioNode = engine.addPlugin('track-1', 'inst-1', plugin, ctx);
 
-    const audioNode = engine.addPlugin('track-1', 'inst-1', plugin as never, ctx);
+      expect(plugin.createAudioNode).toHaveBeenCalledWith(ctx);
+      expect(audioNode.inputNode).toBeDefined();
+      expect(audioNode.outputNode).toBeDefined();
+    });
 
-    expect(plugin.createAudioNode).toHaveBeenCalledWith(ctx);
-    expect(audioNode.inputNode).toBeDefined();
-    expect(audioNode.outputNode).toBeDefined();
+    it('connects second plugin to first plugin output', () => {
+      const outputNode1 = makeAudioNode();
+      const inputNode2 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: makeAudioNode(),
+          outputNode: outputNode1,
+        })),
+      });
+      const plugin2 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: inputNode2,
+          outputNode: makeAudioNode(),
+        })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+
+      expect(outputNode1.connect).toHaveBeenCalledWith(inputNode2);
+    });
+
+    it('does not crash when second plugin has no input node', () => {
+      const plugin1 = createMockPlugin();
+      const plugin2 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: null,
+          outputNode: makeAudioNode(),
+        })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      expect(() => engine.addPlugin('track-1', 'inst-2', plugin2, ctx)).not.toThrow();
+    });
+
+    it('manages separate chains per track', () => {
+      const plugin1 = createMockPlugin();
+      const plugin2 = createMockPlugin();
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-2', 'inst-2', plugin2, ctx);
+
+      expect(engine.getPlugin('track-1', 'inst-1')).toBe(plugin1);
+      expect(engine.getPlugin('track-2', 'inst-2')).toBe(plugin2);
+      expect(engine.getPlugin('track-1', 'inst-2')).toBeUndefined();
+    });
   });
 
-  it('connects second plugin to first in chain', () => {
-    const plugin1 = makePlugin();
-    const plugin2 = makePlugin();
-    const ctx = makeCtx();
+  // ── removePlugin ───────────────────────────────────────────────────────
 
-    const firstNode = engine.addPlugin('track-1', 'inst-1', plugin1 as never, ctx);
-    const secondNode = engine.addPlugin('track-1', 'inst-2', plugin2 as never, ctx);
+  describe('removePlugin', () => {
+    it('removes a plugin and disposes it', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
 
-    // The first plugin's output should be connected to second's input
-    expect(firstNode.outputNode.connect).toHaveBeenCalledWith(secondNode.inputNode);
+      engine.removePlugin('track-1', 'inst-1');
+
+      expect(plugin.dispose).toHaveBeenCalled();
+      expect(engine.getPlugin('track-1', 'inst-1')).toBeUndefined();
+    });
+
+    it('reconnects prev to next when removing middle plugin', () => {
+      const outputNode1 = makeAudioNode();
+      const inputNode3 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: makeAudioNode(),
+          outputNode: outputNode1,
+        })),
+      });
+      const plugin2 = createMockPlugin();
+      const plugin3 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: inputNode3,
+          outputNode: makeAudioNode(),
+        })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+      engine.addPlugin('track-1', 'inst-3', plugin3, ctx);
+
+      engine.removePlugin('track-1', 'inst-2');
+
+      expect(outputNode1.disconnect).toHaveBeenCalled();
+      expect(outputNode1.connect).toHaveBeenCalledWith(inputNode3);
+    });
+
+    it('does nothing for nonexistent track', () => {
+      expect(() => engine.removePlugin('nonexistent', 'inst-1')).not.toThrow();
+    });
+
+    it('does nothing for nonexistent instance', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+      expect(() => engine.removePlugin('track-1', 'nonexistent')).not.toThrow();
+      expect(engine.getPlugin('track-1', 'inst-1')).toBe(plugin);
+    });
+
+    it('deletes chain map entry when last plugin removed', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+      engine.removePlugin('track-1', 'inst-1');
+      expect(engine.getInputNode('track-1')).toBeNull();
+    });
   });
 
-  // ── removePlugin ──
+  // ── rebuildChain ───────────────────────────────────────────────────────
 
-  it('removes a plugin and disposes it', () => {
-    const plugin = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin as never, makeCtx());
+  describe('rebuildChain', () => {
+    it('rebuilds chain from plugin instances', () => {
+      const mockPlugin = createMockPlugin();
 
-    engine.removePlugin('track-1', 'inst-1');
+      vi.spyOn(pluginRegistry, 'getInstance').mockReturnValue(mockPlugin);
+      vi.spyOn(pluginRegistry, 'disposeInstance').mockImplementation(() => {});
 
-    expect(plugin.dispose).toHaveBeenCalledTimes(1);
-    expect(mockDisposeInstance).toHaveBeenCalledWith('inst-1');
+      const instances: PluginInstance[] = [
+        makePluginInstance({ id: 'inst-1', pluginId: 'test-fx', enabled: true, params: { mix: 0.7 } }),
+      ];
+
+      engine.rebuildChain('track-1', instances, ctx);
+
+      expect(mockPlugin.setParameter).toHaveBeenCalledWith('mix', 0.7);
+      expect(engine.getPlugin('track-1', 'inst-1')).toBe(mockPlugin);
+
+      vi.restoreAllMocks();
+    });
+
+    it('skips disabled instances', () => {
+      vi.spyOn(pluginRegistry, 'getInstance').mockReturnValue(createMockPlugin());
+      vi.spyOn(pluginRegistry, 'disposeInstance').mockImplementation(() => {});
+
+      const instances: PluginInstance[] = [
+        makePluginInstance({ id: 'inst-1', enabled: false }),
+      ];
+
+      engine.rebuildChain('track-1', instances, ctx);
+
+      expect(engine.getInputNode('track-1')).toBeNull();
+
+      vi.restoreAllMocks();
+    });
+
+    it('disposes existing chain before rebuilding', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-old', plugin, ctx);
+
+      vi.spyOn(pluginRegistry, 'getInstance').mockReturnValue(undefined);
+      vi.spyOn(pluginRegistry, 'isRegistered').mockReturnValue(false);
+      vi.spyOn(pluginRegistry, 'disposeInstance').mockImplementation(() => {});
+
+      engine.rebuildChain('track-1', [], ctx);
+
+      expect(plugin.dispose).toHaveBeenCalled();
+
+      vi.restoreAllMocks();
+    });
   });
 
-  it('does nothing when removing from nonexistent track', () => {
-    engine.removePlugin('nonexistent', 'inst-1');
-    expect(mockDisposeInstance).not.toHaveBeenCalled();
+  // ── updateParam ────────────────────────────────────────────────────────
+
+  describe('updateParam', () => {
+    it('sets parameter on the correct plugin', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      engine.updateParam('track-1', 'inst-1', 'mix', 0.8);
+
+      expect(plugin.setParameter).toHaveBeenCalledWith('mix', 0.8);
+    });
+
+    it('does nothing for nonexistent track', () => {
+      expect(() => engine.updateParam('nonexistent', 'inst-1', 'mix', 0.5)).not.toThrow();
+    });
+
+    it('does nothing for nonexistent instance', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      engine.updateParam('track-1', 'wrong-inst', 'mix', 0.5);
+
+      expect(plugin.setParameter).not.toHaveBeenCalled();
+    });
   });
 
-  it('does nothing when removing nonexistent instance', () => {
-    const plugin = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin as never, makeCtx());
+  // ── getInputNode / getOutputNode ───────────────────────────────────────
 
-    engine.removePlugin('track-1', 'inst-99');
-    expect(plugin.dispose).not.toHaveBeenCalled();
+  describe('getInputNode / getOutputNode', () => {
+    it('returns input of first and output of last plugin', () => {
+      const input1 = makeAudioNode();
+      const output2 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: input1,
+          outputNode: makeAudioNode(),
+        })),
+      });
+      const plugin2 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({
+          inputNode: makeAudioNode(),
+          outputNode: output2,
+        })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+
+      expect(engine.getInputNode('track-1')).toBe(input1);
+      expect(engine.getOutputNode('track-1')).toBe(output2);
+    });
+
+    it('returns null for empty or nonexistent track', () => {
+      expect(engine.getInputNode('nonexistent')).toBeNull();
+      expect(engine.getOutputNode('nonexistent')).toBeNull();
+    });
   });
 
-  // ── updateParam ──
+  // ── getPlugin ──────────────────────────────────────────────────────────
 
-  it('updates a plugin parameter', () => {
-    const plugin = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin as never, makeCtx());
+  describe('getPlugin', () => {
+    it('returns the plugin by instance ID', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+      expect(engine.getPlugin('track-1', 'inst-1')).toBe(plugin);
+    });
 
-    engine.updateParam('track-1', 'inst-1', 'frequency', 440);
-
-    expect(plugin.setParameter).toHaveBeenCalledWith('frequency', 440);
+    it('returns undefined for unknown track', () => {
+      expect(engine.getPlugin('unknown', 'inst-1')).toBeUndefined();
+    });
   });
 
-  it('does nothing when updating param on nonexistent track', () => {
-    engine.updateParam('nonexistent', 'inst-1', 'frequency', 440);
-    // No error thrown
+  // ── noteOn / noteOff ───────────────────────────────────────────────────
+
+  describe('noteOn / noteOff', () => {
+    it('calls noteOn on all instrument plugins in the chain', () => {
+      const noteOnFn = vi.fn();
+      const plugin = createMockPlugin({ noteOn: noteOnFn });
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      engine.noteOn('track-1', 60, 100, 0.5);
+
+      expect(noteOnFn).toHaveBeenCalledWith(60, 100, 0.5);
+    });
+
+    it('calls noteOff on all instrument plugins in the chain', () => {
+      const noteOffFn = vi.fn();
+      const plugin = createMockPlugin({ noteOff: noteOffFn });
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      engine.noteOff('track-1', 60, 1.0);
+
+      expect(noteOffFn).toHaveBeenCalledWith(60, 1.0);
+    });
+
+    it('skips plugins without noteOn/noteOff', () => {
+      const plugin = createMockPlugin();
+      delete (plugin as Record<string, unknown>).noteOn;
+      delete (plugin as Record<string, unknown>).noteOff;
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      expect(() => engine.noteOn('track-1', 60, 100)).not.toThrow();
+      expect(() => engine.noteOff('track-1', 60)).not.toThrow();
+    });
+
+    it('does nothing for nonexistent track', () => {
+      expect(() => engine.noteOn('nonexistent', 60, 100)).not.toThrow();
+      expect(() => engine.noteOff('nonexistent', 60)).not.toThrow();
+    });
   });
 
-  // ── getInputNode / getOutputNode ──
+  // ── getChainLatency ────────────────────────────────────────────────────
 
-  it('returns input node of first plugin', () => {
-    const plugin = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin as never, makeCtx());
+  describe('getChainLatency', () => {
+    it('sums latency across all plugins in chain', () => {
+      const plugin1 = createMockPlugin();
+      (plugin1 as Record<string, unknown>).latencySamples = 128;
+      const plugin2 = createMockPlugin();
+      (plugin2 as Record<string, unknown>).latencySamples = 256;
 
-    const inputNode = engine.getInputNode('track-1');
-    expect(inputNode).not.toBeNull();
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+
+      expect(engine.getChainLatency('track-1')).toBe(384);
+    });
+
+    it('treats missing latencySamples as 0', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+
+      expect(engine.getChainLatency('track-1')).toBe(0);
+    });
+
+    it('returns 0 for nonexistent track', () => {
+      expect(engine.getChainLatency('nonexistent')).toBe(0);
+    });
   });
 
-  it('returns output node of last plugin', () => {
-    const plugin1 = makePlugin();
-    const plugin2 = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, makeCtx());
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, makeCtx());
+  // ── disposeChain / dispose ─────────────────────────────────────────────
 
-    const outputNode = engine.getOutputNode('track-1');
-    expect(outputNode).not.toBeNull();
+  describe('disposeChain', () => {
+    it('disposes all plugins in a track chain', () => {
+      const plugin1 = createMockPlugin();
+      const plugin2 = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+
+      engine.disposeChain('track-1');
+
+      expect(plugin1.dispose).toHaveBeenCalled();
+      expect(plugin2.dispose).toHaveBeenCalled();
+      expect(engine.getInputNode('track-1')).toBeNull();
+    });
+
+    it('does nothing for nonexistent track', () => {
+      expect(() => engine.disposeChain('nonexistent')).not.toThrow();
+    });
   });
 
-  it('returns null for empty track', () => {
-    expect(engine.getInputNode('empty')).toBeNull();
-    expect(engine.getOutputNode('empty')).toBeNull();
-  });
+  describe('dispose', () => {
+    it('disposes all chains across all tracks', () => {
+      const plugin1 = createMockPlugin();
+      const plugin2 = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-2', 'inst-2', plugin2, ctx);
 
-  // ── getPlugin ──
+      engine.dispose();
 
-  it('returns plugin instance by id', () => {
-    const plugin = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin as never, makeCtx());
-
-    const found = engine.getPlugin('track-1', 'inst-1');
-    expect(found).toBe(plugin);
-  });
-
-  it('returns undefined for nonexistent plugin', () => {
-    expect(engine.getPlugin('track-1', 'nope')).toBeUndefined();
-  });
-
-  // ── noteOn / noteOff ──
-
-  it('sends noteOn to all plugins in chain', () => {
-    const plugin1 = makePlugin();
-    const plugin2 = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, makeCtx());
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, makeCtx());
-
-    engine.noteOn('track-1', 60, 100, 0.5);
-
-    expect(plugin1.noteOn).toHaveBeenCalledWith(60, 100, 0.5);
-    expect(plugin2.noteOn).toHaveBeenCalledWith(60, 100, 0.5);
-  });
-
-  it('sends noteOff to all plugins in chain', () => {
-    const plugin1 = makePlugin();
-    const plugin2 = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, makeCtx());
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, makeCtx());
-
-    engine.noteOff('track-1', 60, 1.0);
-
-    expect(plugin1.noteOff).toHaveBeenCalledWith(60, 1.0);
-    expect(plugin2.noteOff).toHaveBeenCalledWith(60, 1.0);
-  });
-
-  it('does nothing when sending notes to empty track', () => {
-    engine.noteOn('empty', 60, 100);
-    engine.noteOff('empty', 60);
-    // No error thrown
-  });
-
-  // ── getChainLatency ──
-
-  it('sums latency across plugins in chain', () => {
-    const plugin1 = makePlugin({ latencySamples: 128 });
-    const plugin2 = makePlugin({ latencySamples: 256 });
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, makeCtx());
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, makeCtx());
-
-    expect(engine.getChainLatency('track-1')).toBe(384);
-  });
-
-  it('returns 0 for empty track', () => {
-    expect(engine.getChainLatency('empty')).toBe(0);
-  });
-
-  // ── disposeChain ──
-
-  it('disposes all plugins in a track chain', () => {
-    const plugin1 = makePlugin();
-    const plugin2 = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', plugin1 as never, makeCtx());
-    engine.addPlugin('track-1', 'inst-2', plugin2 as never, makeCtx());
-
-    engine.disposeChain('track-1');
-
-    expect(plugin1.dispose).toHaveBeenCalledTimes(1);
-    expect(plugin2.dispose).toHaveBeenCalledTimes(1);
-    expect(mockDisposeInstance).toHaveBeenCalledTimes(2);
-    expect(engine.getInputNode('track-1')).toBeNull();
-  });
-
-  // ── dispose ──
-
-  it('disposes all chains on all tracks', () => {
-    const p1 = makePlugin();
-    const p2 = makePlugin();
-    engine.addPlugin('track-1', 'inst-1', p1 as never, makeCtx());
-    engine.addPlugin('track-2', 'inst-2', p2 as never, makeCtx());
-
-    engine.dispose();
-
-    expect(p1.dispose).toHaveBeenCalled();
-    expect(p2.dispose).toHaveBeenCalled();
-    expect(engine.getInputNode('track-1')).toBeNull();
-    expect(engine.getInputNode('track-2')).toBeNull();
+      expect(plugin1.dispose).toHaveBeenCalled();
+      expect(plugin2.dispose).toHaveBeenCalled();
+      expect(engine.getInputNode('track-1')).toBeNull();
+      expect(engine.getInputNode('track-2')).toBeNull();
+    });
   });
 });

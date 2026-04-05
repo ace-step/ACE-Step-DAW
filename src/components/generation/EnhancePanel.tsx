@@ -14,6 +14,8 @@ import { computeWaveformPeaks } from '../../utils/waveformPeaks';
 import type { RepaintMode } from '../../types/api';
 import { ENHANCE_PRESETS, surpriseMe } from '../../constants/enhancePresets';
 import type { EnhancementNode } from '../../types/enhance';
+import { TimbreReferenceSelector } from './TimbreReferenceSelector';
+import type { TimbreReference } from '../../services/timbreTransfer';
 
 const ENHANCER_BASE_BOTTOM = 60;
 
@@ -135,6 +137,7 @@ export function EnhancePanel() {
   const [lyrics, setLyrics] = useState('');
   const [consistency, setConsistency] = useState<ConsistencyLevel>('medium');
   const [createNew, setCreateNew] = useState(true);
+  const [timbreRef, setTimbreRef] = useState<TimbreReference | null>(null);
 
   // Repaint fields
   const [selStart, setSelStart] = useState(0);
@@ -397,9 +400,9 @@ export function EnhancePanel() {
         clipId: enhancerTarget.clipId,
         caption,
         lyrics,
-        coverStrength,
+        coverStrength: timbreRef ? timbreRef.strength : coverStrength,
         createNew,
-        sourceAudioOverride: chainedSourceAudioKey || undefined,
+        sourceAudioOverride: timbreRef?.audioKey || chainedSourceAudioKey || undefined,
       });
       // After generation, try to load the result audio to get peaks/duration
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
@@ -411,7 +414,7 @@ export function EnhancePanel() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, finalizeResult]);
 
   // Repaint generation
   const handleRepaintGenerate = useCallback(async () => {
@@ -946,6 +949,13 @@ export function EnhancePanel() {
                   ))}
                 </div>
               </div>
+
+              {/* Timbre Reference */}
+              <TimbreReferenceSelector
+                timbreRef={timbreRef}
+                onTimbreRefChange={setTimbreRef}
+                disabled={isSubmitting}
+              />
 
               {/* Create new vs replace */}
               <div className="flex items-center gap-3 pt-1">

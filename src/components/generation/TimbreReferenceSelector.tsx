@@ -20,9 +20,17 @@ export function TimbreReferenceSelector({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = useCallback(
-    (file: File) => {
-      // Store the file as a blob URL for now — real implementation would use asset storage
-      const audioKey = URL.createObjectURL(file);
+    async (file: File) => {
+      // Persist audio in IndexedDB so references survive page reload.
+      // Falls back to blob URL if storage fails.
+      let audioKey: string;
+      try {
+        const { set } = await import('idb-keyval');
+        audioKey = `timbre:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await set(audioKey, file);
+      } catch {
+        audioKey = URL.createObjectURL(file);
+      }
       const ref = createTimbreReference({
         sourceType: 'upload',
         audioKey,
@@ -101,6 +109,7 @@ export function TimbreReferenceSelector({
           <button
             type="button"
             onClick={handleClear}
+            aria-label="Clear timbre reference"
             className="text-[9px] text-zinc-500 hover:text-zinc-300 transition-colors"
             disabled={disabled}
           >

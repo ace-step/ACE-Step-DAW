@@ -262,6 +262,7 @@ const BUFFER_SIZE = 2048;
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
+  private readonly _preDelayNode: DelayNode;
   private _decay = 1.5;
   private _preDelay = 0.01;
 
@@ -269,6 +270,10 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     const mix = new DryWetMix(ctx);
     const processor = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
     const verb = new FreeVerb(ctx.sampleRate);
+    const preDelayNode = ctx.createDelay(0.5);
+
+    const preDelayTime = options?.preDelay ?? 0.01;
+    preDelayNode.delayTime.value = preDelayTime;
 
     verb.roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
     verb.damping = 0.5;
@@ -284,7 +289,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
       verb.processStereo(inL, inR, outL, outR, 0, BUFFER_SIZE);
     };
 
-    mix.input.connect(processor);
+    // Signal path: input → preDelay → processor → wet mix
+    mix.input.connect(preDelayNode);
+    preDelayNode.connect(processor);
     processor.connect(mix.wetInput);
 
     mix.wet = options?.wet ?? 1;
@@ -292,8 +299,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     super(mix.input, mix.output);
     this._verb = verb;
     this._mix = mix;
+    this._preDelayNode = preDelayNode;
     this._decay = options?.decay ?? 1.5;
-    this._preDelay = options?.preDelay ?? 0.01;
+    this._preDelay = preDelayTime;
   }
 
   get decay(): number { return this._decay; }
@@ -303,7 +311,10 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   }
 
   get preDelay(): number { return this._preDelay; }
-  set preDelay(v: number) { this._preDelay = v; }
+  set preDelay(v: number) {
+    this._preDelay = v;
+    this._preDelayNode.delayTime.value = v;
+  }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }

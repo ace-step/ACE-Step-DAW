@@ -71,6 +71,22 @@ import {
 } from './core';
 
 // ---------------------------------------------------------------------------
+// Helper: create a looping AudioBufferSourceNode that outputs constant 1.0.
+// Used as a DC signal source for LFO offset and FrequencyEnvelope.
+// A 0Hz OscillatorNode outputs sin(0)=0 which is NOT a usable DC source.
+// ---------------------------------------------------------------------------
+
+function createDCSource(ctx: AudioContext): AudioBufferSourceNode {
+  const buf = ctx.createBuffer(1, 2, ctx.sampleRate);
+  buf.getChannelData(0).fill(1);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.start();
+  return src;
+}
+
+// ---------------------------------------------------------------------------
 // Base wrapper for native Web Audio nodes
 // ---------------------------------------------------------------------------
 
@@ -424,6 +440,9 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
     this._delayTime = delayMs;
     this._depth = depth;
     this._feedback = fb;
+
+    // Auto-start LFO (consistent with NativePhaser behavior)
+    try { lfo.start(); } catch { /* already started */ }
   }
 
   get frequency(): number { return this._frequency; }
@@ -655,7 +674,7 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   private readonly _osc: OscillatorNode;
   private readonly _gain: GainNode;
   private readonly _dcOffset: GainNode;
-  private readonly _dcSource: OscillatorNode;
+  private readonly _dcSource: AudioBufferSourceNode;
   private readonly _sum: GainNode;
   private _min: number;
   private _max: number;
@@ -665,10 +684,8 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     const gain = ctx.createGain();
     const sum = ctx.createGain();
 
-    // DC offset via a zero-frequency oscillator (value=1) through a gain node.
-    // This avoids ConstantSourceNode which may not be available in all environments.
-    const dcSource = ctx.createOscillator();
-    dcSource.frequency.value = 0;
+    // DC offset via a looped AudioBufferSourceNode outputting constant 1.0.
+    const dcSource = createDCSource(ctx);
     const dcOffset = ctx.createGain();
 
     const min = options?.min ?? 0;
@@ -688,7 +705,6 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     gain.connect(sum);
     dcSource.connect(dcOffset);
     dcOffset.connect(sum);
-    dcSource.start();
 
     super(sum, sum);
     this._osc = osc;

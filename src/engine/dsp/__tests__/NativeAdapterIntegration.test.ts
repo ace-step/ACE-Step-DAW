@@ -40,6 +40,14 @@ function createMockCtx(): AudioContext {
     createWaveShaper: () => ({ ...mockNode(), curve: null, oversample: 'none' }),
     createConvolver: () => ({ ...mockNode(), buffer: null }),
     createScriptProcessor: () => ({ ...mockNode(), onaudioprocess: null }),
+    createBuffer: (_ch: number, len: number, sr: number) => ({
+      getChannelData: () => new Float32Array(len),
+      numberOfChannels: _ch, length: len, sampleRate: sr, duration: len / sr,
+    }),
+    createBufferSource: () => ({
+      ...mockNode(), buffer: null, loop: false, playbackRate: mockParam(),
+      start: vi.fn(), stop: vi.fn(), onended: null,
+    }),
     decodeAudioData: vi.fn(),
   } as unknown as AudioContext;
 }

@@ -238,10 +238,14 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
 
     for (const voice of voicesToRelease) {
       if (voice.osc) {
+        const osc = voice.osc;
         voice.gain.gain.cancelScheduledValues(t);
         voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
         voice.gain.gain.linearRampToValueAtTime(0, t + env.release);
-        try { voice.osc.stop(t + env.release + 0.01); } catch { /* */ }
+        osc.onended = () => {
+          try { osc.disconnect(); } catch { /* */ }
+        };
+        try { osc.stop(t + env.release + 0.01); } catch { /* */ }
         voice.osc = null;
       }
     }
@@ -311,13 +315,22 @@ export class NativeSynth extends NativeSynthBase implements IDSPSynth {
     const freq = noteNameToFreq(note);
     const env = this._envelope;
 
-    if (this._voice.osc) {
-      try { this._voice.osc.stop(t); } catch { /* */ }
+    const previousOsc = this._voice.osc;
+    if (previousOsc) {
+      previousOsc.onended = () => {
+        try { previousOsc.disconnect(); } catch { /* */ }
+      };
+      try { previousOsc.stop(t); } catch {
+        try { previousOsc.disconnect(); } catch { /* */ }
+      }
     }
 
     const osc = this._ctx.createOscillator();
     osc.type = this._oscType;
     osc.frequency.value = freq;
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* */ }
+    };
     osc.connect(this._voice.filter);
     this._voice.osc = osc;
 
@@ -629,7 +642,7 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
   octaves = 4;
 
   private readonly _gain: GainNode;
-  private readonly _dcSource: OscillatorNode;
+  private readonly _dcSource: AudioBufferSourceNode;
 
   constructor(ctx: AudioContext, options?: IDSPFrequencyEnvelopeOptions) {
     super(ctx);
@@ -640,15 +653,25 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
     if (options?.baseFrequency !== undefined) this.baseFrequency = options.baseFrequency;
     if (options?.octaves !== undefined) this.octaves = options.octaves;
 
-    // Use a zero-frequency oscillator (DC=1) as signal source so that
-    // the gain node outputs a non-zero signal usable for AudioParam modulation.
-    this._dcSource = ctx.createOscillator();
-    this._dcSource.frequency.value = 0;
+    // Use a looped AudioBufferSourceNode outputting constant 1.0 as signal source
+    // so that the gain node outputs a non-zero control signal for AudioParam modulation.
+    // (A 0Hz OscillatorNode outputs sin(0)=0 which is not usable as DC.)
+    const buf = ctx.createBuffer(1, 2, ctx.sampleRate);
+    buf.getChannelData(0).fill(1);
+    this._dcSource = ctx.createBufferSource();
+    this._dcSource.buffer = buf;
+    this._dcSource.loop = true;
     this._gain = ctx.createGain();
     this._gain.gain.value = 0;
     this._dcSource.connect(this._gain);
     this._gain.connect(this._output);
     this._dcSource.start();
+  }
+
+  dispose(): void {
+    try { this._dcSource.stop(); } catch { /* */ }
+    try { this._dcSource.disconnect(); } catch { /* */ }
+    super.dispose();
   }
 
   triggerAttack(time?: number): void {

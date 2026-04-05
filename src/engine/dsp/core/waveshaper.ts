@@ -140,14 +140,20 @@ export class Waveshaper {
 
     if (this.oversample) {
       if (this.mix < 1) {
-        // Save dry signal using pre-allocated buffer
-        const len = to - from;
+        // Save/blend dry signal in chunks so the pre-allocated buffer is never overrun.
         const dry = this._dryBuf;
-        for (let i = 0; i < len; i++) dry[i] = buf[from + i];
-        this._oversampler.process(buf, from, to, shapeFn, this.drive);
+        const chunkSize = dry.length;
         const mix = this.mix;
-        for (let i = 0; i < len; i++) {
-          buf[from + i] = dry[i] * (1 - mix) + buf[from + i] * mix;
+
+        for (let chunkFrom = from; chunkFrom < to; chunkFrom += chunkSize) {
+          const chunkTo = Math.min(chunkFrom + chunkSize, to);
+          const len = chunkTo - chunkFrom;
+
+          for (let i = 0; i < len; i++) dry[i] = buf[chunkFrom + i];
+          this._oversampler.process(buf, chunkFrom, chunkTo, shapeFn, this.drive);
+          for (let i = 0; i < len; i++) {
+            buf[chunkFrom + i] = dry[i] * (1 - mix) + buf[chunkFrom + i] * mix;
+          }
         }
       } else {
         this._oversampler.process(buf, from, to, shapeFn, this.drive);

@@ -86,8 +86,18 @@ class MockOscillatorNode extends MockAudioNode {
   frequency = new MockAudioParam();
   type = 'sine';
   started = false;
+  onended: (() => void) | null = null;
   start() { this.started = true; }
   stop() { this.started = false; }
+}
+
+class MockBufferSourceNode extends MockAudioNode {
+  buffer: unknown = null;
+  loop = false;
+  playbackRate = new MockAudioParam();
+  onended: (() => void) | null = null;
+  start = vi.fn();
+  stop = vi.fn();
 }
 
 class MockWaveShaperNode extends MockAudioNode {
@@ -116,6 +126,14 @@ function createMockAudioContext(): AudioContext {
     createWaveShaper: () => new MockWaveShaperNode(),
     createConvolver: () => new MockConvolverNode(),
     createScriptProcessor: () => new MockScriptProcessorNode(),
+    createBuffer: (_channels: number, length: number, _sr: number) => ({
+      getChannelData: () => new Float32Array(length),
+      numberOfChannels: _channels,
+      length,
+      sampleRate: _sr,
+      duration: length / _sr,
+    }),
+    createBufferSource: () => new MockBufferSourceNode(),
     decodeAudioData: vi.fn(),
   } as unknown as AudioContext;
 }

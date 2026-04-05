@@ -91,9 +91,18 @@ export class DspWorkerHost {
       // Create worker
       this._worker = new Worker(this._workerUrl, { type: 'module' });
       this._worker.onmessage = this._handleMessage.bind(this);
+
+      // Wire onerror to settle the initialize() promise immediately
+      // instead of waiting for the 5s timeout.
       this._worker.onerror = (e) => {
-        this._setState('error');
-        this._onError?.(e.message);
+        this._handleMessage({
+          data: { type: 'error', message: e.message || 'Failed to load DSP worker.' },
+        } as MessageEvent<WorkerMessage>);
+      };
+      this._worker.onmessageerror = () => {
+        this._handleMessage({
+          data: { type: 'error', message: 'Failed to deserialize DSP worker message.' },
+        } as MessageEvent<WorkerMessage>);
       };
 
       // Send init command

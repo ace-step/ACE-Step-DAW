@@ -26,8 +26,6 @@ export class ProjectWikiService {
   private pages = new Map<string, WikiPage>();
   private createdAt: number;
   private updatedAt: number;
-  private generationCount = 0;
-
   constructor(projectId: string) {
     this.projectId = projectId;
     this.createdAt = Date.now();
@@ -86,18 +84,26 @@ export class ProjectWikiService {
 
   async logGeneration(entry: GenerationLogEntry): Promise<void> {
     const rating = entry.rating !== undefined ? ` (${entry.rating}/5)` : '';
-    const line = `\n- [${new Date(entry.timestamp).toISOString()}] "${entry.prompt}" → ${entry.result}${rating}`;
+    const metadata = Object.keys(entry.params).length > 0
+      ? ` | params: ${JSON.stringify(entry.params)}`
+      : '';
+    const line = `\n- [${new Date(entry.timestamp).toISOString()}] "${entry.prompt}" → ${entry.result}${rating}${metadata}`;
     await this.appendToPage('generation-log.md', line);
-    this.generationCount++;
   }
 
   // ─── Summary ────────────────────────────────────────────────────────
+
+  private deriveGenerationCount(): number {
+    const logPage = this.pages.get('generation-log.md');
+    if (!logPage) return 0;
+    return (logPage.content.match(/^- \[/gm) ?? []).length;
+  }
 
   getSummary(): ProjectWikiSummary {
     return {
       projectId: this.projectId,
       pageCount: this.pages.size,
-      generationCount: this.generationCount,
+      generationCount: this.deriveGenerationCount(),
       lastUpdated: this.updatedAt,
       pageNames: [...this.pages.keys()],
     };
@@ -118,12 +124,6 @@ export class ProjectWikiService {
     this.pages = new Map(data.pages);
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
-
-    // Count existing generation log entries
-    const logPage = this.pages.get('generation-log.md');
-    if (logPage) {
-      this.generationCount = (logPage.content.match(/^- \[/gm) ?? []).length;
-    }
   }
 
   // ─── Persistence ────────────────────────────────────────────────────
@@ -140,17 +140,31 @@ export class ProjectWikiService {
 // ─── Cache ────────────────────────────────────────────────────────────────
 
 const _cache = new Map<string, ProjectWikiService>();
+const _initCache = new Map<string, Promise<ProjectWikiService>>();
 
 export async function getProjectWiki(projectId: string): Promise<ProjectWikiService> {
-  let wiki = _cache.get(projectId);
-  if (!wiki) {
-    wiki = new ProjectWikiService(projectId);
+  const cached = _cache.get(projectId);
+  if (cached) return cached;
+
+  const inflight = _initCache.get(projectId);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const wiki = new ProjectWikiService(projectId);
     await wiki.initialize();
     _cache.set(projectId, wiki);
+    return wiki;
+  })();
+
+  _initCache.set(projectId, promise);
+  try {
+    return await promise;
+  } finally {
+    _initCache.delete(projectId);
   }
-  return wiki;
 }
 
 export function resetProjectWikiCache(): void {
   _cache.clear();
+  _initCache.clear();
 }

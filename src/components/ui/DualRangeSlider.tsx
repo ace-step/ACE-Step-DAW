@@ -106,8 +106,8 @@ export function DualRangeSlider({
           }}
           onKeyDown={(e) => {
             let next: number | null = null;
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(startValue - step, min, endValue - minSpan);
-            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(startValue + step, min, endValue - minSpan);
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(round(startValue - step), min, endValue - minSpan);
+            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(round(startValue + step), min, endValue - minSpan);
             else if (e.key === 'Home') next = min;
             else if (e.key === 'End') next = clamp(endValue - minSpan, min, max);
             if (next !== null) { e.preventDefault(); onChange(next, endValue); }
@@ -133,8 +133,8 @@ export function DualRangeSlider({
           }}
           onKeyDown={(e) => {
             let next: number | null = null;
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(endValue - step, startValue + minSpan, max);
-            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(endValue + step, startValue + minSpan, max);
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(round(endValue - step), startValue + minSpan, max);
+            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(round(endValue + step), startValue + minSpan, max);
             else if (e.key === 'Home') next = clamp(startValue + minSpan, min, max);
             else if (e.key === 'End') next = max;
             if (next !== null) { e.preventDefault(); onChange(startValue, next); }

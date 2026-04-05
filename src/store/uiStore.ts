@@ -856,10 +856,7 @@ export const useUIStore = create<UIState>()(
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
   setTheme: (theme) => set({ theme }),
-  setHighContrastMode: (enabled) => {
-    set({ highContrastMode: enabled });
-    document.documentElement.setAttribute('data-high-contrast', enabled ? 'true' : 'false');
-  },
+  setHighContrastMode: (enabled) => set({ highContrastMode: enabled }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),

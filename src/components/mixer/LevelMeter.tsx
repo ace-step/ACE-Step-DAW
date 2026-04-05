@@ -19,6 +19,8 @@ export interface LevelMeterProps {
   returnTrackId?: string;
   stereo?: boolean;
   showScale?: boolean;
+  /** Accessible name for this meter (e.g. track name). Falls back to generic label. */
+  'aria-label'?: string;
 }
 
 interface BarState {
@@ -33,7 +35,7 @@ function fillToTopPct(fill: number): number {
   return pad + (1 - fill) * (100 - 2 * pad);
 }
 
-export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showScale }: LevelMeterProps) {
+export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showScale, 'aria-label': ariaLabel }: LevelMeterProps) {
   const rafRef = useRef<number>(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const leftBar = useRef<BarState>({ level: 0, peakLevel: 0, peakHoldFrames: 0 });
@@ -216,7 +218,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label="Audio level meter"
+        aria-label={ariaLabel ?? (masterStage ? `Master ${masterStage} level meter` : 'Audio level meter')}
         data-testid="meter-canvas"
         className="absolute inset-y-0 rounded-sm"
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}

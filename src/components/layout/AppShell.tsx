@@ -144,9 +144,10 @@ function EditorShell() {
       </a>
       <Toolbar />
 
-      <div
+      <main
         id="main-content"
-        className="flex flex-1 min-h-0"
+        tabIndex={-1}
+        className="flex flex-1 min-h-0 outline-none"
         onMouseDownCapture={() => {
           if (mainView === 'arrangement') {
             setHistoryFocusScope('arrangement');
@@ -157,7 +158,7 @@ function EditorShell() {
           {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
         </ErrorBoundary>
         {project && <LoopBrowser />}
-      </div>
+      </main>
 
       <StatusBar saveStatus={saveStatus} lastSavedAt={lastSavedAt} />
 

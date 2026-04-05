@@ -94,12 +94,12 @@ function noteNameToFreq(note: string): number {
   return noteToFreq(midi);
 }
 
-function parseDuration(dur: number | string, ctx: AudioContext): number {
+function parseDuration(dur: number | string, _ctx: AudioContext, bpm = 120): number {
   if (typeof dur === 'number') return dur;
   // Parse Tone.js notation (e.g., '8n', '4n', '2n')
   const match = dur.match(/^(\d+)n$/);
   if (match) {
-    return 60 / 120 * (4 / parseInt(match[1], 10)); // assume 120 BPM
+    return 60 / bpm * (4 / parseInt(match[1], 10));
   }
   return parseFloat(dur) || 0.25;
 }
@@ -137,6 +137,8 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     attack: number; decay: number; sustain: number; release: number;
   };
   private _nextVoice = 0;
+  /** Maps note name (e.g. "C4") to its assigned voice index for per-note release. */
+  private readonly _noteToVoice = new Map<string, number>();
 
   constructor(ctx: AudioContext, options?: IDSPPolySynthOptions) {
     super(ctx);
@@ -157,10 +159,26 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     }
   }
 
-  private _allocVoice(): MonoVoice {
-    const voice = this._voices[this._nextVoice % this._maxPoly];
+  private _allocVoice(note: string): MonoVoice {
+    // If this note already has a voice, reuse it
+    const existing = this._noteToVoice.get(note);
+    if (existing !== undefined) {
+      return this._voices[existing];
+    }
+
+    const idx = this._nextVoice % this._maxPoly;
     this._nextVoice++;
-    return voice;
+
+    // Evict any note currently using this voice slot
+    for (const [n, vi] of this._noteToVoice) {
+      if (vi === idx) {
+        this._noteToVoice.delete(n);
+        break;
+      }
+    }
+
+    this._noteToVoice.set(note, idx);
+    return this._voices[idx];
   }
 
   triggerAttack(notes: string | string[], time?: number, velocity = 1): void {
@@ -168,7 +186,7 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     const t = time ?? this._ctx.currentTime;
 
     for (const note of noteArr) {
-      const voice = this._allocVoice();
+      const voice = this._allocVoice(note);
       const freq = noteNameToFreq(note);
       const env = this._envelope;
 
@@ -201,9 +219,24 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
   triggerRelease(notes: string | string[], time?: number): void {
     const t = time ?? this._ctx.currentTime;
     const env = this._envelope;
+    const noteArr = Array.isArray(notes) ? notes : [notes];
 
-    // Release all active voices (simplified — in production would track per-note)
-    for (const voice of this._voices) {
+    // If no specific notes given, release all active voices
+    const voicesToRelease: MonoVoice[] = [];
+    if (noteArr.length === 0) {
+      voicesToRelease.push(...this._voices.filter(v => v.osc));
+      this._noteToVoice.clear();
+    } else {
+      for (const note of noteArr) {
+        const idx = this._noteToVoice.get(note);
+        if (idx !== undefined) {
+          voicesToRelease.push(this._voices[idx]);
+          this._noteToVoice.delete(note);
+        }
+      }
+    }
+
+    for (const voice of voicesToRelease) {
       if (voice.osc) {
         voice.gain.gain.cancelScheduledValues(t);
         voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
@@ -366,6 +399,19 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
     const t = time ?? this._ctx.currentTime;
     const freq = noteNameToFreq(note);
     const env = this._envelope;
+
+    // Stop and disconnect previous nodes to prevent leaks
+    if (this._activeCarrier) {
+      try { this._activeCarrier.stop(t); } catch { /* */ }
+      try { this._activeCarrier.disconnect(); } catch { /* */ }
+    }
+    if (this._activeModulator) {
+      try { this._activeModulator.stop(t); } catch { /* */ }
+      try { this._activeModulator.disconnect(); } catch { /* */ }
+    }
+    if (this._activeGain) {
+      try { this._activeGain.disconnect(); } catch { /* */ }
+    }
 
     // Carrier
     const carrier = this._ctx.createOscillator();

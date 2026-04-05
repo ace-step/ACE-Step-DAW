@@ -67,6 +67,24 @@ describe('automationLfoConflict', () => {
       expect(detectLfoAutomationConflict(effect, lane)).toBe(false);
     });
 
+    it('returns true when automation targets delayTime of flanger (always-on LFO)', () => {
+      const effect = makeFlangerEffect();
+      const lane = makeAutomationLane('fx-2', 'flanger', 'delayTime');
+      expect(detectLfoAutomationConflict(effect, lane)).toBe(true);
+    });
+
+    it('returns true when automation targets frequency of flanger', () => {
+      const effect = makeFlangerEffect();
+      const lane = makeAutomationLane('fx-2', 'flanger', 'frequency');
+      expect(detectLfoAutomationConflict(effect, lane)).toBe(true);
+    });
+
+    it('returns false when automation targets non-LFO flanger param (e.g. wet)', () => {
+      const effect = makeFlangerEffect();
+      const lane = makeAutomationLane('fx-2', 'flanger', 'wet');
+      expect(detectLfoAutomationConflict(effect, lane)).toBe(false);
+    });
+
     it('returns false for non-LFO effect types', () => {
       const effect: TrackEffect = {
         id: 'fx-3',

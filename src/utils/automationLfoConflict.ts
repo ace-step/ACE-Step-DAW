@@ -10,8 +10,10 @@ interface LfoConflict {
  * LFO-modulated parameters by effect type.
  * These are the parameters that an LFO directly modulates at audio rate.
  */
-const LFO_MODULATED_PARAMS: Record<string, { enabledKey: string; params: string[] }> = {
+const LFO_MODULATED_PARAMS: Record<string, { enabledKey: string | null; params: string[] }> = {
   filter: { enabledKey: 'lfoEnabled', params: ['frequency'] },
+  // Flanger always creates an LFO — no user toggle exists
+  flanger: { enabledKey: null, params: ['delayTime', 'frequency'] },
 };
 
 /**
@@ -31,8 +33,11 @@ export function detectLfoAutomationConflict(
   const lfoConfig = LFO_MODULATED_PARAMS[effect.type];
   if (!lfoConfig) return false;
 
-  const params = effect.params as unknown as Record<string, unknown>;
-  if (!params[lfoConfig.enabledKey]) return false;
+  // enabledKey: null means the LFO is always active (e.g., flanger)
+  if (lfoConfig.enabledKey !== null) {
+    const params = effect.params as unknown as Record<string, unknown>;
+    if (!params[lfoConfig.enabledKey]) return false;
+  }
 
   return lfoConfig.params.includes(lane.parameter.param);
 }

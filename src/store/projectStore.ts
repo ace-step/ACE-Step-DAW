@@ -7375,8 +7375,8 @@ export const useProjectStore = create<ProjectState>()(
         if (effect) {
           const conflictLane = { id: '', trackId, parameter, points: [] as { time: number; value: number }[] };
           if (detectLfoAutomationConflict(effect, conflictLane)) {
-            console.warn(
-              `[ACE-Step] Automation lane for ${parameter.param} on ${parameter.effectType} conflicts with active LFO. ` +
+            log.warn(
+              `Automation lane for ${parameter.param} on ${parameter.effectType} conflicts with active LFO. ` +
               `Automation will control the LFO base value instead of the parameter directly.`,
             );
           }

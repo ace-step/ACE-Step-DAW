@@ -487,6 +487,7 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   private readonly _filters: BiquadFilterNode[];
   private readonly _lfo: OscillatorNode;
   private readonly _lfoGain: GainNode;
+  private readonly _lfoDcGain: GainNode;
   private readonly _mix: DryWetMix;
   private _frequency: number;
   private _octaves: number;
@@ -517,16 +518,30 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
     }
     lastNode.connect(mix.wetInput);
 
-    // LFO modulates all filter frequencies
+    // LFO modulates all filter frequencies with proper DC offset.
+    // Sweep range: baseFreq → baseFreq * 2^oct
+    // Using DC offset + amplitude so frequency stays positive:
+    //   min = baseFreq, max = baseFreq * 2^oct
+    //   offset = (min + max) / 2, amplitude = (max - min) / 2
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
+    const lfoDcSource = createDCSource(ctx);
+    const lfoDcGain = ctx.createGain();
+
+    const maxFreq = baseFreq * Math.pow(2, oct);
+    const amplitude = (maxFreq - baseFreq) / 2;
+    const offset = (maxFreq + baseFreq) / 2;
+
     lfo.frequency.value = freq;
     lfo.type = 'sine';
-    lfoGain.gain.value = baseFreq * Math.pow(2, oct);
+    lfoGain.gain.value = amplitude;
+    lfoDcGain.gain.value = offset;
 
     lfo.connect(lfoGain);
+    lfoDcSource.connect(lfoDcGain);
     for (const f of filters) {
       lfoGain.connect(f.frequency);
+      lfoDcGain.connect(f.frequency);
     }
 
     mix.wet = options?.wet ?? 0.5;
@@ -535,6 +550,7 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
     this._filters = filters;
     this._lfo = lfo;
     this._lfoGain = lfoGain;
+    this._lfoDcGain = lfoDcGain;
     this._mix = mix;
     this._frequency = freq;
     this._octaves = oct;
@@ -554,7 +570,9 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   get octaves(): number { return this._octaves; }
   set octaves(v: number) {
     this._octaves = v;
-    this._lfoGain.gain.value = this._baseFrequency * Math.pow(2, v);
+    const maxFreq = this._baseFrequency * Math.pow(2, v);
+    this._lfoGain.gain.value = (maxFreq - this._baseFrequency) / 2;
+    this._lfoDcGain.gain.value = (maxFreq + this._baseFrequency) / 2;
   }
 
   get stages(): number { return this._stages; }
@@ -573,8 +591,10 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   get baseFrequency(): number { return this._baseFrequency; }
   set baseFrequency(v: number) {
     this._baseFrequency = v;
-    for (const f of this._filters) f.frequency.value = v;
-    this._lfoGain.gain.value = v * Math.pow(2, this._octaves);
+    const maxFreq = v * Math.pow(2, this._octaves);
+    for (const f of this._filters) f.frequency.value = (maxFreq + v) / 2;
+    this._lfoGain.gain.value = (maxFreq - v) / 2;
+    this._lfoDcGain.gain.value = (maxFreq + v) / 2;
   }
 
   get wet(): number { return this._mix.wet; }

@@ -64,6 +64,9 @@ export class DspWorkerHost {
     this._channels = options.channels ?? 2;
     this._bufferSize = options.bufferSize ?? 8192;
     this._paramCount = options.paramCount ?? 256;
+    // Default workerUrl is a placeholder — callers must provide the actual
+    // bundled worker path (e.g. via Vite's new URL('./worker.ts', import.meta.url)).
+    // The worker script itself is not yet implemented (Phase 5 scaffolding).
     this._workerUrl = options.workerUrl ?? '/dsp-worker.js';
   }
 
@@ -92,19 +95,6 @@ export class DspWorkerHost {
       this._worker = new Worker(this._workerUrl, { type: 'module' });
       this._worker.onmessage = this._handleMessage.bind(this);
 
-      // Wire onerror to settle the initialize() promise immediately
-      // instead of waiting for the 5s timeout.
-      this._worker.onerror = (e) => {
-        this._handleMessage({
-          data: { type: 'error', message: e.message || 'Failed to load DSP worker.' },
-        } as MessageEvent<WorkerMessage>);
-      };
-      this._worker.onmessageerror = () => {
-        this._handleMessage({
-          data: { type: 'error', message: 'Failed to deserialize DSP worker message.' },
-        } as MessageEvent<WorkerMessage>);
-      };
-
       // Send init command
       this._send({
         type: 'init',
@@ -121,21 +111,35 @@ export class DspWorkerHost {
         const origHandler = worker.onmessage;
         let settled = false;
 
+        const settleError = (message: string) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          worker.terminate();
+          if (this._worker === worker) this._worker = null;
+          this._audioBuffer = null;
+          this._paramBuffer = null;
+          this._setState('error');
+          this._onError?.(message);
+          resolve(false);
+        };
+
         const cleanup = () => {
           clearTimeout(timeout);
           worker.onmessage = origHandler;
         };
 
         const timeout = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          worker.terminate();
-          if (this._worker === worker) this._worker = null;
-          this._setState('error');
-          this._onError?.('DSP worker initialization timed out');
-          resolve(false);
+          settleError('DSP worker initialization timed out');
         }, 5000);
+
+        // Wire onerror to settle immediately instead of waiting for timeout.
+        worker.onerror = (e) => {
+          settleError(e.message || 'Failed to load DSP worker.');
+        };
+        worker.onmessageerror = () => {
+          settleError('Failed to deserialize DSP worker message.');
+        };
 
         worker.onmessage = (e: MessageEvent) => {
           if (settled) return;
@@ -148,15 +152,21 @@ export class DspWorkerHost {
           } else {
             origHandler?.call(worker, e);
             if (msg.type === 'error' || this._state === 'error') {
-              settled = true;
-              cleanup();
-              resolve(false);
+              settleError(msg.type === 'error' ? (msg as { message: string }).message : 'Worker error');
             }
           }
         };
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (this._worker) {
+        this._worker.terminate();
+        this._worker = null;
+      }
+      this._audioBuffer = null;
+      this._paramBuffer = null;
       this._setState('error');
+      this._onError?.(message);
       return false;
     }
   }

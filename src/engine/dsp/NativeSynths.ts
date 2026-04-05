@@ -94,6 +94,8 @@ function noteNameToFreq(note: string): number {
   return noteToFreq(midi);
 }
 
+// TODO: Thread actual project BPM from transport store into synth callers
+// so that Tone.js-style duration notation ('8n', '4n') uses the correct tempo.
 function parseDuration(dur: number | string, _ctx: AudioContext, bpm = 120): number {
   if (typeof dur === 'number') return dur;
   // Parse Tone.js notation (e.g., '8n', '4n', '2n')
@@ -498,7 +500,9 @@ export class NativeMembraneSynth extends NativeSynthBase implements IDSPMembrane
     osc.frequency.exponentialRampToValueAtTime(freq, t + this._pitchDecay);
 
     const gain = this._ctx.createGain();
-    gain.gain.setValueAtTime(velocity, t);
+    // Clamp velocity to avoid exponentialRamp from 0 (which throws in Web Audio)
+    const safeVelocity = Math.max(0.001, velocity);
+    gain.gain.setValueAtTime(safeVelocity, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
 
     osc.connect(gain);
@@ -614,8 +618,10 @@ export class NativeMetalSynth extends NativeSynthBase implements IDSPMetalSynth 
     filter.Q.value = 1;
 
     const gain = this._ctx.createGain();
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(velocity, t + env.attack);
+    // Clamp velocity to avoid exponentialRamp from 0 (which throws in Web Audio)
+    const safeVelocity = Math.max(0.001, velocity);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(safeVelocity, t + env.attack);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur + env.release);
 
     carrier.connect(filter);

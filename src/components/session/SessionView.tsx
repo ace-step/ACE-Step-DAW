@@ -10,6 +10,7 @@ import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
 import { gatherAiFillContext } from '../../utils/sessionAiFill';
+import { useSessionMidiController } from '../../hooks/useSessionMidiController';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -136,6 +137,8 @@ export function SessionView() {
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
   const [showSessionMixer, setShowSessionMixer] = useState(false);
+  const [midiEnabled, setMidiEnabled] = useState(false);
+  const midiState = useSessionMidiController(midiEnabled);
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -307,6 +310,20 @@ export function SessionView() {
               aria-label="Stop all Session clips"
             >
               Stop All
+            </button>
+            <button
+              onClick={() => setMidiEnabled((v) => !v)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                midiEnabled
+                  ? midiState.isConnected
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-purple-600/50 text-purple-200'
+                  : 'bg-[#2a2a2a] text-zinc-300 hover:bg-[#343434]'
+              }`}
+              aria-label={midiEnabled ? `MIDI ${midiState.isConnected ? 'connected' : 'waiting'}` : 'Enable MIDI controller'}
+              title={midiState.deviceName ? `Connected: ${midiState.deviceName}` : 'Click to enable MIDI controller'}
+            >
+              MIDI {midiEnabled ? (midiState.isConnected ? '●' : '○') : 'OFF'}
             </button>
             <button
               onClick={() => setMainView('arrangement')}

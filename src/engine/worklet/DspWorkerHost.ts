@@ -203,6 +203,7 @@ export class DspWorkerHost {
    * Seek to a specific sample position.
    */
   seek(toSample: number): void {
+    if (this._state !== 'ready' && this._state !== 'playing' && this._state !== 'stopped') return;
     this._send({ type: 'seek', toSample });
     this._positionSample = toSample;
   }

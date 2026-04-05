@@ -160,9 +160,10 @@ class DryWetMix {
 
   get wet(): number { return this._wetAmount; }
   set wet(v: number) {
-    this._wetAmount = v;
-    this._wet.gain.value = v;
-    this._dry.gain.value = 1 - v;
+    const clamped = Math.max(0, Math.min(1, v));
+    this._wetAmount = clamped;
+    this._wet.gain.value = clamped;
+    this._dry.gain.value = 1 - clamped;
   }
 }
 
@@ -269,7 +270,7 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
   get delayTime(): AudioParam { return this._delay.delayTime; }
 
   get feedback(): number { return this._feedback.gain.value; }
-  set feedback(v: number) { this._feedback.gain.value = v; }
+  set feedback(v: number) { this._feedback.gain.value = Math.max(0, Math.min(0.999, v)); }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
@@ -774,8 +775,9 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   }
 
   stop(): void {
+    // Gate output to zero instead of stopping the oscillator,
+    // since stopped OscillatorNodes cannot be restarted.
     this._sum.gain.value = 0;
-    try { this._osc.stop(); } catch { /* already stopped */ }
   }
 
   dispose(): void {

@@ -363,6 +363,7 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
   private _activeCarrier: OscillatorNode | null = null;
   private _activeModulator: OscillatorNode | null = null;
   private _activeGain: GainNode | null = null;
+  private _activeModGain: GainNode | null = null;
 
   constructor(ctx: AudioContext, options?: IDSPFMSynthOptions) {
     super(ctx);
@@ -424,6 +425,9 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
       try { this._activeModulator.stop(t); } catch { /* */ }
       try { this._activeModulator.disconnect(); } catch { /* */ }
     }
+    if (this._activeModGain) {
+      try { this._activeModGain.disconnect(); } catch { /* */ }
+    }
     if (this._activeGain) {
       try { this._activeGain.disconnect(); } catch { /* */ }
     }
@@ -454,6 +458,7 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
 
     this._activeCarrier = carrier;
     this._activeModulator = modulator;
+    this._activeModGain = modGain;
     this._activeGain = envGain;
 
     carrier.start(t);
@@ -507,6 +512,10 @@ export class NativeMembraneSynth extends NativeSynthBase implements IDSPMembrane
 
     osc.connect(gain);
     gain.connect(this._output);
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
     osc.start(t);
     osc.stop(t + dur + 0.01);
   }
@@ -559,6 +568,10 @@ export class NativeNoiseSynth extends NativeSynthBase implements IDSPNoiseSynth 
 
     source.connect(gain);
     gain.connect(this._output);
+    source.onended = () => {
+      try { source.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
     source.start(t);
     source.stop(t + dur + env.release + 0.01);
   }
@@ -627,6 +640,13 @@ export class NativeMetalSynth extends NativeSynthBase implements IDSPMetalSynth 
     carrier.connect(filter);
     filter.connect(gain);
     gain.connect(this._output);
+    carrier.onended = () => {
+      try { carrier.disconnect(); } catch { /* */ }
+      try { mod.disconnect(); } catch { /* */ }
+      try { modGain.disconnect(); } catch { /* */ }
+      try { filter.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
 
     carrier.start(t);
     mod.start(t);

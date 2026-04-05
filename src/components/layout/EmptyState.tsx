@@ -23,7 +23,15 @@ export function EmptyState() {
   const [recentProjects, setRecentProjects] = useState<ProjectSummary[]>([]);
 
   useEffect(() => {
-    listProjects().then((list) => setRecentProjects(list.slice(0, 4)));
+    let isMounted = true;
+    listProjects()
+      .then((list) => {
+        if (isMounted) setRecentProjects(list.slice(0, 4));
+      })
+      .catch(() => {
+        // Ignore storage load failures in the empty state.
+      });
+    return () => { isMounted = false; };
   }, []);
 
   const handleOpenRecent = async (id: string) => {

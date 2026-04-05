@@ -149,6 +149,7 @@ export function WelcomeOverlay() {
   const createProjectFromTemplate = useProjectStore((s) => s.createProjectFromTemplate);
   const setShowGenerationPanel = useUIStore((s) => s.setShowGenerationPanel);
   const hydrateGenerationForm = useGenerationStore((s) => s.hydrateGenerationForm);
+  const resetGenerationForm = useGenerationStore((s) => s.resetGenerationForm);
 
   const dismiss = useCallback(() => {
     setVisible(false);
@@ -180,12 +181,14 @@ export function WelcomeOverlay() {
       bpm: preset.suggestedBpm,
       keyScale: preset.suggestedKey,
     });
+    resetGenerationForm();
     hydrateGenerationForm({
       prompt: preset.caption,
       bpm: preset.suggestedBpm,
       keyScale: preset.suggestedKey,
       lyrics: preset.lyricsTemplate,
       presetId: preset.id,
+      selectedTrackId: '',
     });
     setShowGenerationPanel(true);
     toastSuccess(`${category} preset loaded — edit the prompt and generate!`);
@@ -194,6 +197,7 @@ export function WelcomeOverlay() {
 
   const handleSkipGenre = () => {
     createProject({ name: 'AI Song' });
+    resetGenerationForm();
     setShowGenerationPanel(true);
     toastSuccess('Ready to generate — describe your song!');
     dismiss();
@@ -243,7 +247,7 @@ export function WelcomeOverlay() {
               >
                 ←
               </button>
-              <h2 className="text-sm font-medium text-zinc-200">Pick a Genre</h2>
+              <h2 id="welcome-title" className="text-sm font-medium text-zinc-200">Pick a Genre</h2>
             </div>
             <div className="p-4">
               <p className="text-[10px] text-zinc-500 mb-3">
@@ -356,7 +360,7 @@ export function WelcomeOverlay() {
               >
                 ←
               </button>
-              <h2 className="text-sm font-medium text-zinc-200">Choose a Starter</h2>
+              <h2 id="welcome-title" className="text-sm font-medium text-zinc-200">Choose a Starter</h2>
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 gap-2">

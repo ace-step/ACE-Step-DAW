@@ -30,6 +30,7 @@ vi.mock('../../../store/generationStore', () => ({
   useGenerationStore: vi.fn((selector) => {
     const state = {
       hydrateGenerationForm: vi.fn(),
+      resetGenerationForm: vi.fn(),
     };
     return selector(state);
   }),

@@ -72,7 +72,7 @@ describe('RecipeWiki', () => {
       expect(entries[0].genres).toEqual(['lo-fi', 'hip-hop']);
     });
 
-    it('ignores failed generations without rating', async () => {
+    it('stores failed generations as failure data', async () => {
       const event = makeGenerationEvent({
         type: 'generation_failed',
         result: 'regenerated',
@@ -100,7 +100,7 @@ describe('RecipeWiki', () => {
       }));
       const entries = wiki.getAllEntries();
       // Should have at least attempted genre extraction from prompt
-      expect(entries[0].genres.length).toBeGreaterThanOrEqual(0);
+      expect(entries[0].genres).toEqual(expect.arrayContaining(['metal', 'punk']));
     });
 
     it('persists after ingest', async () => {

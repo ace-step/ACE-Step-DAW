@@ -82,24 +82,33 @@ export class RecipeWiki {
 
     if (matches.length === 0) return null;
 
-    // Weighted average by rating
-    let totalWeight = 0;
-    let weightedCfg = 0;
-    let weightedSteps = 0;
-    let weightedShift = 0;
+    // Weighted average by rating, excluding entries missing a given param
+    let weightedCfg = 0, cfgWeight = 0;
+    let weightedSteps = 0, stepsWeight = 0;
+    let weightedShift = 0, shiftWeight = 0;
 
     for (const entry of matches) {
       const weight = entry.rating ?? 1;
-      totalWeight += weight;
-      weightedCfg += (entry.params.cfgStrength ?? 0) * weight;
-      weightedSteps += (entry.params.steps ?? 0) * weight;
-      weightedShift += (entry.params.shift ?? 0) * weight;
+      if (entry.params.cfgStrength !== undefined) {
+        weightedCfg += entry.params.cfgStrength * weight;
+        cfgWeight += weight;
+      }
+      if (entry.params.steps !== undefined) {
+        weightedSteps += entry.params.steps * weight;
+        stepsWeight += weight;
+      }
+      if (entry.params.shift !== undefined) {
+        weightedShift += entry.params.shift * weight;
+        shiftWeight += weight;
+      }
     }
 
+    if (cfgWeight === 0 && stepsWeight === 0 && shiftWeight === 0) return null;
+
     return {
-      cfgStrength: weightedCfg / totalWeight,
-      steps: Math.round(weightedSteps / totalWeight),
-      shift: weightedShift / totalWeight,
+      cfgStrength: cfgWeight > 0 ? weightedCfg / cfgWeight : 0,
+      steps: stepsWeight > 0 ? Math.round(weightedSteps / stepsWeight) : 0,
+      shift: shiftWeight > 0 ? weightedShift / shiftWeight : 0,
       confidence: Math.min(matches.length / 10, 1),
       sampleSize: matches.length,
     };
@@ -139,7 +148,7 @@ export class RecipeWiki {
   export(): RecipeWikiExport {
     return {
       version: RECIPE_WIKI_VERSION,
-      entries: [...this.entries],
+      entries: JSON.parse(JSON.stringify(this.entries)) as RecipeEntry[],
       exportedAt: Date.now(),
     };
   }
@@ -149,8 +158,13 @@ export class RecipeWiki {
       throw new Error(`Unsupported recipe wiki version: ${data.version}`);
     }
 
-    const existingIds = new Set(this.entries.map(e => e.id));
-    const newEntries = data.entries.filter(e => !existingIds.has(e.id));
+    const seenIds = new Set(this.entries.map(e => e.id));
+    const newEntries: RecipeEntry[] = [];
+    for (const entry of data.entries) {
+      if (seenIds.has(entry.id)) continue;
+      seenIds.add(entry.id);
+      newEntries.push(entry);
+    }
     this.entries.push(...newEntries);
     await this.persist();
   }

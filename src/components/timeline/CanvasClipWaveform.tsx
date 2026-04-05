@@ -1,0 +1,99 @@
+import { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
+import { drawWaveform } from './waveformRenderer';
+import type { StretchMode } from '../../types/project';
+
+interface CanvasClipWaveformProps {
+  peaks: number[] | null;
+  audioDuration: number;
+  audioOffset: number;
+  clipDuration: number;
+  contentOffset?: number;
+  timeStretchRate?: number;
+  stretchMode?: StretchMode;
+  width: number;
+  color: string;
+  opacity?: number;
+  trackVolume?: number;
+}
+
+export function CanvasClipWaveform({
+  peaks,
+  audioDuration,
+  audioOffset,
+  clipDuration,
+  contentOffset,
+  timeStretchRate,
+  stretchMode,
+  width,
+  color,
+  opacity = 0.6,
+  trackVolume = 1,
+}: CanvasClipWaveformProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+
+  // Measure the container height (replaces SVG height="100%")
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setMeasuredHeight(entry.contentRect.height);
+      }
+    });
+    ro.observe(el);
+    setMeasuredHeight(el.clientHeight);
+
+    return () => ro.disconnect();
+  }, []);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !peaks || peaks.length === 0 || width <= 0 || measuredHeight <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = measuredHeight * dpr;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+
+    drawWaveform({
+      ctx,
+      width,
+      height: measuredHeight,
+      peaks,
+      audioDuration,
+      audioOffset,
+      clipDuration,
+      contentOffset,
+      timeStretchRate,
+      stretchMode,
+      color,
+      trackVolume,
+      opacity,
+    });
+  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, width, measuredHeight, color, trackVolume, opacity]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  if (!peaks || peaks.length === 0 || width <= 0) {
+    return null;
+  }
+
+  return (
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden">
+      <canvas
+        ref={canvasRef}
+        style={{ width, height: measuredHeight || '100%' }}
+        data-testid="waveform-canvas"
+      />
+    </div>
+  );
+}

@@ -86,7 +86,7 @@ import {
   ensureMasteringState,
   estimateMasteredLufs,
 } from '../utils/mastering';
-import { TRACK_CATALOG, TRACK_TYPE_CATALOG, DEFAULT_DRUM_KIT } from '../constants/tracks';
+import { TRACK_CATALOG, TRACK_TYPE_CATALOG, DEFAULT_DRUM_KIT, MAX_VIDEO_TRACKS } from '../constants/tracks';
 import { DEFAULT_FILTER_ENVELOPE } from '../components/synth/filterEnvelopeDefaults';
 import {
   DEFAULT_BPM,
@@ -1751,6 +1751,37 @@ function createTrackFromTemplate(
     }
   }
 
+  if (track.trackType === 'video') {
+    // Video tracks are purely visual reference — no audio processing
+    track.volume = 0;
+    track.laneHeight = 80;
+    track.color = '#0ea5e9'; // sky-500
+    delete track.synthPreset;
+    delete track.instrument;
+    delete track.pan;
+    delete track.eqLowGain;
+    delete track.eqMidGain;
+    delete track.eqHighGain;
+    delete track.compressorEnabled;
+    delete track.compressorThreshold;
+    delete track.compressorRatio;
+    delete track.reverbMix;
+    delete track.reverbRoomSize;
+    delete track.sends;
+    delete track.drumKit;
+    track.videoSettings = track.videoSettings ?? {
+      showPreview: true,
+      previewSize: 'medium',
+      previewDocking: 'docked',
+      filmstripOpacity: 1,
+      showTimecodeOverlay: true,
+      videoFollowsEdit: true,
+    };
+    if (!overrideDisplayName) {
+      track.displayName = 'Video';
+    }
+  }
+
   Object.assign(track, syncTrackInstrumentFields(track));
   return track;
 }
@@ -2827,6 +2858,15 @@ export const useProjectStore = create<ProjectState>()(
     const isTrackType = trackName in TRACK_TYPE_CATALOG && !(trackName in TRACK_CATALOG);
     const resolvedName: TrackName = isTrackType ? 'custom' : trackName as TrackName;
     const resolvedType: TrackType = trackType ?? (isTrackType ? (trackName as TrackType) : (trackName === 'custom' ? 'sample' : 'stems'));
+
+    // Enforce max video tracks per project
+    if (resolvedType === 'video') {
+      const existingVideoTracks = state.project.tracks.filter(t => t.trackType === 'video').length;
+      if (existingVideoTracks >= MAX_VIDEO_TRACKS) {
+        toastError(`Video track limit reached (${MAX_VIDEO_TRACKS} max)`);
+        return undefined as unknown as Track;
+      }
+    }
     const overrides: Partial<Track> = {};
     if (options?.order !== undefined) overrides.order = options.order;
     if (options?.color) overrides.color = options.color;

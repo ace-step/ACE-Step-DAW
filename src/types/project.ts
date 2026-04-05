@@ -4,7 +4,7 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
+export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel' | 'video';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 
@@ -804,6 +804,53 @@ export interface ClipGenerationParams {
   chunkMaskMode?: 'explicit' | 'auto';
 }
 
+// ─── Video Track Types ───────────────────────────────────────────────────────
+
+/** Video-specific clip data (only for clips on video tracks). */
+export interface VideoClipData {
+  /** IndexedDB key for the stored video file. */
+  videoFileKey: string;
+  /** Original filename for display. */
+  originalFileName: string;
+  /** Video dimensions. */
+  width: number;
+  height: number;
+  /** Frame rate (fps). */
+  frameRate: number;
+  /** Video codec string (e.g., 'avc1.64001f'). */
+  codec: string;
+  /** Whether the codec is intra-frame only (ProRes, DNxHD, MJPEG) — better scrub performance. */
+  isIntraCodec: boolean;
+  /** GOP (Group of Pictures) size — 1 means all-intra, higher means more decode work per seek. */
+  gopSize?: number;
+  /** Total video file duration in seconds. */
+  fileDuration: number;
+  /** In-point offset within the source file (seconds). */
+  sourceOffset: number;
+  /** Cached filmstrip thumbnail data (IndexedDB key). */
+  filmstripKey?: string;
+  /** Number of thumbnail frames generated. */
+  filmstripFrameCount?: number;
+  /** Whether the source file contains an audio stream (stripped on import, kept as metadata). */
+  hasAudio: boolean;
+}
+
+/** Video track-level settings. */
+export interface VideoTrackSettings {
+  /** Show video preview panel when this track exists. */
+  showPreview: boolean;
+  /** Preview panel size. */
+  previewSize: 'small' | 'medium' | 'large';
+  /** Preview panel docking mode. */
+  previewDocking: 'docked' | 'floating';
+  /** Opacity of video clip filmstrip in timeline (0–1). */
+  filmstripOpacity: number;
+  /** Whether to show timecode overlay on the preview. */
+  showTimecodeOverlay: boolean;
+  /** Video Follows Edit mode — preview updates on every edit operation. */
+  videoFollowsEdit: boolean;
+}
+
 export interface Clip {
   id: string;
   trackId: string;
@@ -868,6 +915,8 @@ export interface Clip {
   muted?: boolean;
   /** Generation parameters used to create this clip, for edit/regenerate. */
   generationParams?: ClipGenerationParams;
+  /** Video-specific data (only for video track clips). */
+  videoData?: VideoClipData;
 }
 
 export interface BounceInPlaceOptions {
@@ -1073,6 +1122,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** Video track settings (only for video tracks). */
+  videoSettings?: VideoTrackSettings;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */

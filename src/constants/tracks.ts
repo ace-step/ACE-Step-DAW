@@ -47,6 +47,7 @@ export const TRACK_TYPE_CATALOG: Record<TrackType, TrackTypeInfo> = {
   pianoRoll: { type: 'pianoRoll', label: 'Piano Roll', abbr: 'PNO', emoji: '🎵', color: '#a855f7', description: 'MIDI note editor with built-in synth presets' },
   drumMachine: { type: 'drumMachine', label: 'Drum Machine', abbr: 'DRM', emoji: '🥁', color: '#ef4444', description: 'MPC-style 16-pad sample trigger instrument' },
   strudel:     { type: 'strudel',     label: 'Strudel',      abbr: 'STR', emoji: '⌁',  color: '#e67e22', description: 'Live-code music patterns with Strudel' },
+  video:       { type: 'video',       label: 'Video',        abbr: 'VID', emoji: '🎬', color: '#0ea5e9', description: 'Video track for scoring to picture' },
 };
 
 export interface DrumKitSample {
@@ -82,5 +83,8 @@ export const KEY_SCALES = [
   'A major', 'A minor', 'A# major', 'A# minor',
   'B major', 'B minor',
 ];
+
+/** Maximum video tracks allowed per project. Nuendo uses 2; start conservative, expand later. */
+export const MAX_VIDEO_TRACKS = 1;
 
 export const TIME_SIGNATURES = [2, 3, 4, 6];

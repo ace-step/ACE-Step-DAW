@@ -35,6 +35,9 @@ export type {
 
 export { ToneDSPFactory, getDSPFactory, setDSPFactory } from './ToneAdapter';
 
+// Native Web Audio factory (Phase 3 — Tone.js-free effects)
+export { NativeDSPFactory } from './NativeAdapter';
+
 // AudioWorklet infrastructure (Phase 1)
 export { RingBuffer, nextPowerOf2 } from './RingBuffer';
 export { ParamBuffer } from './ParamBuffer';

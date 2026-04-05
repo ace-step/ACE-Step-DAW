@@ -93,7 +93,7 @@ export class Oscillator {
         for (let i = from; i < to; i++) {
           output[i] = Math.sin(2 * Math.PI * phase);
           phase += dt;
-          if (phase >= 1) phase -= 1;
+          phase -= Math.floor(phase);
         }
         break;
 
@@ -103,7 +103,7 @@ export class Oscillator {
           val -= polyBlep(phase, dt);
           output[i] = val;
           phase += dt;
-          if (phase >= 1) phase -= 1;
+          phase -= Math.floor(phase);
         }
         break;
 
@@ -115,7 +115,7 @@ export class Oscillator {
           val -= polyBlep((phase - pw + 1) % 1, dt);
           output[i] = val;
           phase += dt;
-          if (phase >= 1) phase -= 1;
+          phase -= Math.floor(phase);
         }
         break;
       }
@@ -133,7 +133,7 @@ export class Oscillator {
           // Scale to [-1, 1] range (4x because integral of ±1 square = triangle with ½ amplitude)
           output[i] = triState * 4;
           phase += dt;
-          if (phase >= 1) phase -= 1;
+          phase -= Math.floor(phase);
         }
         this._triState = triState;
         break;
@@ -143,11 +143,13 @@ export class Oscillator {
     this._phase = phase;
   }
 
-  /** Generate a single sample. */
+  /** Pre-allocated single-sample buffer for tick(). */
+  private static readonly _tickBuf = new Float32Array(1);
+
+  /** Generate a single sample (allocation-free). */
   tick(): number {
-    const buf = new Float32Array(1);
-    this.process(buf, 0, 1);
-    return buf[0];
+    this.process(Oscillator._tickBuf, 0, 1);
+    return Oscillator._tickBuf[0];
   }
 
   /** Reset phase and state. */

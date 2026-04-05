@@ -117,21 +117,21 @@ export class FreeVerb {
 
   get roomSize(): number { return this._roomSize; }
   set roomSize(v: number) {
-    this._roomSize = v;
+    this._roomSize = Math.max(0, Math.min(1, v));
     this._updateParams();
   }
 
   get damping(): number { return this._damping; }
   set damping(v: number) {
-    this._damping = v;
+    this._damping = Math.max(0, Math.min(1, v));
     this._updateParams();
   }
 
   get wet(): number { return this._wet; }
-  set wet(v: number) { this._wet = v; }
+  set wet(v: number) { this._wet = Math.max(0, Math.min(1, v)); }
 
   get dry(): number { return this._dry; }
-  set dry(v: number) { this._dry = v; }
+  set dry(v: number) { this._dry = Math.max(0, Math.min(1, v)); }
 
   private _updateParams(): void {
     const roomScaled = this._roomSize * SCALE_ROOM + OFFSET_ROOM;

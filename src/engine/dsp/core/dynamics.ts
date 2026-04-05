@@ -133,12 +133,16 @@ export class Compressor {
     const makeup = dbToGain(this.makeupGain);
     let grDb = 0;
 
+    // Use envelope follower for attack/release smoothing
+    const follower = this._follower;
+
     for (let i = from; i < to; i++) {
       const input = buf[i];
-      const inputAbs = Math.abs(input);
 
-      // Update envelope
-      const envDb = inputAbs > 0 ? gainToDb(inputAbs) : -120;
+      // Get smoothed envelope level via follower (respects attack/release)
+      const oneSample = new Float32Array([Math.abs(input)]);
+      const envLin = follower.process(oneSample, 0, 1);
+      const envDb = envLin > 0 ? gainToDb(envLin) : -120;
 
       // Compute gain reduction with soft knee
       let gr: number;
@@ -234,10 +238,13 @@ export class Gate {
 
   process(buf: Float32Array, from: number, to: number): void {
     const threshLin = dbToGain(this.threshold);
+    const follower = this._follower;
 
     for (let i = from; i < to; i++) {
-      const inputAbs = Math.abs(buf[i]);
-      if (inputAbs < threshLin) {
+      // Use envelope follower for smoothed level detection
+      const oneSample = new Float32Array([Math.abs(buf[i])]);
+      const envLin = follower.process(oneSample, 0, 1);
+      if (envLin < threshLin) {
         buf[i] = 0;
       }
     }

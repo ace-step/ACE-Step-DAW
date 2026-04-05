@@ -63,6 +63,7 @@ class Oversampler2x {
 
   /**
    * Process a block through a shaping function at 2x sample rate.
+   * Handles blocks larger than maxBlockSize by processing in chunks.
    */
   process(
     buf: Float32Array,
@@ -72,28 +73,38 @@ class Oversampler2x {
     drive: number,
   ): void {
     const up = this._upBuf;
-    const len = to - from;
+    const maxChunkSize = up.length >> 1;
+    if (maxChunkSize <= 0 || to <= from) return;
 
-    // Upsample 2x with linear interpolation
     let prev = this._prevSample;
-    for (let i = 0; i < len; i++) {
-      const cur = buf[from + i];
-      up[i * 2] = (prev + cur) * 0.5;
-      up[i * 2 + 1] = cur;
-      prev = cur;
+    let offset = from;
+
+    while (offset < to) {
+      const len = Math.min(to - offset, maxChunkSize);
+
+      // Upsample 2x with linear interpolation
+      for (let i = 0; i < len; i++) {
+        const cur = buf[offset + i];
+        up[i * 2] = (prev + cur) * 0.5;
+        up[i * 2 + 1] = cur;
+        prev = cur;
+      }
+
+      // Apply shaping at 2x rate
+      const upLen = len * 2;
+      for (let i = 0; i < upLen; i++) {
+        up[i] = shapeFn(up[i], drive);
+      }
+
+      // Downsample 2x by averaging pairs
+      for (let i = 0; i < len; i++) {
+        buf[offset + i] = (up[i * 2] + up[i * 2 + 1]) * 0.5;
+      }
+
+      offset += len;
     }
+
     this._prevSample = prev;
-
-    // Apply shaping at 2x rate
-    const upLen = len * 2;
-    for (let i = 0; i < upLen; i++) {
-      up[i] = shapeFn(up[i], drive);
-    }
-
-    // Downsample 2x by averaging pairs
-    for (let i = 0; i < len; i++) {
-      buf[from + i] = (up[i * 2] + up[i * 2 + 1]) * 0.5;
-    }
   }
 
   reset(): void {
@@ -113,9 +124,12 @@ export class Waveshaper {
   oversample = false;
 
   private _oversampler: Oversampler2x;
+  /** Pre-allocated dry buffer for mix blending (no allocations in process). */
+  private readonly _dryBuf: Float32Array;
 
   constructor(maxBlockSize = 512) {
     this._oversampler = new Oversampler2x(maxBlockSize);
+    this._dryBuf = new Float32Array(maxBlockSize);
   }
 
   /**
@@ -125,13 +139,15 @@ export class Waveshaper {
     const shapeFn = this._getShapeFn();
 
     if (this.oversample) {
-      // Save dry signal for mix
       if (this.mix < 1) {
-        const dry = new Float32Array(to - from);
-        for (let i = from; i < to; i++) dry[i - from] = buf[i];
+        // Save dry signal using pre-allocated buffer
+        const len = to - from;
+        const dry = this._dryBuf;
+        for (let i = 0; i < len; i++) dry[i] = buf[from + i];
         this._oversampler.process(buf, from, to, shapeFn, this.drive);
-        for (let i = from; i < to; i++) {
-          buf[i] = dry[i - from] * (1 - this.mix) + buf[i] * this.mix;
+        const mix = this.mix;
+        for (let i = 0; i < len; i++) {
+          buf[from + i] = dry[i] * (1 - mix) + buf[from + i] * mix;
         }
       } else {
         this._oversampler.process(buf, from, to, shapeFn, this.drive);

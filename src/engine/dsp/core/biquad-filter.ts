@@ -52,10 +52,14 @@ export function calcBiquadCoeffs(
   gainDb: number,
   sampleRate: number,
 ): BiquadCoefficients {
-  const w0 = (2 * Math.PI * freq) / sampleRate;
+  const nyquist = sampleRate / 2;
+  const safeFreq = Math.max(1, Math.min(freq, nyquist - 1));
+  const safeQ = Math.max(0.001, q);
+
+  const w0 = (2 * Math.PI * safeFreq) / sampleRate;
   const cos_w0 = Math.cos(w0);
   const sin_w0 = Math.sin(w0);
-  const alpha = sin_w0 / (2 * q);
+  const alpha = sin_w0 / (2 * safeQ);
 
   let b0: number, b1: number, b2: number;
   let a0: number, a1: number, a2: number;
@@ -208,8 +212,9 @@ export class BiquadProcessor {
   /** Process a single sample (for modulated filters). */
   tick(x: number): number {
     const y = this.b0 * x + this._z1;
-    this._z1 = this.b1 * x - this.a1 * y + this._z2 + ANTI_DENORMAL;
+    const z1 = this.b1 * x - this.a1 * y + this._z2 + ANTI_DENORMAL;
     this._z2 = this.b2 * x - this.a2 * y;
+    this._z1 = z1 - ANTI_DENORMAL;
     return y;
   }
 

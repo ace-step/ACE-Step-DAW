@@ -77,7 +77,8 @@ export class LFO {
     let prevPhase = this._prevPhase;
 
     for (let i = from; i < to; i++) {
-      const p = (phase + offset) % 1;
+      let p = (phase + offset) % 1;
+      if (p < 0) p += 1; // normalize for negative phaseOffset
       let val: number;
 
       switch (this._waveform) {
@@ -113,18 +114,20 @@ export class LFO {
       output[i] = val;
       prevPhase = phase;
       phase += dt;
-      if (phase >= 1) phase -= 1;
+      phase -= Math.floor(phase);
     }
 
     this._phase = phase;
     this._prevPhase = prevPhase;
   }
 
-  /** Generate a single sample. */
+  /** Pre-allocated single-sample buffer for tick(). */
+  private static readonly _tickBuf = new Float32Array(1);
+
+  /** Generate a single sample (allocation-free). */
   tick(): number {
-    const buf = new Float32Array(1);
-    this.process(buf, 0, 1);
-    return buf[0];
+    this.process(LFO._tickBuf, 0, 1);
+    return LFO._tickBuf[0];
   }
 
   /** Reset phase. */

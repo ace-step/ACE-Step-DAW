@@ -44,13 +44,15 @@ export class SmartDefaultsService {
   getSmartDefaults(genre: string): SmartDefaultResult {
     const suggestion = this.recipeWiki.suggestParameters(genre);
 
-    if (!suggestion) {
+    if (!suggestion || (suggestion.cfgStrength === 0 && suggestion.steps === 0 && suggestion.shift === 0)) {
       return {
         source: 'static',
         suggestion: null,
         confidence: 0,
-        sampleSize: 0,
-        explanation: `No wiki data for "${genre}" yet — using static defaults.`,
+        sampleSize: suggestion?.sampleSize ?? 0,
+        explanation: suggestion
+          ? `Insufficient parameter data for "${genre}" — using static defaults.`
+          : `No wiki data for "${genre}" yet — using static defaults.`,
       };
     }
 
@@ -69,18 +71,20 @@ export class SmartDefaultsService {
     const entries = this.recipeWiki.query({ genre });
     if (entries.length === 0) return null;
 
-    const kept = entries.filter(e => e.success && e.rating !== undefined && e.rating >= 3).length;
-    const regenerated = entries.filter(e => !e.success || (e.rating !== undefined && e.rating < 3)).length;
+    const ratedEntries = entries.filter(e => e.rating !== undefined);
+    const kept = ratedEntries.filter(e => e.rating !== undefined && e.rating >= 3).length;
+    const regenerated = ratedEntries.filter(e => e.rating !== undefined && e.rating < 3).length;
     const ratings: number[] = [];
-    for (const e of entries) {
+    for (const e of ratedEntries) {
       if (e.rating !== undefined) ratings.push(e.rating);
     }
+    const ratedCount = ratedEntries.length;
 
     return {
       genre,
       totalGenerations: entries.length,
-      keptRate: kept / entries.length,
-      regeneratedRate: regenerated / entries.length,
+      keptRate: ratedCount > 0 ? kept / ratedCount : 0,
+      regeneratedRate: ratedCount > 0 ? regenerated / ratedCount : 0,
       averageRating: ratings.length > 0
         ? ratings.reduce((a, b) => a + b, 0) / ratings.length
         : 0,

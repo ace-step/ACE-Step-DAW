@@ -35,7 +35,7 @@ export interface DspWorkerHostOptions {
   /** Number of automatable parameter slots (default: 256). */
   paramCount?: number;
   /** URL to the worker script (default: '/dsp-worker.js'). */
-  workerUrl?: string;
+  workerUrl?: string | URL;
 }
 
 export interface CpuStats {
@@ -52,7 +52,7 @@ export class DspWorkerHost {
   private readonly _channels: number;
   private readonly _bufferSize: number;
   private readonly _paramCount: number;
-  private readonly _workerUrl: string;
+  private readonly _workerUrl: string | URL;
 
   private _onStateChange: ((state: DspWorkerState) => void) | null = null;
   private _onCpu: ((stats: CpuStats) => void) | null = null;
@@ -64,9 +64,10 @@ export class DspWorkerHost {
     this._channels = options.channels ?? 2;
     this._bufferSize = options.bufferSize ?? 8192;
     this._paramCount = options.paramCount ?? 256;
-    // Default workerUrl is a placeholder — callers must provide the actual
-    // bundled worker path (e.g. via Vite's new URL('./worker.ts', import.meta.url)).
-    // The worker script itself is not yet implemented (Phase 5 scaffolding).
+    // Phase 5 delivers the host controller and typed protocol.
+    // The actual worker script (dsp-worker.js) is a separate deliverable —
+    // callers should provide the bundled worker path via Vite's
+    // new URL('./dsp-worker.ts', import.meta.url) pattern.
     this._workerUrl = options.workerUrl ?? '/dsp-worker.js';
   }
 

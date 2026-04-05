@@ -763,12 +763,27 @@ export class NativeBufferSource extends NativeSynthBase implements IDSPBufferSou
     }
 
     this._source = source;
-    source.start(time, offset, duration);
+    // Avoid passing undefined args to WebIDL methods (can coerce to NaN)
+    if (time === undefined) {
+      source.start();
+    } else if (offset === undefined) {
+      source.start(time);
+    } else if (duration === undefined) {
+      source.start(time, offset);
+    } else {
+      source.start(time, offset, duration);
+    }
   }
 
   stop(time?: number): void {
     if (this._source) {
-      try { this._source.stop(time); } catch { /* */ }
+      try {
+        if (time === undefined) {
+          this._source.stop();
+        } else {
+          this._source.stop(time);
+        }
+      } catch { /* */ }
     }
   }
 }

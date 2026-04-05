@@ -737,6 +737,10 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     dcSource.connect(dcOffset);
     dcOffset.connect(sum);
 
+    // Gate output until start() — prevents DC offset from shifting
+    // connected AudioParams before the LFO is explicitly activated.
+    sum.gain.value = 0;
+
     super(sum, sum);
     this._osc = osc;
     this._gain = gain;
@@ -765,10 +769,12 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   }
 
   start(): void {
+    this._sum.gain.value = 1;
     try { this._osc.start(); } catch { /* already started */ }
   }
 
   stop(): void {
+    this._sum.gain.value = 0;
     try { this._osc.stop(); } catch { /* already stopped */ }
   }
 

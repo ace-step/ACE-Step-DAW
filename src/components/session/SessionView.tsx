@@ -9,6 +9,7 @@ import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } fro
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
+import { gatherAiFillContext } from '../../utils/sessionAiFill';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -173,6 +174,9 @@ export function SessionView() {
     });
   }, [colorMenu, setSessionSlotFollowAction]);
 
+  const addClip = useProjectStore((s) => s.addClip);
+  const assignClipToSessionSlot = useProjectStore((s) => s.assignClipToSessionSlot);
+
   // Set keyboard context to 'session' on mount, restore previous on unmount
   useEffect(() => {
     const previousScope = useUIStore.getState().keyboardContext.scope;
@@ -230,6 +234,27 @@ export function SessionView() {
     }
     return queued;
   }, [pendingLaunches, scenes]);
+
+  const handleAiFill = useCallback((trackId: string, sceneIndex: number) => {
+    if (!project) return;
+    const track = tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    const { prompt } = gatherAiFillContext(track, sceneIndex, scenes, sessionSlots, tracks);
+    const sceneId = scenes[sceneIndex]?.id;
+    if (!sceneId) return;
+
+    const measures = project.measures ?? 4;
+    const newClip = addClip(trackId, {
+      startTime: 0,
+      duration: (measures * project.timeSignature * 60) / project.bpm,
+      prompt,
+      lyrics: '',
+      source: 'generated',
+      keyScale: project.keyScale,
+    });
+
+    assignClipToSessionSlot(trackId, sceneId, newClip.id);
+  }, [project, tracks, scenes, sessionSlots, addClip, assignClipToSessionSlot]);
 
   return (
     <div className="flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto">
@@ -419,6 +444,7 @@ export function SessionView() {
               dragState={dragState}
               dropTarget={dropTarget}
               onDragStart={handlePointerDown}
+              onAiFill={handleAiFill}
             />
           );
         })}
@@ -844,6 +870,8 @@ interface StopButtonContextMenuState {
   y: number;
   slotId: string;
   hasStopButton: boolean;
+  sceneIndex: number;
+  trackId: string;
 }
 
 function FragmentRow({
@@ -865,6 +893,7 @@ function FragmentRow({
   dragState,
   dropTarget,
   onDragStart,
+  onAiFill,
 }: {
   track: Track;
   sessionClips: Clip[];
@@ -884,6 +913,7 @@ function FragmentRow({
   dragState: SessionDragState | null;
   dropTarget: SessionDropTarget | null;
   onDragStart: (e: React.PointerEvent, type: 'clip' | 'scene', opts: { sourceSlotId?: string; sourceSceneIndex?: number; label: string; color: string }) => void;
+  onAiFill: (trackId: string, sceneIndex: number) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
 
@@ -911,6 +941,8 @@ function FragmentRow({
       y: e.clientY,
       slotId: slot.id,
       hasStopButton: slot.hasStopButton !== false,
+      sceneIndex,
+      trackId: track.id,
     });
   }, [slotBySceneIndex]);
 
@@ -1169,6 +1201,14 @@ function FragmentRow({
 
       {contextMenu && (
         <ContextMenuWrapper x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem
+            label="AI Fill — Generate Clip"
+            onClick={() => {
+              onAiFill(contextMenu.trackId, contextMenu.sceneIndex);
+              setContextMenu(null);
+            }}
+          />
+          <ContextMenuSeparator />
           <ContextMenuItem
             label={contextMenu.hasStopButton ? 'Remove Stop Button' : 'Add Stop Button'}
             onClick={handleToggleStopButton}

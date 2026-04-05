@@ -19,6 +19,7 @@ import {
 } from './PianoRollConstants';
 import { drawPianoRoll } from './PianoRollRenderer';
 import { usePianoRollDrag } from './usePianoRollDrag';
+import { useMidiAiStore } from '../../store/midiAiStore';
 
 export interface GhostNote {
   pitch: number;
@@ -70,6 +71,18 @@ export function PianoRollCanvas({
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
+
+  // MIDI AI generation state
+  const aiLockedNoteIds = useMidiAiStore((s) => s.lockedNoteIds);
+  const aiSelectionStartBeat = useMidiAiStore((s) => s.selectionStartBeat);
+  const aiSelectionEndBeat = useMidiAiStore((s) => s.selectionEndBeat);
+  const aiStatus = useMidiAiStore((s) => s.status);
+  const aiVariations = useMidiAiStore((s) => s.variations);
+  const aiActiveVariationIndex = useMidiAiStore((s) => s.activeVariationIndex);
+  const aiPanelOpen = useMidiAiStore((s) => s.panelOpen);
+  const aiPreviewNotes = aiStatus === 'previewing'
+    ? (aiVariations[aiActiveVariationIndex]?.notes ?? [])
+    : [];
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -345,6 +358,10 @@ export function PianoRollCanvas({
       currentBeat: liveTime,
       drag: dragRef.current,
       quantizePreviewPositions,
+      lockedNoteIds: aiPanelOpen ? aiLockedNoteIds : undefined,
+      aiSelectionStartBeat: aiPanelOpen ? aiSelectionStartBeat : null,
+      aiSelectionEndBeat: aiPanelOpen ? aiSelectionEndBeat : null,
+      aiPreviewNotes: aiPanelOpen ? aiPreviewNotes : undefined,
     });
   }, [
     activeTool,
@@ -364,6 +381,11 @@ export function PianoRollCanvas({
     quantizePreviewPositions,
     selectedNoteIds,
     velocityHeight,
+    aiLockedNoteIds,
+    aiSelectionStartBeat,
+    aiSelectionEndBeat,
+    aiPreviewNotes,
+    aiPanelOpen,
   ]);
 
   useEffect(() => {
@@ -566,11 +588,11 @@ export function PianoRollCanvas({
         setSelectedNoteIds(new Set([hit.note.id]));
       }
 
-      if (hit || selectedNoteIds.size > 0) {
+      if (hit || selectedNoteIds.size > 0 || aiPanelOpen) {
         setContextMenu({ x: e.clientX, y: e.clientY });
       }
     },
-    [selectedNoteIds, findNoteAt, setSelectedNoteIds],
+    [selectedNoteIds, findNoteAt, setSelectedNoteIds, aiPanelOpen],
   );
 
   const handleContextMenuQuantize = useCallback(() => {
@@ -582,6 +604,31 @@ export function PianoRollCanvas({
     setContextMenu(null);
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
+
+  const handleContextMenuLockNotes = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size > 0) {
+      useMidiAiStore.getState().lockNotes(Array.from(selectedNoteIds));
+    }
+  }, [selectedNoteIds]);
+
+  const handleContextMenuUnlockNotes = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size > 0) {
+      useMidiAiStore.getState().unlockNotes(Array.from(selectedNoteIds));
+    }
+  }, [selectedNoteIds]);
+
+  const handleContextMenuSetAiRegion = useCallback(() => {
+    setContextMenu(null);
+    if (selectedNoteIds.size === 0) return;
+    // Use the bounding box of selected notes as the AI region
+    const selNotes = notes.filter((n) => selectedNoteIds.has(n.id));
+    if (selNotes.length === 0) return;
+    const minBeat = Math.min(...selNotes.map((n) => n.startBeat));
+    const maxBeat = Math.max(...selNotes.map((n) => n.startBeat + n.durationBeats));
+    useMidiAiStore.getState().setSelection(minBeat, maxBeat);
+  }, [selectedNoteIds, notes]);
 
   // --- Hover cursor ---
 
@@ -777,6 +824,22 @@ export function PianoRollCanvas({
             onClick={handleContextMenuQuantize}
             shortcut={`${navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q`}
           />
+          {aiPanelOpen && selectedNoteIds.size > 0 && (
+            <>
+              <ContextMenuItem
+                label="Lock for AI"
+                onClick={handleContextMenuLockNotes}
+              />
+              <ContextMenuItem
+                label="Unlock for AI"
+                onClick={handleContextMenuUnlockNotes}
+              />
+              <ContextMenuItem
+                label="Set AI Region"
+                onClick={handleContextMenuSetAiRegion}
+              />
+            </>
+          )}
         </ContextMenuWrapper>
       )}
     </div>

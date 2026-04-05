@@ -14,7 +14,9 @@ import { getSynthPresetById, type SynthPresetCategory } from '../../data/synthPr
 import { createUserPreset, getPresetById, type InstrumentPresetCategory } from '../../data/instrumentPresets';
 import { TransformMenu } from './TransformMenu';
 import { ChordSuggestionPanel } from './ChordSuggestionPanel';
+import { MidiAiPanel } from './MidiAiPanel';
 import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
+import { useMidiAiStore } from '../../store/midiAiStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 import { SynthParameterEditor, PRESET_DEFAULT_OSCILLATOR } from '../synth/SynthParameterEditor';
 
@@ -77,6 +79,9 @@ export function PianoRoll() {
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
   const chordPanelOpen = useChordSuggestionStore((s) => s.panelOpen);
   const toggleChordPanel = useChordSuggestionStore((s) => s.togglePanel);
+  const midiAiPanelOpen = useMidiAiStore((s) => s.panelOpen);
+  const openMidiAiPanel = useMidiAiStore((s) => s.openPanel);
+  const closeMidiAiPanel = useMidiAiStore((s) => s.closePanel);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -441,6 +446,26 @@ export function PianoRoll() {
 
         {clip && (
           <button
+            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+              midiAiPanelOpen
+                ? 'bg-violet-600/40 text-violet-200'
+                : 'bg-violet-600/15 text-violet-100 hover:bg-violet-600/30'
+            }`}
+            onClick={() => {
+              if (midiAiPanelOpen) {
+                closeMidiAiPanel();
+              } else {
+                openMidiAiPanel(track.id, clip.id);
+              }
+            }}
+            title="Toggle AI MIDI generation panel (infill, continue, variation)"
+          >
+            AI Generate
+          </button>
+        )}
+
+        {clip && (
+          <button
             className="px-2 py-1 rounded text-[10px] bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-colors"
             onClick={() => {
               void (async () => {
@@ -499,6 +524,7 @@ export function PianoRoll() {
       </div>
 
       {chordPanelOpen && <ChordSuggestionPanel />}
+      {midiAiPanelOpen && <MidiAiPanel />}
 
       {track.synthPreset === 'sampler' && (
         <div

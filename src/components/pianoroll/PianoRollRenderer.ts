@@ -38,6 +38,13 @@ export interface PianoRollDrawParams {
   currentBeat: number;
   drag: NoteDragState | null;
   quantizePreviewPositions: Record<string, { startBeat: number; durationBeats: number }> | null;
+  /** IDs of notes that are locked for AI generation (rendered with lock indicator) */
+  lockedNoteIds?: Set<string>;
+  /** AI generation selection region in beats */
+  aiSelectionStartBeat?: number | null;
+  aiSelectionEndBeat?: number | null;
+  /** Preview notes from AI generation (rendered semi-transparently) */
+  aiPreviewNotes?: MidiNote[];
 }
 
 /** Draw horizontal key rows (background shading + gridlines). */
@@ -283,6 +290,111 @@ function drawToolBadge(
   ctx.fillText(`${activeTool.toUpperCase()} ${getPianoRollToolShortcut(activeTool)}`, width - 80, 12);
 }
 
+/** Draw a highlight region for AI infill selection. */
+function drawAiSelectionRegion(
+  ctx: CanvasRenderingContext2D,
+  startBeat: number,
+  endBeat: number,
+  beatToX: (beat: number) => number,
+  noteAreaHeight: number,
+  width: number,
+) {
+  const x1 = Math.max(beatToX(startBeat), PIANO_KEYBOARD_WIDTH);
+  const x2 = Math.min(beatToX(endBeat), width);
+  if (x2 <= x1) return;
+
+  // Fill region with violet tint
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.08)';
+  ctx.fillRect(x1, 0, x2 - x1, noteAreaHeight);
+
+  // Left and right boundary lines
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x1, 0);
+  ctx.lineTo(x1, noteAreaHeight);
+  ctx.moveTo(x2, 0);
+  ctx.lineTo(x2, noteAreaHeight);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Label
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.7)';
+  ctx.font = '9px "Geist", sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText('AI Region', x1 + 4, 4);
+}
+
+/** Draw a lock indicator on a locked note. */
+function drawLockedIndicator(
+  ctx: CanvasRenderingContext2D,
+  noteX: number,
+  noteY: number,
+  noteHeight: number,
+) {
+  // Small amber lock icon in top-right corner
+  const iconSize = Math.min(8, noteHeight * 0.6);
+  const ix = noteX + 2;
+  const iy = noteY + 1;
+
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.8)';
+  // Lock body
+  ctx.fillRect(ix, iy + iconSize * 0.4, iconSize, iconSize * 0.6);
+  // Lock shackle
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(ix + iconSize / 2, iy + iconSize * 0.4, iconSize * 0.3, Math.PI, 0);
+  ctx.stroke();
+}
+
+/** Draw AI preview notes (generated, not yet accepted). */
+function drawPreviewNotes(
+  ctx: CanvasRenderingContext2D,
+  previewNotes: MidiNote[],
+  beatToX: (beat: number) => number,
+  pitchToY: (pitch: number) => number,
+  pixelsPerBeat: number,
+  keyHeight: number,
+  width: number,
+  noteAreaHeight: number,
+) {
+  for (const note of previewNotes) {
+    const noteX = beatToX(note.startBeat);
+    const noteY = pitchToY(note.pitch);
+    const noteWidth = note.durationBeats * pixelsPerBeat;
+    const noteHeight = keyHeight - 1;
+    if (noteX + noteWidth < PIANO_KEYBOARD_WIDTH || noteX > width) continue;
+    if (noteY + noteHeight < 0 || noteY > noteAreaHeight) continue;
+
+    // Semi-transparent green fill for preview notes
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
+    ctx.fill();
+
+    // Dashed border
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+
+    // Note name
+    if (noteWidth > 30 && noteHeight > 8) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.font = `${Math.min(9, noteHeight * 0.7)}px "Geist Mono", monospace`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
+    }
+  }
+}
+
 /**
  * Main drawing function for the piano roll canvas.
  * Orchestrates all sub-drawing routines in correct order.
@@ -310,6 +422,10 @@ export function drawPianoRoll(params: PianoRollDrawParams): void {
     currentBeat,
     drag,
     quantizePreviewPositions,
+    lockedNoteIds,
+    aiSelectionStartBeat,
+    aiSelectionEndBeat,
+    aiPreviewNotes,
   } = params;
 
   const noteAreaHeight = height - velocityHeight;
@@ -340,6 +456,11 @@ export function drawPianoRoll(params: PianoRollDrawParams): void {
   // Beat grid (vertical lines + bar numbers)
   drawBeatGrid(ctx, width, noteAreaHeight, pixelsPerBeat, gridBeats, prScrollX);
 
+  // AI selection region overlay (drawn behind notes)
+  if (aiSelectionStartBeat != null && aiSelectionEndBeat != null) {
+    drawAiSelectionRegion(ctx, aiSelectionStartBeat, aiSelectionEndBeat, beatToX, noteAreaHeight, width);
+  }
+
   // Ghost notes from other tracks
   drawGhostNotes(ctx, width, noteAreaHeight, ghostNotes, beatToX, pitchToY, pixelsPerBeat, keyHeight);
 
@@ -351,6 +472,19 @@ export function drawPianoRoll(params: PianoRollDrawParams): void {
     const hasPreview = !!preview;
     const isSelected = selectedNoteIds.has(note.id);
     drawNote(ctx, note, drawStartBeat, drawDuration, hasPreview, isSelected, beatToX, pitchToY, pixelsPerBeat, keyHeight, width, noteAreaHeight);
+
+    // Lock indicator for AI-locked notes
+    if (lockedNoteIds?.has(note.id)) {
+      const noteX = beatToX(drawStartBeat);
+      const noteY = pitchToY(note.pitch);
+      const noteHeight = keyHeight - 1;
+      drawLockedIndicator(ctx, noteX, noteY, noteHeight);
+    }
+  }
+
+  // AI preview notes (generated, semi-transparent)
+  if (aiPreviewNotes && aiPreviewNotes.length > 0) {
+    drawPreviewNotes(ctx, aiPreviewNotes, beatToX, pitchToY, pixelsPerBeat, keyHeight, width, noteAreaHeight);
   }
 
   // Box selection overlay

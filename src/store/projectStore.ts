@@ -930,8 +930,12 @@ export interface ProjectState extends MidiSliceActions {
 
   // Markers
   addMarker: (time: number, name: string) => void;
+  /** Add a typed marker with automatic color assignment. */
+  addTypedMarker: (time: number, name: string, type: import('../types/project').MarkerType) => void;
+  /** Batch-add scene markers from detected cut timestamps. Single undo step. */
+  addSceneMarkers: (cutTimes: number[]) => void;
   removeMarker: (id: string) => void;
-  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color'>>) => void;
+  updateMarker: (id: string, updates: Partial<Pick<Marker, 'time' | 'name' | 'color' | 'type' | 'endTime'>>) => void;
 
   // Comping / takes
   addTake: (clipId: string, audioKey: string, waveformPeaks?: number[]) => void;
@@ -8506,6 +8510,46 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  addTypedMarker: (time, name, type) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project);
+    const colorMap: Record<string, string> = {
+      generic: '#ffffff',
+      scene: '#3b82f6',
+      cue: '#facc15',
+      hit: '#ef4444',
+    };
+    const marker: Marker = { id: uuidv4(), time, name, color: colorMap[type] ?? '#ffffff', type };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: [...(state.project.markers ?? []), marker],
+      },
+    });
+  },
+
+  addSceneMarkers: (cutTimes) => {
+    const state = get();
+    if (!state.project || cutTimes.length === 0) return;
+    _pushHistory(state.project);
+    const newMarkers: Marker[] = cutTimes.map((time, i) => ({
+      id: uuidv4(),
+      time,
+      name: `Scene ${i + 1}`,
+      color: '#3b82f6',
+      type: 'scene' as const,
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        markers: [...(state.project.markers ?? []), ...newMarkers],
+      },
+    });
+  },
+
   removeMarker: (id) => {
     const state = get();
     if (!state.project) return;
@@ -8527,9 +8571,16 @@ export const useProjectStore = create<ProjectState>()(
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        markers: (state.project.markers ?? []).map((m) =>
-          m.id === id ? { ...m, ...updates } : m,
-        ),
+        markers: (state.project.markers ?? []).map((m) => {
+          if (m.id !== id) return m;
+          const updated = { ...m };
+          if (updates.time !== undefined) updated.time = updates.time;
+          if (updates.name !== undefined) updated.name = updates.name;
+          if (updates.color !== undefined) updated.color = updates.color;
+          if ('type' in updates) updated.type = updates.type;
+          if ('endTime' in updates) updated.endTime = updates.endTime;
+          return updated;
+        }),
       },
     });
   },

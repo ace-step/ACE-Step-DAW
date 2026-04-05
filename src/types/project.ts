@@ -1185,11 +1185,17 @@ export interface PlaybackLatencySettings {
   updatedAt: number | null;
 }
 
+export type MarkerType = 'generic' | 'scene' | 'cue' | 'hit';
+
 export interface Marker {
   id: string;
   time: number;
   name: string;
   color: string;
+  /** Marker type for categorization and filtering. */
+  type?: MarkerType;
+  /** Optional end time for range markers (undefined = point marker). */
+  endTime?: number;
 }
 
 export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4' | '1/2' | '1 bar' | '2 bars' | '4 bars' | '8 bars';

@@ -765,6 +765,8 @@ export interface ProjectState extends MidiSliceActions {
   setSessionSlotQuantization: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
   setSessionSlotLegato: (slotId: string, legato: boolean) => void;
   setSessionSlotLaunchMode: (slotId: string, launchMode: SessionLaunchMode) => void;
+  setSessionSlotTempo: (slotId: string, tempo: number | undefined) => void;
+  setSessionSlotTimeSignature: (slotId: string, timeSignature: [number, number] | undefined) => void;
   launchSessionClip: (trackId: string, sceneId: string) => void;
   launchSessionScene: (sceneId: string) => void;
   stopSessionTrack: (trackId: string) => void;
@@ -5258,6 +5260,42 @@ export const useProjectStore = create<ProjectState>()(
     _pushHistory(state.project);
     const nextSlots = [...session.slots];
     nextSlots[slotIndex] = { ...nextSlots[slotIndex], launchMode };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionSlotTempo: (slotId, tempo) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], tempo };
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, slots: nextSlots },
+      },
+    });
+  },
+
+  setSessionSlotTimeSignature: (slotId, timeSignature) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const slotIndex = session.slots.findIndex((s) => s.id === slotId);
+    if (slotIndex === -1) return;
+    _pushHistory(state.project);
+    const nextSlots = [...session.slots];
+    nextSlots[slotIndex] = { ...nextSlots[slotIndex], timeSignature };
     set({
       project: {
         ...state.project,

@@ -85,6 +85,8 @@ interface SlotContextMenuState {
   legato: boolean;
   currentLaunchMode: SessionLaunchMode;
   followAction?: FollowActionConfig;
+  tempo?: number;
+  timeSignature?: [number, number];
 }
 
 const CLIP_FOLLOW_ACTION_OPTIONS: { value: FollowActionType; label: string }[] = [
@@ -112,6 +114,8 @@ export function SessionView() {
   const setSessionSlotLaunchMode = useProjectStore((s) => s.setSessionSlotLaunchMode);
   const setSessionSlotFollowAction = useProjectStore((s) => s.setSessionSlotFollowAction);
   const setSessionFollowActionsEnabled = useProjectStore((s) => s.setSessionFollowActionsEnabled);
+  const setSessionSlotTempo = useProjectStore((s) => s.setSessionSlotTempo);
+  const setSessionSlotTimeSignature = useProjectStore((s) => s.setSessionSlotTimeSignature);
   const selectedSessionSlot = useUIStore((s) => s.selectedSessionSlot);
   const setSelectedSessionSlot = useUIStore((s) => s.setSelectedSessionSlot);
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
@@ -469,6 +473,78 @@ export function SessionView() {
               setColorMenu(null);
             }}
           />
+          <ContextMenuSeparator />
+          <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+            Tempo Override
+          </div>
+          <div className="px-2 py-1.5 flex items-center gap-2">
+            <input
+              type="number"
+              min={20}
+              max={999}
+              step={1}
+              defaultValue={colorMenu.tempo ?? ''}
+              placeholder="Global"
+              className="w-16 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+              onBlur={(e) => {
+                const val = e.target.value.trim() === '' ? undefined : Number(e.target.value);
+                if (val !== undefined && (val < 20 || val > 999)) return;
+                setSessionSlotTempo(colorMenu.slotId, val);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              aria-label="Clip tempo override"
+              data-testid="slot-tempo-input"
+            />
+            <span className="text-[10px] text-zinc-400">BPM</span>
+            {colorMenu.tempo && (
+              <button
+                className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                onClick={() => setSessionSlotTempo(colorMenu.slotId, undefined)}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+            Time Sig Override
+          </div>
+          <div className="px-2 py-1.5 flex items-center gap-1">
+            <select
+              defaultValue={colorMenu.timeSignature?.[0] ?? ''}
+              className="w-10 rounded bg-[#2a2a2a] border border-[#444] px-1 py-0.5 text-[11px] text-zinc-200 outline-none"
+              onChange={(e) => {
+                const num = Number(e.target.value);
+                if (!num) { setSessionSlotTimeSignature(colorMenu.slotId, undefined); return; }
+                const den = colorMenu.timeSignature?.[1] ?? 4;
+                setSessionSlotTimeSignature(colorMenu.slotId, [num, den]);
+              }}
+              aria-label="Time signature numerator"
+              data-testid="slot-timesig-num"
+            >
+              <option value="">—</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 16].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span className="text-[10px] text-zinc-400">/</span>
+            <select
+              defaultValue={colorMenu.timeSignature?.[1] ?? ''}
+              className="w-10 rounded bg-[#2a2a2a] border border-[#444] px-1 py-0.5 text-[11px] text-zinc-200 outline-none"
+              onChange={(e) => {
+                const den = Number(e.target.value);
+                if (!den) { setSessionSlotTimeSignature(colorMenu.slotId, undefined); return; }
+                const num = colorMenu.timeSignature?.[0] ?? 4;
+                setSessionSlotTimeSignature(colorMenu.slotId, [num, den]);
+              }}
+              aria-label="Time signature denominator"
+              data-testid="slot-timesig-den"
+            >
+              <option value="">—</option>
+              {[2, 4, 8, 16].map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
           <ContextMenuSeparator />
           <div className="px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
             Follow Action
@@ -902,6 +978,8 @@ function FragmentRow({
             legato: slot.legato ?? false,
             currentLaunchMode: slotLaunchMode,
             followAction: slot.followAction,
+            tempo: slot.tempo,
+            timeSignature: slot.timeSignature,
           });
         };
 

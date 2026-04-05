@@ -1191,6 +1191,10 @@ export interface SessionClipSlot {
   legato?: boolean;
   /** Clip launch behavior: trigger (default), gate, toggle, or repeat. */
   launchMode?: SessionLaunchMode;
+  /** Optional tempo override (BPM) applied when this clip launches. */
+  tempo?: number;
+  /** Optional time signature override [numerator, denominator] applied when this clip launches. */
+  timeSignature?: [number, number];
   /** Follow action configuration for this clip slot. */
   followAction?: FollowActionConfig;
 }

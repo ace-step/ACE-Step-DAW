@@ -96,11 +96,11 @@ export function EmptyState() {
                 <button
                   key={p.id}
                   onClick={() => handleOpenRecent(p.id)}
-                  className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
+                  className="text-left rounded border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
                 >
                   <p className="text-xs text-zinc-200 truncate font-medium">{p.name}</p>
                   <p className="text-[10px] text-zinc-500 mt-0.5">
-                    {p.trackCount} track{p.trackCount !== 1 ? 's' : ''} · {p.bpm} BPM
+                    {p.trackCount} track{p.trackCount !== 1 ? 's' : ''} · <span className="font-mono">{p.bpm}</span> BPM
                   </p>
                   <p className="text-[10px] text-zinc-600 mt-0.5">
                     {formatRelativeTime(p.updatedAt)}
@@ -121,11 +121,11 @@ export function EmptyState() {
               <button
                 key={starter.id}
                 onClick={() => handleSelectStarter(starter)}
-                className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
+                className="text-left rounded border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
               >
                 <p className="text-xs text-zinc-200 font-medium">{starter.title}</p>
                 <p className="text-[10px] text-zinc-500 mt-0.5">
-                  {starter.bpm} BPM · {starter.keyScale}
+                  <span className="font-mono">{starter.bpm}</span> BPM · {starter.keyScale}
                 </p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {starter.tracks.slice(0, 3).map((t) => (
@@ -153,10 +153,10 @@ export function EmptyState() {
                 <button
                   key={starter.id}
                   onClick={() => handleSelectStarter(starter)}
-                  className="text-left rounded-lg border border-cyan-400/20 hover:border-cyan-400/40 hover:bg-daw-surface-2 transition-colors p-2.5"
+                  className="text-left rounded border border-violet-400/20 hover:border-violet-400/40 hover:bg-daw-surface-2 transition-colors p-2.5"
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-cyan-400">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-violet-400">
                       Demo
                     </span>
                   </div>

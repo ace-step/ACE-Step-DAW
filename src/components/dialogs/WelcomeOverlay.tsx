@@ -67,7 +67,7 @@ function PathCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-lg border p-3 transition-all group ${
+      className={`w-full text-left rounded border p-3 transition-all group ${
         accent
           ? 'border-daw-accent/50 bg-daw-accent/[0.06] hover:bg-daw-accent/[0.12] hover:border-daw-accent/70'
           : 'border-daw-border/50 bg-white/[0.02] hover:bg-white/[0.05] hover:border-daw-border'
@@ -104,13 +104,13 @@ function StarterCard({
     <button
       onClick={onClick}
       data-starter-id={starter.id}
-      className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
+      className="text-left rounded border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
     >
       <div className="flex items-center justify-between gap-1 mb-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-400">
           {starter.kind === 'template' ? 'Template' : 'Demo'}
         </p>
-        <p className="text-[10px] text-zinc-500">{starter.bpm} BPM</p>
+        <p className="text-[10px] text-zinc-500 font-mono">{starter.bpm} BPM</p>
       </div>
       <p className="text-xs text-zinc-200 font-medium">{starter.title}</p>
       <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">{starter.description}</p>
@@ -261,14 +261,14 @@ export function WelcomeOverlay() {
                       key={category}
                       data-genre={category}
                       onClick={() => handleSelectGenre(category)}
-                      className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
+                      className="text-left rounded border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2.5"
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm">{GENRE_ICONS[category]}</span>
                         <span className="text-xs font-medium text-zinc-200">{category}</span>
                       </div>
                       {preset && (
-                        <p className="text-[10px] text-zinc-500">
+                        <p className="text-[10px] text-zinc-500 font-mono">
                           {preset.suggestedBpm} BPM · {preset.suggestedKey}
                         </p>
                       )}

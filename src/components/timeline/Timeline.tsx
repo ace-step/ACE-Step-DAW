@@ -542,25 +542,32 @@ export function Timeline() {
 
               {/* Canvas-based selection overlays for smooth drag performance.
                   Viewport-anchored (sticky) so drag rectangles remain visible during scroll,
-                  while canvas size stays within browser limits. */}
-              {(ctxDrag || selDrag) && (
-                <div
-                  className="pointer-events-none sticky left-0 z-10"
-                  style={{
-                    position: 'sticky',
-                    width: viewportWidth,
-                    height: trackAreaRef.current?.clientHeight ?? 0,
-                    marginBottom: -(trackAreaRef.current?.clientHeight ?? 0),
-                  }}
-                >
-                  <TimelineOverlayCanvas
-                    width={viewportWidth}
-                    height={trackAreaRef.current?.clientHeight ?? 0}
-                    ctxDrag={ctxDrag ? { ...ctxDrag, left: ctxDrag.left - (scrollRef.current?.scrollLeft ?? 0) } : null}
-                    selDrag={selDrag ? { ...selDrag, left: selDrag.left - (scrollRef.current?.scrollLeft ?? 0) } : null}
-                  />
-                </div>
-              )}
+                  while canvas size stays within browser limits. Height uses visible viewport
+                  (not full scrollable area) to keep backing store small. */}
+              {(ctxDrag || selDrag) && (() => {
+                const scrollLeft = scrollRef.current?.scrollLeft ?? 0;
+                const scrollTop = scrollRef.current?.scrollTop ?? 0;
+                // Use visible viewport height (scroll container minus headers), not full scrollable height
+                const visibleHeight = scrollRef.current?.clientHeight ?? 0;
+                return (
+                  <div
+                    className="pointer-events-none sticky left-0 z-10"
+                    style={{
+                      position: 'sticky',
+                      width: viewportWidth,
+                      height: visibleHeight,
+                      marginBottom: -visibleHeight,
+                    }}
+                  >
+                    <TimelineOverlayCanvas
+                      width={viewportWidth}
+                      height={visibleHeight}
+                      ctxDrag={ctxDrag ? { ...ctxDrag, left: ctxDrag.left - scrollLeft, top: ctxDrag.top - scrollTop } : null}
+                      selDrag={selDrag ? { ...selDrag, left: selDrag.left - scrollLeft, top: selDrag.top - scrollTop } : null}
+                    />
+                  </div>
+                );
+              })()}
               {arrangementRows.map((row) => (row.kind === 'track' ? (
                 <TrackLane key={row.track.id} track={row.track} />
               ) : (

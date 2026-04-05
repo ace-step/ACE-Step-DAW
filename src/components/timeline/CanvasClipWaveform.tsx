@@ -37,7 +37,8 @@ export function CanvasClipWaveform({
   const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
   const [measuredHeight, setMeasuredHeight] = useState(0);
 
-  // Cap width to browser canvas limit — used for both backing store AND CSS width
+  // Cap width to the browser canvas limit for the backing store/drawing surface only.
+  // The canvas is still rendered at 100% CSS width, so very wide clips may be stretched.
   const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
   const safeWidth = useMemo(() => Math.min(width, MAX_CANVAS_CSS_PX / dpr), [width, dpr]);
 

@@ -109,11 +109,11 @@ export function connectMidiController(
       // If no specific device, use first available input
       let input: MIDIInput | undefined;
       if (deviceId) {
-        input = access.inputs.get(deviceId);
+        input = access.inputs.get(deviceId) as MIDIInput | undefined;
       } else {
         const entries = access.inputs.values();
         const first = entries.next();
-        input = first.done ? undefined : first.value;
+        input = first.done ? undefined : first.value as MIDIInput;
       }
 
       if (!input) return false;

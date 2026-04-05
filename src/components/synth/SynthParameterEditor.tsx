@@ -1,12 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
-import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope, UnisonSettings } from '../../types/project';
+import type { SynthEnvelope, SynthFilter, SynthLfo, FilterEnvelope, UnisonSettings, SubtractiveInstrumentSettings } from '../../types/project';
 import { OscillatorSelector } from './OscillatorSelector';
 import { ADSREnvelopeEditor } from './ADSREnvelopeEditor';
 import { SynthFilterControls } from './SynthFilterControls';
 import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeEditor';
 import { LFODisplay } from './LFODisplay';
 import { UnisonControls } from './UnisonControls';
+import { SoundDesignPanel } from './SoundDesignPanel';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
 const DEFAULT_FILTER: SynthFilter = { type: 'lowpass', frequency: 1000, Q: 1 };
@@ -66,6 +67,38 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
     [trackId, updateUnisonSettings],
   );
 
+  const [showAiPanel, setShowAiPanel] = useState(false);
+
+  const handleAiApply = useCallback(
+    (changes: Partial<SubtractiveInstrumentSettings>) => {
+      if (changes.oscillator?.waveform) {
+        updateSynthOscillatorType(trackId, changes.oscillator.waveform);
+      }
+      if (changes.ampEnvelope) {
+        updateSynthEnvelope(trackId, changes.ampEnvelope);
+      }
+      if (changes.filter) {
+        const { enabled: _e, ...filterUpdates } = changes.filter;
+        updateSynthFilter(trackId, filterUpdates as Partial<SynthFilter>);
+      }
+      if (changes.lfo) {
+        const { enabled: _e, retrigger: _r, ...lfoUpdates } = changes.lfo;
+        updateSynthLfo(trackId, lfoUpdates as Partial<SynthLfo>);
+      }
+      if (changes.filterEnvelope) {
+        updateFilterEnvelope(trackId, changes.filterEnvelope);
+      }
+      if (changes.unison) {
+        const unisonUpdate: Partial<UnisonSettings> = {};
+        if (changes.unison.voices !== undefined) unisonUpdate.voices = changes.unison.voices;
+        if (changes.unison.detuneCents !== undefined) unisonUpdate.detune = changes.unison.detuneCents;
+        if (changes.unison.stereoSpread !== undefined) unisonUpdate.spread = changes.unison.stereoSpread;
+        updateUnisonSettings(trackId, unisonUpdate);
+      }
+    },
+    [trackId, updateSynthOscillatorType, updateSynthEnvelope, updateSynthFilter, updateSynthLfo, updateFilterEnvelope, updateUnisonSettings],
+  );
+
   if (!track) return null;
 
   const oscillatorType = track.synthOscillatorType
@@ -77,23 +110,57 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
   const filterEnvelope = track.filterEnvelope ?? DEFAULT_FILTER_ENVELOPE;
   const unison = track.unisonSettings ?? DEFAULT_UNISON;
 
+  // Build the current SubtractiveInstrumentSettings for the AI panel
+  const currentSettings: SubtractiveInstrumentSettings = track.instrument?.kind === 'subtractive'
+    ? track.instrument.settings
+    : {
+        oscillator: { waveform: oscillatorType, octave: 0, detuneCents: 0, level: 1 },
+        ampEnvelope: { attack: envelope.attack, decay: envelope.decay, sustain: envelope.sustain, release: envelope.release },
+        filter: { enabled: filter.type !== undefined, type: filter.type, cutoffHz: filter.frequency, resonance: filter.Q, drive: 0, keyTracking: 0 },
+        filterEnvelope: { attack: filterEnvelope.attack, decay: filterEnvelope.decay, sustain: filterEnvelope.sustain, release: filterEnvelope.release, amount: filterEnvelope.octaves ?? 0 },
+        lfo: { enabled: lfo.rate > 0 && lfo.depth > 0, waveform: lfo.shape as SubtractiveInstrumentSettings['lfo']['waveform'], target: 'off', rateHz: lfo.rate, depth: lfo.depth, retrigger: false },
+        unison: { voices: unison.voices, detuneCents: unison.detune, stereoSpread: unison.spread, blend: 0.5 },
+        glideTime: 0,
+        outputGain: 0.55,
+      };
+
   return (
-    <div
-      className="flex gap-4 px-3 py-2 bg-[#1e1e22] border-b border-[#2a2a2a] overflow-x-auto"
-      data-testid="synth-parameter-editor"
-      data-track-id={trackId}
-    >
-      <OscillatorSelector waveform={oscillatorType} onChange={onOscillatorChange} />
-      <div className="w-px bg-[#333] self-stretch shrink-0" />
-      <ADSREnvelopeEditor envelope={envelope} onChange={onEnvelopeChange} />
-      <div className="w-px bg-[#333] self-stretch shrink-0" />
-      <SynthFilterControls filter={filter} onChange={onFilterChange} />
-      <div className="w-px bg-[#333] self-stretch shrink-0" />
-      <FilterEnvelopeEditor envelope={filterEnvelope} onChange={onFilterEnvelopeChange} />
-      <div className="w-px bg-[#333] self-stretch shrink-0" />
-      <LFODisplay lfo={lfo} onChange={onLfoChange} />
-      <div className="w-px bg-[#333] self-stretch shrink-0" />
-      <UnisonControls settings={unison} onChange={onUnisonChange} />
+    <div data-testid="synth-parameter-editor" data-track-id={trackId}>
+      <div className="flex gap-4 px-3 py-2 bg-[#1e1e22] border-b border-[#2a2a2a] overflow-x-auto">
+        <OscillatorSelector waveform={oscillatorType} onChange={onOscillatorChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <ADSREnvelopeEditor envelope={envelope} onChange={onEnvelopeChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <SynthFilterControls filter={filter} onChange={onFilterChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <FilterEnvelopeEditor envelope={filterEnvelope} onChange={onFilterEnvelopeChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <LFODisplay lfo={lfo} onChange={onLfoChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <UnisonControls settings={unison} onChange={onUnisonChange} />
+        <div className="w-px bg-[#333] self-stretch shrink-0" />
+        <button
+          type="button"
+          onClick={() => setShowAiPanel(!showAiPanel)}
+          className={`text-[9px] px-2 py-1 rounded border transition-colors shrink-0 ${
+            showAiPanel
+              ? 'bg-teal-900/50 border-teal-700/50 text-teal-300'
+              : 'border-[#333] text-zinc-500 hover:text-zinc-300 hover:border-[#444]'
+          }`}
+          title="AI Sound Design Assistant"
+        >
+          AI Design
+        </button>
+      </div>
+      {showAiPanel && (
+        <div className="px-3 py-2 bg-[#1a1a1e] border-b border-[#2a2a2a]">
+          <SoundDesignPanel
+            currentSettings={currentSettings}
+            instrumentKind="subtractive"
+            onApply={handleAiApply}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -257,6 +257,8 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
 
 const BUFFER_SIZE = 2048;
 
+// TODO: Migrate from deprecated ScriptProcessorNode to AudioWorkletNode
+// once AudioWorklet pipeline is fully wired (Phase 5 DspWorkerHost).
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
@@ -431,6 +433,11 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
   start(): void {
     try { this._lfo.start(); } catch { /* already started */ }
   }
+
+  dispose(): void {
+    try { this._lfo.stop(); } catch { /* already stopped */ }
+    super.dispose();
+  }
 }
 
 class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
@@ -525,6 +532,11 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
+
+  dispose(): void {
+    try { this._lfo.stop(); } catch { /* already stopped */ }
+    super.dispose();
+  }
 }
 
 class NativeEQ3 extends NativeNodeWrapper implements IDSPEQ3 {
@@ -614,12 +626,22 @@ class NativeConvolver extends NativeNodeWrapper implements IDSPConvolver {
 class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   private readonly _osc: OscillatorNode;
   private readonly _gain: GainNode;
+  private readonly _dcOffset: GainNode;
+  private readonly _dcSource: OscillatorNode;
+  private readonly _sum: GainNode;
   private _min: number;
   private _max: number;
 
   constructor(ctx: AudioContext, options?: IDSPLFOOptions) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    const sum = ctx.createGain();
+
+    // DC offset via a zero-frequency oscillator (value=1) through a gain node.
+    // This avoids ConstantSourceNode which may not be available in all environments.
+    const dcSource = ctx.createOscillator();
+    dcSource.frequency.value = 0;
+    const dcOffset = ctx.createGain();
 
     const min = options?.min ?? 0;
     const max = options?.max ?? 1;
@@ -628,15 +650,24 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     osc.frequency.value = freq;
     osc.type = 'sine';
 
-    // LFO output: osc [-1, 1] → gain → scaled to [min, max]
+    // LFO output: osc [-1, 1] → gain (amplitude) + dcOffset (DC) → sum → [min, max]
     // amplitude = (max - min) / 2, offset = (max + min) / 2
     gain.gain.value = (max - min) / 2;
+    dcOffset.gain.value = (max + min) / 2;
+    sum.gain.value = 1;
 
     osc.connect(gain);
+    gain.connect(sum);
+    dcSource.connect(dcOffset);
+    dcOffset.connect(sum);
+    dcSource.start();
 
-    super(gain, gain);
+    super(sum, sum);
     this._osc = osc;
     this._gain = gain;
+    this._dcOffset = dcOffset;
+    this._dcSource = dcSource;
+    this._sum = sum;
     this._min = min;
     this._max = max;
   }
@@ -648,12 +679,14 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   set min(v: number) {
     this._min = v;
     this._gain.gain.value = (this._max - v) / 2;
+    this._dcOffset.gain.value = (this._max + v) / 2;
   }
 
   get max(): number { return this._max; }
   set max(v: number) {
     this._max = v;
     this._gain.gain.value = (v - this._min) / 2;
+    this._dcOffset.gain.value = (v + this._min) / 2;
   }
 
   start(): void {
@@ -664,8 +697,14 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     try { this._osc.stop(); } catch { /* already stopped */ }
   }
 
+  dispose(): void {
+    try { this._osc.stop(); } catch { /* already stopped */ }
+    try { this._dcSource.stop(); } catch { /* already stopped */ }
+    super.dispose();
+  }
+
   connectParam(destination: AudioParam): void {
-    this._gain.connect(destination);
+    this._sum.connect(destination);
   }
 }
 

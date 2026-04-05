@@ -103,6 +103,9 @@ export class Compressor {
   /** Current gain reduction in dB (for metering). */
   private _grDb = 0;
 
+  /** Pre-allocated single-sample buffer to avoid per-sample allocations in process(). */
+  private readonly _oneSample = new Float32Array(1);
+
   constructor(params: Partial<CompressorParams> = {}, sampleRate = 44100) {
     this._sampleRate = sampleRate;
     if (params.threshold !== undefined) this.threshold = params.threshold;
@@ -140,8 +143,8 @@ export class Compressor {
       const input = buf[i];
 
       // Get smoothed envelope level via follower (respects attack/release)
-      const oneSample = new Float32Array([Math.abs(input)]);
-      const envLin = follower.process(oneSample, 0, 1);
+      this._oneSample[0] = Math.abs(input);
+      const envLin = follower.process(this._oneSample, 0, 1);
       const envDb = envLin > 0 ? gainToDb(envLin) : -120;
 
       // Compute gain reduction with soft knee
@@ -227,6 +230,9 @@ export class Gate {
   private _follower: EnvelopeFollower;
   private _sampleRate: number;
 
+  /** Pre-allocated single-sample buffer to avoid per-sample allocations in process(). */
+  private readonly _oneSample = new Float32Array(1);
+
   constructor(thresholdDb = -40, attackMs = 0.1, releaseMs = 50, sampleRate = 44100) {
     this.threshold = thresholdDb;
     this._sampleRate = sampleRate;
@@ -242,8 +248,8 @@ export class Gate {
 
     for (let i = from; i < to; i++) {
       // Use envelope follower for smoothed level detection
-      const oneSample = new Float32Array([Math.abs(buf[i])]);
-      const envLin = follower.process(oneSample, 0, 1);
+      this._oneSample[0] = Math.abs(buf[i]);
+      const envLin = follower.process(this._oneSample, 0, 1);
       if (envLin < threshLin) {
         buf[i] = 0;
       }

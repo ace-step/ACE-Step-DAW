@@ -36,7 +36,7 @@ describe('Scene chaining: auto-advance through scenes', () => {
 
     const pending = getPendingLaunches();
     // Should have a pending launch for the next scene
-    const sceneFollowLaunch = pending.find((p) => p.type === 'scene');
+    const sceneFollowLaunch = pending.find((p) => p.type === 'scene-follow-action');
     expect(sceneFollowLaunch).toBeDefined();
     expect(sceneFollowLaunch!.sceneId).toBe(scenes[1].id);
     // 4 bars at 120 BPM, 4/4 time = 4 beats per bar, 0.5s per beat = 8s
@@ -89,7 +89,8 @@ describe('Scene chaining: auto-advance through scenes', () => {
     useProjectStore.getState().scheduleSceneFollowAction(scenes[0].id, 0);
 
     const pending = getPendingLaunches();
-    expect(pending[0].type).toBe('stop-all');
+    expect(pending[0].type).toBe('scene-follow-action');
+    expect(pending[0].sceneId).toBeUndefined();
   });
 
   it('followActionConfig takes precedence over followAction (chanceA=1)', () => {
@@ -107,7 +108,7 @@ describe('Scene chaining: auto-advance through scenes', () => {
 
     const pending = getPendingLaunches();
     // Should resolve to 'first' (scene 0), not 'stop'
-    expect(pending[0].type).toBe('scene');
+    expect(pending[0].type).toBe('scene-follow-action');
     expect(pending[0].sceneId).toBe(scenes[0].id);
   });
 

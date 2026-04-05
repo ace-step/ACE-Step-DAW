@@ -11,6 +11,7 @@ import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
 import { gatherAiFillContext } from '../../utils/sessionAiFill';
 import { useSessionMidiController } from '../../hooks/useSessionMidiController';
+import { getMidiCaptureService } from '../../services/midiCaptureService';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -110,6 +111,8 @@ export function SessionView() {
   const launchedSessionClips = useTransportStore((s) => s.launchedSessionClips);
   const currentTime = useTransportStore((s) => s.currentTime);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
+  const armedTrackIds = useTransportStore((s) => s.armedTrackIds);
+  const captureMidi = useProjectStore((s) => s.captureMidi);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
   const setSessionSlotLegato = useProjectStore((s) => s.setSessionSlotLegato);
@@ -137,6 +140,16 @@ export function SessionView() {
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
   const [showSessionMixer, setShowSessionMixer] = useState(false);
+  const [captureBarCount, setCaptureBarCount] = useState(8);
+
+  const hasArmedTrack = armedTrackIds.length > 0;
+  const captureService = useMemo(() => getMidiCaptureService(), []);
+
+  const handleCaptureMidi = useCallback(() => {
+    if (!hasArmedTrack) return;
+    const targetTrackId = armedTrackIds[0];
+    captureMidi(targetTrackId, currentTime, captureService, { bars: captureBarCount, quantize: '1/16' });
+  }, [hasArmedTrack, armedTrackIds, currentTime, captureMidi, captureService, captureBarCount]);
   const [midiEnabled, setMidiEnabled] = useState(false);
   const midiState = useSessionMidiController(midiEnabled);
 
@@ -247,9 +260,11 @@ export function SessionView() {
     if (!sceneId) return;
 
     const measures = project.measures ?? 4;
+    const timeSignatureDenominator = project.timeSignatureDenominator ?? 4;
+    const barDurationSec = (project.timeSignature * 60 * 4) / (project.bpm * timeSignatureDenominator);
     const newClip = addClip(trackId, {
       startTime: 0,
-      duration: (measures * project.timeSignature * 60) / project.bpm,
+      duration: measures * barDurationSec,
       prompt,
       lyrics: '',
       source: 'generated',
@@ -310,6 +325,24 @@ export function SessionView() {
               aria-label="Stop all Session clips"
             >
               Stop All
+            </button>
+            <select
+              value={captureBarCount}
+              onChange={(e) => setCaptureBarCount(Number(e.target.value))}
+              className="rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-1 text-[11px] text-zinc-200 outline-none"
+              aria-label="Capture buffer length in bars"
+            >
+              {[2, 4, 8, 16, 32].map((n) => (
+                <option key={n} value={n}>{n} bars</option>
+              ))}
+            </select>
+            <button
+              onClick={handleCaptureMidi}
+              disabled={!hasArmedTrack}
+              className="px-3 py-1.5 rounded-md bg-[#2a2a2a] text-[11px] font-medium text-zinc-300 hover:bg-[#343434] transition-colors disabled:opacity-30"
+              aria-label="Capture MIDI from rolling buffer"
+            >
+              Capture MIDI
             </button>
             <button
               onClick={() => setMidiEnabled((v) => !v)}
@@ -530,8 +563,13 @@ export function SessionView() {
               placeholder="Global"
               className="w-16 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
               onBlur={(e) => {
-                const val = e.target.value.trim() === '' ? undefined : Number(e.target.value);
-                if (val !== undefined && (val < 20 || val > 999)) return;
+                const rawValue = e.target.value.trim();
+                if (rawValue === '') {
+                  setSessionSlotTempo(colorMenu.slotId, undefined);
+                  return;
+                }
+                const val = Number(rawValue);
+                if (!Number.isFinite(val) || val < 20 || val > 999) return;
                 setSessionSlotTempo(colorMenu.slotId, val);
               }}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
@@ -557,9 +595,15 @@ export function SessionView() {
               className="w-10 rounded bg-[#2a2a2a] border border-[#444] px-1 py-0.5 text-[11px] text-zinc-200 outline-none"
               onChange={(e) => {
                 const num = Number(e.target.value);
-                if (!num) { setSessionSlotTimeSignature(colorMenu.slotId, undefined); return; }
+                if (!num) {
+                  setSessionSlotTimeSignature(colorMenu.slotId, undefined);
+                  setColorMenu((prev) => prev ? { ...prev, timeSignature: undefined } : null);
+                  return;
+                }
                 const den = colorMenu.timeSignature?.[1] ?? 4;
-                setSessionSlotTimeSignature(colorMenu.slotId, [num, den]);
+                const ts: [number, number] = [num, den];
+                setSessionSlotTimeSignature(colorMenu.slotId, ts);
+                setColorMenu((prev) => prev ? { ...prev, timeSignature: ts } : null);
               }}
               aria-label="Time signature numerator"
               data-testid="slot-timesig-num"
@@ -575,9 +619,15 @@ export function SessionView() {
               className="w-10 rounded bg-[#2a2a2a] border border-[#444] px-1 py-0.5 text-[11px] text-zinc-200 outline-none"
               onChange={(e) => {
                 const den = Number(e.target.value);
-                if (!den) { setSessionSlotTimeSignature(colorMenu.slotId, undefined); return; }
+                if (!den) {
+                  setSessionSlotTimeSignature(colorMenu.slotId, undefined);
+                  setColorMenu((prev) => prev ? { ...prev, timeSignature: undefined } : null);
+                  return;
+                }
                 const num = colorMenu.timeSignature?.[0] ?? 4;
-                setSessionSlotTimeSignature(colorMenu.slotId, [num, den]);
+                const ts: [number, number] = [num, den];
+                setSessionSlotTimeSignature(colorMenu.slotId, ts);
+                setColorMenu((prev) => prev ? { ...prev, timeSignature: ts } : null);
               }}
               aria-label="Time signature denominator"
               data-testid="slot-timesig-den"

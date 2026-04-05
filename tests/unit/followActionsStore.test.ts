@@ -279,7 +279,7 @@ describe('follow actions store', () => {
       expect(pending).toHaveLength(0);
     });
 
-    it('queues stop-all when scene follow action is "stop"', () => {
+    it('queues scene-follow-action when scene follow action is "stop"', () => {
       addTrackWithClips(2);
       const session = useProjectStore.getState().project!.session!;
       const scene0 = session.scenes[0];
@@ -289,10 +289,10 @@ describe('follow actions store', () => {
 
       const pending = useProjectStore.getState().project!.session!.pendingLaunches;
       expect(pending).toHaveLength(1);
-      expect(pending[0].type).toBe('stop-all');
+      expect(pending[0].type).toBe('scene-follow-action');
     });
 
-    it('queues stop-all when "next" has no valid target (last scene)', () => {
+    it('queues scene-follow-action wrapping to first when "next" on last scene', () => {
       addTrackWithClips(2);
       const session = useProjectStore.getState().project!.session!;
       const lastScene = session.scenes[session.scenes.length - 1];
@@ -302,7 +302,7 @@ describe('follow actions store', () => {
 
       const pending = useProjectStore.getState().project!.session!.pendingLaunches;
       expect(pending).toHaveLength(1);
-      expect(pending[0].type).toBe('stop-all');
+      expect(pending[0].type).toBe('scene-follow-action');
     });
 
     it('commitPendingSessionLaunches processes scene-follow-action and chains to next scene', () => {

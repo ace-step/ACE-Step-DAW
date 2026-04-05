@@ -5400,23 +5400,40 @@ export const useProjectStore = create<ProjectState>()(
       ? transport.currentTime
       : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, effectiveQuantization));
 
+    // Apply per-slot tempo/time signature overrides
+    let projectWithOverrides = state.project;
+    if (slot.tempo) {
+      projectWithOverrides = { ...projectWithOverrides, bpm: slot.tempo, updatedAt: Date.now() };
+    }
+    if (slot.timeSignature) {
+      projectWithOverrides = {
+        ...projectWithOverrides,
+        timeSignature: slot.timeSignature[0],
+        timeSignatureDenominator: slot.timeSignature[1],
+        updatedAt: Date.now(),
+      };
+    }
+
     if (isImmediate) {
       set({
-        project: applySessionTrackLaunch(state.project, trackId, slot.clipId, executeAt, 'clip', sceneId),
+        project: applySessionTrackLaunch(projectWithOverrides, trackId, slot.clipId, executeAt, 'clip', sceneId),
       });
       return;
     }
 
     set({
       project: {
-        ...state.project,
-        session: queuePendingSessionLaunch(session, {
-          type: 'clip',
-          trackId,
-          sceneId,
-          clipId: slot.clipId,
-          executeAt,
-        }),
+        ...projectWithOverrides,
+        session: queuePendingSessionLaunch(
+          ensureProjectSession(projectWithOverrides).session!,
+          {
+            type: 'clip',
+            trackId,
+            sceneId,
+            clipId: slot.clipId,
+            executeAt,
+          },
+        ),
       },
     });
   },
@@ -5623,6 +5640,25 @@ export const useProjectStore = create<ProjectState>()(
         } else {
           // follow-action resolved to 'stop'
           nextProject = applySessionTrackLaunch(nextProject, launch.trackId, null, launch.executeAt, 'stop');
+        }
+        continue;
+      }
+      if (launch.type === 'scene-follow-action') {
+        if (launch.sceneId) {
+          // Scene follow action: launch the target scene
+          const nextSession = ensureProjectSession(nextProject).session!;
+          for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
+            nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId!);
+          }
+          for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
+            nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
+          }
+          launchedSceneIds.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
+        } else {
+          // Scene follow action resolved to stop-all
+          for (const track of nextProject.tracks) {
+            nextProject = applySessionTrackLaunch(nextProject, track.id, null, launch.executeAt, 'stop');
+          }
         }
         continue;
       }
@@ -6066,25 +6102,25 @@ export const useProjectStore = create<ProjectState>()(
     const executeAt = launchTime + bars * beatsPerBar * beatDuration;
 
     if (targetSceneIndex === -1) {
-      // Stop all
+      // Stop all — use scene-follow-action to avoid wiping other pending launches
       set({
         project: {
           ...state.project,
           session: queuePendingSessionLaunch(session, {
-            type: 'stop-all',
+            type: 'scene-follow-action',
             executeAt,
           }),
         },
       });
     } else {
-      // Launch target scene
+      // Launch target scene — use scene-follow-action to avoid wiping other pending launches
       const targetScene = session.scenes[targetSceneIndex];
       if (!targetScene) return;
       set({
         project: {
           ...state.project,
           session: queuePendingSessionLaunch(session, {
-            type: 'scene',
+            type: 'scene-follow-action',
             sceneId: targetScene.id,
             executeAt,
           }),

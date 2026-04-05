@@ -34,6 +34,7 @@ const GRID_COLS = 8;
 let midiAccess: MIDIAccess | null = null;
 let currentInput: MIDIInput | null = null;
 let eventHandler: MidiEventHandler | null = null;
+let stateChangeHandler: ((state: MidiControllerState) => void) | null = null;
 let customMappings: Map<number, MidiMapping> = new Map();
 
 /**
@@ -114,10 +115,17 @@ export async function initMidiController(): Promise<MidiControllerState> {
       };
     }
 
-    // Listen for new device connections
+    // Listen for new device connections and notify consumers
     midiAccess.onstatechange = (event) => {
       if (event.port?.type === 'input' && event.port.state === 'connected' && !currentInput) {
         connectToInput(event.port as MIDIInput);
+        const newState: MidiControllerState = {
+          isAvailable: true,
+          isConnected: true,
+          deviceName: event.port.name ?? 'Unknown Device',
+          inputId: event.port.id,
+        };
+        stateChangeHandler?.(newState);
       }
     };
 
@@ -154,6 +162,13 @@ export function listMidiInputs(): Array<{ id: string; name: string }> {
  */
 export function setMidiEventHandler(handler: MidiEventHandler | null) {
   eventHandler = handler;
+}
+
+/**
+ * Set a handler to be notified when MIDI connection state changes (e.g., late device connection).
+ */
+export function setMidiStateChangeHandler(handler: ((state: MidiControllerState) => void) | null) {
+  stateChangeHandler = handler;
 }
 
 /**

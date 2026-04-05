@@ -37,6 +37,7 @@ import { TimelineWindowOverlay } from './TimelineWindowOverlay';
 import { useTimelineScroll } from './useTimelineScroll';
 import { useTimelineDragSelection, getTrackVerticalRange } from './useTimelineDragSelection';
 import { ArrangementEmptyTrackHeaderRow, EmptyTrackRow } from './EmptyTrackRows';
+import { TimelineOverlayCanvas } from './TimelineOverlayCanvas';
 
 /** @deprecated Inspector is now a modal; kept for potential future use */
 export const TRACK_INSPECTOR_HEIGHT = 220;
@@ -481,7 +482,7 @@ export function Timeline() {
           </div>
 
           {/* Track lanes area */}
-          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
+          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth, willChange: 'transform' }}>
             <GridOverlay />
             <Playhead />
 
@@ -539,39 +540,13 @@ export function Timeline() {
                 selBottom={selVRange ? selVRange.top + selVRange.height : null}
               />
 
-              {/* Live context drag overlay */}
-              {ctxDrag && (
-                <div
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: ctxDrag.left,
-                    width: ctxDrag.width,
-                    top: ctxDrag.top,
-                    height: ctxDrag.height,
-                    background: 'rgba(90, 200, 250, 0.12)',
-                    borderLeft: '1px solid rgba(90, 200, 250, 0.5)',
-                    borderRight: '1px solid rgba(90, 200, 250, 0.5)',
-                    borderTop: '1px solid rgba(90, 200, 250, 0.3)',
-                    borderBottom: '1px solid rgba(90, 200, 250, 0.3)',
-                  }}
-                />
-              )}
-
-              {/* Live select drag overlay — accent-tinted with smooth fill */}
-              {selDrag && (
-                <div
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: selDrag.left,
-                    width: selDrag.width,
-                    top: selDrag.top,
-                    height: selDrag.height,
-                    background: 'rgba(94, 89, 255, 0.10)',
-                    border: '1px solid rgba(94, 89, 255, 0.7)',
-                    borderRadius: 1,
-                  }}
-                />
-              )}
+              {/* Canvas-based selection overlays for smooth drag performance */}
+              <TimelineOverlayCanvas
+                width={totalWidth}
+                height={trackAreaRef.current?.clientHeight ?? 0}
+                ctxDrag={ctxDrag}
+                selDrag={selDrag}
+              />
               {arrangementRows.map((row) => (row.kind === 'track' ? (
                 <TrackLane key={row.track.id} track={row.track} />
               ) : (

@@ -111,4 +111,39 @@ describe('createUserTimbrePreset', () => {
     expect(preset.referenceAudioKey).toBe('audio-key-123');
     expect(preset.coverStrength).toBe(0.7);
   });
+
+  it('clamps coverStrength to 0-1 range', () => {
+    const over = createUserTimbrePreset({
+      name: 'Over',
+      category: 'Bass Sounds',
+      promptTemplate: 'bass',
+      tags: ['bass'],
+      description: 'test',
+      coverStrength: 1.5,
+    });
+    expect(over.coverStrength).toBe(1);
+
+    const under = createUserTimbrePreset({
+      name: 'Under',
+      category: 'Bass Sounds',
+      promptTemplate: 'bass',
+      tags: ['bass'],
+      description: 'test',
+      coverStrength: -0.3,
+    });
+    expect(under.coverStrength).toBe(0);
+  });
+
+  it('defensively copies tags array', () => {
+    const tags = ['jazz', 'vocal'];
+    const preset = createUserTimbrePreset({
+      name: 'Copy Test',
+      category: 'Vocal Styles',
+      promptTemplate: 'test',
+      tags,
+      description: 'test',
+    });
+    tags.push('mutated');
+    expect(preset.tags).toEqual(['jazz', 'vocal']);
+  });
 });

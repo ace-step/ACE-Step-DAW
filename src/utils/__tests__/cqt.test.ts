@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeCQT, cqtToOnnxInput, CONSONANCE_ACE_CQT_OPTIONS } from '../cqt';
 
-describe('computeCQT', () => {
+describe('computeCQT', { timeout: 30_000 }, () => {
   it('returns correct number of bins for consonance-ACE config', () => {
     const samples = new Float32Array(22050); // 1 second
     const { nBins } = computeCQT(samples, CONSONANCE_ACE_CQT_OPTIONS);

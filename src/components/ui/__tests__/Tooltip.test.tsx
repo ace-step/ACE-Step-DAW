@@ -22,7 +22,7 @@ describe('Tooltip component', () => {
 
   it('shows tooltip after hover delay', () => {
     render(
-      <Tooltip content="Help text" delay={500}>
+      <Tooltip content="Help text" delayMs={500}>
         <button>Hover me</button>
       </Tooltip>,
     );
@@ -38,7 +38,7 @@ describe('Tooltip component', () => {
 
   it('hides tooltip on mouse leave', () => {
     render(
-      <Tooltip content="Help text" delay={0}>
+      <Tooltip content="Help text" delayMs={0}>
         <button>Hover me</button>
       </Tooltip>,
     );
@@ -55,7 +55,7 @@ describe('Tooltip component', () => {
 
   it('renders keyboard shortcut badge', () => {
     render(
-      <Tooltip content="Save" shortcut="Cmd+S" delay={0}>
+      <Tooltip content="Save" shortcut="Cmd+S" delayMs={0}>
         <button>Save</button>
       </Tooltip>,
     );
@@ -70,7 +70,7 @@ describe('Tooltip component', () => {
 
   it('does not show when disabled', () => {
     render(
-      <Tooltip content="Help" disabled delay={0}>
+      <Tooltip content="Help" disabled delayMs={0}>
         <button>Hover me</button>
       </Tooltip>,
     );
@@ -85,7 +85,7 @@ describe('Tooltip component', () => {
 
   it('cancels show on quick mouse leave', () => {
     render(
-      <Tooltip content="Help text" delay={500}>
+      <Tooltip content="Help text" delayMs={500}>
         <button>Hover me</button>
       </Tooltip>,
     );
@@ -105,7 +105,7 @@ describe('Tooltip component', () => {
   it('preserves original event handlers on child', () => {
     const onMouseEnter = vi.fn();
     render(
-      <Tooltip content="Help" delay={0}>
+      <Tooltip content="Help" delayMs={0}>
         <button onMouseEnter={onMouseEnter}>Hover me</button>
       </Tooltip>,
     );

@@ -5,6 +5,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
 import { useVST3Store } from '../../store/vst3Store';
 import { ClipBlock } from './ClipBlock';
+import { VideoClipBlock } from './VideoClipBlock';
 import { TakeLaneStrip } from './TakeLaneStrip';
 import { AutomationLaneView } from './AutomationLaneView';
 import { AddLayerModal } from '../generation/AddLayerModal';
@@ -144,6 +145,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
   const isStrudel = trackType === 'strudel';
+  const isVideo = trackType === 'video';
   const totalWidth = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
   const defaultClipDuration = getBarDuration(bpm, timeSignature, timeSignatureDenominator) * 4;
 
@@ -449,9 +451,11 @@ function TrackLaneInner({ track }: TrackLaneProps) {
 
         <>
           {track.clips.map((clip) => (
-            <ClipBlock key={clip.id} clip={clip} track={track} />
+            isVideo
+              ? <VideoClipBlock key={clip.id} clip={clip} track={track} />
+              : <ClipBlock key={clip.id} clip={clip} track={track} />
           ))}
-          <CrossfadeOverlay track={track} />
+          {!isVideo && <CrossfadeOverlay track={track} />}
 
           {isSequencer && !hasClips && (
             <div
@@ -497,6 +501,15 @@ function TrackLaneInner({ track }: TrackLaneProps) {
               <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-[#444] border-dashed">
                 <span className="text-violet-300 text-sm">{TRACK_TYPE_CATALOG[trackType].abbr}</span>
                 <span className="text-xs text-zinc-400">Double-click to create or open a MIDI clip</span>
+              </div>
+            </div>
+          )}
+
+          {isVideo && !hasClips && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-[#64748b]/30 border-dashed">
+                <span className="text-[#64748b] text-sm">VID</span>
+                <span className="text-xs text-zinc-400">Drag a video file here to add</span>
               </div>
             </div>
           )}

@@ -4,7 +4,7 @@ export type TrackName =
   | 'backing_vocals' | 'vocals'
   | 'custom';
 
-export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel';
+export type TrackType = 'stems' | 'mix' | 'sample' | 'sequencer' | 'pianoRoll' | 'drumMachine' | 'strudel' | 'video';
 export type InputMonitoringMode = 'off' | 'auto' | 'on';
 export type SynthPreset = 'piano' | 'strings' | 'pad' | 'lead' | 'bass' | 'organ' | 'sampler';
 
@@ -73,8 +73,17 @@ export interface UnisonSettings {
 
 export type DrumKitName = '808' | 'acoustic' | 'electronic' | 'lofi';
 export type SamplerPlaybackMode = 'classic' | 'oneShot' | 'loop';
-/** Time-stretch algorithm mode. 'repitch' uses playbackRate (changes pitch), 'slice' uses warp markers. */
-export type StretchMode = 'repitch' | 'slice';
+/**
+ * Time-stretch algorithm mode.
+ * - 'repitch': uses playbackRate (changes pitch)
+ * - 'slice': uses warp markers
+ * - 'beats': transient-preserving slice for rhythmic material
+ * - 'tones': WSOLA for monophonic sources
+ * - 'complex': spectral/phase-vocoder-style stretching for general material
+ * - 'complexPro': enhanced spectral stretching for mixed or full-range material
+ * - 'texture': granular synthesis for ambient/pad material
+ */
+export type StretchMode = 'repitch' | 'slice' | 'beats' | 'tones' | 'complex' | 'complexPro' | 'texture';
 export type PianoRollGrid = '1/4' | '1/8' | '1/16' | '1/32';
 export type StrudelMidiNotationType = 'absolute' | 'relative';
 export type StrudelMidiTimingStyle = 'subdivision' | 'absoluteDuration';
@@ -868,7 +877,65 @@ export interface Clip {
   muted?: boolean;
   /** Generation parameters used to create this clip, for edit/regenerate. */
   generationParams?: ClipGenerationParams;
+  /** Video-specific metadata (only for clips on video tracks). */
+  videoMeta?: VideoClipData;
 }
+
+// ─── Video Track Types ────────────────────────────────────────────────────────
+
+/** Video-specific clip metadata for clips on video tracks. */
+export interface VideoClipData {
+  /** Video codec identifier (e.g. 'h264', 'vp9', 'prores'). */
+  codec: string;
+  /** Video width in pixels. */
+  width: number;
+  /** Video height in pixels. */
+  height: number;
+  /** Frame rate (fps). */
+  frameRate: number;
+  /** Full duration of the source video file in seconds. */
+  fileDuration: number;
+  /** Offset into the source video in seconds (for non-destructive trimming). */
+  sourceOffset: number;
+  /** IndexedDB key where the video file blob is stored. */
+  indexedDbKey: string;
+  /** Whether the source video contains an audio stream (stripped on import). */
+  hasAudioStream: boolean;
+  /** Group of Pictures size — distance between keyframes. */
+  gopSize: number;
+  /** True if codec is intra-frame only (e.g. ProRes, MJPEG). */
+  isIntraOnly: boolean;
+  /** IndexedDB key for cached filmstrip thumbnail data. */
+  filmstripCacheKey?: string;
+}
+
+export type VideoPreviewSize = 'small' | 'medium' | 'large';
+export type VideoPreviewDock = 'top' | 'float';
+
+/** Per-track settings for video preview and display. */
+export interface VideoTrackSettings {
+  /** Preview panel size. */
+  previewSize: VideoPreviewSize;
+  /** Preview panel docking mode. */
+  previewDock: VideoPreviewDock;
+  /** Show filmstrip thumbnails in the timeline lane. */
+  showFilmstrip: boolean;
+  /** Filmstrip thumbnail opacity (0–1). */
+  filmstripOpacity: number;
+  /** Show timecode overlay on the preview panel. */
+  showTimecodeOverlay: boolean;
+  /** Update preview panel in real-time during timeline editing. */
+  videoFollowsEdit: boolean;
+}
+
+export const DEFAULT_VIDEO_TRACK_SETTINGS: VideoTrackSettings = {
+  previewSize: 'medium',
+  previewDock: 'top',
+  showFilmstrip: true,
+  filmstripOpacity: 0.8,
+  showTimecodeOverlay: false,
+  videoFollowsEdit: true,
+};
 
 export interface BounceInPlaceOptions {
   includeEffects: boolean;
@@ -1017,6 +1084,8 @@ export interface Track {
   synthPreset?: SynthPreset;
   /** ID of the active synth preset definition (factory or user). */
   synthPresetDefinitionId?: string;
+  /** Oscillator waveform type (overrides preset default when set). */
+  synthOscillatorType?: 'sine' | 'triangle' | 'sawtooth' | 'square';
   /** Custom ADSR envelope overriding the preset defaults. */
   synthEnvelope?: SynthEnvelope;
   /** Synth filter settings (lowpass/highpass/bandpass). */
@@ -1073,6 +1142,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** Video track display/preview settings (only for video tracks). */
+  videoSettings?: VideoTrackSettings;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */
@@ -1152,7 +1223,7 @@ export interface SessionScene {
   id: string;
   name: string;
   index: number;
-  /** Optional color for visual identification. */
+  /** Optional color for this scene header. */
   color?: string;
   /** Optional tempo override (BPM) applied when this scene launches. */
   tempo?: number;
@@ -1185,7 +1256,7 @@ export interface SessionClipSlot {
 
 export interface SessionPendingLaunch {
   id: string;
-  type: 'clip' | 'scene' | 'stop-track' | 'stop-all' | 'follow-action';
+  type: 'clip' | 'scene' | 'stop-track' | 'stop-all' | 'follow-action' | 'scene-follow-action';
   executeAt: number;
   requestedAt: number;
   trackId?: string;

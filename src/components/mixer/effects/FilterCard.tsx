@@ -11,6 +11,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
 import { normalizeEffectParamValue } from '../../../utils/effectAutomation';
 import type { TrackEffect, FilterParams } from '../../../types/project';
+import { LfoWaveformPreview } from './LfoWaveformPreview';
 
 export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 'filter' }; trackId: string }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
@@ -63,7 +64,8 @@ export function FilterCard({ effect, trackId }: { effect: TrackEffect & { type: 
             </button>
           </div>
           {p.lfoEnabled && (
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-3 justify-center items-center">
+              <LfoWaveformPreview shape="sine" rate={p.lfoRate} depth={p.lfoDepth} color={EFFECT_COLORS.filter} />
               <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'filter', param: 'lfoRate' }} normalizedValue={normalizeEffectParamValue('filter', 'lfoRate', p.lfoRate) ?? 0.5}>
                 <Knob value={p.lfoRate} onChange={(v) => update({ lfoRate: v })} min={0.1} max={20} defaultValue={2} label="Rate" size={56} step={0.1} color={EFFECT_COLORS.filter} />
               </AutomationControlShell>

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Knob } from '../ui/Knob';
 
 // Inline icon components (no lucide-react dependency)
-const GripVertical = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-);
 const ChevronDown = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
 );
@@ -13,9 +9,6 @@ const ChevronRight = ({ className }: { className?: string }) => (
 );
 const Plus = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14"/></svg>
-);
-const Power = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
 );
 const Trash2 = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
@@ -201,19 +194,6 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
   ],
 };
 
-// ─── Horizontal Slider ───────────────────────────────────────────────────────
-
-interface HSliderProps {
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
-  label?: string;
-  displayValue?: string;
-  color?: string;
-  width?: number;
-}
-
 import {
   EQ3Card,
   ParametricEQCard,
@@ -261,10 +241,42 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   noiseReduction: 'Noise Reduce',
 };
 
-// ─── More menu icon ─────────────────────────────────────────────────────────
-const MoreVertical = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-);
+
+/**
+ * Width tier for compact card view (fullWidth=false).
+ * Currently the main EffectChain renders in full-width mode, but EffectDevice
+ * supports compact mode for potential use in horizontal chain strips or popups.
+ * - compact: simple effects (1-2 knobs, no visualization)
+ * - standard: medium effects (3-4 knobs or visualization)
+ * - wide: complex effects (5+ knobs, visualization + mode + extra sections)
+ */
+type WidthTier = 'compact' | 'standard' | 'wide';
+const EFFECT_WIDTH_TIER: Record<TrackEffectType, WidthTier> = {
+  eq3: 'standard',
+  parametricEq: 'wide',
+  compressor: 'wide',
+  reverb: 'compact',
+  delay: 'standard',
+  distortion: 'standard',
+  filter: 'standard',
+  chorus: 'standard',
+  flanger: 'standard',
+  phaser: 'standard',
+  convolver: 'standard',
+  gate: 'wide',
+  deesser: 'standard',
+  transientShaper: 'compact',
+  limiter: 'standard',
+  saturation: 'standard',
+  stereoImager: 'standard',
+  algorithmicReverb: 'wide',
+  noiseReduction: 'compact',
+};
+const WIDTH_TIER_CLASSES: Record<WidthTier, string> = {
+  compact: 'min-w-[160px] max-w-[200px]',
+  standard: 'min-w-[200px] max-w-[260px]',
+  wide: 'min-w-[260px] max-w-[320px]',
+};
 
 function EffectDevice({
   effect, track, index, onDragStart, onDragOver, isDragOver, fullWidth = false,
@@ -282,12 +294,11 @@ function EffectDevice({
   const addTrackEffect = useProjectStore((s) => s.addTrackEffect);
   const reorderTrackEffect = useProjectStore((s) => s.reorderTrackEffect);
   const [collapsed, setCollapsed] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const color = EFFECT_COLORS[effect.type];
   const presets = EFFECT_PRESETS[effect.type];
   const effects = track.effects ?? [];
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // Close presets on outside click
   useEffect(() => {
@@ -297,15 +308,20 @@ function EffectDevice({
     return () => document.removeEventListener('click', close);
   }, [showPresets]);
 
-  // Close menu on outside click
+  // Close context menu on outside click, right-click elsewhere, or Escape
   useEffect(() => {
-    if (!showMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close);
+    document.addEventListener('contextmenu', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('contextmenu', close);
+      document.removeEventListener('keydown', onKey);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showMenu]);
+  }, [ctxMenu]);
 
   const applyPreset = (presetIdx: number) => {
     const preset = presets[presetIdx];
@@ -325,49 +341,71 @@ function EffectDevice({
 
   return (
     <div
-      className={`flex flex-col transition-all duration-200 ease-out ${
+      className={`flex flex-col transition-all ${
         fullWidth
           ? 'w-full h-full'
-          : `min-w-[180px] max-w-[240px] rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
-      } ${!effect.enabled ? 'opacity-50 grayscale-[50%]' : ''}`}
+          : `${WIDTH_TIER_CLASSES[EFFECT_WIDTH_TIER[effect.type]]} rounded-lg shrink-0 ${isDragOver ? 'ring-1 ring-violet-500' : ''}`
+      } ${!effect.enabled ? 'opacity-40' : ''}`}
       style={fullWidth ? undefined : {
         backgroundColor: `color-mix(in srgb, ${color} 6%, #181828)`,
         border: `1px solid ${color}22`,
       }}
       onMouseOver={fullWidth ? undefined : () => onDragOver(index)}
     >
-      {/* ── Device header bar ── */}
+      {/* ── Device header bar — drag-enabled, Ableton-inspired ── */}
       <div
         className={`flex items-center select-none shrink-0 ${
           fullWidth
             ? 'gap-2 px-4 py-2'
-            : 'gap-1.5 px-2 py-2 rounded-t-lg cursor-grab active:cursor-grabbing'
+            : 'gap-2 px-2.5 py-2 rounded-t-lg cursor-grab active:cursor-grabbing'
         }`}
         style={{
-          background: `${color}0f`,
-          borderBottom: `1px solid ${color}18`,
+          background: `${color}18`,
+          borderBottom: `1px solid ${color}25`,
           minHeight: 28,
         }}
-        onMouseDown={!fullWidth ? (e) => { if ((e.target as HTMLElement).closest('button')) return; onDragStart(index); } : undefined}
+        onMouseDown={fullWidth ? undefined : (e) => {
+          // Allow drag from entire title bar (except interactive controls)
+          if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+          e.stopPropagation();
+          onDragStart(index);
+        }}
+        onContextMenu={(e) => {
+          if (fullWidth) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setShowPresets(false);
+          setCtxMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
-        {/* Bypass toggle — Ableton-style circle indicator */}
+        {/* LED-style bypass indicator */}
         <button
-          className={`h-[18px] w-[18px] flex items-center justify-center transition-all rounded-full shrink-0 ${
-            effect.enabled
-              ? 'bg-green-400/20 text-green-400 hover:bg-green-400/30'
-              : 'bg-white/5 text-white/20 hover:bg-white/10 hover:text-white/40'
-          }`}
+          data-no-drag
+          type="button"
+          aria-label={effect.enabled ? 'Bypass effect' : 'Enable effect'}
+          aria-pressed={effect.enabled}
+          className="shrink-0 inline-flex items-center justify-center p-[6px] -m-[6px] rounded-full transition-all duration-150"
           onClick={(e) => {
             e.stopPropagation();
             updateTrackEffect(track.id, effect.id, { enabled: !effect.enabled } as Partial<TrackEffect>);
           }}
           title={effect.enabled ? 'Bypass effect' : 'Enable effect'}
-          aria-label={`${effect.enabled ? 'Bypass' : 'Enable'} ${EFFECT_DISPLAY_NAMES[effect.type]}`}
         >
-          <Power className="h-3 w-3" />
+          <span
+            aria-hidden="true"
+            style={{
+              width: 8,
+              height: 8,
+              display: 'block',
+              borderRadius: '50%',
+              backgroundColor: effect.enabled ? color : 'transparent',
+              border: `1.5px solid ${effect.enabled ? color : 'rgba(255,255,255,0.2)'}`,
+              boxShadow: effect.enabled ? `0 0 6px ${color}80` : 'none',
+            }}
+          />
         </button>
 
-        {/* Effect name — click to collapse */}
+        {/* Effect name — click to collapse in compact view */}
         <button
           onClick={() => !fullWidth && setCollapsed(!collapsed)}
           className={`font-semibold flex-1 truncate text-left transition-colors ${
@@ -379,13 +417,13 @@ function EffectDevice({
         </button>
 
         {/* Preset selector */}
-        <div className="relative">
+        <div className="relative" data-no-drag>
           <button
-            className="flex items-center gap-0.5 text-[10px] text-white/40 hover:text-white/60 transition-colors px-1 py-0.5 rounded hover:bg-white/5"
+            className="flex items-center gap-0.5 text-[9px] text-white/40 hover:text-white/60 transition-colors px-1 py-0.5 rounded hover:bg-white/[0.06]"
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
           >
             Presets
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className="h-2.5 w-2.5" />
           </button>
           {showPresets && (
             <div
@@ -395,7 +433,7 @@ function EffectDevice({
               {presets.map((preset, i) => (
                 <button
                   key={i}
-                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
+                  className="w-full text-left px-3 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white/80"
                   onClick={() => { applyPreset(i); setShowPresets(false); }}
                 >
                   {preset.name}
@@ -408,65 +446,66 @@ function EffectDevice({
         {/* Collapse chevron (compact view only) */}
         {!fullWidth && (
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="h-5 w-5 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors rounded hover:bg-white/5"
-            aria-label={collapsed ? 'Expand effect' : 'Collapse effect'}
+            data-no-drag
+            className="h-4 w-4 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
           >
-            {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {collapsed
+              ? <ChevronRight className="h-3 w-3" />
+              : <ChevronDown className="h-3 w-3" />
+            }
           </button>
         )}
-
-        {/* More menu (delete, move, duplicate) */}
-        <div className="relative" ref={menuRef}>
-          <button
-            className="h-5 w-5 flex items-center justify-center text-white/20 hover:text-white/50 transition-colors rounded hover:bg-white/5"
-            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-            aria-label="Effect options"
-          >
-            <MoreVertical className="h-3 w-3" />
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-full mt-1 bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
-              <button
-                className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                onClick={() => { addTrackEffect(track.id, effect.type); setShowMenu(false); }}
-              >
-                Duplicate
-              </button>
-              {index > 0 && (
-                <button
-                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                  onClick={() => { reorderTrackEffect(track.id, index, index - 1); setShowMenu(false); }}
-                >
-                  Move Left
-                </button>
-              )}
-              {index < effects.length - 1 && (
-                <button
-                  className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
-                  onClick={() => { reorderTrackEffect(track.id, index, index + 1); setShowMenu(false); }}
-                >
-                  Move Right
-                </button>
-              )}
-              <div className="border-t border-white/5 my-1" />
-              <button
-                className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
-                onClick={() => { removeTrackEffect(track.id, effect.id); setShowMenu(false); }}
-              >
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Right-click context menu (compact view) */}
+      {ctxMenu && (
+        <div
+          className="fixed bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl py-1 min-w-[130px]"
+          style={{ left: Math.min(ctxMenu.x, window.innerWidth - 160), top: Math.min(ctxMenu.y, window.innerHeight - 200), zIndex: 9999 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+            onClick={() => { addTrackEffect(track.id, effect.type); setCtxMenu(null); }}
+          >
+            Duplicate
+          </button>
+          {index > 0 && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+              onClick={() => { reorderTrackEffect(track.id, index, index - 1); setCtxMenu(null); }}
+            >
+              Move Left
+            </button>
+          )}
+          {index < effects.length - 1 && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-[10px] text-white/60 hover:bg-white/10"
+              onClick={() => { reorderTrackEffect(track.id, index, index + 1); setCtxMenu(null); }}
+            >
+              Move Right
+            </button>
+          )}
+          <div className="border-t border-white/5 my-1" />
+          <button
+            className="w-full text-left px-3 py-1.5 text-[10px] text-red-400/70 hover:bg-white/10"
+            onClick={() => { removeTrackEffect(track.id, effect.id); setCtxMenu(null); }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* ── Body ── */}
       <div
-        className={fullWidth ? 'flex-1 overflow-y-auto' : 'overflow-hidden transition-[max-height] duration-[250ms] ease-out'}
-        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '280px' }}
+        className={fullWidth
+          ? 'flex-1 overflow-y-auto'
+          : 'overflow-hidden transition-[max-height] duration-200 ease-in-out'
+        }
+        style={fullWidth ? undefined : { maxHeight: collapsed ? '0px' : '400px' }}
       >
-        <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[280px]'}>
+        <div className={fullWidth ? 'h-full flex flex-col justify-center' : 'overflow-y-auto max-h-[400px]'}>
           <EffectCardBody effect={effect} trackId={track.id} />
         </div>
       </div>
@@ -750,7 +789,7 @@ export function EffectChain() {
                   isSelected
                     ? 'text-white/90 bg-white/[0.06]'
                     : 'text-white/40 hover:text-white/65 hover:bg-white/[0.03]'
-                } ${!effect.enabled ? 'opacity-50 grayscale-[50%]' : ''}`}
+                } ${!effect.enabled ? 'opacity-40' : ''}`}
                 style={isSelected ? {
                   borderBottom: `2px solid ${c}`,
                 } : { borderBottom: '2px solid transparent' }}

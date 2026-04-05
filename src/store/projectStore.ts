@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { detectLfoAutomationConflict } from '../utils/automationLfoConflict';
 import { createMidiSlice, appendMidiNotesToClip, type MidiSliceActions } from './slices/midiSlice';
 import { type TrackHeightPreset, getTrackHeightForPreset } from '../constants/trackHeight';
 import type {
@@ -73,7 +74,10 @@ import type {
   FmInstrumentSettings,
   WavetableSettings,
   VelocityLayer,
+  VideoClipData,
+  VideoTrackSettings,
 } from '../types/project';
+import { DEFAULT_VIDEO_TRACK_SETTINGS } from '../types/project';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
@@ -94,6 +98,7 @@ import {
   DEFAULT_TIME_SIGNATURE,
   DEFAULT_MEASURES,
   MAX_PROJECT_TRACKS,
+  MAX_VIDEO_TRACKS,
   DEFAULT_PROJECT_NAME,
   DEFAULT_GENERATION,
 } from '../constants/defaults';
@@ -118,7 +123,7 @@ import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from
 import { clampClipFadeDurations } from '../utils/clipFade';
 import { getSynthPresetById } from '../data/synthPresets';
 import { getPresetById, type InstrumentPreset } from '../data/instrumentPresets';
-import { detectClipGroups, resolveFollowAction, rollFollowAction } from '../utils/followActions';
+import { detectClipGroups, resolveFollowAction, rollFollowAction, resolveSceneFollowAction } from '../utils/followActions';
 import { extractGroove, applyGroove, type ExtractGrooveOptions, type ApplyGrooveOptions } from '../utils/groovePool';
 import type { GrooveTemplate } from '../types/project';
 import { DEFAULT_MODULATION_SETTINGS } from '../types/project';
@@ -639,6 +644,10 @@ export interface ProjectState extends MidiSliceActions {
   bounceTrackToAudio: (trackId: string) => Promise<Clip | undefined>;
 
   addTrack: (trackName: TrackName | TrackType, trackType?: TrackType, options?: { order?: number; color?: string; displayName?: string }) => Track;
+  /** Add a video track (max 1 per project). Returns undefined if limit reached. */
+  addVideoTrack: () => Track | undefined;
+  /** Add a video clip with metadata to a video track. */
+  addVideoClip: (trackId: string, clipData: { startTime: number; duration: number; videoMeta: import('../types/project').VideoClipData }) => Clip | undefined;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -648,6 +657,8 @@ export interface ProjectState extends MidiSliceActions {
   setTrackFmSynth: (trackId: string, params: Partial<FmInstrumentSettings>) => void;
   /** Apply a synth preset definition to a track by preset ID, updating instrument params and legacy synthPreset. */
   loadSynthPreset: (trackId: string, presetId: string) => void;
+  /** Update oscillator waveform type on a synth track. */
+  updateSynthOscillatorType: (trackId: string, oscillatorType: 'sine' | 'triangle' | 'sawtooth' | 'square') => void;
   /** Update ADSR envelope on a synth track. */
   updateSynthEnvelope: (trackId: string, envelope: Partial<SynthEnvelope>) => void;
   /** Update filter settings on a synth track. */
@@ -768,12 +779,15 @@ export interface ProjectState extends MidiSliceActions {
   setSessionSlotFollowAction: (slotId: string, config: Partial<import('../types/project').FollowActionConfig>) => void;
   setSessionFollowActionsEnabled: (enabled: boolean) => void;
   scheduleFollowAction: (trackId: string, currentSlotId: string, launchTime: number) => void;
+  scheduleSceneFollowAction: (sceneId: string, launchTime: number) => void;
   startSessionArrangementRecording: (startTime?: number) => void;
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
-  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'name' | 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
+  /** Create a clip in an empty session slot, using context from adjacent clips. Returns the clip or null. */
+  aiFillSessionSlot: (slotId: string) => Clip | null;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -2852,6 +2866,65 @@ export const useProjectStore = create<ProjectState>()(
     return track;
   },
 
+  addVideoTrack: () => {
+    const state = get();
+    if (_isViewerMode()) return undefined;
+    if (!state.project) return undefined;
+
+    // Enforce MAX_VIDEO_TRACKS limit
+    const existingVideoTracks = state.project.tracks.filter(t => t.trackType === 'video');
+    if (existingVideoTracks.length >= MAX_VIDEO_TRACKS) {
+      toastError(`Video track limit reached (${MAX_VIDEO_TRACKS} max)`);
+      return undefined;
+    }
+
+    // Create video track with videoSettings applied atomically via addTrack
+    // (addTrack → createTrackFromTemplate spreads overrides into the Track object)
+    const track = get().addTrack('custom', 'video', { displayName: 'Video' });
+    if (!track) return undefined;
+
+    // Apply videoSettings directly — addTrack already pushed undo history,
+    // so we update the track in-place without a new history entry
+    const project = get().project;
+    if (project) {
+      set({
+        project: {
+          ...project,
+          updatedAt: Date.now(),
+          tracks: project.tracks.map(t =>
+            t.id === track.id ? { ...t, videoSettings: { ...DEFAULT_VIDEO_TRACK_SETTINGS } } : t,
+          ),
+        },
+      });
+    }
+
+    return get().project?.tracks.find(t => t.id === track.id);
+  },
+
+  addVideoClip: (trackId, clipData) => {
+    const state = get();
+    if (_isViewerMode()) return undefined;
+    if (!state.project) return undefined;
+
+    const track = state.project.tracks.find(t => t.id === trackId);
+    if (!track || track.trackType !== 'video') {
+      toastError('Cannot add video clip to a non-video track');
+      return undefined;
+    }
+
+    const clip = get().addClip(trackId, {
+      startTime: clipData.startTime,
+      duration: clipData.duration,
+      prompt: '',
+      globalCaption: '',
+      lyrics: '',
+      source: 'uploaded',
+      videoMeta: clipData.videoMeta,
+    });
+
+    return clip;
+  },
+
   saveTrackPreset: (trackId, presetName) => {
     const state = get();
     if (!state.project) throw new Error('No project');
@@ -3306,6 +3379,20 @@ export const useProjectStore = create<ProjectState>()(
         : unifiedPreset.instrument.kind === 'fm' ? unifiedPreset.instrument.fallbackPreset
         : unifiedPreset.instrument.kind === 'wavetable' ? unifiedPreset.instrument.fallbackPreset
         : 'piano';
+      // Extract editable params from the unified instrument for the parameter editor.
+      const inst = unifiedPreset.instrument;
+      const editableFields: Partial<Track> = {};
+      if (inst.kind === 'subtractive') {
+        editableFields.synthOscillatorType = inst.settings.oscillator.waveform;
+        editableFields.synthEnvelope = { ...inst.settings.ampEnvelope };
+        if (inst.settings.filter.enabled) {
+          editableFields.synthFilter = {
+            type: inst.settings.filter.type,
+            frequency: inst.settings.filter.cutoffHz,
+            Q: inst.settings.filter.resonance,
+          };
+        }
+      }
       set({
         project: {
           ...state.project,
@@ -3315,6 +3402,7 @@ export const useProjectStore = create<ProjectState>()(
               ? {
                   ...t,
                   synthPresetDefinitionId: presetId,
+                  ...editableFields,
                   ...syncTrackInstrumentFields(t, {
                     instrument: structuredClone(unifiedPreset.instrument),
                     synthPreset: legacyPreset,
@@ -3355,6 +3443,18 @@ export const useProjectStore = create<ProjectState>()(
         outputGain: presetDef.outputGain ?? base.settings.outputGain,
       },
     };
+    // Populate editable fields from legacy preset definition.
+    const legacyEditableFields: Partial<Track> = {
+      synthOscillatorType: presetDef.waveform,
+      synthEnvelope: { ...presetDef.envelope },
+    };
+    if (presetDef.filter?.enabled) {
+      legacyEditableFields.synthFilter = {
+        type: presetDef.filter.type ?? 'lowpass',
+        frequency: presetDef.filter.cutoffHz ?? 1000,
+        Q: presetDef.filter.resonance ?? 1,
+      };
+    }
     set({
       project: {
         ...state.project,
@@ -3364,6 +3464,7 @@ export const useProjectStore = create<ProjectState>()(
             ? {
                 ...t,
                 synthPresetDefinitionId: presetId,
+                ...legacyEditableFields,
                 ...syncTrackInstrumentFields(t, {
                   instrument,
                   synthPreset: presetDef.legacyPreset,
@@ -3371,6 +3472,39 @@ export const useProjectStore = create<ProjectState>()(
               }
             : t,
         ),
+      },
+    });
+  },
+
+  updateSynthOscillatorType: (trackId, oscillatorType) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update oscillator type', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          const nextTrack: typeof t = { ...t, synthOscillatorType: oscillatorType };
+          // Keep the modern instrument model in sync with the legacy field.
+          if (t.instrument?.kind === 'subtractive') {
+            return {
+              ...nextTrack,
+              instrument: {
+                ...t.instrument,
+                settings: {
+                  ...t.instrument.settings,
+                  oscillator: {
+                    ...t.instrument.settings.oscillator,
+                    waveform: oscillatorType,
+                  },
+                },
+              },
+            };
+          }
+          return nextTrack;
+        }),
       },
     });
   },
@@ -3859,6 +3993,7 @@ export const useProjectStore = create<ProjectState>()(
       source: clipData.source,
       starred: clipData.starred,
       midiData: clipData.midiData,
+      videoMeta: clipData.videoMeta,
     };
 
     const newTracks = state.project.tracks.map((t) =>
@@ -5254,8 +5389,26 @@ export const useProjectStore = create<ProjectState>()(
       ? transport.currentTime
       : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, session.quantization));
 
+    // Find the launched scene to apply tempo/time-signature overrides
+    const launchedScene = session.scenes.find((s) => s.id === sceneId);
+
     if (isImmediate) {
       let nextProject = state.project;
+
+      // Apply scene tempo override
+      if (launchedScene?.tempo != null) {
+        nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+      }
+      // Apply scene time signature override
+      if (launchedScene?.timeSignature != null) {
+        nextProject = {
+          ...nextProject,
+          timeSignature: launchedScene.timeSignature[0],
+          timeSignatureDenominator: launchedScene.timeSignature[1],
+          updatedAt: Date.now(),
+        };
+      }
+
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && candidate.clipId)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, executeAt, 'scene', sceneId);
       }
@@ -5263,13 +5416,40 @@ export const useProjectStore = create<ProjectState>()(
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, executeAt, 'stop');
       }
+      // Apply scene tempo/timeSig overrides (using launchedScene from outer scope)
+      if (launchedScene?.tempo) {
+        nextProject = { ...nextProject, bpm: launchedScene.tempo };
+      }
+      if (launchedScene?.timeSignature) {
+        nextProject = {
+          ...nextProject,
+          timeSignature: launchedScene.timeSignature[0],
+          timeSignatureDenominator: launchedScene.timeSignature[1],
+        };
+      }
       set({ project: nextProject });
+      // Schedule scene follow action (e.g., auto-advance to next scene)
+      get().scheduleSceneFollowAction(sceneId, executeAt);
       return;
+    }
+
+    // For quantized launches, apply overrides and queue the launch
+    let nextProject = state.project;
+    if (launchedScene?.tempo != null) {
+      nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+    }
+    if (launchedScene?.timeSignature != null) {
+      nextProject = {
+        ...nextProject,
+        timeSignature: launchedScene.timeSignature[0],
+        timeSignatureDenominator: launchedScene.timeSignature[1],
+        updatedAt: Date.now(),
+      };
     }
 
     set({
       project: {
-        ...state.project,
+        ...nextProject,
         session: queuePendingSessionLaunch(session, {
           type: 'scene',
           sceneId,
@@ -5355,12 +5535,15 @@ export const useProjectStore = create<ProjectState>()(
       },
     };
 
+    // Collect scene launches that need follow action scheduling
+    const sceneLaunchesForFollowAction: Array<{ sceneId: string; executeAt: number }> = [];
+
     for (const launch of ready) {
       if (launch.type === 'clip' && launch.trackId) {
         nextProject = applySessionTrackLaunch(nextProject, launch.trackId, launch.clipId ?? null, launch.executeAt, 'clip', launch.sceneId ?? null);
         continue;
       }
-      if (launch.type === 'scene' && launch.sceneId) {
+      if ((launch.type === 'scene' || launch.type === 'scene-follow-action') && launch.sceneId) {
         const nextSession = ensureProjectSession(nextProject).session!;
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && candidate.clipId)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, launch.executeAt, 'scene', launch.sceneId);
@@ -5369,6 +5552,19 @@ export const useProjectStore = create<ProjectState>()(
         for (const slot of nextSession.slots.filter((candidate) => candidate.sceneId === launch.sceneId && !candidate.clipId && candidate.hasStopButton !== false)) {
           nextProject = applySessionTrackLaunch(nextProject, slot.trackId, null, launch.executeAt, 'stop');
         }
+        // Apply scene tempo/timeSig overrides
+        const launchedScene = nextSession.scenes.find((s) => s.id === launch.sceneId);
+        if (launchedScene?.tempo) {
+          nextProject = { ...nextProject, bpm: launchedScene.tempo };
+        }
+        if (launchedScene?.timeSignature) {
+          nextProject = {
+            ...nextProject,
+            timeSignature: launchedScene.timeSignature[0],
+            timeSignatureDenominator: launchedScene.timeSignature[1],
+          };
+        }
+        sceneLaunchesForFollowAction.push({ sceneId: launch.sceneId, executeAt: launch.executeAt });
         continue;
       }
       if (launch.type === 'stop-track' && launch.trackId) {
@@ -5392,6 +5588,11 @@ export const useProjectStore = create<ProjectState>()(
     }
 
     set({ project: nextProject });
+
+    // Schedule scene follow actions after state is updated
+    for (const { sceneId, executeAt } of sceneLaunchesForFollowAction) {
+      get().scheduleSceneFollowAction(sceneId, executeAt);
+    }
   },
 
   setSessionSlotFollowAction: (slotId, config) => {
@@ -5482,6 +5683,47 @@ export const useProjectStore = create<ProjectState>()(
         session: nextSession,
       },
     });
+  },
+
+  scheduleSceneFollowAction: (sceneId, launchTime) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+
+    // Check global toggle (default true)
+    if (session.followActionsEnabled === false) return;
+
+    const currentScene = session.scenes.find((s) => s.id === sceneId);
+    if (!currentScene?.followAction || currentScene.followAction === 'none') return;
+
+    const targetScene = resolveSceneFollowAction(
+      currentScene.followAction,
+      currentScene,
+      session.scenes,
+    );
+
+    // Calculate fire time using scene followActionTime (in bars, default 1)
+    const bars = currentScene.followActionTime ?? 1;
+    const beatsPerBar = state.project.timeSignature ?? 4;
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const executeAt = launchTime + bars * beatsPerBar * beatDuration;
+
+    if (targetScene) {
+      // Queue a scene launch at the calculated time
+      const nextSession = queuePendingSessionLaunch(session, {
+        type: 'scene-follow-action',
+        sceneId: targetScene.id,
+        executeAt,
+      });
+      set({ project: { ...state.project, session: nextSession } });
+    } else {
+      // 'stop' or no valid target — queue stop-all
+      const nextSession = queuePendingSessionLaunch(session, {
+        type: 'stop-all',
+        executeAt,
+      });
+      set({ project: { ...state.project, session: nextSession } });
+    }
   },
 
   startSessionArrangementRecording: (startTime) => {
@@ -5668,6 +5910,85 @@ export const useProjectStore = create<ProjectState>()(
         },
       },
     });
+  },
+
+  aiFillSessionSlot: (slotId) => {
+    const state = get();
+    if (!state.project) return null;
+    const session = ensureProjectSession(state.project).session!;
+
+    const slot = session.slots.find((s) => s.id === slotId);
+    if (!slot || slot.clipId) return null; // Only fill empty slots
+
+    const track = state.project.tracks.find((t) => t.id === slot.trackId);
+    if (!track) return null;
+
+    // Gather context from adjacent clips in the same track
+    const sceneIndex = session.scenes.findIndex((s) => s.id === slot.sceneId);
+    const trackSlots = session.slots
+      .filter((s) => s.trackId === slot.trackId && s.clipId)
+      .map((s) => ({
+        ...s,
+        sceneIdx: session.scenes.findIndex((sc) => sc.id === s.sceneId),
+      }))
+      .sort((a, b) => a.sceneIdx - b.sceneIdx);
+
+    // Find the nearest clips for context
+    let contextPrompt = '';
+    let contextCaption = state.project.globalCaption ?? '';
+    const adjacentClips = trackSlots
+      .map((s) => ({ slot: s, clip: track.clips.find((c) => c.id === s.clipId), distance: Math.abs(s.sceneIdx - sceneIndex) }))
+      .filter((x) => x.clip)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 3);
+
+    if (adjacentClips.length > 0) {
+      const prompts = adjacentClips.map((x) => x.clip!.prompt).filter(Boolean);
+      contextPrompt = prompts.length > 0
+        ? `Continue from: ${prompts.join('; ')}`
+        : `${track.displayName} fill`;
+      if (!contextCaption && adjacentClips[0].clip!.globalCaption) {
+        contextCaption = adjacentClips[0].clip!.globalCaption;
+      }
+    } else {
+      contextPrompt = `${track.displayName} fill`;
+    }
+
+    // Calculate duration — use a sensible clip length (4 bars), not full project measures
+    const beatsPerBar = state.project.timeSignature ?? 4;
+    const clipBars = 4; // Standard session clip length
+    const beatDuration = 60 / Math.max(1, state.project.bpm);
+    const duration = clipBars * beatsPerBar * beatDuration;
+
+    // Create clip on the track
+    const clip = get().addClip(slot.trackId, {
+      startTime: sceneIndex * duration,
+      duration,
+      prompt: contextPrompt,
+      globalCaption: contextCaption,
+      lyrics: '',
+      source: 'generated',
+    });
+
+    // Ensure the clip is assigned to the correct slot (not just auto-assigned)
+    const updatedSession = get().project!.session!;
+    const updatedSlot = updatedSession.slots.find((s) => s.id === slotId);
+    if (updatedSlot && updatedSlot.clipId !== clip.id) {
+      // Auto-assign may have placed it elsewhere; fix it
+      const nextSlots = updatedSession.slots.map((s) => {
+        if (s.id === slotId) return { ...s, clipId: clip.id };
+        if (s.clipId === clip.id && s.id !== slotId) return { ...s, clipId: null };
+        return s;
+      });
+      set({
+        project: {
+          ...get().project!,
+          session: { ...updatedSession, slots: nextSlots },
+        },
+      });
+    }
+
+    return clip;
   },
 
   removeAsset: (assetId) => {
@@ -7365,6 +7686,24 @@ export const useProjectStore = create<ProjectState>()(
       (lane) => lane.trackId === trackId && automationParamEquals(lane.parameter, parameter),
     );
     if (existingLane) return;
+
+    // Warn if this automation lane conflicts with an active LFO (#1023)
+    if (parameter.type === 'effect') {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      if (track) {
+        const effect = (track.effects ?? []).find((e) => e.id === parameter.effectId);
+        if (effect) {
+          const conflictLane = { id: '', trackId, parameter, points: [] as { time: number; value: number }[] };
+          if (detectLfoAutomationConflict(effect, conflictLane)) {
+            log.warn(
+              `Automation lane for ${parameter.param} on ${parameter.effectType} conflicts with active LFO. ` +
+              `Automation will control the LFO base value instead of the parameter directly.`,
+            );
+          }
+        }
+      }
+    }
+
     _pushHistory(state.project);
     const lanes = [
       ...(state.project.automationLanes ?? []),
@@ -8585,7 +8924,7 @@ export const useProjectStore = create<ProjectState>()(
 
     const bpm = state.project.bpm;
     const timeSig = state.project.timeSignature;
-    const bars = options?.bars ?? 4;
+    const bars = options?.bars ?? 8;
 
     const result = captureService.drain(trackId, captureTime, bpm, timeSig, bars);
     if (!result) return undefined;
@@ -8630,6 +8969,16 @@ export const useProjectStore = create<ProjectState>()(
       t.id === trackId ? { ...t, clips: [...t.clips, clip] } : t,
     );
 
+    // Auto-assign captured clip to session slot so it appears in the session grid.
+    // Reuse the existing normalized session when available to avoid the extra
+    // project-wide recomputation performed by ensureProjectSession(...).
+    const normalizedSession = state.project.session ?? ensureProjectSession(state.project).session!;
+    const session = autoAssignClipToSession(
+      normalizedSession,
+      trackId,
+      clip.id,
+    );
+
     set({
       project: {
         ...state.project,
@@ -8644,6 +8993,7 @@ export const useProjectStore = create<ProjectState>()(
           state.project.timeSignatureMap,
         ),
         tracks: newTracks,
+        session,
       },
     });
 

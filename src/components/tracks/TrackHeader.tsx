@@ -511,6 +511,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                 </span>
               )}
             </div>
+            {track.trackType !== 'video' ? (
             <div
               data-primary-actions
               className="flex items-center gap-1"
@@ -565,9 +566,15 @@ export const TrackHeader = React.memo(function TrackHeader({
                 </button>
               )}
             </div>
+            ) : (
+              <div data-primary-actions className="flex items-center gap-1">
+                <span className="text-[9px] text-zinc-500 font-medium">🎬 VID</span>
+              </div>
+            )}
           </div>
 
-          {/* Row 2: combined fader + stereo meter */}
+          {/* Row 2: combined fader + stereo meter (hidden for video tracks) */}
+          {track.trackType !== 'video' && (
           <div data-testid="track-header-row2" className="w-full">
             <FaderMeter
               trackId={track.id}
@@ -576,6 +583,7 @@ export const TrackHeader = React.memo(function TrackHeader({
               trackName={track.displayName}
             />
           </div>
+          )}
         </div>
       ) : (
         /* Single-row compact layout (laneHeight < 60) */

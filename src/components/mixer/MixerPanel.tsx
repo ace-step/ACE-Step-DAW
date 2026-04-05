@@ -612,7 +612,7 @@ export function MixerPanel() {
               />
             </div>
           )}
-          {[...project.tracks].sort((a, b) => a.order - b.order).map((track) => (
+          {[...project.tracks].filter((t) => t.trackType !== 'video').sort((a, b) => a.order - b.order).map((track) => (
             <ChannelStrip key={track.id} track={track} faderHeight={faderHeight} returnTracks={returnTracks} anySoloed={anySoloed} />
           ))}
           {returnTracks.length > 0 && (

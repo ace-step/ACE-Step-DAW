@@ -3,12 +3,14 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
 import { useTransport } from '../../hooks/useTransport';
+import { getMidiCaptureService } from '../../services/midiCaptureService';
 import { getSessionSlotProgress } from '../../utils/sessionProgress';
 import { getSessionClips } from '../../utils/sessionClips';
 import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } from '../../hooks/useSessionDragDrop';
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
+import { useMidiController } from '../../hooks/useMidiController';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -99,8 +101,10 @@ export function SessionView() {
   const project = useProjectStore((s) => s.project);
   const setSessionLaunchQuantization = useProjectStore((s) => s.setSessionLaunchQuantization);
   const setSessionSlotQuantization = useProjectStore((s) => s.setSessionSlotQuantization);
+  const captureMidi = useProjectStore((s) => s.captureMidi);
   const launchedSessionClips = useTransportStore((s) => s.launchedSessionClips);
   const currentTime = useTransportStore((s) => s.currentTime);
+  const armedTrackIds = useTransportStore((s) => s.armedTrackIds);
   const sessionArrangementRecording = useTransportStore((s) => s.sessionArrangementRecording);
   const setMainView = useUIStore((s) => s.setMainView);
   const setSessionSlotColor = useProjectStore((s) => s.setSessionSlotColor);
@@ -121,10 +125,60 @@ export function SessionView() {
 
   const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
   const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
+  const launchSessionSceneProject = useProjectStore((s) => s.launchSessionScene);
+  const aiFillSessionSlot = useProjectStore((s) => s.aiFillSessionSlot);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
   const [showSessionMixer, setShowSessionMixer] = useState(false);
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
+  const [editingSceneName, setEditingSceneName] = useState('');
+  const [captureBarCount, setCaptureBarCount] = useState(8);
+
+  const hasArmedTrack = armedTrackIds.length > 0;
+  const captureService = useMemo(() => getMidiCaptureService(), []);
+  const armedTrackHasBuffer = hasArmedTrack && captureService.hasEvents(armedTrackIds[0]);
+
+  const handleCaptureMidi = useCallback(() => {
+    if (!hasArmedTrack) return;
+    const targetTrackId = armedTrackIds[0];
+    captureMidi(targetTrackId, currentTime, captureService, { bars: captureBarCount, quantize: '1/16' });
+  }, [hasArmedTrack, armedTrackIds, currentTime, captureMidi, captureService, captureBarCount]);
+
+  const [midiEnabled, setMidiEnabled] = useState(false);
+
+  const storeLaunchClip = useProjectStore((s) => s.launchSessionClip);
+  const storeLaunchScene = useProjectStore((s) => s.launchSessionScene);
+  const storeStopAll = useProjectStore((s) => s.stopAllSessionClips);
+
+  // MIDI controller mapping — route MIDI note-on to session actions
+  const handleMidiClipLaunch = useCallback((trackIndex: number, sceneIndex: number) => {
+    if (!project) return;
+    const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order);
+    const track = sortedTracks[trackIndex];
+    const session = project.session;
+    const scene = session?.scenes[sceneIndex];
+    if (!track || !scene) return;
+    storeLaunchClip(track.id, scene.id);
+  }, [project, storeLaunchClip]);
+
+  const handleMidiSceneLaunch = useCallback((sceneIndex: number) => {
+    if (!project?.session) return;
+    const scene = project.session.scenes[sceneIndex];
+    if (!scene) return;
+    storeLaunchScene(scene.id);
+  }, [project, storeLaunchScene]);
+
+  const handleMidiStopAll = useCallback(() => {
+    storeStopAll();
+  }, [storeStopAll]);
+
+  const { isConnected: midiConnected } = useMidiController({
+    enabled: midiEnabled,
+    onClipLaunch: handleMidiClipLaunch,
+    onSceneLaunch: handleMidiSceneLaunch,
+    onStopAll: handleMidiStopAll,
+  });
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -197,8 +251,14 @@ export function SessionView() {
   const followActionsEnabled = project.session?.followActionsEnabled !== false;
 
   return (
-    <div className="flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto">
-      <div className="sticky top-0 z-20 border-b border-[#303030] bg-[#1c1c1c]/95 backdrop-blur-sm">
+    <div className={`flex-1 min-w-0 bg-[radial-gradient(circle_at_top,#313131_0%,#202020_55%,#171717_100%)] border-l border-[#111] overflow-auto${sessionArrangementRecording ? ' ring-2 ring-red-500/40 ring-inset' : ''}`}>
+      {sessionArrangementRecording && (
+        <div className="sticky top-0 z-30 flex items-center justify-center gap-2 bg-red-600/90 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm" role="status" aria-live="polite" data-testid="session-recording-indicator">
+          <span className="inline-block w-2 h-2 rounded-full bg-white animate-pulse" aria-hidden="true" />
+          Recording to Arrangement
+        </div>
+      )}
+      <div className="sticky top-0 z-20 border-b border-[#303030] bg-[#1c1c1c]/95 backdrop-blur-sm" style={sessionArrangementRecording ? { top: 28 } : undefined}>
         <div className="flex items-center justify-between px-4 py-3">
           <div>
             <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-400">Performance Grid</div>
@@ -241,12 +301,55 @@ export function SessionView() {
             >
               {sessionArrangementRecording ? 'Stop Arrangement Record' : 'Record to Arrangement'}
             </button>
+            {/* MIDI Retroactive Capture */}
+            <div className="flex items-center gap-1">
+              <select
+                aria-label="Capture buffer length in bars"
+                value={captureBarCount}
+                onChange={(e) => setCaptureBarCount(Number(e.target.value))}
+                className="bg-[#111] border border-[#333] rounded px-1.5 py-1 text-[10px] text-zinc-300"
+              >
+                {[2, 4, 8, 16, 32].map((b) => (
+                  <option key={b} value={b}>{b} bars</option>
+                ))}
+              </select>
+              <button
+                onClick={handleCaptureMidi}
+                disabled={!hasArmedTrack}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                  hasArmedTrack && armedTrackHasBuffer
+                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50'
+                    : hasArmedTrack
+                      ? 'bg-[#2a2a2a] text-zinc-300 hover:bg-[#343434]'
+                      : 'bg-[#2a2a2a] text-zinc-500 opacity-50 cursor-not-allowed'
+                }`}
+                aria-label="Capture MIDI from rolling buffer"
+                title={hasArmedTrack ? `Capture last ${captureBarCount} bars of MIDI input` : 'Arm a track to enable MIDI capture'}
+              >
+                Capture MIDI
+              </button>
+            </div>
+
             <button
               onClick={() => void stopAllSessionClips()}
               className="px-3 py-1.5 rounded-md bg-[#2a2a2a] text-[11px] font-medium text-zinc-300 hover:bg-[#343434] transition-colors"
               aria-label="Stop all Session clips"
             >
               Stop All
+            </button>
+            <button
+              onClick={() => setMidiEnabled((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                midiEnabled
+                  ? midiConnected
+                    ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/50'
+                    : 'bg-amber-600/30 text-amber-300 border border-amber-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-400 hover:bg-[#343434]'
+              }`}
+              aria-label={midiEnabled ? 'Disable MIDI controller input' : 'Enable MIDI controller input'}
+              data-testid="midi-controller-toggle"
+            >
+              {midiEnabled ? (midiConnected ? 'MIDI ●' : 'MIDI …') : 'MIDI'}
             </button>
             <button
               onClick={() => setMainView('arrangement')}
@@ -276,74 +379,121 @@ export function SessionView() {
           const isSceneDragTarget = dragState?.type === 'scene' && dropTarget?.sceneIndex === sceneIndex && dropTarget?.valid;
           const isSceneDragSource = dragState?.type === 'scene' && dragState?.sourceSceneIndex === sceneIndex;
 
-          return (
-            <div
-              key={`scene-${sceneIndex}`}
-              className={`sticky top-[72px] z-10 border-b border-r bg-[#242424] px-3 py-2 transition-colors ${
-                isSceneDragTarget ? 'border-blue-500 bg-blue-500/10' : isSceneDragSource ? 'opacity-40 border-[#333]' : 'border-[#333]'
-              }`}
-              data-scene-index={sceneIndex}
-              data-scene-header=""
-              onPointerDown={(e) => {
-                handlePointerDown(e, 'scene', {
-                  sourceSceneIndex: sceneIndex,
-                  label: `Scene ${sceneIndex + 1}`,
-                  color: '#6366f1',
-                });
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const sceneId = scenes[sceneIndex]?.id;
-                if (sceneId) {
-                  setSceneMenu({ x: e.clientX, y: e.clientY, sceneId, sceneIndex });
-                }
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing">
-                  {scenes[sceneIndex]?.color && (
-                    <div
-                      className="w-1 h-6 rounded-sm shrink-0"
-                      style={{ backgroundColor: scenes[sceneIndex].color }}
-                    />
-                  )}
-                  <div>
+          return (() => {
+            const currentScene = scenes[sceneIndex];
+            const sceneColor = currentScene?.color;
+            const isEditing = editingSceneId === currentScene?.id;
+            const hasOverrides = !!(currentScene?.tempo || currentScene?.timeSignature);
+
+            return (
+              <div
+                key={`scene-${sceneIndex}`}
+                className={`sticky top-[72px] z-10 border-b border-r px-3 py-2 transition-colors ${
+                  isSceneDragTarget ? 'border-blue-500 bg-blue-500/10' : isSceneDragSource ? 'opacity-40 border-[#333]' : 'border-[#333]'
+                }`}
+                style={{
+                  backgroundColor: sceneColor ? `color-mix(in srgb, ${sceneColor} 15%, #242424)` : '#242424',
+                  borderLeftColor: sceneColor || undefined,
+                  borderLeftWidth: sceneColor ? '3px' : undefined,
+                }}
+                data-scene-index={sceneIndex}
+                data-scene-header=""
+                data-testid={`scene-header-${sceneIndex}`}
+                onPointerDown={(e) => {
+                  handlePointerDown(e, 'scene', {
+                    sourceSceneIndex: sceneIndex,
+                    label: currentScene?.name || `Scene ${sceneIndex + 1}`,
+                    color: sceneColor || '#6366f1',
+                  });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  const sceneId = currentScene?.id;
+                  if (sceneId) {
+                    setSceneMenu({ x: e.clientX, y: e.clientY, sceneId, sceneIndex });
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    className="cursor-grab active:cursor-grabbing min-w-0 flex-1"
+                    onDoubleClick={() => {
+                      if (currentScene) {
+                        setEditingSceneId(currentScene.id);
+                        setEditingSceneName(currentScene.name);
+                      }
+                    }}
+                  >
                     <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
-                    <div className="text-sm font-semibold text-zinc-100">{sceneIndex + 1}</div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingSceneName}
+                        onChange={(e) => setEditingSceneName(e.target.value)}
+                        onBlur={(e) => {
+                          const wasCanceled = e.currentTarget.dataset.renameCanceled === 'true';
+                          if (!wasCanceled && editingSceneName.trim() && currentScene) {
+                            updateSessionSceneProperties(currentScene.id, { name: editingSceneName.trim() });
+                          }
+                          delete e.currentTarget.dataset.renameCanceled;
+                          setEditingSceneId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') {
+                            (e.target as HTMLInputElement).dataset.renameCanceled = 'true';
+                            setEditingSceneId(null);
+                          }
+                        }}
+                        className="w-full bg-[#1a1a1a] border border-daw-accent rounded px-1 py-0.5 text-sm font-semibold text-zinc-100 outline-none"
+                        aria-label={`Rename scene ${sceneIndex + 1}`}
+                        data-testid={`scene-name-input-${sceneIndex}`}
+                        autoFocus
+                        onPointerDown={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="text-sm font-semibold text-zinc-100 truncate" title={currentScene?.name}>
+                        {currentScene?.name || `${sceneIndex + 1}`}
+                      </div>
+                    )}
                   </div>
+                  <button
+                    onClick={() => {
+                      // Call projectStore to apply tempo/timeSig overrides and manage session state
+                      if (currentScene) launchSessionSceneProject(currentScene.id);
+                      void launchSessionScene(sceneIndex, sceneLaunches);
+                    }}
+                    disabled={sceneLaunches.length === 0}
+                    className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30 shrink-0"
+                    aria-label={`Launch scene ${sceneIndex + 1}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    Launch
+                  </button>
                 </div>
-                <button
-                  onClick={() => void launchSessionScene(sceneIndex, sceneLaunches)}
-                  disabled={sceneLaunches.length === 0}
-                  className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30"
-                  aria-label={`Launch scene ${sceneIndex + 1}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  Launch
-                </button>
+                {(hasOverrides || (currentScene?.followAction && currentScene.followAction !== 'none')) && (
+                  <div className="flex flex-wrap gap-x-2 mt-1">
+                    {currentScene?.tempo && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-400/80" title="Tempo override">
+                        <span className="opacity-60">BPM</span> {currentScene.tempo}
+                      </span>
+                    )}
+                    {currentScene?.timeSignature && (
+                      <span className="inline-flex items-center text-[9px] font-medium text-sky-400/80" title="Time signature override">
+                        {currentScene.timeSignature[0]}/{currentScene.timeSignature[1]}
+                      </span>
+                    )}
+                    {currentScene?.followAction && currentScene.followAction !== 'none' && (
+                      <span className="text-[9px] text-purple-400/70" title="Follow action">
+                        {FOLLOW_ACTION_LABELS[currentScene.followAction]}
+                        {currentScene.followActionTime ? ` ${currentScene.followActionTime}b` : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {scenes[sceneIndex]?.followAction && scenes[sceneIndex].followAction !== 'none' && (
-                <div className="text-[9px] text-zinc-500 mt-0.5">
-                  Follow: {FOLLOW_ACTION_LABELS[scenes[sceneIndex].followAction!]}
-                  {scenes[sceneIndex].followActionTime ? ` (${scenes[sceneIndex].followActionTime} bars)` : ''}
-                </div>
-              )}
-              {(scenes[sceneIndex]?.tempo !== undefined || scenes[sceneIndex]?.timeSignature !== undefined) && (
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {scenes[sceneIndex]?.tempo !== undefined && (
-                    <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">
-                      {scenes[sceneIndex].tempo} BPM
-                    </span>
-                  )}
-                  {scenes[sceneIndex]?.timeSignature !== undefined && (
-                    <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
-                      {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          );
+            );
+          })();
         })}
 
         {tracks.map((track) => {
@@ -367,6 +517,8 @@ export function SessionView() {
               onSlotQuantizationChange={(slotId, q) => setSessionSlotQuantization(slotId, q)}
               onContextMenuSlot={setColorMenu}
               onSlotClick={(sceneIndex) => setSelectedSessionSlot({ trackId: track.id, sceneIndex })}
+              isRecording={sessionArrangementRecording}
+              onAiFill={aiFillSessionSlot}
               dragState={dragState}
               dropTarget={dropTarget}
               onDragStart={handlePointerDown}
@@ -515,20 +667,19 @@ export function SessionView() {
             <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
               Scene Color
             </div>
-            <div className="px-2 py-1.5">
-              <ColorSwatchPalette
-                hasCustomColor={!!scene?.color}
-                onAssignColor={(color) => {
-                  updateSessionSceneProperties(sceneMenu.sceneId, { color });
-                }}
-                onResetColor={() => {
-                  updateSessionSceneProperties(sceneMenu.sceneId, { color: undefined });
-                }}
-                labelPrefix="Assign scene color"
-                resetAriaLabel="Reset scene color"
-                testId="scene-color-palette"
-              />
-            </div>
+            <ColorSwatchPalette
+              hasCustomColor={!!scene?.color}
+              onAssignColor={(color) => {
+                updateSessionSceneProperties(sceneMenu.sceneId, { color });
+                setSceneMenu(null);
+              }}
+              onResetColor={() => {
+                updateSessionSceneProperties(sceneMenu.sceneId, { color: undefined });
+                setSceneMenu(null);
+              }}
+              labelPrefix="Assign scene color"
+              testId="scene-color-palette"
+            />
             <ContextMenuSeparator />
             <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
               Tempo Override
@@ -676,6 +827,8 @@ function FragmentRow({
   currentTime,
   pendingLaunches,
   selectedSceneIndex,
+  isRecording,
+  onAiFill,
   onLaunch,
   onStop,
   onSlotQuantizationChange,
@@ -695,6 +848,8 @@ function FragmentRow({
   currentTime: number;
   pendingLaunches: SessionPendingLaunch[];
   selectedSceneIndex: number | null;
+  isRecording: boolean;
+  onAiFill: (slotId: string) => void;
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
@@ -915,6 +1070,14 @@ function FragmentRow({
                     &#x2192;
                   </span>
                 )}
+                {isActive && isRecording && (
+                  <span
+                    className="absolute bottom-1 right-1 inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse pointer-events-none"
+                    title="Recording to arrangement"
+                    data-testid={`recording-indicator-${slot?.id}`}
+                    aria-label="Recording"
+                  />
+                )}
                 {hasOverride && (
                   <span
                     className="absolute top-1 right-1 rounded bg-daw-accent/80 px-1 py-0.5 text-[9px] font-semibold text-white leading-none pointer-events-none"
@@ -986,6 +1149,14 @@ function FragmentRow({
 
       {contextMenu && (
         <ContextMenuWrapper x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem
+            label="AI Fill — Generate clip"
+            onClick={() => {
+              onAiFill(contextMenu.slotId);
+              setContextMenu(null);
+            }}
+          />
+          <ContextMenuSeparator />
           <ContextMenuItem
             label={contextMenu.hasStopButton ? 'Remove Stop Button' : 'Add Stop Button'}
             onClick={handleToggleStopButton}

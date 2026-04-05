@@ -7,6 +7,11 @@
 
 export type LimiterStyle = 'transparent' | 'aggressive' | 'warm';
 
+export interface LimiterTransferPoint {
+  inputDb: number;
+  outputDb: number;
+}
+
 /**
  * Compute limiter output dB for a given input dB.
  * @param inputDb  Input level in dB
@@ -22,42 +27,19 @@ export function limiterTransfer(
 ): number {
   const boosted = inputDb + gain;
 
-  switch (style) {
-    case 'transparent': {
-      // Gentle 6dB soft knee: continuous from pass-through to hard ceiling
-      if (boosted >= ceiling) return ceiling;
-      const knee = 6;
-      const kneeStart = ceiling - knee;
-      if (boosted <= kneeStart) return boosted;
-      // Quadratic knee: output = kneeStart + knee * t^2
-      // At t=0: output = kneeStart (matches pass-through)
-      // At t=1: output = kneeStart + knee = ceiling (matches ceiling)
-      // Slope transitions from 0 at t=0 toward 2 at t=1 (gentle start)
-      const t = (boosted - kneeStart) / knee;
-      return kneeStart + knee * t * t;
-    }
+  // Standard soft-knee limiter (ratio = ∞), knee centered on ceiling.
+  // Uses quadratic gain reduction: output = boosted - x²/(2*knee)
+  // where x = boosted - (ceiling - knee/2).
+  // Properties: C1-continuous (slope=1 at bottom, slope=0 at top),
+  // monotonic, never amplifies (output ≤ boosted), never exceeds ceiling.
+  const knee = style === 'aggressive' ? 3 : style === 'warm' ? 9 : 6;
+  const halfKnee = knee / 2;
 
-    case 'aggressive': {
-      // Tight 3dB knee for punchier limiting
-      if (boosted >= ceiling) return ceiling;
-      const knee = 3;
-      const kneeStart = ceiling - knee;
-      if (boosted <= kneeStart) return boosted;
-      const t = (boosted - kneeStart) / knee;
-      return kneeStart + knee * t * t;
-    }
+  if (boosted <= ceiling - halfKnee) return boosted;
+  if (boosted >= ceiling + halfKnee) return ceiling;
 
-    case 'warm': {
-      // Pass-through up to ceiling, then soft tanh saturation above
-      if (boosted <= ceiling) return boosted;
-      const overshoot = boosted - ceiling;
-      const compressed = 12 * Math.tanh(overshoot / 12);
-      return Math.min(ceiling, ceiling + compressed - overshoot);
-    }
-
-    default:
-      return Math.min(boosted, ceiling);
-  }
+  const x = boosted - ceiling + halfKnee; // 0 to knee
+  return boosted - (x * x) / (2 * knee);
 }
 
 /**
@@ -67,15 +49,15 @@ export function generateLimiterCurve(
   ceiling: number,
   gain: number,
   style: LimiterStyle,
-  minDb: number = -60,
-  maxDb: number = 0,
+  minDb: number = -48,
+  maxDb: number = 6,
   steps: number = 120,
-): Array<{ x: number; y: number }> {
-  const points: Array<{ x: number; y: number }> = [];
+): LimiterTransferPoint[] {
+  const points: LimiterTransferPoint[] = [];
   for (let i = 0; i <= steps; i++) {
     const inputDb = minDb + (maxDb - minDb) * (i / steps);
     const outputDb = limiterTransfer(inputDb, ceiling, gain, style);
-    points.push({ x: inputDb, y: outputDb });
+    points.push({ inputDb, outputDb });
   }
   return points;
 }

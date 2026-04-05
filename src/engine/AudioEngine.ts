@@ -13,6 +13,7 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
+import { timeStretch, type TimeStretchMode } from '../utils/timeStretch';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -48,6 +49,7 @@ export interface ClipScheduleInfo {
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
   warpMarkers?: AudioWarpMarker[]; // flex-time warp markers for audio quantize
+  stretchMode?: import('../types/project').StretchMode; // time-stretch algorithm
 }
 
 export interface TimelineScrubClip {
@@ -144,6 +146,8 @@ export class AudioEngine {
   private scrubRequestId = 0;
   private readonly decodedBufferCache = new Map<string, AudioBuffer>();
   private readonly decodedBufferPromises = new Map<string, Promise<AudioBuffer | null>>();
+  /** Cache for time-stretched audio buffers. Key: `${clipId}:${mode}:${rate}` */
+  private readonly stretchedBufferCache = new Map<string, AudioBuffer>();
   private scrubTrackStateHash = '';
 
   // Video recording: MediaStream tap from master output
@@ -831,13 +835,72 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Get or create a time-stretched AudioBuffer for non-repitch modes.
+   * Results are cached by clip+mode+rate combination.
+   */
+  private _getStretchedBuffer(
+    clip: ClipScheduleInfo,
+  ): AudioBuffer | null {
+    const mode = clip.stretchMode;
+    const rawRate = clip.timeStretchRate ?? 1;
+    // Validate rate: must be finite and within safe range
+    const rate = Number.isFinite(rawRate) ? Math.max(0.25, Math.min(4, rawRate)) : 1;
+    if (!mode || mode === 'repitch' || mode === 'slice' || Math.abs(rate - 1) < 0.001) {
+      return null;
+    }
+
+    const cacheKey = `${clip.clipId}:${mode}:${rate.toFixed(4)}`;
+    const cached = this.stretchedBufferCache.get(cacheKey);
+    if (cached) return cached;
+
+    // Process each channel with the time-stretch engine
+    const buffer = clip.buffer;
+    const numChannels = buffer.numberOfChannels;
+    const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
+
+    const stretchedChannels: Float32Array[] = [];
+    let maxLen = 0;
+
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelData = buffer.getChannelData(ch);
+      const stretched = timeStretch(channelData, {
+        mode: mode as TimeStretchMode,
+        ratio,
+        sampleRate: buffer.sampleRate,
+      });
+      stretchedChannels.push(stretched);
+      maxLen = Math.max(maxLen, stretched.length);
+    }
+
+    // Create new AudioBuffer with stretched data
+    const stretchedBuffer = this.ctx.createBuffer(
+      numChannels,
+      maxLen,
+      buffer.sampleRate,
+    );
+    for (let ch = 0; ch < numChannels; ch++) {
+      stretchedBuffer.getChannelData(ch).set(stretchedChannels[ch]);
+    }
+
+    this.stretchedBufferCache.set(cacheKey, stretchedBuffer);
+    return stretchedBuffer;
+  }
+
   private _scheduleStandardClip(
     clip: ClipScheduleInfo,
     trackNode: TrackNode,
     fromTime: number,
   ) {
     const source = this.ctx.createBufferSource();
-    source.buffer = clip.buffer;
+
+    // Check if we should use offline time-stretch instead of playbackRate
+    const stretchedBuffer = this._getStretchedBuffer(clip);
+    if (stretchedBuffer) {
+      source.buffer = stretchedBuffer;
+    } else {
+      source.buffer = clip.buffer;
+    }
 
     const envelope = clip.gainEnvelope;
     const hasFades = (clip.fadeInDuration ?? 0) > 0 || (clip.fadeOutDuration ?? 0) > 0;
@@ -860,7 +923,9 @@ export class AudioEngine {
     outputNode.connect(trackNode.inputGain);
 
     const rate = clip.timeStretchRate ?? 1;
-    if (rate !== 1) {
+    // Only apply playbackRate for repitch mode (or when no stretchMode specified)
+    const useRepitch = !clip.stretchMode || clip.stretchMode === 'repitch';
+    if (rate !== 1 && useRepitch && !stretchedBuffer) {
       source.playbackRate.value = rate;
     }
 
@@ -868,15 +933,25 @@ export class AudioEngine {
     if (clipEnd <= fromTime) return;
 
     const contextNow = this.ctx.currentTime;
-    if (clip.startTime >= fromTime) {
+    if (stretchedBuffer) {
+      // Stretched buffer plays at rate 1.0 — stretching already applied
+      if (clip.startTime >= fromTime) {
+        const delay = clip.startTime - fromTime;
+        source.start(contextNow + delay, clip.audioOffset / rate, clip.clipDuration);
+      } else {
+        const seekOffset = fromTime - clip.startTime;
+        const remaining = clip.clipDuration - seekOffset;
+        source.start(contextNow, clip.audioOffset / rate + seekOffset, remaining);
+      }
+    } else if (clip.startTime >= fromTime) {
       const delay = clip.startTime - fromTime;
-      const bufferDuration = clip.clipDuration * rate;
+      const bufferDuration = clip.clipDuration * (useRepitch ? rate : 1);
       source.start(contextNow + delay, clip.audioOffset, bufferDuration);
     } else {
       const seekOffset = fromTime - clip.startTime;
       const remaining = clip.clipDuration - seekOffset;
-      const bufferSeek = seekOffset * rate;
-      const bufferRemaining = remaining * rate;
+      const bufferSeek = seekOffset * (useRepitch ? rate : 1);
+      const bufferRemaining = remaining * (useRepitch ? rate : 1);
       source.start(contextNow, clip.audioOffset + bufferSeek, bufferRemaining);
     }
 

@@ -12,6 +12,7 @@ import { useProjectStore } from '../../../store/projectStore';
 import { effectsEngine } from '../../../engine/EffectsEngine';
 import { normalizeEffectParamValue } from '../../../utils/effectAutomation';
 import type { TrackEffect, FlangerParams } from '../../../types/project';
+import { LfoWaveformPreview } from './LfoWaveformPreview';
 
 export function FlangerCard({ effect, trackId }: { effect: TrackEffect & { type: 'flanger' }; trackId: string }) {
   const updateTrackEffect = useProjectStore((s) => s.updateTrackEffect);
@@ -27,7 +28,10 @@ export function FlangerCard({ effect, trackId }: { effect: TrackEffect & { type:
     <EffectCardLayout
       color={EFFECT_COLORS.flanger}
       visualization={
-        <ModulationDisplay type="flanger" rate={p.frequency} depth={p.depth} centerDelay={p.delayTime} feedback={p.feedback} color={EFFECT_COLORS.flanger} />
+        <div className="flex flex-col items-center gap-1">
+          <ModulationDisplay type="flanger" rate={p.frequency} depth={p.depth} centerDelay={p.delayTime} feedback={p.feedback} color={EFFECT_COLORS.flanger} />
+          <LfoWaveformPreview shape="sine" rate={p.frequency} depth={p.depth} color={EFFECT_COLORS.flanger} width={80} height={16} />
+        </div>
       }
       footer={
         <AutomationControlShell trackId={trackId} effect={effect} target={{ effectType: 'flanger', param: 'wet' }} normalizedValue={normalizeEffectParamValue('flanger', 'wet', p.wet) ?? 0.5}>

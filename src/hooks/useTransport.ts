@@ -190,6 +190,7 @@ export function useTransport() {
       fadeInCurve?: import('../types/project').Clip['fadeInCurve'];
       fadeOutCurve?: import('../types/project').Clip['fadeOutCurve'];
       timeStretchRate?: number;
+      stretchMode?: import('../types/project').StretchMode;
       gainEnvelope?: import('../types/project').GainEnvelopePoint[];
       warpMarkers?: import('../types/project').AudioWarpMarker[];
     }
@@ -293,6 +294,7 @@ export function useTransport() {
               audioOffset: loopAudioOffset,
               clipDuration: loopClipDuration,
               timeStretchRate: clip.timeStretchRate,
+              stretchMode: clip.stretchMode,
               gainEnvelope: clip.gainEnvelope,
             });
             loopIndex += 1;
@@ -312,6 +314,7 @@ export function useTransport() {
           fadeInCurve: clip.fadeInCurve,
           fadeOutCurve: clip.fadeOutCurve,
           timeStretchRate: clip.timeStretchRate,
+          stretchMode: clip.stretchMode,
           gainEnvelope: clip.gainEnvelope,
           warpMarkers: clip.warpMarkers,
         });

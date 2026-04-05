@@ -13,7 +13,10 @@ import { SynthPresetBrowser } from './SynthPresetBrowser';
 import { getSynthPresetById, type SynthPresetCategory } from '../../data/synthPresets';
 import { createUserPreset, getPresetById, type InstrumentPresetCategory } from '../../data/instrumentPresets';
 import { TransformMenu } from './TransformMenu';
+import { ChordSuggestionPanel } from './ChordSuggestionPanel';
+import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
+import { SynthParameterEditor, PRESET_DEFAULT_OSCILLATOR } from '../synth/SynthParameterEditor';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -31,10 +34,12 @@ export function PianoRoll() {
   const [gridSize, setGridSize] = useState<PianoRollGrid>('1/16');
   const [prZoomX, setPrZoomX] = useState(1);
   const [samplerDropActive, setSamplerDropActive] = useState(false);
+  const [showSynthParams, setShowSynthParams] = useState(false);
 
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);
   const loadSynthPreset = useProjectStore((s) => s.loadSynthPreset);
+  const updateSynthOscillatorType = useProjectStore((s) => s.updateSynthOscillatorType);
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
   const clearTrackSampler = useProjectStore((s) => s.clearTrackSampler);
   const updateSamplerConfig = useProjectStore((s) => s.updateSamplerConfig);
@@ -70,6 +75,8 @@ export function PianoRoll() {
   const openGeneratePatternDialog = useUIStore((s) => s.openGeneratePatternDialog);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const setHistoryFocusScope = useUIStore((s) => s.setHistoryFocusScope);
+  const chordPanelOpen = useChordSuggestionStore((s) => s.panelOpen);
+  const toggleChordPanel = useChordSuggestionStore((s) => s.togglePanel);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -353,11 +360,35 @@ export function PianoRoll() {
           }}
         />
 
+        {track.synthPreset !== 'sampler' && (
+          <button
+            type="button"
+            aria-label="Toggle synth parameters"
+            aria-pressed={showSynthParams ? 'true' : 'false'}
+            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+              showSynthParams
+                ? 'bg-violet-600/50 text-violet-200'
+                : 'bg-white/5 text-zinc-400 hover:bg-white/10'
+            }`}
+            onClick={() => setShowSynthParams((v) => !v)}
+            title="Show/hide synth parameter editor"
+          >
+            Synth Params
+          </button>
+        )}
+
         {/* Legacy preset dropdown (Quick Sampler toggle) */}
         <select
           aria-label="Track synth preset"
           value={track.synthPreset ?? 'piano'}
-          onChange={(e) => updateTrack(track.id, { synthPreset: e.target.value as typeof track.synthPreset })}
+          onChange={(e) => {
+            const preset = e.target.value as typeof track.synthPreset;
+            updateTrack(track.id, { synthPreset: preset });
+            // Reset oscillator to preset default (skip for sampler — no synth params)
+            if (preset !== 'sampler') {
+              updateSynthOscillatorType(track.id, PRESET_DEFAULT_OSCILLATOR[preset ?? 'piano'] ?? 'triangle');
+            }
+          }}
           className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-zinc-300"
         >
           <option value="piano">Piano</option>
@@ -395,6 +426,18 @@ export function PianoRoll() {
             Generate Pattern
           </button>
         )}
+
+        <button
+          className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            chordPanelOpen
+              ? 'bg-cyan-600/40 text-cyan-200'
+              : 'bg-cyan-600/15 text-cyan-100 hover:bg-cyan-600/30'
+          }`}
+          onClick={toggleChordPanel}
+          title="Toggle AI chord suggestion panel"
+        >
+          AI Chords
+        </button>
 
         {clip && (
           <button
@@ -455,6 +498,8 @@ export function PianoRoll() {
         </div>
       </div>
 
+      {chordPanelOpen && <ChordSuggestionPanel />}
+
       {track.synthPreset === 'sampler' && (
         <div
           aria-label="Quick Sampler target"
@@ -471,6 +516,10 @@ export function PianoRoll() {
             onLoadSample={() => openSamplerFilePicker(track.id)}
           />
         </div>
+      )}
+
+      {showSynthParams && track.synthPreset !== 'sampler' && (
+        <SynthParameterEditor trackId={track.id} />
       )}
 
       {clip ? (

@@ -1017,6 +1017,8 @@ export interface Track {
   synthPreset?: SynthPreset;
   /** ID of the active synth preset definition (factory or user). */
   synthPresetDefinitionId?: string;
+  /** Oscillator waveform type (overrides preset default when set). */
+  synthOscillatorType?: 'sine' | 'triangle' | 'sawtooth' | 'square';
   /** Custom ADSR envelope overriding the preset defaults. */
   synthEnvelope?: SynthEnvelope;
   /** Synth filter settings (lowpass/highpass/bandpass). */

@@ -5,6 +5,7 @@ import { applyTheme } from '../themes/applyTheme';
 
 export function useThemeSync(): void {
   const themeId = useUIStore((s) => s.theme);
+  const highContrastMode = useUIStore((s) => s.highContrastMode);
 
   useEffect(() => {
     const theme = THEMES[themeId];
@@ -12,4 +13,8 @@ export function useThemeSync(): void {
       applyTheme(themeId, theme.tokens);
     }
   }, [themeId]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-high-contrast', highContrastMode ? 'true' : 'false');
+  }, [highContrastMode]);
 }

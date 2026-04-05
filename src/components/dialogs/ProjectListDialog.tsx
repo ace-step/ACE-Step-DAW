@@ -108,7 +108,7 @@ export function ProjectListDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[520px] max-h-[70vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="Projects" className="w-[520px] max-h-[70vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <h2 className="text-sm font-medium">Projects</h2>
           <button

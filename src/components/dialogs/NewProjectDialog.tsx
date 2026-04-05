@@ -164,7 +164,7 @@ export function NewProjectDialog() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[600px] max-h-[80vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="New Project" className="w-[600px] max-h-[80vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <h2 className="text-sm font-medium">New Project</h2>
           <button

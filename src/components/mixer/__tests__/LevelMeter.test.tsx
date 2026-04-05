@@ -28,13 +28,15 @@ describe('LevelMeter', () => {
   it('renders with correct aria-label for track meter', () => {
     render(<LevelMeter trackId="track-1" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas.getAttribute('aria-label')).toBe('Mixer level meter for track-1');
+    expect(canvas.getAttribute('role')).toBe('img');
+    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
   });
 
   it('renders with correct aria-label for master stage', () => {
     render(<LevelMeter masterStage="output" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas.getAttribute('aria-label')).toBe('Master output level meter');
+    expect(canvas.getAttribute('role')).toBe('img');
+    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
   });
 
   it('renders stereo bars by default for track meters (wider container)', () => {

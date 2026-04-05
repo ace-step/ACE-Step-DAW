@@ -257,6 +257,8 @@ export function ConvolverIRCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Impulse response waveform"
       style={{ width, height }}
       className="rounded"
       data-testid="convolver-ir-curve"

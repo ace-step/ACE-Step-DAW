@@ -158,6 +158,8 @@ export function NoiseReductionDisplay({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="Noise reduction gate display"
       data-testid="noise-reduction-display"
     />
   );

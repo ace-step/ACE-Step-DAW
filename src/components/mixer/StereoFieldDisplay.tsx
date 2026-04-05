@@ -133,6 +133,8 @@ export function StereoFieldDisplay({
       ref={canvasRef}
       style={{ width: canvasWidth, height: canvasHeight }}
       className="rounded"
+      role="img"
+      aria-label="Stereo field visualization"
       data-testid="stereo-field-display"
     />
   );

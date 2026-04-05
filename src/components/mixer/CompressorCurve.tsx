@@ -154,6 +154,8 @@ export function CompressorCurve({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="Compressor transfer curve"
       data-testid="compressor-curve"
     />
   );

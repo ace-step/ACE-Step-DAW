@@ -227,7 +227,7 @@ select:focus-visible,
   mask-image: linear-gradient(to bottom, transparent, black 8px, black calc(100% - 8px), transparent);
 }
 
-/* Reduced motion: simplify micro-interactions */
+/* Reduced motion: simplify micro-interactions and disable blinking */
 @media (prefers-reduced-motion: reduce) {
   .daw-btn-interactive,
   .daw-clip-interactive,
@@ -239,6 +239,17 @@ select:focus-visible,
   }
   .daw-drag-lift[data-dragging="true"] {
     transform: none;
+  }
+  /* Disable playhead blink animations (WCAG 2.3.1) */
+  .playhead-triangle-blink polygon {
+    animation: none !important;
+  }
+  [style*="playhead-blink"] {
+    animation: none !important;
+  }
+  /* Disable session view queued-clip blink */
+  @keyframes session-blink {
+    0%, 100% { opacity: 1; }
   }
 }
 
@@ -444,6 +455,35 @@ select:focus-visible,
   .daw-implied-mute {
     opacity: 0.5;
   }
+}
+
+/* ── High Contrast Mode (toggled via Settings) ── */
+/* Provides WCAG AAA (7:1) contrast ratios when enabled */
+[data-high-contrast="true"] {
+  --color-daw-bg: #0a0a0a;
+  --color-daw-surface: #141414;
+  --color-daw-surface-raised: #1e1e1e;
+  --color-daw-border: #777;
+  --color-daw-border-strong: #999;
+  --color-daw-text-muted: #ccc;
+  --color-daw-track-bg: #111;
+  --color-daw-track-bg-alt: #151515;
+}
+
+[data-high-contrast="true"] button:focus-visible,
+[data-high-contrast="true"] input:focus-visible,
+[data-high-contrast="true"] select:focus-visible,
+[data-high-contrast="true"] [tabindex]:focus-visible {
+  outline-width: 3px;
+  box-shadow: 0 0 0 4px var(--color-daw-focus-ring);
+}
+
+[data-high-contrast="true"] .text-zinc-300 {
+  color: #e5e5e5;
+}
+
+[data-high-contrast="true"] .text-zinc-400 {
+  color: #d4d4d4;
 }
 
 /* ── Screen reader only utility ── */

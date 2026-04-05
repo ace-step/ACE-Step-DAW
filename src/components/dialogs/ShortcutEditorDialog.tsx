@@ -217,6 +217,9 @@ export function ShortcutEditorDialog() {
     >
       <div
         ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shortcut Editor"
         className="w-[620px] max-h-[85vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >

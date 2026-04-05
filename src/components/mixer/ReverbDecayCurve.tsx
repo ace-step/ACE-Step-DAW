@@ -238,6 +238,8 @@ export function ReverbDecayCurve({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="Reverb decay curve"
       data-testid="reverb-decay-curve"
     />
   );

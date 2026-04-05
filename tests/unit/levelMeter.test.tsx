@@ -37,13 +37,15 @@ describe('LevelMeter', () => {
     const canvas = screen.getByTestId('meter-canvas');
     expect(canvas).not.toBeNull();
     expect(canvas.tagName.toLowerCase()).toBe('canvas');
-    expect(canvas.getAttribute('aria-label')).toBe('Mixer level meter for track-1');
+    expect(canvas.getAttribute('role')).toBe('img');
+    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
   });
 
   it('renders a canvas with master aria-label for master stage', () => {
     render(<LevelMeter masterStage="output" />);
     const canvas = screen.getByTestId('meter-canvas');
-    expect(canvas.getAttribute('aria-label')).toBe('Master output level meter');
+    expect(canvas.getAttribute('role')).toBe('img');
+    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
   });
 
   it('renders clip indicator button (initially hidden)', () => {

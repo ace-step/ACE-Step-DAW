@@ -67,6 +67,8 @@ function ThemeSelector() {
 export function SettingsDialog() {
   const show = useUIStore((s) => s.showSettingsDialog);
   const setShow = useUIStore((s) => s.setShowSettingsDialog);
+  const highContrastMode = useUIStore((s) => s.highContrastMode);
+  const setHighContrastMode = useUIStore((s) => s.setHighContrastMode);
   const project = useProjectStore((s) => s.project);
 
   const [bpm, setBpm] = useState(120);
@@ -329,6 +331,18 @@ export function SettingsDialog() {
         <div className="p-4 space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
           <h3 className="text-xs font-medium text-zinc-300">Appearance</h3>
           <ThemeSelector />
+
+          <h3 className="text-xs font-medium text-zinc-300 pt-2">Accessibility</h3>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={highContrastMode}
+              onChange={(e) => setHighContrastMode(e.target.checked)}
+              className="w-4 h-4 accent-daw-accent rounded"
+            />
+            <span className="text-xs text-zinc-300">High contrast mode</span>
+            <span className="text-[10px] text-zinc-500 ml-1">(WCAG AAA 7:1 ratio)</span>
+          </label>
 
           <div className="border-t border-daw-border my-3" />
           <h3 className="text-xs font-medium text-zinc-300">Backend Connection</h3>

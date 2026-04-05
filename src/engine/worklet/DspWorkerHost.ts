@@ -35,7 +35,7 @@ export interface DspWorkerHostOptions {
   /** Number of automatable parameter slots (default: 256). */
   paramCount?: number;
   /** URL to the worker script (default: '/dsp-worker.js'). */
-  workerUrl?: string;
+  workerUrl?: string | URL;
 }
 
 export interface CpuStats {
@@ -52,7 +52,7 @@ export class DspWorkerHost {
   private readonly _channels: number;
   private readonly _bufferSize: number;
   private readonly _paramCount: number;
-  private readonly _workerUrl: string;
+  private readonly _workerUrl: string | URL;
 
   private _onStateChange: ((state: DspWorkerState) => void) | null = null;
   private _onCpu: ((stats: CpuStats) => void) | null = null;
@@ -64,6 +64,10 @@ export class DspWorkerHost {
     this._channels = options.channels ?? 2;
     this._bufferSize = options.bufferSize ?? 8192;
     this._paramCount = options.paramCount ?? 256;
+    // Phase 5 delivers the host controller and typed protocol.
+    // The actual worker script (dsp-worker.js) is a separate deliverable —
+    // callers should provide the bundled worker path via Vite's
+    // new URL('./dsp-worker.ts', import.meta.url) pattern.
     this._workerUrl = options.workerUrl ?? '/dsp-worker.js';
   }
 
@@ -91,10 +95,6 @@ export class DspWorkerHost {
       // Create worker
       this._worker = new Worker(this._workerUrl, { type: 'module' });
       this._worker.onmessage = this._handleMessage.bind(this);
-      this._worker.onerror = (e) => {
-        this._setState('error');
-        this._onError?.(e.message);
-      };
 
       // Send init command
       this._send({
@@ -112,21 +112,44 @@ export class DspWorkerHost {
         const origHandler = worker.onmessage;
         let settled = false;
 
-        const cleanup = () => {
-          clearTimeout(timeout);
-          worker.onmessage = origHandler;
-        };
-
-        const timeout = setTimeout(() => {
+        const settleError = (message: string) => {
           if (settled) return;
           settled = true;
           cleanup();
           worker.terminate();
           if (this._worker === worker) this._worker = null;
+          this._audioBuffer = null;
+          this._paramBuffer = null;
           this._setState('error');
-          this._onError?.('DSP worker initialization timed out');
+          this._onError?.(message);
           resolve(false);
+        };
+
+        // Persistent error handler for post-initialization errors
+        const persistentErrorHandler = (e: ErrorEvent) => {
+          this._setState('error');
+          this._onError?.(e.message || 'DSP worker runtime error');
+        };
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+          worker.onmessage = origHandler;
+          // Restore persistent error handlers so post-init errors aren't silently dropped
+          worker.onerror = persistentErrorHandler;
+          worker.onmessageerror = null;
+        };
+
+        const timeout = setTimeout(() => {
+          settleError('DSP worker initialization timed out');
         }, 5000);
+
+        // Wire onerror to settle immediately instead of waiting for timeout.
+        worker.onerror = (e) => {
+          settleError(e.message || 'Failed to load DSP worker.');
+        };
+        worker.onmessageerror = () => {
+          settleError('Failed to deserialize DSP worker message.');
+        };
 
         worker.onmessage = (e: MessageEvent) => {
           if (settled) return;
@@ -139,15 +162,21 @@ export class DspWorkerHost {
           } else {
             origHandler?.call(worker, e);
             if (msg.type === 'error' || this._state === 'error') {
-              settled = true;
-              cleanup();
-              resolve(false);
+              settleError(msg.type === 'error' ? (msg as { message: string }).message : 'Worker error');
             }
           }
         };
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (this._worker) {
+        this._worker.terminate();
+        this._worker = null;
+      }
+      this._audioBuffer = null;
+      this._paramBuffer = null;
       this._setState('error');
+      this._onError?.(message);
       return false;
     }
   }
@@ -174,6 +203,7 @@ export class DspWorkerHost {
    * Seek to a specific sample position.
    */
   seek(toSample: number): void {
+    if (this._state !== 'ready' && this._state !== 'playing' && this._state !== 'stopped') return;
     this._send({ type: 'seek', toSample });
     this._positionSample = toSample;
   }

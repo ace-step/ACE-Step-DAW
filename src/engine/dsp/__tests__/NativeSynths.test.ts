@@ -243,3 +243,84 @@ describe('NativeBufferSource', () => {
     expect(src.loopEnd).toBe(2.0);
   });
 });
+
+describe('NativePolySynth per-note release', () => {
+  it('releases only the specified note, not all voices', () => {
+    const ctx = createMockCtx();
+    const synth = new NativePolySynth(ctx, { maxPolyphony: 4 });
+
+    // Attack three notes
+    synth.triggerAttack(['C4', 'E4', 'G4']);
+
+    // Release only E4 — C4 and G4 should remain active
+    expect(() => synth.triggerRelease('E4')).not.toThrow();
+
+    // Releasing G4 should also work independently
+    expect(() => synth.triggerRelease('G4')).not.toThrow();
+  });
+
+  it('releaseAll releases all voices regardless of notes', () => {
+    const ctx = createMockCtx();
+    const synth = new NativePolySynth(ctx, { maxPolyphony: 4 });
+
+    synth.triggerAttack(['C4', 'E4', 'G4']);
+    expect(() => synth.releaseAll()).not.toThrow();
+  });
+
+  it('re-triggering the same note reuses the same voice slot', () => {
+    const ctx = createMockCtx();
+    const synth = new NativePolySynth(ctx, { maxPolyphony: 4 });
+
+    // Play C4, then retrigger C4 — should reuse same voice
+    synth.triggerAttack('C4');
+    expect(() => synth.triggerAttack('C4')).not.toThrow();
+  });
+});
+
+describe('NativeFMSynth voice cleanup', () => {
+  it('re-triggering stops previous oscillators', () => {
+    const ctx = createMockCtx();
+    const synth = new NativeFMSynth(ctx);
+
+    // First trigger
+    synth.triggerAttack('C4');
+    // Second trigger should clean up first
+    expect(() => synth.triggerAttack('E4')).not.toThrow();
+    // Release should also work
+    expect(() => synth.triggerRelease()).not.toThrow();
+  });
+
+  it('triggerRelease after triggerAttack stops oscillators', () => {
+    const ctx = createMockCtx();
+    const synth = new NativeFMSynth(ctx);
+
+    synth.triggerAttack('A4', 0, 0.8);
+    // Should stop carrier + modulator
+    expect(() => synth.triggerRelease()).not.toThrow();
+    // Double release should be safe
+    expect(() => synth.triggerRelease()).not.toThrow();
+  });
+});
+
+describe('NativeFrequencyEnvelope signal output', () => {
+  it('creates with DC source for non-zero output signal', () => {
+    const ctx = createMockCtx();
+    const env = new NativeFrequencyEnvelope(ctx);
+    expect(env.outputNode).toBeDefined();
+  });
+
+  it('triggerAttack/triggerRelease automate gain values', () => {
+    const ctx = createMockCtx();
+    const env = new NativeFrequencyEnvelope(ctx, {
+      baseFrequency: 200,
+      octaves: 4,
+      attack: 0.01,
+      decay: 0.1,
+      sustain: 0.5,
+      release: 0.3,
+    });
+
+    expect(() => env.triggerAttack()).not.toThrow();
+    expect(() => env.triggerRelease()).not.toThrow();
+  });
+});

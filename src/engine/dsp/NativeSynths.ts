@@ -94,12 +94,14 @@ function noteNameToFreq(note: string): number {
   return noteToFreq(midi);
 }
 
-function parseDuration(dur: number | string, ctx: AudioContext): number {
+// TODO: Thread actual project BPM from transport store into synth callers
+// so that Tone.js-style duration notation ('8n', '4n') uses the correct tempo.
+function parseDuration(dur: number | string, _ctx: AudioContext, bpm = 120): number {
   if (typeof dur === 'number') return dur;
   // Parse Tone.js notation (e.g., '8n', '4n', '2n')
   const match = dur.match(/^(\d+)n$/);
   if (match) {
-    return 60 / 120 * (4 / parseInt(match[1], 10)); // assume 120 BPM
+    return 60 / bpm * (4 / parseInt(match[1], 10));
   }
   return parseFloat(dur) || 0.25;
 }
@@ -137,6 +139,8 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     attack: number; decay: number; sustain: number; release: number;
   };
   private _nextVoice = 0;
+  /** Maps note name (e.g. "C4") to its assigned voice index for per-note release. */
+  private readonly _noteToVoice = new Map<string, number>();
 
   constructor(ctx: AudioContext, options?: IDSPPolySynthOptions) {
     super(ctx);
@@ -157,10 +161,26 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     }
   }
 
-  private _allocVoice(): MonoVoice {
-    const voice = this._voices[this._nextVoice % this._maxPoly];
+  private _allocVoice(note: string): MonoVoice {
+    // If this note already has a voice, reuse it
+    const existing = this._noteToVoice.get(note);
+    if (existing !== undefined) {
+      return this._voices[existing];
+    }
+
+    const idx = this._nextVoice % this._maxPoly;
     this._nextVoice++;
-    return voice;
+
+    // Evict any note currently using this voice slot
+    for (const [n, vi] of this._noteToVoice) {
+      if (vi === idx) {
+        this._noteToVoice.delete(n);
+        break;
+      }
+    }
+
+    this._noteToVoice.set(note, idx);
+    return this._voices[idx];
   }
 
   triggerAttack(notes: string | string[], time?: number, velocity = 1): void {
@@ -168,7 +188,7 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     const t = time ?? this._ctx.currentTime;
 
     for (const note of noteArr) {
-      const voice = this._allocVoice();
+      const voice = this._allocVoice(note);
       const freq = noteNameToFreq(note);
       const env = this._envelope;
 
@@ -201,14 +221,33 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
   triggerRelease(notes: string | string[], time?: number): void {
     const t = time ?? this._ctx.currentTime;
     const env = this._envelope;
+    const noteArr = Array.isArray(notes) ? notes : [notes];
 
-    // Release all active voices (simplified — in production would track per-note)
-    for (const voice of this._voices) {
+    // If no specific notes given, release all active voices
+    const voicesToRelease: MonoVoice[] = [];
+    if (noteArr.length === 0) {
+      voicesToRelease.push(...this._voices.filter(v => v.osc));
+      this._noteToVoice.clear();
+    } else {
+      for (const note of noteArr) {
+        const idx = this._noteToVoice.get(note);
+        if (idx !== undefined) {
+          voicesToRelease.push(this._voices[idx]);
+          this._noteToVoice.delete(note);
+        }
+      }
+    }
+
+    for (const voice of voicesToRelease) {
       if (voice.osc) {
+        const osc = voice.osc;
         voice.gain.gain.cancelScheduledValues(t);
         voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
         voice.gain.gain.linearRampToValueAtTime(0, t + env.release);
-        try { voice.osc.stop(t + env.release + 0.01); } catch { /* */ }
+        osc.onended = () => {
+          try { osc.disconnect(); } catch { /* */ }
+        };
+        try { osc.stop(t + env.release + 0.01); } catch { /* */ }
         voice.osc = null;
       }
     }
@@ -278,13 +317,22 @@ export class NativeSynth extends NativeSynthBase implements IDSPSynth {
     const freq = noteNameToFreq(note);
     const env = this._envelope;
 
-    if (this._voice.osc) {
-      try { this._voice.osc.stop(t); } catch { /* */ }
+    const previousOsc = this._voice.osc;
+    if (previousOsc) {
+      previousOsc.onended = () => {
+        try { previousOsc.disconnect(); } catch { /* */ }
+      };
+      try { previousOsc.stop(t); } catch {
+        try { previousOsc.disconnect(); } catch { /* */ }
+      }
     }
 
     const osc = this._ctx.createOscillator();
     osc.type = this._oscType;
     osc.frequency.value = freq;
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* */ }
+    };
     osc.connect(this._voice.filter);
     this._voice.osc = osc;
 
@@ -315,6 +363,7 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
   private _activeCarrier: OscillatorNode | null = null;
   private _activeModulator: OscillatorNode | null = null;
   private _activeGain: GainNode | null = null;
+  private _activeModGain: GainNode | null = null;
 
   constructor(ctx: AudioContext, options?: IDSPFMSynthOptions) {
     super(ctx);
@@ -367,6 +416,22 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
     const freq = noteNameToFreq(note);
     const env = this._envelope;
 
+    // Stop and disconnect previous nodes to prevent leaks
+    if (this._activeCarrier) {
+      try { this._activeCarrier.stop(t); } catch { /* */ }
+      try { this._activeCarrier.disconnect(); } catch { /* */ }
+    }
+    if (this._activeModulator) {
+      try { this._activeModulator.stop(t); } catch { /* */ }
+      try { this._activeModulator.disconnect(); } catch { /* */ }
+    }
+    if (this._activeModGain) {
+      try { this._activeModGain.disconnect(); } catch { /* */ }
+    }
+    if (this._activeGain) {
+      try { this._activeGain.disconnect(); } catch { /* */ }
+    }
+
     // Carrier
     const carrier = this._ctx.createOscillator();
     carrier.type = this._oscType;
@@ -393,6 +458,7 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
 
     this._activeCarrier = carrier;
     this._activeModulator = modulator;
+    this._activeModGain = modGain;
     this._activeGain = envGain;
 
     carrier.start(t);
@@ -439,11 +505,17 @@ export class NativeMembraneSynth extends NativeSynthBase implements IDSPMembrane
     osc.frequency.exponentialRampToValueAtTime(freq, t + this._pitchDecay);
 
     const gain = this._ctx.createGain();
-    gain.gain.setValueAtTime(velocity, t);
+    // Clamp velocity to avoid exponentialRamp from 0 (which throws in Web Audio)
+    const safeVelocity = Math.max(0.001, velocity);
+    gain.gain.setValueAtTime(safeVelocity, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
 
     osc.connect(gain);
     gain.connect(this._output);
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
     osc.start(t);
     osc.stop(t + dur + 0.01);
   }
@@ -496,6 +568,10 @@ export class NativeNoiseSynth extends NativeSynthBase implements IDSPNoiseSynth 
 
     source.connect(gain);
     gain.connect(this._output);
+    source.onended = () => {
+      try { source.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
     source.start(t);
     source.stop(t + dur + env.release + 0.01);
   }
@@ -555,13 +631,22 @@ export class NativeMetalSynth extends NativeSynthBase implements IDSPMetalSynth 
     filter.Q.value = 1;
 
     const gain = this._ctx.createGain();
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(velocity, t + env.attack);
+    // Clamp velocity to avoid exponentialRamp from 0 (which throws in Web Audio)
+    const safeVelocity = Math.max(0.001, velocity);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(safeVelocity, t + env.attack);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur + env.release);
 
     carrier.connect(filter);
     filter.connect(gain);
     gain.connect(this._output);
+    carrier.onended = () => {
+      try { carrier.disconnect(); } catch { /* */ }
+      try { mod.disconnect(); } catch { /* */ }
+      try { modGain.disconnect(); } catch { /* */ }
+      try { filter.disconnect(); } catch { /* */ }
+      try { gain.disconnect(); } catch { /* */ }
+    };
 
     carrier.start(t);
     mod.start(t);
@@ -583,6 +668,7 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
   octaves = 4;
 
   private readonly _gain: GainNode;
+  private readonly _dcSource: AudioBufferSourceNode;
 
   constructor(ctx: AudioContext, options?: IDSPFrequencyEnvelopeOptions) {
     super(ctx);
@@ -593,9 +679,25 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
     if (options?.baseFrequency !== undefined) this.baseFrequency = options.baseFrequency;
     if (options?.octaves !== undefined) this.octaves = options.octaves;
 
+    // Use a looped AudioBufferSourceNode outputting constant 1.0 as signal source
+    // so that the gain node outputs a non-zero control signal for AudioParam modulation.
+    // (A 0Hz OscillatorNode outputs sin(0)=0 which is not usable as DC.)
+    const buf = ctx.createBuffer(1, 2, ctx.sampleRate);
+    buf.getChannelData(0).fill(1);
+    this._dcSource = ctx.createBufferSource();
+    this._dcSource.buffer = buf;
+    this._dcSource.loop = true;
     this._gain = ctx.createGain();
     this._gain.gain.value = 0;
+    this._dcSource.connect(this._gain);
     this._gain.connect(this._output);
+    this._dcSource.start();
+  }
+
+  dispose(): void {
+    try { this._dcSource.stop(); } catch { /* */ }
+    try { this._dcSource.disconnect(); } catch { /* */ }
+    super.dispose();
   }
 
   triggerAttack(time?: number): void {
@@ -681,12 +783,27 @@ export class NativeBufferSource extends NativeSynthBase implements IDSPBufferSou
     }
 
     this._source = source;
-    source.start(time, offset, duration);
+    // Avoid passing undefined args to WebIDL methods (can coerce to NaN)
+    if (time === undefined) {
+      source.start();
+    } else if (offset === undefined) {
+      source.start(time);
+    } else if (duration === undefined) {
+      source.start(time, offset);
+    } else {
+      source.start(time, offset, duration);
+    }
   }
 
   stop(time?: number): void {
     if (this._source) {
-      try { this._source.stop(time); } catch { /* */ }
+      try {
+        if (time === undefined) {
+          this._source.stop();
+        } else {
+          this._source.stop(time);
+        }
+      } catch { /* */ }
     }
   }
 }

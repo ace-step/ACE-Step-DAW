@@ -71,6 +71,22 @@ import {
 } from './core';
 
 // ---------------------------------------------------------------------------
+// Helper: create a looping AudioBufferSourceNode that outputs constant 1.0.
+// Used as a DC signal source for LFO offset and FrequencyEnvelope.
+// A 0Hz OscillatorNode outputs sin(0)=0 which is NOT a usable DC source.
+// ---------------------------------------------------------------------------
+
+function createDCSource(ctx: AudioContext): AudioBufferSourceNode {
+  const buf = ctx.createBuffer(1, 2, ctx.sampleRate);
+  buf.getChannelData(0).fill(1);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.start();
+  return src;
+}
+
+// ---------------------------------------------------------------------------
 // Base wrapper for native Web Audio nodes
 // ---------------------------------------------------------------------------
 
@@ -144,9 +160,10 @@ class DryWetMix {
 
   get wet(): number { return this._wetAmount; }
   set wet(v: number) {
-    this._wetAmount = v;
-    this._wet.gain.value = v;
-    this._dry.gain.value = 1 - v;
+    const clamped = Math.max(0, Math.min(1, v));
+    this._wetAmount = clamped;
+    this._wet.gain.value = clamped;
+    this._dry.gain.value = 1 - clamped;
   }
 }
 
@@ -253,7 +270,7 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
   get delayTime(): AudioParam { return this._delay.delayTime; }
 
   get feedback(): number { return this._feedback.gain.value; }
-  set feedback(v: number) { this._feedback.gain.value = v; }
+  set feedback(v: number) { this._feedback.gain.value = Math.max(0, Math.min(0.999, v)); }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
@@ -265,9 +282,12 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
 
 const BUFFER_SIZE = 2048;
 
+// TODO: Migrate from deprecated ScriptProcessorNode to AudioWorkletNode
+// once AudioWorklet pipeline is fully wired (Phase 5 DspWorkerHost).
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
+  private readonly _preDelayNode: DelayNode;
   private _decay = 1.5;
   private _preDelay = 0.01;
 
@@ -275,6 +295,10 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     const mix = new DryWetMix(ctx);
     const processor = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
     const verb = new FreeVerb(ctx.sampleRate);
+    const preDelayNode = ctx.createDelay(0.5);
+
+    const preDelayTime = options?.preDelay ?? 0.01;
+    preDelayNode.delayTime.value = preDelayTime;
 
     verb.roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
     verb.damping = 0.5;
@@ -290,7 +314,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
       verb.processStereo(inL, inR, outL, outR, 0, BUFFER_SIZE);
     };
 
-    mix.input.connect(processor);
+    // Signal path: input → preDelay → processor → wet mix
+    mix.input.connect(preDelayNode);
+    preDelayNode.connect(processor);
     processor.connect(mix.wetInput);
 
     mix.wet = options?.wet ?? 1;
@@ -298,8 +324,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     super(mix.input, mix.output);
     this._verb = verb;
     this._mix = mix;
+    this._preDelayNode = preDelayNode;
     this._decay = options?.decay ?? 1.5;
-    this._preDelay = options?.preDelay ?? 0.01;
+    this._preDelay = preDelayTime;
   }
 
   get decay(): number { return this._decay; }
@@ -309,7 +336,10 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   }
 
   get preDelay(): number { return this._preDelay; }
-  set preDelay(v: number) { this._preDelay = v; }
+  set preDelay(v: number) {
+    this._preDelay = v;
+    this._preDelayNode.delayTime.value = v;
+  }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
@@ -411,6 +441,9 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
     this._delayTime = delayMs;
     this._depth = depth;
     this._feedback = fb;
+
+    // Auto-start LFO (consistent with NativePhaser behavior)
+    try { lfo.start(); } catch { /* already started */ }
   }
 
   get frequency(): number { return this._frequency; }
@@ -444,12 +477,23 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
   start(): void {
     try { this._lfo.start(); } catch { /* already started */ }
   }
+
+  dispose(): void {
+    try { this._lfo.stop(); } catch { /* */ }
+    try { this._lfo.disconnect(); } catch { /* */ }
+    try { this._lfoGain.disconnect(); } catch { /* */ }
+    try { this._delay.disconnect(); } catch { /* */ }
+    try { this._feedbackNode.disconnect(); } catch { /* */ }
+    super.dispose();
+  }
 }
 
 class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   private readonly _filters: BiquadFilterNode[];
   private readonly _lfo: OscillatorNode;
   private readonly _lfoGain: GainNode;
+  private readonly _lfoDcGain: GainNode;
+  private readonly _lfoDcSource: AudioBufferSourceNode;
   private readonly _mix: DryWetMix;
   private _frequency: number;
   private _octaves: number;
@@ -480,16 +524,30 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
     }
     lastNode.connect(mix.wetInput);
 
-    // LFO modulates all filter frequencies
+    // LFO modulates all filter frequencies with proper DC offset.
+    // Sweep range: baseFreq → baseFreq * 2^oct
+    // Using DC offset + amplitude so frequency stays positive:
+    //   min = baseFreq, max = baseFreq * 2^oct
+    //   offset = (min + max) / 2, amplitude = (max - min) / 2
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
+    const lfoDcSource = createDCSource(ctx);
+    const lfoDcGain = ctx.createGain();
+
+    const maxFreq = baseFreq * Math.pow(2, oct);
+    const amplitude = (maxFreq - baseFreq) / 2;
+    const offset = (maxFreq + baseFreq) / 2;
+
     lfo.frequency.value = freq;
     lfo.type = 'sine';
-    lfoGain.gain.value = baseFreq * Math.pow(2, oct);
+    lfoGain.gain.value = amplitude;
+    lfoDcGain.gain.value = offset;
 
     lfo.connect(lfoGain);
+    lfoDcSource.connect(lfoDcGain);
     for (const f of filters) {
       lfoGain.connect(f.frequency);
+      lfoDcGain.connect(f.frequency);
     }
 
     mix.wet = options?.wet ?? 0.5;
@@ -498,6 +556,8 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
     this._filters = filters;
     this._lfo = lfo;
     this._lfoGain = lfoGain;
+    this._lfoDcGain = lfoDcGain;
+    this._lfoDcSource = lfoDcSource;
     this._mix = mix;
     this._frequency = freq;
     this._octaves = oct;
@@ -517,7 +577,9 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   get octaves(): number { return this._octaves; }
   set octaves(v: number) {
     this._octaves = v;
-    this._lfoGain.gain.value = this._baseFrequency * Math.pow(2, v);
+    const maxFreq = this._baseFrequency * Math.pow(2, v);
+    this._lfoGain.gain.value = (maxFreq - this._baseFrequency) / 2;
+    this._lfoDcGain.gain.value = (maxFreq + this._baseFrequency) / 2;
   }
 
   get stages(): number { return this._stages; }
@@ -536,12 +598,24 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   get baseFrequency(): number { return this._baseFrequency; }
   set baseFrequency(v: number) {
     this._baseFrequency = v;
-    for (const f of this._filters) f.frequency.value = v;
-    this._lfoGain.gain.value = v * Math.pow(2, this._octaves);
+    const maxFreq = v * Math.pow(2, this._octaves);
+    for (const f of this._filters) f.frequency.value = (maxFreq + v) / 2;
+    this._lfoGain.gain.value = (maxFreq - v) / 2;
+    this._lfoDcGain.gain.value = (maxFreq + v) / 2;
   }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
+
+  dispose(): void {
+    try { this._lfo.stop(); } catch { /* */ }
+    try { this._lfo.disconnect(); } catch { /* */ }
+    try { this._lfoGain.disconnect(); } catch { /* */ }
+    try { this._lfoDcSource.stop(); } catch { /* */ }
+    try { this._lfoDcSource.disconnect(); } catch { /* */ }
+    try { this._lfoDcGain.disconnect(); } catch { /* */ }
+    super.dispose();
+  }
 }
 
 class NativeEQ3 extends NativeNodeWrapper implements IDSPEQ3 {
@@ -631,12 +705,20 @@ class NativeConvolver extends NativeNodeWrapper implements IDSPConvolver {
 class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   private readonly _osc: OscillatorNode;
   private readonly _gain: GainNode;
+  private readonly _dcOffset: GainNode;
+  private readonly _dcSource: AudioBufferSourceNode;
+  private readonly _sum: GainNode;
   private _min: number;
   private _max: number;
 
   constructor(ctx: AudioContext, options?: IDSPLFOOptions) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    const sum = ctx.createGain();
+
+    // DC offset via a looped AudioBufferSourceNode outputting constant 1.0.
+    const dcSource = createDCSource(ctx);
+    const dcOffset = ctx.createGain();
 
     const min = options?.min ?? 0;
     const max = options?.max ?? 1;
@@ -645,15 +727,27 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
     osc.frequency.value = freq;
     osc.type = 'sine';
 
-    // LFO output: osc [-1, 1] → gain → scaled to [min, max]
+    // LFO output: osc [-1, 1] → gain (amplitude) + dcOffset (DC) → sum → [min, max]
     // amplitude = (max - min) / 2, offset = (max + min) / 2
     gain.gain.value = (max - min) / 2;
+    dcOffset.gain.value = (max + min) / 2;
+    sum.gain.value = 1;
 
     osc.connect(gain);
+    gain.connect(sum);
+    dcSource.connect(dcOffset);
+    dcOffset.connect(sum);
 
-    super(gain, gain);
+    // Gate output until start() — prevents DC offset from shifting
+    // connected AudioParams before the LFO is explicitly activated.
+    sum.gain.value = 0;
+
+    super(sum, sum);
     this._osc = osc;
     this._gain = gain;
+    this._dcOffset = dcOffset;
+    this._dcSource = dcSource;
+    this._sum = sum;
     this._min = min;
     this._max = max;
   }
@@ -665,24 +759,35 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
   set min(v: number) {
     this._min = v;
     this._gain.gain.value = (this._max - v) / 2;
+    this._dcOffset.gain.value = (this._max + v) / 2;
   }
 
   get max(): number { return this._max; }
   set max(v: number) {
     this._max = v;
     this._gain.gain.value = (v - this._min) / 2;
+    this._dcOffset.gain.value = (v + this._min) / 2;
   }
 
   start(): void {
+    this._sum.gain.value = 1;
     try { this._osc.start(); } catch { /* already started */ }
   }
 
   stop(): void {
+    // Gate output to zero instead of stopping the oscillator,
+    // since stopped OscillatorNodes cannot be restarted.
+    this._sum.gain.value = 0;
+  }
+
+  dispose(): void {
     try { this._osc.stop(); } catch { /* already stopped */ }
+    try { this._dcSource.stop(); } catch { /* already stopped */ }
+    super.dispose();
   }
 
   connectParam(destination: AudioParam): void {
-    this._gain.connect(destination);
+    this._sum.connect(destination);
   }
 }
 

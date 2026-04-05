@@ -535,7 +535,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
               >S</button>
-              {!track.isGroup && (
+              {!track.isGroup && track.trackType !== 'video' && (
                 <button
                   onClick={() => setOpenEffectChainTrackId(track.id)}
                   className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
@@ -549,7 +549,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                   aria-label={`Effects for ${track.displayName}`}
                 >FX</button>
               )}
-              {!track.isGroup && (
+              {!track.isGroup && track.trackType !== 'video' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleArmTrack(track.id); }}
                   className={`w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
@@ -564,18 +564,23 @@ export const TrackHeader = React.memo(function TrackHeader({
                   <div className={`w-[8px] h-[8px] rounded-full ${isArmed ? 'bg-white' : 'bg-zinc-500'}`} />
                 </button>
               )}
+              {track.trackType === 'video' && (
+                <span className="text-[9px] font-bold text-sky-400 bg-sky-400/10 rounded px-1">VID</span>
+              )}
             </div>
           </div>
 
-          {/* Row 2: combined fader + stereo meter */}
-          <div data-testid="track-header-row2" className="w-full">
-            <FaderMeter
-              trackId={track.id}
-              volume={track.volume}
-              onVolumeChange={(v) => updateTrack(track.id, { volume: v })}
-              trackName={track.displayName}
-            />
-          </div>
+          {/* Row 2: combined fader + stereo meter (hidden for video tracks) */}
+          {track.trackType !== 'video' && (
+            <div data-testid="track-header-row2" className="w-full">
+              <FaderMeter
+                trackId={track.id}
+                volume={track.volume}
+                onVolumeChange={(v) => updateTrack(track.id, { volume: v })}
+                trackName={track.displayName}
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* Single-row compact layout (laneHeight < 60) */

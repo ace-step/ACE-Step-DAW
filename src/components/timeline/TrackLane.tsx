@@ -144,6 +144,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   const isDrumMachine = trackType === 'drumMachine';
   const isPianoRoll = trackType === 'pianoRoll';
   const isStrudel = trackType === 'strudel';
+  const isVideo = trackType === 'video';
   const totalWidth = getTimelineVisualDuration(totalDuration, pixelsPerSecond, timelineViewportWidth) * pixelsPerSecond;
   const defaultClipDuration = getBarDuration(bpm, timeSignature, timeSignatureDenominator) * 4;
 
@@ -347,7 +348,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
   }, [applyStrudelCodeToTrack, convertMidiFileToStrudel, loadVST3Plugin, placeGenerationHistoryOnTrack, hasProject, bpm, tempoMap, pixelsPerSecond, track.id, track.trackType, importAssetAsQuickSampler, importAssetToTrack, importAudioFileAsSampler, importAudioFileAsNewQuickSampler, importAudioToTrack, importMidiFile, importLoopToTrack, setOpenStrudelEditor]);
 
   const hasClips = track.clips.length > 0;
-  const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel;
+  const shouldHighlightEmptyLane = !hasClips && !isSequencer && !isDrumMachine && !isPianoRoll && !isStrudel && !isVideo;
   const automationLanes = useMemo(
     () => (automationLanesRaw ?? []).filter((l) => l.trackId === track.id),
     [automationLanesRaw, track.id],
@@ -498,6 +499,15 @@ function TrackLaneInner({ track }: TrackLaneProps) {
               <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-[#444] border-dashed">
                 <span className="text-violet-300 text-sm">{TRACK_TYPE_CATALOG[trackType].abbr}</span>
                 <span className="text-xs text-zinc-400">Double-click to create or open a MIDI clip</span>
+              </div>
+            </div>
+          )}
+
+          {isVideo && !hasClips && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex items-center gap-2 bg-[#2d2d2d]/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-sky-500/30 border-dashed">
+                <span className="text-sky-400 text-sm">VID</span>
+                <span className="text-xs text-zinc-400">Drag a video file here to add footage</span>
               </div>
             </div>
           )}

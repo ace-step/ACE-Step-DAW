@@ -53,6 +53,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const totalDuration = useProjectStore((s) => s.project?.totalDuration ?? 600);
   const isMidiClip = Boolean(clip.midiData);
+  const isVideoClip = Boolean(clip.videoData);
   const hasAudioBody = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey || clip.waveformPeaks);
 
   const [addLayerOpen, setAddLayerOpen] = useState(false);
@@ -379,6 +380,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           />
         )}
 
+        {/* Video clip filmstrip placeholder */}
+        {isVideoClip && clip.videoData && (
+          <div
+            className="absolute inset-0 flex items-center justify-center overflow-hidden"
+            style={{ opacity: 0.6 }}
+          >
+            <div className="flex items-center gap-1 text-sky-300/70">
+              <span className="text-[10px]">{clip.videoData.width}x{clip.videoData.height}</span>
+              <span className="text-[10px] opacity-50">|</span>
+              <span className="text-[10px]">{clip.videoData.frameRate}fps</span>
+            </div>
+          </div>
+        )}
+
         {/* Title */}
         <div
           className="absolute left-1.5 text-[10px] font-medium truncate leading-4 z-10 pointer-events-none"
@@ -388,7 +403,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             color: clipPresentation.titleColor,
           }}
         >
-          {isMidiClip ? `${clip.midiData?.notes.length ?? 0} notes` : (clip.prompt || '(no prompt)')}
+          {isVideoClip ? (clip.videoData?.originalFileName ?? 'Video') : isMidiClip ? `${clip.midiData?.notes.length ?? 0} notes` : (clip.prompt || '(no prompt)')}
         </div>
 
         {/* Version navigation */}

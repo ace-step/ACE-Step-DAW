@@ -102,6 +102,27 @@ function TrackTypeDetails({ track }: { track: Track }) {
     );
   }
 
+  if (trackType === 'video') {
+    const videoClip = track.clips.find((c) => c.videoData);
+    const vd = videoClip?.videoData;
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px] max-w-[280px]">
+        <SectionLabel>Video</SectionLabel>
+        <InfoRow label="Type" value={typeInfo?.label ?? 'Video'} />
+        <InfoRow label="Clips" value={String(track.clips.length)} />
+        {vd && (
+          <>
+            <InfoRow label="Resolution" value={`${vd.width}x${vd.height}`} />
+            <InfoRow label="Frame Rate" value={`${vd.frameRate} fps`} />
+            <InfoRow label="Duration" value={`${vd.fileDuration.toFixed(1)}s`} />
+            <InfoRow label="Codec" value={vd.codec} />
+            {vd.isIntraCodec && <InfoRow label="Seek" value="Intra-frame (fast)" />}
+          </>
+        )}
+      </div>
+    );
+  }
+
   // Fallback for unknown types
   return (
     <div className="flex flex-col gap-1 min-w-[160px]">

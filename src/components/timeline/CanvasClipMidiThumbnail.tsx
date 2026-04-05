@@ -80,7 +80,7 @@ export function CanvasClipMidiThumbnail({
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: MIDI_THUMBNAIL_TOP }}>
       <canvas
         ref={canvasRef}
-        style={{ width: safeWidth, height }}
+        style={{ width: '100%', height }}
         data-testid="midi-thumbnail-canvas"
       />
     </div>

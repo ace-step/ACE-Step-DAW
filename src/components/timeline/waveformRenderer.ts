@@ -72,6 +72,9 @@ export function getMinMaxForColumn(
   columnCount: number,
   channelOffset: number,
 ): { max: number; min: number } {
+  if (columnCount <= 0) {
+    return { max: 0, min: 0 };
+  }
   const start = peakSlice.startPeakIdx + Math.floor((columnIndex / columnCount) * peakSlice.numBars);
   const end = peakSlice.startPeakIdx + Math.ceil(((columnIndex + 1) / columnCount) * peakSlice.numBars);
   let max = 0;
@@ -287,6 +290,9 @@ export function drawMidiThumbnail(params: MidiThumbnailRenderParams): void {
   ctx.fillStyle = color;
   ctx.globalAlpha = 0.7;
 
+  // Detect roundRect support (missing in older Safari)
+  const hasRoundRect = typeof ctx.roundRect === 'function';
+
   for (const note of filteredNotes) {
     const x = (note.startBeat * secPerBeat / duration) * width;
     const noteWidth = Math.max((note.durationBeats * secPerBeat / duration) * width, 1);
@@ -294,7 +300,11 @@ export function drawMidiThumbnail(params: MidiThumbnailRenderParams): void {
     const noteHeight = Math.max(height / (range + pad * 2), 2);
 
     ctx.beginPath();
-    ctx.roundRect(x, y, noteWidth, noteHeight, 0.5);
+    if (hasRoundRect) {
+      ctx.roundRect(x, y, noteWidth, noteHeight, 0.5);
+    } else {
+      ctx.rect(x, y, noteWidth, noteHeight);
+    }
     ctx.fill();
   }
 

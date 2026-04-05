@@ -94,7 +94,9 @@ export class FpsMeasure {
   }
 }
 
-/** Expose on window for manual browser testing via console */
-if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).__fpsMeasure = FpsMeasure;
+/** Expose FpsMeasure on window for manual browser console testing. Call from main.tsx or dev entry. */
+export function exposeFpsMeasureOnWindow(): void {
+  if (typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__fpsMeasure = FpsMeasure;
+  }
 }

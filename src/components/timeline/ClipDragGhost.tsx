@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import type { MidiClipData, StretchMode } from '../../types/project';
 import { hexToRgba } from '../../utils/color';
 import { Z } from '../../utils/zIndex';
-import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { CanvasClipWaveform } from './CanvasClipWaveform';
+import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
 import type { DragGhostInfo } from './useClipDrag';
 import { HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 import type { ClipPresentation } from './clipPresentation';
@@ -104,7 +105,7 @@ export function ClipDragGhost({
           className="absolute left-0 right-0 bottom-0 overflow-hidden"
           style={{ top: HEADER_RAIL_HEIGHT_PX }}
         >
-          <ClipWaveform
+          <CanvasClipWaveform
             peaks={peaks}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
@@ -114,14 +115,15 @@ export function ClipDragGhost({
             stretchMode={stretchMode}
             width={width}
             color={isValid ? clipPresentation.waveformColor : invalidColor}
-            opacityClassName="opacity-85"
+            opacity={0.85}
             trackVolume={trackVolume}
           />
         </div>
         {isMidiClip && midiData && (
-          <ClipMidiThumbnail
+          <CanvasClipMidiThumbnail
             midiData={midiData}
             width={dragGhost.width}
+            height={Math.max(0, dragGhost.height - 14)}
             duration={clipDuration}
             bpm={bpm}
             color={isValid ? clipPresentation.waveformColor : invalidColor}

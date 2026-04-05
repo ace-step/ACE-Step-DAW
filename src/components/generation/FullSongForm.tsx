@@ -10,6 +10,7 @@ import { generateText2Music, regenerateClip } from '../../services/generationPip
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { TimbrePresetSelector } from './TimbrePresetSelector';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -327,6 +328,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="Describe the music you want to generate..."
         />
       </section>
+
+      {/* Timbre Preset */}
+      <TimbrePresetSelector
+        currentPrompt={prompt}
+        onApplyTimbre={(newPrompt) => setPrompt(newPrompt)}
+        disabled={isDisabled}
+      />
 
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">

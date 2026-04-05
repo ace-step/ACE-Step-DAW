@@ -300,9 +300,17 @@ export function SessionView() {
               }}
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="cursor-grab active:cursor-grabbing">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
-                  <div className="text-sm font-semibold text-zinc-100">{sceneIndex + 1}</div>
+                <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing">
+                  {scenes[sceneIndex]?.color && (
+                    <div
+                      className="w-1 h-6 rounded-sm shrink-0"
+                      style={{ backgroundColor: scenes[sceneIndex].color }}
+                    />
+                  )}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
+                    <div className="text-sm font-semibold text-zinc-100">{sceneIndex + 1}</div>
+                  </div>
                 </div>
                 <button
                   onClick={() => void launchSessionScene(sceneIndex, sceneLaunches)}
@@ -320,14 +328,18 @@ export function SessionView() {
                   {scenes[sceneIndex].followActionTime ? ` (${scenes[sceneIndex].followActionTime} bars)` : ''}
                 </div>
               )}
-              {scenes[sceneIndex]?.tempo && (
-                <div className="text-[9px] text-zinc-500">
-                  {scenes[sceneIndex].tempo} BPM
-                </div>
-              )}
-              {scenes[sceneIndex]?.timeSignature && (
-                <div className="text-[9px] text-zinc-500">
-                  {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
+              {(scenes[sceneIndex]?.tempo || scenes[sceneIndex]?.timeSignature) && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {scenes[sceneIndex]?.tempo && (
+                    <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                      {scenes[sceneIndex].tempo} BPM
+                    </span>
+                  )}
+                  {scenes[sceneIndex]?.timeSignature && (
+                    <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
+                      {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -500,6 +512,23 @@ export function SessionView() {
             testId="session-scene-context-menu"
             minWidth={200}
           >
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              Scene Color
+            </div>
+            <div className="px-2 py-1.5">
+              <ColorSwatchPalette
+                hasCustomColor={!!scene?.color}
+                onAssignColor={(color) => {
+                  updateSessionSceneProperties(sceneMenu.sceneId, { color });
+                }}
+                onResetColor={() => {
+                  updateSessionSceneProperties(sceneMenu.sceneId, { color: undefined });
+                }}
+                labelPrefix="Assign scene color"
+                testId="scene-color-palette"
+              />
+            </div>
+            <ContextMenuSeparator />
             <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
               Tempo Override
             </div>

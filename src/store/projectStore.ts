@@ -772,7 +772,7 @@ export interface ProjectState extends MidiSliceActions {
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
-  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
 
   removeAsset: (assetId: string) => void;

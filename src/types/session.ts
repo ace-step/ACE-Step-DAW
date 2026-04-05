@@ -31,6 +31,8 @@ export interface SessionScene {
   name: string;
   /** Row index in the session grid. */
   index: number;
+  /** Optional color for visual identification. */
+  color?: string;
   /** Optional tempo override (BPM) applied when this scene launches. */
   tempo?: number;
   /** Optional time signature override [numerator, denominator] applied when this scene launches. */

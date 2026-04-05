@@ -50,8 +50,8 @@ describe('ClipContextMenu split option', () => {
     renderMenu();
     const label = screen.getByText('Split');
     const button = label.closest('button')!;
-    const shortcutSpan = button.querySelectorAll('span')[1];
-    expect(shortcutSpan?.textContent).toBe('⌘E');
+    const shortcutKbd = button.querySelector('kbd');
+    expect(shortcutKbd?.textContent).toBe('⌘E');
   });
 });
 

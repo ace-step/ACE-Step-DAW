@@ -76,15 +76,19 @@ export function TimelineOverlayCanvas({
 
     // Selection drag overlay (accent-tinted)
     if (selDrag) {
+      const hasRoundRect = typeof ctx.roundRect === 'function';
+
       ctx.fillStyle = 'rgba(94, 89, 255, 0.10)';
       ctx.beginPath();
-      ctx.roundRect(selDrag.left, selDrag.top, selDrag.width, selDrag.height, 1);
+      if (hasRoundRect) ctx.roundRect(selDrag.left, selDrag.top, selDrag.width, selDrag.height, 1);
+      else ctx.rect(selDrag.left, selDrag.top, selDrag.width, selDrag.height);
       ctx.fill();
 
       ctx.strokeStyle = 'rgba(94, 89, 255, 0.7)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(selDrag.left, selDrag.top, selDrag.width, selDrag.height, 1);
+      if (hasRoundRect) ctx.roundRect(selDrag.left, selDrag.top, selDrag.width, selDrag.height, 1);
+      else ctx.rect(selDrag.left, selDrag.top, selDrag.width, selDrag.height);
       ctx.stroke();
     }
   }, [width, height, ctxDrag, selDrag]);

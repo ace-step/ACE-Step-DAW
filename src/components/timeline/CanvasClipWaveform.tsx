@@ -107,7 +107,7 @@ export function CanvasClipWaveform({
     <div ref={containerRef} className="absolute inset-0 overflow-hidden">
       <canvas
         ref={canvasRef}
-        style={{ width: safeWidth, height: measuredHeight || '100%' }}
+        style={{ width: '100%', height: measuredHeight || '100%' }}
         data-testid="waveform-canvas"
       />
     </div>

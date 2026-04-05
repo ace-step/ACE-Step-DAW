@@ -337,6 +337,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
         importAudioFileAsSampler,
         importAudioFileAsNewQuickSampler,
         importAudioToTrack,
+        importVideoToTrack: async () => { /* Phase 2 stub — full import wired in useVideoImport hook */ },
         importMidiFile,
         convertMidiFileToStrudel,
         applyStrudelCodeToTrack,

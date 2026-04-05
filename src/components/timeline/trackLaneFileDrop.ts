@@ -1,4 +1,5 @@
 import type { TrackType, StrudelFromMidiResult } from '../../types/project';
+import { isVideoFile } from '../../services/videoService';
 
 export interface TrackLaneFileDropOptions {
   file: File;
@@ -9,6 +10,7 @@ export interface TrackLaneFileDropOptions {
   importAudioFileAsSampler: (file: File, trackId: string) => Promise<void> | void;
   importAudioFileAsNewQuickSampler: (file: File) => Promise<void> | void;
   importAudioToTrack: (file: File, trackId: string, startTime: number) => Promise<void> | void;
+  importVideoToTrack: (file: File, trackId: string, startTime: number) => Promise<void> | void;
   importMidiFile: (file: File, startTime?: number) => Promise<unknown> | unknown;
   convertMidiFileToStrudel: (file: File) => Promise<StrudelFromMidiResult | null>;
   applyStrudelCodeToTrack: (
@@ -39,11 +41,17 @@ export async function processTrackLaneFileDrop(options: TrackLaneFileDropOptions
     importAudioFileAsSampler,
     importAudioFileAsNewQuickSampler,
     importAudioToTrack,
+    importVideoToTrack,
     importMidiFile,
     convertMidiFileToStrudel,
     applyStrudelCodeToTrack,
     setOpenStrudelEditor,
   } = options;
+
+  if (isVideoFile(file)) {
+    await importVideoToTrack(file, trackId, startTime);
+    return;
+  }
 
   if (isMidiFile(file)) {
     if (trackType === 'strudel') {

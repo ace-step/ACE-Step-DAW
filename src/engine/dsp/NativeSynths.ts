@@ -629,6 +629,7 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
   octaves = 4;
 
   private readonly _gain: GainNode;
+  private readonly _dcSource: OscillatorNode;
 
   constructor(ctx: AudioContext, options?: IDSPFrequencyEnvelopeOptions) {
     super(ctx);
@@ -639,9 +640,15 @@ export class NativeFrequencyEnvelope extends NativeSynthBase implements IDSPFreq
     if (options?.baseFrequency !== undefined) this.baseFrequency = options.baseFrequency;
     if (options?.octaves !== undefined) this.octaves = options.octaves;
 
+    // Use a zero-frequency oscillator (DC=1) as signal source so that
+    // the gain node outputs a non-zero signal usable for AudioParam modulation.
+    this._dcSource = ctx.createOscillator();
+    this._dcSource.frequency.value = 0;
     this._gain = ctx.createGain();
     this._gain.gain.value = 0;
+    this._dcSource.connect(this._gain);
     this._gain.connect(this._output);
+    this._dcSource.start();
   }
 
   triggerAttack(time?: number): void {

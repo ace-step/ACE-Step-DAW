@@ -117,6 +117,92 @@ describe('coreKeyboardActions', () => {
     expect(useTransportStore.getState().isPlaying).toBe(false);
   });
 
+  it('toggles loop on transport', async () => {
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    expect(useTransportStore.getState().loopEnabled).toBe(false);
+    const result = await executeCoreKeyboardAction('transport.loop', deps);
+    expect(result).toBe(true);
+    expect(useTransportStore.getState().loopEnabled).toBe(true);
+  });
+
+  it('bypasses effects on focused track', async () => {
+    const synth = useProjectStore.getState().addTrack('synth');
+    useUIStore.getState().setKeyboardContext('timeline', synth.id);
+
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    const result = await executeCoreKeyboardAction('tracks.bypassEffects', deps);
+    expect(result).toBe(true);
+  });
+
+  it('returns false for bypassEffects when not in track scope', async () => {
+    useUIStore.getState().setKeyboardContext('global');
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    const result = await executeCoreKeyboardAction('tracks.bypassEffects', deps);
+    expect(result).toBe(false);
+  });
+
+  it('returns false for mute/solo when not in track scope', async () => {
+    useUIStore.getState().setKeyboardContext('global');
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    expect(await executeCoreKeyboardAction('tracks.mute', deps)).toBe(false);
+    expect(await executeCoreKeyboardAction('tracks.solo', deps)).toBe(false);
+  });
+
+  it('returns false for record when no track is focused and none are armed', async () => {
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    // No track focused, none armed
+    useUIStore.getState().setKeyboardContext('timeline');
+    const result = await executeCoreKeyboardAction('transport.record', deps);
+    expect(result).toBe(false);
+  });
+
+  it('stops recording when already recording', async () => {
+    const toggleRecord = vi.fn().mockResolvedValue(undefined);
+    useTransportStore.setState({ isRecording: true });
+
+    const result = await executeCoreKeyboardAction('transport.record', {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord, toggleArmTrack: vi.fn(),
+    });
+
+    expect(result).toBe(true);
+    expect(toggleRecord).toHaveBeenCalled();
+  });
+
+  it('creates action wrapper via createCoreKeyboardActions', async () => {
+    const { createCoreKeyboardActions } = await import('../../src/services/coreKeyboardActions');
+    const deps = {
+      play: vi.fn(), pause: vi.fn(),
+      toggleRecord: vi.fn(), toggleArmTrack: vi.fn(),
+    };
+
+    const actions = createCoreKeyboardActions(deps);
+    expect(typeof actions.execute).toBe('function');
+
+    const result = await actions.execute('transport.loop');
+    expect(result).toBe(true);
+  });
+
   it('returns false for invalid action ids from untyped callers', async () => {
     const result = await executeCoreKeyboardAction('invalid.action', {
       play: vi.fn(),

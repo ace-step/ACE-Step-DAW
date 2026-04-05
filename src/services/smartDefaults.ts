@@ -37,7 +37,7 @@ export interface DefaultsTrackingEntry {
   genre: string;
   source: 'wiki' | 'static' | 'fallback';
   paramsUsed: RecommendedParams;
-  outcome: 'kept' | 'regenerated' | 'adjusted' | 'deleted';
+  outcome: 'kept' | 'regenerated' | 'adjusted' | 'deleted' | 'failed';
   rating?: number;
 }
 
@@ -52,10 +52,10 @@ export class SmartDefaults {
    * Get recommended parameters for a genre.
    * Priority: wiki suggestion → static preset → generic fallback.
    */
-  async suggest(genre: string): Promise<SmartDefaultsResult> {
+  async suggest(genre: string, taskType = 'text2music'): Promise<SmartDefaultsResult> {
     // Try wiki first
     const wiki = getRecipeWiki();
-    const suggestion = await wiki.query(genre, 'text2music');
+    const suggestion = await wiki.query(genre, taskType);
 
     if (suggestion && suggestion.confidence >= 0.2) {
       return {

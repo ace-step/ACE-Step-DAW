@@ -76,7 +76,7 @@ describe('RecipeWiki', () => {
       const event = makeGenEvent();
       const entry = await wiki.ingest(event);
 
-      expect(entry.genre).toBe('Lo-Fi');
+      expect(entry.genre).toBe('lo-fi');
       expect(entry.prompt).toBe(event.prompt);
       expect(entry.taskType).toBe('text2music');
       expect(entry.params.cfgStrength).toBe(5);
@@ -91,7 +91,7 @@ describe('RecipeWiki', () => {
     it('uses first inferred genre or "Unknown"', async () => {
       const event = makeGenEvent({ inferredMetas: undefined });
       const entry = await wiki.ingest(event);
-      expect(entry.genre).toBe('Unknown');
+      expect(entry.genre).toBe('unknown');
     });
 
     it('maps failed generation events', async () => {

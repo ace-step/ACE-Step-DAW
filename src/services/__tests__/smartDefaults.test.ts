@@ -54,9 +54,9 @@ describe('SmartDefaults', () => {
 
   describe('suggest', () => {
     it('returns wiki-based suggestion when genre data is sufficient', async () => {
-      // RecipeWiki.query will read from get(`recipe:genre:Lo-Fi`)
+      // RecipeWiki.query will read from get(`recipe:genre:lo-fi`)
       mockGet.mockImplementation((key: string) => {
-        if (key === 'recipe:genre:Lo-Fi') return Promise.resolve(makeGenreRecipe());
+        if (key === 'recipe:genre:lo-fi') return Promise.resolve(makeGenreRecipe());
         return Promise.resolve(undefined);
       });
 
@@ -92,7 +92,7 @@ describe('SmartDefaults', () => {
 
     it('prefers wiki over static when confidence is sufficient', async () => {
       mockGet.mockImplementation((key: string) => {
-        if (key === 'recipe:genre:Pop') {
+        if (key === 'recipe:genre:pop') {
           return Promise.resolve(makeGenreRecipe({
             genre: 'Pop',
             totalGenerations: 10,
@@ -110,7 +110,7 @@ describe('SmartDefaults', () => {
 
     it('falls back to static when wiki confidence is too low', async () => {
       mockGet.mockImplementation((key: string) => {
-        if (key === 'recipe:genre:Pop') {
+        if (key === 'recipe:genre:pop') {
           return Promise.resolve(makeGenreRecipe({
             genre: 'Pop',
             totalGenerations: 1, // Very low → low confidence

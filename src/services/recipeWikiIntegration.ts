@@ -29,7 +29,10 @@ export function startRecipeWikiIngest(): void {
     );
 
     for (const event of genEvents) {
-      void wiki.ingest(event);
+      void wiki.ingest(event).catch(() => {
+        // Silently handle ingest failures (IndexedDB quota, serialization)
+        // to avoid unhandled promise rejections
+      });
     }
   });
 }
@@ -63,28 +66,47 @@ export async function getSmartDefaults(
  * Generate dynamic presets from wiki data, supplementing static ones.
  * Wiki-derived presets are marked with `source: 'wiki'`.
  */
-export async function getDynamicPresets(): Promise<
-  (GenerationPreset & { source: 'static' | 'wiki'; sampleSize?: number })[]
-> {
+export interface DynamicPreset {
+  id: string;
+  name: string;
+  caption: string;
+  lyricsTemplate: string;
+  suggestedBpm: number;
+  suggestedKey: string;
+  source: 'static' | 'wiki';
+  /** Original category for static presets */
+  category?: GenerationPreset['category'];
+  /** Learned genre name for wiki presets (may not match static categories) */
+  learnedGenre?: string;
+  sampleSize?: number;
+}
+
+export async function getDynamicPresets(): Promise<DynamicPreset[]> {
   const wiki = getRecipeWiki();
   const genres = await wiki.listGenres();
 
-  const staticPresets = GENERATION_PRESETS.map(p => ({
-    ...p,
+  const staticPresets: DynamicPreset[] = GENERATION_PRESETS.map(p => ({
+    id: p.id,
+    name: p.name,
+    caption: p.caption,
+    lyricsTemplate: p.lyricsTemplate,
+    suggestedBpm: p.suggestedBpm,
+    suggestedKey: p.suggestedKey,
     source: 'static' as const,
+    category: p.category,
   }));
 
-  const wikiPresets = genres
+  const wikiPresets: DynamicPreset[] = genres
     .filter(g => g.totalGenerations >= 3 && g.bestPrompts.length > 0)
     .map(g => ({
-      id: `wiki-${g.genre.toLowerCase().replace(/\s+/g, '-')}`,
+      id: `wiki-${g.genre}`,
       name: `${g.genre} (Learned)`,
-      category: g.genre as GenerationPreset['category'],
       caption: g.bestPrompts[0]?.prompt ?? '',
       lyricsTemplate: '',
       suggestedBpm: g.recommendedParams.bpm ?? 120,
       suggestedKey: g.recommendedParams.keyScale ?? 'C major',
       source: 'wiki' as const,
+      learnedGenre: g.genre,
       sampleSize: g.totalGenerations,
     }));
 

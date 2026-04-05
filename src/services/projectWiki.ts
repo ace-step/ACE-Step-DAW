@@ -147,7 +147,7 @@ export class ProjectWiki {
     return lines.join('\n');
   }
 
-  // ─── Export / Import ───────────────────────────────────────���────────────
+  // ─── Export / Import ────────────────────────────────────────────────────
 
   exportWiki(): ProjectWikiExport {
     return {

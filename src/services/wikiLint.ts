@@ -132,7 +132,7 @@ const PROJECT_BRIEF_INCOMPLETE: LintRule = {
 
 const PROJECT_MANY_FAILURES: LintRule = {
   name: 'project-many-failures',
-  description: 'Flag projects with repeated failed generations using same params',
+  description: 'Flag projects with 3+ failed generations',
   check: ({ projectWiki }) => {
     if (!projectWiki) return [];
     const failed = projectWiki.generationLog.filter(e => e.outcome === 'failed');
@@ -228,13 +228,36 @@ export class WikiLint {
 
   /**
    * Run only lightweight checks (suitable for project-open).
+   * Builds a minimal context — skips dev wiki pages to stay fast.
    */
   async quickCheck(projectWiki?: ProjectWikiState | null): Promise<WikiHealthSummary> {
-    const lightweightRules = this.rules.filter(r =>
-      ['project-brief-incomplete', 'project-many-failures', 'recipe-low-sample'].includes(r.name)
-    );
-    const lint = new WikiLint(lightweightRules);
-    return lint.check(projectWiki);
+    const lightweightRuleNames = new Set([
+      'project-brief-incomplete', 'project-many-failures', 'recipe-low-sample',
+    ]);
+    const lightweightRules = this.rules.filter(r => lightweightRuleNames.has(r.name));
+
+    // Build lightweight context — only fetch recipe genres (skip dev wiki)
+    const recipeWiki = getRecipeWiki();
+    const recipeGenres = await recipeWiki.listGenres();
+    const context: LintContext = {
+      recipeGenres,
+      devPages: [], // Skip dev wiki scan for quick checks
+      projectWiki: projectWiki ?? null,
+    };
+
+    const results: LintResult[] = [];
+    for (const rule of lightweightRules) {
+      results.push(...rule.check(context));
+    }
+
+    return {
+      totalIssues: results.length,
+      errors: results.filter(r => r.severity === 'error').length,
+      warnings: results.filter(r => r.severity === 'warning').length,
+      info: results.filter(r => r.severity === 'info').length,
+      results,
+      checkedAt: Date.now(),
+    };
   }
 
   /**

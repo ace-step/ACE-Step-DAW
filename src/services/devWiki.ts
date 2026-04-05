@@ -1,6 +1,8 @@
 /**
- * Development Knowledge Wiki — File-based wiki for competitive research
- * and architecture decisions. Used by AI agents (@researcher, @product-manager).
+ * Development Knowledge Wiki — Browser-side IndexedDB wiki for competitive
+ * research and architecture decisions at runtime. The static `.llm/wiki/`
+ * directory provides seed content for AI agents; this service manages the
+ * dynamic, queryable copy in IndexedDB for the DAW application.
  * @see https://github.com/ace-step/ACE-Step-DAW/issues/1455
  */
 

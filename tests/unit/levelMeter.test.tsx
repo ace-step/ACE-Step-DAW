@@ -38,7 +38,7 @@ describe('LevelMeter', () => {
     expect(canvas).not.toBeNull();
     expect(canvas.tagName.toLowerCase()).toBe('canvas');
     expect(canvas.getAttribute('role')).toBe('img');
-    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
+    expect(canvas.getAttribute('aria-label')).toBe('Track track-1 level meter');
   });
 
   it('renders a canvas with master aria-label for master stage', () => {

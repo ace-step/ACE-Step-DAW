@@ -218,7 +218,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={ariaLabel ?? (masterStage ? `Master ${masterStage} level meter` : 'Audio level meter')}
+        aria-label={ariaLabel ?? (masterStage ? `Master ${masterStage} level meter` : returnTrackId ? `Return ${returnTrackId} level meter` : trackId ? `Track ${trackId} level meter` : 'Audio level meter')}
         data-testid="meter-canvas"
         className="absolute inset-y-0 rounded-sm"
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}

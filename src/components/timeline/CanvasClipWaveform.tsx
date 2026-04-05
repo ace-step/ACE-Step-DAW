@@ -31,6 +31,7 @@ export function CanvasClipWaveform({
 }: CanvasClipWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
   const [measuredHeight, setMeasuredHeight] = useState(0);
 
   // Measure the container height (replaces SVG height="100%")
@@ -54,13 +55,22 @@ export function CanvasClipWaveform({
     if (!canvas || !peaks || peaks.length === 0 || width <= 0 || measuredHeight <= 0) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = measuredHeight * dpr;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.scale(dpr, dpr);
+    // Only resize backing store when dimensions change (avoids expensive reallocation)
+    const metrics = canvasMetricsRef.current;
+    const needsResize =
+      !metrics || metrics.width !== width || metrics.height !== measuredHeight || metrics.dpr !== dpr;
+
+    if (needsResize) {
+      canvas.width = width * dpr;
+      canvas.height = measuredHeight * dpr;
+      canvasMetricsRef.current = { width, height: measuredHeight, dpr };
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, measuredHeight);
 
     drawWaveform({
       ctx,

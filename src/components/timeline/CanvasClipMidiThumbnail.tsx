@@ -21,19 +21,29 @@ export function CanvasClipMidiThumbnail({
   color,
 }: CanvasClipMidiThumbnailProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || midiData.notes.length === 0 || width <= 0 || height <= 0) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.scale(dpr, dpr);
+    // Only resize backing store when dimensions change
+    const metrics = canvasMetricsRef.current;
+    const needsResize =
+      !metrics || metrics.width !== width || metrics.height !== height || metrics.dpr !== dpr;
+
+    if (needsResize) {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvasMetricsRef.current = { width, height, dpr };
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
 
     drawMidiThumbnail({
       ctx,

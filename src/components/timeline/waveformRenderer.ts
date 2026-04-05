@@ -220,11 +220,15 @@ export function drawWaveform(params: WaveformRenderParams): void {
   const strokeAlpha = 1.0 * opacity;
   const dividerAlpha = 0.2 * opacity;
 
+  // Scale line widths to match SVG viewBox="0 0 width 100" proportions.
+  // The SVG strokeWidth values (0.5, 0.8) were in viewBox units that scaled with height.
+  const viewBoxScale = height / 100;
+
   // Center divider
   const centerDividerY = height * 0.5;
   ctx.strokeStyle = color;
   ctx.globalAlpha = dividerAlpha;
-  ctx.lineWidth = 0.5;
+  ctx.lineWidth = 0.5 * viewBoxScale;
   ctx.beginPath();
   ctx.moveTo(waveformLayout.leftPx, centerDividerY);
   ctx.lineTo(waveformLayout.leftPx + waveformLayout.widthPx, centerDividerY);
@@ -238,13 +242,13 @@ export function drawWaveform(params: WaveformRenderParams): void {
   // Left channel (centered at 25%) — fill + envelope in one pass
   drawChannelComplete(
     ctx, leftMinMax, columnCount, columnWidth,
-    waveformLayout.leftPx, height * 0.25, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8,
+    waveformLayout.leftPx, height * 0.25, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8 * viewBoxScale,
   );
 
   // Right channel (centered at 75%) — fill + envelope in one pass
   drawChannelComplete(
     ctx, rightMinMax, columnCount, columnWidth,
-    waveformLayout.leftPx, height * 0.75, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8,
+    waveformLayout.leftPx, height * 0.75, scaledAmplitude, color, fillAlpha, strokeAlpha, 0.8 * viewBoxScale,
   );
 }
 

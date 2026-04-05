@@ -123,7 +123,7 @@ export function ClipDragGhost({
           <CanvasClipMidiThumbnail
             midiData={midiData}
             width={dragGhost.width}
-            height={Math.max(0, dragGhost.height - HEADER_RAIL_HEIGHT_PX)}
+            height={Math.max(0, dragGhost.height - 14)}
             duration={clipDuration}
             bpm={bpm}
             color={isValid ? clipPresentation.waveformColor : invalidColor}

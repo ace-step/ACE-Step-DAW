@@ -6,12 +6,9 @@ function initProject() {
     name: 'Test',
     bpm: 120,
     timeSignature: 4,
-    tracks: [
-      { name: 'Track 1', trackType: 'stems' },
-    ],
   });
-  // Ensure session exists with scenes
-  useProjectStore.getState().ensureProjectSession?.();
+  // Create a scene so tests have something to work with
+  useProjectStore.getState().createSessionScene('Scene 1');
 }
 
 function getScenes() {
@@ -36,7 +33,7 @@ describe('Scene Properties (#1033)', () => {
   describe('updateSessionSceneProperties', () => {
     it('sets tempo override on a scene', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { tempo: 140 });
@@ -46,7 +43,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('sets time signature override on a scene', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { timeSignature: [3, 4] });
@@ -56,7 +53,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('clears tempo override when set to undefined', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { tempo: 140 });
@@ -67,7 +64,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('clears time signature override when set to undefined', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { timeSignature: [6, 8] });
@@ -78,7 +75,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('sets color on a scene', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { color: '#ff6b6b' });
@@ -88,7 +85,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('clears color when set to undefined', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, { color: '#ff6b6b' });
@@ -99,7 +96,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('updates multiple properties at once', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().updateSessionSceneProperties(sceneId, {
@@ -114,16 +111,15 @@ describe('Scene Properties (#1033)', () => {
     });
 
     it('does nothing for non-existent scene ID', () => {
-      const before = getScenes();
+      const before = structuredClone(getScenes());
       useProjectStore.getState().updateSessionSceneProperties('non-existent', { tempo: 200 });
       expect(getScenes()).toEqual(before);
     });
 
     it('preserves other scenes when updating one', () => {
-      // Create a second scene
       useProjectStore.getState().createSessionScene('Scene 2');
       const scenes = getScenes();
-      if (scenes.length < 2) return;
+      expect(scenes.length).toBeGreaterThanOrEqual(2);
 
       useProjectStore.getState().updateSessionSceneProperties(scenes[0].id, { tempo: 100 });
       const updated = getScenes();
@@ -135,7 +131,7 @@ describe('Scene Properties (#1033)', () => {
   describe('setSessionSceneFollowAction', () => {
     it('sets follow action on a scene', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().setSessionSceneFollowAction(sceneId, 'next', 4);
@@ -146,7 +142,7 @@ describe('Scene Properties (#1033)', () => {
 
     it('clears follow action with none', () => {
       const scenes = getScenes();
-      if (scenes.length === 0) return;
+      expect(scenes.length).toBeGreaterThan(0);
       const sceneId = scenes[0].id;
 
       useProjectStore.getState().setSessionSceneFollowAction(sceneId, 'next', 4);

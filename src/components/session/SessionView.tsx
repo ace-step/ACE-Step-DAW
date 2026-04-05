@@ -328,14 +328,14 @@ export function SessionView() {
                   {scenes[sceneIndex].followActionTime ? ` (${scenes[sceneIndex].followActionTime} bars)` : ''}
                 </div>
               )}
-              {(scenes[sceneIndex]?.tempo || scenes[sceneIndex]?.timeSignature) && (
+              {(scenes[sceneIndex]?.tempo !== undefined || scenes[sceneIndex]?.timeSignature !== undefined) && (
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  {scenes[sceneIndex]?.tempo && (
+                  {scenes[sceneIndex]?.tempo !== undefined && (
                     <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/20">
                       {scenes[sceneIndex].tempo} BPM
                     </span>
                   )}
-                  {scenes[sceneIndex]?.timeSignature && (
+                  {scenes[sceneIndex]?.timeSignature !== undefined && (
                     <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
                       {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
                     </span>
@@ -525,6 +525,7 @@ export function SessionView() {
                   updateSessionSceneProperties(sceneMenu.sceneId, { color: undefined });
                 }}
                 labelPrefix="Assign scene color"
+                resetAriaLabel="Reset scene color"
                 testId="scene-color-palette"
               />
             </div>

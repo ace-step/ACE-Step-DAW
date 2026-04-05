@@ -9,6 +9,8 @@ interface ColorSwatchPaletteProps {
   onResetColor: () => void;
   /** aria-label prefix for swatch buttons (e.g. "Assign clip color" or "Assign slot color"). */
   labelPrefix?: string;
+  /** aria-label for the reset button. Defaults to "Reset to track color". */
+  resetAriaLabel?: string;
   /** data-testid for the wrapper. */
   testId?: string;
 }
@@ -22,6 +24,7 @@ export function ColorSwatchPalette({
   onAssignColor,
   onResetColor,
   labelPrefix = 'Assign color',
+  resetAriaLabel = 'Reset to track color',
   testId = 'color-swatch-palette',
 }: ColorSwatchPaletteProps) {
   return (
@@ -29,7 +32,7 @@ export function ColorSwatchPalette({
       {hasCustomColor && (
         <button
           type="button"
-          aria-label="Reset to track color"
+          aria-label={resetAriaLabel}
           className="w-5 h-5 rounded-full border border-white/20 flex items-center justify-center cursor-pointer hover:border-white/50 transition-colors"
           style={{ backgroundColor: '#555' }}
           onClick={onResetColor}

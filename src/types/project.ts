@@ -1129,7 +1129,15 @@ export type SessionLaunchQuantization = 'none' | '1/32' | '1/16' | '1/8' | '1/4'
 export type SessionLaunchMode = 'trigger' | 'gate' | 'toggle' | 'repeat';
 
 /** Action to perform automatically when a scene finishes playing. */
-export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'first' | 'last' | 'random' | 'again' | 'any' | 'stop';
+
+/** Dual follow action for scenes with probability weighting (Ableton-style A/B split). */
+export interface SceneFollowActionConfig {
+  actionA: SceneFollowActionType;
+  actionB: SceneFollowActionType;
+  /** Probability of action A (0–1). Action B gets 1 − chanceA. */
+  chanceA: number;
+}
 
 // ─── Follow Action Types ─────────────────────────────────────────────────────
 
@@ -1164,6 +1172,8 @@ export interface SessionScene {
   followAction?: SceneFollowActionType;
   /** Duration in bars after which the follow action triggers. */
   followActionTime?: number;
+  /** Dual follow action config with probability weighting. Takes precedence over followAction. */
+  followActionConfig?: SceneFollowActionConfig;
 }
 
 export interface SessionClipSlot {

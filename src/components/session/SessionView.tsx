@@ -10,7 +10,7 @@ import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } fro
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
-import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, FollowActionType, FollowActionConfig } from '../../types/project';
+import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
 
@@ -58,12 +58,16 @@ function isClipQueued(
 
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * 10; // r=10
 
-const FOLLOW_ACTION_OPTIONS: SceneFollowActionType[] = ['none', 'next', 'previous', 'random', 'stop'];
+const FOLLOW_ACTION_OPTIONS: SceneFollowActionType[] = ['none', 'next', 'previous', 'first', 'last', 'random', 'again', 'any', 'stop'];
 const FOLLOW_ACTION_LABELS: Record<SceneFollowActionType, string> = {
   none: 'None',
   next: 'Next',
   previous: 'Previous',
-  random: 'Random',
+  first: 'First',
+  last: 'Last',
+  random: 'Random (other)',
+  again: 'Again',
+  any: 'Any',
   stop: 'Stop',
 };
 
@@ -125,6 +129,8 @@ export function SessionView() {
   const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
   const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
   const launchSessionSceneProject = useProjectStore((s) => s.launchSessionScene);
+  const setSessionSceneFollowActionConfig = useProjectStore((s) => s.setSessionSceneFollowActionConfig);
+  const clearSessionSceneFollowActionConfig = useProjectStore((s) => s.clearSessionSceneFollowActionConfig);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
@@ -434,6 +440,16 @@ export function SessionView() {
                     )}
                   </div>
                 )}
+                {currentScene?.followActionConfig && (
+                  <div className="text-[9px] text-zinc-500 mt-0.5">
+                    {FOLLOW_ACTION_LABELS[currentScene.followActionConfig.actionA]}
+                    {currentScene.followActionConfig.chanceA < 1 && (
+                      <> / {FOLLOW_ACTION_LABELS[currentScene.followActionConfig.actionB]}
+                      {' '}({Math.round(currentScene.followActionConfig.chanceA * 100)}%)</>
+                    )}
+                    {currentScene.followActionTime ? ` · ${currentScene.followActionTime}b` : ''}
+                  </div>
+                )}
               </div>
             );
           })();
@@ -728,6 +744,84 @@ export function SessionView() {
                 </div>
               </>
             )}
+            <ContextMenuSeparator />
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              A/B Follow (probability)
+            </div>
+            <div className="px-2 py-1.5 flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-zinc-400 w-3">A</span>
+                <select
+                  value={scene?.followActionConfig?.actionA ?? 'next'}
+                  onChange={(e) => {
+                    const cfg = scene?.followActionConfig ?? { actionA: 'next', actionB: 'stop', chanceA: 1 };
+                    setSessionSceneFollowActionConfig(sceneMenu.sceneId, {
+                      ...cfg,
+                      actionA: e.target.value as SceneFollowActionType,
+                    });
+                  }}
+                  className="flex-1 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+                  aria-label="Scene follow action A"
+                  data-testid="scene-follow-action-a"
+                >
+                  {FOLLOW_ACTION_OPTIONS.filter((a) => a !== 'none').map((action) => (
+                    <option key={action} value={action}>{FOLLOW_ACTION_LABELS[action]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-zinc-400 w-3">B</span>
+                <select
+                  value={scene?.followActionConfig?.actionB ?? 'stop'}
+                  onChange={(e) => {
+                    const cfg = scene?.followActionConfig ?? { actionA: 'next', actionB: 'stop', chanceA: 1 };
+                    setSessionSceneFollowActionConfig(sceneMenu.sceneId, {
+                      ...cfg,
+                      actionB: e.target.value as SceneFollowActionType,
+                    });
+                  }}
+                  className="flex-1 rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-0.5 text-[11px] text-zinc-200 outline-none"
+                  aria-label="Scene follow action B"
+                  data-testid="scene-follow-action-b"
+                >
+                  {FOLLOW_ACTION_OPTIONS.filter((a) => a !== 'none').map((action) => (
+                    <option key={action} value={action}>{FOLLOW_ACTION_LABELS[action]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[10px] text-zinc-400 w-3">%</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round((scene?.followActionConfig?.chanceA ?? 1) * 100)}
+                  onChange={(e) => {
+                    const cfg = scene?.followActionConfig ?? { actionA: 'next', actionB: 'stop', chanceA: 1 };
+                    setSessionSceneFollowActionConfig(sceneMenu.sceneId, {
+                      ...cfg,
+                      chanceA: Number(e.target.value) / 100,
+                    });
+                  }}
+                  className="flex-1 h-1 accent-daw-accent"
+                  aria-label="A/B probability"
+                  data-testid="scene-follow-chance-slider"
+                />
+                <span className="text-[10px] text-zinc-400 w-8 text-right">
+                  {Math.round((scene?.followActionConfig?.chanceA ?? 1) * 100)}%
+                </span>
+              </div>
+              {scene?.followActionConfig && (
+                <button
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 mt-0.5 text-left"
+                  onClick={() => clearSessionSceneFollowActionConfig(sceneMenu.sceneId)}
+                  data-testid="scene-follow-clear-config"
+                >
+                  Clear A/B config
+                </button>
+              )}
+            </div>
           </ContextMenuWrapper>
         );
       })()}

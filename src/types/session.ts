@@ -23,7 +23,15 @@ export interface SessionClipSlot {
 }
 
 /** Action to perform automatically when a scene finishes playing. */
-export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'random' | 'stop';
+export type SceneFollowActionType = 'none' | 'next' | 'previous' | 'first' | 'last' | 'random' | 'again' | 'any' | 'stop';
+
+/** Dual follow action with probability weighting (Ableton-style A/B split). */
+export interface FollowActionConfig {
+  actionA: SceneFollowActionType;
+  actionB: SceneFollowActionType;
+  /** Probability of action A (0–1). Action B gets 1 − chanceA. */
+  chanceA: number;
+}
 
 /** A scene (horizontal row) that can trigger all slots at once. */
 export interface SessionScene {
@@ -39,6 +47,8 @@ export interface SessionScene {
   followAction?: SceneFollowActionType;
   /** Duration in bars after which the follow action triggers. */
   followActionTime?: number;
+  /** Dual follow action configuration with probability weighting. Takes precedence over followAction. */
+  followActionConfig?: FollowActionConfig;
 }
 
 /** A buffered MIDI event for retroactive capture. */

@@ -65,6 +65,7 @@ import type {
   SessionLaunchQuantization,
   SessionPendingLaunch,
   SceneFollowActionType,
+  SceneFollowActionConfig,
   SessionScene,
   SessionState,
   PlaybackLatencySettings,
@@ -777,6 +778,8 @@ export interface ProjectState extends MidiSliceActions {
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
   updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'name' | 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
+  setSessionSceneFollowActionConfig: (sceneId: string, config: SceneFollowActionConfig) => void;
+  clearSessionSceneFollowActionConfig: (sceneId: string) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -5759,6 +5762,49 @@ export const useProjectStore = create<ProjectState>()(
           scenes: session.scenes.map((scene) =>
             scene.id === sceneId
               ? { ...scene, followAction: action, followActionTime: action === 'none' ? undefined : bars }
+              : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  setSessionSceneFollowActionConfig: (sceneId, config) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    if (!session.scenes.some((s) => s.id === sceneId)) return;
+    _pushHistory(state.project);
+    const clampedChance = Math.max(0, Math.min(1, config.chanceA));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followActionConfig: { ...config, chanceA: clampedChance } }
+              : scene,
+          ),
+        },
+      },
+    });
+  },
+
+  clearSessionSceneFollowActionConfig: (sceneId) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: {
+          ...session,
+          scenes: session.scenes.map((scene) =>
+            scene.id === sceneId
+              ? { ...scene, followActionConfig: undefined }
               : scene,
           ),
         },

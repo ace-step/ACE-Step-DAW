@@ -7,6 +7,14 @@
  */
 import type { ReactNode } from 'react';
 
+/**
+ * Two-tier knob sizing system for visual parameter hierarchy.
+ * Primary: main parameters (threshold, ratio, freq, etc.)
+ * Secondary: supporting/fine-tune controls (knee, Q, etc.)
+ */
+export const KNOB_PRIMARY = 56;
+export const KNOB_SECONDARY = 44;
+
 interface EffectCardLayoutProps {
   mode?: ReactNode;
   visualization?: ReactNode;

@@ -102,11 +102,12 @@ export async function initMidiController(): Promise<MidiControllerState> {
   }
 
   try {
-    midiAccess = await navigator.requestMIDIAccess();
-    const inputs = Array.from(midiAccess.inputs.values());
+    const access = await navigator.requestMIDIAccess();
+    midiAccess = access as MIDIAccess;
+    const inputs = Array.from(access.inputs.values());
 
     if (inputs.length > 0) {
-      connectToInput(inputs[0]);
+      connectToInput(inputs[0] as MIDIInput);
       return {
         isAvailable: true,
         isConnected: true,
@@ -116,7 +117,7 @@ export async function initMidiController(): Promise<MidiControllerState> {
     }
 
     // Listen for new device connections and notify consumers
-    midiAccess.onstatechange = (event) => {
+    access.onstatechange = (event) => {
       if (event.port?.type === 'input' && event.port.state === 'connected' && !currentInput) {
         connectToInput(event.port as MIDIInput);
         const newState: MidiControllerState = {

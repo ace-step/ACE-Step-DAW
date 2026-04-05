@@ -151,16 +151,115 @@ export async function pollMidiResult(taskId: string): Promise<MidiGenerationResu
   throw new Error('MIDI generation timed out');
 }
 
+// ─── WebSocket Streaming ────────────────────────────────────────────────────
+
+export interface MidiStreamToken {
+  /** Type of stream event */
+  type: 'token' | 'progress' | 'complete' | 'error';
+  /** Partial generated note (for 'token' type) */
+  note?: { pitch: number; start_beat: number; duration_beats: number; velocity: number };
+  /** Progress percentage (0-100) */
+  progress?: number;
+  /** Completed results (for 'complete' type) */
+  results?: MidiGenerationResultItem[];
+  /** Error message (for 'error' type) */
+  error?: string;
+}
+
+/**
+ * Stream MIDI generation via WebSocket for real-time feedback.
+ * Falls back to polling if WebSocket is not available.
+ */
+export function streamMidiGeneration(
+  params: MidiGenerationTaskParams,
+  onToken: (token: MidiStreamToken) => void,
+): { cancel: () => void } {
+  const base = getApiBase();
+  const wsBase = base.replace(/^http/, 'ws');
+  let cancelled = false;
+  let ws: WebSocket | null = null;
+
+  const connect = () => {
+    try {
+      ws = new WebSocket(`${wsBase}/v1/midi/generate/stream`);
+
+      ws.onopen = () => {
+        logger.info('WebSocket connected for MIDI streaming');
+        ws?.send(JSON.stringify(params));
+      };
+
+      ws.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const token = JSON.parse(event.data as string) as MidiStreamToken;
+          onToken(token);
+
+          if (token.type === 'complete' || token.type === 'error') {
+            ws?.close();
+          }
+        } catch (e) {
+          logger.error('Failed to parse stream token:', e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        logger.warn('WebSocket error, falling back to polling:', err);
+        ws?.close();
+        // Fall back to REST polling
+        if (!cancelled) {
+          void fallbackToPolling(params, onToken);
+        }
+      };
+
+      ws.onclose = () => {
+        ws = null;
+      };
+    } catch {
+      // WebSocket not available, fall back to polling
+      logger.info('WebSocket not available, using polling');
+      if (!cancelled) {
+        void fallbackToPolling(params, onToken);
+      }
+    }
+  };
+
+  connect();
+
+  return {
+    cancel: () => {
+      cancelled = true;
+      ws?.close();
+    },
+  };
+}
+
+async function fallbackToPolling(
+  params: MidiGenerationTaskParams,
+  onToken: (token: MidiStreamToken) => void,
+): Promise<void> {
+  try {
+    const taskId = await submitMidiGeneration(params);
+    onToken({ type: 'progress', progress: 10 });
+    const results = await pollMidiResult(taskId);
+    onToken({ type: 'complete', results });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    onToken({ type: 'error', error: message });
+  }
+}
+
 // ─── High-Level Orchestration ───────────────────────────────────────────────
 
 /**
- * Run the full MIDI AI generation workflow:
+ * Run the full MIDI AI generation workflow using WebSocket streaming
+ * (with fallback to REST polling):
  * 1. Serialize context notes
- * 2. Submit to backend
- * 3. Poll for results
- * 4. Deserialize and update store with variations
+ * 2. Stream/submit generation to backend
+ * 3. Update store with variations on completion
+ *
+ * Returns a cancel function to abort in-progress generation.
  */
-export async function generateMidiAi(
+export function generateMidiAi(
   contextNotes: MidiNote[],
   options: {
     bpm: number;
@@ -177,50 +276,62 @@ export async function generateMidiAi(
     continuationBars?: number;
     targetInstrument?: string;
   },
-): Promise<void> {
+): { cancel: () => void } {
   const store = useMidiAiStore.getState();
   store.startGeneration();
 
-  try {
-    const contextMidi = serializeNotesToMidiContext(contextNotes, options.bpm);
+  const contextMidi = serializeNotesToMidiContext(contextNotes, options.bpm);
 
-    const params: MidiGenerationTaskParams = {
-      task_type: 'midi_generate',
-      mode: options.mode,
-      context_midi: contextMidi,
-      selection_start: options.selectionStart,
-      selection_end: options.selectionEnd,
-      locked_note_indices: options.lockedNoteIndices,
-      temperature: options.temperature ?? store.temperature,
-      num_results: options.numResults ?? store.numResults,
-      model: options.model ?? store.model,
-      style: options.style ?? (store.style || undefined),
-      key: options.key,
-      time_signature: options.timeSignature,
-      bpm: options.bpm,
-      continuation_bars: options.continuationBars,
-      target_instrument: options.targetInstrument,
-    };
+  const params: MidiGenerationTaskParams = {
+    task_type: 'midi_generate',
+    mode: options.mode,
+    context_midi: contextMidi,
+    selection_start: options.selectionStart,
+    selection_end: options.selectionEnd,
+    locked_note_indices: options.lockedNoteIndices,
+    temperature: options.temperature ?? store.temperature,
+    num_results: options.numResults ?? store.numResults,
+    model: options.model ?? store.model,
+    style: options.style ?? (store.style || undefined),
+    key: options.key,
+    time_signature: options.timeSignature,
+    bpm: options.bpm,
+    continuation_bars: options.continuationBars,
+    target_instrument: options.targetInstrument,
+  };
 
-    logger.info('Submitting MIDI generation:', params.mode);
+  logger.info('Starting MIDI generation:', params.mode);
 
-    const taskId = await submitMidiGeneration(params);
-    logger.info('MIDI generation task submitted:', taskId);
+  const stream = streamMidiGeneration(params, (token) => {
+    const currentStore = useMidiAiStore.getState();
+    // Ignore events if panel was closed or generation reset
+    if (currentStore.status !== 'generating') return;
 
-    const results = await pollMidiResult(taskId);
-    logger.info(`MIDI generation complete: ${results.length} results`);
+    switch (token.type) {
+      case 'progress':
+        // Could update a progress indicator in the future
+        logger.debug('Generation progress:', token.progress);
+        break;
 
-    const variations: MidiAiVariation[] = results.map((result, i) => ({
-      id: `variation-${Date.now()}-${i}`,
-      notes: deserializeMidiResult(result.midi_data),
-      score: result.score,
-      model: result.model,
-    }));
+      case 'complete': {
+        const results = token.results ?? [];
+        logger.info(`MIDI generation complete: ${results.length} results`);
+        const variations: MidiAiVariation[] = results.map((result, i) => ({
+          id: `variation-${Date.now()}-${i}`,
+          notes: deserializeMidiResult(result.midi_data),
+          score: result.score,
+          model: result.model,
+        }));
+        currentStore.setVariations(variations);
+        break;
+      }
 
-    store.setVariations(variations);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error('MIDI generation failed:', message);
-    store.setError(message);
-  }
+      case 'error':
+        logger.error('MIDI generation failed:', token.error);
+        currentStore.setError(token.error ?? 'Unknown error');
+        break;
+    }
+  });
+
+  return stream;
 }

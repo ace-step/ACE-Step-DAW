@@ -5,7 +5,7 @@
  * Follows the same layout pattern as ChordSuggestionPanel.
  * Issue #739
  */
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useMidiAiStore } from '../../store/midiAiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -61,6 +61,7 @@ export function MidiAiPanel() {
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const selectedNoteIds = useUIStore((s) => s.selectedPianoRollNoteIds);
 
+  const cancelRef = useRef<(() => void) | null>(null);
   const bpm = project?.bpm ?? 120;
 
   const clip = project?.tracks
@@ -85,13 +86,16 @@ export function MidiAiPanel() {
   const handleGenerate = useCallback(() => {
     if (!canGenerate) return;
 
+    // Cancel any in-progress generation
+    cancelRef.current?.();
+
     // Compute locked note indices (position in the notes array)
     const lockedIndices: number[] = [];
     notes.forEach((n, i) => {
       if (lockedNoteIds.has(n.id)) lockedIndices.push(i);
     });
 
-    void generateMidiAi(notes, {
+    const stream = generateMidiAi(notes, {
       bpm,
       mode,
       selectionStart: selectionStartBeat ?? undefined,
@@ -104,10 +108,17 @@ export function MidiAiPanel() {
       key: project?.keyScale,
       timeSignature: `${project?.timeSignature ?? 4}/4`,
     });
+    cancelRef.current = stream.cancel;
   }, [
     canGenerate, notes, lockedNoteIds, bpm, mode, selectionStartBeat, selectionEndBeat,
     temperature, numResults, model, style, project,
   ]);
+
+  const handleCancel = useCallback(() => {
+    cancelRef.current?.();
+    cancelRef.current = null;
+    reset();
+  }, [reset]);
 
   // ── Accept variation handler ──────────────────────────────────────────────
 
@@ -270,7 +281,7 @@ export function MidiAiPanel() {
           <span className="text-[10px] text-zinc-500">
             {hasSelection
               ? `Region: ${selectionStartBeat!.toFixed(1)}–${selectionEndBeat!.toFixed(1)} beats (${selectionBars} bars)`
-              : 'Select a region in the piano roll to generate'}
+              : 'Select notes and right-click "Set AI Region" to define the generation area'}
           </span>
         )}
 
@@ -289,8 +300,9 @@ export function MidiAiPanel() {
           type="button"
           onClick={handleLockSelected}
           disabled={selectedNoteIds.length === 0}
+          aria-label="Lock selected notes for AI generation"
           className="px-1.5 py-0.5 rounded text-[10px] bg-amber-600/20 text-amber-200 hover:bg-amber-600/40 disabled:opacity-30 transition-colors"
-          title="Lock selected notes (they won't be regenerated)"
+          title="Lock selected notes — they won't be regenerated (L)"
         >
           Lock Selected
         </button>
@@ -317,16 +329,27 @@ export function MidiAiPanel() {
           </button>
         )}
 
-        {/* Generate button */}
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={!canGenerate}
-          className="px-3 py-1 rounded text-[11px] font-medium bg-violet-600/60 text-violet-100 hover:bg-violet-600/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          title={modeDescription}
-        >
-          {status === 'generating' ? 'Generating...' : `Generate (${mode})`}
-        </button>
+        {/* Generate / Cancel button */}
+        {status === 'generating' ? (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="px-3 py-1 rounded text-[11px] font-medium bg-red-600/50 text-red-100 hover:bg-red-600/70 transition-colors"
+            title="Cancel generation"
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={!canGenerate}
+            className="px-3 py-1 rounded text-[11px] font-medium bg-violet-600/60 text-violet-100 hover:bg-violet-600/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title={modeDescription}
+          >
+            Generate ({mode})
+          </button>
+        )}
       </div>
 
       {/* Preview row — shown when previewing variations */}

@@ -75,11 +75,12 @@ describe('MidiAiPanel', () => {
     expect(screen.getByText(/Generate \(infill\)/)).toBeInTheDocument();
   });
 
-  it('disables generate in infill mode without selection', () => {
+  it('disables generate in infill mode without selection and shows hint', () => {
     useMidiAiStore.getState().setMode('infill');
     render(<MidiAiPanel />);
     const btn = screen.getByText('Generate (infill)');
     expect(btn).toBeDisabled();
+    expect(screen.getByText(/Set AI Region/)).toBeInTheDocument();
   });
 
   it('enables generate in infill mode with selection', () => {
@@ -103,11 +104,12 @@ describe('MidiAiPanel', () => {
     expect(screen.getByText('2 notes locked')).toBeInTheDocument();
   });
 
-  it('shows generating status', () => {
+  it('shows generating status with cancel button', () => {
     useMidiAiStore.getState().startGeneration();
     render(<MidiAiPanel />);
-    // Both the status indicator and the button show "Generating..."
-    expect(screen.getAllByText('Generating...')).toHaveLength(2);
+    // Status indicator shows "Generating..." and button shows "Cancel"
+    expect(screen.getByText('Generating...')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
   });
 
   it('shows error status and retry button', () => {
@@ -170,6 +172,13 @@ describe('MidiAiPanel', () => {
     render(<MidiAiPanel />);
     fireEvent.click(screen.getByTitle('Close AI MIDI panel'));
     expect(useMidiAiStore.getState().panelOpen).toBe(false);
+  });
+
+  it('cancels generation and resets to idle', () => {
+    useMidiAiStore.getState().startGeneration();
+    render(<MidiAiPanel />);
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(useMidiAiStore.getState().status).toBe('idle');
   });
 
   it('updates temperature via slider', () => {

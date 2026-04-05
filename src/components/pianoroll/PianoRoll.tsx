@@ -104,10 +104,44 @@ export function PianoRoll() {
       };
 
       const tool = toolByCode[event.code];
-      if (!tool) return;
+      if (tool) {
+        event.preventDefault();
+        setActivePianoRollTool(tool);
+        return;
+      }
 
-      event.preventDefault();
-      setActivePianoRollTool(tool);
+      // AI generation shortcuts
+      const clipId = ui.openPianoRollClipId;
+      const trackId = ui.openPianoRollTrackId;
+
+      // G = Toggle AI Generate panel
+      if (event.code === 'KeyG' && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        const aiState = useMidiAiStore.getState();
+        if (aiState.panelOpen) {
+          aiState.closePanel();
+        } else if (trackId && clipId) {
+          aiState.openPanel(trackId, clipId);
+        }
+        return;
+      }
+
+      // L = Lock/unlock selected notes (when AI panel is open)
+      if (event.code === 'KeyL' && !event.ctrlKey && !event.metaKey) {
+        const aiState = useMidiAiStore.getState();
+        if (!aiState.panelOpen) return;
+        const selected = ui.selectedPianoRollNoteIds;
+        if (selected.length === 0) return;
+        event.preventDefault();
+        // Toggle: if any selected note is unlocked, lock all; otherwise unlock all
+        const anyUnlocked = selected.some((id) => !aiState.lockedNoteIds.has(id));
+        if (anyUnlocked) {
+          aiState.lockNotes(selected);
+        } else {
+          aiState.unlockNotes(selected);
+        }
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);

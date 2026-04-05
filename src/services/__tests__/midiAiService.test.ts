@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { serializeNotesToMidiContext, deserializeMidiResult } from '../midiAiService';
+import { serializeNotesToMidiContext, deserializeMidiResult, type MidiStreamToken } from '../midiAiService';
 import type { MidiNote } from '../../types/project';
 
 describe('midiAiService', () => {
@@ -82,6 +82,29 @@ describe('midiAiService', () => {
       const base64 = btoa(JSON.stringify(payload));
       const notes = deserializeMidiResult(base64);
       expect(notes[0].id).not.toBe(notes[1].id);
+    });
+  });
+
+  describe('MidiStreamToken type', () => {
+    it('supports all expected token types', () => {
+      const progressToken: MidiStreamToken = { type: 'progress', progress: 50 };
+      expect(progressToken.type).toBe('progress');
+      expect(progressToken.progress).toBe(50);
+
+      const errorToken: MidiStreamToken = { type: 'error', error: 'timeout' };
+      expect(errorToken.type).toBe('error');
+      expect(errorToken.error).toBe('timeout');
+
+      const completeToken: MidiStreamToken = { type: 'complete', results: [] };
+      expect(completeToken.type).toBe('complete');
+      expect(completeToken.results).toHaveLength(0);
+
+      const tokenEvent: MidiStreamToken = {
+        type: 'token',
+        note: { pitch: 60, start_beat: 0, duration_beats: 1, velocity: 100 },
+      };
+      expect(tokenEvent.type).toBe('token');
+      expect(tokenEvent.note?.pitch).toBe(60);
     });
   });
 });

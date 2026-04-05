@@ -6,10 +6,7 @@
  * - ScriptProcessorNode + Phase 2 Core DSP library for complex effects
  *   (Reverb, Distortion, Chorus, Phaser, EQ3, LFO)
  *
- * Part of Phase 3: Effects Migration (#1126).
- *
- * NOTE: Synth factory methods delegate to ToneDSPFactory for now — synth
- * migration is Phase 4 (#1127).
+ * Part of Phase 3: Effects Migration (#1126) + Phase 4: Synth Migration (#1127).
  */
 
 import type {
@@ -53,6 +50,17 @@ import type {
   IDSPSynthOptions,
   IDSPFrequencyEnvelopeOptions,
 } from './interfaces';
+
+import {
+  NativePolySynth,
+  NativeFMSynth,
+  NativeMembraneSynth,
+  NativeNoiseSynth,
+  NativeMetalSynth,
+  NativeSynth,
+  NativeFrequencyEnvelope,
+  NativeBufferSource,
+} from './NativeSynths';
 
 import {
   FreeVerb,
@@ -354,6 +362,7 @@ class NativeDistortion extends NativeNodeWrapper implements IDSPDistortion {
 
 class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
   private readonly _delay: DelayNode;
+  private readonly _feedbackNode: GainNode;
   private readonly _lfo: OscillatorNode;
   private readonly _lfoGain: GainNode;
   private readonly _mix: DryWetMix;
@@ -394,6 +403,7 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
 
     super(mix.input, mix.output);
     this._delay = delay;
+    this._feedbackNode = feedback;
     this._lfo = lfo;
     this._lfoGain = lfoGain;
     this._mix = mix;
@@ -423,7 +433,10 @@ class NativeChorus extends NativeNodeWrapper implements IDSPChorus {
   }
 
   get feedback(): number { return this._feedback; }
-  set feedback(v: number) { this._feedback = v; }
+  set feedback(v: number) {
+    this._feedback = v;
+    this._feedbackNode.gain.value = v;
+  }
 
   get wet(): number { return this._mix.wet; }
   set wet(v: number) { this._mix.wet = v; }
@@ -508,7 +521,11 @@ class NativePhaser extends NativeNodeWrapper implements IDSPPhaser {
   }
 
   get stages(): number { return this._stages; }
-  set stages(_v: number) { /* Cannot change stages after construction */ }
+  set stages(v: number) {
+    if (v !== this._stages) {
+      throw new Error('NativePhaser does not support changing stages after construction');
+    }
+  }
 
   get Q(): number { return this._Q; }
   set Q(v: number) {
@@ -676,20 +693,15 @@ class NativeLFO extends NativeNodeWrapper implements IDSPLFO {
 /**
  * Native Web Audio implementation of IDSPFactory.
  *
- * Replaces Tone.js for all effect nodes. Synth creation currently
- * delegates to ToneDSPFactory (Phase 4 will migrate synths).
+ * Fully replaces Tone.js for all effect and synth nodes.
+ * Effects use native Web Audio API + Phase 2 Core DSP library.
+ * Synths use native OscillatorNode + GainNode + BiquadFilterNode.
  */
 export class NativeDSPFactory implements IDSPFactory {
   private readonly _ctx: AudioContext;
-  private _toneFactory: IDSPFactory | null;
 
-  /**
-   * @param ctx  The AudioContext to use for creating nodes
-   * @param toneFactory  Optional Tone.js factory for synth fallback (Phase 4)
-   */
-  constructor(ctx: AudioContext, toneFactory?: IDSPFactory) {
+  constructor(ctx: AudioContext) {
     this._ctx = ctx;
-    this._toneFactory = toneFactory ?? null;
   }
 
   // Effects — all native, no Tone.js
@@ -741,37 +753,37 @@ export class NativeDSPFactory implements IDSPFactory {
     return new NativeLFO(this._ctx, options);
   }
 
-  // Synths — delegate to Tone.js factory for Phase 4
+  // Synths — all native, no Tone.js (Phase 4)
   createPolySynth(options?: IDSPPolySynthOptions): IDSPPolySynth {
-    return this._toneFactory!.createPolySynth(options);
+    return new NativePolySynth(this._ctx, options);
   }
 
   createFMSynth(options?: IDSPFMSynthOptions): IDSPFMSynth {
-    return this._toneFactory!.createFMSynth(options);
+    return new NativeFMSynth(this._ctx, options);
   }
 
   createMembraneSynth(options?: IDSPMembraneSynthOptions): IDSPMembraneSynth {
-    return this._toneFactory!.createMembraneSynth(options);
+    return new NativeMembraneSynth(this._ctx, options);
   }
 
   createNoiseSynth(options?: IDSPNoiseSynthOptions): IDSPNoiseSynth {
-    return this._toneFactory!.createNoiseSynth(options);
+    return new NativeNoiseSynth(this._ctx, options);
   }
 
   createMetalSynth(options?: IDSPMetalSynthOptions): IDSPMetalSynth {
-    return this._toneFactory!.createMetalSynth(options);
+    return new NativeMetalSynth(this._ctx, options);
   }
 
   createSynth(options?: IDSPSynthOptions): IDSPSynth {
-    return this._toneFactory!.createSynth(options);
+    return new NativeSynth(this._ctx, options);
   }
 
   createFrequencyEnvelope(options?: IDSPFrequencyEnvelopeOptions): IDSPFrequencyEnvelope {
-    return this._toneFactory!.createFrequencyEnvelope(options);
+    return new NativeFrequencyEnvelope(this._ctx, options);
   }
 
   createBufferSource(): IDSPBufferSource {
-    return this._toneFactory!.createBufferSource();
+    return new NativeBufferSource(this._ctx);
   }
 
   getContext(): AudioContext {

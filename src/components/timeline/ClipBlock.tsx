@@ -374,7 +374,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           <CanvasClipMidiThumbnail
             midiData={clip.midiData}
             width={width}
-            height={Math.max(0, (track.laneHeight ?? 80) - HEADER_RAIL_HEIGHT_PX)}
+            height={Math.max(0, (track.laneHeight ?? 80) - 14)}
             duration={clip.duration}
             bpm={bpm}
             color={clipPresentation.waveformColor}

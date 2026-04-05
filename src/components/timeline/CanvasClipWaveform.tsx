@@ -55,26 +55,28 @@ export function CanvasClipWaveform({
     if (!canvas || !peaks || peaks.length === 0 || width <= 0 || measuredHeight <= 0) return;
 
     const dpr = window.devicePixelRatio || 1;
+    // Cap backing store to safe browser canvas limit (most browsers: 16384–32768px)
+    const safeWidth = Math.min(width, 16384 / dpr);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     // Only resize backing store when dimensions change (avoids expensive reallocation)
     const metrics = canvasMetricsRef.current;
     const needsResize =
-      !metrics || metrics.width !== width || metrics.height !== measuredHeight || metrics.dpr !== dpr;
+      !metrics || metrics.width !== safeWidth || metrics.height !== measuredHeight || metrics.dpr !== dpr;
 
     if (needsResize) {
-      canvas.width = width * dpr;
+      canvas.width = safeWidth * dpr;
       canvas.height = measuredHeight * dpr;
-      canvasMetricsRef.current = { width, height: measuredHeight, dpr };
+      canvasMetricsRef.current = { width: safeWidth, height: measuredHeight, dpr };
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, measuredHeight);
+    ctx.clearRect(0, 0, safeWidth, measuredHeight);
 
     drawWaveform({
       ctx,
-      width,
+      width: safeWidth,
       height: measuredHeight,
       peaks,
       audioDuration,

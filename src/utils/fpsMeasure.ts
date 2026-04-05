@@ -79,10 +79,14 @@ export class FpsMeasure {
     const minFrameTime = Math.min(...this.frameTimes);
     const framesAt60 = this.frameTimes.filter((t) => t <= 16.67).length;
 
+    // Guard against Infinity from zero/negative frame times (timer resolution edge cases)
+    const toFps = (frameTime: number): number =>
+      Number.isFinite(frameTime) && frameTime > 0 ? Math.round(1000 / frameTime) : 0;
+
     return {
-      averageFps: Math.round(1000 / avgFrameTime),
-      minFps: Math.round(1000 / maxFrameTime),
-      maxFps: Math.round(1000 / minFrameTime),
+      averageFps: toFps(avgFrameTime),
+      minFps: toFps(maxFrameTime),
+      maxFps: toFps(minFrameTime),
       frameCount: this.frameTimes.length,
       durationMs: Math.round(totalDuration),
       percentAt60fps: Math.round((framesAt60 / this.frameTimes.length) * 100),

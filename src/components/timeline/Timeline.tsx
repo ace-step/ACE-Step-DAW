@@ -540,9 +540,10 @@ export function Timeline() {
                 selBottom={selVRange ? selVRange.top + selVRange.height : null}
               />
 
-              {/* Canvas-based selection overlays for smooth drag performance */}
+              {/* Canvas-based selection overlays for smooth drag performance.
+                  Sized to viewport (not totalWidth) to avoid exceeding browser canvas limits. */}
               <TimelineOverlayCanvas
-                width={totalWidth}
+                width={Math.min(totalWidth, viewportWidth + 200)}
                 height={trackAreaRef.current?.clientHeight ?? 0}
                 ctxDrag={ctxDrag}
                 selDrag={selDrag}

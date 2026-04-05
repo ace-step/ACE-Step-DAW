@@ -2,14 +2,30 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FpsMeasure } from '../fpsMeasure';
 
 describe('FpsMeasure', () => {
+  let rafCallbacks: Array<(time: number) => void>;
+  let rafIdCounter: number;
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    rafCallbacks = [];
+    rafIdCounter = 0;
+
+    // Stub rAF explicitly for deterministic frame simulation
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return ++rafIdCounter;
+    });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
+
+  /** Flush one round of pending rAF callbacks. Pass 0 — tick reads performance.now() internally. */
+  function flushRaf() {
+    const cbs = rafCallbacks.splice(0);
+    for (const cb of cbs) cb(0);
+  }
 
   it('returns empty report before start', () => {
     const fps = new FpsMeasure();
@@ -22,26 +38,25 @@ describe('FpsMeasure', () => {
   it('measures frame times via requestAnimationFrame', () => {
     const fps = new FpsMeasure();
 
-    // Mock performance.now to return predictable times
+    // Use clean 16ms increments (62.5fps) to avoid floating-point issues
     let time = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => {
-      time += 16.67; // 60fps = ~16.67ms per frame
+      time += 16;
       return time;
     });
 
-    fps.start();
+    fps.start(); // tick() sets baseline (time=16), schedules rAF
 
-    // Simulate 10 animation frames
-    for (let i = 0; i < 10; i++) {
-      vi.advanceTimersByTime(16.67);
+    for (let i = 0; i < 5; i++) {
+      flushRaf(); // Each records one frame: 32-16=16, 48-32=16, ...
     }
 
     fps.stop();
 
     const report = fps.getReport();
-    expect(report.frameCount).toBeGreaterThan(0);
-    expect(report.averageFps).toBeGreaterThanOrEqual(55); // ~60fps
-    expect(report.percentAt60fps).toBeGreaterThanOrEqual(0);
+    expect(report.frameCount).toBe(5);
+    // 1000 / 16 = 62.5 → rounds to 63
+    expect(report.averageFps).toBe(63);
   });
 
   it('reports zero after stop with no frames', () => {
@@ -49,32 +64,50 @@ describe('FpsMeasure', () => {
     fps.start();
     fps.stop();
     const report = fps.getReport();
-    // May have 0 or very few frames depending on timing
-    expect(report.durationMs).toBeGreaterThanOrEqual(0);
+    expect(report.frameCount).toBe(0);
+    expect(report.durationMs).toBe(0);
   });
 
   it('calculates min/max FPS correctly', () => {
     const fps = new FpsMeasure();
-    let time = 0;
-    const frameTimes = [16.67, 16.67, 33.33, 16.67, 8.33]; // varying frame times
+    // Explicit timestamps: baseline=100, then frames at +10, +10, +40, +10, +5
+    const timestamps = [100, 110, 120, 160, 170, 175];
+    let callIdx = 0;
 
     vi.spyOn(performance, 'now').mockImplementation(() => {
-      const frameTime = frameTimes.shift() ?? 16.67;
-      time += frameTime;
-      return time;
+      return timestamps[Math.min(callIdx++, timestamps.length - 1)];
     });
 
-    fps.start();
+    fps.start(); // baseline at 100
     for (let i = 0; i < 5; i++) {
-      vi.advanceTimersByTime(16.67);
+      flushRaf(); // frames: 10, 10, 40, 10, 5
     }
     fps.stop();
 
     const report = fps.getReport();
-    // With 33.33ms frame, min FPS ~30; with 8.33ms, max FPS ~120
-    if (report.frameCount > 0) {
-      expect(report.minFps).toBeLessThanOrEqual(report.averageFps);
-      expect(report.maxFps).toBeGreaterThanOrEqual(report.averageFps);
-    }
+    expect(report.frameCount).toBe(5);
+    // min FPS from slowest frame (40ms → 25fps)
+    expect(report.minFps).toBe(25);
+    // max FPS from fastest frame (5ms → 200fps)
+    expect(report.maxFps).toBe(200);
+    expect(report.minFps).toBeLessThanOrEqual(report.averageFps);
+    expect(report.maxFps).toBeGreaterThanOrEqual(report.averageFps);
+  });
+
+  it('guards against zero frame times (Infinity prevention)', () => {
+    const fps = new FpsMeasure();
+    let time = 100;
+
+    // All calls return the same time → 0ms frame deltas
+    vi.spyOn(performance, 'now').mockImplementation(() => time);
+
+    fps.start();
+    for (let i = 0; i < 3; i++) flushRaf();
+    fps.stop();
+
+    const report = fps.getReport();
+    expect(Number.isFinite(report.averageFps)).toBe(true);
+    expect(Number.isFinite(report.maxFps)).toBe(true);
+    expect(report.averageFps).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { drawMidiThumbnail } from './waveformRenderer';
 import type { MidiClipData } from '../../types/project';
 
@@ -8,6 +8,9 @@ import type { MidiClipData } from '../../types/project';
  * note content — matches the original SVG implementation's `top: 14`.
  */
 const MIDI_THUMBNAIL_TOP = 14;
+
+/** Safe max canvas dimension to stay within browser limits. */
+const MAX_CANVAS_CSS_PX = 16384;
 
 interface CanvasClipMidiThumbnailProps {
   midiData: MidiClipData;
@@ -29,13 +32,14 @@ export function CanvasClipMidiThumbnail({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
 
+  // Cap width for both backing store AND CSS to prevent stretching
+  const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+  const safeWidth = useMemo(() => Math.min(width, MAX_CANVAS_CSS_PX / dpr), [width, dpr]);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || midiData.notes.length === 0 || width <= 0 || height <= 0) return;
+    if (!canvas || midiData.notes.length === 0 || safeWidth <= 0 || height <= 0) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    // Cap backing store to safe browser canvas limit
-    const safeWidth = Math.min(width, 16384 / dpr);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -62,7 +66,7 @@ export function CanvasClipMidiThumbnail({
       bpm,
       color,
     });
-  }, [midiData, width, height, duration, bpm, color]);
+  }, [midiData, safeWidth, height, duration, bpm, color, dpr]);
 
   useEffect(() => {
     draw();
@@ -76,7 +80,7 @@ export function CanvasClipMidiThumbnail({
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: MIDI_THUMBNAIL_TOP }}>
       <canvas
         ref={canvasRef}
-        style={{ width, height }}
+        style={{ width: safeWidth, height }}
         data-testid="midi-thumbnail-canvas"
       />
     </div>

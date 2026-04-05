@@ -37,12 +37,6 @@ export interface SeekCommand {
   toSample: number;
 }
 
-export interface SetParamCommand {
-  type: 'set-param';
-  index: number;
-  value: number;
-}
-
 export interface AddTrackCommand {
   type: 'add-track';
   trackId: string;
@@ -87,7 +81,6 @@ export type WorkerCommand =
   | PlayCommand
   | StopCommand
   | SeekCommand
-  | SetParamCommand
   | AddTrackCommand
   | RemoveTrackCommand
   | UpdateEffectCommand

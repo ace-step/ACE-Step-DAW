@@ -22,8 +22,10 @@ class SynthEngineAdapter implements InstrumentEngine {
   }
 
   setParameter(_trackId: string, _name: string, _value: number | string | boolean): void {
-    // Subtractive synth parameters are not yet dynamically settable.
-    // This will be wired up when the synth UI gets real-time param control.
+    // Intentional no-op: this adapter wraps the legacy synthEngine for direct
+    // note triggering only. Realtime subtractive parameter changes during
+    // PianoRoll playback are handled by subtractiveEngine, so forwarding
+    // parameters here would mutate the wrong engine instance.
   }
 
   releaseAll(): void {

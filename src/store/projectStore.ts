@@ -775,7 +775,7 @@ export interface ProjectState extends MidiSliceActions {
   stopSessionArrangementRecording: (endTime?: number) => Clip[];
   moveSessionSlotClip: (sourceSlotId: string, targetSlotId: string) => void;
   reorderSessionScenes: (fromIndex: number, toIndex: number) => void;
-  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
+  updateSessionSceneProperties: (sceneId: string, properties: Partial<Pick<SessionScene, 'name' | 'color' | 'tempo' | 'timeSignature' | 'followAction' | 'followActionTime'>>) => void;
   setSessionSceneFollowAction: (sceneId: string, action: SceneFollowActionType, bars?: number) => void;
 
   removeAsset: (assetId: string) => void;
@@ -5318,8 +5318,26 @@ export const useProjectStore = create<ProjectState>()(
       ? transport.currentTime
       : getQuantizedLaunchTime(transport.currentTime, getSessionQuantizationSeconds(state.project, session.quantization));
 
+    // Find the launched scene to apply tempo/time-signature overrides
+    const launchedScene = session.scenes.find((s) => s.id === sceneId);
+
     if (isImmediate) {
       let nextProject = state.project;
+
+      // Apply scene tempo override
+      if (launchedScene?.tempo != null) {
+        nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+      }
+      // Apply scene time signature override
+      if (launchedScene?.timeSignature != null) {
+        nextProject = {
+          ...nextProject,
+          timeSignature: launchedScene.timeSignature[0],
+          timeSignatureDenominator: launchedScene.timeSignature[1],
+          updatedAt: Date.now(),
+        };
+      }
+
       for (const slot of session.slots.filter((candidate) => candidate.sceneId === sceneId && candidate.clipId)) {
         nextProject = applySessionTrackLaunch(nextProject, slot.trackId, slot.clipId ?? null, executeAt, 'scene', sceneId);
       }
@@ -5331,9 +5349,23 @@ export const useProjectStore = create<ProjectState>()(
       return;
     }
 
+    // For quantized launches, apply overrides and queue the launch
+    let nextProject = state.project;
+    if (launchedScene?.tempo != null) {
+      nextProject = { ...nextProject, bpm: launchedScene.tempo, updatedAt: Date.now() };
+    }
+    if (launchedScene?.timeSignature != null) {
+      nextProject = {
+        ...nextProject,
+        timeSignature: launchedScene.timeSignature[0],
+        timeSignatureDenominator: launchedScene.timeSignature[1],
+        updatedAt: Date.now(),
+      };
+    }
+
     set({
       project: {
-        ...state.project,
+        ...nextProject,
         session: queuePendingSessionLaunch(session, {
           type: 'scene',
           sceneId,

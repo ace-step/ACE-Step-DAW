@@ -121,10 +121,13 @@ export function SessionView() {
 
   const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
   const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
+  const launchSessionSceneProject = useProjectStore((s) => s.launchSessionScene);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
   const [showSessionMixer, setShowSessionMixer] = useState(false);
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
+  const [editingSceneName, setEditingSceneName] = useState('');
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -276,62 +279,121 @@ export function SessionView() {
           const isSceneDragTarget = dragState?.type === 'scene' && dropTarget?.sceneIndex === sceneIndex && dropTarget?.valid;
           const isSceneDragSource = dragState?.type === 'scene' && dragState?.sourceSceneIndex === sceneIndex;
 
-          return (
-            <div
-              key={`scene-${sceneIndex}`}
-              className={`sticky top-[72px] z-10 border-b border-r bg-[#242424] px-3 py-2 transition-colors ${
-                isSceneDragTarget ? 'border-blue-500 bg-blue-500/10' : isSceneDragSource ? 'opacity-40 border-[#333]' : 'border-[#333]'
-              }`}
-              data-scene-index={sceneIndex}
-              data-scene-header=""
-              onPointerDown={(e) => {
-                handlePointerDown(e, 'scene', {
-                  sourceSceneIndex: sceneIndex,
-                  label: `Scene ${sceneIndex + 1}`,
-                  color: '#6366f1',
-                });
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                const sceneId = scenes[sceneIndex]?.id;
-                if (sceneId) {
-                  setSceneMenu({ x: e.clientX, y: e.clientY, sceneId, sceneIndex });
-                }
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="cursor-grab active:cursor-grabbing">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
-                  <div className="text-sm font-semibold text-zinc-100">{sceneIndex + 1}</div>
+          return (() => {
+            const currentScene = scenes[sceneIndex];
+            const sceneColor = currentScene?.color;
+            const isEditing = editingSceneId === currentScene?.id;
+            const hasOverrides = !!(currentScene?.tempo || currentScene?.timeSignature);
+
+            return (
+              <div
+                key={`scene-${sceneIndex}`}
+                className={`sticky top-[72px] z-10 border-b border-r px-3 py-2 transition-colors ${
+                  isSceneDragTarget ? 'border-blue-500 bg-blue-500/10' : isSceneDragSource ? 'opacity-40 border-[#333]' : 'border-[#333]'
+                }`}
+                style={{
+                  backgroundColor: sceneColor ? `color-mix(in srgb, ${sceneColor} 15%, #242424)` : '#242424',
+                  borderLeftColor: sceneColor || undefined,
+                  borderLeftWidth: sceneColor ? '3px' : undefined,
+                }}
+                data-scene-index={sceneIndex}
+                data-scene-header=""
+                data-testid={`scene-header-${sceneIndex}`}
+                onPointerDown={(e) => {
+                  handlePointerDown(e, 'scene', {
+                    sourceSceneIndex: sceneIndex,
+                    label: currentScene?.name || `Scene ${sceneIndex + 1}`,
+                    color: sceneColor || '#6366f1',
+                  });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  const sceneId = currentScene?.id;
+                  if (sceneId) {
+                    setSceneMenu({ x: e.clientX, y: e.clientY, sceneId, sceneIndex });
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    className="cursor-grab active:cursor-grabbing min-w-0 flex-1"
+                    onDoubleClick={() => {
+                      if (currentScene) {
+                        setEditingSceneId(currentScene.id);
+                        setEditingSceneName(currentScene.name);
+                      }
+                    }}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">Scene</div>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingSceneName}
+                        onChange={(e) => setEditingSceneName(e.target.value)}
+                        onBlur={(e) => {
+                          const wasCanceled = e.currentTarget.dataset.renameCanceled === 'true';
+                          if (!wasCanceled && editingSceneName.trim() && currentScene) {
+                            updateSessionSceneProperties(currentScene.id, { name: editingSceneName.trim() });
+                          }
+                          delete e.currentTarget.dataset.renameCanceled;
+                          setEditingSceneId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') {
+                            (e.target as HTMLInputElement).dataset.renameCanceled = 'true';
+                            setEditingSceneId(null);
+                          }
+                        }}
+                        className="w-full bg-[#1a1a1a] border border-daw-accent rounded px-1 py-0.5 text-sm font-semibold text-zinc-100 outline-none"
+                        aria-label={`Rename scene ${sceneIndex + 1}`}
+                        data-testid={`scene-name-input-${sceneIndex}`}
+                        autoFocus
+                        onPointerDown={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="text-sm font-semibold text-zinc-100 truncate" title={currentScene?.name}>
+                        {currentScene?.name || `${sceneIndex + 1}`}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Call projectStore to apply tempo/timeSig overrides and manage session state
+                      if (currentScene) launchSessionSceneProject(currentScene.id);
+                      void launchSessionScene(sceneIndex, sceneLaunches);
+                    }}
+                    disabled={sceneLaunches.length === 0}
+                    className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30 shrink-0"
+                    aria-label={`Launch scene ${sceneIndex + 1}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    Launch
+                  </button>
                 </div>
-                <button
-                  onClick={() => void launchSessionScene(sceneIndex, sceneLaunches)}
-                  disabled={sceneLaunches.length === 0}
-                  className="rounded-md bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition-colors hover:bg-daw-accent disabled:opacity-30"
-                  aria-label={`Launch scene ${sceneIndex + 1}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  Launch
-                </button>
+                {(hasOverrides || (currentScene?.followAction && currentScene.followAction !== 'none')) && (
+                  <div className="flex flex-wrap gap-x-2 mt-1">
+                    {currentScene?.tempo && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-400/80" title="Tempo override">
+                        <span className="opacity-60">BPM</span> {currentScene.tempo}
+                      </span>
+                    )}
+                    {currentScene?.timeSignature && (
+                      <span className="inline-flex items-center text-[9px] font-medium text-sky-400/80" title="Time signature override">
+                        {currentScene.timeSignature[0]}/{currentScene.timeSignature[1]}
+                      </span>
+                    )}
+                    {currentScene?.followAction && currentScene.followAction !== 'none' && (
+                      <span className="text-[9px] text-purple-400/70" title="Follow action">
+                        {FOLLOW_ACTION_LABELS[currentScene.followAction]}
+                        {currentScene.followActionTime ? ` ${currentScene.followActionTime}b` : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {scenes[sceneIndex]?.followAction && scenes[sceneIndex].followAction !== 'none' && (
-                <div className="text-[9px] text-zinc-500 mt-0.5">
-                  Follow: {FOLLOW_ACTION_LABELS[scenes[sceneIndex].followAction!]}
-                  {scenes[sceneIndex].followActionTime ? ` (${scenes[sceneIndex].followActionTime} bars)` : ''}
-                </div>
-              )}
-              {scenes[sceneIndex]?.tempo && (
-                <div className="text-[9px] text-zinc-500">
-                  {scenes[sceneIndex].tempo} BPM
-                </div>
-              )}
-              {scenes[sceneIndex]?.timeSignature && (
-                <div className="text-[9px] text-zinc-500">
-                  {scenes[sceneIndex].timeSignature![0]}/{scenes[sceneIndex].timeSignature![1]}
-                </div>
-              )}
-            </div>
-          );
+            );
+          })();
         })}
 
         {tracks.map((track) => {
@@ -500,6 +562,23 @@ export function SessionView() {
             testId="session-scene-context-menu"
             minWidth={200}
           >
+            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              Scene Color
+            </div>
+            <ColorSwatchPalette
+              hasCustomColor={!!scene?.color}
+              onAssignColor={(color) => {
+                updateSessionSceneProperties(sceneMenu.sceneId, { color });
+                setSceneMenu(null);
+              }}
+              onResetColor={() => {
+                updateSessionSceneProperties(sceneMenu.sceneId, { color: undefined });
+                setSceneMenu(null);
+              }}
+              labelPrefix="Assign scene color"
+              testId="scene-color-palette"
+            />
+            <ContextMenuSeparator />
             <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
               Tempo Override
             </div>

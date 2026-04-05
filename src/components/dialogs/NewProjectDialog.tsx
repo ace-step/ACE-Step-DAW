@@ -22,6 +22,7 @@ import {
   type TemplateSummary,
 } from '../../services/projectStorage';
 import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from '../../data/onboardingCatalog';
+import { GENRE_TEMPLATES, getGenreCategories, getGenreTemplateById } from '../../data/genreTemplates';
 import { toastSuccess } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { ClipLayoutItem } from '../../utils/clipLayout';
@@ -101,6 +102,7 @@ export function NewProjectDialog() {
 
   const [recentProjects, setRecentProjects] = useState<ProjectSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
 
   // Reset form and load recent projects + templates when dialog opens
   useEffect(() => {
@@ -241,6 +243,74 @@ export function NewProjectDialog() {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* ── Genre Templates ── */}
+          <div className="p-4 border-b border-daw-border">
+            <h3 className="text-xs font-medium text-zinc-400 mb-3">Genre Templates</h3>
+            <div className="flex flex-wrap gap-1 mb-3">
+              <button
+                type="button"
+                onClick={() => setGenreFilter(null)}
+                className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                  genreFilter === null
+                    ? 'bg-daw-accent/20 border-daw-accent text-daw-accent'
+                    : 'border-daw-border/50 text-zinc-400 hover:text-zinc-300 hover:border-daw-border'
+                }`}
+              >
+                All
+              </button>
+              {getGenreCategories().map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setGenreFilter(cat)}
+                  className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                    genreFilter === cat
+                      ? 'bg-daw-accent/20 border-daw-accent text-daw-accent'
+                      : 'border-daw-border/50 text-zinc-400 hover:text-zinc-300 hover:border-daw-border'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {GENRE_TEMPLATES
+                .filter((entry) => genreFilter === null || entry.genre === genreFilter)
+                .map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    data-genre-template-id={entry.id}
+                    onClick={() => {
+                      const tmpl = getGenreTemplateById(entry.id);
+                      if (tmpl) {
+                        createProjectFromTemplate(tmpl);
+                        toastSuccess(`Opened "${entry.title}"`);
+                        setShow(false);
+                      }
+                    }}
+                    className="text-left rounded-lg border border-daw-border/50 hover:border-daw-accent/50 hover:bg-daw-surface-2 transition-colors p-2"
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">{entry.genre}</p>
+                      <p className="text-[10px] text-zinc-500">{entry.bpm} BPM</p>
+                    </div>
+                    <p className="text-xs text-zinc-200 font-medium">{entry.title}</p>
+                    <p className="text-[10px] text-zinc-500">{entry.keyScale}</p>
+                    <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">{entry.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {entry.tracks.slice(0, 3).map((t) => (
+                        <span key={t} className="text-[9px] rounded bg-white/5 border border-white/10 px-1.5 py-0.5 text-zinc-400">{t}</span>
+                      ))}
+                      {entry.tracks.length > 3 && (
+                        <span className="text-[9px] text-zinc-500">+{entry.tracks.length - 3}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
             </div>
           </div>
 

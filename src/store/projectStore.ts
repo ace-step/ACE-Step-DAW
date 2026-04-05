@@ -114,6 +114,7 @@ import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrack
 import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { audioBufferToWavBlob } from '../utils/wav';
+import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount } from '../types/api';
@@ -650,6 +651,10 @@ export interface ProjectState extends MidiSliceActions {
   addVideoTrack: () => Track | undefined;
   /** Add a video clip with metadata to a video track. */
   addVideoClip: (trackId: string, clipData: { startTime: number; duration: number; videoMeta: import('../types/project').VideoClipData }) => Clip | undefined;
+  /** Split a video clip at a given time, creating two clips referencing the same source. */
+  splitVideoClip: (clipId: string, splitTimeSeconds: number) => void;
+  /** Trim a video clip edge, snapping to frame boundaries. */
+  trimVideoClip: (clipId: string, edge: 'left' | 'right', newValue: number) => void;
   removeTrack: (trackId: string) => void;
   removeTracks: (trackIds: string[]) => void;
   duplicateTrack: (trackId: string) => Track | undefined;
@@ -2929,6 +2934,138 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return clip;
+  },
+
+  splitVideoClip: (clipId, splitTimeSeconds) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const t of state.project.tracks) {
+      if (t.trackType !== 'video') continue;
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; trackId = t.id; break; }
+    }
+    if (!sourceClip || !trackId || !sourceClip.videoMeta) return;
+
+    const result = computeVideoSplit(
+      sourceClip.startTime,
+      sourceClip.duration,
+      sourceClip.videoMeta.sourceOffset,
+      splitTimeSeconds,
+      sourceClip.videoMeta.frameRate,
+    );
+    if (!result) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Split video clip' });
+
+    const leftClip: Clip = {
+      ...sourceClip,
+      duration: result.left.duration,
+    };
+
+    const rightClip: Clip = {
+      ...sourceClip,
+      id: uuidv4(),
+      startTime: result.right.startTime,
+      duration: result.right.duration,
+      videoMeta: {
+        ...sourceClip.videoMeta,
+        sourceOffset: result.right.sourceOffset,
+      },
+    };
+
+    const newTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      return {
+        ...t,
+        clips: t.clips.map((c) => (c.id === clipId ? leftClip : c)).concat(rightClip),
+      };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  trimVideoClip: (clipId, edge, newValue) => {
+    const state = get();
+    if (!state.project) return;
+
+    let sourceClip: Clip | undefined;
+    let trackId: string | undefined;
+    for (const t of state.project.tracks) {
+      if (t.trackType !== 'video') continue;
+      const c = t.clips.find((c) => c.id === clipId);
+      if (c) { sourceClip = c; trackId = t.id; break; }
+    }
+    if (!sourceClip || !trackId || !sourceClip.videoMeta) return;
+
+    const meta = sourceClip.videoMeta;
+
+    if (edge === 'left') {
+      const result = computeLeftTrim(
+        sourceClip.startTime, sourceClip.duration, meta.sourceOffset,
+        newValue, meta.frameRate, meta.fileDuration,
+      );
+      if (!result) return;
+
+      _pushHistory(state.project, { scope: 'arrangement', label: 'Trim video clip' });
+
+      const updatedClip: Clip = {
+        ...sourceClip,
+        startTime: result.startTime,
+        duration: result.duration,
+        videoMeta: { ...meta, sourceOffset: result.sourceOffset },
+      };
+
+      const newTracks = state.project.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        return { ...t, clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)) };
+      });
+
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+          tracks: newTracks,
+        },
+      });
+    } else {
+      const result = computeRightTrim(
+        sourceClip.startTime, meta.sourceOffset,
+        newValue, meta.frameRate, meta.fileDuration,
+      );
+      if (!result) return;
+
+      _pushHistory(state.project, { scope: 'arrangement', label: 'Trim video clip' });
+
+      const updatedClip: Clip = {
+        ...sourceClip,
+        duration: result.duration,
+      };
+
+      const newTracks = state.project.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        return { ...t, clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)) };
+      });
+
+      set({
+        project: {
+          ...state.project,
+          updatedAt: Date.now(),
+          totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+          tracks: newTracks,
+        },
+      });
+    }
   },
 
   saveTrackPreset: (trackId, presetName) => {

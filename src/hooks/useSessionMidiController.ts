@@ -4,6 +4,7 @@ import { useTransport } from './useTransport';
 import {
   initMidiController,
   setMidiEventHandler,
+  setMidiStateChangeHandler,
   disconnectMidiController,
   type MidiControllerState,
   type MidiMapping,
@@ -81,9 +82,13 @@ export function useSessionMidiController(enabled: boolean) {
     });
 
     setMidiEventHandler(handleMidiEvent);
+    setMidiStateChangeHandler((state) => {
+      if (!cancelled) setMidiState(state);
+    });
 
     return () => {
       cancelled = true;
+      setMidiStateChangeHandler(null);
       disconnectMidiController();
     };
   }, [enabled, handleMidiEvent]);

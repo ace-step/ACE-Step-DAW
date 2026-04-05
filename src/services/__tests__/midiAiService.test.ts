@@ -55,7 +55,7 @@ describe('midiAiService', () => {
       expect(notes[0].startBeat).toBe(0);
       expect(notes[0].durationBeats).toBe(1);
       expect(notes[0].velocity).toBe(100);
-      expect(notes[0].id).toMatch(/^ai-gen-/);
+      expect(notes[0].id).toMatch(/^note-/);
 
       expect(notes[1].pitch).toBe(67);
       expect(notes[1].startBeat).toBe(2);

@@ -72,15 +72,17 @@ export function PianoRollCanvas({
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
 
-  // MIDI AI generation state
+  // MIDI AI generation state — only active when panel targets this clip
+  const aiPanelOpen = useMidiAiStore((s) => s.panelOpen);
+  const aiTargetClipId = useMidiAiStore((s) => s.targetClipId);
+  const aiActiveForClip = aiPanelOpen && aiTargetClipId === clip.id;
   const aiLockedNoteIds = useMidiAiStore((s) => s.lockedNoteIds);
   const aiSelectionStartBeat = useMidiAiStore((s) => s.selectionStartBeat);
   const aiSelectionEndBeat = useMidiAiStore((s) => s.selectionEndBeat);
   const aiStatus = useMidiAiStore((s) => s.status);
   const aiVariations = useMidiAiStore((s) => s.variations);
   const aiActiveVariationIndex = useMidiAiStore((s) => s.activeVariationIndex);
-  const aiPanelOpen = useMidiAiStore((s) => s.panelOpen);
-  const aiPreviewNotes = aiStatus === 'previewing'
+  const aiPreviewNotes = aiActiveForClip && aiStatus === 'previewing'
     ? (aiVariations[aiActiveVariationIndex]?.notes ?? [])
     : [];
 
@@ -358,10 +360,10 @@ export function PianoRollCanvas({
       currentBeat: liveTime,
       drag: dragRef.current,
       quantizePreviewPositions,
-      lockedNoteIds: aiPanelOpen ? aiLockedNoteIds : undefined,
-      aiSelectionStartBeat: aiPanelOpen ? aiSelectionStartBeat : null,
-      aiSelectionEndBeat: aiPanelOpen ? aiSelectionEndBeat : null,
-      aiPreviewNotes: aiPanelOpen ? aiPreviewNotes : undefined,
+      lockedNoteIds: aiActiveForClip ? aiLockedNoteIds : undefined,
+      aiSelectionStartBeat: aiActiveForClip ? aiSelectionStartBeat : null,
+      aiSelectionEndBeat: aiActiveForClip ? aiSelectionEndBeat : null,
+      aiPreviewNotes: aiActiveForClip ? aiPreviewNotes : undefined,
     });
   }, [
     activeTool,
@@ -385,7 +387,7 @@ export function PianoRollCanvas({
     aiSelectionStartBeat,
     aiSelectionEndBeat,
     aiPreviewNotes,
-    aiPanelOpen,
+    aiActiveForClip,
   ]);
 
   useEffect(() => {
@@ -588,11 +590,11 @@ export function PianoRollCanvas({
         setSelectedNoteIds(new Set([hit.note.id]));
       }
 
-      if (hit || selectedNoteIds.size > 0 || aiPanelOpen) {
+      if (hit || selectedNoteIds.size > 0) {
         setContextMenu({ x: e.clientX, y: e.clientY });
       }
     },
-    [selectedNoteIds, findNoteAt, setSelectedNoteIds, aiPanelOpen],
+    [selectedNoteIds, findNoteAt, setSelectedNoteIds],
   );
 
   const handleContextMenuQuantize = useCallback(() => {
@@ -824,7 +826,7 @@ export function PianoRollCanvas({
             onClick={handleContextMenuQuantize}
             shortcut={`${navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q`}
           />
-          {aiPanelOpen && selectedNoteIds.size > 0 && (
+          {aiActiveForClip && selectedNoteIds.size > 0 && (
             <>
               <ContextMenuItem
                 label="Lock for AI"

@@ -13,6 +13,7 @@ import type { MidiNote } from '../types/project';
 import { useMidiAiStore } from '../store/midiAiStore';
 import type { MidiAiVariation } from '../store/midiAiStore';
 import { createDebugLogger } from '../utils/debugLogger';
+import { generateNoteId } from '../components/pianoroll/PianoRollConstants';
 
 const logger = createDebugLogger('ace-step:midi-ai');
 
@@ -23,6 +24,23 @@ function getApiBase(): string {
     return custom.trim().replace(/\/+$/, '');
   }
   return '/api';
+}
+
+/**
+ * Construct an absolute WebSocket URL from the API base.
+ * Handles both relative paths (e.g. '/api') and absolute URLs (e.g. 'http://host:8080').
+ */
+function getWsUrl(path: string): string {
+  const base = getApiBase();
+
+  // If base is already absolute, replace http(s) with ws(s)
+  if (/^https?:\/\//.test(base)) {
+    return base.replace(/^http/, 'ws') + path;
+  }
+
+  // Relative path — build absolute WS URL from window.location
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}${base}${path}`;
 }
 
 // ─── MIDI Serialization Helpers ────────────────────────────────────────────
@@ -47,6 +65,7 @@ export function serializeNotesToMidiContext(notes: MidiNote[], bpm: number): str
 
 /**
  * Convert base64-encoded MIDI result back to MidiNote[].
+ * Uses generateNoteId() for collision-resistant unique IDs.
  */
 export function deserializeMidiResult(base64Data: string): MidiNote[] {
   try {
@@ -62,8 +81,8 @@ export function deserializeMidiResult(base64Data: string): MidiNote[] {
 
     if (!data.notes || !Array.isArray(data.notes)) return [];
 
-    return data.notes.map((n, i) => ({
-      id: `ai-gen-${Date.now()}-${i}`,
+    return data.notes.map((n) => ({
+      id: generateNoteId(),
       pitch: n.pitch,
       startBeat: n.start_beat,
       durationBeats: n.duration_beats,
@@ -96,10 +115,14 @@ interface MidiResultResponse {
  */
 export async function submitMidiGeneration(
   params: MidiGenerationTaskParams,
+  signal?: AbortSignal,
 ): Promise<string> {
   const base = getApiBase();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MIDI_GENERATE_TIMEOUT_MS);
+
+  // Chain external signal to internal controller
+  signal?.addEventListener('abort', () => controller.abort());
 
   try {
     const res = await fetch(`${base}/v1/midi/generate`, {
@@ -123,12 +146,18 @@ export async function submitMidiGeneration(
 
 /**
  * Poll for MIDI generation results.
+ * Supports cancellation via AbortSignal.
  */
-export async function pollMidiResult(taskId: string): Promise<MidiGenerationResultItem[]> {
+export async function pollMidiResult(
+  taskId: string,
+  signal?: AbortSignal,
+): Promise<MidiGenerationResultItem[]> {
   const base = getApiBase();
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    const res = await fetch(`${base}/v1/midi/result/${taskId}`);
+    if (signal?.aborted) throw new Error('MIDI generation cancelled');
+
+    const res = await fetch(`${base}/v1/midi/result/${taskId}`, { signal });
 
     if (!res.ok) {
       throw new Error(`Failed to poll MIDI result: ${res.status}`);
@@ -144,8 +173,14 @@ export async function pollMidiResult(taskId: string): Promise<MidiGenerationResu
       throw new Error(data.error ?? 'MIDI generation failed on the server');
     }
 
-    // Wait before next poll
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    // Wait before next poll (abortable)
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, POLL_INTERVAL_MS);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(new Error('MIDI generation cancelled'));
+      });
+    });
   }
 
   throw new Error('MIDI generation timed out');
@@ -169,19 +204,19 @@ export interface MidiStreamToken {
 /**
  * Stream MIDI generation via WebSocket for real-time feedback.
  * Falls back to polling if WebSocket is not available.
+ * Cancel aborts both WebSocket and polling fallback.
  */
 export function streamMidiGeneration(
   params: MidiGenerationTaskParams,
   onToken: (token: MidiStreamToken) => void,
 ): { cancel: () => void } {
-  const base = getApiBase();
-  const wsBase = base.replace(/^http/, 'ws');
-  let cancelled = false;
+  const abortController = new AbortController();
   let ws: WebSocket | null = null;
 
   const connect = () => {
     try {
-      ws = new WebSocket(`${wsBase}/v1/midi/generate/stream`);
+      const wsUrl = getWsUrl('/v1/midi/generate/stream');
+      ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         logger.info('WebSocket connected for MIDI streaming');
@@ -189,7 +224,7 @@ export function streamMidiGeneration(
       };
 
       ws.onmessage = (event) => {
-        if (cancelled) return;
+        if (abortController.signal.aborted) return;
         try {
           const token = JSON.parse(event.data as string) as MidiStreamToken;
           onToken(token);
@@ -205,9 +240,9 @@ export function streamMidiGeneration(
       ws.onerror = (err) => {
         logger.warn('WebSocket error, falling back to polling:', err);
         ws?.close();
-        // Fall back to REST polling
-        if (!cancelled) {
-          void fallbackToPolling(params, onToken);
+        // Fall back to REST polling (respects abort signal)
+        if (!abortController.signal.aborted) {
+          void fallbackToPolling(params, onToken, abortController.signal);
         }
       };
 
@@ -217,8 +252,8 @@ export function streamMidiGeneration(
     } catch {
       // WebSocket not available, fall back to polling
       logger.info('WebSocket not available, using polling');
-      if (!cancelled) {
-        void fallbackToPolling(params, onToken);
+      if (!abortController.signal.aborted) {
+        void fallbackToPolling(params, onToken, abortController.signal);
       }
     }
   };
@@ -227,7 +262,7 @@ export function streamMidiGeneration(
 
   return {
     cancel: () => {
-      cancelled = true;
+      abortController.abort();
       ws?.close();
     },
   };
@@ -236,13 +271,15 @@ export function streamMidiGeneration(
 async function fallbackToPolling(
   params: MidiGenerationTaskParams,
   onToken: (token: MidiStreamToken) => void,
+  signal: AbortSignal,
 ): Promise<void> {
   try {
-    const taskId = await submitMidiGeneration(params);
+    const taskId = await submitMidiGeneration(params, signal);
     onToken({ type: 'progress', progress: 10 });
-    const results = await pollMidiResult(taskId);
+    const results = await pollMidiResult(taskId, signal);
     onToken({ type: 'complete', results });
   } catch (error) {
+    if (signal.aborted) return; // Silently ignore cancellation
     const message = error instanceof Error ? error.message : String(error);
     onToken({ type: 'error', error: message });
   }
@@ -309,7 +346,6 @@ export function generateMidiAi(
 
     switch (token.type) {
       case 'progress':
-        // Could update a progress indicator in the future
         logger.debug('Generation progress:', token.progress);
         break;
 

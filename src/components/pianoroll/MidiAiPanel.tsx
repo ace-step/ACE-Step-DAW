@@ -5,7 +5,7 @@
  * Follows the same layout pattern as ChordSuggestionPanel.
  * Issue #739
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useMidiAiStore } from '../../store/midiAiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
@@ -62,6 +62,15 @@ export function MidiAiPanel() {
   const selectedNoteIds = useUIStore((s) => s.selectedPianoRollNoteIds);
 
   const cancelRef = useRef<(() => void) | null>(null);
+
+  // Cancel in-flight generation on unmount
+  useEffect(() => {
+    return () => {
+      cancelRef.current?.();
+      cancelRef.current = null;
+    };
+  }, []);
+
   const bpm = project?.bpm ?? 120;
 
   const clip = project?.tracks
@@ -106,7 +115,7 @@ export function MidiAiPanel() {
       model,
       style: style || undefined,
       key: project?.keyScale,
-      timeSignature: `${project?.timeSignature ?? 4}/4`,
+      timeSignature: `${project?.timeSignature ?? 4}/${(project as Record<string, number> | null)?.timeSignatureDenominator ?? 4}`,
     });
     cancelRef.current = stream.cancel;
   }, [
@@ -126,13 +135,13 @@ export function MidiAiPanel() {
     const variation = acceptVariation();
     if (!variation || !targetClipId) return;
 
-    // In infill mode: remove existing notes in the selection range, then add generated notes
+    // In infill mode: remove existing notes that intersect the selection range, then add generated notes
     if (mode === 'infill' && selectionStartBeat !== null && selectionEndBeat !== null) {
       const toRemove = notes.filter(
         (n) =>
           !lockedNoteIds.has(n.id) &&
-          n.startBeat >= selectionStartBeat &&
-          n.startBeat < selectionEndBeat,
+          n.startBeat < selectionEndBeat &&
+          n.startBeat + n.durationBeats > selectionStartBeat,
       );
       for (const n of toRemove) {
         removeMidiNote(targetClipId, n.id);
@@ -223,7 +232,11 @@ export function MidiAiPanel() {
           )}
           <button
             type="button"
-            onClick={closePanel}
+            onClick={() => {
+              cancelRef.current?.();
+              cancelRef.current = null;
+              closePanel();
+            }}
             className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-zinc-400 hover:bg-white/10 transition-colors"
             title="Close AI MIDI panel"
           >

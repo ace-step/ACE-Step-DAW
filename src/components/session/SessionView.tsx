@@ -9,6 +9,7 @@ import { useSessionDragDrop, type SessionDragState, type SessionDropTarget } fro
 import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui/ContextMenu';
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
+import { useMidiController } from '../../hooks/useMidiController';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, FollowActionType, FollowActionConfig } from '../../types/project';
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
@@ -126,6 +127,40 @@ export function SessionView() {
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
   const [showSessionMixer, setShowSessionMixer] = useState(false);
+  const [midiEnabled, setMidiEnabled] = useState(false);
+
+  const storeLaunchClip = useProjectStore((s) => s.launchSessionClip);
+  const storeLaunchScene = useProjectStore((s) => s.launchSessionScene);
+  const storeStopAll = useProjectStore((s) => s.stopAllSessionClips);
+
+  // MIDI controller mapping — route MIDI note-on to session actions
+  const handleMidiClipLaunch = useCallback((trackIndex: number, sceneIndex: number) => {
+    if (!project) return;
+    const sortedTracks = [...project.tracks].sort((a, b) => a.order - b.order);
+    const track = sortedTracks[trackIndex];
+    const session = project.session;
+    const scene = session?.scenes[sceneIndex];
+    if (!track || !scene) return;
+    storeLaunchClip(track.id, scene.id);
+  }, [project, storeLaunchClip]);
+
+  const handleMidiSceneLaunch = useCallback((sceneIndex: number) => {
+    if (!project?.session) return;
+    const scene = project.session.scenes[sceneIndex];
+    if (!scene) return;
+    storeLaunchScene(scene.id);
+  }, [project, storeLaunchScene]);
+
+  const handleMidiStopAll = useCallback(() => {
+    storeStopAll();
+  }, [storeStopAll]);
+
+  const { isConnected: midiConnected } = useMidiController({
+    enabled: midiEnabled,
+    onClipLaunch: handleMidiClipLaunch,
+    onSceneLaunch: handleMidiSceneLaunch,
+    onStopAll: handleMidiStopAll,
+  });
 
   const handleCloseColorMenu = useCallback(() => setColorMenu(null), []);
 
@@ -254,6 +289,20 @@ export function SessionView() {
               aria-label="Stop all Session clips"
             >
               Stop All
+            </button>
+            <button
+              onClick={() => setMidiEnabled((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                midiEnabled
+                  ? midiConnected
+                    ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/50'
+                    : 'bg-amber-600/30 text-amber-300 border border-amber-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-400 hover:bg-[#343434]'
+              }`}
+              aria-label={midiEnabled ? 'Disable MIDI controller input' : 'Enable MIDI controller input'}
+              data-testid="midi-controller-toggle"
+            >
+              {midiEnabled ? (midiConnected ? 'MIDI ●' : 'MIDI …') : 'MIDI'}
             </button>
             <button
               onClick={() => setMainView('arrangement')}

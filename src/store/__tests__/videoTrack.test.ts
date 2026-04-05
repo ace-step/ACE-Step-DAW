@@ -17,7 +17,7 @@ describe('Video Track (Phase 1)', () => {
 
   describe('addTrack("video")', () => {
     it('creates a valid video track via store API', () => {
-      const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const track = useProjectStore.getState().addTrack('custom', 'video');
       expect(track).toBeDefined();
       expect(track.trackType).toBe('video');
       expect(track.trackName).toBe('custom');
@@ -26,17 +26,17 @@ describe('Video Track (Phase 1)', () => {
     });
 
     it('assigns video catalog color (#0ea5e9)', () => {
-      const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const track = useProjectStore.getState().addTrack('custom', 'video');
       expect(track.color).toBe('#0ea5e9');
     });
 
     it('sets default laneHeight to 80', () => {
-      const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const track = useProjectStore.getState().addTrack('custom', 'video');
       expect(track.laneHeight).toBe(80);
     });
 
     it('initializes default videoSettings', () => {
-      const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const track = useProjectStore.getState().addTrack('custom', 'video');
       expect(track.videoSettings).toBeDefined();
       expect(track.videoSettings!.showPreview).toBe(true);
       expect(track.videoSettings!.previewSize).toBe('medium');
@@ -47,7 +47,7 @@ describe('Video Track (Phase 1)', () => {
     });
 
     it('does NOT initialize audio-related fields', () => {
-      const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const track = useProjectStore.getState().addTrack('custom', 'video');
       // Video tracks should not have mixer/audio properties
       expect(track.volume).toBe(0); // explicitly 0, not 0.8
       expect(track.pan).toBeUndefined();
@@ -63,7 +63,7 @@ describe('Video Track (Phase 1)', () => {
     });
 
     it('adds the track to project tracks', () => {
-      useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      useProjectStore.getState().addTrack('custom', 'video');
       const tracks = useProjectStore.getState().project!.tracks;
       expect(tracks).toHaveLength(1);
       expect(tracks[0].trackType).toBe('video');
@@ -72,12 +72,12 @@ describe('Video Track (Phase 1)', () => {
 
   describe('max video track enforcement', () => {
     it('enforces max 1 video track per project', () => {
-      const first = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const first = useProjectStore.getState().addTrack('custom', 'video');
       expect(first).toBeDefined();
       expect(first.trackType).toBe('video');
 
       // Second video track should be rejected
-      const second = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      const second = useProjectStore.getState().addTrack('custom', 'video');
       // Should return undefined or falsy when limit reached
       expect(second?.trackType).not.toBe('video');
 
@@ -91,7 +91,7 @@ describe('Video Track (Phase 1)', () => {
     });
 
     it('allows non-video tracks when video track exists', () => {
-      useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      useProjectStore.getState().addTrack('custom', 'video');
       const audioTrack = useProjectStore.getState().addTrack('custom', 'sample');
       expect(audioTrack).toBeDefined();
       expect(audioTrack.trackType).toBe('sample');
@@ -103,7 +103,7 @@ describe('Video Track (Phase 1)', () => {
 
   describe('video track serialization', () => {
     it('videoSettings survives JSON round-trip', () => {
-      useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      useProjectStore.getState().addTrack('custom', 'video');
       const project = useProjectStore.getState().project!;
 
       // Simulate save/load
@@ -118,7 +118,7 @@ describe('Video Track (Phase 1)', () => {
     });
 
     it('videoData on clip survives JSON round-trip', () => {
-      useProjectStore.getState().addTrack('video' as any, 'video' as any);
+      useProjectStore.getState().addTrack('custom', 'video');
       const tracks = useProjectStore.getState().project!.tracks;
       const videoTrack = tracks.find(t => t.trackType === 'video')!;
 
@@ -169,7 +169,7 @@ describe('Video Track (Phase 1)', () => {
   describe('video track shorthand', () => {
     it('addTrack("video") resolves correctly (shorthand)', () => {
       // When trackName is a TrackType (like 'video'), it should resolve to custom + video
-      const track = useProjectStore.getState().addTrack('video' as any);
+      const track = useProjectStore.getState().addTrack('video' as any) /* shorthand: 'video' is a TrackType not TrackName */;
       expect(track.trackType).toBe('video');
       expect(track.trackName).toBe('custom');
     });

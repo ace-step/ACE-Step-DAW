@@ -48,6 +48,11 @@ describe('videoService', () => {
       expect(isVideoFile(file)).toBe(false);
     });
 
+    it('rejects audio/webm (not video/webm)', () => {
+      const file = new File([], 'recording.webm', { type: 'audio/webm' });
+      expect(isVideoFile(file)).toBe(false);
+    });
+
     it('rejects plain text files', () => {
       const file = new File([], 'notes.txt', { type: 'text/plain' });
       expect(isVideoFile(file)).toBe(false);
@@ -123,6 +128,8 @@ describe('videoService', () => {
       const file = new File([], 'document.pdf', { type: 'application/pdf' });
       const error = validateVideoFile(file);
       expect(error).toContain('Unsupported format');
+      expect(error).toContain('MP4');
+      expect(error).toContain('MKV');
     });
 
     it('accepts WebM files', () => {

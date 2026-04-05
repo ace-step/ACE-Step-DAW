@@ -17,7 +17,7 @@ describe('Mixer — video track exclusion', () => {
   it('video tracks should be filtered out from mixer display', () => {
     // Add a mix of tracks
     useProjectStore.getState().addTrack('custom', 'sample');
-    useProjectStore.getState().addTrack('video' as any, 'video' as any);
+    useProjectStore.getState().addTrack('custom', 'video');
     useProjectStore.getState().addTrack('drums', 'stems');
 
     const tracks = useProjectStore.getState().project!.tracks;

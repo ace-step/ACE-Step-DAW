@@ -1,5 +1,6 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import type { Track } from '../../types/project';
+import { toastInfo } from '../../hooks/useToast';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useGenerationStore } from '../../store/generationStore';
@@ -338,7 +339,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
         importAudioFileAsSampler,
         importAudioFileAsNewQuickSampler,
         importAudioToTrack,
-        importVideoToTrack: async () => { /* Phase 2 stub — full import wired in useVideoImport hook */ },
+        importVideoToTrack: async (videoFile: File) => { toastInfo(`Video import coming soon: "${videoFile.name}"`); },
         importMidiFile,
         convertMidiFileToStrudel,
         applyStrudelCodeToTrack,

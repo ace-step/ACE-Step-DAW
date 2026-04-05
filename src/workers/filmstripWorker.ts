@@ -25,17 +25,15 @@ interface GenerationRequest {
   thumbHeight: number;
 }
 
-const hasWebCodecs = typeof VideoDecoder !== 'undefined';
-
 self.onmessage = async (e: MessageEvent) => {
   if (e.data.type !== 'generate-filmstrip') return;
 
   const request: GenerationRequest = e.data.request;
 
   try {
-    const thumbnails = hasWebCodecs
-      ? await generateWithWebCodecs(request)
-      : await generateWithVideoElement(request);
+    // Placeholder implementation — generates timecode thumbnails.
+    // Will be replaced with real decoding when mp4box.js demuxer is integrated.
+    const thumbnails = await generatePlaceholderThumbnails(request);
 
     self.postMessage({
       type: 'filmstrip-complete',
@@ -54,39 +52,16 @@ self.onmessage = async (e: MessageEvent) => {
 };
 
 /**
- * Generate thumbnails using WebCodecs VideoDecoder.
- * This is the high-performance path for Chromium browsers.
+ * Generate placeholder thumbnails with timestamps.
+ *
+ * NOTE: This is a placeholder implementation. Real frame decoding requires
+ * either mp4box.js demuxing + WebCodecs VideoDecoder (Chromium) or
+ * HTMLVideoElement seeking on the main thread (all browsers).
+ * These placeholders show timecodes and will be replaced by actual frames
+ * when the demuxer integration is added.
  */
-async function generateWithWebCodecs(request: GenerationRequest): Promise<Blob[]> {
-  const { videoBlob, videoData, intervalSeconds, thumbWidth, thumbHeight } = request;
-  const canvas = new OffscreenCanvas(thumbWidth, thumbHeight);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Cannot create OffscreenCanvas 2D context');
-
-  // Calculate target timestamps
-  const frameCount = Math.ceil(videoData.fileDuration / intervalSeconds);
-  const timestamps: number[] = [];
-  for (let i = 0; i < frameCount; i++) {
-    timestamps.push(i * intervalSeconds);
-  }
-
-  // Use HTMLVideoElement fallback approach even in Worker via createImageBitmap
-  // WebCodecs requires demuxed data (mp4box integration deferred to future)
-  // For now, use the video element fallback which is simpler and works everywhere
-  return generateWithVideoElement(request);
-}
-
-/**
- * Generate thumbnails using HTMLVideoElement seeking.
- * Works in all browsers but is slower than WebCodecs.
- * Note: This runs on main thread if Worker doesn't support HTMLVideoElement.
- */
-async function generateWithVideoElement(request: GenerationRequest): Promise<Blob[]> {
-  const { videoBlob, videoData, intervalSeconds, thumbWidth, thumbHeight } = request;
-
-  // In a Worker context, we can't use HTMLVideoElement directly.
-  // Instead, we use createImageBitmap with a canvas approach.
-  // For now, we create thumbnail placeholders that the main thread will fill.
+async function generatePlaceholderThumbnails(request: GenerationRequest): Promise<Blob[]> {
+  const { videoData, intervalSeconds, thumbWidth, thumbHeight } = request;
   const frameCount = Math.ceil(videoData.fileDuration / intervalSeconds);
   const thumbnails: Blob[] = [];
 

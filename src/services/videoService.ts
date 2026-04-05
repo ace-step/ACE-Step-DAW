@@ -34,10 +34,15 @@ const VIDEO_MIME_TYPES = new Set([
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|mkv|avi|m4v)$/i;
 
 /**
- * Check if a file is a video file by MIME type or extension.
+ * Check if a file is a video file.
+ * Prefers MIME type when available; falls back to extension only when MIME is empty/unknown.
  */
 export function isVideoFile(file: File): boolean {
-  return VIDEO_MIME_TYPES.has(file.type) || VIDEO_EXTENSIONS.test(file.name);
+  const mimeType = file.type.trim().toLowerCase();
+  if (mimeType) {
+    return VIDEO_MIME_TYPES.has(mimeType);
+  }
+  return VIDEO_EXTENSIONS.test(file.name);
 }
 
 /**
@@ -81,7 +86,14 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       video.load();
     };
 
+    // Timeout after 10 seconds
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Video metadata extraction timed out'));
+    }, 10_000);
+
     video.onloadedmetadata = () => {
+      clearTimeout(timeout);
       const metadata: VideoMetadata = {
         duration: video.duration,
         width: video.videoWidth,
@@ -94,7 +106,6 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
         fileSize: file.size,
       };
 
-      // Refine intra-codec classification
       metadata.isIntraCodec = isIntraFrameCodec(metadata.codec);
       if (metadata.isIntraCodec) {
         metadata.gopSize = 1;
@@ -105,37 +116,9 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
     };
 
     video.onerror = () => {
+      clearTimeout(timeout);
       cleanup();
       reject(new Error(`Cannot read video file: ${file.name}`));
-    };
-
-    // Timeout after 10 seconds
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Video metadata extraction timed out'));
-    }, 10_000);
-
-    video.onloadedmetadata = function onLoaded() {
-      clearTimeout(timeout);
-      const metadata: VideoMetadata = {
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight,
-        frameRate: 30,
-        codec: detectCodecFromMimeType(file.type),
-        isIntraCodec: false,
-        gopSize: 15,
-        hasAudio: hasAudioTrack(video),
-        fileSize: file.size,
-      };
-
-      metadata.isIntraCodec = isIntraFrameCodec(metadata.codec);
-      if (metadata.isIntraCodec) {
-        metadata.gopSize = 1;
-      }
-
-      cleanup();
-      resolve(metadata);
     };
 
     video.src = objectURL;
@@ -179,7 +162,7 @@ export function validateVideoFile(file: File): string | null {
     return `File too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 500 MB.`;
   }
   if (!isVideoFile(file)) {
-    return `Unsupported format: ${file.type || file.name}. Supported: MP4, WebM, MOV.`;
+    return `Unsupported format: ${file.type || file.name}. Supported: MP4, WebM, MOV, MKV, AVI, M4V.`;
   }
   return null;
 }
@@ -243,7 +226,16 @@ export async function importVideoFile(
   // 3. Extract metadata
   const metadata = await extractVideoMetadata(file);
 
-  // 4. Performance warning for long-GOP H.264
+  // 4. Validate codec support
+  const codecSupported = await isCodecSupported(metadata.codec, metadata.width, metadata.height);
+  if (!codecSupported) {
+    throw new Error(
+      `Unsupported video codec: ${metadata.codec}. ` +
+      'This browser cannot decode this video format. Try re-encoding as H.264 (MP4) or VP9 (WebM).',
+    );
+  }
+
+  // 5. Performance warning for long-GOP H.264
   if (!metadata.isIntraCodec && metadata.gopSize > 1) {
     toastInfo(
       `This video uses inter-frame compression (${metadata.codec}, GOP=${metadata.gopSize}). ` +

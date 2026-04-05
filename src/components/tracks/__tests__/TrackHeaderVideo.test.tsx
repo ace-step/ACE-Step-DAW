@@ -17,13 +17,13 @@ describe('Video track header behavior', () => {
   });
 
   it('video track is created with correct type', () => {
-    const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+    const track = useProjectStore.getState().addTrack('custom', 'video');
     expect(track.trackType).toBe('video');
     expect(track.volume).toBe(0);
   });
 
   it('video track has no audio fields (verifying data model)', () => {
-    const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+    const track = useProjectStore.getState().addTrack('custom', 'video');
     expect(track.pan).toBeUndefined();
     expect(track.eqLowGain).toBeUndefined();
     expect(track.compressorEnabled).toBeUndefined();
@@ -32,7 +32,7 @@ describe('Video track header behavior', () => {
   });
 
   it('video track videoSettings are initialized', () => {
-    const track = useProjectStore.getState().addTrack('video' as any, 'video' as any);
+    const track = useProjectStore.getState().addTrack('custom', 'video');
     expect(track.videoSettings).toBeDefined();
     expect(track.videoSettings!.showPreview).toBe(true);
     expect(track.videoSettings!.videoFollowsEdit).toBe(true);

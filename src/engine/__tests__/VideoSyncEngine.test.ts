@@ -106,16 +106,20 @@ describe('VideoSyncEngine — pure logic', () => {
       expect(mapTransportToVideoTime(10, mapping)).toBe(0);
     });
 
-    it('clamps to source duration when clip extends beyond source', () => {
+    it('clamps near source duration when clip extends beyond source (last-frame safe)', () => {
       const mapping = createMapping({
         clipStartTime: 0,
         clipEndTime: 200,
         clipDuration: 200,
         sourceOffset: 0,
         sourceDuration: 120,
+        frameRate: 30,
       });
-      // Transport 150 → 150 seconds, but source is only 120s → clamp to 120
-      expect(mapTransportToVideoTime(150, mapping)).toBe(120);
+      // Transport 150 → 150 seconds, but source is only 120s
+      // Clamped to sourceDuration - 1/frameRate for reliable last-frame rendering
+      const result = mapTransportToVideoTime(150, mapping)!;
+      expect(result).toBeCloseTo(120 - 1 / 30, 5);
+      expect(result).toBeLessThan(120);
     });
 
     it('handles clip starting at transport 0', () => {

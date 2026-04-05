@@ -48,7 +48,7 @@ export async function processTrackLaneFileDrop(options: TrackLaneFileDropOptions
     setOpenStrudelEditor,
   } = options;
 
-  if (isVideoFile(file)) {
+  if (isVideoFile(file) && trackType === 'video') {
     await importVideoToTrack(file, trackId, startTime);
     return;
   }

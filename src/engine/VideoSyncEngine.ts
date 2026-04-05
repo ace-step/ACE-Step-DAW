@@ -44,8 +44,10 @@ export function mapTransportToVideoTime(
   }
   const timeInClip = transportSeconds - mapping.clipStartTime;
   const videoTime = mapping.sourceOffset + timeInClip;
-  // Clamp to source duration (freeze on last frame if clip extends beyond source)
-  return Math.min(videoTime, mapping.sourceDuration);
+  // Clamp slightly before source duration so HTMLVideoElement can reliably render the last frame
+  const endEpsilon = mapping.frameRate > 0 ? 1 / mapping.frameRate : 0.001;
+  const lastRenderableTime = Math.max(0, mapping.sourceDuration - endEpsilon);
+  return Math.min(videoTime, lastRenderableTime);
 }
 
 /**
@@ -181,11 +183,14 @@ export class VideoSyncEngine {
   private currentMapping: VideoClipMapping | null = null;
   private animFrameId: number | null = null;
   private audioLatency: number = 0;
+  private getTransportSeconds: (() => number) | null = null;
 
   /**
    * Attach the engine to DOM elements for rendering.
+   * @param getTransportSeconds - callback to read current transport time (e.g. () => Tone.Transport.seconds)
    */
-  attach(canvas: HTMLCanvasElement): void {
+  attach(canvas: HTMLCanvasElement, getTransportSeconds?: () => number): void {
+    this.getTransportSeconds = getTransportSeconds ?? null;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.videoEl = document.createElement('video');
@@ -320,7 +325,29 @@ export class VideoSyncEngine {
   private startSyncLoop(): void {
     this.stopSyncLoop();
     const loop = () => {
-      if (this.mode !== 'playing') return;
+      if (this.mode !== 'playing' || !this.videoEl || !this.currentMapping) return;
+
+      // Drift correction: compare expected vs actual video time
+      if (this.getTransportSeconds) {
+        const transportTime = compensateLatency(this.getTransportSeconds(), this.audioLatency);
+        const expectedVideoTime = mapTransportToVideoTime(transportTime, this.currentMapping);
+
+        if (expectedVideoTime !== null) {
+          const actualVideoTime = this.videoEl.currentTime;
+          const drift = calculateDrift(expectedVideoTime, actualVideoTime);
+          const correction = getDriftCorrection(drift, expectedVideoTime);
+
+          if (correction.type === 'rate-adjust') {
+            this.videoEl.playbackRate = correction.playbackRate;
+          } else if (correction.type === 'hard-seek') {
+            this.videoEl.currentTime = correction.targetTime;
+            this.videoEl.playbackRate = 1;
+          } else {
+            this.videoEl.playbackRate = 1;
+          }
+        }
+      }
+
       this.drawCurrentFrame();
       this.animFrameId = requestAnimationFrame(loop);
     };

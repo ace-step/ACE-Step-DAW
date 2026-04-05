@@ -112,15 +112,18 @@ const INTENSIFIERS: Record<string, number> = {
 /**
  * Parse a natural language sound description into parameter adjustments.
  *
+ * When multiple descriptors match (e.g. "dark aggressive"), deltas for
+ * the same parameter are summed so no adjustment is silently lost.
+ *
  * Examples:
  *   "warmer" → lower filter cutoff, soften attack
  *   "much brighter" → raise filter cutoff (amplified)
- *   "warmer and brighter" → combined adjustments
+ *   "dark aggressive" → combined adjustments with summed deltas
  */
 export function parseSoundDescription(input: string): ParameterAdjustment[] {
   const normalized = input.toLowerCase().trim();
-  const result: ParameterAdjustment[] = [];
-  const seen = new Set<string>(); // avoid duplicate parameters
+  // Accumulate deltas per parameter so multiple descriptors compose correctly
+  const paramMap = new Map<string, ParameterAdjustment>();
 
   // Detect intensifier
   let intensifier = 1.0;
@@ -131,13 +134,15 @@ export function parseSoundDescription(input: string): ParameterAdjustment[] {
     }
   }
 
-  // Match descriptors
+  // Match descriptors — sum deltas for shared parameters
   for (const [descriptor, adjustments] of Object.entries(SOUND_DESCRIPTORS)) {
     if (normalized.includes(descriptor)) {
       for (const adj of adjustments) {
-        if (!seen.has(adj.parameter)) {
-          seen.add(adj.parameter);
-          result.push({
+        const existing = paramMap.get(adj.parameter);
+        if (existing) {
+          existing.delta += adj.delta * intensifier;
+        } else {
+          paramMap.set(adj.parameter, {
             ...adj,
             delta: adj.delta * intensifier,
           });
@@ -146,5 +151,47 @@ export function parseSoundDescription(input: string): ParameterAdjustment[] {
     }
   }
 
-  return result;
+  return Array.from(paramMap.values());
+}
+
+/**
+ * Generate named variations of a base set of adjustments.
+ *
+ * Returns up to `count` variations, each with a descriptive name and
+ * modified deltas. Useful for offering multiple sound design directions.
+ */
+export function generateVariations(
+  baseAdjustments: ParameterAdjustment[],
+  count: number = 5,
+): { name: string; adjustments: ParameterAdjustment[] }[] {
+  const safeCount = Math.max(0, Math.min(count, 10));
+  const variations: { name: string; adjustments: ParameterAdjustment[] }[] = [
+    { name: 'Brighter', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 1.3 })) },
+    { name: 'Warmer', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 0.7 })) },
+    { name: 'Wider', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('unison') || a.parameter.includes('spread') ? a.delta * 1.5 : a.delta,
+    })) },
+    { name: 'Punchier', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('attack') || a.parameter.includes('decay') ? a.delta * 1.4 : a.delta,
+    })) },
+    { name: 'Spacious', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('release') || a.parameter.includes('spread') ? a.delta * 1.6 : a.delta,
+    })) },
+    { name: 'Aggressive', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 1.8 })) },
+    { name: 'Vibrato', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('lfo') ? a.delta * 2.0 : a.delta,
+    })) },
+    { name: 'Detuned', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('detune') ? a.delta * 2.0 : a.delta,
+    })) },
+    { name: 'Subtle', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 0.4 })) },
+    { name: 'Extreme', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 2.5 })) },
+  ];
+
+  return variations.slice(0, safeCount);
 }

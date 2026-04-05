@@ -244,7 +244,7 @@ select:focus-visible,
   .playhead-triangle-blink polygon {
     animation: none !important;
   }
-  [style*="playhead-blink"] {
+  .playhead-blink-line {
     animation: none !important;
   }
   /* Disable session view queued-clip blink */
@@ -269,6 +269,9 @@ select:focus-visible,
   0%, 30% { background-color: #ffffff; }
   50%, 80% { background-color: var(--color-daw-playhead); }
   100% { background-color: #ffffff; }
+}
+.playhead-blink-line {
+  animation: playhead-blink-line 1.2s ease-in-out infinite;
 }
 @keyframes playhead-blink-triangle {
   0%, 30% { border-top-color: #000000; }

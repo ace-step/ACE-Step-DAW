@@ -45,7 +45,7 @@ describe('LevelMeter', () => {
     render(<LevelMeter masterStage="output" />);
     const canvas = screen.getByTestId('meter-canvas');
     expect(canvas.getAttribute('role')).toBe('img');
-    expect(canvas.getAttribute('aria-label')).toBe('Audio level meter');
+    expect(canvas.getAttribute('aria-label')).toBe('Master output level meter');
   });
 
   it('renders clip indicator button (initially hidden)', () => {

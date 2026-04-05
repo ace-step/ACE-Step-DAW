@@ -57,12 +57,11 @@ function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number
 
   return (
     <div
-      className="absolute w-px z-20 pointer-events-none"
+      className={`absolute w-px z-20 pointer-events-none${blink ? ' playhead-blink-line' : ''}`}
       style={{
         left: x,
         top: laneRect.top,
         height: laneRect.height,
-        animation: blink ? 'playhead-blink-line 1.2s ease-in-out infinite' : undefined,
         backgroundColor: blink ? undefined : '#ffffff',
         boxShadow: '0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.15)',
       }}

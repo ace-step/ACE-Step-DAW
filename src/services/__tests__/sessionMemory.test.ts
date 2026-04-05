@@ -70,8 +70,8 @@ describe('SessionMemory', () => {
     memory = new SessionMemory();
   });
 
-  afterEach(() => {
-    memory.destroy();
+  afterEach(async () => {
+    await memory.destroy();
     vi.useRealTimers();
   });
 

@@ -1,11 +1,12 @@
 /**
  * Session Memory Layer — automatic event capture and wiki ingest pipeline.
  * Captures generation, creative, and research events during a DAW session,
- * batches them, and persists wiki updates to IndexedDB.
+ * batches them, persists raw session data to IndexedDB, and derives wiki
+ * updates from those events when needed.
  * @see https://github.com/ace-step/ACE-Step-DAW/issues/1451
  */
 
-import { get, set } from 'idb-keyval';
+import { set } from 'idb-keyval';
 import type {
   SessionEvent,
   GenerationEvent,
@@ -68,17 +69,17 @@ export class SessionMemory {
   // ─── Event Capture ──────────────────────────────────────────────────
 
   captureGeneration(event: GenerationEvent): void {
-    if (!this.config.captureGenerations) return;
+    if (this.destroyed || !this.config.captureGenerations) return;
     this.addEvent(event);
   }
 
   captureCreative(event: CreativeEvent): void {
-    if (!this.config.captureCreativeActions) return;
+    if (this.destroyed || !this.config.captureCreativeActions) return;
     this.addEvent(event);
   }
 
   captureResearch(event: ResearchEvent): void {
-    if (!this.config.captureResearch) return;
+    if (this.destroyed || !this.config.captureResearch) return;
     this.addEvent(event);
   }
 
@@ -90,11 +91,16 @@ export class SessionMemory {
     const events = [...this.buffer];
     this.buffer = [];
 
-    const key = `${WIKI_SESSION_PREFIX}${this.sessionId}:${Date.now()}`;
-    await set(key, events);
+    try {
+      const key = `${WIKI_SESSION_PREFIX}${this.sessionId}:${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      await set(key, events);
 
-    for (const cb of this.flushCallbacks) {
-      cb(events);
+      for (const cb of this.flushCallbacks) {
+        cb(events);
+      }
+    } catch {
+      // Re-queue events on persistence failure to prevent data loss
+      this.buffer = [...events, ...this.buffer];
     }
   }
 
@@ -163,7 +169,8 @@ export class SessionMemory {
   // ─── Session Summary ───────────────────────────────────────────────
 
   async endSession(): Promise<SessionSummary> {
-    // Flush remaining buffer
+    // Stop accepting new events and flush remaining buffer
+    this.stopFlushTimer();
     await this.flush();
 
     const genEvents = this.allEvents.filter(
@@ -173,6 +180,7 @@ export class SessionMemory {
       e => classifyEvent(e) === 'creative'
     );
 
+    // Only count complete/failed — variation_selected tracked separately in events
     const successful = genEvents.filter(e => e.type === 'generation_complete').length;
     const failed = genEvents.filter(e => e.type === 'generation_failed').length;
 
@@ -198,7 +206,7 @@ export class SessionMemory {
       startedAt: this.startedAt,
       endedAt: Date.now(),
       projectId: this.projectId,
-      totalGenerations: genEvents.length,
+      totalGenerations: successful + failed,
       successfulGenerations: successful,
       failedGenerations: failed,
       averageRating,

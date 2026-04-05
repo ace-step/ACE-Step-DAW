@@ -50,7 +50,7 @@ describe('Toolbar button micro-animations', () => {
     render(<Toolbar />);
 
     // Play button is a direct <button> with inline classes, not a <Button> component
-    const playButton = screen.getByTitle('Play (Space)');
+    const playButton = screen.getByLabelText('Play');
     // Play button uses inline transition classes (not the Button component)
     expect(playButton.className).toContain('active:scale-95');
   });

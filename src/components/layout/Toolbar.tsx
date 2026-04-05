@@ -12,6 +12,7 @@ import { CompanionStatus } from '../plugins/CompanionStatus';
 import { formatTime, formatBarsBeats, formatDurationMSS } from '../../utils/time';
 import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
+import { Tooltip } from '../ui/Tooltip';
 import { LatencyDisplay } from './LatencyDisplay';
 
 const KEY_ROOT_LABELS: Record<string, string> = {
@@ -514,6 +515,7 @@ function ControlBarButton({
   active,
   onClick,
   title,
+  shortcutHint,
   disabled,
   dataTarget,
   className,
@@ -523,6 +525,7 @@ function ControlBarButton({
   active?: boolean;
   onClick: () => void | Promise<void>;
   title: string;
+  shortcutHint?: string;
   disabled?: boolean;
   dataTarget?: string;
   className?: string;
@@ -533,7 +536,8 @@ function ControlBarButton({
     ? ''
     : 'hover:bg-transparent hover:text-white';
 
-  return (
+  const label = title.replace(/\s*\(.+?\)$/, '');
+  const btn = (
     <Button
       size="md"
       variant="ghost"
@@ -541,14 +545,23 @@ function ControlBarButton({
       active={active}
       onClick={onClick}
       disabled={disabled}
-      title={title}
-      aria-label={title.replace(/\s*\(.+?\)$/, '')}
+      title={shortcutHint ? undefined : title}
+      aria-label={label}
       data-onboarding-target={dataTarget}
       className={`h-10 w-10 rounded-lg p-0 text-white/90 ${hoverClass} ${className ?? ''}`}
     >
       {children}
     </Button>
   );
+
+  if (shortcutHint) {
+    return (
+      <Tooltip content={label} shortcut={shortcutHint} side="bottom">
+        {btn}
+      </Tooltip>
+    );
+  }
+  return btn;
 }
 
 function AceStudioLink() {
@@ -745,6 +758,7 @@ export function Toolbar() {
           active={mainView === 'arrangement'}
           onClick={() => setMainView('arrangement')}
           title="Arrangement View (Tab)"
+          shortcutHint="Tab"
         >
           <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M2 4h10M2 7h10M2 10h10" />
@@ -754,6 +768,7 @@ export function Toolbar() {
           active={mainView === 'session'}
           onClick={() => setMainView('session')}
           title="Session View (Tab)"
+          shortcutHint="Tab"
         >
           <svg width="23" height="23" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
             <path d="M4 2v10M7 2v10M10 2v10" />
@@ -818,13 +833,14 @@ export function Toolbar() {
         data-onboarding-target="transport"
       >
         {/* Rewind */}
-        <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)">
+        <ControlBarButton onClick={() => void stop()} title="Go to Beginning (Enter)" shortcutHint="Enter">
           <svg width="22" height="20" viewBox="0 0 14 12" fill="currentColor">
             <rect x="0" y="1" width="2" height="10" rx="0.5" />
             <path d="M13 1L5 6l8 5V1z" />
           </svg>
         </ControlBarButton>
         {/* Play/Pause */}
+        <Tooltip content={isPlaying ? 'Pause' : 'Play'} shortcut="Space" side="bottom">
         <button
           onClick={() => void (isPlaying ? pause() : play())}
           className={`flex h-10 w-11 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
@@ -832,7 +848,6 @@ export function Toolbar() {
               ? 'bg-daw-accent text-white'
               : 'bg-transparent text-white/90 hover:bg-transparent hover:text-white'
           }`}
-          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -846,12 +861,13 @@ export function Toolbar() {
             </svg>
           )}
         </button>
-        <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" active={isRecording}>
+        </Tooltip>
+        <ControlBarButton onClick={() => void toggleRecord()} title="Record (R)" shortcutHint="R" active={isRecording}>
           <div className={`h-[20px] w-[20px] rounded-full bg-red-500 ${isRecording ? 'animate-pulse' : 'opacity-70'}`} />
         </ControlBarButton>
+        <Tooltip content="Metronome" shortcut="K" side="bottom">
         <button
           onClick={toggleMetronome}
-          title="Metronome (K)"
           aria-label="Metronome"
           className={`flex h-10 w-10 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
             metronomeEnabled
@@ -861,10 +877,12 @@ export function Toolbar() {
         >
           <MetronomePulseIcon />
         </button>
+        </Tooltip>
         <ControlBarButton
           active={loopEnabled}
           onClick={toggleLoop}
           title="Loop (C)"
+          shortcutHint="C"
           disableHoverHighlight
         >
           <svg width="22" height="22" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

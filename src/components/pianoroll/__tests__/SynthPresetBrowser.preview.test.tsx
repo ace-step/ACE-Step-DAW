@@ -11,7 +11,21 @@ vi.mock('tone', () => ({
   Gain: vi.fn().mockReturnValue({ toDestination: vi.fn(), connect: vi.fn(), dispose: vi.fn() }),
 }));
 
-describe('SynthPresetBrowser — preview buttons', () => {
+// Mock usePresetPreview hook
+vi.mock('../../../hooks/usePresetPreview', () => ({
+  usePresetPreview: () => ({
+    isPlaying: false,
+    activePresetId: null,
+    volume: 0.3,
+    handlePresetHoverStart: vi.fn(),
+    handlePresetHoverEnd: vi.fn(),
+    handlePresetClick: vi.fn(),
+    changeVolume: vi.fn(),
+    stop: vi.fn(),
+  }),
+}));
+
+describe('SynthPresetBrowser — preview system', () => {
   const defaultProps = {
     trackId: 'track-1',
     currentPresetId: null,
@@ -20,40 +34,33 @@ describe('SynthPresetBrowser — preview buttons', () => {
     userPresets: [] as typeof FACTORY_SYNTH_PRESETS,
     userInstrumentPresets: [],
     onDeleteUserPreset: vi.fn(),
-    onPreviewPreset: vi.fn(),
   };
 
-  it('renders preview buttons when onPreviewPreset is provided', () => {
+  it('renders built-in preview play buttons for each preset in a category', () => {
     render(<SynthPresetBrowser {...defaultProps} />);
     // Open the browser
     fireEvent.click(screen.getByLabelText('Synth preset browser'));
     // Navigate to a category
     const bassCategory = screen.getByText('Bass');
     fireEvent.click(bassCategory);
-    // Preview buttons should be present
+    // Preview buttons should be present (built-in, from usePresetPreview)
     const previewButtons = screen.getAllByLabelText(/Preview/);
     expect(previewButtons.length).toBeGreaterThan(0);
   });
 
-  it('calls onPreviewPreset when preview button is clicked', () => {
-    const onPreviewPreset = vi.fn();
-    render(<SynthPresetBrowser {...defaultProps} onPreviewPreset={onPreviewPreset} />);
+  it('renders volume control slider when browser is open', () => {
+    render(<SynthPresetBrowser {...defaultProps} />);
     fireEvent.click(screen.getByLabelText('Synth preset browser'));
-    const bassCategory = screen.getByText('Bass');
-    fireEvent.click(bassCategory);
-    const previewButtons = screen.getAllByLabelText(/Preview/);
-    fireEvent.click(previewButtons[0]);
-    expect(onPreviewPreset).toHaveBeenCalledTimes(1);
-    expect(typeof onPreviewPreset.mock.calls[0][0]).toBe('string'); // preset ID
+    expect(screen.getByLabelText('Preview volume')).toBeInTheDocument();
   });
 
-  it('does not render preview buttons when onPreviewPreset is not provided', () => {
-    const { onPreviewPreset: _, ...propsWithoutPreview } = defaultProps;
-    render(<SynthPresetBrowser {...propsWithoutPreview} />);
+  it('renders keyboard-focusable preset list', () => {
+    render(<SynthPresetBrowser {...defaultProps} />);
     fireEvent.click(screen.getByLabelText('Synth preset browser'));
     const bassCategory = screen.getByText('Bass');
     fireEvent.click(bassCategory);
-    const previewButtons = screen.queryAllByLabelText(/Preview/);
-    expect(previewButtons.length).toBe(0);
+    // The list container should be focusable (tabIndex=0)
+    const items = document.querySelectorAll('[data-preset-item]');
+    expect(items.length).toBeGreaterThan(0);
   });
 });

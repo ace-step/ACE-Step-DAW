@@ -348,19 +348,6 @@ export function SynthPresetBrowser({
                     >
                       {preset.name}
                     </button>
-                    {onPreviewPreset && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPreviewPreset(preset.id);
-                        }}
-                        className="text-zinc-500 hover:text-blue-400 text-[11px] shrink-0 transition-colors"
-                        aria-label={`Preview ${preset.name}`}
-                        title={`Preview ${preset.name}`}
-                      >
-                        &#9654;
-                      </button>
-                    )}
                     {kindFilter === 'all' && kindBadge(preset.instrumentKind)}
                     {!preset.isFactory && (
                       <span className="text-[9px] text-zinc-500 shrink-0">user</span>

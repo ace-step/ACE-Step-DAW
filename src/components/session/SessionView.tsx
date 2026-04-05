@@ -121,6 +121,7 @@ export function SessionView() {
 
   const updateSessionSceneProperties = useProjectStore((s) => s.updateSessionSceneProperties);
   const setSessionSceneFollowAction = useProjectStore((s) => s.setSessionSceneFollowAction);
+  const aiFillSessionSlot = useProjectStore((s) => s.aiFillSessionSlot);
   const [colorMenu, setColorMenu] = useState<SlotContextMenuState | null>(null);
   const [sceneMenu, setSceneMenu] = useState<SceneContextMenuState | null>(null);
   const { dragState, dropTarget, handlePointerDown, handlePointerMove, handlePointerUp, cancelDrag } = useSessionDragDrop();
@@ -362,6 +363,7 @@ export function SessionView() {
               onContextMenuSlot={setColorMenu}
               onSlotClick={(sceneIndex) => setSelectedSessionSlot({ trackId: track.id, sceneIndex })}
               isRecording={sessionArrangementRecording}
+              onAiFill={aiFillSessionSlot}
               dragState={dragState}
               dropTarget={dropTarget}
               onDragStart={handlePointerDown}
@@ -654,6 +656,7 @@ function FragmentRow({
   pendingLaunches,
   selectedSceneIndex,
   isRecording,
+  onAiFill,
   onLaunch,
   onStop,
   onSlotQuantizationChange,
@@ -674,6 +677,7 @@ function FragmentRow({
   pendingLaunches: SessionPendingLaunch[];
   selectedSceneIndex: number | null;
   isRecording: boolean;
+  onAiFill: (slotId: string) => void;
   onLaunch: (clipId: string, sceneIndex: number) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   onSlotQuantizationChange: (slotId: string, quantization: 'global' | SessionLaunchQuantization) => void;
@@ -973,6 +977,14 @@ function FragmentRow({
 
       {contextMenu && (
         <ContextMenuWrapper x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem
+            label="AI Fill — Generate clip"
+            onClick={() => {
+              onAiFill(contextMenu.slotId);
+              setContextMenu(null);
+            }}
+          />
+          <ContextMenuSeparator />
           <ContextMenuItem
             label={contextMenu.hasStopButton ? 'Remove Stop Button' : 'Add Stop Button'}
             onClick={handleToggleStopButton}

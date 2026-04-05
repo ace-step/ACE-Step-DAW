@@ -3,8 +3,15 @@
  *
  * Public API for:
  * - DSP Provider interfaces (backend-agnostic)
- * - Tone.js adapter (current default backend)
+ * - Tone.js adapter (legacy default backend)
+ * - Native Web Audio factory (Tone.js-free replacement)
+ * - Core DSP library (zero-dependency AudioWorklet-safe primitives)
  * - WASM DSP integration (optional GPU-accelerated path)
+ *
+ * Migration path (Phases 0-6 of #1118):
+ *   1. Import { NativeDSPFactory, setDSPFactory } from './dsp'
+ *   2. Call setDSPFactory(new NativeDSPFactory(audioContext))
+ *   3. All engine code automatically uses native nodes
  */
 
 // DSP Provider abstraction layer (Phase 0)
@@ -33,10 +40,30 @@ export type {
   IDSPFactory,
 } from './interfaces';
 
+// Factory management
 export { ToneDSPFactory, getDSPFactory, setDSPFactory } from './ToneAdapter';
 
-// Native Web Audio factory (Phase 3 — Tone.js-free effects)
+// Native Web Audio factory — Tone.js-free (Phases 3+4)
 export { NativeDSPFactory } from './NativeAdapter';
+
+// Native synth implementations (Phase 4)
+export {
+  NativePolySynth,
+  NativeFMSynth,
+  NativeMembraneSynth,
+  NativeNoiseSynth,
+  NativeMetalSynth,
+  NativeSynth,
+  NativeFrequencyEnvelope,
+  NativeBufferSource,
+} from './NativeSynths';
+
+// Migration helper (Phase 6)
+export {
+  configureNativeDsp,
+  revertToToneDsp,
+  isNativeDsp,
+} from './configureNativeDsp';
 
 // AudioWorklet infrastructure (Phase 1)
 export { RingBuffer, nextPowerOf2 } from './RingBuffer';

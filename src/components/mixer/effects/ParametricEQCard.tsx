@@ -307,9 +307,10 @@ export function ParametricEQCard({
 
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Parametric EQ frequency response"
         className="rounded-md border border-white/10 cursor-crosshair"
         onMouseDown={handleCanvasMouseDown}
-        aria-label="Parametric EQ frequency display"
       />
 
       {effect.params.mode === 'simple' ? (

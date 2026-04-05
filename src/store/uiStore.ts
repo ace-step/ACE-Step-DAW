@@ -217,6 +217,8 @@ export interface UIState {
 
   // Theme
   theme: ThemeId;
+  /** High-contrast mode for improved visibility (WCAG AAA 7:1 ratio) */
+  highContrastMode: boolean;
 
   // Inline AI regeneration & suggestions
   regionRegenerateTarget: { startTime: number; endTime: number; trackIds: string[] } | null;
@@ -426,6 +428,7 @@ export interface UIState {
 
   // Theme
   setTheme: (theme: ThemeId) => void;
+  setHighContrastMode: (enabled: boolean) => void;
 
   // Inline AI regeneration & suggestions
   setRegionRegenerateTarget: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
@@ -706,6 +709,7 @@ export const useUIStore = create<UIState>()(
   dspBackend: 'auto',
 
   theme: 'ableton',
+  highContrastMode: false,
 
   regionRegenerateTarget: null,
   inlineSuggestions: [],
@@ -852,6 +856,10 @@ export const useUIStore = create<UIState>()(
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
   setTheme: (theme) => set({ theme }),
+  setHighContrastMode: (enabled) => {
+    set({ highContrastMode: enabled });
+    document.documentElement.setAttribute('data-high-contrast', enabled ? 'true' : 'false');
+  },
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),
@@ -1409,6 +1417,8 @@ export const useUIStore = create<UIState>()(
         dspBackend: state.dspBackend,
         // Theme
         theme: state.theme,
+        // Accessibility
+        highContrastMode: state.highContrastMode,
         // Synth presets
         userSynthPresets: state.userSynthPresets,
         userInstrumentPresets: state.userInstrumentPresets,

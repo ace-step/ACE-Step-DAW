@@ -2,6 +2,13 @@ import { useRef, useCallback, useState } from 'react';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { PrecisionInput, clampValue } from '../ui/PrecisionInput';
 
+function formatMiniKnobValue(value: number, min: number, max: number, bipolar: boolean): string {
+  if (bipolar) {
+    return `${value > 0 ? '+' : ''}${Math.round(value * 100)}%`;
+  }
+  return `${Math.round(((value - min) / (max - min)) * 100)}%`;
+}
+
 interface MiniKnobProps {
   value: number;
   min?: number;
@@ -132,6 +139,37 @@ export function MiniKnob({
     [],
   );
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const range = max - min;
+      const coarseStep = range / 100;
+      const fineStep = range / 1000;
+      const s = e.altKey ? fineStep : coarseStep;
+
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          e.preventDefault();
+          onChange(clampValue(value + s, min, max));
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          e.preventDefault();
+          onChange(clampValue(value - s, min, max));
+          break;
+        case 'Home':
+          e.preventDefault();
+          onChange(min);
+          break;
+        case 'End':
+          e.preventDefault();
+          onChange(max);
+          break;
+      }
+    },
+    [value, min, max, onChange],
+  );
+
   const displayVal = bipolar
     ? `${value > 0 ? '+' : ''}${Math.round(value * 100)}`
     : `${Math.round(norm * 100)}`;
@@ -139,12 +177,19 @@ export function MiniKnob({
   return (
     <div
       ref={mergedKnobRef}
-      className="flex flex-col items-center gap-0 cursor-ns-resize"
+      className="flex flex-col items-center gap-0 cursor-ns-resize outline-none focus-visible:ring-2 focus-visible:ring-daw-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent rounded"
       title={label ? `${label}: ${displayVal}%` : `${displayVal}%`}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
-      aria-label={`${label ?? 'Control'} mini knob`}
+      onKeyDown={handleKeyDown}
+      role="slider"
+      tabIndex={0}
+      aria-label={`${label ?? 'Control'} knob`}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuetext={formatMiniKnobValue(value, min, max, bipolar)}
     >
       <svg width={size} height={size} className="shrink-0">
         <path d={bgPath} fill="none" stroke="#404040" strokeWidth={strokeW} strokeLinecap="round" />

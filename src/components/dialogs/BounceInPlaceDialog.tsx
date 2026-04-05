@@ -49,6 +49,9 @@ export function BounceInPlaceDialog() {
       onMouseDown={(event) => event.target === event.currentTarget && !isBouncing && close()}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bounce In Place"
         className="w-[420px] rounded-lg border border-daw-border bg-daw-surface shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >

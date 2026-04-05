@@ -5,6 +5,10 @@ interface DialogTransitionProps {
   show: boolean;
   children: ReactNode;
   onClose?: () => void;
+  /** Accessible label for the dialog (used as aria-label) */
+  ariaLabel?: string;
+  /** ID of the element that labels the dialog (used as aria-labelledby) */
+  ariaLabelledBy?: string;
 }
 
 /**
@@ -15,7 +19,7 @@ interface DialogTransitionProps {
  * Close: scale(1) → scale(0.97) + opacity(0), 200ms ease-in
  * Backdrop: fades in/out with blur
  */
-export function DialogTransition({ show, children, onClose }: DialogTransitionProps) {
+export function DialogTransition({ show, children, onClose, ariaLabel, ariaLabelledBy }: DialogTransitionProps) {
   const { shouldRender, isVisible } = useAnimatedPresence(show, 200);
 
   if (!shouldRender) return null;
@@ -40,6 +44,10 @@ export function DialogTransition({ show, children, onClose }: DialogTransitionPr
       >
         <div
           className="pointer-events-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-label={ariaLabelledBy ? undefined : (ariaLabel ?? 'Dialog')}
+          aria-labelledby={ariaLabelledBy}
           style={{
             transform: isVisible ? 'scale(1)' : (show ? 'scale(0.97)' : 'scale(0.95)'),
             opacity: isVisible ? 1 : 0,

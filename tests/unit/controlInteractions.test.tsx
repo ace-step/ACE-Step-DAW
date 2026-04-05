@@ -83,7 +83,7 @@ describe('control interaction standards', () => {
       />,
     );
 
-    const knob = screen.getByLabelText('Swing mini knob');
+    const knob = screen.getByLabelText('Swing knob');
 
     fireEvent.contextMenu(knob);
     const input = screen.getByRole('spinbutton', { name: 'Swing exact value' });
@@ -142,14 +142,14 @@ describe('control interaction standards', () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByLabelText('Range start handle'));
+    fireEvent.contextMenu(screen.getByLabelText('Range start'));
     const startInput = screen.getByRole('spinbutton', { name: 'Start exact value' });
     fireEvent.change(startInput, { target: { value: '3.5' } });
     fireEvent.keyDown(startInput, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledWith(3.5, 8);
 
     onChange.mockClear();
-    fireEvent.contextMenu(screen.getByLabelText('Range end handle'));
+    fireEvent.contextMenu(screen.getByLabelText('Range end'));
     const endInput = screen.getByRole('spinbutton', { name: 'End exact value' });
     fireEvent.change(endInput, { target: { value: '7.5' } });
     fireEvent.keyDown(endInput, { key: 'Enter' });

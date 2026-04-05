@@ -140,6 +140,8 @@ export function DeEsserDisplay({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="De-esser frequency response"
       data-testid="deesser-display"
     />
   );

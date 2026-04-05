@@ -96,7 +96,7 @@ export function DualRangeSlider({
 
         {/* Start thumb */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10 outline-none focus-visible:ring-2 focus-visible:ring-daw-accent/60"
           style={{ left: `${startPct}%` }}
           onMouseDown={makeDragHandler('start')}
           onContextMenu={(e) => {
@@ -104,12 +104,26 @@ export function DualRangeSlider({
             e.stopPropagation();
             setEditingHandle('start');
           }}
-          aria-label="Range start handle"
+          onKeyDown={(e) => {
+            let next: number | null = null;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(startValue - step, min, endValue - minSpan);
+            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(startValue + step, min, endValue - minSpan);
+            else if (e.key === 'Home') next = min;
+            else if (e.key === 'End') next = clamp(endValue - minSpan, min, max);
+            if (next !== null) { e.preventDefault(); onChange(next, endValue); }
+          }}
+          role="slider"
+          tabIndex={0}
+          aria-label="Range start"
+          aria-valuenow={startValue}
+          aria-valuemin={min}
+          aria-valuemax={endValue - minSpan}
+          aria-valuetext={fmt(startValue)}
         />
 
         {/* End thumb */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10 outline-none focus-visible:ring-2 focus-visible:ring-daw-accent/60"
           style={{ left: `${endPct}%` }}
           onMouseDown={makeDragHandler('end')}
           onContextMenu={(e) => {
@@ -117,7 +131,21 @@ export function DualRangeSlider({
             e.stopPropagation();
             setEditingHandle('end');
           }}
-          aria-label="Range end handle"
+          onKeyDown={(e) => {
+            let next: number | null = null;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(endValue - step, startValue + minSpan, max);
+            else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(endValue + step, startValue + minSpan, max);
+            else if (e.key === 'Home') next = clamp(startValue + minSpan, min, max);
+            else if (e.key === 'End') next = max;
+            if (next !== null) { e.preventDefault(); onChange(startValue, next); }
+          }}
+          role="slider"
+          tabIndex={0}
+          aria-label="Range end"
+          aria-valuenow={endValue}
+          aria-valuemin={startValue + minSpan}
+          aria-valuemax={max}
+          aria-valuetext={fmt(endValue)}
         />
       </div>
 

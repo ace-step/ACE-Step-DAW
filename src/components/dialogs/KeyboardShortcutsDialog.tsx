@@ -32,6 +32,9 @@ export function KeyboardShortcutsDialog() {
       onMouseDown={(event) => event.target === event.currentTarget && setShow(false)}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard Shortcuts"
         className="w-[680px] max-h-[85vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col"
         onClick={(event) => event.stopPropagation()}
       >

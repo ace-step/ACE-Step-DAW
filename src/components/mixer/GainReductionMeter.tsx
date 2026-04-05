@@ -144,6 +144,8 @@ export function GainReductionMeter({
       <canvas
         ref={canvasRef}
         style={{ width: cw, height: ch }}
+        role="img"
+        aria-label="Gain reduction meter"
         data-testid="gr-meter"
       />
       <span className="text-[8px] text-white/30 font-mono" style={{ fontVariantNumeric: 'tabular-nums' }}>

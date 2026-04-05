@@ -116,6 +116,8 @@ export function ModulationDisplay({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="Modulation LFO waveform"
       data-testid="modulation-display"
     />
   );

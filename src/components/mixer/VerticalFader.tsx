@@ -129,6 +129,7 @@ export function VerticalFader({
       aria-valuemin={Math.round(min * 100)}
       aria-valuemax={Math.round(max * 100)}
       aria-valuenow={Math.round(value * 100)}
+      aria-valuetext={`${Math.round(value * 100)}%`}
       aria-orientation="vertical"
       tabIndex={0}
     >

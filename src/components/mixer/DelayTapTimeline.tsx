@@ -217,6 +217,8 @@ export function DelayTapTimeline({
       ref={canvasRef}
       style={{ width, height }}
       className="rounded"
+      role="img"
+      aria-label="Delay tap timeline"
       data-testid="delay-tap-timeline"
     />
   );

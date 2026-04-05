@@ -249,6 +249,9 @@ export function VideoExportDialog() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={handleClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Video Recording"
         className="relative flex w-full max-w-2xl flex-col gap-4 rounded-2xl border border-white/10 bg-[#1a1c20] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

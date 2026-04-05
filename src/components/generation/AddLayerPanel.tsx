@@ -746,6 +746,8 @@ export function AddLayerPanel() {
                   <div className="relative flex-1" style={{ minWidth: 0 }} onClick={handleWaveformClick}>
                     <canvas
                       ref={waveformCanvasRef}
+                      role="img"
+                      aria-label="Layer waveform preview"
                       className="w-full h-8 cursor-pointer rounded"
                     />
                     {/* Draggable selection mask overlay */}

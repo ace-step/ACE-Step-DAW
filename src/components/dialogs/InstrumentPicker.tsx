@@ -63,7 +63,7 @@ export function InstrumentPicker() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label="Add Track" className="w-[480px] bg-daw-surface rounded-lg border border-daw-border shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-daw-border">
           <div className="flex items-center gap-2">
             {step === 'instrument' && (

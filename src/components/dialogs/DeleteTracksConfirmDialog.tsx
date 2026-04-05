@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 
@@ -13,6 +13,15 @@ export function DeleteTracksConfirmDialog() {
     [pendingIds, allTracks],
   );
 
+  useEffect(() => {
+    if (!pendingIds || pendingIds.length === 0) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [pendingIds, cancel]);
+
   if (!pendingIds || pendingIds.length === 0) return null;
 
   const totalClips = tracks.reduce((sum, t) => sum + t.clips.length, 0);
@@ -24,6 +33,9 @@ export function DeleteTracksConfirmDialog() {
       onMouseDown={(e) => e.target === e.currentTarget && cancel()}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Delete Tracks"
         className="w-[400px] rounded-lg border border-daw-border bg-daw-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

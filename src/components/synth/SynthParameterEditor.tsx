@@ -7,6 +7,8 @@ import { SynthFilterControls } from './SynthFilterControls';
 import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeEditor';
 import { LFODisplay } from './LFODisplay';
 import { UnisonControls } from './UnisonControls';
+import { SoundDesignAssistant } from './SoundDesignAssistant';
+import type { ParameterAdjustment } from '../../services/soundDesignAssistant';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
 const DEFAULT_FILTER: SynthFilter = { type: 'lowpass', frequency: 1000, Q: 1 };
@@ -66,6 +68,41 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
     [trackId, updateUnisonSettings],
   );
 
+  const handleSoundDesignAdjustments = useCallback(
+    (adjustments: ParameterAdjustment[]) => {
+      const envelopeUpdates: Partial<SynthEnvelope> = {};
+      const filterUpdates: Partial<SynthFilter> = {};
+      const unisonUpdates: Partial<UnisonSettings> = {};
+
+      for (const adj of adjustments) {
+        if (adj.parameter === 'ampEnvelope.attack') {
+          envelopeUpdates.attack = Math.max(0.001, (track?.synthEnvelope?.attack ?? DEFAULT_ENVELOPE.attack) + adj.delta);
+        } else if (adj.parameter === 'ampEnvelope.decay') {
+          envelopeUpdates.decay = Math.max(0.001, (track?.synthEnvelope?.decay ?? DEFAULT_ENVELOPE.decay) + adj.delta);
+        } else if (adj.parameter === 'ampEnvelope.sustain') {
+          envelopeUpdates.sustain = Math.max(0, Math.min(1, (track?.synthEnvelope?.sustain ?? DEFAULT_ENVELOPE.sustain) + adj.delta));
+        } else if (adj.parameter === 'ampEnvelope.release') {
+          envelopeUpdates.release = Math.max(0.001, (track?.synthEnvelope?.release ?? DEFAULT_ENVELOPE.release) + adj.delta);
+        } else if (adj.parameter === 'filter.cutoffHz' || adj.parameter === 'filter.frequency') {
+          filterUpdates.frequency = Math.max(20, Math.min(20000, (track?.synthFilter?.frequency ?? DEFAULT_FILTER.frequency) + adj.delta));
+        } else if (adj.parameter === 'filter.resonance') {
+          filterUpdates.Q = Math.max(0, Math.min(20, (track?.synthFilter?.Q ?? DEFAULT_FILTER.Q) + adj.delta));
+        } else if (adj.parameter === 'unison.voices') {
+          unisonUpdates.voices = Math.max(1, Math.min(8, (track?.unisonSettings?.voices ?? DEFAULT_UNISON.voices) + adj.delta));
+        } else if (adj.parameter === 'unison.detuneCents' || adj.parameter === 'oscillator.detuneCents') {
+          unisonUpdates.detune = Math.max(0, (track?.unisonSettings?.detune ?? DEFAULT_UNISON.detune) + adj.delta);
+        } else if (adj.parameter === 'unison.spread') {
+          unisonUpdates.spread = Math.max(0, Math.min(1, (track?.unisonSettings?.spread ?? DEFAULT_UNISON.spread) + adj.delta));
+        }
+      }
+
+      if (Object.keys(envelopeUpdates).length > 0) updateSynthEnvelope(trackId, envelopeUpdates);
+      if (Object.keys(filterUpdates).length > 0) updateSynthFilter(trackId, filterUpdates);
+      if (Object.keys(unisonUpdates).length > 0) updateUnisonSettings(trackId, unisonUpdates);
+    },
+    [trackId, track, updateSynthEnvelope, updateSynthFilter, updateUnisonSettings],
+  );
+
   if (!track) return null;
 
   const oscillatorType = track.synthOscillatorType
@@ -79,10 +116,15 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
 
   return (
     <div
-      className="flex gap-4 px-3 py-2 bg-[#1e1e22] border-b border-[#2a2a2a] overflow-x-auto"
+      className="flex flex-col gap-2 bg-[#1e1e22] border-b border-[#2a2a2a]"
       data-testid="synth-parameter-editor"
       data-track-id={trackId}
     >
+      <SoundDesignAssistant
+        trackId={trackId}
+        onApplyAdjustments={handleSoundDesignAdjustments}
+      />
+      <div className="flex gap-4 px-3 py-2 overflow-x-auto">
       <OscillatorSelector waveform={oscillatorType} onChange={onOscillatorChange} />
       <div className="w-px bg-[#333] self-stretch shrink-0" />
       <ADSREnvelopeEditor envelope={envelope} onChange={onEnvelopeChange} />
@@ -94,6 +136,7 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
       <LFODisplay lfo={lfo} onChange={onLfoChange} />
       <div className="w-px bg-[#333] self-stretch shrink-0" />
       <UnisonControls settings={unison} onChange={onUnisonChange} />
+      </div>
     </div>
   );
 }

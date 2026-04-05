@@ -52,7 +52,10 @@ export class DevWikiService {
   async updateEntry(id: string, updates: Partial<Pick<DevWikiEntry, 'title' | 'content' | 'tags' | 'source' | 'category'>>): Promise<void> {
     const entry = this.entries.find(e => e.id === id);
     if (!entry) return;
-    Object.assign(entry, updates, { updatedAt: Date.now() });
+    const sanitized = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined)
+    );
+    Object.assign(entry, sanitized, { updatedAt: Date.now() });
     await this.persist();
   }
 
@@ -115,15 +118,27 @@ export class DevWikiService {
 // ─── Singleton ────────────────────────────────────────────────────────────
 
 let _instance: DevWikiService | null = null;
+let _initPromise: Promise<DevWikiService> | null = null;
 
 export async function getDevWiki(): Promise<DevWikiService> {
-  if (!_instance) {
-    _instance = new DevWikiService();
-    await _instance.initialize();
+  if (_instance) return _instance;
+  if (_initPromise) return _initPromise;
+
+  _initPromise = (async () => {
+    const instance = new DevWikiService();
+    await instance.initialize();
+    _instance = instance;
+    return instance;
+  })();
+
+  try {
+    return await _initPromise;
+  } finally {
+    _initPromise = null;
   }
-  return _instance;
 }
 
 export function resetDevWiki(): void {
   _instance = null;
+  _initPromise = null;
 }

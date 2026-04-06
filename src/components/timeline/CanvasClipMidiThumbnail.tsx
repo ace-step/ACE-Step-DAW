@@ -74,7 +74,7 @@ export function CanvasClipMidiThumbnail({
     draw();
   }, [draw]);
 
-  if (midiData.notes.length === 0) {
+  if (midiData.notes.length === 0 || height <= 0 || safeWidth <= 0) {
     return null;
   }
 

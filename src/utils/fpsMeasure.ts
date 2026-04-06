@@ -27,18 +27,22 @@ export interface FpsReport {
   percentAt60fps: number;
 }
 
-/** Maximum number of frame samples to retain (ring buffer). ~5 min at 60fps. */
+/** Maximum number of frame samples to retain. ~5 min at 60fps. */
 const MAX_SAMPLES = 18000;
 
 export class FpsMeasure {
-  private frameTimes: number[] = [];
+  /** Fixed-size circular buffer for O(1) per-frame writes. */
+  private buffer = new Float64Array(MAX_SAMPLES);
+  private writeIndex = 0;
+  private count = 0;
   private lastTimestamp: number | null = null;
   private rafId: number | null = null;
   private running = false;
 
   start(): void {
     if (this.running) this.stop();
-    this.frameTimes = [];
+    this.writeIndex = 0;
+    this.count = 0;
     this.lastTimestamp = null;
     this.running = true;
     this.tick();
@@ -57,19 +61,28 @@ export class FpsMeasure {
 
     const now = performance.now();
     if (this.lastTimestamp !== null) {
-      this.frameTimes.push(now - this.lastTimestamp);
-      // Ring buffer: drop oldest samples when exceeding limit
-      if (this.frameTimes.length > MAX_SAMPLES) {
-        this.frameTimes = this.frameTimes.slice(-MAX_SAMPLES);
-      }
+      this.buffer[this.writeIndex] = now - this.lastTimestamp;
+      this.writeIndex = (this.writeIndex + 1) % MAX_SAMPLES;
+      if (this.count < MAX_SAMPLES) this.count++;
     }
     this.lastTimestamp = now;
 
     this.rafId = requestAnimationFrame(this.tick);
   };
 
+  /** Get the stored frame times as a plain array (for report computation). */
+  private getSamples(): number[] {
+    if (this.count < MAX_SAMPLES) {
+      return Array.from(this.buffer.subarray(0, this.count));
+    }
+    // Circular: oldest starts at writeIndex
+    const tail = Array.from(this.buffer.subarray(this.writeIndex));
+    const head = Array.from(this.buffer.subarray(0, this.writeIndex));
+    return tail.concat(head);
+  }
+
   getReport(): FpsReport {
-    if (this.frameTimes.length === 0) {
+    if (this.count === 0) {
       return {
         averageFps: 0,
         minFps: 0,
@@ -80,11 +93,20 @@ export class FpsMeasure {
       };
     }
 
-    const totalDuration = this.frameTimes.reduce((sum, t) => sum + t, 0);
-    const avgFrameTime = totalDuration / this.frameTimes.length;
-    const maxFrameTime = Math.max(...this.frameTimes);
-    const minFrameTime = Math.min(...this.frameTimes);
-    const framesAt60 = this.frameTimes.filter((t) => t <= 16.67).length;
+    const samples = this.getSamples();
+    let totalDuration = 0;
+    let maxFrameTime = 0;
+    let minFrameTime = Infinity;
+    let framesAt60 = 0;
+
+    for (const t of samples) {
+      totalDuration += t;
+      if (t > maxFrameTime) maxFrameTime = t;
+      if (t < minFrameTime) minFrameTime = t;
+      if (t <= 16.67) framesAt60++;
+    }
+
+    const avgFrameTime = totalDuration / samples.length;
 
     // Guard against Infinity from zero/negative frame times (timer resolution edge cases)
     const toFps = (frameTime: number): number =>
@@ -94,9 +116,9 @@ export class FpsMeasure {
       averageFps: toFps(avgFrameTime),
       minFps: toFps(maxFrameTime),
       maxFps: toFps(minFrameTime),
-      frameCount: this.frameTimes.length,
+      frameCount: samples.length,
       durationMs: Math.round(totalDuration),
-      percentAt60fps: Math.round((framesAt60 / this.frameTimes.length) * 100),
+      percentAt60fps: Math.round((framesAt60 / samples.length) * 100),
     };
   }
 }

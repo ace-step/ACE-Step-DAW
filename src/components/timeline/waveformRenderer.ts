@@ -43,10 +43,11 @@ export function getVisiblePeakSlice(
     return { startPeakIdx: 0, numBars: 0 };
   }
 
-  const startPeakIdx = Math.floor((audioOffset / audioDuration) * logicalPeakCount);
-  const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - audioOffset));
+  const clampedAudioOffset = Math.min(Math.max(0, audioOffset), audioDuration);
+  const startPeakIdx = Math.floor((clampedAudioOffset / audioDuration) * logicalPeakCount);
+  const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - clampedAudioOffset));
   const endPeakIdx = Math.min(
-    Math.ceil(((audioOffset + visibleAudioSec) / audioDuration) * logicalPeakCount),
+    Math.ceil(((clampedAudioOffset + visibleAudioSec) / audioDuration) * logicalPeakCount),
     logicalPeakCount,
   );
 

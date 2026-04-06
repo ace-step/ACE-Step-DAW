@@ -1,11 +1,52 @@
 import * as Tone from 'tone';
-import type { DrumKitName } from '../types/project';
+import type { DrumKitName, DrumPadFilter, DrumPadSend, DrumPadFilterType } from '../types/project';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DrumVoice {
   trigger: (time?: number, velocity?: number) => void;
   dispose: () => void;
+  /** Set detune in semitones (-24 to +24) */
+  setDetune?: (semitones: number) => void;
+}
+
+/** Per-pad audio effect chain: filter → distortion → gain → panner → output */
+interface PadEffectChain {
+  filter: Tone.Filter;
+  distortion: Tone.Distortion;
+  gain: Tone.Gain;
+  panner: Tone.Panner;
+  dispose: () => void;
+}
+
+function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
+  const filter = new Tone.Filter({ frequency: 20000, type: 'lowpass' });
+  const distortion = new Tone.Distortion(0);
+  const gain = new Tone.Gain(0.8);
+  const panner = new Tone.Panner(0);
+
+  // Chain: filter → distortion → gain → panner → output
+  filter.connect(distortion);
+  distortion.connect(gain);
+  gain.connect(panner);
+  if (connectTo) {
+    panner.connect(connectTo);
+  } else {
+    panner.toDestination();
+  }
+
+  return {
+    filter,
+    distortion,
+    gain,
+    panner,
+    dispose() {
+      filter.dispose();
+      distortion.dispose();
+      gain.dispose();
+      panner.dispose();
+    },
+  };
 }
 
 export interface DrumPatternStep {
@@ -62,6 +103,7 @@ function createKick808(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('C1', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -75,6 +117,7 @@ function createKickAcoustic(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D1', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -96,6 +139,7 @@ function createSnare808(connectTo?: Tone.InputNode): DrumVoice {
       body.triggerAttackRelease('E2', '16n', time, vel * 0.5);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
+    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
@@ -117,6 +161,7 @@ function createSnareAcoustic(connectTo?: Tone.InputNode): DrumVoice {
       body.triggerAttackRelease('G2', '16n', time, vel * 0.4);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
+    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
@@ -165,6 +210,7 @@ function createRim(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(400, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -178,6 +224,7 @@ function createTomHigh(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('G2', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -191,6 +238,7 @@ function createTomLow(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D2', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -211,6 +259,7 @@ function createCrash(connectTo?: Tone.InputNode): DrumVoice {
       metal.triggerAttackRelease(300, '4n', time, vel * 0.3);
     },
     dispose: () => { noise.dispose(); metal.dispose(); },
+    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
@@ -223,6 +272,7 @@ function createRide(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => metal.triggerAttackRelease(400, '8n', time, vel * 0.4),
     dispose: () => metal.dispose(),
+    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
@@ -247,6 +297,7 @@ function createCowbell(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(560, '16n', time, vel * 0.6),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -260,6 +311,7 @@ function createConga(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('A2', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -273,6 +325,7 @@ function createBongo(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D3', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -297,6 +350,7 @@ function createPerc(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(200, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -424,8 +478,20 @@ export const DRUM_PRESETS = [
 
 // ─── Drum Engine Class ──────────────────────────────────────────────────────
 
+/** Parameters for updating a single pad's effect chain */
+export interface PadParams {
+  tune?: number;
+  decay?: number;
+  volume?: number;
+  pan?: number;
+  filter?: DrumPadFilter;
+  drive?: number;
+  send?: DrumPadSend;
+}
+
 class DrumEngine {
   private voices = new Map<string, DrumVoice[]>();
+  private padChains = new Map<string, PadEffectChain[]>();
   private currentKit = new Map<string, DrumKitName>();
   private scheduledIds = new Map<string, number[]>();
 
@@ -442,9 +508,53 @@ class DrumEngine {
 
     this.disposeTrack(trackId);
 
-    const voices = createDrumVoicesForKit(kit);
+    // Create per-pad effect chains and route voices through them
+    const chains: PadEffectChain[] = [];
+    const factories = KIT_FACTORIES[kit];
+    const voices: DrumVoice[] = [];
+
+    for (let i = 0; i < factories.length; i++) {
+      const chain = createPadEffectChain();
+      chains.push(chain);
+      const voice = factories[i](chain.filter);
+      voices.push(voice);
+    }
+
+    this.padChains.set(trackId, chains);
     this.voices.set(trackId, voices);
     this.currentKit.set(trackId, kit);
+  }
+
+  /** Update per-pad effect parameters in real-time */
+  updatePadParams(trackId: string, padIndex: number, params: PadParams) {
+    const chains = this.padChains.get(trackId);
+    const voices = this.voices.get(trackId);
+    if (!chains || padIndex < 0 || padIndex >= chains.length) return;
+
+    const chain = chains[padIndex];
+
+    if (params.volume !== undefined) {
+      chain.gain.gain.value = params.volume;
+    }
+    if (params.pan !== undefined) {
+      chain.panner.pan.value = params.pan;
+    }
+    if (params.filter !== undefined) {
+      if (params.filter.type === 'off') {
+        chain.filter.frequency.value = 20000;
+        chain.filter.type = 'lowpass';
+      } else {
+        chain.filter.type = params.filter.type;
+        chain.filter.frequency.value = params.filter.cutoff;
+      }
+    }
+    if (params.drive !== undefined) {
+      chain.distortion.distortion = params.drive;
+    }
+    if (params.tune !== undefined && voices) {
+      const voice = voices[padIndex];
+      voice.setDetune?.(params.tune);
+    }
   }
 
   async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {
@@ -514,6 +624,11 @@ class DrumEngine {
     if (voices) {
       for (const v of voices) v.dispose();
       this.voices.delete(trackId);
+    }
+    const chains = this.padChains.get(trackId);
+    if (chains) {
+      for (const c of chains) c.dispose();
+      this.padChains.delete(trackId);
     }
     this.currentKit.delete(trackId);
   }

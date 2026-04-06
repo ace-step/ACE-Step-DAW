@@ -477,6 +477,18 @@ export interface BounceInPlaceOptions {
   replaceOriginal: boolean;
 }
 
+export type DrumPadFilterType = 'off' | 'lowpass' | 'highpass';
+
+export interface DrumPadFilter {
+  type: DrumPadFilterType;
+  cutoff: number;          // 20–20000 Hz
+}
+
+export interface DrumPadSend {
+  reverb: number;          // 0–1
+  delay: number;           // 0–1
+}
+
 export interface DrumPad {
   id: string;
   name: string;
@@ -484,6 +496,11 @@ export interface DrumPad {
   color: string;
   volume: number;          // 0–1
   pan: number;             // -1 to +1
+  tune: number;            // -24 to +24 semitones
+  decay: number;           // 0–1 (relative decay length)
+  filter: DrumPadFilter;
+  drive: number;           // 0–1 saturation amount
+  send: DrumPadSend;
 }
 
 export interface DrumMachineConfig {

@@ -57,6 +57,8 @@ import type {
   MasteringState,
   DrumMachineConfig,
   DrumKitName,
+  DrumPadFilter,
+  DrumPadSend,
   SamplerConfig,
   FollowActionConfig,
   SessionClipSlot,
@@ -874,6 +876,11 @@ export interface ProjectState extends MidiSliceActions {
   setDrumPadSample: (trackId: string, padIndex: number, sampleKey: string) => void;
   setDrumPadVolume: (trackId: string, padIndex: number, volume: number) => void;
   setDrumPadPan: (trackId: string, padIndex: number, pan: number) => void;
+  setDrumPadTune: (trackId: string, padIndex: number, tune: number) => void;
+  setDrumPadDecay: (trackId: string, padIndex: number, decay: number) => void;
+  setDrumPadFilter: (trackId: string, padIndex: number, filter: Partial<DrumPadFilter>) => void;
+  setDrumPadDrive: (trackId: string, padIndex: number, drive: number) => void;
+  setDrumPadSend: (trackId: string, padIndex: number, send: Partial<DrumPadSend>) => void;
   renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   // MIDI actions: inherited from MidiSliceActions via extends
@@ -1581,6 +1588,11 @@ function createDefaultDrumMachineConfig(kit: DrumKitName = '808'): DrumMachineCo
       color: d.color,
       volume: 0.8,
       pan: 0,
+      tune: 0,
+      decay: 0.5,
+      filter: { type: 'off' as const, cutoff: 20000 },
+      drive: 0,
+      send: { reverb: 0, delay: 0 },
     })),
   };
 }
@@ -7195,6 +7207,142 @@ export const useProjectStore = create<ProjectState>()(
               pads: t.drumMachine.pads.map((p, i) =>
                 i === padIndex ? { ...p, pan: Math.max(-1, Math.min(1, pan)) } : p,
               ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadTune: (trackId, padIndex, tune) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad tune', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, tune: Math.max(-24, Math.min(24, tune)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDecay: (trackId, padIndex, decay) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad decay', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, decay: Math.max(0, Math.min(1, decay)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadFilter: (trackId, padIndex, filterUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad filter', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.filter, ...filterUpdate };
+                return {
+                  ...p,
+                  filter: {
+                    type: merged.type,
+                    cutoff: Math.max(20, Math.min(20000, merged.cutoff)),
+                  },
+                };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDrive: (trackId, padIndex, drive) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad drive', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, drive: Math.max(0, Math.min(1, drive)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadSend: (trackId, padIndex, sendUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad sends', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.send, ...sendUpdate };
+                return {
+                  ...p,
+                  send: {
+                    reverb: Math.max(0, Math.min(1, merged.reverb)),
+                    delay: Math.max(0, Math.min(1, merged.delay)),
+                  },
+                };
+              }),
             },
           };
         }),

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CanvasClipMidiThumbnail } from '../CanvasClipMidiThumbnail';
 import type { MidiClipData } from '../../../types/project';
@@ -24,11 +24,15 @@ const mockCtx = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(mockCtx);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx as unknown as CanvasRenderingContext2D);
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', {
     configurable: true,
     get: () => 60,
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function makeMidiData(noteCount: number): MidiClipData {

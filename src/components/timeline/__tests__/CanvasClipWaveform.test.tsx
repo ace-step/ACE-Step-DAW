@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CanvasClipWaveform } from '../CanvasClipWaveform';
 
@@ -24,13 +24,15 @@ const mockCtx = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Mock HTMLCanvasElement.getContext
-  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(mockCtx);
-  // Mock clientHeight (jsdom defaults to 0)
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx as unknown as CanvasRenderingContext2D);
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', {
     configurable: true,
     get: () => 80,
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function generatePeaks(count: number): number[] {

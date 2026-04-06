@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasClipWaveform } from '../../src/components/timeline/CanvasClipWaveform';
 import { PEAK_STRIDE } from '../../src/utils/waveformPeaks';
 
@@ -25,11 +25,15 @@ const mockCtx = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(mockCtx);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx as unknown as CanvasRenderingContext2D);
   Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', {
     configurable: true,
     get: () => 80,
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 /** Create stereo min/max peaks: [Lmax, Lmin, Rmax, Rmin, ...] */

@@ -1,9 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
-import { drawWaveform } from './waveformRenderer';
+import { drawWaveform, MAX_CANVAS_CSS_PX } from './waveformRenderer';
 import type { StretchMode } from '../../types/project';
-
-/** Safe max canvas dimension to stay within browser limits (most: 16384–32768). */
-const MAX_CANVAS_CSS_PX = 16384;
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;

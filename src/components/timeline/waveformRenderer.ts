@@ -14,6 +14,9 @@ import { PEAK_STRIDE } from '../../utils/waveformPeaks';
 import { getClipSourceSpan, getClipWaveformLayout } from '../../utils/clipAudio';
 import type { StretchMode } from '../../types/project';
 
+/** Safe max canvas CSS dimension to stay within browser limits. Shared across timeline renderers. */
+export const MAX_CANVAS_CSS_PX = 16384;
+
 export interface WaveformRenderParams {
   ctx: CanvasRenderingContext2D;
   width: number;
@@ -95,17 +98,23 @@ export function getMinMaxForColumn(
  * Precompute min/max for all columns of a channel.
  * Avoids triple-scanning the same peak range (fill upper, fill lower, envelope).
  */
+/** Typed-array pair for min/max per column — avoids per-frame object allocations. */
+interface ChannelMinMax { maxArr: Float32Array; minArr: Float32Array }
+
 function precomputeChannelMinMax(
   peaks: number[],
   peakSlice: VisiblePeakSlice,
   columnCount: number,
   channelOffset: number,
-): Array<{ max: number; min: number }> {
-  const result: Array<{ max: number; min: number }> = new Array(columnCount);
+): ChannelMinMax {
+  const maxArr = new Float32Array(columnCount);
+  const minArr = new Float32Array(columnCount);
   for (let i = 0; i < columnCount; i++) {
-    result[i] = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    const mm = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    maxArr[i] = mm.max;
+    minArr[i] = mm.min;
   }
-  return result;
+  return { maxArr, minArr };
 }
 
 /**
@@ -114,7 +123,7 @@ function precomputeChannelMinMax(
  */
 function drawChannelComplete(
   ctx: CanvasRenderingContext2D,
-  columnMinMax: Array<{ max: number; min: number }>,
+  columnMinMax: ChannelMinMax,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
@@ -133,7 +142,7 @@ function drawChannelComplete(
   // Upper contour (max values, left to right)
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - columnMinMax[i].max * maxAmplitude;
+    const yTop = centerY - columnMinMax.maxArr[i] * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }
@@ -141,7 +150,7 @@ function drawChannelComplete(
   // Lower contour (min values, right to left)
   for (let i = columnCount - 1; i >= 0; i--) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const yBottom = centerY - columnMinMax[i].min * maxAmplitude;
+    const yBottom = centerY - columnMinMax.minArr[i] * maxAmplitude;
     ctx.lineTo(x, yBottom);
   }
 
@@ -154,7 +163,7 @@ function drawChannelComplete(
   ctx.beginPath();
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - columnMinMax[i].max * maxAmplitude;
+    const yTop = centerY - columnMinMax.maxArr[i] * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }

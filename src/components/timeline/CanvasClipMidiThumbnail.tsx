@@ -1,17 +1,9 @@
 import { useRef, useEffect, useCallback, useMemo } from 'react';
-import { drawMidiThumbnail } from './waveformRenderer';
+import { drawMidiThumbnail, MAX_CANVAS_CSS_PX } from './waveformRenderer';
 import type { MidiClipData } from '../../types/project';
 
-/**
- * Vertical offset for the MIDI thumbnail within the clip block.
- * Intentionally smaller than HEADER_RAIL_HEIGHT_PX (20) to show more
- * note content — matches the original SVG implementation's `top: 14`.
- */
 /** Exported so callers can compute available height without duplicating magic numbers. */
 export const MIDI_THUMBNAIL_TOP = 14;
-
-/** Safe max canvas dimension to stay within browser limits. */
-const MAX_CANVAS_CSS_PX = 16384;
 
 interface CanvasClipMidiThumbnailProps {
   midiData: MidiClipData;

@@ -41,8 +41,8 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const triggerPad = useCallback(
     (padIndex: number) => {
       const kit = track?.drumKit ?? '808';
-      const padVol = track?.drumMachine?.pads?.[padIndex]?.volume ?? 0.8;
-      drumEngine.triggerPad(trackId, padIndex, Math.round(padVol * 127), kit);
+      // Volume is managed by the engine's volumeGain node — no caller-side scaling needed
+      drumEngine.triggerPad(trackId, padIndex, 100, kit);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));

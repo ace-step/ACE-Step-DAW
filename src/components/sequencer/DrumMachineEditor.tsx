@@ -81,8 +81,8 @@ export function DrumMachineEditor() {
     (padIndex: number, velocity?: number) => {
       if (!trackId) return;
       const kit = track?.drumKit ?? '808';
-      const padVol = pads[padIndex]?.volume ?? 0.8;
-      const vel = Math.round((velocity ?? 0.8) * padVol * 127);
+      // Volume is managed by the engine's volumeGain node — no caller-side scaling needed
+      const vel = Math.round((velocity ?? 0.8) * 127);
       drumEngine.triggerPad(trackId, padIndex, vel, kit);
 
       // Visual feedback

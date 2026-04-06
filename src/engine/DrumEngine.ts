@@ -10,13 +10,17 @@ interface DrumVoice {
   setDetune?: (semitones: number) => void;
 }
 
-/** Per-pad audio effect chain: filter → distortion → gain → panner → output */
+/** Per-pad audio effect chain: filter → distortion → volumeGain → decayGain → panner → output.
+ * volumeGain: per-pad level (synced from store), decayGain: envelope ramp per trigger. */
 interface PadEffectChain {
   filter: Tone.Filter;
   distortion: Tone.Distortion;
-  gain: Tone.Gain;
+  /** Steady-state per-pad volume — synced from pad.volume via updatePadParams */
+  volumeGain: Tone.Gain;
+  /** Decay envelope gain — ramped per trigger, separate from volume */
+  decayGain: Tone.Gain;
   panner: Tone.Panner;
-  /** Decay scale 0–1: controls how quickly the gain fades after trigger */
+  /** Decay scale 0–1: controls how quickly decayGain fades after trigger */
   decayScale: number;
   /** Send amounts stored for return track routing */
   sendReverb: number;
@@ -27,13 +31,15 @@ interface PadEffectChain {
 function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
   const filter = new Tone.Filter({ frequency: 20000, type: 'lowpass' });
   const distortion = new Tone.Distortion(0);
-  const gain = new Tone.Gain(1);
+  const volumeGain = new Tone.Gain(0.8);
+  const decayGain = new Tone.Gain(1);
   const panner = new Tone.Panner(0);
 
-  // Chain: filter → distortion → gain → panner → output
+  // Chain: filter → distortion → volumeGain → decayGain → panner → output
   filter.connect(distortion);
-  distortion.connect(gain);
-  gain.connect(panner);
+  distortion.connect(volumeGain);
+  volumeGain.connect(decayGain);
+  decayGain.connect(panner);
   if (connectTo) {
     panner.connect(connectTo);
   } else {
@@ -43,7 +49,8 @@ function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
   return {
     filter,
     distortion,
-    gain,
+    volumeGain,
+    decayGain,
     panner,
     decayScale: 0.5,
     sendReverb: 0,
@@ -51,7 +58,8 @@ function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
     dispose() {
       filter.dispose();
       distortion.dispose();
-      gain.dispose();
+      volumeGain.dispose();
+      decayGain.dispose();
       panner.dispose();
     },
   };
@@ -487,12 +495,14 @@ export const DRUM_PRESETS = [
 // ─── Drum Engine Class ──────────────────────────────────────────────────────
 
 /** Parameters for updating a single pad's effect chain.
- * Note: volume is intentionally omitted — callers should pre-scale the
- * velocity passed to triggerPad with the pad's volume to avoid double attenuation. */
+ * Volume is managed via a dedicated volumeGain node, so callers don't need
+ * to pre-scale velocity — all trigger paths get consistent pad volume. */
 export interface PadParams {
   tune?: number;
-  /** Relative decay 0–1: scales the gain node's release/fade time (0 = very short, 1 = full length) */
+  /** Relative decay 0–1: scales the decayGain envelope (0 = very short, 1 = full ring-out) */
   decay?: number;
+  /** Per-pad volume 0–1: applied via dedicated volumeGain node */
+  volume?: number;
   pan?: number;
   filter?: DrumPadFilter;
   drive?: number;
@@ -545,6 +555,9 @@ class DrumEngine {
 
     const chain = chains[padIndex];
 
+    if (params.volume !== undefined) {
+      chain.volumeGain.gain.value = params.volume;
+    }
     if (params.pan !== undefined) {
       chain.panner.pan.value = params.pan;
     }
@@ -565,9 +578,6 @@ class DrumEngine {
       voice.setDetune?.(params.tune);
     }
     if (params.decay !== undefined) {
-      // Map 0–1 to gain ramp: 0 = very short (0.02s), 1 = full length (no cut).
-      // At decay=1, gain stays at 1. At lower values, schedule a faster fade-out
-      // on the gain node after each trigger.
       chain.decayScale = params.decay;
     }
     if (params.send !== undefined) {
@@ -579,12 +589,13 @@ class DrumEngine {
   }
 
   /** Sync all pad parameters from project state to the engine.
-   * Safely no-ops if the track hasn't been initialized yet — params will
-   * be applied on the next ensureTrack + sync cycle or triggerPad call. */
-  syncTrackPadParams(trackId: string, pads: ReadonlyArray<{ tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+   * Safely no-ops if the track hasn't been initialized yet — call
+   * ensureAndSyncPadParams after ensureTrack to apply params to a new track. */
+  syncTrackPadParams(trackId: string, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
     if (!this.padChains.has(trackId)) return;
     for (let i = 0; i < pads.length; i++) {
       this.updatePadParams(trackId, i, {
+        volume: pads[i].volume,
         pan: pads[i].pan,
         tune: pads[i].tune,
         decay: pads[i].decay,
@@ -596,9 +607,20 @@ class DrumEngine {
   }
 
   /** Async version: ensures the track is initialized, then syncs pad params. */
-  async ensureAndSyncPadParams(trackId: string, kit: DrumKitName, pads: ReadonlyArray<{ tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+  async ensureAndSyncPadParams(trackId: string, kit: DrumKitName, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
     await this.ensureTrack(trackId, kit);
     this.syncTrackPadParams(trackId, pads);
+  }
+
+  /** Apply the decay envelope on a pad's decayGain node at the given time.
+   * Used by both triggerPad and schedulePattern for consistent behavior. */
+  private applyDecayEnvelope(chain: PadEffectChain, time: number) {
+    chain.decayGain.gain.cancelScheduledValues(time);
+    chain.decayGain.gain.setValueAtTime(1, time);
+    if (chain.decayScale < 0.999) {
+      const fadeTime = 0.02 + chain.decayScale * 1.98;
+      chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
+    }
   }
 
   async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {
@@ -608,18 +630,8 @@ class DrumEngine {
     if (!voices || padIndex < 0 || padIndex >= voices.length) return;
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
 
-    // Apply decay envelope via gain ramp
     if (chains) {
-      const chain = chains[padIndex];
-      const now = Tone.now();
-      // Cancel any pending ramp from a previous trigger
-      chain.gain.gain.cancelScheduledValues(now);
-      chain.gain.gain.setValueAtTime(1, now);
-      // Map decay 0–1 to fade time: 0 → 0.02s (very short), 1 → full ring-out / no cut
-      if (chain.decayScale < 0.999) {
-        const fadeTime = 0.02 + chain.decayScale * 1.98;
-        chain.gain.gain.linearRampToValueAtTime(0.001, now + fadeTime);
-      }
+      this.applyDecayEnvelope(chains[padIndex], Tone.now());
     }
 
     voices[padIndex].trigger(undefined, vel);
@@ -635,6 +647,7 @@ class DrumEngine {
   ) {
     this.unschedulePattern(trackId);
     const voices = this.voices.get(trackId);
+    const chains = this.padChains.get(trackId);
     if (!voices) return;
 
     const secondsPerStep = (60 / bpm) / 4; // 16th notes
@@ -657,7 +670,10 @@ class DrumEngine {
 
         const id = Tone.getTransport().scheduleRepeat(
           (time) => {
-            if (voices[padIdx]) voices[padIdx].trigger(time, vel);
+            if (voices[padIdx]) {
+              if (chains?.[padIdx]) this.applyDecayEnvelope(chains[padIdx], time);
+              voices[padIdx].trigger(time, vel);
+            }
           },
           patternDuration,
           startTime + stepOffset,

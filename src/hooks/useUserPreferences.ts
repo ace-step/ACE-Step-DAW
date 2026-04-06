@@ -5,10 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  getUserPreferencesService,
-  type UserPreferencesService,
-} from '../services/userPreferences';
+import { getUserPreferencesService } from '../services/userPreferences';
 import type {
   UserPreferences,
   PersonalizedPreset,
@@ -30,11 +27,12 @@ export function useUserPreferences(): UseUserPreferencesReturn {
   const refresh = useCallback(() => {
     setLoading(true);
     const service = getUserPreferencesService();
-    Promise.all([
-      service.computePreferences(),
-      service.getSuggestedPresets(),
-    ])
-      .then(([prefs, presets]) => {
+    // Compute preferences once, then derive presets from the same result
+    service.computePreferences()
+      .then(prefs =>
+        service.getSuggestedPresets(prefs).then(presets => ({ prefs, presets }))
+      )
+      .then(({ prefs, presets }) => {
         setPreferences(prefs);
         setSuggestedPresets(presets);
       })

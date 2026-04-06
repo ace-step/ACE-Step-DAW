@@ -12,7 +12,7 @@ export interface UserPreferences {
   instrumentPreferences: Record<string, number>;
   moodPreferences: Record<string, number>;
   generationCount: number;
-  keptCount: number;
+  successfulCount: number;
   lastUpdated: number;
 }
 
@@ -49,6 +49,6 @@ export const EMPTY_PREFERENCES: UserPreferences = {
   instrumentPreferences: {},
   moodPreferences: {},
   generationCount: 0,
-  keptCount: 0,
+  successfulCount: 0,
   lastUpdated: 0,
 };

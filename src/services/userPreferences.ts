@@ -47,7 +47,7 @@ export class UserPreferencesService {
       instrumentPreferences,
       moodPreferences,
       generationCount: entries.length,
-      keptCount: successful.length,
+      successfulCount: successful.length,
       lastUpdated: Date.now(),
     };
 
@@ -64,9 +64,11 @@ export class UserPreferencesService {
 
   /**
    * Generate personalized preset suggestions based on preferences.
+   * Uses provided preferences when available, otherwise falls back to
+   * cached preferences and only recomputes if the cache is missing.
    */
-  async getSuggestedPresets(): Promise<PersonalizedPreset[]> {
-    const prefs = await this.computePreferences();
+  async getSuggestedPresets(preferences?: UserPreferences): Promise<PersonalizedPreset[]> {
+    const prefs = preferences ?? (await this.getCachedPreferences()) ?? (await this.computePreferences());
     if (prefs.generationCount === 0) return [];
 
     const presets: PersonalizedPreset[] = [];

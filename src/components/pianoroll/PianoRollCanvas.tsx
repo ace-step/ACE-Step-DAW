@@ -800,7 +800,8 @@ export function PianoRollCanvas({
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
       <canvas
         ref={mergedCanvasRef}
-        aria-label="Piano roll editor"
+        role="application"
+        aria-label="Piano roll note editor"
         data-active-tool={activeTool}
         className="absolute inset-0"
         style={{

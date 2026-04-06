@@ -1,14 +1,12 @@
 import type { SampleZone } from '../types/project';
 
-let zoneIdCounter = 0;
-
 /** Create a SampleZone with sensible defaults. */
 export function createDefaultZone(
   audioKey: string,
   overrides: Partial<SampleZone> = {},
 ): SampleZone {
   return {
-    id: overrides.id ?? `zone-${Date.now()}-${++zoneIdCounter}`,
+    id: overrides.id ?? crypto.randomUUID(),
     audioKey,
     rootNote: 60,
     lowKey: 0,
@@ -23,19 +21,25 @@ export function createDefaultZone(
   };
 }
 
-/** Find all zones matching a given pitch and velocity. */
+/**
+ * Find all zones matching a given pitch and velocity.
+ * Includes zones within crossfade margin of their boundaries
+ * so that adjacent (non-overlapping) zones can crossfade.
+ */
 export function matchZones(
   zones: SampleZone[],
   pitch: number,
   velocity: number,
 ): SampleZone[] {
-  return zones.filter(
-    (z) =>
-      pitch >= z.lowKey &&
-      pitch <= z.highKey &&
+  return zones.filter((z) => {
+    const margin = z.crossfadeWidth ?? 0;
+    return (
+      pitch >= z.lowKey - margin &&
+      pitch <= z.highKey + margin &&
       velocity >= z.lowVelocity &&
-      velocity <= z.highVelocity,
-  );
+      velocity <= z.highVelocity
+    );
+  });
 }
 
 /**

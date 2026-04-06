@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { createDefaultZone, validateZones } from '../../utils/sampleZones';

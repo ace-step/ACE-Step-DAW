@@ -74,7 +74,7 @@ export function parseSfz(sfzText: string): SfzParseResult {
   // Remove comments and split into lines
   const lines = sfzText
     .split('\n')
-    .map((l) => l.replace(/\/\/.*$/, '').trim())
+    .map((l) => l.replace(/(?:\/\/|;).*$/, '').trim())
     .filter(Boolean);
 
   // Reassemble into a single stream and split by headers

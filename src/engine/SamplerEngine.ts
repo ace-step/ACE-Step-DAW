@@ -109,7 +109,8 @@ class SamplerEngine {
       existing.buffer = new Tone.ToneAudioBuffer(audioBuffer);
       existing.config = nextConfig;
       this.bufferCache.set(config.audioKey, audioBuffer);
-      // Refresh zone buffers if zones changed
+      // Refresh zone buffers if zones changed; prune stale entries
+      this._pruneZoneBuffers(existing, nextConfig);
       if (nextConfig.zones && nextConfig.zones.length > 0) {
         void this._loadZoneBuffers(trackId, nextConfig);
       }
@@ -144,6 +145,16 @@ class SamplerEngine {
     }
   }
 
+  /** Remove zone buffer entries that no longer correspond to any zone in the config. */
+  private _pruneZoneBuffers(instance: SamplerInstance, config: SamplerConfig): void {
+    const activeKeys = new Set((config.zones ?? []).map((z) => z.audioKey));
+    for (const key of instance.zoneBuffers.keys()) {
+      if (!activeKeys.has(key)) {
+        instance.zoneBuffers.delete(key);
+      }
+    }
+  }
+
   /** Load audio buffers for all zones in a config. */
   private async _loadZoneBuffers(trackId: string, config: SamplerConfig): Promise<void> {
     const zones = config.zones;
@@ -152,7 +163,12 @@ class SamplerEngine {
     const instance = this.samplers.get(trackId);
     if (!instance) return;
 
+    const engine = getAudioEngine();
+    await engine.resume();
+
     for (const zone of zones) {
+      // Skip zones with empty audioKey (e.g., unresolved SFZ imports)
+      if (!zone.audioKey) continue;
       if (instance.zoneBuffers.has(zone.audioKey)) continue;
 
       // Check the global buffer cache first
@@ -165,8 +181,6 @@ class SamplerEngine {
       const blob = await loadAudioBlobByKey(zone.audioKey);
       if (!blob) continue;
 
-      const engine = getAudioEngine();
-      await engine.resume();
       const buffer = await engine.decodeAudioData(blob);
       this.bufferCache.set(zone.audioKey, buffer);
       // Re-check instance in case it was removed while loading
@@ -215,19 +229,16 @@ class SamplerEngine {
 
     const previewConfig = buildPlaybackConfig(config, buffer.duration);
     const vel01 = velocity / 127;
+    const toneBuffer = new Tone.ToneAudioBuffer(buffer);
     const zoneInfos = resolveZonePlayback(previewConfig, pitch, velocity);
 
     for (const info of zoneInfos) {
-      // For preview, use the loaded buffer if it matches primary, otherwise skip zones that aren't loaded
-      const toneBuffer = info.audioKey === config.audioKey
-        ? new Tone.ToneAudioBuffer(buffer)
-        : null; // Zone buffers aren't loaded for preview context
-      if (!toneBuffer) continue;
-
+      // Preview always uses primary buffer (zone buffers may not be loaded in preview context)
       const voice = this._createVoice(toneBuffer, previewConfig, pitch, vel01, info);
       voice.gain.connect(Tone.getDestination());
       this.previewVoices.push(voice);
       this._startVoice(voice, previewConfig, duration);
+      break; // Preview plays first matching zone only
     }
   }
 
@@ -236,10 +247,18 @@ class SamplerEngine {
     if (!instance) return;
 
     const zoneInfos = resolveZonePlayback(instance.config, pitch, Math.round(velocity * 127));
+    let played = false;
     for (const info of zoneInfos) {
       const buffer = this._getZoneBuffer(instance, info.audioKey);
       if (!buffer) continue;
       const voice = this._createVoice(buffer, instance.config, pitch, velocity, info);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, duration);
+      played = true;
+    }
+    // Fallback to primary sample if no zone buffers were available
+    if (!played) {
+      const voice = this._createVoice(instance.buffer, instance.config, pitch, velocity);
       this._registerVoice(instance, voice);
       this._startVoice(voice, instance.config, duration);
     }
@@ -257,10 +276,18 @@ class SamplerEngine {
 
     const vel01 = velocity / 127;
     const zoneInfos = resolveZonePlayback(instance.config, pitch, velocity);
+    let played = false;
     for (const info of zoneInfos) {
       const buffer = this._getZoneBuffer(instance, info.audioKey);
       if (!buffer) continue;
       const voice = this._createVoice(buffer, instance.config, pitch, vel01, info);
+      this._registerVoice(instance, voice);
+      this._startVoice(voice, instance.config, Number.POSITIVE_INFINITY);
+      played = true;
+    }
+    // Fallback to primary sample if no zone buffers were available
+    if (!played) {
+      const voice = this._createVoice(instance.buffer, instance.config, pitch, vel01);
       this._registerVoice(instance, voice);
       this._startVoice(voice, instance.config, Number.POSITIVE_INFINITY);
     }

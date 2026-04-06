@@ -7,9 +7,9 @@ import type { SampleZone } from '../types/project';
 /**
  * Hook to import SFZ files and convert them to sample zones.
  *
- * Note: SFZ import creates zone definitions with sample file paths.
- * The actual audio files still need to be loaded separately through
- * the audio import pipeline. This import sets up the zone layout.
+ * SFZ import creates zone layout definitions. Zones are initialized
+ * with the track's current primary audioKey. Users can then assign
+ * individual samples to each zone via the zone editor.
  */
 export function useSfzImport() {
   const setSampleZones = useProjectStore((s) => s.setSampleZones);
@@ -31,6 +31,11 @@ export function useSfzImport() {
           const text = await file.text();
           const result = parseSfz(text);
 
+          // Use the track's primary audioKey as fallback for imported zones
+          const project = useProjectStore.getState().project;
+          const track = project?.tracks.find((t) => t.id === trackId);
+          const fallbackAudioKey = track?.samplerConfig?.audioKey ?? '';
+
           const zones: SampleZone[] = result.regions.map((region) => {
             // Convert SFZ volume (dB) to linear gain
             const volumeDb = region.volume ?? 0;
@@ -39,7 +44,7 @@ export function useSfzImport() {
             // Convert SFZ pan (-100 to 100) to our range (-1 to 1)
             const panNormalized = (region.pan ?? 0) / 100;
 
-            return createDefaultZone('', {
+            return createDefaultZone(fallbackAudioKey, {
               sampleName: region.sample,
               rootNote: region.pitchKeycenter,
               lowKey: region.lokey,

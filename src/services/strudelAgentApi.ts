@@ -11,6 +11,13 @@
 import type { StrudelPatternInfo } from '../engine/strudelEngine';
 import { useProjectStore } from '../store/projectStore';
 import { STRUDEL_PRESETS, type StrudelPreset } from '../constants/strudelPresets';
+import {
+  STRUDEL_TEMPLATES,
+  getTemplateByGenre,
+  getTemplatesByComplexity,
+  getTemplatesByBpmRange,
+  type StrudelTemplate,
+} from '../constants/strudelTemplateLibrary';
 import { buildPromptFromPatternInfo } from './strudelGenerationBridge';
 import { computeLineDiff, formatUnifiedDiff, formatDiffSummary } from '../utils/codeDiff';
 import { createDebugLogger } from '../utils/debugLogger';
@@ -218,5 +225,9 @@ export function createStrudelAgentApi() {
     updateTrackCode: updateStrudelTrackCode,
     diffCode: diffPatternCode,
     diffTrackVersion: diffTrackVersion,
+    listTemplates: () => STRUDEL_TEMPLATES,
+    getTemplateByGenre,
+    getTemplatesByComplexity,
+    getTemplatesByBpmRange,
   };
 }

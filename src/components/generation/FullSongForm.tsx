@@ -58,6 +58,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   // Persisted in generationStore — survives panel close/reopen
   const prompt = useGenerationStore((s) => s.generationForm.prompt);
   const setPrompt = useGenerationStore((s) => s.setGenerationPrompt);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
   const lyrics = useGenerationStore((s) => s.generationForm.lyrics);
   const setLyrics = useGenerationStore((s) => s.setGenerationLyrics);
   const thinking = useGenerationStore((s) => s.generationForm.thinking);
@@ -87,6 +89,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [loadingExample, setLoadingExample] = useState(false);
   const [expandCaption, setExpandCaption] = useState(false);
   const [expandLyrics, setExpandLyrics] = useState(false);
+  const [showNegativePrompt, setShowNegativePrompt] = useState(false);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -169,6 +172,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     if (p) {
       setPrompt(p.prompt);
       setLyrics(p.lyrics);
+      setNegativePrompt(p.negativePrompt ?? '');
+      if (p.negativePrompt) setShowNegativePrompt(true);
       if (p.thinking !== undefined) setThinking(p.thinking);
       if (p.seed !== undefined) { setSeed(p.seed); setUseRandomSeed(false); }
       if (p.useRandomSeed !== undefined) setUseRandomSeed(p.useRandomSeed);
@@ -188,6 +193,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
       setLyrics(editingClip.lyrics || '');
+      setNegativePrompt('');
+      setShowNegativePrompt(false);
       if (editingClip.audioDuration && editingClip.audioDuration > 0) {
         setDurationSeconds(editingClip.audioDuration);
         setDurationAuto(false);
@@ -222,6 +229,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           type: 'text2music',
           prompt: prompt.trim(),
           lyrics: instrumental ? '[Instrumental]' : lyrics,
+          negativePrompt: negativePrompt.trim() || undefined,
           durationSeconds: durationSeconds === -1 ? undefined : durationSeconds,
           thinking,
           seed: useRandomSeed ? undefined : seed,
@@ -247,6 +255,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     generateText2Music({
       prompt: prompt.trim(),
       lyrics: instrumental ? '[Instrumental]' : lyrics,
+      negativePrompt: negativePrompt.trim() || undefined,
       durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
       bpm: useProjectMeta ? (project?.bpm ?? null) : null,
       keyScale: useProjectMeta ? (project?.keyScale ?? '') : '',
@@ -266,7 +275,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, negativePrompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -405,6 +414,77 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           disabled={isDisabled || instrumental}
           placeholder="[Verse 1]\nYour lyrics here..."
         />
+      </section>
+
+      {/* Negative Prompt — collapsible */}
+      <section className="space-y-1.5" data-testid="negative-prompt-section">
+        <button
+          type="button"
+          onClick={() => setShowNegativePrompt((v) => !v)}
+          aria-expanded={showNegativePrompt}
+          aria-controls="negative-prompt-content"
+          className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-300 transition-colors"
+        >
+          <svg
+            width={10}
+            height={10}
+            viewBox="0 0 10 10"
+            fill="currentColor"
+            className={`transition-transform ${showNegativePrompt ? 'rotate-90' : ''}`}
+          >
+            <path d="M3 1l4 4-4 4z" />
+          </svg>
+          Negative Prompt
+          {!showNegativePrompt && negativePrompt.trim() && (
+            <span className="ml-1 text-[9px] text-indigo-400">active</span>
+          )}
+        </button>
+        {showNegativePrompt && (
+          <div id="negative-prompt-content" className="space-y-1.5">
+            <textarea
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+              rows={2}
+              placeholder="Elements to exclude: no autotune, no reverb..."
+              aria-label="Negative prompt"
+              className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+              disabled={isDisabled}
+              data-testid="negative-prompt-input"
+            />
+            <div className="flex flex-wrap gap-1">
+              {['no autotune', 'no reverb', 'no distortion', 'no falsetto', 'no guitar solo', 'no background vocals'].map((chip) => {
+                const isActive = negativePrompt.toLowerCase().includes(chip);
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) {
+                        // Remove the chip from the negative prompt
+                        const regex = new RegExp(`\\s*,?\\s*${chip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*,?\\s*`, 'gi');
+                        setNegativePrompt(negativePrompt.replace(regex, ', ').replace(/^[,\s]+|[,\s]+$/g, ''));
+                      } else {
+                        setNegativePrompt(
+                          negativePrompt.trim()
+                            ? `${negativePrompt.trim()}, ${chip}`
+                            : chip,
+                        );
+                      }
+                    }}
+                    disabled={isDisabled}
+                    className={`rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+                      isActive
+                        ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                        : 'bg-[#333] text-zinc-400 hover:bg-[#444] border border-transparent'
+                    }`}
+                  >
+                    {chip}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Random Example */}

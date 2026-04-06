@@ -14,6 +14,8 @@ export interface CoverTaskParams {
   model: string;
   seed?: number;
   use_random_seed?: boolean;
+  /** Negative prompt �� elements to exclude from generation (e.g. "no autotune, no reverb") */
+  negative_prompt?: string;
 }
 
 export type RepaintMode = 'conservative' | 'balanced' | 'aggressive';
@@ -40,6 +42,8 @@ export interface RepaintTaskParams {
   seed?: number;
   use_random_seed?: boolean;
   src_audio_path?: string;
+  /** Negative prompt — elements to exclude from generation */
+  negative_prompt?: string;
 }
 
 export type StemCount = 2 | 4 | 6;
@@ -75,6 +79,8 @@ export interface Text2MusicTaskParams {
   use_random_seed?: boolean;
   use_cot_caption?: boolean;
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Negative prompt — elements to exclude from generation */
+  negative_prompt?: string;
 }
 
 /**
@@ -122,6 +128,8 @@ export interface LegoTaskParams {
   src_audio_path?: string;  // server-side path; when set, skips blob upload
   chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Negative prompt — elements to exclude from generation */
+  negative_prompt?: string;
 }
 
 /** All API responses are wrapped in this envelope */

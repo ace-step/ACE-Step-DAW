@@ -641,3 +641,177 @@ describe('generateText2Music', () => {
     expect(useGenerationStore.getState().isGenerating).toBe(false);
   });
 });
+
+describe('negative_prompt pipeline threading', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useModelStore.setState(useModelStore.getInitialState(), true);
+    useProjectStore.getState().createProject();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('includes negative_prompt in lego task params when set on clip', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 10,
+    });
+    // Persist negativePrompt on the clip
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'lego',
+        prompt: 'driving drums',
+        lyrics: '',
+        negativePrompt: 'no reverb',
+      },
+    });
+
+    mockSuccessfulGeneration();
+    mockLoadAudioBlobByKey.mockResolvedValue(null);
+
+    const promise = generateSingleClip(clip.id);
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, taskParams] = mockReleaseLegoTask.mock.calls[0];
+    expect(taskParams.negative_prompt).toBe('no reverb');
+  });
+
+  it('omits negative_prompt from lego task params when not set', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 10,
+    });
+
+    mockSuccessfulGeneration();
+    mockLoadAudioBlobByKey.mockResolvedValue(null);
+
+    const promise = generateSingleClip(clip.id);
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, taskParams] = mockReleaseLegoTask.mock.calls[0];
+    expect(taskParams.negative_prompt).toBeUndefined();
+  });
+
+  it('includes negative_prompt in text2music task params', async () => {
+    useModelStore.setState({
+      activeModelId: 'test-t2m-model',
+      availableModels: [
+        { name: 'test-t2m-model', category: 'text2music', is_default: true, is_loaded: true } as never,
+      ],
+    });
+    mockInitModel.mockResolvedValue(undefined);
+    mockSuccessfulGeneration();
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-t2m' });
+
+    const promise = generateText2Music({
+      prompt: 'upbeat pop song',
+      lyrics: '',
+      durationSeconds: 60,
+      bpm: null,
+      keyScale: '',
+      timeSignature: '',
+      splitToStems: false,
+      negativePrompt: 'no autotune, no distortion',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, taskParams] = mockReleaseLegoTask.mock.calls[0];
+    expect(taskParams.negative_prompt).toBe('no autotune, no distortion');
+  });
+
+  it('includes negative_prompt in cover task params when set on clip', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 5,
+    });
+
+    // Set up clip with audio and negativePrompt
+    const project = useProjectStore.getState().project!;
+    const trackObj = project.tracks.find((t) => t.id === track.id)!;
+    const storeClip = trackObj.clips.find((c) => c.id === clip.id)!;
+    storeClip.isolatedAudioKey = 'audio-key';
+    storeClip.generationStatus = 'ready';
+
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'lego',
+        prompt: 'rock song',
+        lyrics: '',
+        negativePrompt: 'no distortion',
+      },
+    });
+
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockSuccessfulGeneration();
+
+    const promise = generateCoverClip({
+      clipId: clip.id,
+      caption: 'jazz cover',
+      lyrics: '',
+      coverStrength: 0.5,
+      createNew: false,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, taskParams] = mockReleaseLegoTask.mock.calls[0];
+    expect(taskParams.negative_prompt).toBe('no distortion');
+    expect(taskParams.task_type).toBe('cover');
+  });
+
+  it('includes negative_prompt in repaint task params when set on clip', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 10,
+    });
+
+    // Set up clip with audio and negativePrompt
+    const project = useProjectStore.getState().project!;
+    const trackObj = project.tracks.find((t) => t.id === track.id)!;
+    const storeClip = trackObj.clips.find((c) => c.id === clip.id)!;
+    storeClip.cumulativeMixKey = 'mix-key';
+    storeClip.generationStatus = 'ready';
+
+    useProjectStore.getState().updateClip(clip.id, {
+      generationParams: {
+        type: 'lego',
+        prompt: 'ambient pad',
+        lyrics: '',
+        negativePrompt: 'no heavy bass',
+      },
+    });
+
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockSuccessfulGeneration();
+
+    const promise = generateRepaintClip({
+      clipId: clip.id,
+      repaintStart: 2,
+      repaintEnd: 8,
+      prompt: 'add piano',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, taskParams] = mockReleaseLegoTask.mock.calls[0];
+    expect(taskParams.negative_prompt).toBe('no heavy bass');
+    expect(taskParams.task_type).toBe('repaint');
+  });
+});

@@ -782,6 +782,7 @@ export interface ClipGenerationParams {
   type: ClipGenerationType;
   prompt: string;
   lyrics: string;
+  negativePrompt?: string;
   // text2music params
   durationSeconds?: number;
   thinking?: boolean;

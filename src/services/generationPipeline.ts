@@ -106,6 +106,8 @@ export interface ClipInternalOptions {
   seedOverride?: number;
   /** Whether to use a random seed (overrides seedOverride). */
   useRandomSeedOverride?: boolean;
+  /** Negative prompt — elements to exclude from generation. */
+  negativePromptOverride?: string;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
 }
@@ -297,6 +299,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -436,6 +439,18 @@ export async function generateVariationSession(
         lyrics: params.lyrics ?? '',
         source: 'generated',
       });
+
+      // Persist negative prompt so generateClipInternal can read it
+      if (params.negativePrompt?.trim()) {
+        store.updateClip(clip.id, {
+          generationParams: {
+            type: 'lego',
+            prompt: params.prompt,
+            lyrics: params.lyrics ?? '',
+            negativePrompt: params.negativePrompt.trim(),
+          },
+        });
+      }
 
       useGenerationStore.getState().updateVariation(index, {
         clipId: clip.id,
@@ -764,6 +779,12 @@ async function generateClipInternal(
       params.use_random_seed = true;
     }
 
+    // Negative prompt
+    const effectiveNegativePrompt = options.negativePromptOverride?.trim() || clip.generationParams?.negativePrompt?.trim();
+    if (effectiveNegativePrompt) {
+      params.negative_prompt = effectiveNegativePrompt;
+    }
+
     const historyUpdatedAt = Date.now();
     genStore.upsertGenerationHistoryRecord({
       clipId,
@@ -1088,7 +1109,8 @@ function getNextVariationStartTime(trackId: string): number {
 
 function createVariationClipAtTime(params: VariationSessionParams, index: number, baseStartTime: number): string {
   const startTime = baseStartTime + (index * params.duration);
-  const clip = useProjectStore.getState().addClip(params.trackId, {
+  const store = useProjectStore.getState();
+  const clip = store.addClip(params.trackId, {
     startTime,
     duration: params.duration,
     prompt: params.prompt,
@@ -1096,6 +1118,17 @@ function createVariationClipAtTime(params: VariationSessionParams, index: number
     lyrics: params.lyrics ?? '',
     source: 'generated',
   });
+  // Persist negative prompt so generateClipInternal can read it
+  if (params.negativePrompt?.trim()) {
+    store.updateClip(clip.id, {
+      generationParams: {
+        type: 'lego',
+        prompt: params.prompt,
+        lyrics: params.lyrics ?? '',
+        negativePrompt: params.negativePrompt.trim(),
+      },
+    });
+  }
   return clip.id;
 }
 
@@ -1807,6 +1840,12 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         model: project.generationDefaults.model,
       };
 
+      // Thread negative prompt from clip's persisted generation params
+      const clipNegPrompt = sourceClip.generationParams?.negativePrompt?.trim();
+      if (clipNegPrompt) {
+        coverParams.negative_prompt = clipNegPrompt;
+      }
+
       const coverStartedAt = Date.now();
       genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: coverStartedAt });
       store.updateClipStatus(targetClipId, 'generating');
@@ -1948,6 +1987,12 @@ async function generateRepaintInternal(
       repaint_mode: repaintMode,
       repaint_strength: repaintStrength,
     };
+
+    // Thread negative prompt from clip's persisted generation params
+    const clipNegPrompt = clip.generationParams?.negativePrompt?.trim();
+    if (clipNegPrompt) {
+      params.negative_prompt = clipNegPrompt;
+    }
 
     const jobStartedAt = Date.now();
     {
@@ -2506,6 +2551,8 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Negative prompt — elements to exclude from generation */
+  negativePrompt?: string;
 }
 
 export interface Text2MusicResult {
@@ -2592,6 +2639,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
       shift: request.shift,
+      negativePrompt: request.negativePrompt?.trim() || undefined,
     },
   });
 
@@ -2644,6 +2692,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt?.trim()) {
+      params.negative_prompt = request.negativePrompt.trim();
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

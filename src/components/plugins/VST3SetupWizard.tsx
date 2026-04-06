@@ -42,12 +42,20 @@ const AlertIcon = ({ className }: { className?: string }) => (
  * - Wizard has not been dismissed
  * - Companion is not currently connected
  */
+/** Detect user's platform for highlighting the appropriate download button */
+function detectPlatform(): string {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('win')) return 'windows';
+  if (ua.includes('mac')) return 'macos';
+  return 'linux';
+}
+
 export function VST3SetupWizard() {
   const connectionStatus = useVST3Store((s) => s.connectionStatus);
-  const companionAppStatus = useVST3Store((s) => s.companionAppStatus);
   const connectionError = useVST3Store((s) => s.connectionError);
   const setupWizardDismissed = useVST3Store((s) => s.setupWizardDismissed);
   const dismissSetupWizard = useVST3Store((s) => s.dismissSetupWizard);
+  const userPlatform = detectPlatform();
 
   // Don't show if dismissed or already connected
   if (setupWizardDismissed || connectionStatus === 'connected') {
@@ -94,19 +102,26 @@ export function VST3SetupWizard() {
           <span className="text-xs font-medium text-zinc-300">Download Companion App</span>
         </div>
         <div className="ml-7 flex flex-wrap gap-2">
-          {DOWNLOAD_LINKS.map(({ label, testId }) => (
-            <a
-              key={testId}
-              href={RELEASES_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid={testId}
-              className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-zinc-300 transition-colors hover:border-violet-500/50 hover:bg-white/10 hover:text-white"
-            >
-              <DownloadIcon className="h-3 w-3" />
-              {label}
-            </a>
-          ))}
+          {DOWNLOAD_LINKS.map(({ platform, label, testId }) => {
+            const isCurrentPlatform = platform === userPlatform;
+            return (
+              <a
+                key={testId}
+                href={RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid={testId}
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[10px] transition-colors hover:border-violet-500/50 hover:bg-white/10 hover:text-white ${
+                  isCurrentPlatform
+                    ? 'border-violet-500/40 bg-violet-600/20 text-white font-medium'
+                    : 'border-white/10 bg-white/5 text-zinc-300'
+                }`}
+              >
+                <DownloadIcon className="h-3 w-3" />
+                {label}
+              </a>
+            );
+          })}
         </div>
       </div>
 

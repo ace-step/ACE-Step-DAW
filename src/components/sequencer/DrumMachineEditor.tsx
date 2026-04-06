@@ -99,7 +99,7 @@ export function DrumMachineEditor() {
       }, 150);
       timeoutRefs.current.set(padIndex, timeout);
     },
-    [trackId, track?.drumKit, pads],
+    [trackId, track?.drumKit],
   );
 
   // Mouse-down handler: compute velocity from Y position within pad

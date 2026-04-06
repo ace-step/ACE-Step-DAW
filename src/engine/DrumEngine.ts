@@ -31,7 +31,9 @@ interface PadEffectChain {
 function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
   const filter = new Tone.Filter({ frequency: 20000, type: 'lowpass' });
   const distortion = new Tone.Distortion(0);
-  const volumeGain = new Tone.Gain(0.8);
+  // Neutral defaults: volume=1 and decay=1 preserve pre-#950 behavior
+  // until explicit syncTrackPadParams applies user-selected values
+  const volumeGain = new Tone.Gain(1);
   const decayGain = new Tone.Gain(1);
   const panner = new Tone.Panner(0);
 
@@ -52,7 +54,7 @@ function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
     volumeGain,
     decayGain,
     panner,
-    decayScale: 0.5,
+    decayScale: 1,
     sendReverb: 0,
     sendDelay: 0,
     dispose() {
@@ -613,14 +615,16 @@ class DrumEngine {
   }
 
   /** Apply the decay envelope on a pad's decayGain node at the given time.
-   * Used by both triggerPad and schedulePattern for consistent behavior. */
+   * Used by both triggerPad and schedulePattern for consistent behavior.
+   * Neutral/default decay (>=0.999) is a no-op to avoid unnecessary
+   * automation for pads whose parameters were never explicitly synced. */
   private applyDecayEnvelope(chain: PadEffectChain, time: number) {
+    if (chain.decayScale >= 0.999) return;
+
     chain.decayGain.gain.cancelScheduledValues(time);
     chain.decayGain.gain.setValueAtTime(1, time);
-    if (chain.decayScale < 0.999) {
-      const fadeTime = 0.02 + chain.decayScale * 1.98;
-      chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
-    }
+    const fadeTime = 0.02 + chain.decayScale * 1.98;
+    chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
   }
 
   /** Trigger a drum pad. Pad effect params (volume, tune, filter, etc.) must be

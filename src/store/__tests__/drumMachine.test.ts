@@ -174,7 +174,7 @@ describe('drumMachine store actions', () => {
 
     it('defaults to 0.5 on new pads', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
-      expect(track.drumMachine!.pads[0].decay).toBe(0.5);
+      expect(track.drumMachine!.pads[0].decay).toBe(1);
     });
   });
 
@@ -283,7 +283,7 @@ describe('drumMachine store actions', () => {
 
       const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
       expect(pad.tune).toBe(0);
-      expect(pad.decay).toBe(0.5);
+      expect(pad.decay).toBe(1);
       expect(pad.filter).toEqual({ type: 'off', cutoff: 20000 });
       expect(pad.drive).toBe(0);
       expect(pad.send).toEqual({ reverb: 0, delay: 0 });

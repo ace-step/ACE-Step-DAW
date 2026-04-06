@@ -1589,7 +1589,7 @@ function createDefaultDrumMachineConfig(kit: DrumKitName = '808'): DrumMachineCo
       volume: 0.8,
       pan: 0,
       tune: 0,
-      decay: 0.5,
+      decay: 1,
       filter: { type: 'off' as const, cutoff: 20000 },
       drive: 0,
       send: { reverb: 0, delay: 0 },
@@ -2100,7 +2100,7 @@ function ensureTrackDefaults(track: Track): Track {
       ...normalizedTrack.drumMachine,
       pads: normalizedTrack.drumMachine.pads.map((pad) => {
         const tune = Number.isFinite(pad.tune) ? Math.max(-24, Math.min(24, pad.tune)) : 0;
-        const decay = Number.isFinite(pad.decay) ? Math.max(0, Math.min(1, pad.decay)) : 0.5;
+        const decay = Number.isFinite(pad.decay) ? Math.max(0, Math.min(1, pad.decay)) : 1;
         const drive = Number.isFinite(pad.drive) ? Math.max(0, Math.min(1, pad.drive)) : 0;
         const filterType = pad.filter && validFilterTypes.has(pad.filter.type) ? pad.filter.type : 'off';
         const filterCutoff = pad.filter && Number.isFinite(pad.filter.cutoff)

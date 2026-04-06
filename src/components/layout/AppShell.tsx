@@ -24,6 +24,7 @@ import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
 import { useOnboardingTracking } from '../../hooks/useOnboardingTracking';
+import { startWikiGenerationLogger, stopWikiGenerationLogger } from '../../services/projectWikiIntegration';
 import { BottomPanelTransition } from '../ui/BottomPanelTransition';
 import { PanelSkeleton } from '../ui/PanelSkeleton';
 
@@ -127,6 +128,12 @@ function EditorShell() {
   useEffectsSync();
   useVST3Connection();
   useVST3Sync();
+
+  // Auto-update project wiki generation-log when clips complete generation
+  useEffect(() => {
+    startWikiGenerationLogger();
+    return () => stopWikiGenerationLogger();
+  }, []);
 
   return (
     <div

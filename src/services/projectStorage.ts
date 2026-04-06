@@ -2,6 +2,8 @@ import { get, set, del, keys } from 'idb-keyval';
 import type { Project, ProjectTemplate } from '../types/project';
 import { downloadBlob } from './browserDownload';
 import { buildClipLayout, type ClipLayoutItem } from '../utils/clipLayout';
+import { getProjectWiki } from './projectWiki';
+import type { ProjectWikiExport } from '../types/projectWiki';
 
 const PROJECT_PREFIX = 'project:';
 const TEMPLATE_PREFIX = 'template:';
@@ -129,6 +131,8 @@ interface ArchiveManifest {
   version: number;
   project: Project;
   files: { key: string; offset: number; size: number }[];
+  /** Wiki snapshot — included since manifest version 1. */
+  wiki?: ProjectWikiExport;
 }
 
 export async function exportProjectArchive(project: Project): Promise<void> {
@@ -154,10 +158,21 @@ export async function exportProjectArchive(project: Project): Promise<void> {
     offset += entry.blob.size;
   }
 
+  // Export wiki snapshot if available
+  let wikiSnapshot: ProjectWikiExport | undefined;
+  try {
+    const wiki = getProjectWiki(project.id);
+    await wiki.initialize();
+    wikiSnapshot = await wiki.export();
+  } catch {
+    // Wiki export failed — non-critical, continue without it
+  }
+
   const manifest: ArchiveManifest = {
     version: 1,
     project,
     files: fileTable,
+    wiki: wikiSnapshot,
   };
 
   const manifestJson = JSON.stringify(manifest);
@@ -239,6 +254,17 @@ export async function importProjectArchive(): Promise<Project | null> {
 
         // Save project to library
         await saveProject(manifest.project);
+
+        // Restore wiki if present in archive
+        if (manifest.wiki) {
+          try {
+            const wiki = getProjectWiki(manifest.project.id);
+            await wiki.initialize();
+            await wiki.import(manifest.wiki);
+          } catch {
+            // Wiki import failed — non-critical
+          }
+        }
 
         resolve(manifest.project);
       } catch {

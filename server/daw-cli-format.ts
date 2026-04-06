@@ -142,6 +142,14 @@ export function formatStatus(data: Record<string, unknown>): string {
       lines.push(`  ${(t.name as string)?.padEnd(12) ?? 'Track'} ${type.padEnd(7)} ${clipCount}clip${clipCount !== 1 ? 's' : ''} ${vol} ${pan} ${flags}`.trimEnd());
     }
   }
+
+  // Append wiki summary if present
+  const wikiSummary = data.wikiSummary as string | undefined;
+  if (wikiSummary) {
+    lines.push('');
+    lines.push(wikiSummary);
+  }
+
   return lines.join('\n');
 }
 

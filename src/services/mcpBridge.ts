@@ -14,6 +14,7 @@ import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
 import { createDebugLogger } from '../utils/debugLogger';
+import { getProjectWiki } from './projectWiki';
 
 const log = createDebugLogger('mcp-bridge');
 
@@ -90,6 +91,17 @@ async function executeTool(tool: string, params: Record<string, unknown>): Promi
     case 'daw_get_project': {
       const p = project.project;
       if (!p) return { error: 'No project loaded' };
+
+      // Include wiki summary if available
+      let wikiSummary: string | undefined;
+      try {
+        const wiki = getProjectWiki(p.id);
+        await wiki.initialize();
+        wikiSummary = await wiki.summarize();
+      } catch {
+        // Wiki unavailable — non-critical
+      }
+
       return {
         name: p.name,
         bpm: p.bpm,
@@ -106,6 +118,7 @@ async function executeTool(tool: string, params: Record<string, unknown>): Promi
           muted: t.muted,
           soloed: t.soloed,
         })),
+        wikiSummary,
       };
     }
 

@@ -42,8 +42,8 @@ export class DevWiki {
    * Write or update a wiki page.
    */
   async writePage(page: DevWikiPage): Promise<void> {
-    page.lastUpdated = Date.now();
-    await set(`${DEV_WIKI_PREFIX}${page.path}`, page);
+    const stored = { ...page, lastUpdated: Date.now() };
+    await set(`${DEV_WIKI_PREFIX}${stored.path}`, stored);
   }
 
   /**
@@ -79,13 +79,9 @@ export class DevWiki {
       (k): k is string => typeof k === 'string' && k.startsWith(DEV_WIKI_PREFIX)
     );
 
-    const pages: DevWikiPage[] = [];
-    for (const key of wikiKeys) {
-      const page = await get<DevWikiPage>(key);
-      if (page) pages.push(page);
-    }
-
-    return pages;
+    return (await Promise.all(
+      wikiKeys.map(key => get<DevWikiPage>(key))
+    )).filter((p): p is DevWikiPage => p != null);
   }
 
   /**

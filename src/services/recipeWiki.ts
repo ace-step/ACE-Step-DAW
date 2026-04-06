@@ -74,11 +74,9 @@ export class RecipeWiki {
     // Try taskType-specific recommendations if enough entries exist
     const entryIds = await get<string[]>(`${GENRE_INDEX_PREFIX}${normalized}`);
     if (entryIds && entryIds.length > 0) {
-      const entries: RecipeEntry[] = [];
-      for (const id of entryIds) {
-        const entry = await get<RecipeEntry>(`${ENTRY_PREFIX}${id}`);
-        if (entry) entries.push(entry);
-      }
+      const entries = (await Promise.all(
+        entryIds.map(id => get<RecipeEntry>(`${ENTRY_PREFIX}${id}`))
+      )).filter((e): e is RecipeEntry => e != null);
       const taskEntries = entries.filter(e => e.taskType === taskType);
       if (taskEntries.length >= 3) {
         const params = computeRecommendedParams(taskEntries);
@@ -143,13 +141,9 @@ export class RecipeWiki {
       (k): k is string => typeof k === 'string' && k.startsWith(GENRE_PREFIX)
     );
 
-    const recipes: GenreRecipe[] = [];
-    for (const key of genreKeys) {
-      const recipe = await get<GenreRecipe>(key);
-      if (recipe) recipes.push(recipe);
-    }
-
-    return recipes;
+    return (await Promise.all(
+      genreKeys.map(key => get<GenreRecipe>(key))
+    )).filter((r): r is GenreRecipe => r != null);
   }
 
   // ─── Export / Import ─────────────────────────────────────────────────
@@ -164,17 +158,13 @@ export class RecipeWiki {
       (k): k is string => typeof k === 'string' && k.startsWith(GENRE_PREFIX)
     );
 
-    const entries: RecipeEntry[] = [];
-    for (const key of entryKeys) {
-      const entry = await get<RecipeEntry>(key);
-      if (entry) entries.push(entry);
-    }
+    const entries = (await Promise.all(
+      entryKeys.map(key => get<RecipeEntry>(key))
+    )).filter((e): e is RecipeEntry => e != null);
 
-    const genres: GenreRecipe[] = [];
-    for (const key of genreKeys) {
-      const recipe = await get<GenreRecipe>(key);
-      if (recipe) genres.push(recipe);
-    }
+    const genres = (await Promise.all(
+      genreKeys.map(key => get<GenreRecipe>(key))
+    )).filter((r): r is GenreRecipe => r != null);
 
     return {
       version: 1,
@@ -212,8 +202,12 @@ export class RecipeWiki {
 
   private async addToGenreIndex(genre: string, entryId: string): Promise<void> {
     const indexKey = `${GENRE_INDEX_PREFIX}${genre}`;
-    const existing = await get<string[]>(indexKey) ?? [];
+    let existing = await get<string[]>(indexKey) ?? [];
     existing.push(entryId);
+    // Cap index at 1000 entries to prevent unbounded growth
+    if (existing.length > 1000) {
+      existing = existing.slice(-1000);
+    }
     await set(indexKey, existing);
   }
 
@@ -221,11 +215,9 @@ export class RecipeWiki {
     const indexKey = `${GENRE_INDEX_PREFIX}${genre}`;
     const entryIds = await get<string[]>(indexKey) ?? [];
 
-    const entries: RecipeEntry[] = [];
-    for (const id of entryIds) {
-      const entry = await get<RecipeEntry>(`${ENTRY_PREFIX}${id}`);
-      if (entry) entries.push(entry);
-    }
+    const entries = (await Promise.all(
+      entryIds.map(id => get<RecipeEntry>(`${ENTRY_PREFIX}${id}`))
+    )).filter((e): e is RecipeEntry => e != null);
 
     const recipe = this.buildGenreRecipe(genre, entries);
     await set(`${GENRE_PREFIX}${genre}`, recipe);

@@ -9,9 +9,11 @@
  * Left to other layers: human audible mix judgment and dense layout review.
  */
 import { test, expect } from '@playwright/test';
+import { dismissWelcomeOverlay } from '../support/e2eStartup';
 
 test.describe('Mixer Operations @critical', () => {
   test.beforeEach(async ({ page }) => {
+    await dismissWelcomeOverlay(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => typeof (window as any).__store !== 'undefined', null, { timeout: 10000 });

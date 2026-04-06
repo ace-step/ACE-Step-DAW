@@ -5,6 +5,7 @@ import { EnhanceRepaintControls } from './EnhanceRepaintControls';
 import { EnhanceSourcePreview } from './EnhanceSourcePreview';
 import { EnhanceHistorySidebar } from './EnhanceHistorySidebar';
 import { ResultsPanel } from './ResultsPanel';
+import { NegativePromptSection } from './NegativePromptSection';
 
 export function EnhancePanel() {
   const state = useEnhancePanelState();
@@ -200,6 +201,13 @@ export function EnhancePanel() {
               bpm={project?.bpm}
             />
           )}
+
+          {/* Negative prompt — shared between cover and repaint */}
+          <NegativePromptSection
+            value={state.negativePrompt}
+            onChange={state.setNegativePrompt}
+            disabled={state.isSubmitting}
+          />
 
           {/* Enhance button */}
           <button

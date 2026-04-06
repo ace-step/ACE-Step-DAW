@@ -61,6 +61,9 @@ export function useEnhancePanelState() {
   const [repaintMode, setRepaintMode] = useState<RepaintMode>('balanced');
   const [repaintStrength, setRepaintStrength] = useState(0.5);
 
+  // Shared negative prompt (cover + repaint)
+  const [negativePrompt, setNegativePrompt] = useState('');
+
   // Sessions & results
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [results, setResults] = useState<ResultEntry[]>([]);
@@ -286,6 +289,7 @@ export function useEnhancePanelState() {
         coverStrength: timbreRef ? timbreRef.strength : coverStrength,
         createNew,
         sourceAudioOverride: timbreRef?.audioKey || chainedSourceAudioKey || undefined,
+        negativePrompt: negativePrompt.trim() || undefined,
       });
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
     } catch (err) {
@@ -296,7 +300,7 @@ export function useEnhancePanelState() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, finalizeResult]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, negativePrompt, finalizeResult]);
 
   const handleRepaintGenerate = useCallback(async () => {
     if (!enhancerTarget || isGenerating || isSubmitting) return;
@@ -311,6 +315,7 @@ export function useEnhancePanelState() {
         clipId: enhancerTarget.clipId, repaintStart: selStart, repaintEnd: selEnd, prompt,
         globalCaption: globalCaption || undefined, repaintMode, repaintStrength,
         sourceAudioOverride: chainedSourceAudioKey || undefined,
+        negativePrompt: negativePrompt.trim() || undefined,
       });
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
     } catch (err) {
@@ -321,7 +326,7 @@ export function useEnhancePanelState() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, selStart, selEnd, prompt, globalCaption, repaintMode, repaintStrength, isGenerating, isSubmitting, chainedSourceAudioKey, negativePrompt, finalizeResult]);
 
   const handleGenerate = mode === 'cover' ? handleCoverGenerate : handleRepaintGenerate;
 
@@ -442,6 +447,8 @@ export function useEnhancePanelState() {
     // Repaint fields
     selStart, selEnd, prompt, setPrompt, globalCaption, setGlobalCaption,
     repaintMode, setRepaintMode, repaintStrength, setRepaintStrength,
+    // Shared negative prompt
+    negativePrompt, setNegativePrompt,
     // Sessions
     sessions, activeSessionId, setActiveSessionId,
     // Results

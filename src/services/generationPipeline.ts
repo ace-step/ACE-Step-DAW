@@ -297,7 +297,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
-    if (params.negativePrompt) taskParams.negative_prompt = params.negativePrompt;
+    if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -812,8 +812,9 @@ async function generateClipInternal(
     }
 
     // Negative prompt: exclude unwanted elements from generation
-    if (clip.generationParams?.negativePrompt) {
-      params.negative_prompt = clip.generationParams.negativePrompt;
+    const clipNegativePrompt = clip.generationParams?.negativePrompt?.trim();
+    if (clipNegativePrompt) {
+      params.negative_prompt = clipNegativePrompt;
     }
 
     // Submit task
@@ -1815,8 +1816,9 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         model: project.generationDefaults.model,
       };
 
-      if (opts.negativePrompt) {
-        coverParams.negative_prompt = opts.negativePrompt;
+      const coverNegativePrompt = opts.negativePrompt?.trim();
+      if (coverNegativePrompt) {
+        coverParams.negative_prompt = coverNegativePrompt;
       }
 
       const coverStartedAt = Date.now();
@@ -1962,8 +1964,9 @@ async function generateRepaintInternal(
       repaint_strength: repaintStrength,
     };
 
-    if (negativePrompt) {
-      params.negative_prompt = negativePrompt;
+    const repaintNegativePrompt = negativePrompt?.trim();
+    if (repaintNegativePrompt) {
+      params.negative_prompt = repaintNegativePrompt;
     }
 
     const jobStartedAt = Date.now();
@@ -2668,8 +2671,9 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       params.vocal_language = request.vocalLanguage;
     }
 
-    if (request.negativePrompt) {
-      params.negative_prompt = request.negativePrompt;
+    const negativePromptTrimmed = request.negativePrompt?.trim();
+    if (negativePromptTrimmed) {
+      params.negative_prompt = negativePromptTrimmed;
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

@@ -640,4 +640,78 @@ describe('generateText2Music', () => {
     expect(result.errorMessage).toContain('CUDA out of memory');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
   });
+
+  it('forwards negativePrompt as negative_prompt to the API', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-neg' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-neg',
+      status: 1,
+      progress_text: 'Done',
+      result: JSON.stringify([{
+        file: '/tmp/neg.wav',
+        seed_value: 42,
+        dit_model: 'test-model',
+        metas: { bpm: 120, keyscale: 'C major', timesignature: '4/4', genres: ['pop'] },
+      }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['neg-audio'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:proj:neg:isolated');
+    mockDecodeAudioData.mockResolvedValue(fakeAudioBuffer(30));
+
+    const promise = generateText2Music({
+      prompt: 'A pop song',
+      lyrics: '',
+      durationSeconds: 30,
+      bpm: 120,
+      keyScale: 'C major',
+      timeSignature: '4/4',
+      splitToStems: false,
+      negativePrompt: 'no autotune, no heavy reverb',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, params] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.negative_prompt).toBe('no autotune, no heavy reverb');
+  });
+
+  it('omits negative_prompt when value is whitespace-only', async () => {
+    mockInitModel.mockResolvedValue(undefined);
+    setupModelStore();
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-ws' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-ws',
+      status: 1,
+      progress_text: 'Done',
+      result: JSON.stringify([{
+        file: '/tmp/ws.wav',
+        seed_value: 1,
+        dit_model: 'test-model',
+        metas: { bpm: 120, keyscale: 'C major', timesignature: '4/4', genres: [] },
+      }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['ws-audio'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:proj:ws:isolated');
+    mockDecodeAudioData.mockResolvedValue(fakeAudioBuffer(30));
+
+    const promise = generateText2Music({
+      prompt: 'A rock song',
+      lyrics: '',
+      durationSeconds: 30,
+      bpm: null,
+      keyScale: '',
+      timeSignature: '',
+      splitToStems: false,
+      negativePrompt: '   ',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, params] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.negative_prompt).toBeUndefined();
+  });
 });

@@ -71,8 +71,31 @@ export class RecipeWiki {
     const recipe = await get<GenreRecipe>(`${GENRE_PREFIX}${normalized}`);
     if (!recipe) return null;
 
-    const confidence = computeConfidence(recipe.totalGenerations, recipe.averageRating);
+    // Try taskType-specific recommendations if enough entries exist
+    const entryIds = await get<string[]>(`${GENRE_INDEX_PREFIX}${normalized}`);
+    if (entryIds && entryIds.length > 0) {
+      const entries: RecipeEntry[] = [];
+      for (const id of entryIds) {
+        const entry = await get<RecipeEntry>(`${ENTRY_PREFIX}${id}`);
+        if (entry) entries.push(entry);
+      }
+      const taskEntries = entries.filter(e => e.taskType === taskType);
+      if (taskEntries.length >= 3) {
+        const params = computeRecommendedParams(taskEntries);
+        const ratings = taskEntries.filter(e => e.userRating !== undefined).map(e => e.userRating!);
+        const confidence = computeConfidence(taskEntries.length, averageOf(ratings));
+        return {
+          genre: recipe.genre,
+          params,
+          confidence,
+          sampleSize: taskEntries.length,
+          reasoning: `Based on ${taskEntries.length} ${taskType} generation(s) for ${genre}`,
+        };
+      }
+    }
 
+    // Fall back to genre-level aggregated recipe
+    const confidence = computeConfidence(recipe.totalGenerations, recipe.averageRating);
     return {
       genre: recipe.genre,
       params: recipe.recommendedParams,
@@ -219,6 +242,11 @@ function extractTags(prompt: string): string[] {
   const words = prompt.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2);
   const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this']);
   return [...new Set(words.filter(w => !stopWords.has(w)))];
+}
+
+function averageOf(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 function computeConfidence(sampleSize: number, averageRating: number | null): number {

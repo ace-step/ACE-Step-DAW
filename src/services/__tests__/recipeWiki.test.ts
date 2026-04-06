@@ -165,6 +165,62 @@ describe('RecipeWiki', () => {
       expect(suggestion).toBeNull();
     });
 
+    it('uses taskType-filtered entries when enough data exists', async () => {
+      const recipe: GenreRecipe = {
+        genre: 'lo-fi',
+        totalGenerations: 10,
+        successfulGenerations: 8,
+        failedGenerations: 2,
+        averageRating: 3.5,
+        bestPrompts: [],
+        recommendedParams: { cfgStrength: 5, steps: 32, bpm: 85 },
+        knownFailures: [],
+        lastUpdated: Date.now(),
+      };
+      const entryIds = ['e1', 'e2', 'e3', 'e4'];
+      const t2mEntries = [
+        makeEntry({ id: 'e1', taskType: 'text2music', params: { cfgStrength: 6, steps: 40, bpm: 90 }, userRating: 5 }),
+        makeEntry({ id: 'e2', taskType: 'text2music', params: { cfgStrength: 7, steps: 40, bpm: 95 }, userRating: 4 }),
+        makeEntry({ id: 'e3', taskType: 'text2music', params: { cfgStrength: 6.5, steps: 38, bpm: 92 }, userRating: 4 }),
+      ];
+      const otherEntry = makeEntry({ id: 'e4', taskType: 'extend', params: { cfgStrength: 3 }, userRating: 3 });
+
+      mockGet
+        .mockResolvedValueOnce(recipe) // genre recipe
+        .mockResolvedValueOnce(entryIds) // genre index
+        .mockResolvedValueOnce(t2mEntries[0])
+        .mockResolvedValueOnce(t2mEntries[1])
+        .mockResolvedValueOnce(t2mEntries[2])
+        .mockResolvedValueOnce(otherEntry);
+
+      const suggestion = await wiki.query('Lo-Fi', 'text2music');
+      expect(suggestion).not.toBeNull();
+      expect(suggestion!.sampleSize).toBe(3);
+      expect(suggestion!.reasoning).toContain('text2music');
+    });
+
+    it('falls back to genre recipe when insufficient taskType entries', async () => {
+      const recipe: GenreRecipe = {
+        genre: 'lo-fi',
+        totalGenerations: 10,
+        successfulGenerations: 8,
+        failedGenerations: 2,
+        averageRating: 3.5,
+        bestPrompts: [],
+        recommendedParams: { cfgStrength: 5, steps: 32, bpm: 85 },
+        knownFailures: [],
+        lastUpdated: Date.now(),
+      };
+      mockGet
+        .mockResolvedValueOnce(recipe)
+        .mockResolvedValueOnce(['e1']) // only 1 entry
+        .mockResolvedValueOnce(makeEntry({ id: 'e1', taskType: 'text2music' }));
+
+      const suggestion = await wiki.query('Lo-Fi', 'text2music');
+      expect(suggestion).not.toBeNull();
+      expect(suggestion!.sampleSize).toBe(10); // uses genre-level data
+    });
+
     it('confidence scales with sample size', async () => {
       const small: GenreRecipe = {
         genre: 'Jazz',

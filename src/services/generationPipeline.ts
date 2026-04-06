@@ -1727,6 +1727,8 @@ export interface GenerateCoverOptions {
   createNew: boolean;
   /** Optional IDB audio key to use as source instead of the clip's own audio (for iterative chaining) */
   sourceAudioOverride?: string;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export async function generateCoverClip(opts: GenerateCoverOptions): Promise<string | undefined> {
@@ -1806,6 +1808,10 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
         thinking: project.generationDefaults.thinking,
         model: project.generationDefaults.model,
       };
+
+      if (opts.negativePrompt) {
+        coverParams.negative_prompt = opts.negativePrompt;
+      }
 
       const coverStartedAt = Date.now();
       genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: coverStartedAt });
@@ -1900,6 +1906,7 @@ async function generateRepaintInternal(
   globalCaption: string,
   repaintMode: RepaintMode = 'balanced',
   repaintStrength: number = 0.5,
+  negativePrompt?: string,
 ): Promise<GenerationOutcome> {
   const store = useProjectStore.getState();
   const genStore = useGenerationStore.getState();
@@ -1948,6 +1955,10 @@ async function generateRepaintInternal(
       repaint_mode: repaintMode,
       repaint_strength: repaintStrength,
     };
+
+    if (negativePrompt) {
+      params.negative_prompt = negativePrompt;
+    }
 
     const jobStartedAt = Date.now();
     {
@@ -2128,6 +2139,8 @@ export interface GenerateRepaintOptions {
   repaintStrength?: number;
   /** Optional IDB audio key to use as source instead of the clip's own audio (for iterative chaining) */
   sourceAudioOverride?: string;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise<string | undefined> {
@@ -2170,6 +2183,7 @@ export async function generateRepaintClip(opts: GenerateRepaintOptions): Promise
         globalCaption,
         opts.repaintMode ?? 'balanced',
         opts.repaintStrength ?? 0.5,
+        opts.negativePrompt,
       );
 
       if (outcome.succeeded) {
@@ -2500,6 +2514,8 @@ export interface Text2MusicRequest {
   useCotCaption?: boolean;
   /** Vocal language code — "unknown" = server auto-detects via CoT */
   vocalLanguage?: string;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
   /** When true, update project BPM/key/timeSignature from generated result */
   syncMetaToProject?: boolean;
   /** Whether the lyrics are instrumental (for persisting generation params) */
@@ -2644,6 +2660,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt) {
+      params.negative_prompt = request.negativePrompt;
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

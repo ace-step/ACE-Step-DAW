@@ -236,6 +236,7 @@ export interface VariationSessionParams {
   thinking?: boolean;
   seed?: string;
   useRandomSeed?: boolean;
+  negativePrompt?: string;
   /** Comparison mode: 'cross-model' enables per-variation model switching */
   comparisonMode?: 'same-model' | 'cross-model';
   /** Per-variation model overrides for cross-model comparison */
@@ -289,6 +290,7 @@ export interface GenerationFormState {
   thinking: boolean;
   seed: string;
   useRandomSeed: boolean;
+  negativePrompt: string;
   compareModelsEnabled: boolean;
   compareModelOverrides: ModelOverride[];
 }
@@ -367,6 +369,7 @@ function normalizeVariationSessionParams(
     thinking: params.thinking,
     seed: params.seed,
     useRandomSeed: params.useRandomSeed,
+    negativePrompt: params.negativePrompt?.trim() || undefined,
     comparisonMode: params.comparisonMode,
     modelOverrides: params.modelOverrides,
   };
@@ -391,6 +394,7 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     thinking: DEFAULT_GENERATION.thinking,
     seed: '',
     useRandomSeed: true,
+    negativePrompt: '',
     compareModelsEnabled: false,
     compareModelOverrides: [],
   };
@@ -484,6 +488,7 @@ export interface GenerationState {
   setGenerationThinking: (thinking: boolean) => void;
   setGenerationSeed: (seed: string) => void;
   setGenerationUseRandomSeed: (useRandom: boolean) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
   setGenerationRequestError: (message: string | null) => void;
   applyGenerationPreset: (preset: GenerationPreset) => void;
   getPromptAutocompleteSuggestions: (prompt?: string, caretIndex?: number, limit?: number) => PromptAutocompleteSuggestion[];
@@ -861,6 +866,10 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: { ...s.generationForm, useRandomSeed: useRandom, requestError: null },
       })),
 
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: { ...s.generationForm, negativePrompt, requestError: null },
+      })),
+
       setStemsFormDraft: (draft) => set({ stemsFormDraft: draft }),
       clearStemsFormDraft: () => set({ stemsFormDraft: null }),
 
@@ -948,6 +957,7 @@ export const useGenerationStore = create<GenerationState>()(
           thinking: generationForm.thinking,
           seed: generationForm.useRandomSeed ? undefined : generationForm.seed || undefined,
           useRandomSeed: generationForm.useRandomSeed,
+          negativePrompt: generationForm.negativePrompt.trim() || undefined,
           ...(generationForm.compareModelsEnabled && generationForm.compareModelOverrides.length > 0
             ? {
                 comparisonMode: 'cross-model' as const,

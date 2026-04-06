@@ -788,6 +788,7 @@ export interface ClipGenerationParams {
   seed?: number;
   useRandomSeed?: boolean;
   vocalLanguage?: string;
+  negativePrompt?: string;
   instrumental?: boolean;
   splitToStems?: boolean;
   stemCount?: 2 | 4 | 6;

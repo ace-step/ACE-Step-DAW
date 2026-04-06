@@ -11,6 +11,7 @@ import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
+import { NegativePromptSection } from './NegativePromptSection';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -71,6 +72,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeed = useCallback((v: number) => setSeedStr(String(v)), [setSeedStr]);
   const useRandomSeed = useGenerationStore((s) => s.generationForm.useRandomSeed);
   const setUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
 
   // Local state — reset on panel reopen (less critical)
   const [instrumental, setInstrumental] = useState(false);
@@ -227,6 +230,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           seed: useRandomSeed ? undefined : seed,
           useRandomSeed,
           vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+          negativePrompt: negativePrompt.trim() || undefined,
           instrumental,
           splitToStems,
           stemCount,
@@ -260,13 +264,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+      negativePrompt: negativePrompt.trim() || undefined,
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, negativePrompt, editingClipId]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -406,6 +411,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="[Verse 1]\nYour lyrics here..."
         />
       </section>
+
+      {/* Negative Prompt — collapsible, hidden by default */}
+      <NegativePromptSection
+        value={negativePrompt}
+        onChange={setNegativePrompt}
+        disabled={isDisabled}
+      />
 
       {/* Random Example */}
       <button

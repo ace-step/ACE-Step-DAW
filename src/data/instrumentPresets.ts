@@ -21,13 +21,13 @@ export const ALL_PRESET_CATEGORIES: readonly InstrumentPresetCategory[] = [
   'Bass', 'Lead', 'Pad', 'Pluck', 'FX', 'Keys', 'Bell', 'Wavetable',
 ] as const;
 
-export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable';
+export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable' | 'granular';
 
 export interface InstrumentPreset {
   id: string;
   name: string;
   category: InstrumentPresetCategory;
-  instrumentKind: 'subtractive' | 'fm' | 'wavetable';
+  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular';
   isFactory: boolean;
   /** Full instrument config to apply to a track. */
   instrument: TrackInstrument;

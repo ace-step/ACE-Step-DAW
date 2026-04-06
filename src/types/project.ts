@@ -168,7 +168,7 @@ export interface VelocityLayer {
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -383,11 +383,56 @@ export interface WavetableTrackInstrument {
   settings: WavetableSettings;
 }
 
+/** Grain envelope shape applied to each individual grain. */
+export type GrainEnvelopeShape = 'hann' | 'triangle' | 'trapezoid' | 'tukey';
+
+/** Configuration for the granular synthesis engine. */
+export interface GranularSettings {
+  /** IndexedDB audio key for the granular source sample. */
+  audioKey: string;
+  /** MIDI root note (default 60 = C4). */
+  rootNote: number;
+  /** Grain size in milliseconds (1–500). */
+  grainSize: number;
+  /** Grain density — number of grains triggered per second (1–100). */
+  density: number;
+  /** Playback position in source buffer (0–1, normalized). */
+  position: number;
+  /** Position scatter — randomize grain start within this range (0–1). */
+  positionScatter: number;
+  /** Pitch scatter — randomize pitch per grain in semitones (0–24). */
+  pitchScatter: number;
+  /** Grain envelope shape. */
+  envelopeShape: GrainEnvelopeShape;
+  /** Grain attack portion of envelope (0–0.5, fraction of grain size). */
+  grainAttack: number;
+  /** Grain release portion of envelope (0–0.5, fraction of grain size). */
+  grainRelease: number;
+  /** Freeze mode — lock grain position for sustained textures. */
+  freeze: boolean;
+  /** Stereo spray/spread of grains (0–1, 0=mono center, 1=full stereo). */
+  spread: number;
+  /** Global output gain (0–1). */
+  gain: number;
+  /** Amplitude envelope attack in seconds. */
+  attack: number;
+  /** Amplitude envelope release in seconds. */
+  release: number;
+}
+
+export interface GranularTrackInstrument {
+  kind: 'granular';
+  preset: 'granular';
+  name: string;
+  settings: GranularSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
-  | WavetableTrackInstrument;
+  | WavetableTrackInstrument
+  | GranularTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -1107,6 +1152,8 @@ export interface Track {
   drumMachine?: DrumMachineConfig;
   /** Sampler instrument config — when set on a pianoRoll track, uses loaded audio sample instead of synth preset. */
   samplerConfig?: SamplerConfig;
+  /** Granular synthesis config — when set on a pianoRoll track, uses granular engine. */
+  granularConfig?: GranularSettings;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   panMode?: 'stereo' | 'dual-mono';  // default 'stereo'

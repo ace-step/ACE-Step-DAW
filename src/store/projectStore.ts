@@ -74,6 +74,7 @@ import type {
   TrackInstrument,
   FmInstrumentSettings,
   WavetableSettings,
+  GranularSettings,
   VelocityLayer,
   VideoClipData,
   VideoTrackSettings,
@@ -685,6 +686,10 @@ export interface ProjectState extends MidiSliceActions {
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
   updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
+  /** Update the granular synthesis config on a pianoRoll track. */
+  updateGranularConfig: (trackId: string, config: Partial<GranularSettings>) => void;
+  /** Clear the granular config from a track. */
+  clearGranularConfig: (trackId: string) => void;
   /** Add a velocity layer to a track's samplerConfig. */
   addVelocityLayer: (trackId: string, layer: VelocityLayer) => void;
   /** Remove a velocity layer by index from a track's samplerConfig. */
@@ -3888,6 +3893,46 @@ export const useProjectStore = create<ProjectState>()(
                     samplerConfig: undefined,
                   }),
                 })
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateGranularConfig: (trackId, config) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure granular', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                granularConfig: { ...t.granularConfig!, ...config },
+                instrument: t.instrument?.kind === 'granular'
+                  ? { ...t.instrument, settings: { ...t.instrument.settings, ...config } }
+                  : t.instrument,
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  clearGranularConfig: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear granular config', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, granularConfig: undefined }
             : t,
         ),
       },

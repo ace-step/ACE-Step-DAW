@@ -70,6 +70,7 @@ describe('ArrangementAssistantPanel', () => {
   it('shows suggestions when available', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
+      lastAnalyzedProjectId: 'p1',
       suggestions: [
         {
           id: 'sug-1',
@@ -94,6 +95,7 @@ describe('ArrangementAssistantPanel', () => {
   it('shows sections in the sections tab', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
+      lastAnalyzedProjectId: 'p1',
       sections: [
         { id: 'sec-1', type: 'verse', startTime: 0, endTime: 30, trackIds: ['t1'], confidence: 0.8 },
       ],
@@ -107,6 +109,7 @@ describe('ArrangementAssistantPanel', () => {
   it('accepts a suggestion when Accept is clicked', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
+      lastAnalyzedProjectId: 'p1',
       suggestions: [
         {
           id: 'sug-1',
@@ -128,6 +131,7 @@ describe('ArrangementAssistantPanel', () => {
   it('rejects a suggestion when Dismiss is clicked', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
+      lastAnalyzedProjectId: 'p1',
       suggestions: [
         {
           id: 'sug-1',

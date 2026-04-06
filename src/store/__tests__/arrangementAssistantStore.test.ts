@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useArrangementAssistantStore } from '../arrangementAssistantStore';
 import { useProjectStore } from '../projectStore';
 
@@ -38,6 +38,7 @@ vi.mock('../../services/arrangementAnalysis', () => ({
 
 describe('arrangementAssistantStore', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     useArrangementAssistantStore.setState({
       isOpen: false,
       isAnalyzing: false,
@@ -47,6 +48,10 @@ describe('arrangementAssistantStore', () => {
       error: null,
       lastAnalyzedProjectId: null,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('starts closed with no data', () => {
@@ -87,6 +92,8 @@ describe('arrangementAssistantStore', () => {
     });
 
     useArrangementAssistantStore.getState().analyze();
+    // Analysis runs in setTimeout(fn, 0) — advance timers
+    vi.advanceTimersByTime(0);
 
     const state = useArrangementAssistantStore.getState();
     expect(state.isAnalyzing).toBe(false);

@@ -186,7 +186,8 @@ function splitRegionByClipDurations(region: TimeRegion, project: Project): TimeR
     const end = orderedSplitPoints[i + 1];
     const trackIds = new Set<string>();
     for (const clip of clipsInRegion) {
-      if (clip.start >= start && clip.start < end) {
+      // Overlap check: clip spans into this sub-region
+      if (clip.start < end && clip.end > start) {
         trackIds.add(clip.trackId);
       }
     }

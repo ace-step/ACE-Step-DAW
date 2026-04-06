@@ -69,25 +69,28 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
 
     set({ isAnalyzing: true, error: null });
 
-    try {
-      const analysis = analyzeArrangement(project);
-      set({
-        sections: analysis.sections,
-        suggestions: analysis.suggestions,
-        projectMeta: analysis.projectMeta,
-        isAnalyzing: false,
-        lastAnalyzedProjectId: project.id,
-      });
-    } catch (err) {
-      set({
-        sections: [],
-        suggestions: [],
-        projectMeta: null,
-        error: err instanceof Error ? err.message : 'Analysis failed',
-        isAnalyzing: false,
-        lastAnalyzedProjectId: null,
-      });
-    }
+    // Yield to the event loop so the spinner renders before heavy sync work
+    setTimeout(() => {
+      try {
+        const analysis = analyzeArrangement(project);
+        set({
+          sections: analysis.sections,
+          suggestions: analysis.suggestions,
+          projectMeta: analysis.projectMeta,
+          isAnalyzing: false,
+          lastAnalyzedProjectId: project.id,
+        });
+      } catch (err) {
+        set({
+          sections: [],
+          suggestions: [],
+          projectMeta: null,
+          error: err instanceof Error ? err.message : 'Analysis failed',
+          isAnalyzing: false,
+          lastAnalyzedProjectId: null,
+        });
+      }
+    }, 0);
   },
 
   acceptSuggestion: (id) =>

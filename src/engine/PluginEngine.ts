@@ -33,11 +33,13 @@ export class PluginEngine {
 
     const pluginNode: PluginNode = { instanceId, plugin, audioNode, bypassed: false };
 
-    // Connect to previous plugin in chain if exists
-    if (chain.length > 0) {
-      const prev = chain[chain.length - 1];
-      if (audioNode.inputNode) {
-        prev.audioNode.outputNode.connect(audioNode.inputNode);
+    // Connect to last non-bypassed plugin in chain (skip bypassed plugins)
+    if (chain.length > 0 && audioNode.inputNode) {
+      for (let i = chain.length - 1; i >= 0; i--) {
+        if (!chain[i].bypassed) {
+          chain[i].audioNode.outputNode.connect(audioNode.inputNode);
+          break;
+        }
       }
     }
 

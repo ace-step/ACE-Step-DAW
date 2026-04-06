@@ -446,6 +446,34 @@ describe('PluginEngine', () => {
       engine.addPlugin('track-1', 'inst-1', plugin, ctx);
       expect(() => engine.setPluginBypassed('track-1', 'nonexistent', true)).not.toThrow();
     });
+
+    it('wires new plugin to last non-bypassed plugin when last plugin is bypassed', () => {
+      const output1 = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
+      const output2 = { connect: vi.fn(), disconnect: vi.fn() } as unknown as AudioNode;
+      const input3 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: makeAudioNode(), outputNode: output1 })),
+      });
+      const plugin2 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: makeAudioNode(), outputNode: output2 })),
+      });
+      const plugin3 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: input3, outputNode: makeAudioNode() })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+      engine.setPluginBypassed('track-1', 'inst-2', true);
+
+      (output1.connect as ReturnType<typeof vi.fn>).mockClear();
+      (output2.connect as ReturnType<typeof vi.fn>).mockClear();
+
+      engine.addPlugin('track-1', 'inst-3', plugin3, ctx);
+      // Should connect to plugin1 (non-bypassed), not plugin2 (bypassed)
+      expect(output1.connect).toHaveBeenCalledWith(input3);
+      expect(output2.connect).not.toHaveBeenCalledWith(input3);
+    });
   });
 
   // ── disposeChain / dispose ─────────────────────────────────────────────

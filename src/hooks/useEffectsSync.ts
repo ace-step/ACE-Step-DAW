@@ -13,6 +13,7 @@ import { effectsEngine, initWasmDsp } from '../engine/EffectsEngine';
 import { pluginEngine } from '../engine/PluginEngine';
 import { getAudioEngine } from './useAudioEngine';
 import type { CompressorParams } from '../types/project';
+import type { VST3ActiveInstance } from '../types/vst3';
 
 /**
  * Build a combined effects chain by chaining VST3 plugins before built-in effects.
@@ -28,6 +29,8 @@ export function buildCombinedEffectsChain(trackId: string): { input: AudioNode |
   const hasEffects = effectsInput !== null && effectsOutput !== null;
 
   if (hasPlugins && hasEffects) {
+    // Disconnect prior edge to avoid duplicate parallel connections on re-sync
+    try { pluginOutput.disconnect(effectsInput); } catch { /* no prior connection */ }
     // Chain: VST3 plugins → built-in effects
     pluginOutput.connect(effectsInput);
     return { input: pluginInput, output: effectsOutput };
@@ -41,10 +44,23 @@ export function buildCombinedEffectsChain(trackId: string): { input: AudioNode |
   return { input: null, output: null };
 }
 
+/**
+ * Derive a stable fingerprint of VST3 instances for effect chain syncing.
+ * Only includes fields that affect audio routing (instanceId, trackId, enabled).
+ */
+function selectVst3EffectChainKey(s: { instances: Record<string, VST3ActiveInstance> }): string {
+  const parts: string[] = [];
+  for (const [id, inst] of Object.entries(s.instances)) {
+    parts.push(`${id}:${inst.trackId ?? ''}:${inst.enabled ? '1' : '0'}`);
+  }
+  return parts.sort().join('|');
+}
+
 export function useEffectsSync() {
   const tracks = useProjectStore((s) => s.project?.tracks);
   const dspBackend = useUIStore((s) => s.dspBackend);
-  const vst3Instances = useVST3Store((s) => s.instances);
+  // Subscribe to a stable fingerprint so we only re-render on routing-relevant changes
+  const vst3ChainKey = useVST3Store(selectVst3EffectChainKey);
   const wasmInitRef = useRef(false);
 
   // Initialize WASM DSP engine once when dspBackend allows it
@@ -69,14 +85,25 @@ export function useEffectsSync() {
 
     const engine = getAudioEngine();
 
+    // Pre-group VST3 instances by trackId to avoid O(tracks*instances) loop
+    const vst3Instances = useVST3Store.getState().instances;
+    const instancesByTrack = new Map<string, { instanceId: string; enabled: boolean }[]>();
+    for (const inst of Object.values(vst3Instances)) {
+      if (!inst.trackId) continue;
+      const list = instancesByTrack.get(inst.trackId) ?? [];
+      list.push({ instanceId: inst.instanceId, enabled: inst.enabled });
+      instancesByTrack.set(inst.trackId, list);
+    }
+
     // First pass: rebuild built-in effect chains + sync VST3 bypass, then splice combined chain
     for (const track of tracks) {
       const effects = track.effects ?? [];
       effectsEngine.rebuildChain(track.id, effects, track.effectsBypassed ?? false);
 
       // Sync VST3 plugin bypass state with audio engine
-      for (const inst of Object.values(vst3Instances)) {
-        if (inst.trackId === track.id) {
+      const trackInstances = instancesByTrack.get(track.id);
+      if (trackInstances) {
+        for (const inst of trackInstances) {
           pluginEngine.setPluginBypassed(track.id, inst.instanceId, !inst.enabled);
         }
       }
@@ -86,12 +113,10 @@ export function useEffectsSync() {
         const { input, output } = buildCombinedEffectsChain(track.id);
         trackNode.spliceEffects(input, output);
 
-        // Apply VST3 latency compensation
+        // Always apply latency compensation (including clearing to 0 when plugins removed/bypassed)
         const pluginLatency = pluginEngine.getChainLatency(track.id);
-        if (pluginLatency > 0) {
-          const sampleRate = engine.ctx?.sampleRate ?? 44100;
-          trackNode.setLatencyCompensation(pluginLatency, sampleRate);
-        }
+        const sampleRate = engine.ctx?.sampleRate ?? 44100;
+        trackNode.setLatencyCompensation(pluginLatency, sampleRate);
       }
     }
 
@@ -119,5 +144,5 @@ export function useEffectsSync() {
         }
       }
     }
-  }, [tracks, vst3Instances]);
+  }, [tracks, vst3ChainKey]);
 }

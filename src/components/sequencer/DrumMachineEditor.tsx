@@ -85,9 +85,9 @@ export function DrumMachineEditor() {
     (padIndex: number, velocity?: number) => {
       if (!trackId) return;
       const kit = track?.drumKit ?? '808';
-      // Volume is managed by the engine's volumeGain node — no caller-side scaling needed
       const vel = Math.round((velocity ?? 0.8) * 127);
-      drumEngine.triggerPad(trackId, padIndex, vel, kit);
+      // Pass pads when engine not yet ready so params are synced at trigger time
+      drumEngine.triggerPad(trackId, padIndex, vel, kit, engineReady ? undefined : pads);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));
@@ -103,7 +103,7 @@ export function DrumMachineEditor() {
       }, 150);
       timeoutRefs.current.set(padIndex, timeout);
     },
-    [trackId, track?.drumKit],
+    [trackId, track?.drumKit, engineReady, pads],
   );
 
   // Mouse-down handler: compute velocity from Y position within pad

@@ -44,8 +44,9 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const triggerPad = useCallback(
     (padIndex: number) => {
       const kit = track?.drumKit ?? '808';
-      // Volume is managed by the engine's volumeGain node — no caller-side scaling needed
-      drumEngine.triggerPad(trackId, padIndex, 100, kit);
+      // Pass pads when engine not yet ready so params are synced at trigger time
+      const padData = engineReady ? undefined : track?.drumMachine?.pads;
+      drumEngine.triggerPad(trackId, padIndex, 100, kit, padData);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));
@@ -61,7 +62,7 @@ export function BeatPad({ trackId }: BeatPadProps) {
       }, 150);
       timeoutRefs.current.set(padIndex, timeout);
     },
-    [trackId, track?.drumKit],
+    [trackId, track?.drumKit, engineReady, track?.drumMachine?.pads],
   );
 
   // Keyboard mapping

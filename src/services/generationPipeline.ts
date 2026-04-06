@@ -297,6 +297,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt) taskParams.negative_prompt = params.negativePrompt;
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -808,6 +809,11 @@ async function generateClipInternal(
     // Auto-expand prompt: controls whether LM rewrites the caption via CoT
     if (clip.autoExpandPrompt === false) {
       params.use_cot_caption = false;
+    }
+
+    // Negative prompt: exclude unwanted elements from generation
+    if (clip.generationParams?.negativePrompt) {
+      params.negative_prompt = clip.generationParams.negativePrompt;
     }
 
     // Submit task

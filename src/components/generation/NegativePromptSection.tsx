@@ -36,6 +36,8 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-1.5 text-left"
+        aria-expanded={expanded}
+        aria-controls="negative-prompt-content"
         data-testid="negative-prompt-toggle"
       >
         <svg
@@ -58,7 +60,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
       </button>
 
       {expanded && (
-        <div className="space-y-1.5">
+        <div id="negative-prompt-content" className="space-y-1.5">
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -66,6 +68,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
             placeholder="e.g. no autotune, no heavy reverb, no falsetto..."
             className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
             disabled={disabled}
+            aria-label="Negative prompt — exclude unwanted elements"
             data-testid="negative-prompt-input"
           />
           <div className="flex flex-wrap gap-1" data-testid="negative-prompt-chips">

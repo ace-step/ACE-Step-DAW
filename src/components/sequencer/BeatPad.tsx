@@ -20,13 +20,16 @@ export function BeatPad({ trackId }: BeatPadProps) {
 
   const engineReadyRef = useRef(false);
 
-  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
+  // Effect 1: Ensure drum engine is initialized + initial pad sync
   useEffect(() => {
     engineReadyRef.current = false;
     if (!track) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (!cancelled) engineReadyRef.current = true;
+      if (cancelled) return;
+      engineReadyRef.current = true;
+      const pads = track.drumMachine?.pads;
+      if (pads) drumEngine.syncTrackPadParams(trackId, pads);
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -41,7 +44,8 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const triggerPad = useCallback(
     (padIndex: number) => {
       const kit = track?.drumKit ?? '808';
-      drumEngine.triggerPad(trackId, padIndex, 100, kit);
+      const padVol = track?.drumMachine?.pads?.[padIndex]?.volume ?? 0.8;
+      drumEngine.triggerPad(trackId, padIndex, Math.round(padVol * 100), kit);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));

@@ -58,18 +58,21 @@ export function DrumMachineEditor() {
   // Track whether the drum engine has been initialized for this track
   const engineReadyRef = useRef(false);
 
-  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
+  // Effect 1: Ensure drum engine is initialized + initial pad sync
   useEffect(() => {
     engineReadyRef.current = false;
     if (!track || !trackId) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (!cancelled) engineReadyRef.current = true;
+      if (cancelled) return;
+      engineReadyRef.current = true;
+      // Initial sync after engine is ready
+      if (pads.length) drumEngine.syncTrackPadParams(trackId, pads);
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Effect 2: Sync pad params when pads change (only if engine is ready)
+  // Effect 2: Sync pad params on subsequent changes (skips redundant ensureTrack)
   useEffect(() => {
     if (!trackId || !pads.length || !engineReadyRef.current) return;
     drumEngine.syncTrackPadParams(trackId, pads);

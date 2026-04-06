@@ -7244,7 +7244,7 @@ export const useProjectStore = create<ProjectState>()(
             drumMachine: {
               ...t.drumMachine,
               pads: t.drumMachine.pads.map((p, i) =>
-                i === padIndex ? { ...p, tune: Math.max(-24, Math.min(24, tune)) } : p,
+                i === padIndex ? { ...p, tune: Math.max(-24, Math.min(24, Number.isFinite(tune) ? tune : p.tune)) } : p,
               ),
             },
           };
@@ -7268,7 +7268,7 @@ export const useProjectStore = create<ProjectState>()(
             drumMachine: {
               ...t.drumMachine,
               pads: t.drumMachine.pads.map((p, i) =>
-                i === padIndex ? { ...p, decay: Math.max(0, Math.min(1, decay)) } : p,
+                i === padIndex ? { ...p, decay: Math.max(0, Math.min(1, Number.isFinite(decay) ? decay : p.decay)) } : p,
               ),
             },
           };
@@ -7294,7 +7294,11 @@ export const useProjectStore = create<ProjectState>()(
               pads: t.drumMachine.pads.map((p, i) => {
                 if (i !== padIndex) return p;
                 const merged = { ...p.filter, ...filterUpdate };
-                const cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
+                // Auto-adjust cutoff when filter type changes to avoid inaudible defaults
+                let cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
+                if (filterUpdate.type && filterUpdate.type !== p.filter.type && !filterUpdate.cutoff) {
+                  cutoffSource = filterUpdate.type === 'highpass' ? 200 : 20000;
+                }
                 return {
                   ...p,
                   filter: {
@@ -7325,7 +7329,7 @@ export const useProjectStore = create<ProjectState>()(
             drumMachine: {
               ...t.drumMachine,
               pads: t.drumMachine.pads.map((p, i) =>
-                i === padIndex ? { ...p, drive: Math.max(0, Math.min(1, drive)) } : p,
+                i === padIndex ? { ...p, drive: Math.max(0, Math.min(1, Number.isFinite(drive) ? drive : p.drive)) } : p,
               ),
             },
           };

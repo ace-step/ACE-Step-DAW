@@ -121,8 +121,6 @@ function midiToFreq(midi: number): number {
 interface PhysicalVoice {
   pitch: number;
   output: GainNode;
-  /** Handle for bow exciter's continuous scheduling. */
-  bowInterval: ReturnType<typeof setInterval> | null;
   releaseTimeoutId: ReturnType<typeof setTimeout> | null;
   /** All active source nodes for cleanup. */
   activeNodes: Set<AudioBufferSourceNode>;
@@ -269,6 +267,7 @@ class PhysicalModelingEngine {
     if (settings.gain !== undefined) {
       instance.output.gain.value = settings.gain;
     }
+    this._propagateSettingsToVoices(instance);
   }
 
   // ── Note Triggering ──────────────────────────────────────────────────────
@@ -353,7 +352,6 @@ class PhysicalModelingEngine {
     const voice: PhysicalVoice = {
       pitch,
       output: voiceOutput,
-      bowInterval: null,
       releaseTimeoutId: null,
       activeNodes: new Set([exciterSource]),
       delayNode,
@@ -363,22 +361,19 @@ class PhysicalModelingEngine {
       bodyFeedback,
     };
 
-    // For bow exciter: continuously feed the delay line
+    // For bow exciter: continuously feed the delay line with a looping buffer
     if (settings.exciter === 'bow') {
-      const bowIntervalMs = Math.max(20, (exciterBuffer.length / ctx.sampleRate) * 1000 * 0.8);
-      voice.bowInterval = globalThis.setInterval(() => {
-        if (!instance.voices.has(pitch)) return;
-        const bowBuffer = generateExciterBuffer(ctx, 'bow', freq, velocity * 0.3, settings.pluckPosition);
-        const bowSource = ctx.createBufferSource();
-        bowSource.buffer = bowBuffer;
-        bowSource.connect(delayNode);
-        bowSource.start();
-        voice.activeNodes.add(bowSource);
-        bowSource.onended = () => {
-          voice.activeNodes.delete(bowSource);
-          try { bowSource.disconnect(); } catch { /* already disconnected */ }
-        };
-      }, bowIntervalMs);
+      const bowBuffer = generateExciterBuffer(ctx, 'bow', freq, Math.round(velocity * 0.3), settings.pluckPosition);
+      const bowSource = ctx.createBufferSource();
+      bowSource.buffer = bowBuffer;
+      bowSource.loop = true;
+      bowSource.connect(delayNode);
+      bowSource.start(now);
+      voice.activeNodes.add(bowSource);
+      bowSource.onended = () => {
+        voice.activeNodes.delete(bowSource);
+        try { bowSource.disconnect(); } catch { /* already disconnected */ }
+      };
     }
 
     exciterSource.onended = () => {
@@ -443,11 +438,16 @@ class PhysicalModelingEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return;
 
-    if (name in instance.settings) {
-      (instance.settings as unknown as Record<string, unknown>)[name] = value;
-      if (name === 'gain' && typeof value === 'number') {
-        instance.output.gain.value = value;
-      }
+    const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+    if (BLOCKED_KEYS.has(name) || !Object.prototype.hasOwnProperty.call(instance.settings, name)) return;
+
+    (instance.settings as unknown as Record<string, unknown>)[name] = value;
+    if (name === 'gain' && typeof value === 'number') {
+      instance.output.gain.value = value;
+    }
+    // Propagate changes to active voices
+    if (typeof value === 'number') {
+      this._propagateSettingsToVoices(instance);
     }
   }
 
@@ -458,14 +458,41 @@ class PhysicalModelingEngine {
     this.instances.clear();
   }
 
+  // ── Live Parameter Propagation ───────────────────────────────────────────
+
+  private _propagateSettingsToVoices(instance: PhysicalInstance): void {
+    const { settings } = instance;
+    const ctx = this.getContext();
+
+    for (const voices of instance.voices.values()) {
+      for (const voice of voices) {
+        // Update feedback gain (damping + tension)
+        const tensionFactor = 0.95 + settings.stringTension * 0.04;
+        const newFeedback = clamp((1 - settings.damping) * tensionFactor, 0, 0.998);
+        voice.feedbackGain.gain.setTargetAtTime(newFeedback, ctx.currentTime, 0.02);
+
+        // Update filter cutoff (brightness)
+        const freq = midiToFreq(voice.pitch);
+        const minCutoff = freq * 1.5;
+        const maxCutoff = Math.min(ctx.sampleRate / 2 - 100, freq * 12);
+        const newCutoff = minCutoff + settings.brightness * (maxCutoff - minCutoff);
+        voice.filterNode.frequency.setTargetAtTime(newCutoff, ctx.currentTime, 0.02);
+
+        // Update body resonance
+        if (voice.bodyDelay && voice.bodyFeedback) {
+          const bodyDelayTime = 0.002 + settings.bodySize * 0.015;
+          voice.bodyDelay.delayTime.setTargetAtTime(bodyDelayTime, ctx.currentTime, 0.02);
+          voice.bodyFeedback.gain.setTargetAtTime(
+            clamp(settings.bodySize * 0.6, 0, 0.8), ctx.currentTime, 0.02,
+          );
+        }
+      }
+    }
+  }
+
   // ── Cleanup ──────────────────────────────────────────────────────────────
 
   private _releaseVoice(voice: PhysicalVoice, release: number): void {
-    if (voice.bowInterval !== null) {
-      globalThis.clearInterval(voice.bowInterval);
-      voice.bowInterval = null;
-    }
-
     if (voice.releaseTimeoutId !== null) {
       globalThis.clearTimeout(voice.releaseTimeoutId);
       voice.releaseTimeoutId = null;

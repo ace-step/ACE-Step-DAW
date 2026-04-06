@@ -5,10 +5,7 @@ import type {
   PhysicalExciterType,
   PhysicalModelingPresetName,
 } from '../../types/project';
-import {
-  PHYSICAL_MODELING_PRESETS,
-  DEFAULT_PHYSICAL_MODELING_SETTINGS,
-} from '../../engine/PhysicalModelingEngine';
+import { PHYSICAL_MODELING_PRESETS } from '../../engine/PhysicalModelingEngine';
 
 const EXCITER_OPTIONS: { value: PhysicalExciterType; label: string; description: string }[] = [
   { value: 'pluck', label: 'Pluck', description: 'Noise burst — guitar, harp' },

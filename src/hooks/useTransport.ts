@@ -392,6 +392,7 @@ export function useTransport() {
         modulationEngine.removeTrack(track.id);
         samplerEngine.removeTrackSampler(track.id);
         granularEngine.removeTrack(track.id);
+        physicalModelingEngine.removeTrack(track.id);
 
         if (useSampler && samplerConfig) {
           const sampleBlob = await loadAudioBlobByKey(samplerConfig.audioKey);

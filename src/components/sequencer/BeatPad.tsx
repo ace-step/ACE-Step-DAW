@@ -18,34 +18,31 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const timeoutRefs = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const track = useProjectStore((s) => s.project?.tracks.find((t) => t.id === trackId));
 
-  const engineReadyRef = useRef(false);
+  const [engineReady, setEngineReady] = useState(false);
 
-  // Effect 1: Ensure drum engine is initialized + initial pad sync
+  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
   useEffect(() => {
-    engineReadyRef.current = false;
+    setEngineReady(false);
     if (!track) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (cancelled) return;
-      engineReadyRef.current = true;
-      const pads = track.drumMachine?.pads;
-      if (pads) drumEngine.syncTrackPadParams(trackId, pads);
+      if (!cancelled) setEngineReady(true);
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Effect 2: Sync pad params when pads change (only if engine is ready)
+  // Effect 2: Sync pad params when pads change OR engine becomes ready
   useEffect(() => {
-    if (!engineReadyRef.current) return;
+    if (!engineReady) return;
     const pads = track?.drumMachine?.pads;
     if (pads) drumEngine.syncTrackPadParams(trackId, pads);
-  }, [trackId, track?.drumMachine?.pads]);
+  }, [trackId, track?.drumMachine?.pads, engineReady]);
 
   const triggerPad = useCallback(
     (padIndex: number) => {
       const kit = track?.drumKit ?? '808';
       const padVol = track?.drumMachine?.pads?.[padIndex]?.volume ?? 0.8;
-      drumEngine.triggerPad(trackId, padIndex, Math.round(padVol * 100), kit);
+      drumEngine.triggerPad(trackId, padIndex, Math.round(padVol * 127), kit);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));

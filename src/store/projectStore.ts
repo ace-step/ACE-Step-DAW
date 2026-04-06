@@ -2092,18 +2092,30 @@ function ensureTrackDefaults(track: Track): Track {
     })),
   };
 
-  // Backfill drum pad fields added in #950 for older persisted projects
+  // Backfill drum pad fields added in #950 for older persisted projects.
+  // Validate/clamp numeric fields to prevent NaN from corrupted persisted data.
   if (normalizedTrack.drumMachine?.pads) {
+    const validFilterTypes = new Set(['off', 'lowpass', 'highpass']);
     normalizedTrack.drumMachine = {
       ...normalizedTrack.drumMachine,
-      pads: normalizedTrack.drumMachine.pads.map((pad) => ({
-        ...pad,
-        tune: pad.tune ?? 0,
-        decay: pad.decay ?? 0.5,
-        filter: pad.filter ?? { type: 'off' as const, cutoff: 20000 },
-        drive: pad.drive ?? 0,
-        send: pad.send ?? { reverb: 0, delay: 0 },
-      })),
+      pads: normalizedTrack.drumMachine.pads.map((pad) => {
+        const tune = Number.isFinite(pad.tune) ? Math.max(-24, Math.min(24, pad.tune)) : 0;
+        const decay = Number.isFinite(pad.decay) ? Math.max(0, Math.min(1, pad.decay)) : 0.5;
+        const drive = Number.isFinite(pad.drive) ? Math.max(0, Math.min(1, pad.drive)) : 0;
+        const filterType = pad.filter && validFilterTypes.has(pad.filter.type) ? pad.filter.type : 'off';
+        const filterCutoff = pad.filter && Number.isFinite(pad.filter.cutoff)
+          ? Math.max(20, Math.min(20000, pad.filter.cutoff)) : 20000;
+        const reverbSend = pad.send && Number.isFinite(pad.send.reverb) ? Math.max(0, Math.min(1, pad.send.reverb)) : 0;
+        const delaySend = pad.send && Number.isFinite(pad.send.delay) ? Math.max(0, Math.min(1, pad.send.delay)) : 0;
+        return {
+          ...pad,
+          tune,
+          decay,
+          drive,
+          filter: { type: filterType as 'off' | 'lowpass' | 'highpass', cutoff: filterCutoff },
+          send: { reverb: reverbSend, delay: delaySend },
+        };
+      }),
     };
   }
 

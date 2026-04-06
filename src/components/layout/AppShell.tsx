@@ -13,7 +13,10 @@ import { SharedProjectPage } from '../sharing/SharedProjectPage';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
 import { StatusBar } from './StatusBar';
+import { SkipLinks } from '../ui/SkipLinks';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
+import { useReducedMotionSync } from '../../hooks/useReducedMotion';
+import { useAccessibilitySync } from '../../hooks/useAccessibilitySync';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
@@ -61,6 +64,8 @@ const VirtualKeyboard = lazy(() => import('../midi/VirtualKeyboard').then(m => (
 
 function EditorShell() {
   useAudioEngine();
+  useReducedMotionSync();
+  useAccessibilitySync();
   useOnboardingTracking();
   const project = useProjectStore((s) => s.project);
   const setShowNewProjectDialog = useUIStore((s) => s.setShowNewProjectDialog);
@@ -136,10 +141,14 @@ function EditorShell() {
       aria-label="ACE-Step DAW"
       tabIndex={-1}
     >
+      <SkipLinks />
       <Toolbar />
 
-      <div
+      <section
+        id="main-content"
         className="flex flex-1 min-h-0"
+        tabIndex={-1}
+        aria-label={mainView === 'arrangement' ? 'Arrangement timeline' : 'Session view'}
         onMouseDownCapture={() => {
           if (mainView === 'arrangement') {
             setHistoryFocusScope('arrangement');
@@ -147,10 +156,12 @@ function EditorShell() {
         }}
       >
         <ErrorBoundary name="Timeline">
-          {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
+          <div id="timeline-region" tabIndex={-1}>
+            {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
+          </div>
         </ErrorBoundary>
         {project && <LoopBrowser />}
-      </div>
+      </section>
 
       <StatusBar saveStatus={saveStatus} lastSavedAt={lastSavedAt} />
 
@@ -171,7 +182,9 @@ function EditorShell() {
         <ErrorBoundary name="EffectChain"><Suspense fallback={<PanelSkeleton variant="effects" />}><EffectChain /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
       <BottomPanelTransition show={!!project && showMixer}>
-        <ErrorBoundary name="Mixer"><Suspense fallback={<PanelSkeleton variant="mixer" />}><MixerPanel /></Suspense></ErrorBoundary>
+        <div id="mixer-region" tabIndex={-1}>
+          <ErrorBoundary name="Mixer"><Suspense fallback={<PanelSkeleton variant="mixer" />}><MixerPanel /></Suspense></ErrorBoundary>
+        </div>
       </BottomPanelTransition>
       {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}

@@ -215,6 +215,14 @@ export interface UIState {
   dspBackend: 'auto' | 'wasm' | 'tonejs';
   setDspBackend: (mode: 'auto' | 'wasm' | 'tonejs') => void;
 
+  // Accessibility
+  reducedMotion: boolean;
+  highContrastMode: boolean;
+  colorBlindMode: boolean;
+  setReducedMotion: (v: boolean) => void;
+  setHighContrastMode: (v: boolean) => void;
+  setColorBlindMode: (v: boolean) => void;
+
   // Theme
   theme: ThemeId;
 
@@ -705,6 +713,10 @@ export const useUIStore = create<UIState>()(
 
   dspBackend: 'auto',
 
+  reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  highContrastMode: false,
+  colorBlindMode: false,
+
   theme: 'ableton',
 
   regionRegenerateTarget: null,
@@ -851,6 +863,9 @@ export const useUIStore = create<UIState>()(
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
+  setReducedMotion: (v) => set({ reducedMotion: v }),
+  setHighContrastMode: (v) => set({ highContrastMode: v }),
+  setColorBlindMode: (v) => set({ colorBlindMode: v }),
   setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
@@ -1407,6 +1422,10 @@ export const useUIStore = create<UIState>()(
         recentCommandIds: state.recentCommandIds,
         // DSP backend
         dspBackend: state.dspBackend,
+        // Accessibility
+        reducedMotion: state.reducedMotion,
+        highContrastMode: state.highContrastMode,
+        colorBlindMode: state.colorBlindMode,
         // Theme
         theme: state.theme,
         // Synth presets

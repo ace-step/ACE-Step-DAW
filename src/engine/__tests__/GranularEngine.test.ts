@@ -254,6 +254,26 @@ describe('GranularEngine', () => {
       // At least 2 gain nodes: voice output + grain envelope
       expect(mockCtx.createGain.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
+
+    it('adjusts envelope duration to match wall-clock grain length when pitch-shifted', () => {
+      const buffer = makeAudioBuffer(1, 44100, 1);
+      const settings = makeSettings({ rootNote: 60, pitchScatter: 0, grainSize: 50 });
+      granularEngine.ensureTrackGranular('track-1', settings, buffer);
+      // Play one octave up — playback rate ≈2.0, so wall-clock time ≈half
+      granularEngine.noteOn('track-1', 72, 100);
+
+      const gainResults = mockCtx.createGain.mock.results;
+      // Grain gain is the 3rd createGain call: (1) instance output, (2) voice output, (3) grain gain
+      const grainGain = gainResults[2]?.value;
+      expect(grainGain).toBeDefined();
+      const curveCall = grainGain.gain.setValueCurveAtTime.mock.calls[0];
+      expect(curveCall).toBeDefined();
+      // Duration arg (3rd param) should be ~half of grainDurationSeconds due to rate=2
+      const envelopeDuration = curveCall[2];
+      const grainDurationSeconds = 50 / 1000; // 50ms grain size
+      // At rate 2.0, wall-clock duration is ~25ms
+      expect(envelopeDuration).toBeCloseTo(grainDurationSeconds / 2, 3);
+    });
   });
 
   describe('triggerAttackRelease', () => {

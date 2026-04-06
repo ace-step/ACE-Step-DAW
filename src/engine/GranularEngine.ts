@@ -105,14 +105,22 @@ interface GranularVoice {
   startTime: number;
 }
 
+interface GrainWindowCache {
+  size: number;
+  shape: GrainEnvelopeShape;
+  attackFrac: number;
+  releaseFrac: number;
+  data: Float32Array;
+}
+
 interface GranularInstance {
   audioBuffer: AudioBuffer;
   audioKey: string;
   settings: GranularSettings;
   output: GainNode;
   voices: Map<number, GranularVoice[]>;
-  /** Shared grain window buffer (recomputed on settings change). */
-  grainWindowBuffer: AudioBuffer | null;
+  /** Cached grain window (invalidated on settings change). */
+  grainWindowCache: GrainWindowCache | null;
 }
 
 // ── Engine ───────────────────────────────────────────────────────────────────
@@ -141,7 +149,7 @@ class GranularEngine {
     if (existing && existing.audioKey === settings.audioKey) {
       existing.audioBuffer = audioBuffer;
       existing.settings = { ...settings };
-      existing.grainWindowBuffer = null; // invalidate cache
+      existing.grainWindowCache = null; // invalidate cache
       existing.output.gain.value = settings.gain;
       this.bufferCache.set(settings.audioKey, audioBuffer);
       return;
@@ -167,7 +175,7 @@ class GranularEngine {
       settings: { ...settings },
       output,
       voices: new Map(),
-      grainWindowBuffer: null,
+      grainWindowCache: null,
     });
     this.bufferCache.set(settings.audioKey, audioBuffer);
   }
@@ -193,7 +201,7 @@ class GranularEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return;
     Object.assign(instance.settings, settings);
-    instance.grainWindowBuffer = null; // invalidate cache
+    instance.grainWindowCache = null; // invalidate cache
     if (settings.gain !== undefined) {
       instance.output.gain.value = settings.gain;
     }
@@ -294,7 +302,7 @@ class GranularEngine {
 
     if (name in instance.settings) {
       (instance.settings as unknown as Record<string, unknown>)[name] = value;
-      instance.grainWindowBuffer = null;
+      instance.grainWindowCache = null;
       if (name === 'gain' && typeof value === 'number') {
         instance.output.gain.value = value;
       }
@@ -321,7 +329,6 @@ class GranularEngine {
     const ctx = this.getContext();
     const { settings, audioBuffer } = instance;
     const sampleRate = audioBuffer.sampleRate;
-    const numChannels = audioBuffer.numberOfChannels;
     const bufferLength = audioBuffer.length;
 
     // Calculate grain size in samples
@@ -353,17 +360,21 @@ class GranularEngine {
     // to avoid per-grain AudioBuffer allocations and sample copies.
     const grainOffsetSeconds = startSample / sampleRate;
     const grainDurationSeconds = grainSizeSamples / sampleRate;
+    const clampedRate = Math.max(0.01, playbackRate);
+    // Wall-clock duration accounts for playback rate
+    const grainDurationSec = grainDurationSeconds / clampedRate;
     const window = this._getGrainWindow(instance, grainSizeSamples);
 
     // Create source node for this grain
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.playbackRate.value = Math.max(0.01, playbackRate);
+    source.playbackRate.value = clampedRate;
 
     // Apply grain envelope via GainNode + setValueCurveAtTime
+    // Use wall-clock duration so envelope matches actual audible grain length
     const grainGain = ctx.createGain();
     grainGain.gain.value = 0;
-    grainGain.gain.setValueCurveAtTime(window, ctx.currentTime, grainDurationSeconds);
+    grainGain.gain.setValueCurveAtTime(window, ctx.currentTime, grainDurationSec);
 
     // Apply stereo spread via stereo panner
     const panner = ctx.createStereoPanner();
@@ -376,7 +387,6 @@ class GranularEngine {
 
     voice.activeGrains.add(source);
 
-    const grainDurationSec = grainDurationSeconds / Math.max(0.01, playbackRate);
     source.start(ctx.currentTime, grainOffsetSeconds, grainDurationSeconds);
     source.stop(ctx.currentTime + grainDurationSec + 0.005);
 
@@ -393,9 +403,20 @@ class GranularEngine {
   }
 
   private _getGrainWindow(instance: GranularInstance, grainSizeSamples: number): Float32Array {
-    // Build and cache window
     const { envelopeShape, grainAttack, grainRelease } = instance.settings;
-    return buildGrainWindow(grainSizeSamples, envelopeShape, grainAttack, grainRelease);
+    const cached = instance.grainWindowCache;
+    if (
+      cached &&
+      cached.size === grainSizeSamples &&
+      cached.shape === envelopeShape &&
+      cached.attackFrac === grainAttack &&
+      cached.releaseFrac === grainRelease
+    ) {
+      return cached.data;
+    }
+    const data = buildGrainWindow(grainSizeSamples, envelopeShape, grainAttack, grainRelease);
+    instance.grainWindowCache = { size: grainSizeSamples, shape: envelopeShape, attackFrac: grainAttack, releaseFrac: grainRelease, data };
+    return data;
   }
 
   private _updateSchedulerInterval(instance: GranularInstance, voice: GranularVoice): void {

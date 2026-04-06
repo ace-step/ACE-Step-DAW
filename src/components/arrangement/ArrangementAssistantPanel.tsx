@@ -11,22 +11,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import type { ArrangementSection, ArrangementSuggestion, SuggestionKind } from '../../types/arrangement';
-
-// ─── Section Badge Colors ─────────────────────────────────────────────────
-
-const SECTION_COLORS: Record<string, string> = {
-  intro: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
-  verse: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  'pre-chorus': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  chorus: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
-  bridge: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  outro: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-  drop: 'bg-red-500/20 text-red-300 border-red-500/30',
-  breakdown: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-  solo: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
-  interlude: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
-  unknown: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
-};
+import { SECTION_COLORS as SECTION_HEX_COLORS } from '../timeline/SectionSelector';
 
 const SUGGESTION_ICONS: Record<SuggestionKind, string> = {
   'next-section': '⊕',
@@ -45,7 +30,7 @@ const SUGGESTION_COLORS: Record<SuggestionKind, string> = {
 // ─── Sub-components ───────────────────────────────────────────────────────
 
 function SectionBadge({ section }: { section: ArrangementSection }) {
-  const colorClasses = SECTION_COLORS[section.type] ?? SECTION_COLORS.unknown;
+  const hexColor = SECTION_HEX_COLORS[section.type] ?? '#71717a';
   const startMins = Math.floor(section.startTime / 60);
   const startSecs = Math.floor(section.startTime % 60);
   const endMins = Math.floor(section.endTime / 60);
@@ -54,7 +39,12 @@ function SectionBadge({ section }: { section: ArrangementSection }) {
 
   return (
     <div
-      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border ${colorClasses}`}
+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border"
+      style={{
+        borderColor: `${hexColor}40`,
+        backgroundColor: `${hexColor}18`,
+        color: hexColor,
+      }}
       data-testid={`section-badge-${section.id}`}
     >
       <span className="text-[10px] font-semibold uppercase tracking-wider">{section.type}</span>

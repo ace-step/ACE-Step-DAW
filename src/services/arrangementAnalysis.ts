@@ -12,6 +12,7 @@ import type {
   ArrangementAnalysis,
   SectionType,
 } from '../types/arrangement';
+import { computeSections as computeMarkerSections } from '../utils/arrangementSections';
 
 // ─── Section Detection ────────────────────────────────────────────────────
 
@@ -175,9 +176,45 @@ function splitRegionByClipDurations(region: TimeRegion, project: Project): TimeR
 }
 
 /**
- * Detect musical sections in the arrangement by analyzing clip positions.
+ * Detect musical sections in the arrangement.
+ *
+ * When the project has arrangement markers, those are used as the primary
+ * source of section boundaries (integrating with `computeSections` from
+ * `utils/arrangementSections`). When no markers exist, falls back to
+ * clip-position-based heuristic detection.
  */
 export function detectSections(project: Project): ArrangementSection[] {
+  // Prefer marker-based sections when available
+  if (project.markers && project.markers.length > 0) {
+    const markerSections = computeMarkerSections(project.markers, project.totalDuration);
+    return markerSections.map((ms) => {
+      const trackIds = new Set<string>();
+      for (const track of project.tracks) {
+        for (const clip of track.clips) {
+          const clipEnd = clip.startTime + clip.duration;
+          if (clip.startTime < ms.endTime && clipEnd > ms.startTime) {
+            trackIds.add(track.id);
+          }
+        }
+      }
+      const sectionName = ms.marker.name.toLowerCase().trim() as SectionType;
+      const knownTypes: SectionType[] = [
+        'intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro',
+        'drop', 'breakdown', 'solo', 'interlude',
+      ];
+      const type = knownTypes.includes(sectionName) ? sectionName : 'unknown';
+      return {
+        id: uuidv4(),
+        type,
+        startTime: ms.startTime,
+        endTime: ms.endTime,
+        trackIds: [...trackIds],
+        confidence: 0.95,
+      };
+    });
+  }
+
+  // Fallback: clip-based detection
   const regions = mergeClipRegions(project);
   if (regions.length === 0) return [];
 

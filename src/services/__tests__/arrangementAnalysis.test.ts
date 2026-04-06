@@ -164,6 +164,30 @@ describe('detectSections', () => {
   });
 });
 
+  it('uses markers when available instead of clip-based detection', () => {
+    const track = makeTrack({
+      clips: [
+        makeClip({ startTime: 0, duration: 60 }),
+      ],
+    });
+    const project = makeProject({
+      tracks: [track],
+      totalDuration: 60,
+    });
+    // Add markers
+    (project as any).markers = [
+      { id: 'm1', time: 0, name: 'Intro', color: '#6366f1' },
+      { id: 'm2', time: 8, name: 'Verse', color: '#22c55e' },
+      { id: 'm3', time: 40, name: 'Chorus', color: '#f59e0b' },
+    ];
+    const sections = detectSections(project);
+    expect(sections.length).toBe(3);
+    expect(sections[0].type).toBe('intro');
+    expect(sections[1].type).toBe('verse');
+    expect(sections[2].type).toBe('chorus');
+    expect(sections[0].confidence).toBe(0.95);
+  });
+
 // ─── Next Section Suggestions ────────────────────────────────────────────
 
 describe('suggestNextSection', () => {

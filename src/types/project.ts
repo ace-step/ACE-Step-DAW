@@ -198,7 +198,7 @@ export interface SampleZone {
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -457,12 +457,32 @@ export interface GranularTrackInstrument {
   settings: GranularSettings;
 }
 
+export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
+export type PhysicalModelPreset = 'acoustic-guitar' | 'harp' | 'kalimba' | 'marimba' | 'steel-drum' | 'custom';
+
+export interface PhysicalModelSettings {
+  exciter: PhysicalExciterType;
+  damping: number;       // 0–1 (how quickly the sound decays; higher = more damped)
+  brightness: number;    // 0–1 (lowpass filter in feedback; higher = brighter)
+  pluckPosition: number; // 0–1 (where along the string the excitation occurs)
+  bodySize: number;      // 0–1 (body resonance amount)
+  outputGain: number;    // dB
+}
+
+export interface PhysicalTrackInstrument {
+  kind: 'physical';
+  preset: PhysicalModelPreset;
+  name: string;
+  settings: PhysicalModelSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
   | WavetableTrackInstrument
-  | GranularTrackInstrument;
+  | GranularTrackInstrument
+  | PhysicalTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;

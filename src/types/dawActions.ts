@@ -160,6 +160,18 @@ export interface DAWGlobals {
       roles: { drums: string; bass: string; chords: string; melody: string };
     }>;
     updateTrackCode: (trackId: string, newCode: string, label?: string) => string | null;
+    diffCode: (before: string, after: string) => {
+      unified: string;
+      summary: string;
+      added: number;
+      removed: number;
+    };
+    diffTrackVersion: (trackId: string, versionIndex: number) => {
+      unified: string;
+      summary: string;
+      added: number;
+      removed: number;
+    } | null;
   };
 }
 

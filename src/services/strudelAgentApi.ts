@@ -12,6 +12,7 @@ import type { StrudelPatternInfo } from '../engine/strudelEngine';
 import { useProjectStore } from '../store/projectStore';
 import { STRUDEL_PRESETS, type StrudelPreset } from '../constants/strudelPresets';
 import { buildPromptFromPatternInfo } from './strudelGenerationBridge';
+import { computeLineDiff, formatUnifiedDiff, formatDiffSummary } from '../utils/codeDiff';
 import { createDebugLogger } from '../utils/debugLogger';
 
 const log = createDebugLogger('strudel:agent-api');
@@ -163,6 +164,47 @@ export function updateStrudelTrackCode(
   return newCode;
 }
 
+// ─── Code Diff ──────────────────────────────────────────────
+
+/**
+ * Compare two versions of Strudel code and return a unified diff.
+ * Agents can use this to review their own edits.
+ */
+export function diffPatternCode(
+  before: string,
+  after: string,
+): { unified: string; summary: string; added: number; removed: number } {
+  const diff = computeLineDiff(before, after);
+  return {
+    unified: formatUnifiedDiff(diff),
+    summary: formatDiffSummary(diff),
+    added: diff.filter((l) => l.type === 'added').length,
+    removed: diff.filter((l) => l.type === 'removed').length,
+  };
+}
+
+/**
+ * Compare a track's current code against a specific version.
+ */
+export function diffTrackVersion(
+  trackId: string,
+  versionIndex: number,
+): { unified: string; summary: string; added: number; removed: number } | null {
+  const project = useProjectStore.getState().project;
+  if (!project) return null;
+
+  const track = project.tracks.find((t) => t.id === trackId && t.trackType === 'strudel');
+  if (!track) return null;
+
+  const versions = track.strudelVersions ?? [];
+  if (versionIndex < 0 || versionIndex >= versions.length) return null;
+
+  const currentCode = track.strudelCode ?? '';
+  const versionCode = versions[versionIndex].code;
+
+  return diffPatternCode(versionCode, currentCode);
+}
+
 // ─── Composite API object ───────────────────────────────────
 
 /**
@@ -174,5 +216,7 @@ export function createStrudelAgentApi() {
     getTrackSummary: getStrudelTrackSummary,
     listPresets: listStrudelPresets,
     updateTrackCode: updateStrudelTrackCode,
+    diffCode: diffPatternCode,
+    diffTrackVersion: diffTrackVersion,
   };
 }

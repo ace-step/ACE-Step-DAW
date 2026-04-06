@@ -8,7 +8,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useArrangementAssistantStore } from '../../store/arrangementAssistantStore';
 import { useProjectStore } from '../../store/projectStore';
-import { useUIStore } from '../../store/uiStore';
 import { Z } from '../../utils/zIndex';
 import type { ArrangementSection, ArrangementSuggestion, SuggestionKind } from '../../types/arrangement';
 import { SECTION_COLORS as SECTION_HEX_COLORS } from '../timeline/SectionSelector';
@@ -145,17 +144,18 @@ export function ArrangementAssistantPanel() {
   const acceptSuggestion = useArrangementAssistantStore((s) => s.acceptSuggestion);
   const rejectSuggestion = useArrangementAssistantStore((s) => s.rejectSuggestion);
   const setOpen = useArrangementAssistantStore((s) => s.setOpen);
+  const lastAnalyzedProjectId = useArrangementAssistantStore((s) => s.lastAnalyzedProjectId);
 
   const project = useProjectStore((s) => s.project);
 
   const [activeTab, setActiveTab] = useState<'sections' | 'suggestions'>('suggestions');
 
-  // Auto-analyze when panel opens
+  // Auto-analyze when panel opens or project changes
   useEffect(() => {
-    if (isOpen && project && sections.length === 0) {
+    if (isOpen && project && project.id !== lastAnalyzedProjectId) {
       analyze();
     }
-  }, [isOpen, project, sections.length, analyze]);
+  }, [isOpen, project, project?.id, lastAnalyzedProjectId, analyze]);
 
   const handleRefresh = useCallback(() => {
     analyze();
@@ -221,7 +221,7 @@ export function ArrangementAssistantPanel() {
         <div className="flex items-center gap-3 px-3 py-1.5 bg-[#1c1c20] border-b border-[#2a2a2e]">
           <span className="text-[9px] text-zinc-500">{projectMeta.bpm} BPM</span>
           <span className="text-[9px] text-zinc-500">{projectMeta.keyScale}</span>
-          <span className="text-[9px] text-zinc-500">{projectMeta.timeSignature}/4</span>
+          <span className="text-[9px] text-zinc-500">{projectMeta.timeSignature}/{projectMeta.timeSignatureDenominator}</span>
         </div>
       )}
 

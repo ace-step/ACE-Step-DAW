@@ -196,6 +196,7 @@ describe('suggestNextSection', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 0,
     });
     expect(suggestion.sectionType).toBe('intro');
@@ -210,6 +211,7 @@ describe('suggestNextSection', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 8,
     });
     expect(suggestion.sectionType).toBe('verse');
@@ -225,6 +227,7 @@ describe('suggestNextSection', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 40,
     });
     expect(suggestion.sectionType).toBe('chorus');
@@ -243,6 +246,7 @@ describe('suggestNextSection', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 136,
     });
     expect(suggestion.sectionType).toBe('bridge');
@@ -253,6 +257,7 @@ describe('suggestNextSection', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 0,
     });
     expect(suggestion.duration).toBeGreaterThan(0);
@@ -263,6 +268,7 @@ describe('suggestNextSection', () => {
       bpm: 140,
       keyScale: 'A minor',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 0,
     });
     expect(suggestion.description).toContain('A minor');
@@ -277,6 +283,7 @@ describe('suggestInstrumentation', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 0,
     });
     expect(suggestions).toEqual([]);
@@ -291,6 +298,7 @@ describe('suggestInstrumentation', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 30,
     });
     expect(suggestions.length).toBeGreaterThan(0);
@@ -310,6 +318,7 @@ describe('suggestInstrumentation', () => {
       bpm: 120,
       keyScale: 'C major',
       timeSignature: 4,
+      timeSignatureDenominator: 4,
       totalDuration: 60,
     });
     // Should suggest adding more instruments to the chorus for energy buildup
@@ -324,7 +333,7 @@ describe('suggestChordProgression', () => {
   it('suggests I-V-vi-IV for pop in C major', () => {
     const suggestions = suggestChordProgression(
       [{ id: '1', type: 'verse', startTime: 0, endTime: 30, trackIds: ['t1'], confidence: 0.9 }],
-      { bpm: 120, keyScale: 'C major', timeSignature: 4, totalDuration: 30 },
+      { bpm: 120, keyScale: 'C major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     );
     expect(suggestions.length).toBeGreaterThan(0);
     expect(suggestions[0].kind).toBe('chord-progression');
@@ -334,7 +343,7 @@ describe('suggestChordProgression', () => {
   it('returns key-appropriate chords', () => {
     const suggestions = suggestChordProgression(
       [{ id: '1', type: 'chorus', startTime: 0, endTime: 30, trackIds: ['t1'], confidence: 0.9 }],
-      { bpm: 120, keyScale: 'G major', timeSignature: 4, totalDuration: 30 },
+      { bpm: 120, keyScale: 'G major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     );
     expect(suggestions.length).toBeGreaterThan(0);
     // Chords should reference the key
@@ -344,7 +353,7 @@ describe('suggestChordProgression', () => {
   it('suggests minor key progressions for minor keys', () => {
     const suggestions = suggestChordProgression(
       [{ id: '1', type: 'verse', startTime: 0, endTime: 30, trackIds: ['t1'], confidence: 0.9 }],
-      { bpm: 120, keyScale: 'A minor', timeSignature: 4, totalDuration: 30 },
+      { bpm: 120, keyScale: 'A minor', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     );
     expect(suggestions.length).toBeGreaterThan(0);
     expect(suggestions[0].description.toLowerCase()).toContain('a');

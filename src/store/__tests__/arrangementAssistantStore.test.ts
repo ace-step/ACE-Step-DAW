@@ -32,7 +32,7 @@ vi.mock('../../services/arrangementAnalysis', () => ({
         status: 'pending',
       },
     ],
-    projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, totalDuration: 30 },
+    projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
   })),
 }));
 
@@ -45,6 +45,7 @@ describe('arrangementAssistantStore', () => {
       suggestions: [],
       projectMeta: null,
       error: null,
+      lastAnalyzedProjectId: null,
     });
   });
 
@@ -78,6 +79,7 @@ describe('arrangementAssistantStore', () => {
         bpm: 120,
         keyScale: 'C major',
         timeSignature: 4,
+        timeSignatureDenominator: 4,
         totalDuration: 60,
         tracks: [],
         generationDefaults: {} as any,
@@ -131,7 +133,7 @@ describe('arrangementAssistantStore', () => {
     useArrangementAssistantStore.setState({
       sections: [{ id: '1', type: 'verse', startTime: 0, endTime: 30, trackIds: [], confidence: 0.8 }],
       suggestions: [{ id: '1', kind: 'next-section', title: '', description: '', time: 0, duration: 10, trackIds: [], status: 'pending' }],
-      projectMeta: { bpm: 120, keyScale: 'C', timeSignature: 4, totalDuration: 30 },
+      projectMeta: { bpm: 120, keyScale: 'C', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     });
 
     useArrangementAssistantStore.getState().clear();

@@ -14,6 +14,15 @@ import type {
 } from '../types/arrangement';
 import { computeSections as computeMarkerSections } from '../utils/arrangementSections';
 
+/** Shared project metadata passed to suggestion functions. */
+type ProjectMeta = {
+  bpm: number;
+  keyScale: string;
+  timeSignature: number;
+  timeSignatureDenominator: number;
+  totalDuration: number;
+};
+
 // ─── Section Detection ────────────────────────────────────────────────────
 
 interface TimeRegion {
@@ -274,10 +283,12 @@ const SECTION_BARS: Record<SectionType, number> = {
   'unknown': 8,
 };
 
-function barsToSeconds(bars: number, bpm: number, timeSignature: number): number {
-  const beatsPerBar = timeSignature;
-  const secondsPerBeat = 60 / bpm;
-  return bars * beatsPerBar * secondsPerBeat;
+function barsToSeconds(bars: number, bpm: number, timeSignature: number, timeSignatureDenominator: number = 4): number {
+  // A bar contains `timeSignature` beats of duration `1/timeSignatureDenominator`.
+  // BPM refers to quarter-note beats, so one denominator-beat = (4 / denominator) quarter beats.
+  const quarterBeatsPerBar = timeSignature * (4 / timeSignatureDenominator);
+  const secondsPerQuarterBeat = 60 / bpm;
+  return bars * quarterBeatsPerBar * secondsPerQuarterBeat;
 }
 
 /**
@@ -285,7 +296,7 @@ function barsToSeconds(bars: number, bpm: number, timeSignature: number): number
  */
 export function suggestNextSection(
   sections: ArrangementSection[],
-  meta: { bpm: number; keyScale: string; timeSignature: number; totalDuration: number },
+  meta: ProjectMeta,
 ): ArrangementSuggestion {
   let nextType: SectionType;
   let startTime: number;
@@ -317,7 +328,7 @@ export function suggestNextSection(
     startTime = lastSection.endTime;
   }
 
-  const duration = barsToSeconds(SECTION_BARS[nextType], meta.bpm, meta.timeSignature);
+  const duration = barsToSeconds(SECTION_BARS[nextType], meta.bpm, meta.timeSignature, meta.timeSignatureDenominator);
 
   return {
     id: uuidv4(),
@@ -355,7 +366,7 @@ const SECTION_INSTRUMENTS: Record<SectionType, string[]> = {
 export function suggestInstrumentation(
   sections: ArrangementSection[],
   tracks: Track[],
-  meta: { bpm: number; keyScale: string; timeSignature: number; totalDuration: number },
+  meta: ProjectMeta,
 ): ArrangementSuggestion[] {
   if (sections.length === 0) return [];
 
@@ -398,52 +409,74 @@ export function suggestInstrumentation(
 interface ChordProgression {
   name: string;
   numerals: string;
-  chords: (root: string, isMinor: boolean) => string;
+  chords: (root: string, isMinor: boolean, usesFlats: boolean) => string;
 }
 
 const MAJOR_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-function parseKey(keyScale: string): { root: string; isMinor: boolean } {
-  const parts = keyScale.trim().split(/\s+/);
-  const root = parts[0] ?? 'C';
-  const isMinor = (parts[1] ?? '').toLowerCase() === 'minor';
-  return { root, isMinor };
+/** Map flat note names to their sharp enharmonic equivalents. */
+const FLAT_TO_SHARP: Record<string, string> = {
+  Db: 'C#', Eb: 'D#', Fb: 'E', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B',
+};
+
+/** Map sharp notes to their flat enharmonic equivalents for flat-key display. */
+const SHARP_TO_FLAT: Record<string, string> = {
+  'C#': 'Db', 'D#': 'Eb', 'F#': 'Gb', 'G#': 'Ab', 'A#': 'Bb',
+};
+
+function normalizeNote(note: string): string {
+  return FLAT_TO_SHARP[note] ?? note;
 }
 
-function getNoteAt(root: string, semitones: number): string {
-  const rootIdx = MAJOR_NOTES.indexOf(root);
+function parseKey(keyScale: string): { root: string; isMinor: boolean; usesFlats: boolean } {
+  const parts = keyScale.trim().split(/\s+/);
+  const rawRoot = parts[0] ?? 'C';
+  const isMinor = (parts[1] ?? '').toLowerCase() === 'minor';
+  const usesFlats = rawRoot.includes('b');
+  const root = normalizeNote(rawRoot);
+  return { root, isMinor, usesFlats };
+}
+
+function getNoteAt(root: string, semitones: number, usesFlats: boolean = false): string {
+  const rootIdx = MAJOR_NOTES.indexOf(normalizeNote(root));
   if (rootIdx === -1) return root;
-  return MAJOR_NOTES[(rootIdx + semitones) % 12];
+  const note = MAJOR_NOTES[(rootIdx + semitones) % 12];
+  // Display using flats if the key uses flats
+  if (usesFlats && SHARP_TO_FLAT[note]) return SHARP_TO_FLAT[note];
+  return note;
 }
 
 const MAJOR_PROGRESSIONS: ChordProgression[] = [
   {
     name: 'Pop Standard',
     numerals: 'I – V – vi – IV',
-    chords: (root) => {
-      const V = getNoteAt(root, 7);
-      const vi = getNoteAt(root, 9);
-      const IV = getNoteAt(root, 5);
-      return `${root} – ${V} – ${vi}m – ${IV}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const V = getNoteAt(root, 7, usesFlats);
+      const vi = getNoteAt(root, 9, usesFlats);
+      const IV = getNoteAt(root, 5, usesFlats);
+      const r = getNoteAt(root, 0, usesFlats);
+      return `${r} – ${V} – ${vi}m – ${IV}`;
     },
   },
   {
     name: 'Classic',
     numerals: 'I – IV – V – I',
-    chords: (root) => {
-      const IV = getNoteAt(root, 5);
-      const V = getNoteAt(root, 7);
-      return `${root} – ${IV} – ${V} – ${root}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const IV = getNoteAt(root, 5, usesFlats);
+      const V = getNoteAt(root, 7, usesFlats);
+      const r = getNoteAt(root, 0, usesFlats);
+      return `${r} – ${IV} – ${V} – ${r}`;
     },
   },
   {
     name: 'Emotional',
     numerals: 'vi – IV – I – V',
-    chords: (root) => {
-      const vi = getNoteAt(root, 9);
-      const IV = getNoteAt(root, 5);
-      const V = getNoteAt(root, 7);
-      return `${vi}m – ${IV} – ${root} – ${V}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const vi = getNoteAt(root, 9, usesFlats);
+      const IV = getNoteAt(root, 5, usesFlats);
+      const V = getNoteAt(root, 7, usesFlats);
+      const r = getNoteAt(root, 0, usesFlats);
+      return `${vi}m – ${IV} – ${r} – ${V}`;
     },
   },
 ];
@@ -452,31 +485,34 @@ const MINOR_PROGRESSIONS: ChordProgression[] = [
   {
     name: 'Natural Minor',
     numerals: 'i – VI – III – VII',
-    chords: (root) => {
-      const VI = getNoteAt(root, 8);
-      const III = getNoteAt(root, 3);
-      const VII = getNoteAt(root, 10);
-      return `${root}m – ${VI} – ${III} – ${VII}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const r = getNoteAt(root, 0, usesFlats);
+      const VI = getNoteAt(root, 8, usesFlats);
+      const III = getNoteAt(root, 3, usesFlats);
+      const VII = getNoteAt(root, 10, usesFlats);
+      return `${r}m – ${VI} – ${III} – ${VII}`;
     },
   },
   {
     name: 'Minor Pop',
     numerals: 'i – iv – VII – III',
-    chords: (root) => {
-      const iv = getNoteAt(root, 5);
-      const VII = getNoteAt(root, 10);
-      const III = getNoteAt(root, 3);
-      return `${root}m – ${iv}m – ${VII} – ${III}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const r = getNoteAt(root, 0, usesFlats);
+      const iv = getNoteAt(root, 5, usesFlats);
+      const VII = getNoteAt(root, 10, usesFlats);
+      const III = getNoteAt(root, 3, usesFlats);
+      return `${r}m – ${iv}m – ${VII} – ${III}`;
     },
   },
   {
     name: 'Dramatic Minor',
     numerals: 'i – VII – VI – V',
-    chords: (root) => {
-      const VII = getNoteAt(root, 10);
-      const VI = getNoteAt(root, 8);
-      const V = getNoteAt(root, 7);
-      return `${root}m – ${VII} – ${VI} – ${V}`;
+    chords: (root, _isMinor, usesFlats) => {
+      const r = getNoteAt(root, 0, usesFlats);
+      const VII = getNoteAt(root, 10, usesFlats);
+      const VI = getNoteAt(root, 8, usesFlats);
+      const V = getNoteAt(root, 7, usesFlats);
+      return `${r}m – ${VII} – ${VI} – ${V}`;
     },
   },
 ];
@@ -486,12 +522,13 @@ const MINOR_PROGRESSIONS: ChordProgression[] = [
  */
 export function suggestChordProgression(
   sections: ArrangementSection[],
-  meta: { bpm: number; keyScale: string; timeSignature: number; totalDuration: number },
+  meta: ProjectMeta,
 ): ArrangementSuggestion[] {
   if (sections.length === 0) return [];
 
-  const { root, isMinor } = parseKey(meta.keyScale);
+  const { root, isMinor, usesFlats } = parseKey(meta.keyScale);
   const progressions = isMinor ? MINOR_PROGRESSIONS : MAJOR_PROGRESSIONS;
+  const displayRoot = getNoteAt(root, 0, usesFlats);
 
   const suggestions: ArrangementSuggestion[] = [];
 
@@ -500,13 +537,13 @@ export function suggestChordProgression(
     // Pick a progression based on section type (vary it)
     const progIdx = i % progressions.length;
     const prog = progressions[progIdx];
-    const chordStr = prog.chords(root, isMinor);
+    const chordStr = prog.chords(root, isMinor, usesFlats);
 
     suggestions.push({
       id: uuidv4(),
       kind: 'chord-progression',
       title: `${prog.name} progression for ${section.type}`,
-      description: `${prog.numerals}: ${chordStr} — works well for ${section.type} sections in ${root} ${isMinor ? 'minor' : 'major'}`,
+      description: `${prog.numerals}: ${chordStr} — works well for ${section.type} sections in ${displayRoot} ${isMinor ? 'minor' : 'major'}`,
       time: section.startTime,
       duration: section.endTime - section.startTime,
       trackIds: section.trackIds,
@@ -581,10 +618,11 @@ function formatTime(seconds: number): string {
  * next section, instrumentation, chords, and gap fills.
  */
 export function analyzeArrangement(project: Project): ArrangementAnalysis {
-  const meta = {
+  const meta: ProjectMeta = {
     bpm: project.bpm,
     keyScale: project.keyScale,
     timeSignature: project.timeSignature,
+    timeSignatureDenominator: project.timeSignatureDenominator ?? 4,
     totalDuration: project.totalDuration,
   };
 

@@ -24,6 +24,8 @@ export interface ArrangementAssistantState {
   projectMeta: ArrangementAnalysis['projectMeta'] | null;
   /** Error message from the last analysis. */
   error: string | null;
+  /** ID of the project that was last analyzed (for stale detection). */
+  lastAnalyzedProjectId: string | null;
 
   // ─── Actions ────────────────────────────────────────────────
   /** Open/close the assistant panel. */
@@ -46,6 +48,7 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
   suggestions: [],
   projectMeta: null,
   error: null,
+  lastAnalyzedProjectId: null,
 
   setOpen: (open) => set({ isOpen: open }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -53,7 +56,14 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
   analyze: () => {
     const project = useProjectStore.getState().project;
     if (!project) {
-      set({ error: 'No project open', isAnalyzing: false });
+      set({
+        sections: [],
+        suggestions: [],
+        projectMeta: null,
+        error: 'No project open',
+        isAnalyzing: false,
+        lastAnalyzedProjectId: null,
+      });
       return;
     }
 
@@ -66,6 +76,7 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
         suggestions: analysis.suggestions,
         projectMeta: analysis.projectMeta,
         isAnalyzing: false,
+        lastAnalyzedProjectId: project.id,
       });
     } catch (err) {
       set({
@@ -95,5 +106,6 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
       suggestions: [],
       projectMeta: null,
       error: null,
+      lastAnalyzedProjectId: null,
     }),
 }));

@@ -23,7 +23,7 @@ vi.mock('../../../services/arrangementAnalysis', () => ({
         status: 'pending',
       },
     ],
-    projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, totalDuration: 30 },
+    projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
   })),
 }));
 
@@ -36,6 +36,7 @@ describe('ArrangementAssistantPanel', () => {
       suggestions: [],
       projectMeta: null,
       error: null,
+      lastAnalyzedProjectId: null,
     });
     useProjectStore.setState({
       project: {
@@ -46,6 +47,7 @@ describe('ArrangementAssistantPanel', () => {
         bpm: 120,
         keyScale: 'C major',
         timeSignature: 4,
+        timeSignatureDenominator: 4,
         totalDuration: 60,
         tracks: [],
         generationDefaults: {} as any,
@@ -154,7 +156,7 @@ describe('ArrangementAssistantPanel', () => {
   it('shows project metadata when available', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
-      projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, totalDuration: 30 },
+      projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     });
     render(<ArrangementAssistantPanel />);
     expect(screen.getByText('120 BPM')).toBeTruthy();
@@ -162,13 +164,14 @@ describe('ArrangementAssistantPanel', () => {
   });
 
   it('shows error message when present', () => {
-    // Set sections to non-empty so auto-analyze doesn't trigger
+    // Set lastAnalyzedProjectId to match project so auto-analyze doesn't trigger
     useArrangementAssistantStore.setState({
       isOpen: true,
       error: 'Analysis failed',
       sections: [
         { id: 'sec-1', type: 'verse', startTime: 0, endTime: 30, trackIds: ['t1'], confidence: 0.8 },
       ],
+      lastAnalyzedProjectId: 'p1',
     });
     render(<ArrangementAssistantPanel />);
     expect(screen.getByText('Analysis failed')).toBeTruthy();

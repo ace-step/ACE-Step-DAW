@@ -58,7 +58,10 @@ export interface ArrangementAnalysis {
   projectMeta: {
     bpm: number;
     keyScale: string;
+    /** Time signature numerator. */
     timeSignature: number;
+    /** Time signature denominator. Defaults to 4 when not provided by the source project. */
+    timeSignatureDenominator: number;
     totalDuration: number;
   };
 }

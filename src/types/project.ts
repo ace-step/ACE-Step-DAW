@@ -782,13 +782,14 @@ export interface ClipGenerationParams {
   type: ClipGenerationType;
   prompt: string;
   lyrics: string;
+  /** Negative prompt — exclude unwanted elements. Shared across all generation types. */
+  negativePrompt?: string;
   // text2music params
   durationSeconds?: number;
   thinking?: boolean;
   seed?: number;
   useRandomSeed?: boolean;
   vocalLanguage?: string;
-  negativePrompt?: string;
   instrumental?: boolean;
   splitToStems?: boolean;
   stemCount?: 2 | 4 | 6;

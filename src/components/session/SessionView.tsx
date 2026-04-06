@@ -153,7 +153,7 @@ export function SessionView() {
   }, [hasArmedTrack, armedTrackIds, currentTime, captureMidi, captureService, captureBarCount]);
   const [midiEnabled, setMidiEnabled] = useState(false);
   const midiState = useSessionMidiController(midiEnabled);
-  const { startSlotRecording, stopSlotRecording } = useSessionRecording();
+  const { startSlotRecording, stopSlotRecording, countInEnabled, setCountInEnabled, countInRemaining } = useSessionRecording();
   const recordingSlotIds = useProjectStore((s) => s.project?.session?.recordingSlotIds ?? []);
   const fixedLengthBars = useProjectStore((s) => s.project?.session?.fixedLengthBars ?? null);
   const setSessionFixedLengthBars = useProjectStore((s) => s.setSessionFixedLengthBars);
@@ -364,6 +364,17 @@ export function SessionView() {
                 ))}
               </select>
             </label>
+            <button
+              onClick={() => setCountInEnabled(!countInEnabled)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                countInEnabled
+                  ? 'bg-orange-600/30 text-orange-300 border border-orange-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-500 hover:bg-[#343434]'
+              }`}
+              aria-label={countInEnabled ? 'Disable count-in' : 'Enable count-in before recording'}
+            >
+              {countInRemaining != null ? `Count: ${countInRemaining}` : countInEnabled ? 'Count-In ON' : 'Count-In'}
+            </button>
             <button
               onClick={() => setMidiEnabled((v) => !v)}
               className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
@@ -1266,6 +1277,37 @@ function FragmentRow({
                       <option key={opt} value={opt}>{opt === 'global' ? 'Global' : opt}</option>
                     ))}
                   </select>
+                )}
+                {isArmed && clip.midiData && slot && sceneId && !recordingSlotIds.includes(slot.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStartRecording(sceneId, slot.id);
+                    }}
+                    className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600/80 px-1.5 py-0.5 text-[9px] font-medium text-white leading-none hover:bg-red-500 transition-colors"
+                    title="MIDI Overdub — record additional notes on top"
+                    aria-label={`MIDI overdub on ${getClipLabel(clip, sceneIndex)}`}
+                    data-testid={`overdub-btn-${slot.id}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    OVR
+                  </button>
+                )}
+                {isArmed && slot && recordingSlotIds.includes(slot.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const recordingType = track.trackType === 'pianoRoll' ? 'midi' as const : 'audio' as const;
+                      onStopRecording(slot.id, sceneId!, recordingType);
+                    }}
+                    className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none animate-pulse"
+                    title="Stop overdub recording"
+                    aria-label={`Stop overdub on ${getClipLabel(clip, sceneIndex)}`}
+                    data-testid={`overdub-stop-${slot.id}`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-sm bg-white" />
+                    REC
+                  </button>
                 )}
               </div>
             ) : (() => {

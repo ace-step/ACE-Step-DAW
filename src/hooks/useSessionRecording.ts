@@ -8,7 +8,7 @@
  * - Count-in before recording
  * - Creating clips from recorded data and assigning to slots
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { recordingEngine } from '../engine/RecordingEngine';
@@ -17,8 +17,9 @@ import { saveAudioBlob } from '../services/audioFileManager';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
-import { toastError, toastSuccess } from './useToast';
+import { toastError, toastSuccess, toastInfo } from './useToast';
 import type { Track } from '../types/project';
+import type { CountInLength } from '../engine/RecordingEngine';
 
 /** Determine recording type based on track type. */
 function getRecordingType(track: Track): 'audio' | 'midi' {
@@ -27,6 +28,8 @@ function getRecordingType(track: Track): 'audio' | 'midi' {
 
 export function useSessionRecording() {
   const fixedLengthTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [countInRemaining, setCountInRemaining] = useState<number | null>(null);
+  const [countInEnabled, setCountInEnabled] = useState(false);
 
   const startSlotRecording = useCallback(async (
     trackId: string,
@@ -46,10 +49,20 @@ export function useSessionRecording() {
     if (!track) return;
 
     const recordingType = getRecordingType(track);
-    const transportTime = useTransportStore.getState().currentTime;
     const bpm = project.bpm;
     const timeSig = project.timeSignature;
     const timeSigDenom = project.timeSignatureDenominator ?? 4;
+
+    // Count-in before recording starts
+    if (countInEnabled && recordingEngine.getCountInLength() !== 'off') {
+      toastInfo('Count-in...');
+      await recordingEngine.playCountIn(bpm, timeSig, (_bar, _beat, remaining) => {
+        setCountInRemaining(remaining);
+      });
+      setCountInRemaining(null);
+    }
+
+    const transportTime = useTransportStore.getState().currentTime;
 
     // Start recording based on type
     if (recordingType === 'audio') {
@@ -77,7 +90,7 @@ export function useSessionRecording() {
     }
 
     toastSuccess(`Recording ${recordingType === 'midi' ? 'MIDI' : 'audio'}...`);
-  }, []);
+  }, [countInEnabled]);
 
   const stopSlotRecording = useCallback(async (
     slotId: string,
@@ -141,19 +154,48 @@ export function useSessionRecording() {
       // Stop MIDI recording — capture from rolling buffer
       const captureService = getMidiCaptureService();
       const captureTime = useTransportStore.getState().currentTime;
-      const capturedClipId = useProjectStore.getState().captureMidi(
-        trackId,
-        captureTime,
-        captureService,
-        { bars: measures, quantize: '1/16' },
-      );
 
-      if (capturedClipId) {
-        // Auto-assign the captured clip to the correct session slot
-        useProjectStore.getState().assignClipToSessionSlot(trackId, sceneId, capturedClipId);
-        toastSuccess('MIDI recording saved to slot');
+      // Check if this is an overdub (slot already has a MIDI clip)
+      const currentProject = useProjectStore.getState().project;
+      const slot = currentProject?.session?.slots.find((s) => s.id === slotId);
+      const existingClipId = slot?.clipId;
+      const existingClip = existingClipId
+        ? currentProject?.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === existingClipId)
+        : null;
+      const isOverdub = existingClip?.midiData != null;
+
+      if (isOverdub && existingClip) {
+        // Overdub: merge new notes into existing clip
+        const result = captureService.drain(trackId, captureTime, bpm, timeSig, measures);
+        if (result && result.notes.length > 0) {
+          const store = useProjectStore.getState();
+          for (const n of result.notes) {
+            store.addMidiNote(existingClipId!, {
+              pitch: n.pitch,
+              startBeat: n.startBeat,
+              durationBeats: n.durationBeats,
+              velocity: n.velocity,
+            });
+          }
+          toastSuccess('MIDI overdub — notes merged');
+        } else {
+          toastError('No MIDI data to overdub');
+        }
       } else {
-        toastError('No MIDI data captured');
+        // New recording: create a new clip
+        const capturedClipId = useProjectStore.getState().captureMidi(
+          trackId,
+          captureTime,
+          captureService,
+          { bars: measures, quantize: '1/16' },
+        );
+
+        if (capturedClipId) {
+          useProjectStore.getState().assignClipToSessionSlot(trackId, sceneId, capturedClipId);
+          toastSuccess('MIDI recording saved to slot');
+        } else {
+          toastError('No MIDI data captured');
+        }
       }
     }
   }, []);
@@ -197,5 +239,8 @@ export function useSessionRecording() {
     stopAllSlotRecordings,
     playCountIn,
     getRecordingType,
+    countInRemaining,
+    countInEnabled,
+    setCountInEnabled,
   };
 }

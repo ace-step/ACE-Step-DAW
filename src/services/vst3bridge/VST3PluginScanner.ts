@@ -61,22 +61,21 @@ export class VST3PluginScanner {
   }
 
   /**
-   * Load plugins from cache if valid, otherwise return null.
-   * Checks IndexedDB first, falls back to localStorage.
+   * Load plugins from IndexedDB cache if valid, otherwise return null.
+   * Validates companion version match and cache age (<24h).
    */
   async loadFromCache(): Promise<VST3PluginInfo[] | null> {
     if (!this.companionVersion) return null;
 
-    const valid = await this.idbCache.isValid(this.companionVersion);
-    if (!valid) return null;
-
+    // Single retrieve call to avoid redundant IndexedDB opens
     const entry = await this.idbCache.retrieve();
-    if (entry) {
-      this.cachedPlugins = entry.plugins;
-      this.lastScanTimestamp = entry.timestamp;
-      return entry.plugins;
-    }
-    return null;
+    if (!entry) return null;
+    if (entry.companionVersion !== this.companionVersion) return null;
+    if (Date.now() - entry.timestamp > 24 * 60 * 60 * 1000) return null;
+
+    this.cachedPlugins = entry.plugins;
+    this.lastScanTimestamp = entry.timestamp;
+    return entry.plugins;
   }
 
   /**

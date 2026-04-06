@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import 'fake-indexeddb/auto';
 import { VST3ScanCache } from '../VST3ScanCache';
 import type { VST3PluginInfo } from '../VST3PluginScanner';
 
@@ -21,7 +22,12 @@ function createPlugin(overrides: Partial<VST3PluginInfo> = {}): VST3PluginInfo {
 describe('VST3ScanCache', () => {
   let cache: VST3ScanCache;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Clear IndexedDB between tests to prevent cross-test pollution
+    const dbs = await indexedDB.databases();
+    for (const db of dbs) {
+      if (db.name) indexedDB.deleteDatabase(db.name);
+    }
     cache = new VST3ScanCache();
   });
 
@@ -91,6 +97,30 @@ describe('VST3ScanCache', () => {
     });
   });
 
+  describe('IndexedDB persistence across instances', () => {
+    it('data stored in one instance is retrievable from a new instance', async () => {
+      const cache1 = new VST3ScanCache();
+      const plugins = [createPlugin(), createPlugin({ uid: 'uid-2' })];
+      await cache1.store(plugins, '1.0.0');
+
+      // Create a completely new instance — should read from IndexedDB
+      const cache2 = new VST3ScanCache();
+      const result = await cache2.retrieve();
+      expect(result?.plugins).toEqual(plugins);
+      expect(result?.companionVersion).toBe('1.0.0');
+    });
+
+    it('clearing in one instance is reflected in a new instance', async () => {
+      const cache1 = new VST3ScanCache();
+      await cache1.store([createPlugin()], '1.0.0');
+      await cache1.clear();
+
+      const cache2 = new VST3ScanCache();
+      const result = await cache2.retrieve();
+      expect(result).toBeNull();
+    });
+  });
+
   describe('plugin count', () => {
     it('returns 0 for empty cache', async () => {
       expect(await cache.getPluginCount()).toBe(0);
@@ -103,9 +133,8 @@ describe('VST3ScanCache', () => {
   });
 });
 
-describe('VST3PluginScanner with cache integration', () => {
-  it('uses cache on startup when valid', async () => {
-    // This tests that the scanner loads from cache instead of rescanning
+describe('VST3ScanCache version scenarios', () => {
+  it('valid cache returns true for matching version', async () => {
     const cache = new VST3ScanCache();
     const plugins = [createPlugin()];
     await cache.store(plugins, '1.0.0');
@@ -118,7 +147,6 @@ describe('VST3PluginScanner with cache integration', () => {
   it('invalidates cache when version changes', async () => {
     const cache = new VST3ScanCache();
     await cache.store([createPlugin()], '1.0.0');
-    // Version bumped
     expect(await cache.isValid('2.0.0')).toBe(false);
   });
 });

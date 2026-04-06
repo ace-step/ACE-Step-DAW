@@ -73,6 +73,42 @@ describe('VST3PluginScanner enhanced caching', () => {
     });
   });
 
+  describe('cache-hit path', () => {
+    it('scan without force does NOT call bridge when cache is valid', async () => {
+      const plugins = [createMockPlugin()];
+      const scanFn = vi.fn().mockResolvedValue(plugins);
+      const client = createMockBridgeClient({ scanPlugins: scanFn });
+      scanner.setBridgeClient(client);
+      scanner.setCompanionVersion('1.0.0');
+
+      // First scan with force to populate cache
+      await scanner.scan(undefined, true);
+      expect(scanFn).toHaveBeenCalledTimes(1);
+
+      // Second scan without force should use cache — no bridge call
+      const result = await scanner.scan(undefined, false);
+      expect(scanFn).toHaveBeenCalledTimes(1); // NOT called again
+      expect(result).toEqual(plugins);
+    });
+
+    it('scan without force calls bridge when cache version mismatches', async () => {
+      const plugins = [createMockPlugin()];
+      const scanFn = vi.fn().mockResolvedValue(plugins);
+      const client = createMockBridgeClient({ scanPlugins: scanFn });
+      scanner.setBridgeClient(client);
+      scanner.setCompanionVersion('1.0.0');
+
+      // Populate cache
+      await scanner.scan(undefined, true);
+      expect(scanFn).toHaveBeenCalledTimes(1);
+
+      // Change version — cache should be invalid
+      scanner.setCompanionVersion('2.0.0');
+      await scanner.scan(undefined, false);
+      expect(scanFn).toHaveBeenCalledTimes(2); // Bridge called again
+    });
+  });
+
   describe('loadFromCache', () => {
     it('returns null when no companion version set', async () => {
       const result = await scanner.loadFromCache();

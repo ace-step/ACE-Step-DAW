@@ -301,7 +301,7 @@ export function drawMidiThumbnail(params: MidiThumbnailRenderParams): void {
 
     ctx.beginPath();
     if (hasRoundRect) {
-      ctx.roundRect(x, y, noteWidth, noteHeight, 0.5);
+      ctx.roundRect(x, y, noteWidth, noteHeight, Math.max(0.5, height / 200));
     } else {
       ctx.rect(x, y, noteWidth, noteHeight);
     }

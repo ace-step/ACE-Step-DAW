@@ -144,9 +144,12 @@ window.__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
 window.__midiCaptureService = getMidiCaptureService();
 
-// Expose FPS benchmark tool for Canvas performance testing (Issue #1334)
-import { exposeFpsMeasureOnWindow } from './utils/fpsMeasure';
-exposeFpsMeasureOnWindow();
+// Expose FPS benchmark tool for Canvas performance testing (Issue #1334) — dev only
+if (import.meta.env.DEV) {
+  void import('./utils/fpsMeasure').then(({ exposeFpsMeasureOnWindow }) => {
+    exposeFpsMeasureOnWindow();
+  });
+}
 
 // Start MCP bridge for Claude Code integration
 import { startMcpBridge } from './services/mcpBridge';

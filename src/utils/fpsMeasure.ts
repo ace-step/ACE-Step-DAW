@@ -27,6 +27,9 @@ export interface FpsReport {
   percentAt60fps: number;
 }
 
+/** Maximum number of frame samples to retain (ring buffer). ~5 min at 60fps. */
+const MAX_SAMPLES = 18000;
+
 export class FpsMeasure {
   private frameTimes: number[] = [];
   private lastTimestamp: number | null = null;
@@ -55,6 +58,10 @@ export class FpsMeasure {
     const now = performance.now();
     if (this.lastTimestamp !== null) {
       this.frameTimes.push(now - this.lastTimestamp);
+      // Ring buffer: drop oldest samples when exceeding limit
+      if (this.frameTimes.length > MAX_SAMPLES) {
+        this.frameTimes = this.frameTimes.slice(-MAX_SAMPLES);
+      }
     }
     this.lastTimestamp = now;
 

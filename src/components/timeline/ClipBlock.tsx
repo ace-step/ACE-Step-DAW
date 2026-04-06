@@ -10,7 +10,7 @@ import { getClipPresentation } from './clipPresentation';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { ClipContextMenuContainer } from './ClipContextMenuContainer';
 import { CanvasClipWaveform } from './CanvasClipWaveform';
-import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
+import { CanvasClipMidiThumbnail, MIDI_THUMBNAIL_TOP } from './CanvasClipMidiThumbnail';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
@@ -374,7 +374,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           <CanvasClipMidiThumbnail
             midiData={clip.midiData}
             width={width}
-            height={Math.max(0, (track.laneHeight ?? 80) - 14)}
+            height={Math.max(0, (track.laneHeight ?? 80) - MIDI_THUMBNAIL_TOP)}
             duration={clip.duration}
             bpm={bpm}
             color={clipPresentation.waveformColor}

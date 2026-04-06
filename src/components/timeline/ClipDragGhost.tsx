@@ -4,7 +4,7 @@ import type { MidiClipData, StretchMode } from '../../types/project';
 import { hexToRgba } from '../../utils/color';
 import { Z } from '../../utils/zIndex';
 import { CanvasClipWaveform } from './CanvasClipWaveform';
-import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
+import { CanvasClipMidiThumbnail, MIDI_THUMBNAIL_TOP } from './CanvasClipMidiThumbnail';
 import type { DragGhostInfo } from './useClipDrag';
 import { HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 import type { ClipPresentation } from './clipPresentation';
@@ -123,7 +123,7 @@ export function ClipDragGhost({
           <CanvasClipMidiThumbnail
             midiData={midiData}
             width={dragGhost.width}
-            height={Math.max(0, dragGhost.height - 14)}
+            height={Math.max(0, dragGhost.height - MIDI_THUMBNAIL_TOP)}
             duration={clipDuration}
             bpm={bpm}
             color={isValid ? clipPresentation.waveformColor : invalidColor}

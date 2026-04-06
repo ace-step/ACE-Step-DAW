@@ -7,7 +7,8 @@ import type { MidiClipData } from '../../types/project';
  * Intentionally smaller than HEADER_RAIL_HEIGHT_PX (20) to show more
  * note content — matches the original SVG implementation's `top: 14`.
  */
-const MIDI_THUMBNAIL_TOP = 14;
+/** Exported so callers can compute available height without duplicating magic numbers. */
+export const MIDI_THUMBNAIL_TOP = 14;
 
 /** Safe max canvas dimension to stay within browser limits. */
 const MAX_CANVAS_CSS_PX = 16384;
@@ -32,7 +33,8 @@ export function CanvasClipMidiThumbnail({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
 
-  // Cap width for both backing store AND CSS to prevent stretching
+  // Cap width for backing store to stay within browser canvas limits.
+  // CSS uses 100% width so wide clips may stretch beyond safeWidth.
   const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
   const safeWidth = useMemo(() => Math.min(width, MAX_CANVAS_CSS_PX / dpr), [width, dpr]);
 

@@ -18,19 +18,25 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const timeoutRefs = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const track = useProjectStore((s) => s.project?.tracks.find((t) => t.id === trackId));
 
-  // Ensure drum engine for this track, then sync per-pad params
+  const engineReadyRef = useRef(false);
+
+  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
   useEffect(() => {
+    engineReadyRef.current = false;
     if (!track) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (cancelled) return;
-      const pads = track.drumMachine?.pads;
-      if (pads) {
-        drumEngine.syncTrackPadParams(trackId, pads);
-      }
+      if (!cancelled) engineReadyRef.current = true;
     });
     return () => { cancelled = true; };
-  }, [trackId, track?.drumKit, track?.drumMachine?.pads]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effect 2: Sync pad params when pads change (only if engine is ready)
+  useEffect(() => {
+    if (!engineReadyRef.current) return;
+    const pads = track?.drumMachine?.pads;
+    if (pads) drumEngine.syncTrackPadParams(trackId, pads);
+  }, [trackId, track?.drumMachine?.pads]);
 
   const triggerPad = useCallback(
     (padIndex: number) => {

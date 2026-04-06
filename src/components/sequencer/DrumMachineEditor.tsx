@@ -55,18 +55,25 @@ export function DrumMachineEditor() {
   const drumMachine = track?.drumMachine;
   const pads = drumMachine?.pads ?? [];
 
-  // Ensure drum engine for this track, then sync all pad params.
-  // Combined into one effect to avoid the race where pad sync runs
-  // before ensureTrack (async) has created the padChains.
+  // Track whether the drum engine has been initialized for this track
+  const engineReadyRef = useRef(false);
+
+  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
   useEffect(() => {
-    if (!track || !trackId || !pads.length) return;
+    engineReadyRef.current = false;
+    if (!track || !trackId) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (cancelled) return;
-      drumEngine.syncTrackPadParams(trackId, pads);
+      if (!cancelled) engineReadyRef.current = true;
     });
     return () => { cancelled = true; };
-  }, [trackId, track?.drumKit, pads]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effect 2: Sync pad params when pads change (only if engine is ready)
+  useEffect(() => {
+    if (!trackId || !pads.length || !engineReadyRef.current) return;
+    drumEngine.syncTrackPadParams(trackId, pads);
+  }, [trackId, pads]);
 
   // Velocity-sensitive pad trigger: compute velocity from vertical position within pad
   const triggerPad = useCallback(

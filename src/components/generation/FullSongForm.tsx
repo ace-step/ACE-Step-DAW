@@ -11,6 +11,7 @@ import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
+import { NegativePromptSection } from './NegativePromptSection';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -71,6 +72,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeed = useCallback((v: number) => setSeedStr(String(v)), [setSeedStr]);
   const useRandomSeed = useGenerationStore((s) => s.generationForm.useRandomSeed);
   const setUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
 
   // Local state — reset on panel reopen (less critical)
   const [instrumental, setInstrumental] = useState(false);
@@ -184,6 +187,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      if (p.negativePrompt) setNegativePrompt(p.negativePrompt);
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -263,10 +267,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
+      negativePrompt: negativePrompt.trim() || undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, negativePrompt]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -329,6 +334,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="Describe the music you want to generate..."
         />
       </section>
+
+      {/* Negative Prompt — collapsible section with suggestion chips */}
+      <NegativePromptSection
+        value={negativePrompt}
+        onChange={setNegativePrompt}
+        disabled={isDisabled}
+      />
 
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">

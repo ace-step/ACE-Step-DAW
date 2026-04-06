@@ -240,6 +240,8 @@ export interface VariationSessionParams {
   comparisonMode?: 'same-model' | 'cross-model';
   /** Per-variation model overrides for cross-model comparison */
   modelOverrides?: ModelOverride[];
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export interface VariationSession {
@@ -291,6 +293,7 @@ export interface GenerationFormState {
   useRandomSeed: boolean;
   compareModelsEnabled: boolean;
   compareModelOverrides: ModelOverride[];
+  negativePrompt: string;
 }
 
 export interface GenerationValidationInput {
@@ -393,6 +396,7 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     useRandomSeed: true,
     compareModelsEnabled: false,
     compareModelOverrides: [],
+    negativePrompt: '',
   };
 }
 
@@ -497,6 +501,7 @@ export interface GenerationState {
 
   setCompareModelsEnabled: (enabled: boolean) => void;
   setCompareModelOverrides: (overrides: ModelOverride[]) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
 
   startVariationSession: (params: VariationSessionParams) => void;
   updateVariation: (index: number, updates: Partial<Omit<Variation, 'index'>>) => void;
@@ -872,6 +877,10 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: { ...s.generationForm, compareModelOverrides: overrides, requestError: null },
       })),
 
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: { ...s.generationForm, negativePrompt, requestError: null },
+      })),
+
       setGenerationRequestError: (message) => set((s) => ({
         generationForm: {
           ...s.generationForm,
@@ -954,6 +963,7 @@ export const useGenerationStore = create<GenerationState>()(
                 modelOverrides: generationForm.compareModelOverrides,
               }
             : {}),
+          ...(generationForm.negativePrompt.trim() ? { negativePrompt: generationForm.negativePrompt.trim() } : {}),
         }, generationForm.presetId);
 
         set({

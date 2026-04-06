@@ -11,6 +11,7 @@ import {
   parseArrangementEmptyTrackSlotIndex,
 } from '../arrangement/trackSlotLayout';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
+import { NegativePromptSection } from './NegativePromptSection';
 
 const VOCAL_TRACK_NAMES = new Set<string>(['vocals', 'backing_vocals']);
 const TARGET_TRACK_OPTIONS = TRACK_NAMES.map((trackName) => TRACK_CATALOG[trackName]);
@@ -134,6 +135,7 @@ export function AddLayerPanel() {
   const [style, setStyle] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [globalCaption, setGlobalCaption] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
 
   const [chunkMaskMode, setChunkMaskMode] = useState<'auto' | 'explicit'>('explicit');
   const [seedValue, setSeedValue] = useState('');
@@ -304,6 +306,7 @@ export function AddLayerPanel() {
         setSeedValue(params?.seed !== undefined ? String(params.seed) : '');
         setUseRandomSeed(params?.useRandomSeed ?? true);
         setChunkMaskMode('explicit');
+        setNegativePrompt(params?.negativePrompt ?? '');
         // Restore context window from saved generation params (resolved to current clip position)
         const resolvedCtx = resolveContextWindow(clip);
         if (resolvedCtx) {
@@ -648,6 +651,7 @@ export function AddLayerPanel() {
       contextWindow: hasContext ? contextWindow : null,
       chunkMaskMode,
       clipId: isEditMode ? editingClipId ?? undefined : undefined,
+      negativePrompt: negativePrompt.trim() || undefined,
     });
   };
 
@@ -934,6 +938,13 @@ export function AddLayerPanel() {
               <span className="text-[9px] text-zinc-600">Rand</span>
             </label>
           </div>
+
+          {/* Negative prompt — collapsible */}
+          <NegativePromptSection
+            value={negativePrompt}
+            onChange={setNegativePrompt}
+            disabled={isGenerating}
+          />
 
           {/* Global caption — hidden in chunk mode (partial selection) */}
           {selectionCoversWholeSong && (

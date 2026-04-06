@@ -108,6 +108,8 @@ export interface ClipInternalOptions {
   useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export interface VariationGenerationDependencies {
@@ -297,6 +299,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt) taskParams.negative_prompt = params.negativePrompt;
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -755,6 +758,11 @@ async function generateClipInternal(
       `ctxOffset=${ctxOffset}`,
       `instruction=${instruction}`,
     );
+
+    // Negative prompt override
+    if (options.negativePrompt) {
+      params.negative_prompt = options.negativePrompt;
+    }
 
     // Per-generation seed override from advanced params
     if (options.useRandomSeedOverride === false && options.seedOverride !== undefined) {
@@ -1344,6 +1352,8 @@ export interface AddLayerOptions {
   chunkMaskMode?: 'explicit' | 'auto';
   /** When set, regenerate into this existing clip instead of creating a new one. */
   clipId?: string;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void> {
@@ -1379,6 +1389,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             globalCaption: opts.globalCaption,
             contextWindow: savedCtxWindow,
             chunkMaskMode: opts.chunkMaskMode,
+            negativePrompt: opts.negativePrompt,
           },
         });
       } else {
@@ -1401,6 +1412,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
             globalCaption: opts.globalCaption,
             contextWindow: savedCtxWindow,
             chunkMaskMode: opts.chunkMaskMode,
+            negativePrompt: opts.negativePrompt,
           },
         });
       }
@@ -1458,6 +1470,7 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
         lyricsOverride: opts.lyrics,
         chunkMaskMode: opts.chunkMaskMode,
         contextWindow: effectiveCtxWindow ?? undefined,
+        negativePrompt: opts.negativePrompt,
       });
 
       if (outcome.succeeded) {
@@ -2506,6 +2519,8 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Negative prompt — exclude unwanted elements from generation */
+  negativePrompt?: string;
 }
 
 export interface Text2MusicResult {
@@ -2592,6 +2607,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
       shift: request.shift,
+      negativePrompt: request.negativePrompt,
     },
   });
 
@@ -2644,6 +2660,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt) {
+      params.negative_prompt = request.negativePrompt;
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

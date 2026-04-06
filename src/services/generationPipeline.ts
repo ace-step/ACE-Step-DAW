@@ -438,19 +438,17 @@ export async function generateVariationSession(
         globalCaption: params.globalCaption ?? '',
         lyrics: params.lyrics ?? '',
         source: 'generated',
-      });
-
-      // Persist negative prompt so generateClipInternal can read it
-      if (params.negativePrompt?.trim()) {
-        store.updateClip(clip.id, {
+        // Persist negative prompt inline so generateClipInternal can read it
+        // without a separate updateClip (which would pollute the undo stack)
+        ...(params.negativePrompt?.trim() ? {
           generationParams: {
-            type: 'lego',
+            type: 'lego' as const,
             prompt: params.prompt,
             lyrics: params.lyrics ?? '',
             negativePrompt: params.negativePrompt.trim(),
           },
-        });
-      }
+        } : {}),
+      });
 
       useGenerationStore.getState().updateVariation(index, {
         clipId: clip.id,
@@ -1118,18 +1116,16 @@ function createVariationClipAtTime(params: VariationSessionParams, index: number
     globalCaption: params.globalCaption ?? '',
     lyrics: params.lyrics ?? '',
     source: 'generated',
-  });
-  // Persist negative prompt so generateClipInternal can read it
-  if (params.negativePrompt?.trim()) {
-    store.updateClip(clip.id, {
+    // Persist negative prompt inline to avoid extra undo entry from updateClip
+    ...(params.negativePrompt?.trim() ? {
       generationParams: {
-        type: 'lego',
+        type: 'lego' as const,
         prompt: params.prompt,
         lyrics: params.lyrics ?? '',
         negativePrompt: params.negativePrompt.trim(),
       },
-    });
-  }
+    } : {}),
+  });
   return clip.id;
 }
 

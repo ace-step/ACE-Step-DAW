@@ -386,6 +386,68 @@ describe('PluginEngine', () => {
     });
   });
 
+  // ── setPluginBypassed ──────────────────────────────────────────────────
+
+  describe('setPluginBypassed', () => {
+    it('bypasses a plugin and getInputNode/getOutputNode skip it', () => {
+      const input1 = makeAudioNode();
+      const output1 = makeAudioNode();
+      const input2 = makeAudioNode();
+      const output2 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: input1, outputNode: output1 })),
+      });
+      const plugin2 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: input2, outputNode: output2 })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.addPlugin('track-1', 'inst-2', plugin2, ctx);
+
+      // Before bypass: first input, last output
+      expect(engine.getInputNode('track-1')).toBe(input1);
+      expect(engine.getOutputNode('track-1')).toBe(output2);
+
+      // Bypass first plugin
+      engine.setPluginBypassed('track-1', 'inst-1', true);
+      expect(engine.getInputNode('track-1')).toBe(input2);
+      expect(engine.getOutputNode('track-1')).toBe(output2);
+    });
+
+    it('un-bypasses a plugin and restores it in the chain', () => {
+      const input1 = makeAudioNode();
+      const output1 = makeAudioNode();
+
+      const plugin1 = createMockPlugin({
+        createAudioNode: vi.fn(() => ({ inputNode: input1, outputNode: output1 })),
+      });
+
+      engine.addPlugin('track-1', 'inst-1', plugin1, ctx);
+      engine.setPluginBypassed('track-1', 'inst-1', true);
+      expect(engine.getInputNode('track-1')).toBeNull();
+
+      engine.setPluginBypassed('track-1', 'inst-1', false);
+      expect(engine.getInputNode('track-1')).toBe(input1);
+    });
+
+    it('returns null for all nodes when all plugins are bypassed', () => {
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+      engine.setPluginBypassed('track-1', 'inst-1', true);
+
+      expect(engine.getInputNode('track-1')).toBeNull();
+      expect(engine.getOutputNode('track-1')).toBeNull();
+    });
+
+    it('does nothing for nonexistent track or instance', () => {
+      expect(() => engine.setPluginBypassed('nonexistent', 'inst-1', true)).not.toThrow();
+      const plugin = createMockPlugin();
+      engine.addPlugin('track-1', 'inst-1', plugin, ctx);
+      expect(() => engine.setPluginBypassed('track-1', 'nonexistent', true)).not.toThrow();
+    });
+  });
+
   // ── disposeChain / dispose ─────────────────────────────────────────────
 
   describe('disposeChain', () => {

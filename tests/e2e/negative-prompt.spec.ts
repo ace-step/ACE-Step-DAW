@@ -34,12 +34,17 @@ test.describe('Negative Prompt @generation', () => {
     await page.mouse.click(24, 24);
   });
 
-  test('negative prompt section is collapsed by default', async ({ page }) => {
-    // Switch to Custom mode to see FullSongForm
-    const customTab = page.getByRole('tab', { name: /custom/i });
-    if (await customTab.isVisible()) {
-      await customTab.click();
+  /** Switch to Custom sub-mode so FullSongForm (with NegativePromptSection) is visible */
+  async function switchToCustomMode(page: import('@playwright/test').Page) {
+    const customBtn = page.getByTestId('mix-submode-custom');
+    if (await customBtn.isVisible()) {
+      await customBtn.click();
+      await expect(page.getByTestId('full-song-form')).toBeVisible();
     }
+  }
+
+  test('negative prompt section is collapsed by default', async ({ page }) => {
+    await switchToCustomMode(page);
 
     const section = page.getByTestId('negative-prompt-section');
     await expect(section).toBeVisible();
@@ -49,10 +54,7 @@ test.describe('Negative Prompt @generation', () => {
   });
 
   test('expands negative prompt and enters text', async ({ page }) => {
-    const customTab = page.getByRole('tab', { name: /custom/i });
-    if (await customTab.isVisible()) {
-      await customTab.click();
-    }
+    await switchToCustomMode(page);
 
     // Expand the section
     await page.getByTestId('negative-prompt-toggle').click();
@@ -77,10 +79,7 @@ test.describe('Negative Prompt @generation', () => {
   });
 
   test('clicking suggestion chip adds to negative prompt', async ({ page }) => {
-    const customTab = page.getByRole('tab', { name: /custom/i });
-    if (await customTab.isVisible()) {
-      await customTab.click();
-    }
+    await switchToCustomMode(page);
 
     await page.getByTestId('negative-prompt-toggle').click();
 
@@ -94,10 +93,7 @@ test.describe('Negative Prompt @generation', () => {
   });
 
   test('negative prompt persists when collapsing and re-expanding', async ({ page }) => {
-    const customTab = page.getByRole('tab', { name: /custom/i });
-    if (await customTab.isVisible()) {
-      await customTab.click();
-    }
+    await switchToCustomMode(page);
 
     // Expand and type
     await page.getByTestId('negative-prompt-toggle').click();

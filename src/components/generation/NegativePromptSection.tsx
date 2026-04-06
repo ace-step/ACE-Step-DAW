@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 /** Common exclusion suggestions — one-click chips for quick negative prompting */
 const SUGGESTION_CHIPS = [
@@ -12,6 +12,11 @@ const SUGGESTION_CHIPS = [
   'no drum machine',
 ] as const;
 
+/** Parse comma-separated tokens for exact-match duplicate detection */
+function parseTokens(value: string): string[] {
+  return value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+}
+
 interface NegativePromptSectionProps {
   value: string;
   onChange: (value: string) => void;
@@ -20,11 +25,13 @@ interface NegativePromptSectionProps {
 
 export function NegativePromptSection({ value, onChange, disabled }: NegativePromptSectionProps) {
   const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+
+  const tokens = parseTokens(value);
 
   const handleChipClick = (chip: string) => {
     const current = value.trim();
-    // Don't add duplicates (case-insensitive check)
-    if (current.toLowerCase().includes(chip.toLowerCase())) return;
+    if (tokens.includes(chip.toLowerCase())) return;
     onChange(current ? `${current}, ${chip}` : chip);
   };
 
@@ -37,7 +44,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-1.5 text-left"
         aria-expanded={expanded}
-        aria-controls="negative-prompt-content"
+        aria-controls={contentId}
         data-testid="negative-prompt-toggle"
       >
         <svg
@@ -60,7 +67,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
       </button>
 
       {expanded && (
-        <div id="negative-prompt-content" className="space-y-1.5">
+        <div id={contentId} className="space-y-1.5">
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -73,7 +80,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
           />
           <div className="flex flex-wrap gap-1" data-testid="negative-prompt-chips">
             {SUGGESTION_CHIPS.map((chip) => {
-              const isActive = value.toLowerCase().includes(chip.toLowerCase());
+              const isActive = tokens.includes(chip.toLowerCase());
               return (
                 <button
                   key={chip}

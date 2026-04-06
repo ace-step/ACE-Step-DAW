@@ -121,6 +121,7 @@ export function useEnhancePanelState() {
       setGlobalCaption(clip.globalCaption ?? project?.globalCaption ?? '');
       setRepaintMode('balanced');
       setRepaintStrength(0.5);
+      setNegativePrompt('');
 
       const sessionId = `session-${Date.now()}`;
       sessionCounterRef.current = 1;

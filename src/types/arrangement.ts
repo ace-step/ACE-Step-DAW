@@ -1,7 +1,21 @@
 /** Arrangement analysis types for the AI Arrangement Assistant. */
 
 /** Detected musical section in the arrangement. */
-export type SectionType = 'intro' | 'verse' | 'pre-chorus' | 'chorus' | 'bridge' | 'outro' | 'drop' | 'breakdown' | 'solo' | 'interlude' | 'unknown';
+export type SectionType =
+  | 'intro'
+  | 'verse'
+  | 'pre-chorus'
+  | 'chorus'
+  | 'bridge'
+  | 'outro'
+  | 'drop'
+  | 'breakdown'
+  | 'solo'
+  | 'interlude'
+  | 'hook'
+  | 'build'
+  | 'tag'
+  | 'unknown';
 
 /** A detected section within the arrangement timeline. */
 export interface ArrangementSection {

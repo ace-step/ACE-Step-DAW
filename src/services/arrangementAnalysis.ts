@@ -209,7 +209,7 @@ export function detectSections(project: Project): ArrangementSection[] {
       const sectionName = ms.marker.name.toLowerCase().trim() as SectionType;
       const knownTypes: SectionType[] = [
         'intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro',
-        'drop', 'breakdown', 'solo', 'interlude',
+        'drop', 'breakdown', 'solo', 'interlude', 'hook', 'build', 'tag',
       ];
       const type = knownTypes.includes(sectionName) ? sectionName : 'unknown';
       return {
@@ -265,6 +265,9 @@ const SECTION_FLOW: Record<SectionType, SectionType[]> = {
   'breakdown': ['drop', 'chorus'],
   'solo': ['chorus', 'verse'],
   'interlude': ['verse', 'chorus'],
+  'hook': ['verse', 'bridge'],
+  'build': ['drop', 'chorus'],
+  'tag': ['outro'],
   'unknown': ['verse'],
 };
 
@@ -280,6 +283,9 @@ const SECTION_BARS: Record<SectionType, number> = {
   'breakdown': 4,
   'solo': 8,
   'interlude': 4,
+  'hook': 4,
+  'build': 4,
+  'tag': 4,
   'unknown': 8,
 };
 
@@ -297,7 +303,7 @@ function barsToSeconds(bars: number, bpm: number, timeSignature: number, timeSig
 export function suggestNextSection(
   sections: ArrangementSection[],
   meta: ProjectMeta,
-): ArrangementSuggestion {
+): ArrangementSuggestion | null {
   let nextType: SectionType;
   let startTime: number;
 
@@ -307,6 +313,11 @@ export function suggestNextSection(
   } else {
     const lastSection = sections[sections.length - 1];
     const candidates = SECTION_FLOW[lastSection.type] ?? ['verse'];
+
+    // Terminal section — no next suggestion after outro/tag
+    if (candidates.length === 0) {
+      return null;
+    }
 
     // Smart selection: check what we already have to avoid repetition
     const sectionTypeCounts = new Map<SectionType, number>();
@@ -322,7 +333,7 @@ export function suggestNextSection(
     } else if (lastSection.type === 'bridge') {
       nextType = 'chorus';
     } else {
-      nextType = candidates[0] ?? 'verse';
+      nextType = candidates[0];
     }
 
     startTime = lastSection.endTime;
@@ -357,6 +368,9 @@ const SECTION_INSTRUMENTS: Record<SectionType, string[]> = {
   'breakdown': ['synth pad', 'piano'],
   'solo': ['guitar', 'synth lead'],
   'interlude': ['piano', 'strings'],
+  'hook': ['synth', 'guitar', 'vocals'],
+  'build': ['synth', 'drums', 'bass'],
+  'tag': ['vocals', 'piano'],
   'unknown': ['piano'],
 };
 
@@ -571,35 +585,41 @@ export function detectGaps(project: Project): ArrangementSuggestion[] {
     // Sort clips by start time
     const sortedClips = [...track.clips].sort((a, b) => a.startTime - b.startTime);
 
+    const addGap = (gapStart: number, gapEnd: number, beforeClip?: typeof sortedClips[0], afterClip?: typeof sortedClips[0]) => {
+      const gapDuration = gapEnd - gapStart;
+      if (gapDuration < MIN_GAP_SECONDS) return;
+      const prompts: string[] = [];
+      if (beforeClip?.prompt?.trim()) prompts.push(beforeClip.prompt.trim());
+      if (afterClip?.prompt?.trim()) prompts.push(afterClip.prompt.trim());
+      const prompt = prompts.length > 0
+        ? `Transition between: ${prompts.join(' → ')}`
+        : `${track.displayName} fill`;
+      suggestions.push({
+        id: uuidv4(),
+        kind: 'fill-gap',
+        title: `Fill gap in ${track.displayName}`,
+        description: `${gapDuration.toFixed(1)}s gap on "${track.displayName}" between ${formatTime(gapStart)} and ${formatTime(gapEnd)}`,
+        time: gapStart,
+        duration: gapDuration,
+        trackIds: [track.id],
+        prompt,
+        status: 'pending',
+      });
+    };
+
+    // Gap before first clip
+    addGap(0, sortedClips[0].startTime, undefined, sortedClips[0]);
+
+    // Gaps between clips
     for (let i = 0; i < sortedClips.length - 1; i++) {
       const current = sortedClips[i];
       const next = sortedClips[i + 1];
-      const gapStart = current.startTime + current.duration;
-      const gapEnd = next.startTime;
-      const gapDuration = gapEnd - gapStart;
-
-      if (gapDuration >= MIN_GAP_SECONDS) {
-        // Build prompt from adjacent clips
-        const prompts: string[] = [];
-        if (current.prompt?.trim()) prompts.push(current.prompt.trim());
-        if (next.prompt?.trim()) prompts.push(next.prompt.trim());
-        const prompt = prompts.length > 0
-          ? `Transition between: ${prompts.join(' → ')}`
-          : `${track.displayName} fill`;
-
-        suggestions.push({
-          id: uuidv4(),
-          kind: 'fill-gap',
-          title: `Fill gap in ${track.displayName}`,
-          description: `${gapDuration.toFixed(1)}s gap on "${track.displayName}" between ${formatTime(gapStart)} and ${formatTime(gapEnd)}`,
-          time: gapStart,
-          duration: gapDuration,
-          trackIds: [track.id],
-          prompt,
-          status: 'pending',
-        });
-      }
+      addGap(current.startTime + current.duration, next.startTime, current, next);
     }
+
+    // Gap after last clip
+    const lastClip = sortedClips[sortedClips.length - 1];
+    addGap(lastClip.startTime + lastClip.duration, project.totalDuration, lastClip, undefined);
   }
 
   return suggestions;
@@ -629,8 +649,9 @@ export function analyzeArrangement(project: Project): ArrangementAnalysis {
   const sections = detectSections(project);
   const suggestions: ArrangementSuggestion[] = [];
 
-  // Next section suggestion
-  suggestions.push(suggestNextSection(sections, meta));
+  // Next section suggestion (null when arrangement is terminal, e.g. ends with outro)
+  const nextSection = suggestNextSection(sections, meta);
+  if (nextSection) suggestions.push(nextSection);
 
   // Instrumentation suggestions
   suggestions.push(...suggestInstrumentation(sections, project.tracks, meta));

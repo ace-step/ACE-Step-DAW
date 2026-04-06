@@ -162,7 +162,6 @@ describe('detectSections', () => {
       expect(section.id).toBeTruthy();
     }
   });
-});
 
   it('uses markers when available instead of clip-based detection', () => {
     const track = makeTrack({
@@ -187,6 +186,7 @@ describe('detectSections', () => {
     expect(sections[2].type).toBe('chorus');
     expect(sections[0].confidence).toBe(0.95);
   });
+});
 
 // ─── Next Section Suggestions ────────────────────────────────────────────
 
@@ -199,8 +199,9 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 0,
     });
-    expect(suggestion.sectionType).toBe('intro');
-    expect(suggestion.time).toBe(0);
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.sectionType).toBe('intro');
+    expect(suggestion!.time).toBe(0);
   });
 
   it('suggests verse after intro', () => {
@@ -214,8 +215,9 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 8,
     });
-    expect(suggestion.sectionType).toBe('verse');
-    expect(suggestion.time).toBe(8);
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.sectionType).toBe('verse');
+    expect(suggestion!.time).toBe(8);
   });
 
   it('suggests chorus after verse', () => {
@@ -230,8 +232,9 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 40,
     });
-    expect(suggestion.sectionType).toBe('chorus');
-    expect(suggestion.time).toBe(40);
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.sectionType).toBe('chorus');
+    expect(suggestion!.time).toBe(40);
   });
 
   it('suggests bridge after second chorus', () => {
@@ -249,7 +252,8 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 136,
     });
-    expect(suggestion.sectionType).toBe('bridge');
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.sectionType).toBe('bridge');
   });
 
   it('includes duration in the suggestion', () => {
@@ -260,7 +264,8 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 0,
     });
-    expect(suggestion.duration).toBeGreaterThan(0);
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.duration).toBeGreaterThan(0);
   });
 
   it('respects project key and tempo in suggestion metadata', () => {
@@ -271,7 +276,24 @@ describe('suggestNextSection', () => {
       timeSignatureDenominator: 4,
       totalDuration: 0,
     });
-    expect(suggestion.description).toContain('A minor');
+    expect(suggestion).not.toBeNull();
+    expect(suggestion!.description).toContain('A minor');
+  });
+
+  it('returns null after outro (terminal section)', () => {
+    const sections: ArrangementSection[] = [
+      { id: '1', type: 'intro', startTime: 0, endTime: 8, trackIds: ['t1'], confidence: 0.9 },
+      { id: '2', type: 'verse', startTime: 8, endTime: 40, trackIds: ['t1'], confidence: 0.9 },
+      { id: '3', type: 'outro', startTime: 40, endTime: 48, trackIds: ['t1'], confidence: 0.9 },
+    ];
+    const suggestion = suggestNextSection(sections, {
+      bpm: 120,
+      keyScale: 'C major',
+      timeSignature: 4,
+      timeSignatureDenominator: 4,
+      totalDuration: 48,
+    });
+    expect(suggestion).toBeNull();
   });
 });
 

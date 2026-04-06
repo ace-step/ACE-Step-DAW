@@ -59,13 +59,17 @@ export function DrumMachineEditor() {
   // useState (not ref) so Effect 2 re-runs when readiness changes.
   const [engineReady, setEngineReady] = useState(false);
 
-  // Effect 1: Ensure drum engine is initialized (only on track/kit change)
+  // Effect 1: Ensure drum engine is initialized, sync pads, then mark ready.
+  // Pads are synced inside the promise so params are guaranteed applied
+  // before any user-triggered hits.
   useEffect(() => {
     setEngineReady(false);
     if (!track || !trackId) return;
     let cancelled = false;
     drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
-      if (!cancelled) setEngineReady(true);
+      if (cancelled) return;
+      if (pads.length) drumEngine.syncTrackPadParams(trackId, pads);
+      setEngineReady(true);
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -308,7 +312,7 @@ export function DrumMachineEditor() {
                 />
                 <Knob
                   value={selectedPadData.decay}
-                  min={0} max={1} defaultValue={0.5} step={0.01}
+                  min={0} max={1} defaultValue={1} step={0.01}
                   onChange={(v) => setDrumPadDecay(trackId, selectedPad, v)}
                   label="Decay" variant="sm"
                   formatValue={(v) => `${Math.round(v * 100)}%`}

@@ -627,11 +627,19 @@ class DrumEngine {
     chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
   }
 
-  /** Trigger a drum pad. Pad effect params (volume, tune, filter, etc.) must be
-   * synced beforehand via syncTrackPadParams or ensureAndSyncPadParams.
-   * UI components (DrumMachineEditor, BeatPad) handle this automatically. */
-  async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {
+  /** Trigger a drum pad.
+   * UI callers that already sync params may omit `pads`.
+   * Non-UI callers (e.g. transport) can pass `pads` to ensure per-pad
+   * params are applied before the trigger. */
+  async triggerPad(
+    trackId: string,
+    padIndex: number,
+    velocity = 100,
+    kit: DrumKitName = '808',
+    pads?: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>,
+  ) {
     await this.ensureTrack(trackId, kit);
+    if (pads) this.syncTrackPadParams(trackId, pads);
     const voices = this.voices.get(trackId);
     const chains = this.padChains.get(trackId);
     if (!voices || padIndex < 0 || padIndex >= voices.length) return;

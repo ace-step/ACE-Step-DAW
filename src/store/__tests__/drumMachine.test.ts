@@ -172,7 +172,7 @@ describe('drumMachine store actions', () => {
       expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].decay).toBe(0);
     });
 
-    it('defaults to 0.5 on new pads', () => {
+    it('defaults to 1 on new pads', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
       expect(track.drumMachine!.pads[0].decay).toBe(1);
     });

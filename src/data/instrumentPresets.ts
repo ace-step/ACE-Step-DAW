@@ -21,7 +21,7 @@ export const ALL_PRESET_CATEGORIES: readonly InstrumentPresetCategory[] = [
   'Bass', 'Lead', 'Pad', 'Pluck', 'FX', 'Keys', 'Bell', 'Wavetable',
 ] as const;
 
-export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable' | 'granular';
+export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable';
 
 export interface InstrumentPreset {
   id: string;
@@ -157,6 +157,9 @@ export function createUserPreset(
 ): InstrumentPreset {
   if (instrument.kind === 'sampler') {
     throw new Error('Sampler instruments cannot be saved as instrument presets');
+  }
+  if (instrument.kind === 'granular') {
+    throw new Error('Granular instruments cannot be saved as presets (source audio is project-scoped)');
   }
   return {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

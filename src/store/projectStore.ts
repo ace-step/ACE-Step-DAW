@@ -3902,24 +3902,27 @@ export const useProjectStore = create<ProjectState>()(
   updateGranularConfig: (trackId, config) => {
     const state = get();
     if (!state.project) return;
+    let didChange = false;
+    const nextTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const existing = t.granularConfig;
+      if (!existing && !('audioKey' in config)) return t;
+      didChange = true;
+      return {
+        ...t,
+        granularConfig: existing ? { ...existing, ...config } : config as GranularSettings,
+        instrument: t.instrument?.kind === 'granular'
+          ? { ...t.instrument, settings: { ...(t.instrument as { settings: GranularSettings }).settings, ...config } }
+          : t.instrument,
+      };
+    });
+    if (!didChange) return;
     _pushHistory(state.project, { scope: 'track', label: 'Configure granular', trackId });
     set({
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) => {
-          if (t.id !== trackId) return t;
-          // Allow initializing granularConfig if audioKey is provided
-          const existing = t.granularConfig;
-          if (!existing && !('audioKey' in config)) return t;
-          return {
-            ...t,
-            granularConfig: existing ? { ...existing, ...config } : config as GranularSettings,
-            instrument: t.instrument?.kind === 'granular'
-              ? { ...t.instrument, settings: { ...(t.instrument as { settings: GranularSettings }).settings, ...config } }
-              : t.instrument,
-          };
-        }),
+        tracks: nextTracks,
       },
     });
   },

@@ -4,7 +4,7 @@
  * Displays source waveform with grain position indicator,
  * and provides controls for all granular synthesis parameters.
  */
-import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import type { GranularSettings, GrainEnvelopeShape, Track } from '../../types/project';
 import { Knob } from '../ui/Knob';
 import { DEFAULT_GRANULAR_SETTINGS, granularEngine } from '../../engine/GranularEngine';
@@ -147,11 +147,16 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
       return;
     }
     let cancelled = false;
-    granularEngine.getTrackBuffer(track).then((buf) => {
-      if (!cancelled) setAudioBuffer(buf);
-    });
+    granularEngine
+      .getTrackBuffer(track)
+      .then((buf) => {
+        if (!cancelled) setAudioBuffer(buf);
+      })
+      .catch(() => {
+        if (!cancelled) setAudioBuffer(null);
+      });
     return () => { cancelled = true; };
-  }, [track, hasSource, config?.audioKey]);
+  }, [track.id, hasSource, config?.audioKey]);
 
   const handleChange = useCallback(
     (key: keyof GranularSettings, value: number | boolean | string) => {

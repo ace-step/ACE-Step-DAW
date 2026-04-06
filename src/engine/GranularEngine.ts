@@ -100,8 +100,6 @@ interface GranularVoice {
   schedulerHandle: ReturnType<typeof setInterval> | null;
   activeGrains: Set<AudioBufferSourceNode>;
   releaseTimeoutId: ReturnType<typeof setTimeout> | null;
-  /** Position auto-scan offset — advances when not frozen. */
-  positionOffset: number;
   startTime: number;
 }
 
@@ -230,7 +228,6 @@ class GranularEngine {
       schedulerHandle: null,
       activeGrains: new Set(),
       releaseTimeoutId: null,
-      positionOffset: 0,
       startTime: now,
     };
 
@@ -345,10 +342,10 @@ class GranularEngine {
     const sampleRate = audioBuffer.sampleRate;
     const bufferLength = audioBuffer.length;
 
-    // Calculate grain size in samples
-    const grainSizeSamples = Math.max(
-      64,
-      Math.min(bufferLength, Math.round((settings.grainSize / 1000) * sampleRate)),
+    // Calculate grain size in samples — clamp to buffer length for short buffers
+    const grainSizeSamples = Math.min(
+      bufferLength,
+      Math.max(64, Math.round((settings.grainSize / 1000) * sampleRate)),
     );
 
     // Calculate grain start position

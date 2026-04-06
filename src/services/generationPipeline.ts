@@ -779,8 +779,10 @@ async function generateClipInternal(
       params.use_random_seed = true;
     }
 
-    // Negative prompt
-    const effectiveNegativePrompt = options.negativePromptOverride?.trim() || clip.generationParams?.negativePrompt?.trim();
+    // Negative prompt — check override, then clip params, then current store form
+    const effectiveNegativePrompt = options.negativePromptOverride?.trim()
+      || clip.generationParams?.negativePrompt?.trim()
+      || useGenerationStore.getState().generationForm.negativePrompt?.trim();
     if (effectiveNegativePrompt) {
       params.negative_prompt = effectiveNegativePrompt;
     }

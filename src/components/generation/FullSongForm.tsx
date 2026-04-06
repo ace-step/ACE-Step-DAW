@@ -460,6 +460,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
                   <button
                     key={chip}
                     type="button"
+                    aria-pressed={isActive}
+                    aria-label={`Toggle exclusion: ${chip}`}
                     onClick={() => {
                       if (isActive) {
                         setNegativePrompt(

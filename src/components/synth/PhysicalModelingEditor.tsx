@@ -61,7 +61,8 @@ function KnobSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 accent-amber-500 cursor-pointer"
+        className="w-full h-1.5 accent-daw-accent cursor-pointer"
+        aria-label={label}
         data-testid={testId}
       />
     </div>
@@ -73,9 +74,8 @@ export function PhysicalModelingEditor({ trackId }: PhysicalModelingEditorProps)
   const setTrackInstrument = useProjectStore((s) => s.setTrackInstrument);
 
   const instrument = track?.instrument;
-  if (!instrument || instrument.kind !== 'physical') return null;
-
-  const settings = instrument.settings;
+  const isPhysical = instrument?.kind === 'physical';
+  const settings = isPhysical ? instrument.settings : null;
 
   const updateSettings = useCallback(
     (updates: Partial<PhysicalModelingSettings>) => {
@@ -109,6 +109,8 @@ export function PhysicalModelingEditor({ trackId }: PhysicalModelingEditorProps)
     [updateSettings],
   );
 
+  if (!isPhysical || !settings) return null;
+
   return (
     <div
       className="border-t border-[#333] bg-[#1a1a1a] px-4 py-3"
@@ -122,7 +124,8 @@ export function PhysicalModelingEditor({ trackId }: PhysicalModelingEditorProps)
         <select
           value={settings.presetName}
           onChange={(e) => handlePresetChange(e.target.value as PhysicalModelingPresetName)}
-          className="rounded bg-[#2a2a2a] border border-[#444] px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-amber-500"
+          className="rounded bg-[#2a2a2a] border border-[#444] px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-daw-accent"
+          aria-label="Physical modeling preset"
           data-testid="physical-preset-select"
         >
           {PRESET_OPTIONS.map((opt) => (
@@ -141,7 +144,7 @@ export function PhysicalModelingEditor({ trackId }: PhysicalModelingEditorProps)
               onClick={() => handleExciterChange(opt.value)}
               className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
                 settings.exciter === opt.value
-                  ? 'bg-amber-600/30 text-amber-300 border border-amber-500/50'
+                  ? 'bg-daw-accent/20 text-daw-accent border border-daw-accent/50'
                   : 'bg-[#2a2a2a] text-zinc-400 hover:bg-[#343434] border border-transparent'
               }`}
               title={opt.description}

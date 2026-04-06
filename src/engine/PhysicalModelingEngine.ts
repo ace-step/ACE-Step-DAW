@@ -276,9 +276,10 @@ class PhysicalModelingEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return;
 
+    const safePitch = clamp(pitch, 0, 127);
     const ctx = this.getContext();
     const { settings } = instance;
-    const freq = midiToFreq(pitch);
+    const freq = midiToFreq(safePitch);
     const now = ctx.currentTime;
 
     // Voice output with attack envelope
@@ -308,7 +309,9 @@ class PhysicalModelingEngine {
     const feedbackGain = ctx.createGain();
     // String tension slightly affects sustain character
     const tensionFactor = 0.95 + settings.stringTension * 0.04;
-    feedbackGain.gain.value = clamp((1 - settings.damping) * tensionFactor, 0, 0.998);
+    // Scale down main feedback when body resonance is active to prevent runaway oscillation
+    const bodyCompensation = 1 - settings.bodySize * 0.3;
+    feedbackGain.gain.value = clamp((1 - settings.damping) * tensionFactor * bodyCompensation, 0, 0.998);
 
     // Wire feedback loop: delay → filter → feedback gain → delay
     delayNode.connect(filterNode);
@@ -466,9 +469,10 @@ class PhysicalModelingEngine {
 
     for (const voices of instance.voices.values()) {
       for (const voice of voices) {
-        // Update feedback gain (damping + tension)
+        // Update feedback gain (damping + tension + body compensation)
         const tensionFactor = 0.95 + settings.stringTension * 0.04;
-        const newFeedback = clamp((1 - settings.damping) * tensionFactor, 0, 0.998);
+        const bodyCompensation = 1 - settings.bodySize * 0.3;
+        const newFeedback = clamp((1 - settings.damping) * tensionFactor * bodyCompensation, 0, 0.998);
         voice.feedbackGain.gain.setTargetAtTime(newFeedback, ctx.currentTime, 0.02);
 
         // Update filter cutoff (brightness)

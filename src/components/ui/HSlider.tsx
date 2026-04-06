@@ -118,7 +118,8 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
           if (next !== null) {
             e.preventDefault();
             onChange(next);
-            announceValue(displayValue ?? next.toFixed(1));
+            const nextNorm = (next - min) / (max - min);
+            announceValue(`${Math.round(nextNorm * 100)}%`);
           }
         }}
       >

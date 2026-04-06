@@ -305,6 +305,9 @@ export function ParametricEQCard({
         <span className="text-[8px] text-white/35">Spectrum + response</span>
       </div>
 
+      {/* Canvas provides visual band dragging as a convenience; all EQ params
+          are fully accessible via the knob controls below. role="img" is intentional
+          since mouse interaction is redundant with the keyboard-accessible knobs. */}
       <canvas
         ref={canvasRef}
         role="img"

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 /**
  * Global aria-live announcer for screen readers.
@@ -41,6 +41,13 @@ export function announceToScreenReader(message: string): void {
  */
 export function useAriaValueAnnounce(label?: string): (value: string) => void {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Clear pending timer on unmount to avoid stale announcements
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   return useCallback((displayValue: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);

@@ -105,7 +105,7 @@ export function VerticalFader({
         e.preventDefault();
         e.stopPropagation();
         onChange(next);
-        announceValue(next.toFixed(1));
+        announceValue(`${Math.round(next * 100)}%`);
       }
     },
     [value, min, max, onChange, announceValue],

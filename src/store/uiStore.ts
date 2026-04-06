@@ -1421,6 +1421,7 @@ export const useUIStore = create<UIState>()(
         theme: state.theme,
         // Accessibility
         highContrastMode: state.highContrastMode,
+        colorBlindMode: state.colorBlindMode,
         // Synth presets
         userSynthPresets: state.userSynthPresets,
         userInstrumentPresets: state.userInstrumentPresets,

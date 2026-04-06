@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import type { DrumKitName, DrumPadFilter, DrumPadSend, DrumPadFilterType } from '../types/project';
+import type { DrumKitName, DrumPadFilter, DrumPadSend } from '../types/project';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -615,9 +615,11 @@ class DrumEngine {
       // Cancel any pending ramp from a previous trigger
       chain.gain.gain.cancelScheduledValues(now);
       chain.gain.gain.setValueAtTime(1, now);
-      // Map decay 0–1 to fade time: 0 → 0.02s (very short), 1 → 2s (full ring-out)
-      const fadeTime = 0.02 + chain.decayScale * 1.98;
-      chain.gain.gain.linearRampToValueAtTime(0.001, now + fadeTime);
+      // Map decay 0–1 to fade time: 0 → 0.02s (very short), 1 → full ring-out / no cut
+      if (chain.decayScale < 0.999) {
+        const fadeTime = 0.02 + chain.decayScale * 1.98;
+        chain.gain.gain.linearRampToValueAtTime(0.001, now + fadeTime);
+      }
     }
 
     voices[padIndex].trigger(undefined, vel);

@@ -599,12 +599,6 @@ export function useTransport() {
         const patternDuration = stepDuration * totalSteps;
         if (patternDuration <= 0) continue;
 
-        // Ensure drum engine is ready and sync per-pad effect params
-        const drumPads = track.drumMachine?.pads;
-        if (drumPads) {
-          void drumEngine.ensureAndSyncPadParams(track.id, track.drumKit ?? '808', drumPads);
-        }
-
         const firstLoopIndex = Math.floor(startFrom / patternDuration);
         const lastLoopIndex = Math.ceil(effectiveEnd / patternDuration);
 
@@ -615,9 +609,6 @@ export function useTransport() {
             if (row.muted) continue;
             const padIndex = DRUM_PAD_INDEX_BY_SAMPLE_KEY[row.sampleKey];
             if (padIndex === undefined) continue;
-
-            // Look up per-pad volume for velocity scaling
-            const padVolume = drumPads?.[padIndex]?.volume ?? 0.8;
 
             for (let stepIndex = 0; stepIndex < row.steps.length; stepIndex++) {
               const step = row.steps[stepIndex];
@@ -632,7 +623,7 @@ export function useTransport() {
               if (stepTime < startFrom || stepTime >= effectiveEnd) continue;
 
               const velocity = Math.round(
-                Math.max(0, Math.min(1, step.velocity * row.volume * track.volume * padVolume)) * 127,
+                Math.max(0, Math.min(1, step.velocity * row.volume * track.volume)) * 127,
               );
               if (velocity <= 0) continue;
 

@@ -26,7 +26,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - name: Run critical E2E tests
-        run: npx playwright test --grep '@critical' --retries=1 --reporter=list,html
+        id: e2e-critical
+        run: |
+          npx playwright test --grep '@critical' --retries=1 --reporter=list,html 2>&1 | tee /tmp/e2e-critical-output.txt
+        continue-on-error: true
+
+      - name: Post test results to job summary
+        if: always()
+        run: |
+          echo '## E2E Critical Test Results' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -80 /tmp/e2e-critical-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No output captured" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if tests failed
+        if: steps.e2e-critical.outcome == 'failure'
+        run: exit 1
 
       - name: Upload critical test report
         if: always()

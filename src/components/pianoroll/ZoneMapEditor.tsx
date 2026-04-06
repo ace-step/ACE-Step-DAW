@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { createDefaultZone, validateZones } from '../../utils/sampleZones';
 import { useSfzImport } from '../../hooks/useSfzImport';
@@ -157,10 +157,9 @@ function ZoneGrid({
 }: {
   zones: SampleZone[];
   selectedZoneId: string | null;
-  onSelectZone: (id: string) => void;
+  onSelectZone: (id: string | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const GRID_WIDTH = 384;
   const GRID_HEIGHT = 80;
   const KEY_WIDTH = GRID_WIDTH / TOTAL_KEYS;
@@ -256,30 +255,56 @@ function ZoneGrid({
           return;
         }
       }
+      // Deselect on miss-click
+      onSelectZone(null);
     },
     [zones, onSelectZone, KEY_WIDTH, VEL_SCALE],
   );
 
-  // Redraw when zones change
-  const canvasCallback = useCallback(
-    (node: HTMLCanvasElement | null) => {
-      if (node) {
-        (canvasRef as React.MutableRefObject<HTMLCanvasElement>).current = node;
-        drawGrid(node);
+  // Keyboard navigation: arrow keys cycle through zones
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (zones.length === 0) return;
+      const currentIdx = zones.findIndex((z) => z.id === selectedZoneId);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = (currentIdx + 1) % zones.length;
+        onSelectZone(zones[next].id);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = currentIdx <= 0 ? zones.length - 1 : currentIdx - 1;
+        onSelectZone(zones[prev].id);
+      } else if (e.key === 'Escape') {
+        onSelectZone(null);
       }
     },
-    [drawGrid],
+    [zones, selectedZoneId, onSelectZone],
   );
 
+  // Redraw when zones or selection change
+  useEffect(() => {
+    if (canvasRef.current) {
+      drawGrid(canvasRef.current);
+    }
+  }, [drawGrid]);
+
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <canvas
-        ref={canvasCallback}
-        className="w-full rounded-sm cursor-crosshair"
-        style={{ height: `${GRID_HEIGHT}px`, imageRendering: 'pixelated' }}
+        ref={canvasRef}
+        className="w-full rounded-sm cursor-crosshair focus:outline-none focus:ring-1 focus:ring-[var(--daw-accent,#3b82f6)]/50"
+        style={{ height: `${GRID_HEIGHT}px` }}
         onClick={handleClick}
-        aria-label="Sample zone map grid"
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="application"
+        aria-label={`Sample zone map grid with ${zones.length} zone${zones.length !== 1 ? 's' : ''}. Use arrow keys to navigate.`}
       />
+      {zones.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-[10px] text-zinc-500">Click "+ Add Zone" or "Import SFZ" to create zones</span>
+        </div>
+      )}
       {/* Axis labels */}
       <div className="flex justify-between text-[8px] text-zinc-500 mt-0.5">
         <span>C-1</span>
@@ -301,7 +326,7 @@ function ZoneDetailEditor({
   onChange: (partial: Partial<SampleZone>) => void;
 }) {
   return (
-    <div className="rounded border border-white/8 bg-white/[0.03] px-2.5 py-2 space-y-2">
+    <div className="rounded border border-white/8 bg-white/[0.03] px-2.5 py-2 space-y-2" data-zone-id={zone.id}>
       <div className="text-[10px] font-semibold text-zinc-300 truncate">
         {zone.sampleName || 'Zone'} — {midiNoteToName(zone.rootNote)}
       </div>

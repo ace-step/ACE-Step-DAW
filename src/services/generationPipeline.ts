@@ -108,6 +108,8 @@ export interface ClipInternalOptions {
   useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
+  /** Negative prompt — elements to exclude from generation. */
+  negativePromptOverride?: string;
 }
 
 export interface VariationGenerationDependencies {
@@ -297,6 +299,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt) taskParams.negative_prompt = params.negativePrompt;
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -808,6 +811,11 @@ async function generateClipInternal(
     // Auto-expand prompt: controls whether LM rewrites the caption via CoT
     if (clip.autoExpandPrompt === false) {
       params.use_cot_caption = false;
+    }
+
+    // Negative prompt: exclude unwanted elements from generation
+    if (options.negativePromptOverride) {
+      params.negative_prompt = options.negativePromptOverride;
     }
 
     // Submit task
@@ -2506,6 +2514,8 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Negative prompt — elements to exclude from generation. */
+  negativePrompt?: string;
 }
 
 export interface Text2MusicResult {
@@ -2585,6 +2595,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       seed: request.seed,
       useRandomSeed: request.useRandomSeed,
       vocalLanguage: request.vocalLanguage,
+      negativePrompt: request.negativePrompt,
       instrumental: request.instrumental,
       splitToStems: request.splitToStems,
       stemCount: request.stemCount,
@@ -2644,6 +2655,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt) {
+      params.negative_prompt = request.negativePrompt;
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

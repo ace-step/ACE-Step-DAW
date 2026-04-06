@@ -60,6 +60,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setPrompt = useGenerationStore((s) => s.setGenerationPrompt);
   const lyrics = useGenerationStore((s) => s.generationForm.lyrics);
   const setLyrics = useGenerationStore((s) => s.setGenerationLyrics);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
   const thinking = useGenerationStore((s) => s.generationForm.thinking);
   const setThinking = useGenerationStore((s) => s.setGenerationThinking);
   const seedStr = useGenerationStore((s) => s.generationForm.seed);
@@ -87,6 +89,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [loadingExample, setLoadingExample] = useState(false);
   const [expandCaption, setExpandCaption] = useState(false);
   const [expandLyrics, setExpandLyrics] = useState(false);
+  const [showNegativePrompt, setShowNegativePrompt] = useState(!!negativePrompt);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -227,6 +230,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           seed: useRandomSeed ? undefined : seed,
           useRandomSeed,
           vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+          negativePrompt: negativePrompt.trim() || undefined,
           instrumental,
           splitToStems,
           stemCount,
@@ -260,13 +264,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       seed: useRandomSeed ? undefined : seed,
       useRandomSeed,
       vocalLanguage: instrumental ? 'unknown' : vocalLanguage,
+      negativePrompt: negativePrompt.trim() || undefined,
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, negativePrompt, editingClipId]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -328,6 +333,48 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           disabled={isDisabled}
           placeholder="Describe the music you want to generate..."
         />
+      </section>
+
+      {/* Negative Prompt — collapsible */}
+      <section className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setShowNegativePrompt(!showNegativePrompt)}
+          className="flex items-center gap-1 text-[11px] font-medium uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          <span className="text-[9px]">{showNegativePrompt ? '\u25BC' : '\u25B6'}</span>
+          Exclude (Negative Prompt)
+        </button>
+        {showNegativePrompt && (
+          <div className="space-y-1.5">
+            <textarea
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+              disabled={isDisabled}
+              placeholder="e.g., no autotune, no heavy reverb, no falsetto..."
+              rows={2}
+              className="w-full resize-none rounded-md border border-[#444] bg-[#1e1e1e] px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+              data-testid="negative-prompt-input"
+            />
+            <div className="flex flex-wrap gap-1">
+              {['no autotune', 'no reverb', 'no distortion', 'no falsetto', 'no guitar solo', 'no background vocals'].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => {
+                    const current = negativePrompt.trim();
+                    if (current.toLowerCase().includes(chip)) return;
+                    setNegativePrompt(current ? `${current}, ${chip}` : chip);
+                  }}
+                  className="rounded-full border border-zinc-700 bg-zinc-800/50 px-2 py-0.5 text-[10px] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 disabled:opacity-30 transition-colors"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Lyrics — with Language + Instrumental inline */}

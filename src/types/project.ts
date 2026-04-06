@@ -782,6 +782,8 @@ export interface ClipGenerationParams {
   type: ClipGenerationType;
   prompt: string;
   lyrics: string;
+  /** Text describing elements to exclude from generation (e.g., "no autotune, no heavy reverb"). */
+  negativePrompt?: string;
   // text2music params
   durationSeconds?: number;
   thinking?: boolean;

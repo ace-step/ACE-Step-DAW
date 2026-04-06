@@ -289,6 +289,7 @@ export interface GenerationFormState {
   thinking: boolean;
   seed: string;
   useRandomSeed: boolean;
+  negativePrompt: string;
   compareModelsEnabled: boolean;
   compareModelOverrides: ModelOverride[];
 }
@@ -391,6 +392,7 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     thinking: DEFAULT_GENERATION.thinking,
     seed: '',
     useRandomSeed: true,
+    negativePrompt: '',
     compareModelsEnabled: false,
     compareModelOverrides: [],
   };
@@ -478,6 +480,7 @@ export interface GenerationState {
   setGenerationVariationCount: (variationCount: number) => void;
   setGenerationTargetTrack: (trackId: string) => void;
   setGenerationLyrics: (lyrics: string) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
   setGenerationInferenceSteps: (steps: number) => void;
   setGenerationGuidanceScale: (scale: number) => void;
   setGenerationShift: (shift: number) => void;
@@ -835,6 +838,9 @@ export const useGenerationStore = create<GenerationState>()(
 
       setGenerationLyrics: (lyrics) => set((s) => ({
         generationForm: { ...s.generationForm, lyrics, requestError: null },
+      })),
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: { ...s.generationForm, negativePrompt },
       })),
 
       setGenerationInferenceSteps: (steps) => set((s) => ({

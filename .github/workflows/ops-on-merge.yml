@@ -27,7 +27,7 @@ jobs:
               PENDING=$(gh pr checks $PR --repo ${{ github.repository }} --json bucket --jq '[.[] | select(.bucket == "pending")] | length')
               if [ "$PENDING" = "0" ]; then
                 echo "Auto-merging PR #$PR — all checks passed"
-                gh pr merge $PR --repo ${{ github.repository }} --squash --admin || true
+                gh pr merge $PR --repo ${{ github.repository }} --squash || true
               else
                 echo "Skipping PR #$PR — $PENDING check(s) still pending"
               fi

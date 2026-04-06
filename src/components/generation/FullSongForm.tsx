@@ -197,6 +197,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         setDurationAuto(false);
       }
       setInstrumental(editingClip.lyrics === '[Instrumental]');
+      setNegativePrompt('');
     }
   }, [editingClipId, editingClip]);
   useEffect(() => {

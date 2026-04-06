@@ -436,6 +436,18 @@ export function StrudelEditor() {
     window.addEventListener('mouseup', onUp);
   }, [editorHeight]);
 
+  // Memoize diff computation to avoid O(m·n) recalculation on every render
+  const diffData = useMemo(() => {
+    const track = activeStrudelTrack;
+    const versionList = track?.strudelVersions ?? [];
+    if (versionList.length === 0) return null;
+    const lastVersion = versionList[versionList.length - 1];
+    const currentCode = track?.strudelCode ?? '';
+    const diff = computeLineDiff(lastVersion.code, currentCode);
+    const summary = formatDiffSummary(diff);
+    return { diff, summary, lastVersion, versionCount: versionList.length };
+  }, [activeStrudelTrack?.strudelCode, activeStrudelTrack?.strudelVersions]);
+
   if (!strudelPanelOpen) return null;
 
   return (
@@ -808,41 +820,32 @@ export function StrudelEditor() {
             {activeTab === 'diff' && (
               <div className="p-2 font-mono text-[10px] overflow-y-auto h-full">
                 <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Version Diff</h3>
-                {(() => {
-                  const track = activeStrudelTrack;
-                  const versions = track?.strudelVersions ?? [];
-                  if (versions.length === 0) {
-                    return <div className="text-zinc-600 p-1">No versions captured. Click &quot;snapshot&quot; to start tracking changes.</div>;
-                  }
-                  const lastVersion = versions[versions.length - 1];
-                  const currentCode = track?.strudelCode ?? '';
-                  const diff = computeLineDiff(lastVersion.code, currentCode);
-                  const summary = formatDiffSummary(diff);
-                  return (
-                    <>
-                      <div className="text-zinc-500 mb-1 text-[9px]">
-                        vs {lastVersion.label || `v${versions.length}`} ({new Date(lastVersion.timestamp).toLocaleTimeString()}) — {summary}
-                      </div>
-                      <div className="space-y-0">
-                        {diff.map((line: DiffLine, i: number) => (
-                          <div
-                            key={i}
-                            className={`py-0 px-1 ${
-                              line.type === 'added' ? 'bg-emerald-900/30 text-emerald-300' :
-                              line.type === 'removed' ? 'bg-red-900/30 text-red-300' :
-                              'text-zinc-500'
-                            }`}
-                          >
-                            <span className="inline-block w-3 text-right mr-1 opacity-50">
-                              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
-                            </span>
-                            {line.content || '\u00A0'}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  );
-                })()}
+                {!diffData ? (
+                  <div className="text-zinc-600 p-1">No versions captured. Click &quot;snapshot&quot; to start tracking changes.</div>
+                ) : (
+                  <>
+                    <div className="text-zinc-500 mb-1 text-[9px]">
+                      vs {diffData.lastVersion.label || `v${diffData.versionCount}`} ({new Date(diffData.lastVersion.timestamp).toLocaleTimeString()}) — {diffData.summary}
+                    </div>
+                    <div className="space-y-0">
+                      {diffData.diff.map((line: DiffLine, i: number) => (
+                        <div
+                          key={i}
+                          className={`py-0 px-1 ${
+                            line.type === 'added' ? 'bg-emerald-900/30 text-emerald-300' :
+                            line.type === 'removed' ? 'bg-red-900/30 text-red-300' :
+                            'text-zinc-500'
+                          }`}
+                        >
+                          <span className="inline-block w-3 text-right mr-1 opacity-50">
+                            {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                          </span>
+                          {line.content || '\u00A0'}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {activeTab === 'settings' && (

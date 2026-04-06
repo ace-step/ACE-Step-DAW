@@ -74,12 +74,13 @@ export function buildGenerationParamsFromPattern(options: {
   beatsPerBar?: number;
 }): StrudelGenerationParams {
   const beatsPerBar = options.beatsPerBar ?? 4;
-  const rawDuration = (options.bars * beatsPerBar * 60) / options.bpm;
+  const safeBpm = Math.max(1, options.bpm);
+  const rawDuration = (options.bars * beatsPerBar * 60) / safeBpm;
   const lengthSeconds = Math.min(rawDuration, MAX_GENERATION_DURATION_S);
 
   return {
     lengthSeconds,
-    bpm: options.bpm,
+    bpm: safeBpm,
     bars: options.bars,
   };
 }
@@ -110,18 +111,26 @@ export interface GenerateFromPatternOptions {
 export async function generateFromStrudelPattern(
   options: GenerateFromPatternOptions,
 ): Promise<{ clipId: string; trackId: string } | null> {
-  const { evaluateStrudelPatternPure, getPatternInfo } = await import('../engine/strudelEngine');
   const { useProjectStore } = await import('../store/projectStore');
   const { generateFromGenerationPanel } = await import('./generationPipeline');
 
   log.info('Starting generation from Strudel pattern', { trackId: options.trackId, bars: options.bars });
 
-  // 1. Parse and analyze pattern
+  // 1. Parse pattern and extract MIDI data for analysis
+  const { evaluateStrudelPatternPure, getPatternInfo, queryPatternEvents } = await import('../engine/strudelEngine');
+  const { strudelEventsToMidiNotes } = await import('./strudelConversion');
+
   const pattern = await evaluateStrudelPatternPure(options.code);
   if (!pattern) {
     log.warn('Failed to evaluate Strudel pattern');
     return null;
   }
+
+  // Freeze pattern to MIDI notes for structural analysis
+  const beatsPerBar = options.beatsPerBar ?? 4;
+  const events = queryPatternEvents(pattern, 0, options.bars);
+  const midiNotes = strudelEventsToMidiNotes(events, beatsPerBar);
+  log.info('Pattern frozen to MIDI', { noteCount: midiNotes.length, eventCount: events.length });
 
   const patternInfo = getPatternInfo(pattern, options.bars);
   log.info('Pattern analysis', patternInfo);
@@ -149,8 +158,9 @@ export async function generateFromStrudelPattern(
   if (stemsTrack) {
     targetTrackId = stemsTrack.id;
   } else {
-    const newTrack = projectStore.addTrack('custom', 'stems');
-    newTrack.displayName = 'AI from Strudel';
+    const newTrack = projectStore.addTrack('custom', 'stems', {
+      displayName: 'AI from Strudel',
+    });
     targetTrackId = newTrack.id;
   }
 

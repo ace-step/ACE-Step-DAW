@@ -83,7 +83,7 @@ export class StrudelEventLog {
    * Get log entries with optional filtering.
    */
   getEntries(filter?: StrudelLogFilter): StrudelLogEntry[] {
-    let result = this.entries;
+    let result = this.entries.slice();
 
     if (filter?.event) {
       result = result.filter((e) => e.event === filter.event);

@@ -47,6 +47,11 @@ describe('codeDiff', () => {
       expect(diff.filter((l) => l.type === 'added').length).toBe(1);
     });
 
+    it('returns empty diff for both empty strings', () => {
+      const diff = computeLineDiff('', '');
+      expect(diff.length).toBe(0);
+    });
+
     it('handles multiline code', () => {
       const before = `stack(
   s("bd sd"),

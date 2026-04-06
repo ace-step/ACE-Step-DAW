@@ -15,9 +15,13 @@ export interface DiffLine {
  * Compute a line-by-line diff between two code strings.
  * Returns an array of DiffLine entries showing what changed.
  */
+function splitLines(input: string): string[] {
+  return input === '' ? [] : input.split('\n');
+}
+
 export function computeLineDiff(before: string, after: string): DiffLine[] {
-  const beforeLines = before.split('\n');
-  const afterLines = after.split('\n');
+  const beforeLines = splitLines(before);
+  const afterLines = splitLines(after);
 
   // Build LCS table
   const m = beforeLines.length;

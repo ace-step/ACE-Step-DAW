@@ -172,6 +172,32 @@ export interface DAWGlobals {
       added: number;
       removed: number;
     } | null;
+    listTemplates: () => Array<{
+      id: string;
+      genre: string;
+      description: string;
+      code: string;
+      complexity: 'simple' | 'moderate' | 'complex';
+      bpmRange: { min: number; max: number };
+      instruments: string[];
+      agentInstructions: string;
+    }>;
+    getTemplateByGenre: (genre: string) => unknown;
+    getTemplatesByComplexity: (complexity: 'simple' | 'moderate' | 'complex') => unknown[];
+    getTemplatesByBpmRange: (minBpm: number, maxBpm: number) => unknown[];
+    getEventLog: (filter?: {
+      event?: string;
+      level?: 'debug' | 'info' | 'warn' | 'error';
+      since?: number;
+      limit?: number;
+    }) => Array<{
+      timestamp: number;
+      event: string;
+      level: string;
+      data: Record<string, unknown>;
+    }>;
+    clearEventLog: () => void;
+    subscribeToEvents: (callback: (entry: unknown) => void) => () => void;
   };
 }
 

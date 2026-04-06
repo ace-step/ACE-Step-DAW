@@ -17,11 +17,18 @@ describe('Generation Store — Negative Prompt', () => {
     expect(form.negativePrompt).toBe('distortion, noise');
   });
 
-  it('negativePrompt persists across panel toggles (state survives)', () => {
+  it('retains negativePrompt after setting it in the store', () => {
     useGenerationStore.getState().setGenerationNegativePrompt('harsh vocals');
-    // Simulate panel reopen — store state should persist
     const form = useGenerationStore.getState().generationForm;
     expect(form.negativePrompt).toBe('harsh vocals');
+  });
+
+  it('clears requestError when negativePrompt is set', () => {
+    useGenerationStore.setState((s) => ({
+      generationForm: { ...s.generationForm, requestError: 'some error' },
+    }));
+    useGenerationStore.getState().setGenerationNegativePrompt('noise');
+    expect(useGenerationStore.getState().generationForm.requestError).toBeNull();
   });
 
   it('resetGenerationForm clears negativePrompt', () => {

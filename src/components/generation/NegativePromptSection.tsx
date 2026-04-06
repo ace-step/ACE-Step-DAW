@@ -55,6 +55,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="flex w-full items-center gap-1 text-[11px] font-medium uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
         data-testid="negative-prompt-toggle"
       >
@@ -82,6 +83,7 @@ export function NegativePromptSection({ value, onChange, disabled }: NegativePro
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder="Elements to exclude (e.g. distortion, harsh vocals, noise)"
+            aria-label="Negative prompt — elements to exclude from generation"
             data-testid="negative-prompt-input"
             className="h-16 w-full resize-none rounded-md border border-daw-border bg-daw-surface-2 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-daw-accent focus:outline-none disabled:opacity-50"
           />

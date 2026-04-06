@@ -769,6 +769,7 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: {
           ...s.generationForm,
           negativePrompt,
+          requestError: null,
         },
       })),
 

@@ -393,6 +393,7 @@ function TrackLaneInner({ track }: TrackLaneProps) {
           contain: 'content',
           contentVisibility: 'auto',
           containIntrinsicSize: `auto ${rowHeight}px`,
+          willChange: 'transform',
         }}
         onContextMenu={handleContextMenu}
         onDoubleClick={handleDoubleClick}

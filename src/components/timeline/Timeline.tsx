@@ -34,6 +34,7 @@ import {
   TIMELINE_RULER_HEIGHT,
 } from './timelineLayout';
 import { TimelineWindowOverlay } from './TimelineWindowOverlay';
+import { TimelineOverlayCanvas } from './TimelineOverlayCanvas';
 import { useTimelineScroll } from './useTimelineScroll';
 import { useTimelineDragSelection, getTrackVerticalRange } from './useTimelineDragSelection';
 import { ArrangementEmptyTrackHeaderRow, EmptyTrackRow } from './EmptyTrackRows';
@@ -539,39 +540,13 @@ export function Timeline() {
                 selBottom={selVRange ? selVRange.top + selVRange.height : null}
               />
 
-              {/* Live context drag overlay */}
-              {ctxDrag && (
-                <div
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: ctxDrag.left,
-                    width: ctxDrag.width,
-                    top: ctxDrag.top,
-                    height: ctxDrag.height,
-                    background: 'rgba(90, 200, 250, 0.12)',
-                    borderLeft: '1px solid rgba(90, 200, 250, 0.5)',
-                    borderRight: '1px solid rgba(90, 200, 250, 0.5)',
-                    borderTop: '1px solid rgba(90, 200, 250, 0.3)',
-                    borderBottom: '1px solid rgba(90, 200, 250, 0.3)',
-                  }}
-                />
-              )}
-
-              {/* Live select drag overlay — accent-tinted with smooth fill */}
-              {selDrag && (
-                <div
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: selDrag.left,
-                    width: selDrag.width,
-                    top: selDrag.top,
-                    height: selDrag.height,
-                    background: 'rgba(94, 89, 255, 0.10)',
-                    border: '1px solid rgba(94, 89, 255, 0.7)',
-                    borderRadius: 1,
-                  }}
-                />
-              )}
+              {/* Live drag overlays — Canvas for smooth rendering during rapid mouse movement */}
+              <TimelineOverlayCanvas
+                ctxDragRect={ctxDrag}
+                selDragRect={selDrag}
+                scrollLeft={scrollX}
+                scrollTop={scrollY}
+              />
               {arrangementRows.map((row) => (row.kind === 'track' ? (
                 <TrackLane key={row.track.id} track={row.track} />
               ) : (

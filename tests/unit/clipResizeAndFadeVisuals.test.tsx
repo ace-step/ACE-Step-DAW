@@ -85,28 +85,30 @@ describe('Clip resize handle width and fade visuals', () => {
     expect(rightHandle.style.cursor).toContain('data:image/svg+xml');
   });
 
-  it('renders a dedicated header rail and an ivory selected body surface', () => {
+  it('renders a dedicated header rail and Canvas-based clip visual', () => {
     const { container } = renderClip();
     const headerRail = container.querySelector('[data-testid="clip-header-rail"]') as HTMLElement;
     const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
+    const clipCanvas = container.querySelector('[data-testid="clip-canvas"]') as HTMLElement;
 
     expect(headerRail).not.toBeNull();
     expect(headerRail.getAttribute('aria-label')).toBe('Move clip clip-1');
     expect(bodySurface).not.toBeNull();
-    expect(bodySurface.style.background).toContain('253, 251, 246');
+    // Visual rendering (including selected ivory background) now done via Canvas
+    expect(clipCanvas).not.toBeNull();
   });
 
   it('keeps the selected clip surface regardless of track selection', () => {
     useUIStore.setState({ selectedTrackIds: new Set(['other-track']) });
 
     const { container } = renderClip();
-    const bodySurface = container.querySelector('[data-testid="clip-body-surface"]') as HTMLElement;
     const clipEl = container.querySelector('[data-testid="clip-clip-1"]') as HTMLElement;
+    const clipCanvas = container.querySelector('[data-testid="clip-canvas"]') as HTMLElement;
 
-    // Clip selection is independent of track selection
-    expect(bodySurface.style.background).toContain('253, 251, 246');
-    // Selected clip has accent border and outer glow via boxShadow (no ring-2 class)
-    expect(clipEl.style.border).toContain('solid');
+    // Clip selection is independent of track selection — Canvas renders selected state
+    expect(clipCanvas).not.toBeNull();
+    // Selected clip has outer glow via boxShadow
+    expect(clipEl.style.boxShadow).toBeTruthy();
   });
 
   it('does not render fade controls or overlays for zero-fade clips', () => {

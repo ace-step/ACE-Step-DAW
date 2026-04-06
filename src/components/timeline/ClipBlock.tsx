@@ -9,7 +9,7 @@ import { getClipContentOffset } from '../../utils/clipAudio';
 import { getClipPresentation } from './clipPresentation';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { ClipContextMenuContainer } from './ClipContextMenuContainer';
-import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { ClipMidiThumbnail } from './ClipWaveform';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
@@ -23,6 +23,7 @@ import { useClipHover } from './useClipHover';
 import { useWaveformUpgrade } from './useWaveformUpgrade';
 import type { DragGhostInfo } from './useClipDrag';
 import { CURSOR_BRACKET_LEFT, CURSOR_BRACKET_RIGHT } from '../../utils/bracketCursor';
+import { drawClipCanvas } from './ClipCanvasRenderer';
 
 interface ClipBlockProps {
   clip: Clip;
@@ -64,6 +65,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const clipBlockRef = useRef<HTMLDivElement>(null);
+  const clipCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const {
     hoveredResizeEdge,
@@ -134,6 +136,11 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   useWaveformUpgrade(clip.id, clip.generationStatus, clip.isolatedAudioKey, clip.waveformPeaks, clip.audioDuration);
 
+  const peaks = clip.waveformPeaks;
+  const audioDuration = clip.audioDuration ?? clip.duration;
+  const audioOffset = clip.audioOffset ?? 0;
+  const contentOffset = getClipContentOffset(clip);
+
   const left = clip.startTime * pixelsPerSecond;
   const width = clip.duration * pixelsPerSecond;
   const isSelected = isClipSelected;
@@ -144,6 +151,51 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const showFadeOutHandle = fadeOutDuration > 0;
   const clipColor = clip.color ?? track.color;
   const clipPresentation = useMemo(() => getClipPresentation(clipColor, isSelected), [clipColor, isSelected]);
+
+  // Canvas-based clip visual rendering
+  const renderClipCanvas = useCallback(() => {
+    const canvas = clipCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const parent = canvas.parentElement;
+    const w = Math.max(width, 4);
+    const h = parent?.offsetHeight ?? 60;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    ctx.scale(dpr, dpr);
+
+    drawClipCanvas(ctx, {
+      width: w,
+      height: h,
+      headerHeight: HEADER_RAIL_HEIGHT_PX,
+      clipColor,
+      presentation: clipPresentation,
+      isSelected,
+      isMuted: clip.muted ?? false,
+      borderRadius: 3,
+      waveform: peaks ? {
+        peaks,
+        audioDuration,
+        audioOffset,
+        clipDuration: clip.duration,
+        contentOffset,
+        timeStretchRate: clip.timeStretchRate,
+        stretchMode: clip.stretchMode,
+        trackVolume: track.volume,
+        opacity: isSelected ? 0.95 : 0.9,
+      } : undefined,
+    });
+  }, [width, clipColor, clipPresentation, isSelected, clip.muted, clip.duration, clip.timeStretchRate, clip.stretchMode, peaks, audioDuration, audioOffset, contentOffset, track.volume]);
+
+  useEffect(() => {
+    renderClipCanvas();
+  }, [renderClipCanvas]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -216,10 +268,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     stale: 'opacity-50',
   };
 
-  const peaks = clip.waveformPeaks;
-  const audioDuration = clip.audioDuration ?? clip.duration;
-  const audioOffset = clip.audioOffset ?? 0;
-  const contentOffset = getClipContentOffset(clip);
   const selectedActionClipIds = isClipSelected ? [...useUIStore.getState().selectedClipIds] : [clip.id];
   const allTracks = useProjectStore.getState().project?.tracks ?? [];
   const selectedActionClips = selectedActionClipIds
@@ -243,7 +291,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           left,
           width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
-          border: clipPresentation.clipBorder,
           contain: 'layout style paint',
           zIndex: 1,
         }}
@@ -258,30 +305,28 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         onMouseLeave={handleMouseLeaveLocal}
         onContextMenu={handleContextMenu}
         >
-        {/* Header rail */}
+        {/* Canvas background — renders header, body, border, waveform in one paint */}
+        <canvas
+          ref={clipCanvasRef}
+          className="absolute inset-0 rounded-[3px]"
+          data-testid="clip-canvas"
+          style={{ pointerEvents: 'none' }}
+        />
+
+        {/* Header rail — transparent overlay for interaction */}
         <div
           data-clip-header-rail="true"
           data-testid="clip-header-rail"
           aria-label={`Move clip ${clip.id}`}
-          className="absolute left-0 right-0 top-0 z-[6] flex items-center rounded-t-[3px] border-b px-2"
-          style={{
-            height: HEADER_RAIL_HEIGHT_PX,
-            background: clipPresentation.headerBackground,
-            borderBottomColor: hexToRgba(clipColor, 0.38),
-          }}
+          className="absolute left-0 right-0 top-0 z-[6] flex items-center rounded-t-[3px] px-2"
+          style={{ height: HEADER_RAIL_HEIGHT_PX }}
         />
 
-        {/* Body surface */}
+        {/* Body surface — transparent overlay for interaction */}
         <div
           className="absolute left-0 right-0 bottom-0 rounded-b-[3px] overflow-hidden"
           data-testid="clip-body-surface"
-          style={{
-            top: HEADER_RAIL_HEIGHT_PX,
-            background: clipPresentation.bodyBackground,
-            borderTop: `1px solid ${hexToRgba(clipColor, 0.08)}`,
-            borderBottom: `1px solid ${clipPresentation.bodyBorderColor}`,
-            boxShadow: clipPresentation.bodyInnerShadow,
-          }}
+          style={{ top: HEADER_RAIL_HEIGHT_PX }}
         />
 
         {/* Resize handles — accent-colored edge strips visible on hover */}
@@ -307,26 +352,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           <div
             className="absolute top-0 right-0 bottom-0 w-[3px] rounded-r-[3px] opacity-0 group-hover/resize-right:opacity-100 transition-opacity duration-150"
             style={{ backgroundColor: 'var(--color-daw-accent, #5e59ff)' }}
-          />
-        </div>
-
-        {/* Waveform */}
-        <div
-          className="absolute left-0 right-0 bottom-0 overflow-hidden"
-          style={{ top: HEADER_RAIL_HEIGHT_PX }}
-        >
-          <ClipWaveform
-            peaks={peaks}
-            audioDuration={audioDuration}
-            audioOffset={audioOffset}
-            clipDuration={clip.duration}
-            contentOffset={contentOffset}
-            timeStretchRate={clip.timeStretchRate}
-            stretchMode={clip.stretchMode}
-            width={width}
-            color={clipPresentation.waveformColor}
-            opacityClassName={isSelected ? 'opacity-95' : 'opacity-90'}
-            trackVolume={track.volume}
           />
         </div>
 

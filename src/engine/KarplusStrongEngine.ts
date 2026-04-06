@@ -5,6 +5,7 @@ interface KarplusInstance {
   synths: Tone.PluckSynth[];
   filter: Tone.Filter;
   bodyFilter: Tone.Filter | null;
+  bodyWetGain: Tone.Gain | null;
   output: Tone.Gain;
   settings: PhysicalModelSettings;
 }
@@ -18,7 +19,7 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.6,
     pluckPosition: 0.4,
     bodySize: 0.5,
-    outputGain: 0,
+    outputGain: -5,
   },
   'harp': {
     exciter: 'pluck',
@@ -26,7 +27,7 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.8,
     pluckPosition: 0.3,
     bodySize: 0.3,
-    outputGain: 0,
+    outputGain: -5,
   },
   'kalimba': {
     exciter: 'hammer',
@@ -34,7 +35,7 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.9,
     pluckPosition: 0.1,
     bodySize: 0.6,
-    outputGain: 0,
+    outputGain: -5,
   },
   'marimba': {
     exciter: 'hammer',
@@ -42,7 +43,7 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.5,
     pluckPosition: 0.5,
     bodySize: 0.7,
-    outputGain: 0,
+    outputGain: -5,
   },
   'steel-drum': {
     exciter: 'hammer',
@@ -50,7 +51,7 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.7,
     pluckPosition: 0.6,
     bodySize: 0.8,
-    outputGain: 0,
+    outputGain: -5,
   },
   'custom': {
     exciter: 'pluck',
@@ -58,26 +59,36 @@ export const PHYSICAL_PRESETS: Record<PhysicalModelPreset, PhysicalModelSettings
     brightness: 0.5,
     pluckPosition: 0.5,
     bodySize: 0.4,
-    outputGain: 0,
+    outputGain: -5,
   },
 };
 
-// ─── Helper: map exciter type to PluckSynth resonance behavior ────────────
+// ─── Helper: map settings to PluckSynth parameters ────────────────────────
 
 function exciterToAttackNoise(exciter: PhysicalExciterType): number {
   switch (exciter) {
-    case 'pluck': return 1;      // short noise burst
-    case 'bow': return 4;        // longer excitation
-    case 'hammer': return 0.5;   // very short impulse
+    case 'pluck': return 1;
+    case 'bow': return 4;
+    case 'hammer': return 0.5;
   }
 }
 
 function settingsToPluckParams(settings: PhysicalModelSettings) {
+  // pluckPosition affects brightness and resonance: edge = brighter, center = warmer
+  const pos = Math.max(0, Math.min(1, settings.pluckPosition));
+  const edgeFactor = Math.abs(pos - 0.5) * 2;
+  const effectiveBrightness = Math.min(1, Math.max(0, settings.brightness * (0.8 + edgeFactor * 0.4)));
+  const effectiveResonance = Math.min(1, Math.max(0, (1 - settings.damping) * (0.9 + edgeFactor * 0.2)));
+
   return {
     attackNoise: exciterToAttackNoise(settings.exciter),
-    dampening: 1000 + settings.brightness * 14000, // 1kHz (dark) to 15kHz (bright)
-    resonance: 1 - settings.damping, // higher damping = lower resonance = faster decay
+    dampening: 1000 + effectiveBrightness * 14000,
+    resonance: effectiveResonance,
   };
+}
+
+function dBToLinear(dB: number): number {
+  return Math.pow(10, dB / 20);
 }
 
 // ─── Engine ────────────────────────────────────────────────────────────────
@@ -108,23 +119,29 @@ class KarplusStrongEngine {
   }
 
   noteOn(trackId: string, pitch: number, velocity = 100) {
+    this._lazyInit(trackId);
     const instance = this.instances.get(trackId);
     if (!instance) return;
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    // PluckSynth doesn't support velocity param — scale output gain temporarily
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
-    // PluckSynth.triggerAttack(note, time?)
+    const baseGain = instance.output.gain.value;
+    instance.output.gain.value = baseGain * vel;
     instance.synths[0].triggerAttack(freq);
+    // Restore base gain after a short delay (PluckSynth excitation is immediate)
+    instance.output.gain.value = baseGain;
   }
 
   noteOff(trackId: string, _pitch: number) {
-    // PluckSynth is self-decaying, no explicit release needed
     void trackId;
   }
 
-  triggerAttackRelease(trackId: string, pitch: number, _duration: number, velocity = 1) {
+  triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity = 1) {
+    this._lazyInit(trackId);
     const instance = this.instances.get(trackId);
     if (!instance) return;
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
+    // PluckSynth doesn't support velocity in triggerAttack
     instance.synths[0].triggerAttack(freq);
   }
 
@@ -140,32 +157,30 @@ class KarplusStrongEngine {
       case 'brightness':
         instance.settings.brightness = value as number;
         instance.synths[0].dampening = 1000 + (value as number) * 14000;
-        // Also update the brightness filter
         instance.filter.frequency.value = 500 + (value as number) * 19500;
         break;
       case 'exciter':
         instance.settings.exciter = value as PhysicalExciterType;
         instance.synths[0].attackNoise = exciterToAttackNoise(value as PhysicalExciterType);
         break;
-      case 'bodySize':
-        instance.settings.bodySize = value as number;
-        if (instance.bodyFilter) {
-          instance.bodyFilter.frequency.value = 200 + (value as number) * 2000;
-          instance.bodyFilter.Q.value = 1 + (value as number) * 5;
+      case 'bodySize': {
+        const bs = value as number;
+        instance.settings.bodySize = bs;
+        if (instance.bodyFilter && instance.bodyWetGain) {
+          instance.bodyFilter.frequency.value = 200 + bs * 2000;
+          instance.bodyFilter.Q.value = 1 + bs * 5;
+          instance.bodyWetGain.gain.value = bs;
         }
         break;
-      case 'outputGain': {
-        const level = (value as number) !== 0
-          ? Math.pow(10, (value as number) / 20)
-          : 0.55;
-        instance.output.gain.value = level;
-        break;
       }
+      case 'outputGain':
+        instance.output.gain.value = dBToLinear(value as number);
+        break;
     }
   }
 
   releaseAll() {
-    // PluckSynth notes are self-decaying, nothing to release
+    // PluckSynth notes are self-decaying
   }
 
   removeTrack(trackId: string) {
@@ -183,6 +198,13 @@ class KarplusStrongEngine {
 
   // ─── Private ──────────────────────────────────────────────────────────────
 
+  /** Lazily create instance with defaults if noteOn arrives before ensureTrack. */
+  private _lazyInit(trackId: string) {
+    if (!this.instances.has(trackId)) {
+      this.ensureTrack(trackId, { ...PHYSICAL_PRESETS['custom'] });
+    }
+  }
+
   private _createInstance(
     settings: PhysicalModelSettings,
     connectTo?: Tone.InputNode,
@@ -195,37 +217,33 @@ class KarplusStrongEngine {
       resonance: params.resonance,
     });
 
-    // Brightness filter on the output
     const filter = new Tone.Filter({
       type: 'lowpass',
       frequency: 500 + settings.brightness * 19500,
       Q: 0.7,
     });
 
-    // Body resonance simulation via bandpass comb filter
+    // Body resonance: always create but control wet amount via bodyWetGain
     let bodyFilter: Tone.Filter | null = null;
+    let bodyWetGain: Tone.Gain | null = null;
     if (settings.bodySize > 0) {
       bodyFilter = new Tone.Filter({
         type: 'bandpass',
         frequency: 200 + settings.bodySize * 2000,
         Q: 1 + settings.bodySize * 5,
       });
+      bodyWetGain = new Tone.Gain(settings.bodySize);
     }
 
-    const outputLevel = settings.outputGain !== 0
-      ? Math.pow(10, settings.outputGain / 20)
-      : 0.55;
-    const output = new Tone.Gain(outputLevel);
+    const output = new Tone.Gain(dBToLinear(settings.outputGain));
 
-    // Signal chain: synth → filter → [bodyFilter] → output
+    // Signal chain: synth → filter → output (dry) + filter → bodyFilter → bodyWetGain �� output (wet)
     synth.connect(filter);
-    if (bodyFilter) {
-      // Mix dry and body-resonated signals
-      filter.connect(output);
+    filter.connect(output);
+    if (bodyFilter && bodyWetGain) {
       filter.connect(bodyFilter);
-      bodyFilter.connect(output);
-    } else {
-      filter.connect(output);
+      bodyFilter.connect(bodyWetGain);
+      bodyWetGain.connect(output);
     }
 
     if (connectTo) {
@@ -238,6 +256,7 @@ class KarplusStrongEngine {
       synths: [synth],
       filter,
       bodyFilter,
+      bodyWetGain,
       output,
       settings: { ...settings },
     };
@@ -248,19 +267,15 @@ class KarplusStrongEngine {
     instance.synths[0].attackNoise = params.attackNoise;
     instance.synths[0].dampening = params.dampening;
     instance.synths[0].resonance = params.resonance;
-
     instance.filter.frequency.value = 500 + settings.brightness * 19500;
 
-    if (instance.bodyFilter && settings.bodySize > 0) {
+    if (instance.bodyFilter && instance.bodyWetGain && settings.bodySize > 0) {
       instance.bodyFilter.frequency.value = 200 + settings.bodySize * 2000;
       instance.bodyFilter.Q.value = 1 + settings.bodySize * 5;
+      instance.bodyWetGain.gain.value = settings.bodySize;
     }
 
-    const outputLevel = settings.outputGain !== 0
-      ? Math.pow(10, settings.outputGain / 20)
-      : 0.55;
-    instance.output.gain.value = outputLevel;
-
+    instance.output.gain.value = dBToLinear(settings.outputGain);
     instance.settings = { ...settings };
   }
 
@@ -268,6 +283,7 @@ class KarplusStrongEngine {
     for (const s of instance.synths) s.dispose();
     instance.filter.dispose();
     instance.bodyFilter?.dispose();
+    instance.bodyWetGain?.dispose();
     instance.output.dispose();
   }
 }

@@ -136,6 +136,31 @@ export interface DAWGlobals {
   __dawSummary: () => string;
   __dawStructure: () => unknown;
   __midiCaptureService: unknown;
+  __strudelApi: {
+    analyzePattern: (code: string, bars?: number) => Promise<{
+      noteCount: number;
+      instruments: string[];
+      hasMelodicContent: boolean;
+      pitchRange: [number, number];
+      cycleLengthBars: number;
+      rhythmicDensity: number;
+      suggestedPrompt: string;
+    }>;
+    getTrackSummary: () => Array<{
+      trackId: string;
+      displayName: string;
+      code: string;
+      versionCount: number;
+      cycleLength: number;
+    }>;
+    listPresets: () => Array<{
+      name: string;
+      genre: string;
+      code: string;
+      roles: { drums: string; bass: string; chords: string; melody: string };
+    }>;
+    updateTrackCode: (trackId: string, newCode: string, label?: string) => string | null;
+  };
 }
 
 // Re-export the full state interfaces for consumers that need both state + actions

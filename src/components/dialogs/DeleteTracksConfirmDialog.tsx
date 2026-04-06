@@ -16,7 +16,11 @@ export function DeleteTracksConfirmDialog() {
   useEffect(() => {
     if (!pendingIds || pendingIds.length === 0) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cancel();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        cancel();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

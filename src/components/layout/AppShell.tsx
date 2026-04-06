@@ -168,11 +168,11 @@ function EditorShell() {
           }
         }}
       >
-        <div id="timeline-region" tabIndex={-1} aria-label="Timeline" className="flex flex-1 min-h-0 min-w-0 outline-none">
+        <section id="timeline-region" tabIndex={-1} aria-label="Timeline" className="flex flex-1 min-h-0 min-w-0 outline-none">
           <ErrorBoundary name="Timeline">
             {mainView === 'arrangement' ? <Timeline /> : <Suspense fallback={null}><SessionView /></Suspense>}
           </ErrorBoundary>
-        </div>
+        </section>
         {project && <LoopBrowser />}
       </main>
 

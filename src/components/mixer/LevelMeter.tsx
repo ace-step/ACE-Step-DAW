@@ -188,8 +188,8 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
   const clipResetLabel = masterStage
     ? `Reset clip indicator for master ${masterStage}`
     : returnTrackId
-      ? `Reset clip indicator for return ${returnTrackId}`
-      : `Reset clip indicator for ${trackId}`;
+      ? 'Reset clip indicator for return track'
+      : 'Reset clip indicator for track';
 
   const resetClip = () => {
     const engine = getAudioEngine();
@@ -230,7 +230,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={ariaLabel ?? (masterStage ? `Master ${masterStage} level meter` : returnTrackId ? `Return ${returnTrackId} level meter` : trackId ? `Track ${trackId} level meter` : 'Audio level meter')}
+        aria-label={ariaLabel ?? (masterStage ? `Master ${masterStage} level meter` : returnTrackId ? 'Return track level meter' : trackId ? 'Track level meter' : 'Audio level meter')}
         data-testid="meter-canvas"
         className="absolute inset-y-0 rounded-sm"
         style={{ width: totalBarWidth, height: '100%', left: meterLeft }}

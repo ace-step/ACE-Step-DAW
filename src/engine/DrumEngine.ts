@@ -623,6 +623,9 @@ class DrumEngine {
     }
   }
 
+  /** Trigger a drum pad. Pad effect params (volume, tune, filter, etc.) must be
+   * synced beforehand via syncTrackPadParams or ensureAndSyncPadParams.
+   * UI components (DrumMachineEditor, BeatPad) handle this automatically. */
   async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {
     await this.ensureTrack(trackId, kit);
     const voices = this.voices.get(trackId);

@@ -7306,15 +7306,18 @@ export const useProjectStore = create<ProjectState>()(
               pads: t.drumMachine.pads.map((p, i) => {
                 if (i !== padIndex) return p;
                 const merged = { ...p.filter, ...filterUpdate };
+                // Validate filter type against allowed values
+                const validTypes = new Set<string>(['off', 'lowpass', 'highpass']);
+                const safeType = validTypes.has(merged.type) ? merged.type : p.filter.type;
                 // Auto-adjust cutoff when filter type changes to avoid inaudible defaults
                 let cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
-                if (filterUpdate.type && filterUpdate.type !== p.filter.type && !filterUpdate.cutoff) {
-                  cutoffSource = filterUpdate.type === 'highpass' ? 200 : 20000;
+                if (filterUpdate.type && safeType !== p.filter.type && !filterUpdate.cutoff) {
+                  cutoffSource = safeType === 'highpass' ? 200 : 20000;
                 }
                 return {
                   ...p,
                   filter: {
-                    type: merged.type,
+                    type: safeType as 'off' | 'lowpass' | 'highpass',
                     cutoff: Math.max(20, Math.min(20000, cutoffSource)),
                   },
                 };

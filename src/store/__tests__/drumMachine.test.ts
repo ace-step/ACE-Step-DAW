@@ -225,7 +225,7 @@ describe('drumMachine store actions', () => {
     });
   });
 
-  describe('setDrumPadSendAmounts', () => {
+  describe('setDrumPadSend', () => {
     it('sets pad reverb send', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
       useProjectStore.getState().setDrumPadSend(track.id, 0, { reverb: 0.4 });

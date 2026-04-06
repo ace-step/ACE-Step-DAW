@@ -86,38 +86,47 @@ function mergeClipRegions(project: Project): TimeRegion[] {
 /**
  * Classify a section based on its position, duration, and context.
  */
-function classifySection(
-  region: TimeRegion,
-  index: number,
-  totalRegions: number,
-  avgDuration: number,
-): { type: SectionType; confidence: number } {
-  const duration = region.endTime - region.startTime;
-  const isFirst = index === 0;
-  const isLast = index === totalRegions - 1;
-  const isShort = duration < avgDuration * 0.75;
+/**
+ * Classify sections for an array of regions.
+ * Two-pass: first detect intro/outro, then alternate verse/chorus for the body.
+ */
+function classifySections(regions: TimeRegion[]): { type: SectionType; confidence: number }[] {
+  if (regions.length === 0) return [];
+  if (regions.length === 1) return [{ type: 'verse', confidence: 0.5 }];
 
-  // Intro: first section and notably shorter than average
-  if (isFirst && isShort && totalRegions > 1) {
-    return { type: 'intro', confidence: 0.8 };
+  const avgDuration = regions.reduce((sum, r) => sum + (r.endTime - r.startTime), 0) / regions.length;
+  const results: { type: SectionType; confidence: number }[] = new Array(regions.length);
+
+  // Detect intro (first, short) and outro (last, short)
+  const firstDur = regions[0].endTime - regions[0].startTime;
+  const lastDur = regions[regions.length - 1].endTime - regions[regions.length - 1].startTime;
+  const hasIntro = firstDur < avgDuration * 0.75;
+  const hasOutro = regions.length > 1 && lastDur < avgDuration * 0.75;
+
+  let bodyStart = 0;
+  let bodyEnd = regions.length;
+
+  if (hasIntro) {
+    results[0] = { type: 'intro', confidence: 0.8 };
+    bodyStart = 1;
+  }
+  if (hasOutro) {
+    results[regions.length - 1] = { type: 'outro', confidence: 0.8 };
+    bodyEnd = regions.length - 1;
   }
 
-  // Outro: last section and notably shorter than average
-  if (isLast && isShort && totalRegions > 1) {
-    return { type: 'outro', confidence: 0.8 };
+  // Alternate verse/chorus for body sections
+  let bodyIdx = 0;
+  for (let i = bodyStart; i < bodyEnd; i++) {
+    if (!results[i]) {
+      results[i] = bodyIdx % 2 === 0
+        ? { type: 'verse', confidence: 0.6 }
+        : { type: 'chorus', confidence: 0.6 };
+      bodyIdx++;
+    }
   }
 
-  // For a single section, default to verse
-  if (totalRegions <= 1) {
-    return { type: 'verse', confidence: 0.5 };
-  }
-
-  // For remaining sections, alternate verse/chorus starting from the first full-length section
-  const bodyIndex = isFirst ? 0 : (index - (totalRegions > 2 ? 1 : 0));
-  if (bodyIndex % 2 === 0) {
-    return { type: 'verse', confidence: 0.6 };
-  }
-  return { type: 'chorus', confidence: 0.6 };
+  return results;
 }
 
 /**
@@ -144,32 +153,37 @@ function splitRegionByClipDurations(region: TimeRegion, project: Project): TimeR
 
   if (clipsInRegion.length <= 1) return [region];
 
-  // Group clips into segments where consecutive clips on the same track
-  // have significantly different durations (ratio > 2x)
-  const sortedClips = clipsInRegion.sort((a, b) => a.start - b.start);
+  // Group clips by track, then find split points where consecutive clips
+  // on the same track have significantly different durations (ratio > 2x)
+  const clipsByTrack = new Map<string, typeof clipsInRegion>();
+  for (const clip of clipsInRegion) {
+    const arr = clipsByTrack.get(clip.trackId);
+    if (arr) arr.push(clip);
+    else clipsByTrack.set(clip.trackId, [clip]);
+  }
 
-  // Find split points: boundaries where the clip duration changes significantly
-  const splitPoints: number[] = [region.startTime];
-  for (let i = 1; i < sortedClips.length; i++) {
-    const prev = sortedClips[i - 1];
-    const curr = sortedClips[i];
-    // Only split if same track and duration ratio > 2x
-    if (prev.trackId === curr.trackId) {
+  const splitPoints = new Set<number>([region.startTime, region.endTime]);
+  for (const trackClips of clipsByTrack.values()) {
+    trackClips.sort((a, b) => a.start - b.start);
+    for (let i = 1; i < trackClips.length; i++) {
+      const prev = trackClips[i - 1];
+      const curr = trackClips[i];
       const ratio = Math.max(prev.duration, curr.duration) / Math.min(prev.duration, curr.duration);
       if (ratio >= 2) {
-        splitPoints.push(curr.start);
+        splitPoints.add(curr.start);
       }
     }
   }
-  splitPoints.push(region.endTime);
 
-  if (splitPoints.length <= 2) return [region];
+  const orderedSplitPoints = [...splitPoints].sort((a, b) => a - b);
+
+  if (orderedSplitPoints.length <= 2) return [region];
 
   // Create sub-regions from split points
   const subRegions: TimeRegion[] = [];
-  for (let i = 0; i < splitPoints.length - 1; i++) {
-    const start = splitPoints[i];
-    const end = splitPoints[i + 1];
+  for (let i = 0; i < orderedSplitPoints.length - 1; i++) {
+    const start = orderedSplitPoints[i];
+    const end = orderedSplitPoints[i + 1];
     const trackIds = new Set<string>();
     for (const clip of clipsInRegion) {
       if (clip.start >= start && clip.start < end) {
@@ -235,11 +249,10 @@ export function detectSections(project: Project): ArrangementSection[] {
     finalRegions = regions;
   }
 
-  const avgDuration =
-    finalRegions.reduce((sum, r) => sum + (r.endTime - r.startTime), 0) / finalRegions.length;
+  const classifications = classifySections(finalRegions);
 
   return finalRegions.map((region, index) => {
-    const { type, confidence } = classifySection(region, index, finalRegions.length, avgDuration);
+    const { type, confidence } = classifications[index];
     return {
       id: uuidv4(),
       type,

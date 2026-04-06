@@ -80,8 +80,12 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
       });
     } catch (err) {
       set({
+        sections: [],
+        suggestions: [],
+        projectMeta: null,
         error: err instanceof Error ? err.message : 'Analysis failed',
         isAnalyzing: false,
+        lastAnalyzedProjectId: null,
       });
     }
   },

@@ -219,6 +219,8 @@ export interface UIState {
   theme: ThemeId;
   /** High-contrast mode for improved visibility (WCAG AAA 7:1 ratio) */
   highContrastMode: boolean;
+  /** Color-blind mode — adds patterns/shapes to color-only indicators */
+  colorBlindMode: boolean;
 
   // Inline AI regeneration & suggestions
   regionRegenerateTarget: { startTime: number; endTime: number; trackIds: string[] } | null;
@@ -429,6 +431,7 @@ export interface UIState {
   // Theme
   setTheme: (theme: ThemeId) => void;
   setHighContrastMode: (enabled: boolean) => void;
+  setColorBlindMode: (enabled: boolean) => void;
 
   // Inline AI regeneration & suggestions
   setRegionRegenerateTarget: (v: { startTime: number; endTime: number; trackIds: string[] } | null) => void;
@@ -710,6 +713,7 @@ export const useUIStore = create<UIState>()(
 
   theme: 'ableton',
   highContrastMode: false,
+  colorBlindMode: false,
 
   regionRegenerateTarget: null,
   inlineSuggestions: [],
@@ -857,6 +861,7 @@ export const useUIStore = create<UIState>()(
   setDspBackend: (mode) => set({ dspBackend: mode }),
   setTheme: (theme) => set({ theme }),
   setHighContrastMode: (enabled) => set({ highContrastMode: enabled }),
+  setColorBlindMode: (enabled) => set({ colorBlindMode: enabled }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
   closeBounceInPlaceDialog: () => set({ bounceInPlaceTrackId: null }),

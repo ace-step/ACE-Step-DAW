@@ -356,6 +356,8 @@ export const TrackHeader = React.memo(function TrackHeader({
           backgroundColor: isArmed ? '#ef4444' : track.soloed ? '#10b981' : track.color,
           '--track-color': track.color,
         } as React.CSSProperties}
+        data-track-armed={isArmed ? 'true' : undefined}
+        data-track-soloed={!isArmed && track.soloed ? 'true' : undefined}
         title="Click to change track color"
         onClick={(e) => {
           e.stopPropagation();
@@ -525,6 +527,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                 }`}
                 title="Mute (M)"
                 aria-label={`Mute ${track.displayName}`}
+                aria-pressed={track.muted}
               >M</button>
               <button
                 onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
@@ -535,6 +538,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                 }`}
                 title="Solo (S)"
                 aria-label={`Solo ${track.displayName}`}
+                aria-pressed={track.soloed}
               >S</button>
               {!track.isGroup && (
                 <button
@@ -561,6 +565,7 @@ export const TrackHeader = React.memo(function TrackHeader({
                   style={isArmed ? { animation: 'record-arm-pulse 1.5s ease-in-out infinite' } : undefined}
                   title="Record Arm"
                   aria-label={`Record arm ${track.displayName}`}
+                  aria-pressed={isArmed}
                 >
                   <div className={`w-[8px] h-[8px] rounded-full ${isArmed ? 'bg-white' : 'bg-zinc-500'}`} />
                 </button>
@@ -628,6 +633,7 @@ export const TrackHeader = React.memo(function TrackHeader({
               }`}
               title="Mute (M)"
               aria-label={`Mute ${track.displayName}`}
+              aria-pressed={track.muted}
             >M</button>
             <button
               onClick={() => track.isGroup ? setGroupSoloed(track.id, !track.soloed) : updateTrack(track.id, { soloed: !track.soloed })}
@@ -638,6 +644,7 @@ export const TrackHeader = React.memo(function TrackHeader({
               }`}
               title="Solo (S)"
               aria-label={`Solo ${track.displayName}`}
+              aria-pressed={track.soloed}
             >S</button>
             <div className="flex-1 min-w-[40px]">
               <FaderMeter

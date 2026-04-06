@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
+import { useAriaValueAnnounce } from '../../hooks/useAriaAnnounce';
 
 interface DualRangeSliderProps {
   min: number;
@@ -29,6 +30,8 @@ export function DualRangeSlider({
 }: DualRangeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [editingHandle, setEditingHandle] = useState<'start' | 'end' | null>(null);
+  const announceStart = useAriaValueAnnounce('Range start');
+  const announceEnd = useAriaValueAnnounce('Range end');
 
   const clamp = (v: number, lo: number, hi: number) => clampValue(v, lo, hi);
   const round = (v: number) => Math.round(v / step) * step;
@@ -110,7 +113,7 @@ export function DualRangeSlider({
             else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(round(startValue + step), min, endValue - minSpan);
             else if (e.key === 'Home') next = min;
             else if (e.key === 'End') next = clamp(endValue - minSpan, min, max);
-            if (next !== null) { e.preventDefault(); onChange(next, endValue); }
+            if (next !== null) { e.preventDefault(); onChange(next, endValue); announceStart(fmt(next)); }
           }}
           role="slider"
           tabIndex={0}
@@ -137,7 +140,7 @@ export function DualRangeSlider({
             else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = clamp(round(endValue + step), startValue + minSpan, max);
             else if (e.key === 'Home') next = clamp(startValue + minSpan, min, max);
             else if (e.key === 'End') next = max;
-            if (next !== null) { e.preventDefault(); onChange(startValue, next); }
+            if (next !== null) { e.preventDefault(); onChange(startValue, next); announceEnd(fmt(next)); }
           }}
           role="slider"
           tabIndex={0}

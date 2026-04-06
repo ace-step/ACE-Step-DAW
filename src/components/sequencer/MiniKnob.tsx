@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState } from 'react';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { PrecisionInput, clampValue } from '../ui/PrecisionInput';
+import { useAriaValueAnnounce } from '../../hooks/useAriaAnnounce';
 
 function formatMiniKnobValue(value: number, min: number, max: number, bipolar: boolean): string {
   if (bipolar) {
@@ -37,6 +38,7 @@ export function MiniKnob({
   const dragRef = useRef<{ startY: number; startVal: number } | null>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const [showPrecisionInput, setShowPrecisionInput] = useState(false);
+  const announceValue = useAriaValueAnnounce(label);
 
   const norm = (value - min) / (max - min);
   const r = size / 2;
@@ -146,28 +148,34 @@ export function MiniKnob({
       const fineStep = range / 1000;
       const s = e.altKey ? fineStep : coarseStep;
 
+      let newVal: number | undefined;
       switch (e.key) {
         case 'ArrowUp':
         case 'ArrowRight':
           e.preventDefault();
-          onChange(clampValue(value + s, min, max));
+          newVal = clampValue(value + s, min, max);
+          onChange(newVal);
           break;
         case 'ArrowDown':
         case 'ArrowLeft':
           e.preventDefault();
-          onChange(clampValue(value - s, min, max));
+          newVal = clampValue(value - s, min, max);
+          onChange(newVal);
           break;
         case 'Home':
           e.preventDefault();
-          onChange(min);
+          newVal = min;
+          onChange(newVal);
           break;
         case 'End':
           e.preventDefault();
-          onChange(max);
+          newVal = max;
+          onChange(newVal);
           break;
       }
+      if (newVal !== undefined) announceValue(formatMiniKnobValue(newVal, min, max, bipolar));
     },
-    [value, min, max, onChange],
+    [value, min, max, onChange, announceValue, bipolar],
   );
 
   const displayVal = bipolar

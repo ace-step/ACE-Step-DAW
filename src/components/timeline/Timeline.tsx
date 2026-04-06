@@ -320,7 +320,7 @@ export function Timeline() {
   const arrangementSurfaceWidth = trackListWidth + Math.max(totalWidth, viewportWidth);
 
   return (
-    <>
+    <section id="timeline-region" tabIndex={-1} aria-label="Timeline" className="contents">
       <Minimap />
       <div
         ref={mergedScrollRef}
@@ -620,6 +620,6 @@ export function Timeline() {
           />
         )
       )}
-    </>
+    </section>
   );
 }

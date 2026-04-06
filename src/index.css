@@ -489,6 +489,75 @@ select:focus-visible,
   color: #d4d4d4;
 }
 
+[data-high-contrast="true"] .text-zinc-500 {
+  color: #bbb;
+}
+
+/* ── Default Theme Text Contrast Fix (WCAG AA 4.5:1) ── */
+/* zinc-500 (#71717a) on dark bg (~#1c1d22) is only ~3.4:1, bump to meet AA */
+.text-zinc-500 {
+  color: #8b8b97;
+}
+
+/* ── Color-Blind Friendly Mode ── */
+/* Adds patterns, borders, and shapes to color-only indicators */
+[data-color-blind="true"] [aria-label*="Mute"][aria-pressed="true"],
+[data-color-blind="true"] [title="Mute (M)"].bg-red-500 {
+  outline: 2px solid #fff;
+  outline-offset: -1px;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.25) 2px,
+    rgba(255, 255, 255, 0.25) 4px
+  ) !important;
+}
+
+[data-color-blind="true"] [aria-label*="Solo"][aria-pressed="true"],
+[data-color-blind="true"] [title="Solo (S)"].bg-amber-400 {
+  outline: 2px dashed #000;
+  outline-offset: -1px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.2) 2px,
+    rgba(0, 0, 0, 0.2) 4px
+  ) !important;
+}
+
+[data-color-blind="true"] [aria-label*="Record arm"].bg-red-500 {
+  outline: 2px dotted #fff;
+  outline-offset: -1px;
+}
+
+/* Track color strip: add hash pattern when armed/soloed */
+[data-color-blind="true"] [data-track-armed="true"] {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.3) 2px,
+    rgba(255, 255, 255, 0.3) 4px
+  ) !important;
+}
+
+[data-color-blind="true"] [data-track-soloed="true"] {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.3) 2px,
+    rgba(255, 255, 255, 0.3) 4px
+  ) !important;
+}
+
+/* Meter bars: add tick marks for color-blind users */
+[data-color-blind="true"] [data-testid="level-meter"] {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 /* ── Screen reader only utility ── */
 .sr-only {
   position: absolute;

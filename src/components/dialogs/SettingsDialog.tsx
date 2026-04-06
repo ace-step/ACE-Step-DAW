@@ -69,6 +69,8 @@ export function SettingsDialog() {
   const setShow = useUIStore((s) => s.setShowSettingsDialog);
   const highContrastMode = useUIStore((s) => s.highContrastMode);
   const setHighContrastMode = useUIStore((s) => s.setHighContrastMode);
+  const colorBlindMode = useUIStore((s) => s.colorBlindMode);
+  const setColorBlindMode = useUIStore((s) => s.setColorBlindMode);
   const project = useProjectStore((s) => s.project);
 
   const [bpm, setBpm] = useState(120);
@@ -342,6 +344,16 @@ export function SettingsDialog() {
             />
             <span className="text-xs text-zinc-300">High contrast mode</span>
             <span className="text-[10px] text-zinc-500 ml-1">(WCAG AAA 7:1 ratio)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={colorBlindMode}
+              onChange={(e) => setColorBlindMode(e.target.checked)}
+              className="w-4 h-4 accent-daw-accent rounded"
+            />
+            <span className="text-xs text-zinc-300">Color-blind friendly mode</span>
+            <span className="text-[10px] text-zinc-500 ml-1">(patterns + shapes for color indicators)</span>
           </label>
 
           <div className="border-t border-daw-border my-3" />

@@ -5,6 +5,7 @@ import {
   freqToX,
   dbToY,
 } from '../../utils/loudnessMetering';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const MIN_FREQ = 20;
 const MAX_FREQ = 20000;
@@ -62,8 +63,10 @@ export function SpectrumAnalyzer({
   smoothing = 'medium',
   showPeaks = true,
 }: SpectrumAnalyzerProps) {
+  const reducedMotion = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
+  const lastDrawRef = useRef<number>(0);
   const smoothedLufsRef = useRef<number>(-Infinity);
   const lufsDisplayRef = useRef<HTMLSpanElement>(null);
   // Smoothed spectrum data (persists between frames)
@@ -73,6 +76,16 @@ export function SpectrumAnalyzer({
   const peakHoldRef = useRef<Int32Array | null>(null);
 
   const draw = useCallback(() => {
+    // Throttle to ~5fps when reduced motion is active
+    if (reducedMotion) {
+      const now = performance.now();
+      if (now - lastDrawRef.current < 200) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawRef.current = now;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -261,7 +274,7 @@ export function SpectrumAnalyzer({
     }
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [width, height, smoothing, showPeaks]);
+  }, [width, height, smoothing, showPeaks, reducedMotion]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);

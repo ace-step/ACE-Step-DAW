@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { METER_CANVAS_STOPS, METER_DB_TICKS, METER_DB_TICKS_MINOR, METER_PADDING_PCT, dbToFill, levelToFill } from '../meter-colors';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const BAR_WIDTH = 4;
 const BAR_GAP = 1;
@@ -36,7 +37,9 @@ function fillToTopPct(fill: number): number {
 }
 
 export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showScale, 'aria-label': ariaLabel }: LevelMeterProps) {
+  const reducedMotion = useReducedMotion();
   const rafRef = useRef<number>(0);
+  const lastTickRef = useRef<number>(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const leftBar = useRef<BarState>({ level: 0, peakLevel: 0, peakHoldFrames: 0 });
   const rightBar = useRef<BarState>({ level: 0, peakLevel: 0, peakHoldFrames: 0 });
@@ -81,6 +84,15 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
     const engine = getAudioEngine();
 
     const tick = () => {
+      // Throttle to ~5fps when reduced motion is active
+      if (reducedMotion) {
+        const now = performance.now();
+        if (now - lastTickRef.current < 200) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        lastTickRef.current = now;
+      }
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       const w = Math.round(rect.width * dpr);
@@ -170,7 +182,7 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [trackId, masterStage, returnTrackId, isStereo, updateBar]);
+  }, [trackId, masterStage, returnTrackId, isStereo, updateBar, reducedMotion]);
 
 
   const clipResetLabel = masterStage

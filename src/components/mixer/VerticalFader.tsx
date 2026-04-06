@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { levelToFill, fillToLevel, METER_PADDING_PCT } from '../meter-colors';
+import { useAriaValueAnnounce } from '../../hooks/useAriaAnnounce';
 
 interface VerticalFaderProps {
   value: number;
@@ -29,6 +30,7 @@ export function VerticalFader({
 }: VerticalFaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const announceValue = useAriaValueAnnounce(ariaLabel);
 
   const getValueFromY = useCallback(
     (clientY: number) => {
@@ -103,9 +105,10 @@ export function VerticalFader({
         e.preventDefault();
         e.stopPropagation();
         onChange(next);
+        announceValue(next.toFixed(1));
       }
     },
-    [value, min, max, onChange],
+    [value, min, max, onChange, announceValue],
   );
 
   // Arrow position with padding (matches LevelMeter's fillToTopPct)

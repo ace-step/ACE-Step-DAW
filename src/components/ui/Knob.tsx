@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { useSmoothedValue } from '../../hooks/useSmoothedValue';
+import { useAriaValueAnnounce } from '../../hooks/useAriaAnnounce';
 
 interface KnobProps {
   value: number;
@@ -74,6 +75,7 @@ export function Knob({
 
   const clamp = (v: number) => clampValue(v, min, max);
   const applyStep = useCallback((nextValue: number) => clamp(roundToStep(nextValue, step)), [clamp, step]);
+  const announceValue = useAriaValueAnnounce(label);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (disabled) return;
@@ -138,34 +140,46 @@ export function Knob({
     onChange(applyStep(value + delta));
   }, [value, min, max, onChange, disabled, applyStep]);
 
+  const formatForAnnounce = useCallback((v: number) => {
+    if (formatValue) return formatValue(v);
+    const display = step !== undefined && step >= 1 ? Math.round(v).toString() : v.toFixed(1);
+    return unit ? `${display}${unit}` : display;
+  }, [formatValue, step, unit]);
+
   const onKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (disabled) return;
     const range = max - min;
     const coarseStep = step ?? range / 100;
     const fineStep = step ? step : range / 1000;
     const s = e.altKey ? fineStep : coarseStep;
+    let newVal: number | undefined;
 
     switch (e.key) {
       case 'ArrowUp':
       case 'ArrowRight':
         e.preventDefault();
-        onChange(applyStep(value + s));
+        newVal = applyStep(value + s);
+        onChange(newVal);
         break;
       case 'ArrowDown':
       case 'ArrowLeft':
         e.preventDefault();
-        onChange(applyStep(value - s));
+        newVal = applyStep(value - s);
+        onChange(newVal);
         break;
       case 'Home':
         e.preventDefault();
-        onChange(min);
+        newVal = min;
+        onChange(newVal);
         break;
       case 'End':
         e.preventDefault();
-        onChange(max);
+        newVal = max;
+        onChange(newVal);
         break;
     }
-  }, [value, min, max, step, onChange, disabled, applyStep]);
+    if (newVal !== undefined) announceValue(formatForAnnounce(newVal));
+  }, [value, min, max, step, onChange, disabled, applyStep, announceValue, formatForAnnounce]);
 
   const wheelRef = useNonPassiveWheel(onWheelHandler);
   const mergedKnobRef = useCallback((el: HTMLDivElement | null) => {

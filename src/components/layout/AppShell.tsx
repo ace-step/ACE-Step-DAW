@@ -135,13 +135,27 @@ function EditorShell() {
       aria-label="ACE-Step DAW"
       tabIndex={-1}
     >
-      {/* Skip navigation link — visible only on focus (WCAG 2.4.1) */}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:rounded focus:bg-daw-accent focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
-      >
-        Skip to main content
-      </a>
+      {/* Skip navigation links — visible only on focus (WCAG 2.4.1) */}
+      <nav aria-label="Skip navigation" className="contents">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:rounded focus:bg-daw-accent focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
+        >
+          Skip to main content
+        </a>
+        <a
+          href="#timeline-region"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-36 focus:z-[9999] focus:rounded focus:bg-daw-accent focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
+        >
+          Skip to timeline
+        </a>
+        <a
+          href="#mixer-region"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-72 focus:z-[9999] focus:rounded focus:bg-daw-accent focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg focus:outline-none"
+        >
+          Skip to mixer
+        </a>
+      </nav>
       <Toolbar />
 
       <main

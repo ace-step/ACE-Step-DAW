@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
+import { useAriaValueAnnounce } from '../../hooks/useAriaAnnounce';
 
 interface HSliderProps {
   value: number;
@@ -21,6 +22,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
   const [showPrecisionInput, setShowPrecisionInput] = useState(false);
   const clamp = useCallback((nextValue: number) => clampValue(nextValue, min, max), [min, max]);
   const step = (max - min) / 100;
+  const announceValue = useAriaValueAnnounce(label);
 
   // Store active listeners in a ref so cleanup can remove them on unmount
   const listenersRef = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
@@ -113,7 +115,11 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
           else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = clamp(value - step);
           else if (e.key === 'Home') next = min;
           else if (e.key === 'End') next = max;
-          if (next !== null) { e.preventDefault(); onChange(next); }
+          if (next !== null) {
+            e.preventDefault();
+            onChange(next);
+            announceValue(displayValue ?? next.toFixed(1));
+          }
         }}
       >
         {/* Track background */}

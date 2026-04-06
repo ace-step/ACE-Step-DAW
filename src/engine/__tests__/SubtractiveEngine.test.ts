@@ -10,6 +10,7 @@ function createMockSynth() {
     triggerAttackRelease: vi.fn(),
     releaseAll: vi.fn(),
     dispose: vi.fn(),
+    detune: { value: 0 }, // Expose detune param for pitch LFO
   };
 }
 
@@ -373,33 +374,35 @@ describe('SubtractiveEngine', () => {
   });
 
   describe('LFO pitch target', () => {
-    it('creates LFO for pitch target', () => {
+    it('creates LFO for pitch target and connects to synth detune', () => {
       const settings = makeSettings({
         lfo: { enabled: true, waveform: 'sine', target: 'pitch', rateHz: 5, depth: 0.3, retrigger: false },
       });
       const instance = engine.ensureTrackSynth('track-1', settings);
       expect(instance.lfo).not.toBeNull();
       expect(lastCreatedLFO.start).toHaveBeenCalled();
+      expect(lastCreatedLFO.connect).toHaveBeenCalled();
     });
   });
 
   describe('LFO pan target', () => {
-    it('creates LFO for pan target', () => {
+    it('creates LFO for pan target and connects to panner pan', () => {
       const settings = makeSettings({
         lfo: { enabled: true, waveform: 'triangle', target: 'pan', rateHz: 2, depth: 0.5, retrigger: false },
       });
       const instance = engine.ensureTrackSynth('track-1', settings);
       expect(instance.lfo).not.toBeNull();
-      expect(instance.panner).not.toBeNull();
+      expect(instance.panner).toBeDefined();
       expect(lastCreatedLFO.start).toHaveBeenCalled();
+      expect(lastCreatedLFO.connect).toHaveBeenCalled();
     });
 
-    it('does not create panner without pan LFO', () => {
+    it('always creates a panner even without pan LFO (for modulation matrix)', () => {
       const settings = makeSettings({
         lfo: { enabled: true, waveform: 'sine', target: 'amp', rateHz: 4, depth: 0.3, retrigger: false },
       });
       const instance = engine.ensureTrackSynth('track-1', settings);
-      expect(instance.panner).toBeNull();
+      expect(instance.panner).toBeDefined();
     });
   });
 

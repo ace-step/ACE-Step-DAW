@@ -8,7 +8,7 @@ interface SubtractiveInstance {
   synth: Tone.PolySynth;
   filter: Tone.Filter | null;
   lfo: Tone.LFO | null;
-  panner: Tone.Panner | null;
+  panner: Tone.Panner;
   output: Tone.Gain;
   settings: SubtractiveInstrumentSettings;
 }
@@ -119,7 +119,7 @@ class SubtractiveEngine {
       this._disposeInstance(this.previewInstance);
     }
     this.previewInstance = this._createInstance(settings);
-    this.previewInstance.output.toDestination();
+    // _createInstance already routes output → panner → destination when no connectTo is given
     const freq = this._pitchToFreq(pitch, settings.oscillator.octave);
     this.previewInstance.synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
@@ -141,9 +141,7 @@ class SubtractiveEngine {
     return {
       amp: instance.output.gain as unknown as Tone.InputNode,
       pitch: (instance.synth as unknown as { detune: Tone.InputNode }).detune ?? undefined,
-      pan: instance.panner
-        ? (instance.panner.pan as unknown as Tone.InputNode)
-        : undefined,
+      pan: instance.panner.pan as unknown as Tone.InputNode,
       filterCutoff: instance.filter
         ? (instance.filter.frequency as unknown as Tone.InputNode)
         : undefined,
@@ -207,9 +205,10 @@ class SubtractiveEngine {
       : 0.55;
     const output = new Tone.Gain(outputLevel);
 
-    // Signal chain: synth → [filter] → output → [panner] → connectTo/destination
+    // Signal chain: synth → [filter] → output → panner → connectTo/destination
     let toneFilter: Tone.Filter | null = null;
-    let tonePanner: Tone.Panner | null = null;
+    // Always insert a panner so modulation matrix can target pan regardless of LFO config
+    const tonePanner = new Tone.Panner(0);
 
     if (filter.enabled) {
       toneFilter = new Tone.Filter({
@@ -256,24 +255,22 @@ class SubtractiveEngine {
         }
         case 'pitch': {
           // Modulate global detune param on PolySynth. depth 1.0 = ±1200 cents (1 octave).
-          const maxCents = lfo.depth * 1200;
-          lfoNode = new Tone.LFO({
-            frequency: lfo.rateHz,
-            type: lfo.waveform as Tone.ToneOscillatorType,
-            min: -maxCents,
-            max: maxCents,
-          });
-          // PolySynth exposes a shared detune Signal we can modulate
           const detuneParam = (synth as unknown as { detune: Tone.InputNode }).detune;
           if (detuneParam) {
+            const maxCents = lfo.depth * 1200;
+            lfoNode = new Tone.LFO({
+              frequency: lfo.rateHz,
+              type: lfo.waveform as Tone.ToneOscillatorType,
+              min: -maxCents,
+              max: maxCents,
+            });
             lfoNode.connect(detuneParam);
+            lfoNode.start();
           }
-          lfoNode.start();
           break;
         }
         case 'pan': {
-          // Insert a Panner between output and destination, modulate its pan param
-          tonePanner = new Tone.Panner(0);
+          // Modulate the always-present panner's pan param
           lfoNode = new Tone.LFO({
             frequency: lfo.rateHz,
             type: lfo.waveform as Tone.ToneOscillatorType,
@@ -287,15 +284,12 @@ class SubtractiveEngine {
       }
     }
 
-    // Final output routing: output → [panner] → connectTo/destination
-    const finalNode = tonePanner ?? output;
-    if (tonePanner) {
-      output.connect(tonePanner);
-    }
+    // Final output routing: output → panner → connectTo/destination
+    output.connect(tonePanner);
     if (connectTo) {
-      finalNode.connect(connectTo);
+      tonePanner.connect(connectTo);
     } else {
-      finalNode.toDestination();
+      tonePanner.toDestination();
     }
 
     return {
@@ -398,7 +392,7 @@ class SubtractiveEngine {
     instance.lfo?.stop();
     instance.lfo?.dispose();
     instance.filter?.dispose();
-    instance.panner?.dispose();
+    instance.panner.dispose();
     instance.output.dispose();
   }
 }

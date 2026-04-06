@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type SetStateAction } from '
 import { useAudioImport } from '../../hooks/useAudioImport';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import type { PianoRollGrid, SamplerConfig } from '../../types/project';
+import type { GranularSettings, PianoRollGrid, SamplerConfig } from '../../types/project';
 import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import { QuickSamplerEditor } from './QuickSamplerEditor';
+import { GranularPanel } from './GranularPanel';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
 import { PianoRollEmptyState } from './PianoRollEmptyState';
@@ -45,6 +46,8 @@ export function PianoRoll() {
   const setTrackSampler = useProjectStore((s) => s.setTrackSampler);
   const clearTrackSampler = useProjectStore((s) => s.clearTrackSampler);
   const updateSamplerConfig = useProjectStore((s) => s.updateSamplerConfig);
+  const updateGranularConfig = useProjectStore((s) => s.updateGranularConfig);
+  const clearGranularConfig = useProjectStore((s) => s.clearGranularConfig);
   const convertMidiClipToStrudel = useProjectStore((s) => s.convertMidiClipToStrudel);
   const convertMidiTrackToStrudel = useProjectStore((s) => s.convertMidiTrackToStrudel);
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
@@ -52,6 +55,7 @@ export function PianoRoll() {
     importAudioFileAsSampler,
     importAssetAsQuickSampler,
     openSamplerFilePicker,
+    openGranularFilePicker,
   } = useAudioImport();
 
   const userSynthPresets = useUIStore((s) => s.userSynthPresets);
@@ -578,7 +582,18 @@ export function PianoRoll() {
         </div>
       )}
 
-      {showSynthParams && track.synthPreset !== 'sampler' && (
+      {track.instrument?.kind === 'granular' && (
+        <GranularPanel
+          track={track}
+          onConfigChange={(updates: Partial<GranularSettings>) =>
+            updateGranularConfig(track.id, updates)
+          }
+          onClear={() => clearGranularConfig(track.id)}
+          onLoadSample={() => openGranularFilePicker(track.id)}
+        />
+      )}
+
+      {showSynthParams && track.synthPreset !== 'sampler' && track.instrument?.kind !== 'granular' && (
         <SynthParameterEditor trackId={track.id} />
       )}
 

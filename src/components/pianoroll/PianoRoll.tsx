@@ -55,6 +55,7 @@ export function PianoRoll() {
     importAudioFileAsSampler,
     importAssetAsQuickSampler,
     openSamplerFilePicker,
+    openGranularFilePicker,
   } = useAudioImport();
 
   const userSynthPresets = useUIStore((s) => s.userSynthPresets);
@@ -588,7 +589,7 @@ export function PianoRoll() {
             updateGranularConfig(track.id, updates)
           }
           onClear={() => clearGranularConfig(track.id)}
-          onLoadSample={() => openSamplerFilePicker(track.id)}
+          onLoadSample={() => openGranularFilePicker(track.id)}
         />
       )}
 

@@ -4,10 +4,10 @@
  * Displays source waveform with grain position indicator,
  * and provides controls for all granular synthesis parameters.
  */
-import { useCallback, useMemo, useRef, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import type { GranularSettings, GrainEnvelopeShape, Track } from '../../types/project';
 import { Knob } from '../ui/Knob';
-import { DEFAULT_GRANULAR_SETTINGS } from '../../engine/GranularEngine';
+import { DEFAULT_GRANULAR_SETTINGS, granularEngine } from '../../engine/GranularEngine';
 
 interface GranularPanelProps {
   track: Track;
@@ -140,12 +140,19 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
   const config = track.granularConfig;
   const hasSource = !!config?.audioKey;
 
-  // Memoize the audio buffer from the track (drawn in waveform)
-  const audioBuffer = useMemo(() => {
-    // Buffer is loaded async by the engine — we just pass null here
-    // The waveform will show "no source" until the buffer is available
-    return null as AudioBuffer | null;
-  }, []);
+  // Load the audio buffer asynchronously for waveform display
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  useEffect(() => {
+    if (!hasSource) {
+      setAudioBuffer(null);
+      return;
+    }
+    let cancelled = false;
+    granularEngine.getTrackBuffer(track).then((buf) => {
+      if (!cancelled) setAudioBuffer(buf);
+    });
+    return () => { cancelled = true; };
+  }, [track, hasSource, config?.audioKey]);
 
   const handleChange = useCallback(
     (key: keyof GranularSettings, value: number | boolean | string) => {

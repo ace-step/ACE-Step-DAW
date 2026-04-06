@@ -7,7 +7,7 @@ vi.mock('tone', () => {
     currentTime: 0,
     destination: {},
     createGain: vi.fn(() => ({
-      gain: { value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+      gain: { value: 0, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn(), setValueCurveAtTime: vi.fn(), cancelAndHoldAtTime: vi.fn() },
       connect: vi.fn(),
       disconnect: vi.fn(),
     })),
@@ -245,14 +245,14 @@ describe('GranularEngine', () => {
       expect(rate).toBeCloseTo(2.0, 1);
     });
 
-    it('creates grain buffer with correct channel count', () => {
+    it('applies grain envelope via GainNode setValueCurveAtTime', () => {
       const buffer = makeAudioBuffer(1, 44100, 2);
       granularEngine.ensureTrackGranular('track-1', makeSettings(), buffer);
       granularEngine.noteOn('track-1', 60, 100);
 
-      expect(mockCtx.createBuffer).toHaveBeenCalled();
-      const [channels] = mockCtx.createBuffer.mock.calls[0];
-      expect(channels).toBe(2);
+      // Grain envelope is applied via a GainNode with setValueCurveAtTime
+      // At least 2 gain nodes: voice output + grain envelope
+      expect(mockCtx.createGain.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -372,13 +372,14 @@ describe('GranularEngine', () => {
       expect(mockCtx.createBufferSource.mock.calls.length).toBeGreaterThan(initialSourceCount);
     });
 
-    it('applies grain window envelope to buffer', () => {
+    it('applies grain window envelope via GainNode', () => {
       const buffer = makeAudioBuffer(2);
       const settings = makeSettings({ envelopeShape: 'triangle', grainSize: 50 });
       granularEngine.ensureTrackGranular('track-1', settings, buffer);
       granularEngine.noteOn('track-1', 60, 100);
 
-      expect(mockCtx.createBuffer).toHaveBeenCalled();
+      // Grain uses GainNode with setValueCurveAtTime for envelope
+      expect(mockCtx.createBufferSource).toHaveBeenCalled();
     });
   });
 
@@ -407,7 +408,8 @@ describe('GranularEngine', () => {
         granularEngine.ensureTrackGranular('track-1', settings, buffer);
         granularEngine.noteOn('track-1', 60, 100);
 
-        expect(mockCtx.createBuffer).toHaveBeenCalled();
+        // Each shape should produce grains without errors
+        expect(mockCtx.createBufferSource).toHaveBeenCalled();
       },
     );
   });

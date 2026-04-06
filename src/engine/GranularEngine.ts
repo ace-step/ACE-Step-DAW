@@ -55,18 +55,20 @@ function buildGrainWindow(
       window[i] = 1 - Math.abs((i - mid) / mid);
     } else if (shape === 'trapezoid') {
       if (i < sustainStart) {
-        window[i] = i / attackSamples;
+        window[i] = attackSamples > 1 ? i / (attackSamples - 1) : 1;
       } else if (i >= sustainEnd) {
-        window[i] = (length - 1 - i) / releaseSamples;
+        window[i] = releaseSamples > 1 ? (length - 1 - i) / (releaseSamples - 1) : 1;
       } else {
         window[i] = 1;
       }
     } else {
       // tukey — cosine-tapered
       if (i < attackSamples) {
-        window[i] = 0.5 * (1 - Math.cos((Math.PI * i) / attackSamples));
+        const denom = attackSamples > 1 ? attackSamples - 1 : 1;
+        window[i] = 0.5 * (1 - Math.cos((Math.PI * i) / denom));
       } else if (i >= sustainEnd) {
-        window[i] = 0.5 * (1 - Math.cos((Math.PI * (length - 1 - i)) / releaseSamples));
+        const denom = releaseSamples > 1 ? releaseSamples - 1 : 1;
+        window[i] = 0.5 * (1 - Math.cos((Math.PI * (length - 1 - i)) / denom));
       } else {
         window[i] = 1;
       }
@@ -140,6 +142,7 @@ class GranularEngine {
       existing.audioBuffer = audioBuffer;
       existing.settings = { ...settings };
       existing.grainWindowBuffer = null; // invalidate cache
+      existing.output.gain.value = settings.gain;
       this.bufferCache.set(settings.audioKey, audioBuffer);
       return;
     }
@@ -346,42 +349,42 @@ class GranularEngine {
     const midiOffset = voice.pitch - settings.rootNote + pitchOffset;
     const playbackRate = Math.pow(2, midiOffset / 12);
 
-    // Create grain buffer with windowed audio
-    const grainBuffer = ctx.createBuffer(numChannels, grainSizeSamples, sampleRate);
+    // Reuse the original buffer — apply grain envelope via GainNode
+    // to avoid per-grain AudioBuffer allocations and sample copies.
+    const grainOffsetSeconds = startSample / sampleRate;
+    const grainDurationSeconds = grainSizeSamples / sampleRate;
     const window = this._getGrainWindow(instance, grainSizeSamples);
-
-    for (let ch = 0; ch < numChannels; ch++) {
-      const sourceData = audioBuffer.getChannelData(ch);
-      const grainData = grainBuffer.getChannelData(ch);
-      for (let i = 0; i < grainSizeSamples; i++) {
-        const srcIdx = startSample + i;
-        grainData[i] = (srcIdx < bufferLength ? sourceData[srcIdx] : 0) * window[i];
-      }
-    }
 
     // Create source node for this grain
     const source = ctx.createBufferSource();
-    source.buffer = grainBuffer;
+    source.buffer = audioBuffer;
     source.playbackRate.value = Math.max(0.01, playbackRate);
+
+    // Apply grain envelope via GainNode + setValueCurveAtTime
+    const grainGain = ctx.createGain();
+    grainGain.gain.value = 0;
+    grainGain.gain.setValueCurveAtTime(window, ctx.currentTime, grainDurationSeconds);
 
     // Apply stereo spread via stereo panner
     const panner = ctx.createStereoPanner();
     const panValue = (seededRandom() - 0.5) * 2 * settings.spread;
     panner.pan.value = clamp(panValue, -1, 1);
 
-    source.connect(panner);
+    source.connect(grainGain);
+    grainGain.connect(panner);
     panner.connect(voice.output);
 
     voice.activeGrains.add(source);
 
-    const grainDurationSec = grainSizeSamples / sampleRate / Math.max(0.01, playbackRate);
-    source.start(ctx.currentTime);
+    const grainDurationSec = grainDurationSeconds / Math.max(0.01, playbackRate);
+    source.start(ctx.currentTime, grainOffsetSeconds, grainDurationSeconds);
     source.stop(ctx.currentTime + grainDurationSec + 0.005);
 
     source.onended = () => {
       voice.activeGrains.delete(source);
       try {
         source.disconnect();
+        grainGain.disconnect();
         panner.disconnect();
       } catch {
         // Already disconnected
@@ -419,13 +422,21 @@ class GranularEngine {
       voice.releaseTimeoutId = null;
     }
 
-    // Fade out
+    // Fade out — use cancelAndHoldAtTime when available to avoid gain clicks
     const ctx = this.getContext();
     const now = ctx.currentTime;
     const releaseEnd = now + Math.max(0.01, release);
-    voice.output.gain.cancelScheduledValues(now);
-    voice.output.gain.setValueAtTime(Math.max(0.0001, voice.output.gain.value), now);
-    voice.output.gain.linearRampToValueAtTime(0.0001, releaseEnd);
+    const gainParam = voice.output.gain;
+    const holdable = gainParam as AudioParam & {
+      cancelAndHoldAtTime?: (cancelTime: number) => void;
+    };
+    if (typeof holdable.cancelAndHoldAtTime === 'function') {
+      holdable.cancelAndHoldAtTime(now);
+    } else {
+      gainParam.cancelScheduledValues(now);
+      gainParam.setValueAtTime(Math.max(0.0001, gainParam.value), now);
+    }
+    gainParam.linearRampToValueAtTime(0.0001, releaseEnd);
 
     // Clean up after release
     globalThis.setTimeout(() => {

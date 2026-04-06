@@ -3907,17 +3907,19 @@ export const useProjectStore = create<ProjectState>()(
       project: {
         ...state.project,
         updatedAt: Date.now(),
-        tracks: state.project.tracks.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                granularConfig: { ...t.granularConfig!, ...config },
-                instrument: t.instrument?.kind === 'granular'
-                  ? { ...t.instrument, settings: { ...t.instrument.settings, ...config } }
-                  : t.instrument,
-              }
-            : t,
-        ),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId) return t;
+          // Allow initializing granularConfig if audioKey is provided
+          const existing = t.granularConfig;
+          if (!existing && !('audioKey' in config)) return t;
+          return {
+            ...t,
+            granularConfig: existing ? { ...existing, ...config } : config as GranularSettings,
+            instrument: t.instrument?.kind === 'granular'
+              ? { ...t.instrument, settings: { ...(t.instrument as { settings: GranularSettings }).settings, ...config } }
+              : t.instrument,
+          };
+        }),
       },
     });
   },
@@ -3932,7 +3934,13 @@ export const useProjectStore = create<ProjectState>()(
         updatedAt: Date.now(),
         tracks: state.project.tracks.map((t) =>
           t.id === trackId
-            ? { ...t, granularConfig: undefined }
+            ? {
+                ...t,
+                granularConfig: undefined,
+                instrument: t.instrument?.kind === 'granular'
+                  ? createDefaultSubtractiveInstrument()
+                  : t.instrument,
+              }
             : t,
         ),
       },

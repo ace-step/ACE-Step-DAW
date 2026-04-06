@@ -545,6 +545,10 @@ export function useTransport() {
                     wtSynth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
                   }
                 });
+              } else if (track.instrument?.kind === 'granular') {
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  granularEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
                 const previousOverlap = note.isSlide

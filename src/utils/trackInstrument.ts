@@ -294,7 +294,7 @@ export function getLegacySynthPresetFromInstrument(instrument: TrackInstrument):
     case 'sampler':
       return 'sampler';
     case 'granular':
-      return 'sampler';
+      return 'piano';
     case 'fm':
       return instrument.fallbackPreset;
     case 'wavetable':

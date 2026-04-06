@@ -11,6 +11,7 @@ import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
+import { NEGATIVE_PROMPT_SUGGESTIONS, isChipActive, toggleNegativePromptChip } from '../../utils/negativePromptChips';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -71,6 +72,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeed = useCallback((v: number) => setSeedStr(String(v)), [setSeedStr]);
   const useRandomSeed = useGenerationStore((s) => s.generationForm.useRandomSeed);
   const setUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
 
   // Local state — reset on panel reopen (less critical)
   const [instrumental, setInstrumental] = useState(false);
@@ -87,6 +90,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [loadingExample, setLoadingExample] = useState(false);
   const [expandCaption, setExpandCaption] = useState(false);
   const [expandLyrics, setExpandLyrics] = useState(false);
+  const [negativePromptExpanded, setNegativePromptExpanded] = useState(false);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -184,6 +188,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      if (p.negativePrompt) { setNegativePrompt(p.negativePrompt); setNegativePromptExpanded(true); }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -234,6 +239,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
           guidanceScale: project?.generationDefaults?.guidanceScale,
           shift: project?.generationDefaults?.shift,
+          negativePrompt: negativePrompt.trim() || undefined,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);
@@ -263,10 +269,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
+      negativePrompt: negativePrompt.trim() || undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, negativePrompt]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -405,6 +412,67 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           disabled={isDisabled || instrumental}
           placeholder="[Verse 1]\nYour lyrics here..."
         />
+      </section>
+
+      {/* Negative Prompt — collapsible */}
+      <section data-testid="negative-prompt-section">
+        <button
+          type="button"
+          onClick={() => setNegativePromptExpanded(!negativePromptExpanded)}
+          className="flex w-full items-center gap-1.5 text-[11px] text-zinc-500 transition-colors hover:text-zinc-300"
+          aria-expanded={negativePromptExpanded}
+        >
+          <svg
+            width={10}
+            height={10}
+            viewBox="0 0 10 10"
+            fill="currentColor"
+            className={`transition-transform ${negativePromptExpanded ? 'rotate-90' : ''}`}
+          >
+            <path d="M3 1l4 4-4 4z" />
+          </svg>
+          Negative Prompt
+          {!negativePromptExpanded && negativePrompt.trim() && (
+            <span className="ml-1 truncate text-[9px] text-zinc-600 max-w-[160px]">
+              ({negativePrompt.trim()})
+            </span>
+          )}
+        </button>
+        {negativePromptExpanded && (
+          <div className="mt-1.5 space-y-1.5">
+            <textarea
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+              rows={2}
+              placeholder="Elements to exclude (e.g. no autotune, no reverb)"
+              className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+              disabled={isDisabled}
+              data-testid="negative-prompt-input"
+            />
+            <div className="flex flex-wrap gap-1">
+              {NEGATIVE_PROMPT_SUGGESTIONS.map((chip) => {
+                const active = isChipActive(negativePrompt, chip);
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setNegativePrompt(toggleNegativePromptChip(negativePrompt, chip))}
+                    disabled={isDisabled}
+                    className={`rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+                      active
+                        ? 'bg-red-900/50 text-red-300 border border-red-700/50'
+                        : 'bg-[#333] text-zinc-500 border border-transparent hover:bg-[#444] hover:text-zinc-300'
+                    }`}
+                    aria-pressed={active}
+                    aria-label={`${active ? 'Remove' : 'Add'} "${chip}" to negative prompt`}
+                  >
+                    {chip}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Random Example */}

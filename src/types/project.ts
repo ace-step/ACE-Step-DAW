@@ -795,6 +795,8 @@ export interface ClipGenerationParams {
   inferenceSteps?: number;
   guidanceScale?: number;
   shift?: number;
+  /** Negative prompt — elements to exclude from generation */
+  negativePrompt?: string;
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;

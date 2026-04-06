@@ -289,6 +289,7 @@ export interface GenerationFormState {
   thinking: boolean;
   seed: string;
   useRandomSeed: boolean;
+  negativePrompt: string;
   compareModelsEnabled: boolean;
   compareModelOverrides: ModelOverride[];
 }
@@ -391,6 +392,7 @@ export function createDefaultGenerationFormState(): GenerationFormState {
     thinking: DEFAULT_GENERATION.thinking,
     seed: '',
     useRandomSeed: true,
+    negativePrompt: '',
     compareModelsEnabled: false,
     compareModelOverrides: [],
   };
@@ -484,6 +486,7 @@ export interface GenerationState {
   setGenerationThinking: (thinking: boolean) => void;
   setGenerationSeed: (seed: string) => void;
   setGenerationUseRandomSeed: (useRandom: boolean) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
   setGenerationRequestError: (message: string | null) => void;
   applyGenerationPreset: (preset: GenerationPreset) => void;
   getPromptAutocompleteSuggestions: (prompt?: string, caretIndex?: number, limit?: number) => PromptAutocompleteSuggestion[];
@@ -859,6 +862,10 @@ export const useGenerationStore = create<GenerationState>()(
 
       setGenerationUseRandomSeed: (useRandom) => set((s) => ({
         generationForm: { ...s.generationForm, useRandomSeed: useRandom, requestError: null },
+      })),
+
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: { ...s.generationForm, negativePrompt, requestError: null },
       })),
 
       setStemsFormDraft: (draft) => set({ stemsFormDraft: draft }),

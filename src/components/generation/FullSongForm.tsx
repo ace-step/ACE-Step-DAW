@@ -58,7 +58,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   // Persisted in generationStore — survives panel close/reopen
   const prompt = useGenerationStore((s) => s.generationForm.prompt);
   const setPrompt = useGenerationStore((s) => s.setGenerationPrompt);
-  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt ?? '');
   const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
   const lyrics = useGenerationStore((s) => s.generationForm.lyrics);
   const setLyrics = useGenerationStore((s) => s.setGenerationLyrics);

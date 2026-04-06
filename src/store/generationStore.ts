@@ -1124,6 +1124,19 @@ export const useGenerationStore = create<GenerationState>()(
         generationHistory: state.generationHistory,
         generationForm: state.generationForm,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<GenerationState> | undefined;
+        return {
+          ...currentState,
+          ...persisted,
+          // Deep-merge generationForm with defaults so new fields (e.g. negativePrompt)
+          // are always present even when rehydrating older localStorage data
+          generationForm: {
+            ...createDefaultGenerationFormState(),
+            ...persisted?.generationForm,
+          },
+        };
+      },
     },
   ),
 );

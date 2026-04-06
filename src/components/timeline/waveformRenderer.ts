@@ -21,6 +21,8 @@ export interface WaveformDrawParams {
   color: string;
   opacity?: number;
   trackVolume?: number;
+  /** Max columns to compute (limits work when backing store is capped). */
+  maxColumns?: number;
 }
 
 interface PeakSlice {
@@ -222,6 +224,7 @@ export function drawWaveform(
     color,
     opacity = 0.9,
     trackVolume = 1,
+    maxColumns,
   } = params;
 
   const contentWidth = Math.max(width, 0);
@@ -251,7 +254,9 @@ export function drawWaveform(
   );
   if (peakSlice.numBars === 0) return;
 
-  const columnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
+  // Limit columns to backing store resolution when capped at 16384px
+  const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
+  const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
   const columnWidth = waveformLayout.widthPx / columnCount;
 
   // Scale amplitude by track volume (visual feedback of output level).
@@ -312,7 +317,7 @@ export function drawMidiThumbnail(
   color: string,
   opacity: number = 0.7,
 ): void {
-  if (notes.length === 0 || width <= 0 || height <= 0) return;
+  if (notes.length === 0 || width <= 0 || height <= 0 || bpm <= 0 || duration <= 0) return;
 
   const secPerBeat = 60 / bpm;
   // Compute min/max pitch in a single loop (avoids spread argument limit on large arrays)

@@ -66,9 +66,15 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     // No SVG paths should be present within this render
     expect(container.querySelectorAll('path').length).toBe(0);
     expect(container.querySelectorAll('svg').length).toBe(0);
+
+    // contentOffset=1 shifts the waveform start X to the right (1/5 of 500 = 100px)
+    // Verify moveTo was called with an X >= 100 (the waveform leftPx offset)
+    const moveToCall = mockCtx.moveTo.mock.calls[0];
+    expect(moveToCall).toBeDefined();
+    expect(moveToCall[0]).toBeGreaterThanOrEqual(100);
   });
 
-  it('renders canvas for repitch stretch mode', () => {
+  it('renders canvas for repitch stretch mode starting near x=0', () => {
     render(
       <div style={{ width: 600, height: 80 }}>
         <CanvasClipWaveform
@@ -86,9 +92,13 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     );
 
     expect(screen.getByTestId('canvas-waveform')).toBeInTheDocument();
-    // Canvas drawWaveform should have been called (via getContext + drawing)
     expect(mockCtx.save).toHaveBeenCalled();
     expect(mockCtx.restore).toHaveBeenCalled();
+
+    // Repitch stretch: waveform starts near x=0 (contentOffset ignored in repitch mode)
+    const moveToCall = mockCtx.moveTo.mock.calls[0];
+    expect(moveToCall).toBeDefined();
+    expect(moveToCall[0]).toBeLessThan(1);
   });
 
   it('renders dual-channel waveform via canvas', () => {

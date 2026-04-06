@@ -78,6 +78,9 @@ export function CanvasClipWaveform({
     ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     ctx.clearRect(0, 0, contentWidth, canvasHeight);
 
+    // Limit column count to effective backing resolution to avoid wasted work
+    const effectiveMaxColumns = Math.ceil(backingWidth / (window.devicePixelRatio || 1));
+
     drawWaveform(ctx, {
       peaks,
       audioDuration,
@@ -91,6 +94,7 @@ export function CanvasClipWaveform({
       color,
       opacity: 1, // opacity controlled by CSS class on container
       trackVolume,
+      maxColumns: effectiveMaxColumns,
     });
   }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, canvasHeight]);
 

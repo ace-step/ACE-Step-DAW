@@ -114,12 +114,15 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
       ),
     })),
 
-  clear: () =>
+  clear: () => {
+    analysisRunId++;
     set({
+      isAnalyzing: false,
       sections: [],
       suggestions: [],
       projectMeta: null,
       error: null,
       lastAnalyzedProjectId: null,
-    }),
+    });
+  },
 }));

@@ -208,12 +208,14 @@ function splitRegionByClipDurations(region: TimeRegion, project: Project): TimeR
  * clip-position-based heuristic detection.
  */
 export function detectSections(project: Project): ArrangementSection[] {
-  // Prefer marker-based sections when available
-  // Filter out boundary-only markers with empty names (used as end markers in the timeline)
-  const namedMarkers = project.markers?.filter((m) => m.name.trim().length > 0);
-  if (namedMarkers && namedMarkers.length > 0) {
-    const markerSections = computeMarkerSections(namedMarkers, project.totalDuration);
-    return markerSections.map((ms) => {
+  // Keep empty-name markers so computeMarkerSections uses them as boundaries,
+  // but skip emitting boundary-only sections in the returned analysis.
+  const allMarkers = project.markers;
+  if (allMarkers && allMarkers.length > 0) {
+    const markerSections = computeMarkerSections(allMarkers, project.totalDuration);
+    return markerSections
+      .filter((ms) => ms.marker.name.trim().length > 0)
+      .map((ms) => {
       const trackIds = new Set<string>();
       for (const track of project.tracks) {
         for (const clip of track.clips) {
@@ -403,14 +405,21 @@ export function suggestInstrumentation(
   if (sections.length === 0) return [];
 
   const suggestions: ArrangementSuggestion[] = [];
-  const existingTrackNames = new Set(tracks.map((t) => t.displayName.toLowerCase()));
+  const trackNameById = new Map(
+    tracks.map((t) => [t.id, t.displayName.toLowerCase()] as const),
+  );
 
   for (const section of sections) {
     const recommended = SECTION_INSTRUMENTS[section.type] ?? [];
+    // Only check tracks actually present in this section, not all project tracks
+    const sectionTrackNames = new Set(
+      section.trackIds
+        .map((trackId) => trackNameById.get(trackId))
+        .filter((name): name is string => typeof name === 'string'),
+    );
     const missing = recommended.filter((inst) => {
-      // Check if any existing track has a similar name
-      return !existingTrackNames.has(inst) &&
-        ![...existingTrackNames].some((name) => name.includes(inst) || inst.includes(name));
+      return !sectionTrackNames.has(inst) &&
+        ![...sectionTrackNames].some((name) => name.includes(inst) || inst.includes(name));
     });
 
     // Only suggest if the section has notably fewer instruments than recommended

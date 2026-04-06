@@ -161,7 +161,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
     const parent = canvas.parentElement;
     const w = Math.max(width, 4);
-    const h = parent?.offsetHeight ?? 60;
+    const h = Math.max(parent?.offsetHeight || 0, 1);
     const dpr = window.devicePixelRatio || 1;
 
     canvas.width = w * dpr;
@@ -195,6 +195,15 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   useEffect(() => {
     renderClipCanvas();
+  }, [renderClipCanvas]);
+
+  // Re-render canvas when container resizes (track height changes)
+  useEffect(() => {
+    const parent = clipCanvasRef.current?.parentElement;
+    if (!parent) return;
+    const ro = new ResizeObserver(() => renderClipCanvas());
+    ro.observe(parent);
+    return () => ro.disconnect();
   }, [renderClipCanvas]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);

@@ -163,6 +163,12 @@ export function GridOverlay() {
     sub: 'var(--color-daw-grid-sub)',
   };
 
+  // Clamp canvas to a safe maximum to avoid exceeding browser canvas limits
+  // (typically 16384 or 32768 px). For very long timelines, this prevents
+  // blank canvases or crashes from oversized backing stores.
+  const MAX_CANVAS_WIDTH = 16384;
+  const clampedWidth = Math.min(totalWidth, MAX_CANVAS_WIDTH);
+
   const renderGrid = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !project) return;
@@ -173,9 +179,9 @@ export function GridOverlay() {
     const rect = canvas.parentElement?.getBoundingClientRect();
     const h = rect?.height ?? (canvas.offsetHeight || 800);
 
-    canvas.width = totalWidth * dpr;
+    canvas.width = clampedWidth * dpr;
     canvas.height = h * dpr;
-    canvas.style.width = `${totalWidth}px`;
+    canvas.style.width = `${clampedWidth}px`;
     canvas.style.height = `${h}px`;
     ctx.scale(dpr, dpr);
 
@@ -191,16 +197,24 @@ export function GridOverlay() {
     const barShadingColor = computedStyle.getPropertyValue('--color-daw-grid-bar-shading').trim()
       || 'rgba(255,255,255,0.02)';
 
+    // Only draw lines within the clamped canvas width
+    const visibleLines = clampedWidth < totalWidth
+      ? lines.filter((l) => l.x <= clampedWidth)
+      : lines;
+    const visibleShading = clampedWidth < totalWidth
+      ? barShading.filter((s) => s.x < clampedWidth)
+      : barShading;
+
     drawGrid(ctx, {
-      lines,
-      barShading,
-      totalWidth,
+      lines: visibleLines,
+      barShading: visibleShading,
+      totalWidth: clampedWidth,
       height: h,
       isDashed: isMetaDown,
       barShadingColor,
       colors: resolvedColors,
     });
-  }, [lines, barShading, totalWidth, isMetaDown, project]);
+  }, [lines, barShading, totalWidth, clampedWidth, isMetaDown, project]);
 
   useEffect(() => {
     renderGrid();

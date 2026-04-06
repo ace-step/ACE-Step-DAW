@@ -137,13 +137,18 @@ describe('WaveformCanvasRenderer', () => {
     expect(ctx.save).toHaveBeenCalled();
   });
 
-  it('handles very large peak arrays efficiently', () => {
+  it('bounds drawing work for very large peak arrays', () => {
     const largePeaks = makePeaks(10000);
-    const start = performance.now();
+
     drawWaveform(ctx, defaultParams({ peaks: largePeaks, width: 1920 }));
-    const elapsed = performance.now() - start;
-    // Should complete in under 50ms even for 10k peaks
-    expect(elapsed).toBeLessThan(50);
+
     expect(ctx.fill).toHaveBeenCalled();
+    // Rendering work is bounded by display columns (width=1920), not peak count (10000).
+    // 2 channels × 3 passes (fill upper, fill lower, peak line) × ~1920 columns ≈ 11520.
+    // This should be well below 10000 × 6 = 60000 if we iterated every peak.
+    expect(ctx.lineTo).toHaveBeenCalled();
+    const lineToCount = (ctx.lineTo as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(lineToCount).toBeLessThan(1920 * 8); // bounded by columns, not peaks
+    expect(lineToCount).toBeLessThan(10000 * 2); // much less than if we traced every peak
   });
 });

@@ -17,11 +17,12 @@ interface ClipWaveformProps {
   trackVolume?: number;
 }
 
-const OPACITY_MAP: Record<string, number> = {
-  'opacity-60': 0.6,
-  'opacity-90': 0.9,
-  'opacity-95': 0.95,
-};
+/** Parse Tailwind-style opacity-XX class names to numeric values (XX/100). */
+function parseOpacityClass(className: string): number {
+  const match = /^opacity-(\d+)$/.exec(className);
+  if (match) return Math.min(1, parseInt(match[1], 10) / 100);
+  return 0.9;
+}
 
 export function ClipWaveform({
   peaks,
@@ -38,7 +39,7 @@ export function ClipWaveform({
 }: ClipWaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contentWidth = Math.max(width, 0);
-  const opacity = OPACITY_MAP[opacityClassName] ?? 0.9;
+  const opacity = parseOpacityClass(opacityClassName);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;

@@ -40,10 +40,20 @@ export function drawGrid(ctx: CanvasRenderingContext2D, params: GridRenderParams
     ctx.fillRect(shade.x, 0, shade.width, height);
   }
 
-  // Grid lines — batch by strength for fewer style changes
+  // Grid lines — single-pass bucket by strength for O(n) grouping
+  const linesByStrength: Record<GridStrength, GridLine[]> = {
+    sub: [],
+    eighth: [],
+    beat: [],
+    bar: [],
+  };
+  for (const line of lines) {
+    linesByStrength[line.strength].push(line);
+  }
+
   const strengths: GridStrength[] = ['sub', 'eighth', 'beat', 'bar'];
   for (const strength of strengths) {
-    const strengthLines = lines.filter((l) => l.strength === strength);
+    const strengthLines = linesByStrength[strength];
     if (strengthLines.length === 0) continue;
 
     ctx.strokeStyle = colors[strength];

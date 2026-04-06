@@ -89,33 +89,62 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, params: WaveformRend
 
   ctx.globalAlpha = opacity;
 
-  // Draw filled waveform shapes for both channels
-  drawChannelFill(ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, halfH / 2, scaledAmplitude, color, 0.6);
-  drawChannelFill(ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, halfH + halfH / 2, scaledAmplitude, color, 0.6);
+  // Pre-compute per-column min/max once per channel to avoid redundant iterations
+  const leftMinMax = computeColumnMinMax(peaks, peakSlice, columnCount, 0);
+  const rightMinMax = computeColumnMinMax(peaks, peakSlice, columnCount, 2);
 
-  // Draw peak envelope highlight lines — brighter outline on top
-  drawChannelPeakLine(ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, halfH / 2, scaledAmplitude, color, 1.0, 0.8);
-  drawChannelPeakLine(ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, halfH + halfH / 2, scaledAmplitude, color, 1.0, 0.8);
+  // Draw filled waveform shapes + peak envelope lines for both channels
+  drawChannelFill(ctx, leftMinMax, columnCount, columnWidth, waveformLayout.leftPx,
+    halfH / 2, scaledAmplitude, color, 0.6);
+  drawChannelFill(ctx, rightMinMax, columnCount, columnWidth, waveformLayout.leftPx,
+    halfH + halfH / 2, scaledAmplitude, color, 0.6);
+
+  drawChannelPeakLine(ctx, leftMinMax, columnCount, columnWidth, waveformLayout.leftPx,
+    halfH / 2, scaledAmplitude, color, 1.0, 0.8);
+  drawChannelPeakLine(ctx, rightMinMax, columnCount, columnWidth, waveformLayout.leftPx,
+    halfH + halfH / 2, scaledAmplitude, color, 1.0, 0.8);
 
   ctx.restore();
 }
 
+/** Pre-computed per-column min/max values for one channel. */
+interface ColumnMinMax {
+  maxValues: Float32Array;
+  minValues: Float32Array;
+}
+
 /**
- * Draw the filled waveform shape for one channel.
+ * Pre-compute per-column min/max once per channel.
+ * Avoids redundant getMinMaxForColumn calls between fill and peak line drawing.
+ */
+function computeColumnMinMax(
+  peaks: number[],
+  peakSlice: { startPeakIdx: number; numBars: number },
+  columnCount: number,
+  channelOffset: number,
+): ColumnMinMax {
+  const maxValues = new Float32Array(columnCount);
+  const minValues = new Float32Array(columnCount);
+
+  for (let i = 0; i < columnCount; i++) {
+    const { max, min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    maxValues[i] = max;
+    minValues[i] = min;
+  }
+
+  return { maxValues, minValues };
+}
+
+/**
+ * Draw the filled waveform shape for one channel using pre-computed min/max.
  * Upper contour (max) left-to-right, lower contour (min) right-to-left, then close.
  */
 function drawChannelFill(
   ctx: CanvasRenderingContext2D,
-  peaks: number[],
-  peakSlice: { startPeakIdx: number; numBars: number },
+  minMax: ColumnMinMax,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
   color: string,
@@ -128,8 +157,7 @@ function drawChannelFill(
   // Upper contour (max, going upward from center)
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - minMax.maxValues[i] * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }
@@ -137,8 +165,7 @@ function drawChannelFill(
   // Lower contour (min, going below center) — right to left
   for (let i = columnCount - 1; i >= 0; i--) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yBottom = centerY - min * maxAmplitude;
+    const yBottom = centerY - minMax.minValues[i] * maxAmplitude;
     ctx.lineTo(x, yBottom);
   }
 
@@ -150,16 +177,14 @@ function drawChannelFill(
 }
 
 /**
- * Draw the peak envelope line (positive peaks only) for one channel.
+ * Draw the peak envelope line (positive peaks only) for one channel using pre-computed min/max.
  */
 function drawChannelPeakLine(
   ctx: CanvasRenderingContext2D,
-  peaks: number[],
-  peakSlice: { startPeakIdx: number; numBars: number },
+  minMax: ColumnMinMax,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
   color: string,
@@ -171,8 +196,7 @@ function drawChannelPeakLine(
   ctx.beginPath();
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - minMax.maxValues[i] * maxAmplitude;
     if (i === 0) ctx.moveTo(x, yTop);
     else ctx.lineTo(x, yTop);
   }

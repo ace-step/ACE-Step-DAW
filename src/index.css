@@ -241,11 +241,14 @@ select:focus-visible,
     transform: none;
   }
   /* Disable playhead blink animations (WCAG 2.3.1) */
+  /* Static fallback colors ensure playhead remains visible when animation is disabled */
   .playhead-triangle-blink polygon {
     animation: none !important;
+    fill: var(--color-daw-playhead, #ffffff) !important;
   }
   .playhead-blink-line {
     animation: none !important;
+    background-color: var(--color-daw-playhead, #ffffff) !important;
   }
   /* Disable session view queued-clip blink */
   @keyframes session-blink {
@@ -462,15 +465,16 @@ select:focus-visible,
 
 /* ── High Contrast Mode (toggled via Settings) ── */
 /* Provides WCAG AAA (7:1) contrast ratios when enabled */
+/* !important needed to override inline styles set by applyTheme() */
 [data-high-contrast="true"] {
-  --color-daw-bg: #0a0a0a;
-  --color-daw-surface: #141414;
-  --color-daw-surface-raised: #1e1e1e;
-  --color-daw-border: #777;
-  --color-daw-border-strong: #999;
-  --color-daw-text-muted: #ccc;
-  --color-daw-track-bg: #111;
-  --color-daw-track-bg-alt: #151515;
+  --color-daw-bg: #0a0a0a !important;
+  --color-daw-surface: #141414 !important;
+  --color-daw-surface-raised: #1e1e1e !important;
+  --color-daw-border: #777 !important;
+  --color-daw-border-strong: #999 !important;
+  --color-daw-text-muted: #ccc !important;
+  --color-daw-track-bg: #111 !important;
+  --color-daw-track-bg-alt: #151515 !important;
 }
 
 [data-high-contrast="true"] button:focus-visible,

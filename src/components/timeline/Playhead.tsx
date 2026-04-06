@@ -62,7 +62,7 @@ function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number
         left: x,
         top: laneRect.top,
         height: laneRect.height,
-        backgroundColor: blink ? undefined : '#ffffff',
+        backgroundColor: '#ffffff',
         boxShadow: '0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.15)',
       }}
     />

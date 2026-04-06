@@ -29,7 +29,7 @@ describe('LevelMeter', () => {
     render(<LevelMeter trackId="track-1" />);
     const canvas = screen.getByTestId('meter-canvas');
     expect(canvas.getAttribute('role')).toBe('img');
-    expect(canvas.getAttribute('aria-label')).toBe('Track track-1 level meter');
+    expect(canvas.getAttribute('aria-label')).toBe('Track level meter');
   });
 
   it('renders with correct aria-label for master stage', () => {

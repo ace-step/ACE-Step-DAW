@@ -118,9 +118,9 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
           if (next !== null) {
             e.preventDefault();
             onChange(next);
-            // Match aria-valuetext format: use displayValue style if available, else percentage
+            // Announce percentage matching aria-valuetext fallback format
             const nextNorm = (next - min) / (max - min);
-            announceValue(displayValue != null ? `${Math.round(next * 1000) / 1000}` : `${Math.round(nextNorm * 100)}%`);
+            announceValue(`${Math.round(nextNorm * 100)}%`);
           }
         }}
       >

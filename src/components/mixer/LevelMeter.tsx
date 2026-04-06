@@ -188,8 +188,10 @@ export function LevelMeter({ trackId, masterStage, returnTrackId, stereo, showSc
   const clipResetLabel = masterStage
     ? `Reset clip indicator for master ${masterStage}`
     : returnTrackId
-      ? 'Reset clip indicator for return track'
-      : 'Reset clip indicator for track';
+      ? `Reset clip indicator for return track ${returnTrackId}`
+      : trackId
+        ? `Reset clip indicator for track ${trackId}`
+        : 'Reset clip indicator';
 
   const resetClip = () => {
     const engine = getAudioEngine();

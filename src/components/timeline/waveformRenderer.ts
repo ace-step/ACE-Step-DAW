@@ -275,9 +275,14 @@ export function drawMidiThumbnail(params: MidiThumbnailRenderParams): void {
   if (notes.length === 0 || width <= 0 || height <= 0 || duration <= 0) return;
 
   const secPerBeat = 60 / bpm;
-  const pitches = notes.map((n) => n.pitch);
-  const minPitch = Math.min(...pitches);
-  const maxPitch = Math.max(...pitches);
+  // Compute min/max pitch in a single pass (avoids stack overflow on large arrays)
+  let minPitch = notes[0].pitch;
+  let maxPitch = notes[0].pitch;
+  for (let i = 1; i < notes.length; i++) {
+    const p = notes[i].pitch;
+    if (p < minPitch) minPitch = p;
+    if (p > maxPitch) maxPitch = p;
+  }
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
 

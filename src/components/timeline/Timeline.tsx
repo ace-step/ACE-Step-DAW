@@ -45,6 +45,24 @@ export const TRACK_INSPECTOR_HEIGHT = 220;
 const EMPTY_TRACKS: Track[] = [];
 const EMPTY_TEMPO_MAP: TempoEvent[] = [];
 
+interface DragRect { left: number; width: number; top: number; height: number }
+
+/** Small child that subscribes to scroll — only this component re-renders on scroll, not Timeline. */
+function ScrollAwareOverlay({ width, height, ctxDrag, selDrag }: {
+  width: number; height: number; ctxDrag: DragRect | null; selDrag: DragRect | null;
+}) {
+  const scrollX = useUIStore((s) => s.scrollX);
+  const scrollY = useUIStore((s) => s.scrollY);
+  return (
+    <TimelineOverlayCanvas
+      width={width}
+      height={height}
+      ctxDrag={ctxDrag ? { ...ctxDrag, left: ctxDrag.left - scrollX, top: ctxDrag.top - scrollY } : null}
+      selDrag={selDrag ? { ...selDrag, left: selDrag.left - scrollX, top: selDrag.top - scrollY } : null}
+    />
+  );
+}
+
 export function Timeline() {
   const hasProject = useProjectStore((s) => Boolean(s.project));
   const tracks = useProjectStore((s) => s.project?.tracks ?? EMPTY_TRACKS);
@@ -545,11 +563,6 @@ export function Timeline() {
                   while canvas size stays within browser limits. Height uses visible viewport
                   (not full scrollable area) to keep backing store small. */}
               {(ctxDrag || selDrag) && (() => {
-                // Read scroll from store snapshot (not reactive subscription) to avoid
-                // re-rendering the entire Timeline on every scroll event.
-                const scrollLeft = useUIStore.getState().scrollX;
-                const scrollTop = useUIStore.getState().scrollY;
-                // Use visible viewport height (scroll container minus headers), not full scrollable height
                 const visibleHeight = scrollRef.current?.clientHeight ?? 0;
                 return (
                   <div
@@ -562,11 +575,11 @@ export function Timeline() {
                       marginBottom: -visibleHeight,
                     }}
                   >
-                    <TimelineOverlayCanvas
+                    <ScrollAwareOverlay
                       width={viewportWidth}
                       height={visibleHeight}
-                      ctxDrag={ctxDrag ? { ...ctxDrag, left: ctxDrag.left - scrollLeft, top: ctxDrag.top - scrollTop } : null}
-                      selDrag={selDrag ? { ...selDrag, left: selDrag.left - scrollLeft, top: selDrag.top - scrollTop } : null}
+                      ctxDrag={ctxDrag}
+                      selDrag={selDrag}
                     />
                   </div>
                 );

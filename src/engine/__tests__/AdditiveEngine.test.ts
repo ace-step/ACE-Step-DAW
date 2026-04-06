@@ -100,7 +100,7 @@ describe('AdditiveEngine', () => {
       const settings = createDefaultAdditiveSettings();
       expect(settings.partials).toHaveLength(16);
       expect(settings.ampEnvelope.attack).toBe(0.01);
-      expect(settings.outputGain).toBe(0);
+      expect(settings.outputGain).toBe(-5);
     });
 
     it('creates settings with specified preset', () => {

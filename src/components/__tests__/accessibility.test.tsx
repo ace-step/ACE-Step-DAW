@@ -260,15 +260,32 @@ describe('Accessibility — WCAG 2.1 AA', () => {
   // ─── Skip Navigation Links ──────────────────────────────────
 
   describe('Skip navigation', () => {
-    it('skip links target timeline and mixer regions', () => {
-      // Verify the skip link targets exist as valid HTML id patterns
-      const timelineLink = document.createElement('a');
-      timelineLink.href = '#timeline-region';
-      expect(timelineLink.hash).toBe('#timeline-region');
+    it('renders skip links with existing, focusable targets', () => {
+      render(
+        <>
+          <a href="#timeline-region">Skip to timeline</a>
+          <a href="#mixer-region">Skip to mixer</a>
+          <section id="timeline-region" tabIndex={-1}>Timeline</section>
+          <div id="mixer-region" role="region" tabIndex={-1}>Mixer</div>
+        </>
+      );
 
-      const mixerLink = document.createElement('a');
-      mixerLink.href = '#mixer-region';
-      expect(mixerLink.hash).toBe('#mixer-region');
+      const timelineLink = screen.getByRole('link', { name: /skip to timeline/i });
+      const mixerLink = screen.getByRole('link', { name: /skip to mixer/i });
+      const timelineRegion = document.getElementById('timeline-region');
+      const mixerRegion = document.getElementById('mixer-region');
+
+      expect(timelineLink.getAttribute('href')).toBe('#timeline-region');
+      expect(mixerLink.getAttribute('href')).toBe('#mixer-region');
+      expect(timelineRegion).toBeTruthy();
+      expect(mixerRegion).toBeTruthy();
+      expect(timelineRegion!.getAttribute('tabindex')).toBe('-1');
+      expect(mixerRegion!.getAttribute('tabindex')).toBe('-1');
+
+      timelineRegion!.focus();
+      expect(document.activeElement).toBe(timelineRegion);
+      mixerRegion!.focus();
+      expect(document.activeElement).toBe(mixerRegion);
     });
   });
 
@@ -283,9 +300,16 @@ describe('Accessibility — WCAG 2.1 AA', () => {
   // ─── aria-pressed on mute/solo buttons ──────────────────────
 
   describe('Mute/Solo button semantics', () => {
-    it('aria-pressed should be a valid ARIA attribute', () => {
-      const btn = document.createElement('button');
-      btn.setAttribute('aria-pressed', 'true');
+    it('aria-pressed reflects toggle state on buttons', () => {
+      const { rerender } = render(
+        <button aria-label="Mute Track 1" aria-pressed={false}>M</button>
+      );
+      const btn = screen.getByRole('button', { name: /mute track 1/i });
+      expect(btn.getAttribute('aria-pressed')).toBe('false');
+
+      rerender(
+        <button aria-label="Mute Track 1" aria-pressed={true}>M</button>
+      );
       expect(btn.getAttribute('aria-pressed')).toBe('true');
     });
   });

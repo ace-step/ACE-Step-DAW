@@ -153,6 +153,8 @@ export interface SamplerConfig {
   release: number;
   /** Optional velocity layers for multi-sample velocity switching and crossfading. */
   velocityLayers?: VelocityLayer[];
+  /** Multi-sample zones mapped across key and velocity ranges. */
+  zones?: SampleZone[];
 }
 
 /** A single velocity layer in a sampler instrument zone. */
@@ -165,6 +167,34 @@ export interface VelocityLayer {
   sampleUrl: string;
   /** Output gain multiplier for this layer (0–1, default 1). */
   gain: number;
+}
+
+/** A key/velocity zone in a multi-sample instrument. */
+export interface SampleZone {
+  /** Unique zone identifier. */
+  id: string;
+  /** IndexedDB audio key for this zone's sample. */
+  audioKey: string;
+  /** Display name for this zone's sample. */
+  sampleName?: string;
+  /** MIDI note the sample was recorded at (pitch reference). */
+  rootNote: number;
+  /** Lowest MIDI note this zone responds to (0–127). */
+  lowKey: number;
+  /** Highest MIDI note this zone responds to (0–127). */
+  highKey: number;
+  /** Lowest velocity this zone responds to (0–127). */
+  lowVelocity: number;
+  /** Highest velocity this zone responds to (0–127). */
+  highVelocity: number;
+  /** Per-zone volume multiplier (0–1, default 1). */
+  volume: number;
+  /** Per-zone stereo pan (-1 to 1, default 0). */
+  pan: number;
+  /** Tuning offset in cents (-1200 to 1200, default 0). */
+  tuneOffset: number;
+  /** Crossfade width in semitones for smooth transitions between adjacent zones (0–12). */
+  crossfadeWidth: number;
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;

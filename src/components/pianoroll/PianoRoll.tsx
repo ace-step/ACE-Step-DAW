@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import type { GranularSettings, PianoRollGrid, SamplerConfig } from '../../types/project';
 import { CHORD_SHAPES, DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
 import { QuickSamplerEditor } from './QuickSamplerEditor';
+import { ZoneMapEditor } from './ZoneMapEditor';
 import { GranularPanel } from './GranularPanel';
 import { GeneratePatternDialog } from './GeneratePatternDialog';
 import { PianoRollCanvas } from './PianoRollCanvas';
@@ -578,6 +579,10 @@ export function PianoRoll() {
             onSamplerSettingsChange={(updates) => setTrackSampler(track.id, updates)}
             onClear={() => clearTrackSampler(track.id)}
             onLoadSample={() => openSamplerFilePicker(track.id)}
+          />
+          <ZoneMapEditor
+            track={track}
+            onLoadSampleForZone={() => openSamplerFilePicker(track.id)}
           />
         </div>
       )}

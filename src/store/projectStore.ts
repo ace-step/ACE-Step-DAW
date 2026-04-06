@@ -76,6 +76,7 @@ import type {
   WavetableSettings,
   GranularSettings,
   VelocityLayer,
+  SampleZone,
   VideoClipData,
   VideoTrackSettings,
   MarkerType,
@@ -696,6 +697,14 @@ export interface ProjectState extends MidiSliceActions {
   removeVelocityLayer: (trackId: string, index: number) => void;
   /** Partially update a velocity layer at the given index. */
   updateVelocityLayer: (trackId: string, index: number, partial: Partial<VelocityLayer>) => void;
+  /** Add a sample zone to a track's samplerConfig. */
+  addSampleZone: (trackId: string, zone: SampleZone) => void;
+  /** Remove a sample zone by ID from a track's samplerConfig. */
+  removeSampleZone: (trackId: string, zoneId: string) => void;
+  /** Partially update a sample zone. */
+  updateSampleZone: (trackId: string, zoneId: string, partial: Partial<SampleZone>) => void;
+  /** Replace all zones on a track (e.g., from SFZ import). */
+  setSampleZones: (trackId: string, zones: SampleZone[]) => void;
   createQuickSamplerTrack: (input: {
     audioKey: string;
     sampleName?: string;
@@ -4021,6 +4030,108 @@ export const useProjectStore = create<ProjectState>()(
                   velocityLayers: t.samplerConfig!.velocityLayers!.map((l, i) =>
                     i === index ? { ...l, ...partial } : l,
                   ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  addSampleZone: (trackId, zone) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Add sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: [...(t.samplerConfig!.zones ?? []), zone],
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  removeSampleZone: (trackId, zoneId) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Remove sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.filter((z) => z.id !== zoneId),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSampleZone: (trackId, zoneId, partial) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.map((z) =>
+                    z.id === zoneId ? { ...z, ...partial } : z,
+                  ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  setSampleZones: (trackId, zones) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Set sample zones', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones,
                 },
               }
             : t,

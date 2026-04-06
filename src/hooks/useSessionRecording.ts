@@ -19,7 +19,6 @@ import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { toastError, toastSuccess, toastInfo } from './useToast';
 import type { Track } from '../types/project';
-import type { CountInLength } from '../engine/RecordingEngine';
 
 /** Determine recording type based on track type. */
 function getRecordingType(track: Track): 'audio' | 'midi' {
@@ -66,6 +65,11 @@ export function useSessionRecording() {
 
     // Start recording based on type
     if (recordingType === 'audio') {
+      // RecordingEngine supports only one active MediaRecorder — block concurrent audio recordings
+      if (recordingEngine.recording) {
+        toastError('Another audio recording is already in progress');
+        return;
+      }
       const ok = await recordingEngine.startRecording(trackId, slotId, transportTime);
       if (!ok) {
         toastError('Microphone access denied');
@@ -84,7 +88,10 @@ export function useSessionRecording() {
       const barDuration = (timeSig * 60 * 4) / (bpm * timeSigDenom);
       const totalMs = fixedBars * barDuration * 1000;
       const timer = setTimeout(() => {
-        stopSlotRecording(slotId, trackId, sceneId, recordingType, fixedBars);
+        void stopSlotRecording(slotId, trackId, sceneId, recordingType, fixedBars).catch((error) => {
+          console.error('Failed to auto-stop slot recording', error);
+          toastError('Failed to stop recording automatically');
+        });
       }, totalMs);
       fixedLengthTimers.current.set(slotId, timer);
     }

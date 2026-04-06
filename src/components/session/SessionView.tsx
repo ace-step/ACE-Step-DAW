@@ -1282,7 +1282,7 @@ function FragmentRow({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStartRecording(sceneId, slot.id);
+                      void onStartRecording(sceneId, slot.id);
                     }}
                     className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600/80 px-1.5 py-0.5 text-[9px] font-medium text-white leading-none hover:bg-red-500 transition-colors"
                     title="MIDI Overdub — record additional notes on top"
@@ -1298,7 +1298,7 @@ function FragmentRow({
                     onClick={(e) => {
                       e.stopPropagation();
                       const recordingType = track.trackType === 'pianoRoll' ? 'midi' as const : 'audio' as const;
-                      onStopRecording(slot.id, sceneId!, recordingType);
+                      void onStopRecording(slot.id, sceneId!, recordingType);
                     }}
                     className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none animate-pulse"
                     title="Stop overdub recording"
@@ -1321,7 +1321,7 @@ function FragmentRow({
                   <button
                     onClick={() => {
                       onSlotClick(sceneIndex);
-                      onStopRecording(slot.id, sceneId, recordingType);
+                      void onStopRecording(slot.id, sceneId, recordingType);
                     }}
                     className={`flex h-24 w-full flex-col items-center justify-center gap-2 rounded-xl border border-red-500 bg-red-500/10 transition-colors ${
                       isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''
@@ -1349,7 +1349,7 @@ function FragmentRow({
                     onClick={() => {
                       if (dragState) return;
                       onSlotClick(sceneIndex);
-                      onStartRecording(sceneId, slot.id);
+                      void onStartRecording(sceneId, slot.id);
                     }}
                     onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
                     className={`flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed transition-colors ${

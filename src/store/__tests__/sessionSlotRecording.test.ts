@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useProjectStore } from '../projectStore';
 
 function resetWithProject() {
+  useProjectStore.setState({ project: null });
   const store = useProjectStore.getState();
   // Create a minimal project
   store.createProject({

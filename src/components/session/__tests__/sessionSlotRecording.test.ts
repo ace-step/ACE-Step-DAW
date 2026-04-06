@@ -8,6 +8,8 @@ import { useProjectStore } from '../../../store/projectStore';
 import { useTransportStore } from '../../../store/transportStore';
 
 function setupProject() {
+  useProjectStore.setState({ project: null });
+  useTransportStore.setState({ armedTrackIds: [] });
   const store = useProjectStore.getState();
   store.createProject({
     name: 'Recording Test',

@@ -2092,6 +2092,21 @@ function ensureTrackDefaults(track: Track): Track {
     })),
   };
 
+  // Backfill drum pad fields added in #950 for older persisted projects
+  if (normalizedTrack.drumMachine?.pads) {
+    normalizedTrack.drumMachine = {
+      ...normalizedTrack.drumMachine,
+      pads: normalizedTrack.drumMachine.pads.map((pad) => ({
+        ...pad,
+        tune: pad.tune ?? 0,
+        decay: pad.decay ?? 0.5,
+        filter: pad.filter ?? { type: 'off' as const, cutoff: 20000 },
+        drive: pad.drive ?? 0,
+        send: pad.send ?? { reverb: 0, delay: 0 },
+      })),
+    };
+  }
+
   return {
     ...normalizedTrack,
     ...syncTrackInstrumentFields(normalizedTrack),

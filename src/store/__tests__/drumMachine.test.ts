@@ -256,6 +256,40 @@ describe('drumMachine store actions', () => {
     });
   });
 
+  describe('migration: backfill missing pad fields', () => {
+    it('adds default tune/decay/filter/drive/send to pads missing them', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      // Simulate an old persisted pad without the new fields by stripping them
+      const oldPad = { ...track.drumMachine!.pads[0] } as Record<string, unknown>;
+      delete oldPad.tune;
+      delete oldPad.decay;
+      delete oldPad.filter;
+      delete oldPad.drive;
+      delete oldPad.send;
+
+      // Reload the project through setProject which calls ensureTrackDefaults
+      const project = useProjectStore.getState().project!;
+      const modifiedTrack = {
+        ...project.tracks[0],
+        drumMachine: {
+          ...project.tracks[0].drumMachine!,
+          pads: [oldPad as never, ...project.tracks[0].drumMachine!.pads.slice(1)],
+        },
+      };
+      useProjectStore.getState().setProject({
+        ...project,
+        tracks: [modifiedTrack],
+      });
+
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.tune).toBe(0);
+      expect(pad.decay).toBe(0.5);
+      expect(pad.filter).toEqual({ type: 'off', cutoff: 20000 });
+      expect(pad.drive).toBe(0);
+      expect(pad.send).toEqual({ reverb: 0, delay: 0 });
+    });
+  });
+
   describe('undo/redo', () => {
     it('undoes a pad sample change', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');

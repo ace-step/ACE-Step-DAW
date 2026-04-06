@@ -599,6 +599,11 @@ export function useTransport() {
         const patternDuration = stepDuration * totalSteps;
         if (patternDuration <= 0) continue;
 
+        // Sync per-pad effect params before scheduling triggers
+        if (track.drumMachine?.pads) {
+          drumEngine.syncTrackPadParams(track.id, track.drumMachine.pads);
+        }
+
         const firstLoopIndex = Math.floor(startFrom / patternDuration);
         const lastLoopIndex = Math.ceil(effectiveEnd / patternDuration);
 

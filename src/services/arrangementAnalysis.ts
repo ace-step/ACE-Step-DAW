@@ -214,7 +214,12 @@ export function detectSections(project: Project): ArrangementSection[] {
   if (allMarkers && allMarkers.length > 0) {
     const markerSections = computeMarkerSections(allMarkers, project.totalDuration);
     return markerSections
-      .filter((ms) => ms.marker.name.trim().length > 0)
+      .map((ms) => ({
+        ...ms,
+        startTime: Math.max(0, Math.min(ms.startTime, project.totalDuration)),
+        endTime: Math.max(0, Math.min(ms.endTime, project.totalDuration)),
+      }))
+      .filter((ms) => ms.marker.name.trim().length > 0 && ms.endTime > ms.startTime)
       .map((ms) => {
       const trackIds = new Set<string>();
       for (const track of project.tracks) {

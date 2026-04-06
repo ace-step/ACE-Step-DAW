@@ -59,6 +59,7 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
   analyze: () => {
     const project = useProjectStore.getState().project;
     if (!project) {
+      analysisRunId++;
       set({
         sections: [],
         suggestions: [],

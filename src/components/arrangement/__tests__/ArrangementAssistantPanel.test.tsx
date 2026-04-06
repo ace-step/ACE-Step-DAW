@@ -160,6 +160,7 @@ describe('ArrangementAssistantPanel', () => {
   it('shows project metadata when available', () => {
     useArrangementAssistantStore.setState({
       isOpen: true,
+      lastAnalyzedProjectId: 'p1',
       projectMeta: { bpm: 120, keyScale: 'C major', timeSignature: 4, timeSignatureDenominator: 4, totalDuration: 30 },
     });
     render(<ArrangementAssistantPanel />);

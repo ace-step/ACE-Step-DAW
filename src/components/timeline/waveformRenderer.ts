@@ -254,8 +254,10 @@ export function drawWaveform(
   const columnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnWidth = waveformLayout.widthPx / columnCount;
 
-  // Scale amplitude by track volume (visual feedback of output level)
-  const scaledAmplitude = (height * 0.46) * Math.min(1, trackVolume);
+  // Scale amplitude by track volume (visual feedback of output level).
+  // Each channel occupies half the height, centered at 0.25/0.75.
+  // Max amplitude = 0.23 * height matches the SVG renderer (23 units in 100px viewBox).
+  const scaledAmplitude = (height * 0.23) * Math.min(1, trackVolume);
 
   // Channel center Y positions (50% for each channel)
   const leftCenterY = height * 0.25;
@@ -340,10 +342,14 @@ export function drawMidiThumbnail(
     const y = height - ((note.pitch - minPitch + pad) / (range + pad * 2)) * height;
     const noteHeight = Math.max(height / (range + pad * 2), 2);
 
-    // Rounded rectangle
-    const r = Math.min(0.5, noteWidth / 2, noteHeight / 2);
+    // Rounded rectangle with fallback for browsers without roundRect
     ctx.beginPath();
-    ctx.roundRect(x, y, noteWidth, noteHeight, r);
+    if (typeof ctx.roundRect === 'function') {
+      const r = Math.min(0.5, noteWidth / 2, noteHeight / 2);
+      ctx.roundRect(x, y, noteWidth, noteHeight, r);
+    } else {
+      ctx.rect(x, y, noteWidth, noteHeight);
+    }
     ctx.fill();
   }
 

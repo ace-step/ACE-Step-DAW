@@ -53,15 +53,18 @@ export function TimelineOverlayCanvas({
 
     if (cssWidth <= 0 || cssHeight <= 0) return;
 
-    // Update backing store if needed
-    const bw = Math.round(cssWidth * dpr);
-    const bh = Math.round(cssHeight * dpr);
+    // Cap backing store to 16384px to avoid exceeding browser limits
+    // on very wide timelines. Adjust transform to map logical → capped size.
+    const bw = Math.min(Math.round(cssWidth * dpr), 16384);
+    const bh = Math.min(Math.round(cssHeight * dpr), 16384);
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw;
       canvas.height = bh;
     }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const scaleX = bw / cssWidth;
+    const scaleY = bh / cssHeight;
+    ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
 
     if (ctxDragRect) {

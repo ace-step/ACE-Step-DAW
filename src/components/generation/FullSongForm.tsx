@@ -187,6 +187,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      if (p.negativePrompt) {
+        setNegativePrompt(p.negativePrompt);
+        setShowNegativePrompt(true);
+      }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -340,13 +344,15 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         <button
           type="button"
           onClick={() => setShowNegativePrompt(!showNegativePrompt)}
+          aria-expanded={showNegativePrompt}
+          aria-controls="negative-prompt-container"
           className="flex items-center gap-1 text-[11px] font-medium uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
         >
           <span className="text-[9px]">{showNegativePrompt ? '\u25BC' : '\u25B6'}</span>
           Exclude (Negative Prompt)
         </button>
         {showNegativePrompt && (
-          <div className="space-y-1.5">
+          <div id="negative-prompt-container" className="space-y-1.5">
             <textarea
               value={negativePrompt}
               onChange={(e) => setNegativePrompt(e.target.value)}

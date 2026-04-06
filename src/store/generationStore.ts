@@ -840,7 +840,7 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: { ...s.generationForm, lyrics, requestError: null },
       })),
       setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
-        generationForm: { ...s.generationForm, negativePrompt },
+        generationForm: { ...s.generationForm, negativePrompt, requestError: null },
       })),
 
       setGenerationInferenceSteps: (steps) => set((s) => ({

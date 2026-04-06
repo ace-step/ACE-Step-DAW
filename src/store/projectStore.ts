@@ -800,6 +800,14 @@ export interface ProjectState extends MidiSliceActions {
   aiFillSessionSlot: (slotId: string) => Clip | null;
   setSessionSceneFollowActionConfig: (sceneId: string, config: SceneFollowActionConfig) => void;
   clearSessionSceneFollowActionConfig: (sceneId: string) => void;
+  /** Mark a session slot as recording. */
+  startSessionSlotRecording: (slotId: string) => void;
+  /** Stop recording on a session slot. */
+  stopSessionSlotRecording: (slotId: string) => void;
+  /** Stop all session slot recordings. */
+  stopAllSessionSlotRecordings: () => void;
+  /** Set fixed-length recording duration in bars (null = manual stop). */
+  setSessionFixedLengthBars: (bars: number | null) => void;
 
   removeAsset: (assetId: string) => void;
   toggleAssetStar: (assetId: string) => void;
@@ -6207,6 +6215,63 @@ export const useProjectStore = create<ProjectState>()(
               : scene,
           ),
         },
+      },
+    });
+  },
+
+  startSessionSlotRecording: (slotId) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    const existing = session.recordingSlotIds ?? [];
+    if (existing.includes(slotId)) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: [...existing, slotId] },
+      },
+    });
+  },
+
+  stopSessionSlotRecording: (slotId) => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    const existing = session.recordingSlotIds ?? [];
+    if (!existing.includes(slotId)) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: existing.filter((id) => id !== slotId) },
+      },
+    });
+  },
+
+  stopAllSessionSlotRecordings: () => {
+    const state = get();
+    if (!state.project?.session) return;
+    const session = state.project.session;
+    if (!session.recordingSlotIds?.length) return;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, recordingSlotIds: [] },
+      },
+    });
+  },
+
+  setSessionFixedLengthBars: (bars) => {
+    const state = get();
+    if (!state.project) return;
+    const session = ensureProjectSession(state.project).session!;
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        session: { ...session, fixedLengthBars: bars },
       },
     });
   },

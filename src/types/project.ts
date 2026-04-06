@@ -1308,6 +1308,10 @@ export interface SessionState {
   lastLaunchAt: number | null;
   /** Global toggle for follow actions. When false, no follow actions fire. Default true. */
   followActionsEnabled?: boolean;
+  /** Slot IDs currently recording (empty when no recording is active). */
+  recordingSlotIds?: string[];
+  /** Fixed-length recording setting in bars (null = manual stop). */
+  fixedLengthBars?: number | null;
 }
 
 /** A saved project template — a snapshot of project settings and track layout (without audio). */

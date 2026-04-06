@@ -168,7 +168,7 @@ export interface VelocityLayer {
 }
 
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -427,12 +427,59 @@ export interface GranularTrackInstrument {
   settings: GranularSettings;
 }
 
+// ─── Physical Modeling Synthesis Types ─────────────────────────────────────
+
+/** Exciter type for physical modeling synthesis. */
+export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
+
+/** Preset names for physical modeling synthesis. */
+export type PhysicalModelingPresetName =
+  | 'acousticGuitar'
+  | 'harp'
+  | 'kalimba'
+  | 'marimba'
+  | 'steelDrum'
+  | 'bowedString'
+  | 'custom';
+
+/** Settings for a physical modeling (Karplus-Strong) instrument. */
+export interface PhysicalModelingSettings {
+  /** Exciter type that determines the initial signal. */
+  exciter: PhysicalExciterType;
+  /** Damping factor (0–1). Higher = faster decay. */
+  damping: number;
+  /** Brightness (0–1). Controls lowpass filter cutoff in feedback loop. */
+  brightness: number;
+  /** Pluck position along the string (0–1). Affects harmonic content. */
+  pluckPosition: number;
+  /** Body resonance size (0–1). Controls comb filter feedback for body simulation. */
+  bodySize: number;
+  /** String tension affects pitch character (0–1). */
+  stringTension: number;
+  /** Output gain (0–1). */
+  gain: number;
+  /** Amplitude envelope attack in seconds. */
+  attack: number;
+  /** Amplitude envelope release in seconds. */
+  release: number;
+  /** Active preset name. */
+  presetName: PhysicalModelingPresetName;
+}
+
+export interface PhysicalModelingTrackInstrument {
+  kind: 'physical';
+  preset: 'physical';
+  name: string;
+  settings: PhysicalModelingSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
   | WavetableTrackInstrument
-  | GranularTrackInstrument;
+  | GranularTrackInstrument
+  | PhysicalModelingTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;

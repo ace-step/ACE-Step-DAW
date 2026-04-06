@@ -3,6 +3,7 @@ import type { InstrumentEngine } from './InstrumentEngine';
 import { synthEngine } from './SynthEngine';
 import { samplerEngine } from './SamplerEngine';
 import { granularEngine } from './GranularEngine';
+import { physicalModelingEngine } from './PhysicalModelingEngine';
 
 /**
  * Adapter that wraps the legacy {@link SynthEngine} singleton to conform to
@@ -150,12 +151,47 @@ class GranularEngineAdapter implements InstrumentEngine {
   }
 }
 
+/**
+ * Adapter that wraps the {@link PhysicalModelingEngine} singleton to conform to
+ * the {@link InstrumentEngine} interface.
+ */
+class PhysicalModelingEngineAdapter implements InstrumentEngine {
+  noteOn(trackId: string, pitch: number, velocity: number): void {
+    physicalModelingEngine.noteOn(trackId, pitch, velocity);
+  }
+
+  noteOff(trackId: string, pitch: number): void {
+    physicalModelingEngine.noteOff(trackId, pitch);
+  }
+
+  triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity: number): void {
+    physicalModelingEngine.triggerAttackRelease(trackId, pitch, duration, velocity);
+  }
+
+  setParameter(trackId: string, name: string, value: number | string | boolean): void {
+    physicalModelingEngine.setParameter(trackId, name, value);
+  }
+
+  releaseAll(): void {
+    physicalModelingEngine.releaseAll();
+  }
+
+  removeTrack(trackId: string): void {
+    physicalModelingEngine.removeTrack(trackId);
+  }
+
+  dispose(): void {
+    physicalModelingEngine.dispose();
+  }
+}
+
 // ── Singletons (one adapter per kind) ──────────────────────────────────────
 
 const subtractiveAdapter = new SynthEngineAdapter();
 const samplerAdapter = new SamplerEngineAdapter();
 const fmAdapter = new FmEngineAdapter();
 const granularAdapter = new GranularEngineAdapter();
+const physicalAdapter = new PhysicalModelingEngineAdapter();
 
 /**
  * Return the {@link InstrumentEngine} that should handle playback for the
@@ -174,8 +210,10 @@ export function getEngineForInstrument(instrument: TrackInstrument): InstrumentE
       return subtractiveAdapter;
     case 'granular':
       return granularAdapter;
+    case 'physical':
+      return physicalAdapter;
   }
 }
 
 // Re-export the adapters for direct testing.
-export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter };
+export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter, PhysicalModelingEngineAdapter };

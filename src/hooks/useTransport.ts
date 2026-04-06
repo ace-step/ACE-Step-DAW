@@ -11,6 +11,7 @@ import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { wavetableEngine } from '../engine/WavetableEngine';
 import { granularEngine } from '../engine/GranularEngine';
+import { physicalModelingEngine } from '../engine/PhysicalModelingEngine';
 import { modulationEngine } from '../engine/ModulationEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import {
@@ -438,6 +439,12 @@ export function useTransport() {
               trackNode.inputGain as unknown as AudioNode,
             );
           }
+        } else if (!vst3Instrument && track.instrument?.kind === 'physical') {
+          const trackNode = engine.getOrCreateTrackNode(track.id);
+          physicalModelingEngine.ensureTrack(
+            track.id, track.instrument.settings,
+            trackNode.inputGain as unknown as AudioNode,
+          );
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
@@ -548,6 +555,10 @@ export function useTransport() {
               } else if (track.instrument?.kind === 'granular') {
                 engine.scheduleMidiEvent(scheduledStart, () => {
                   granularEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
+                });
+              } else if (track.instrument?.kind === 'physical') {
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  physicalModelingEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();

@@ -5,29 +5,30 @@
  * browsable preset collection with categories and metadata.
  */
 
-import type { TrackInstrument } from '../types/project';
+import type { TrackInstrument, PhysicalModelingPresetName } from '../types/project';
 import { FACTORY_SYNTH_PRESETS, type SynthPresetDefinition, type SynthPresetCategory } from './synthPresets';
 import { FACTORY_FM_PRESETS, type FmPresetDefinition } from './fmPresets';
 import { WAVETABLE_PRESETS, type WavetablePreset } from '../engine/wavetablePresets';
 import { createDefaultSubtractiveInstrument, createDefaultFmInstrument } from '../utils/trackInstrument';
+import { PHYSICAL_MODELING_PRESETS } from '../engine/PhysicalModelingEngine';
 
 // ---------------------------------------------------------------------------
 // Unified preset type
 // ---------------------------------------------------------------------------
 
-export type InstrumentPresetCategory = SynthPresetCategory | 'Bell' | 'Wavetable';
+export type InstrumentPresetCategory = SynthPresetCategory | 'Bell' | 'Wavetable' | 'Physical';
 
 export const ALL_PRESET_CATEGORIES: readonly InstrumentPresetCategory[] = [
-  'Bass', 'Lead', 'Pad', 'Pluck', 'FX', 'Keys', 'Bell', 'Wavetable',
+  'Bass', 'Lead', 'Pad', 'Pluck', 'FX', 'Keys', 'Bell', 'Wavetable', 'Physical',
 ] as const;
 
-export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable';
+export type InstrumentKindFilter = 'all' | 'subtractive' | 'fm' | 'wavetable' | 'physical';
 
 export interface InstrumentPreset {
   id: string;
   name: string;
   category: InstrumentPresetCategory;
-  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular';
+  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'physical';
   isFactory: boolean;
   /** Full instrument config to apply to a track. */
   instrument: TrackInstrument;
@@ -103,6 +104,35 @@ function wavetableToUnified(def: WavetablePreset): InstrumentPreset {
 }
 
 // ---------------------------------------------------------------------------
+// Physical modeling factory presets
+// ---------------------------------------------------------------------------
+
+const PHYSICAL_PRESET_LABELS: Record<Exclude<PhysicalModelingPresetName, 'custom'>, string> = {
+  acousticGuitar: 'Acoustic Guitar',
+  harp: 'Harp',
+  kalimba: 'Kalimba',
+  marimba: 'Marimba',
+  steelDrum: 'Steel Drum',
+  bowedString: 'Bowed String',
+};
+
+const PHYSICAL_FACTORY_PRESETS: InstrumentPreset[] = (
+  Object.entries(PHYSICAL_MODELING_PRESETS) as [Exclude<PhysicalModelingPresetName, 'custom'>, typeof PHYSICAL_MODELING_PRESETS[keyof typeof PHYSICAL_MODELING_PRESETS]][]
+).map(([key, settings]) => ({
+  id: `physical-${key}`,
+  name: PHYSICAL_PRESET_LABELS[key],
+  category: 'Physical' as InstrumentPresetCategory,
+  instrumentKind: 'physical' as const,
+  isFactory: true,
+  instrument: {
+    kind: 'physical' as const,
+    preset: 'physical' as const,
+    name: PHYSICAL_PRESET_LABELS[key],
+    settings: { ...settings },
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // All factory presets (unified)
 // ---------------------------------------------------------------------------
 
@@ -110,6 +140,7 @@ export const ALL_FACTORY_PRESETS: readonly InstrumentPreset[] = [
   ...FACTORY_SYNTH_PRESETS.map(subtractiveToUnified),
   ...FACTORY_FM_PRESETS.map(fmToUnified),
   ...WAVETABLE_PRESETS.map(wavetableToUnified),
+  ...PHYSICAL_FACTORY_PRESETS,
 ];
 
 // ---------------------------------------------------------------------------

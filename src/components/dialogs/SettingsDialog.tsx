@@ -101,7 +101,7 @@ function AccessibilitySettings() {
   const reducedMotion = useUIStore((s) => s.reducedMotion);
   const highContrastMode = useUIStore((s) => s.highContrastMode);
   const colorBlindMode = useUIStore((s) => s.colorBlindMode);
-  const setReducedMotion = useUIStore((s) => s.setReducedMotion);
+  const setReducedMotion = useUIStore((s) => s.setReducedMotionManual);
   const setHighContrastMode = useUIStore((s) => s.setHighContrastMode);
   const setColorBlindMode = useUIStore((s) => s.setColorBlindMode);
 

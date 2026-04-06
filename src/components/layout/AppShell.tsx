@@ -181,11 +181,11 @@ function EditorShell() {
       <BottomPanelTransition show={!!project && !!(openEffectChainTrackId || openMidiEffectChainTrackId)}>
         <ErrorBoundary name="EffectChain"><Suspense fallback={<PanelSkeleton variant="effects" />}><EffectChain /></Suspense></ErrorBoundary>
       </BottomPanelTransition>
-      <BottomPanelTransition show={!!project && showMixer}>
-        <div id="mixer-region" tabIndex={-1}>
+      <div id="mixer-region" tabIndex={-1}>
+        <BottomPanelTransition show={!!project && showMixer}>
           <ErrorBoundary name="Mixer"><Suspense fallback={<PanelSkeleton variant="mixer" />}><MixerPanel /></Suspense></ErrorBoundary>
-        </div>
-      </BottomPanelTransition>
+        </BottomPanelTransition>
+      </div>
       {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}

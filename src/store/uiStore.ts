@@ -217,9 +217,13 @@ export interface UIState {
 
   // Accessibility
   reducedMotion: boolean;
+  /** True when user explicitly toggled reduced motion in Settings (vs OS default). */
+  reducedMotionOverride: boolean;
   highContrastMode: boolean;
   colorBlindMode: boolean;
   setReducedMotion: (v: boolean) => void;
+  /** Set reduced motion AND mark it as a user override. */
+  setReducedMotionManual: (v: boolean) => void;
   setHighContrastMode: (v: boolean) => void;
   setColorBlindMode: (v: boolean) => void;
 
@@ -714,6 +718,7 @@ export const useUIStore = create<UIState>()(
   dspBackend: 'auto',
 
   reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  reducedMotionOverride: false,
   highContrastMode: false,
   colorBlindMode: false,
 
@@ -864,6 +869,7 @@ export const useUIStore = create<UIState>()(
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
   setReducedMotion: (v) => set({ reducedMotion: v }),
+  setReducedMotionManual: (v) => set({ reducedMotion: v, reducedMotionOverride: true }),
   setHighContrastMode: (v) => set({ highContrastMode: v }),
   setColorBlindMode: (v) => set({ colorBlindMode: v }),
   setTheme: (theme) => set({ theme }),
@@ -1424,6 +1430,7 @@ export const useUIStore = create<UIState>()(
         dspBackend: state.dspBackend,
         // Accessibility
         reducedMotion: state.reducedMotion,
+        reducedMotionOverride: state.reducedMotionOverride,
         highContrastMode: state.highContrastMode,
         colorBlindMode: state.colorBlindMode,
         // Theme

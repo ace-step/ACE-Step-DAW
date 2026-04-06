@@ -473,28 +473,32 @@ export function useAudioImport() {
       const project = useProjectStore.getState().project;
       if (!project) return;
 
-      const engine = getAudioEngine();
-      await engine.resume();
+      try {
+        const engine = getAudioEngine();
+        await engine.resume();
 
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
-      const wavBlob = audioBufferToWavBlob(audioBuffer);
-      const audioKey = await saveAudioBlob(project.id, `granular-${trackId}`, 'isolated', wavBlob);
-      const sampleName = file.name.replace(/\.[^.]+$/, '');
+        const arrayBuffer = await file.arrayBuffer();
+        const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer);
+        const wavBlob = audioBufferToWavBlob(audioBuffer);
+        const audioKey = await saveAudioBlob(project.id, `granular-${trackId}`, 'isolated', wavBlob);
+        const sampleName = file.name.replace(/\.[^.]+$/, '');
 
-      const { createGranularSettings } = await import('../engine/GranularEngine');
-      const granularConfig = createGranularSettings(audioKey);
-      useProjectStore.getState().updateTrack(trackId, {
-        instrument: {
-          kind: 'granular',
-          preset: 'granular',
-          name: sampleName,
-          settings: granularConfig,
-        },
-      });
-      // Set granularConfig on the track directly
-      useProjectStore.getState().updateGranularConfig(trackId, granularConfig);
-      toastSuccess(`Loaded granular source: ${sampleName}`);
+        const { createGranularSettings } = await import('../engine/GranularEngine');
+        const granularConfig = createGranularSettings(audioKey);
+        const store = useProjectStore.getState();
+        store.updateTrack(trackId, {
+          instrument: {
+            kind: 'granular',
+            preset: 'granular',
+            name: sampleName,
+            settings: granularConfig,
+          },
+        });
+        store.updateGranularConfig(trackId, granularConfig);
+        toastSuccess(`Loaded granular source: ${sampleName}`);
+      } catch (err) {
+        toastError(`Failed to load granular source: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     };
     input.click();
   }, []);

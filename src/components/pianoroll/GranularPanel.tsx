@@ -128,8 +128,7 @@ function GrainWaveform({
   return (
     <canvas
       ref={canvasRef}
-      className="w-full rounded border border-white/8"
-      style={{ height: 80 }}
+      className="w-full h-20 rounded border border-daw-border"
     />
   );
 }
@@ -163,7 +162,7 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
 
   if (!hasSource) {
     return (
-      <div className="rounded-xl border border-white/8 bg-[#0b1220] px-4 py-6 shrink-0">
+      <div className="rounded-xl border border-daw-border bg-daw-surface-2 px-4 py-6 shrink-0" data-testid="granular-panel">
         <div className="text-center">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400 mb-3">
             Granular Synthesis
@@ -173,7 +172,8 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
           </p>
           <button
             onClick={onLoadSample}
-            className="px-3 py-1.5 rounded text-[10px] font-medium bg-[#4A5FFF]/15 text-[#8B9FFF] hover:bg-[#4A5FFF]/25 transition-colors"
+            data-testid="granular-load-btn"
+            className="px-3 py-1.5 rounded text-[10px] font-medium bg-daw-accent/15 text-daw-accent hover:bg-daw-accent/25 transition-colors"
           >
             Load Sample
           </button>
@@ -185,7 +185,7 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
   const settings = config!;
 
   return (
-    <div className="rounded-xl border border-white/8 bg-[#0b1220] px-3 py-3 shrink-0 space-y-3">
+    <div className="rounded-xl border border-daw-border bg-daw-surface-2 px-3 py-3 shrink-0 space-y-3" data-testid="granular-panel">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
@@ -194,6 +194,7 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => handleChange('freeze', !settings.freeze)}
+            data-testid="granular-freeze-btn"
             className={`px-2 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider transition-colors ${
               settings.freeze
                 ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30'
@@ -204,12 +205,14 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
           </button>
           <button
             onClick={onLoadSample}
+            data-testid="granular-load-btn"
             className="px-2 py-0.5 rounded text-[9px] font-medium bg-white/5 text-zinc-400 hover:bg-white/8 transition-colors"
           >
             Load
           </button>
           <button
             onClick={onClear}
+            data-testid="granular-clear-btn"
             className="px-2 py-0.5 rounded text-[9px] font-medium bg-white/5 text-zinc-400 hover:bg-red-500/15 hover:text-red-300 transition-colors"
           >
             Clear
@@ -326,7 +329,7 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
                 onClick={() => handleChange('envelopeShape', value)}
                 className={`px-1.5 py-0.5 rounded text-[8px] font-medium transition-colors ${
                   settings.envelopeShape === value
-                    ? 'bg-[#4A5FFF]/20 text-[#8B9FFF]'
+                    ? 'bg-daw-accent/20 text-daw-accent'
                     : 'bg-white/3 text-zinc-600 hover:bg-white/6 hover:text-zinc-400'
                 }`}
               >
@@ -418,8 +421,9 @@ export function GranularPanel({ track, onConfigChange, onClear, onLoadSample }: 
           value={settings.rootNote}
           min={0}
           max={127}
+          data-testid="granular-root-note"
           onChange={(e) => handleChange('rootNote', Math.max(0, Math.min(127, parseInt(e.target.value) || 60)))}
-          className="w-12 px-1.5 py-0.5 rounded text-[10px] text-zinc-200 bg-white/5 border border-white/8 text-center focus:outline-none focus:ring-1 focus:ring-[#4A5FFF]/50"
+          className="w-12 px-1.5 py-0.5 rounded font-mono text-[10px] text-zinc-200 bg-white/5 border border-daw-border text-center focus:outline-none focus:ring-1 focus:ring-daw-accent/50"
         />
       </div>
     </div>

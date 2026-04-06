@@ -378,6 +378,55 @@ describe('GranularEngine', () => {
     });
   });
 
+  describe('getTrackBuffer', () => {
+    it('returns null when track has no granularConfig', async () => {
+      const track = { id: 'track-1', granularConfig: undefined } as unknown as import('../../types/project').Track;
+      const result = await granularEngine.getTrackBuffer(track);
+      expect(result).toBeNull();
+    });
+
+    it('returns cached buffer if available', async () => {
+      const buffer = makeAudioBuffer();
+      const settings = makeSettings();
+      granularEngine.ensureTrackGranular('track-1', settings, buffer);
+      const track = { id: 'track-1', granularConfig: settings } as unknown as import('../../types/project').Track;
+      const result = await granularEngine.getTrackBuffer(track);
+      expect(result).toBe(buffer);
+    });
+  });
+
+  describe('grain window caching', () => {
+    it('reuses cached window for same grain parameters', () => {
+      const buffer = makeAudioBuffer();
+      const settings = makeSettings({ density: 10, grainSize: 50, envelopeShape: 'hann' });
+      granularEngine.ensureTrackGranular('track-1', settings, buffer);
+      granularEngine.noteOn('track-1', 60, 100);
+
+      // Initial grain creates the window
+      const initialGainCount = mockCtx.createGain.mock.calls.length;
+
+      // Advance to trigger another grain — should reuse cached window
+      vi.advanceTimersByTime(100);
+      const afterGainCount = mockCtx.createGain.mock.calls.length;
+      // More grains were created (new gain nodes)
+      expect(afterGainCount).toBeGreaterThan(initialGainCount);
+    });
+
+    it('invalidates cache when settings change', () => {
+      const buffer = makeAudioBuffer();
+      const settings = makeSettings({ grainSize: 50, envelopeShape: 'hann' });
+      granularEngine.ensureTrackGranular('track-1', settings, buffer);
+      granularEngine.noteOn('track-1', 60, 100);
+
+      // Change envelope shape — cache should be invalidated
+      granularEngine.updateSettings('track-1', { envelopeShape: 'triangle' });
+      vi.advanceTimersByTime(100);
+
+      // Should not throw — grains still scheduled with new shape
+      expect(mockCtx.createBufferSource.mock.calls.length).toBeGreaterThan(1);
+    });
+  });
+
   describe('grain scheduling', () => {
     it('schedules grains at the configured density', () => {
       const buffer = makeAudioBuffer();

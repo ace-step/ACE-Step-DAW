@@ -83,7 +83,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Simple seeded PRNG for deterministic scatter (xoshiro128**). */
+/** Simple seeded PRNG for deterministic scatter (xorshift32). */
 let _seed = 42;
 function seededRandom(): number {
   _seed ^= _seed << 13;
@@ -292,8 +292,20 @@ class GranularEngine {
   removeTrack(trackId: string): void {
     const instance = this.instances.get(trackId);
     if (!instance) return;
+    const audioKey = instance.audioKey;
     this._disposeInstance(instance);
     this.instances.delete(trackId);
+    // Evict buffer cache if no other instance references this audioKey
+    let stillReferenced = false;
+    for (const other of this.instances.values()) {
+      if (other.audioKey === audioKey) {
+        stillReferenced = true;
+        break;
+      }
+    }
+    if (!stillReferenced) {
+      this.bufferCache.delete(audioKey);
+    }
   }
 
   setParameter(trackId: string, name: string, value: number | string | boolean): void {
@@ -318,9 +330,11 @@ class GranularEngine {
   }
 
   dispose(): void {
-    for (const trackId of this.instances.keys()) {
-      this.removeTrack(trackId);
+    for (const instance of this.instances.values()) {
+      this._disposeInstance(instance);
     }
+    this.instances.clear();
+    this.bufferCache.clear();
   }
 
   // ── Grain Scheduling ─────────────────────────────────────────────────────

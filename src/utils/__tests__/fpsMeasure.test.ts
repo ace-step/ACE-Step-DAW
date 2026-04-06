@@ -41,11 +41,12 @@ describe('FpsMeasure', () => {
   });
 
   it('calculates fps from simulated frames', () => {
+    const t0 = performance.now();
     fps.start();
-    // Simulate 60fps: 16.67ms intervals
+    // Simulate 60fps: 16.67ms intervals (offset from performance.now() base)
     for (let i = 0; i < 10; i++) {
       const cb = rafCallbacks[rafCallbacks.length - 1];
-      if (cb) cb(i * 16.67);
+      if (cb) cb(t0 + i * 16.67);
     }
 
     const measuredFps = fps.fps;
@@ -55,12 +56,13 @@ describe('FpsMeasure', () => {
   });
 
   it('calculates minFps from worst frame', () => {
+    const t0 = performance.now();
     fps.start();
     // Simulate frames with one slow frame
-    const times = [0, 16, 32, 48, 100, 116, 132]; // 52ms gap at index 4
-    for (const t of times) {
+    const offsets = [0, 16, 32, 48, 100, 116, 132]; // 52ms gap at index 4
+    for (const offset of offsets) {
       const cb = rafCallbacks[rafCallbacks.length - 1];
-      if (cb) cb(t);
+      if (cb) cb(t0 + offset);
     }
 
     const minFps = fps.minFps;

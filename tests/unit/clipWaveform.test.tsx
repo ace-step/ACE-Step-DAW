@@ -6,6 +6,7 @@ import { PEAK_STRIDE } from '../../src/utils/waveformPeaks';
 // Mock canvas context
 const mockCtx = {
   scale: vi.fn(),
+  setTransform: vi.fn(),
   clearRect: vi.fn(),
   beginPath: vi.fn(),
   moveTo: vi.fn(),
@@ -42,7 +43,7 @@ function makePeaks(count: number, fillMax = 0.5, fillMin = -0.5): number[] {
 
 describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
   it('renders canvas element when peaks are provided', () => {
-    render(
+    const { container } = render(
       <div style={{ width: 500, height: 80 }}>
         <CanvasClipWaveform
           peaks={makePeaks(64)}
@@ -58,9 +59,9 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
 
     // Canvas should be rendered instead of SVG paths
     expect(screen.getByTestId('canvas-waveform')).toBeInTheDocument();
-    // No SVG paths should be present
-    expect(document.querySelectorAll('path').length).toBe(0);
-    expect(document.querySelectorAll('svg').length).toBe(0);
+    // No SVG paths should be present within this render
+    expect(container.querySelectorAll('path').length).toBe(0);
+    expect(container.querySelectorAll('svg').length).toBe(0);
   });
 
   it('renders canvas for repitch stretch mode', () => {

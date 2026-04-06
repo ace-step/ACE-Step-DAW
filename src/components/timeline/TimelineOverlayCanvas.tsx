@@ -101,8 +101,6 @@ export function TimelineOverlayCanvas({
       style={{
         width: '100%',
         height: '100%',
-        position: 'sticky',
-        top: 0,
       }}
     />
   );

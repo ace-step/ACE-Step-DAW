@@ -5,6 +5,7 @@ import type { MidiClipData } from '../../../types/project';
 
 const mockCtx = {
   scale: vi.fn(),
+  setTransform: vi.fn(),
   clearRect: vi.fn(),
   beginPath: vi.fn(),
   moveTo: vi.fn(),

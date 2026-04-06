@@ -82,32 +82,50 @@ export function getMinMaxForColumn(
 }
 
 /**
+ * Precompute per-column min/max values for a channel.
+ * Avoids redundant scans when drawing both filled shape and envelope line.
+ */
+export function precomputeColumnMinMax(
+  peaks: number[],
+  peakSlice: PeakSlice,
+  columnCount: number,
+  channelOffset: number,
+): { maxArr: Float64Array; minArr: Float64Array } {
+  const maxArr = new Float64Array(columnCount);
+  const minArr = new Float64Array(columnCount);
+  for (let i = 0; i < columnCount; i++) {
+    const { max, min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
+    maxArr[i] = max;
+    minArr[i] = min;
+  }
+  return { maxArr, minArr };
+}
+
+/**
  * Draw a single channel's waveform as a filled shape on Canvas.
  * Upper contour (max) from left to right, lower contour (min) right to left.
  */
 export function drawChannelWaveform(
   ctx: CanvasRenderingContext2D,
-  peaks: number[],
-  peakSlice: PeakSlice,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
-  height: number,
   color: string,
   fillOpacity: number,
+  maxArr: Float64Array,
+  minArr: Float64Array,
 ): void {
-  if (columnCount <= 0 || peakSlice.numBars === 0) return;
+  if (columnCount <= 0) return;
 
+  const previousAlpha = ctx.globalAlpha;
   ctx.beginPath();
 
   // Upper contour (max values)
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - maxArr[i] * maxAmplitude;
     if (i === 0) {
       ctx.moveTo(x, yTop);
     } else {
@@ -118,16 +136,15 @@ export function drawChannelWaveform(
   // Lower contour (min values, right to left)
   for (let i = columnCount - 1; i >= 0; i--) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { min } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yBottom = centerY - min * maxAmplitude;
+    const yBottom = centerY - minArr[i] * maxAmplitude;
     ctx.lineTo(x, yBottom);
   }
 
   ctx.closePath();
-  ctx.globalAlpha = fillOpacity;
+  ctx.globalAlpha = previousAlpha * fillOpacity;
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = previousAlpha;
 }
 
 /**
@@ -135,25 +152,22 @@ export function drawChannelWaveform(
  */
 export function drawPeakEnvelopeLine(
   ctx: CanvasRenderingContext2D,
-  peaks: number[],
-  peakSlice: PeakSlice,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
-  channelOffset: number,
   centerY: number,
   maxAmplitude: number,
   color: string,
   lineWidth: number,
+  maxArr: Float64Array,
 ): void {
-  if (columnCount <= 0 || peakSlice.numBars === 0) return;
+  if (columnCount <= 0) return;
 
   ctx.beginPath();
 
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const { max } = getMinMaxForColumn(peaks, peakSlice, i, columnCount, channelOffset);
-    const yTop = centerY - max * maxAmplitude;
+    const yTop = centerY - maxArr[i] * maxAmplitude;
     if (i === 0) {
       ctx.moveTo(x, yTop);
     } else {
@@ -163,7 +177,6 @@ export function drawPeakEnvelopeLine(
 
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
-  ctx.globalAlpha = 1;
   ctx.stroke();
 }
 
@@ -177,14 +190,15 @@ export function drawCenterDivider(
   centerY: number,
   color: string,
 ): void {
+  const previousAlpha = ctx.globalAlpha;
   ctx.beginPath();
   ctx.moveTo(leftPx, centerY);
   ctx.lineTo(leftPx + widthPx, centerY);
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.2;
+  ctx.globalAlpha = previousAlpha * 0.2;
   ctx.lineWidth = 0.5;
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = previousAlpha;
 }
 
 /**
@@ -247,6 +261,10 @@ export function drawWaveform(
   const leftCenterY = height * 0.25;
   const rightCenterY = height * 0.75;
 
+  // Precompute per-column min/max for both channels (avoids redundant peak scans)
+  const leftMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
+  const rightMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
+
   ctx.save();
   ctx.globalAlpha = opacity;
 
@@ -255,23 +273,25 @@ export function drawWaveform(
 
   // Filled waveform shapes
   drawChannelWaveform(
-    ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, leftCenterY, scaledAmplitude, height, color, 0.6,
+    ctx, columnCount, columnWidth, waveformLayout.leftPx,
+    leftCenterY, scaledAmplitude, color, 0.6,
+    leftMinMax.maxArr, leftMinMax.minArr,
   );
   drawChannelWaveform(
-    ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, rightCenterY, scaledAmplitude, height, color, 0.6,
+    ctx, columnCount, columnWidth, waveformLayout.leftPx,
+    rightCenterY, scaledAmplitude, color, 0.6,
+    rightMinMax.maxArr, rightMinMax.minArr,
   );
 
   // Peak envelope lines
   const lineWidth = Math.max(0.5, height / 125);
   drawPeakEnvelopeLine(
-    ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    0, leftCenterY, scaledAmplitude, color, lineWidth,
+    ctx, columnCount, columnWidth, waveformLayout.leftPx,
+    leftCenterY, scaledAmplitude, color, lineWidth, leftMinMax.maxArr,
   );
   drawPeakEnvelopeLine(
-    ctx, peaks, peakSlice, columnCount, columnWidth, waveformLayout.leftPx,
-    2, rightCenterY, scaledAmplitude, color, lineWidth,
+    ctx, columnCount, columnWidth, waveformLayout.leftPx,
+    rightCenterY, scaledAmplitude, color, lineWidth, rightMinMax.maxArr,
   );
 
   ctx.restore();
@@ -293,9 +313,14 @@ export function drawMidiThumbnail(
   if (notes.length === 0 || width <= 0 || height <= 0) return;
 
   const secPerBeat = 60 / bpm;
-  const pitches = notes.map((n) => n.pitch);
-  const minPitch = Math.min(...pitches);
-  const maxPitch = Math.max(...pitches);
+  // Compute min/max pitch in a single loop (avoids spread argument limit on large arrays)
+  let minPitch = notes[0].pitch;
+  let maxPitch = notes[0].pitch;
+  for (let i = 1; i < notes.length; i++) {
+    const p = notes[i].pitch;
+    if (p < minPitch) minPitch = p;
+    if (p > maxPitch) maxPitch = p;
+  }
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getVisiblePeakSlice,
   getMinMaxForColumn,
+  precomputeColumnMinMax,
   drawChannelWaveform,
   drawPeakEnvelopeLine,
   drawCenterDivider,
@@ -166,17 +167,14 @@ describe('drawChannelWaveform', () => {
   });
 
   it('does nothing for zero columns', () => {
-    drawChannelWaveform(ctx, peaks, { startPeakIdx: 0, numBars: 10 }, 0, 10, 0, 0, 50, 23, 100, '#000', 0.6);
-    expect(ctx.beginPath).not.toHaveBeenCalled();
-  });
-
-  it('does nothing for zero numBars', () => {
-    drawChannelWaveform(ctx, peaks, { startPeakIdx: 0, numBars: 0 }, 10, 10, 0, 0, 50, 23, 100, '#000', 0.6);
+    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 0, 0);
+    drawChannelWaveform(ctx, 0, 10, 0, 50, 23, '#000', 0.6, maxArr, minArr);
     expect(ctx.beginPath).not.toHaveBeenCalled();
   });
 
   it('draws a closed path with fill', () => {
-    drawChannelWaveform(ctx, peaks, { startPeakIdx: 0, numBars: 10 }, 5, 10, 0, 0, 50, 23, 100, '#1a1d26', 0.6);
+    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
+    drawChannelWaveform(ctx, 5, 10, 0, 50, 23, '#1a1d26', 0.6, maxArr, minArr);
     expect(ctx.beginPath).toHaveBeenCalledTimes(1);
     expect(ctx.moveTo).toHaveBeenCalledTimes(1);
     // 5 upper + 5 lower - 1 (moveTo) = 9 lineTo calls
@@ -186,10 +184,12 @@ describe('drawChannelWaveform', () => {
     expect(ctx.fillStyle).toBe('#1a1d26');
   });
 
-  it('sets correct opacity', () => {
-    drawChannelWaveform(ctx, peaks, { startPeakIdx: 0, numBars: 10 }, 5, 10, 0, 0, 50, 23, 100, '#000', 0.6);
-    // globalAlpha should be set to 0.6 before fill, then restored to 1
-    expect(ctx.globalAlpha).toBe(1);
+  it('preserves and restores globalAlpha', () => {
+    ctx.globalAlpha = 0.9;
+    const { maxArr, minArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
+    drawChannelWaveform(ctx, 5, 10, 0, 50, 23, '#000', 0.6, maxArr, minArr);
+    // globalAlpha should be restored to previous value
+    expect(ctx.globalAlpha).toBe(0.9);
   });
 });
 
@@ -204,12 +204,14 @@ describe('drawPeakEnvelopeLine', () => {
   });
 
   it('does nothing for zero columns', () => {
-    drawPeakEnvelopeLine(ctx, peaks, { startPeakIdx: 0, numBars: 10 }, 0, 10, 0, 0, 50, 23, '#000', 0.8);
+    const { maxArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 0, 0);
+    drawPeakEnvelopeLine(ctx, 0, 10, 0, 50, 23, '#000', 0.8, maxArr);
     expect(ctx.beginPath).not.toHaveBeenCalled();
   });
 
   it('draws an open polyline with stroke', () => {
-    drawPeakEnvelopeLine(ctx, peaks, { startPeakIdx: 0, numBars: 10 }, 5, 10, 0, 0, 50, 23, '#1a1d26', 0.8);
+    const { maxArr } = precomputeColumnMinMax(peaks, { startPeakIdx: 0, numBars: 10 }, 5, 0);
+    drawPeakEnvelopeLine(ctx, 5, 10, 0, 50, 23, '#1a1d26', 0.8, maxArr);
     expect(ctx.beginPath).toHaveBeenCalledTimes(1);
     expect(ctx.moveTo).toHaveBeenCalledTimes(1);
     expect(ctx.lineTo).toHaveBeenCalledTimes(4);

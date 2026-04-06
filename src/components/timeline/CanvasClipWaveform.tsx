@@ -48,13 +48,16 @@ export function CanvasClipWaveform({
     const cssHeight = canvas.clientHeight;
     if (cssHeight <= 0) return;
 
-    // Set backing store dimensions for HiDPI
+    // Set backing store dimensions for HiDPI. If capped at 16384,
+    // adjust transform to map logical width to the capped backing size.
     const backingWidth = Math.min(Math.round(contentWidth * dpr), 16384);
     const backingHeight = Math.round(cssHeight * dpr);
-    canvas.width = backingWidth;
-    canvas.height = backingHeight;
+    if (canvas.width !== backingWidth) canvas.width = backingWidth;
+    if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
-    ctx.scale(dpr, dpr);
+    const scaleX = backingWidth / contentWidth;
+    const scaleY = backingHeight / cssHeight;
+    ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     ctx.clearRect(0, 0, contentWidth, cssHeight);
 
     drawWaveform(ctx, {

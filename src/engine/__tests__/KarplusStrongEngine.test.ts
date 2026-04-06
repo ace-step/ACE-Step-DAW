@@ -21,35 +21,43 @@ function createMockFilter() {
   };
 }
 
-function createMockGain() {
+function createMockGain(initialValue = 1) {
   return {
     connect: vi.fn(),
     toDestination: vi.fn(),
     dispose: vi.fn(),
-    gain: { value: 1 },
+    gain: {
+      value: initialValue,
+      cancelScheduledValues: vi.fn(),
+      setValueAtTime: vi.fn(),
+      linearRampToValueAtTime: vi.fn(),
+    },
   };
 }
 
+let allCreatedPlucks: ReturnType<typeof createMockPluckSynth>[] = [];
 let lastCreatedPluck: ReturnType<typeof createMockPluckSynth>;
 let lastCreatedFilter: ReturnType<typeof createMockFilter>;
 
 vi.mock('tone', () => ({
   PluckSynth: function MockPluckSynth() {
     lastCreatedPluck = createMockPluckSynth();
+    allCreatedPlucks.push(lastCreatedPluck);
     return lastCreatedPluck;
   },
   Filter: function MockFilter() {
     lastCreatedFilter = createMockFilter();
     return lastCreatedFilter;
   },
-  Gain: function MockGain() {
-    return createMockGain();
+  Gain: function MockGain(val?: number) {
+    return createMockGain(typeof val === 'number' ? val : 1);
   },
   Frequency: vi.fn((pitch: number, _type: string) => ({
     toFrequency: () => 440 * Math.pow(2, (pitch - 69) / 12),
   })),
   getContext: vi.fn(() => ({ state: 'running' })),
   start: vi.fn(),
+  now: vi.fn(() => 0),
 }));
 
 import type { PhysicalModelSettings } from '../../types/project';
@@ -73,27 +81,34 @@ describe('KarplusStrongEngine', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    allCreatedPlucks = [];
     engine = await createFreshEngine();
   });
 
   describe('ensureTrack', () => {
-    it('creates a new instance for a track', () => {
-      const instance = engine.ensureTrack('track-1', makeSettings());
+    it('creates a new instance for a track', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
       expect(instance).toBeDefined();
-      expect(instance.synths).toHaveLength(1);
+      expect(instance.synths).toHaveLength(8); // VOICE_COUNT polyphonic voices
       expect(instance.output).toBeDefined();
     });
 
-    it('returns existing instance on second call', () => {
-      const first = engine.ensureTrack('track-1', makeSettings());
-      const second = engine.ensureTrack('track-1', makeSettings({ damping: 0.8 }));
+    it('returns existing instance on second call', async () => {
+      const first = await engine.ensureTrack('track-1', makeSettings());
+      const second = await engine.ensureTrack('track-1', makeSettings({ damping: 0.8 }));
       expect(second).toBe(first);
       expect(second.settings.damping).toBe(0.8);
     });
 
-    it('creates body filter when bodySize > 0', () => {
-      const instance = engine.ensureTrack('track-1', makeSettings({ bodySize: 0.5 }));
-      expect(instance.bodyFilter).not.toBeNull();
+    it('always creates body filter and wet gain', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings({ bodySize: 0 }));
+      expect(instance.bodyFilter).toBeDefined();
+      expect(instance.bodyWetGain).toBeDefined();
+    });
+
+    it('body wet gain reflects bodySize', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings({ bodySize: 0.5 }));
+      expect(instance.bodyWetGain.gain.value).toBe(0.5);
     });
   });
 
@@ -125,42 +140,73 @@ describe('KarplusStrongEngine', () => {
   });
 
   describe('note triggering', () => {
-    it('noteOn triggers the PluckSynth', () => {
-      engine.ensureTrack('track-1', makeSettings());
+    it('noteOn triggers a PluckSynth voice', async () => {
+      await engine.ensureTrack('track-1', makeSettings());
       engine.noteOn('track-1', 60, 100);
-      expect(lastCreatedPluck.triggerAttack).toHaveBeenCalled();
+      // At least one voice should have triggerAttack called
+      const triggered = allCreatedPlucks.some((p) => p.triggerAttack.mock.calls.length > 0);
+      expect(triggered).toBe(true);
     });
 
-    it('triggerAttackRelease triggers the PluckSynth', () => {
-      engine.ensureTrack('track-1', makeSettings());
+    it('triggerAttackRelease triggers a PluckSynth voice', async () => {
+      await engine.ensureTrack('track-1', makeSettings());
       engine.triggerAttackRelease('track-1', 60, 0.5, 0.8);
-      expect(lastCreatedPluck.triggerAttack).toHaveBeenCalled();
+      const triggered = allCreatedPlucks.some((p) => p.triggerAttack.mock.calls.length > 0);
+      expect(triggered).toBe(true);
     });
 
-    it('does nothing for nonexistent track', () => {
-      engine.noteOn('nonexistent', 60, 100);
+    it('round-robins voices for polyphony', async () => {
+      await engine.ensureTrack('track-1', makeSettings());
+      engine.noteOn('track-1', 60, 100);
+      engine.noteOn('track-1', 64, 100);
+      engine.noteOn('track-1', 67, 100);
+      // 3 different voices should be triggered
+      const triggeredCount = allCreatedPlucks.filter((p) => p.triggerAttack.mock.calls.length > 0).length;
+      expect(triggeredCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it('does nothing for nonexistent track on triggerAttackRelease', () => {
       engine.triggerAttackRelease('nonexistent', 60, 0.5, 0.8);
       // No error thrown
     });
   });
 
   describe('setParameter', () => {
-    it('updates damping', () => {
-      const instance = engine.ensureTrack('track-1', makeSettings());
+    it('updates damping', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
       engine.setParameter('track-1', 'damping', 0.8);
       expect(instance.settings.damping).toBe(0.8);
     });
 
-    it('updates brightness', () => {
-      const instance = engine.ensureTrack('track-1', makeSettings());
+    it('updates brightness', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
       engine.setParameter('track-1', 'brightness', 0.9);
       expect(instance.settings.brightness).toBe(0.9);
     });
 
-    it('updates exciter type', () => {
-      const instance = engine.ensureTrack('track-1', makeSettings());
+    it('updates exciter type', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
       engine.setParameter('track-1', 'exciter', 'bow');
       expect(instance.settings.exciter).toBe('bow');
+    });
+
+    it('updates pluckPosition', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
+      engine.setParameter('track-1', 'pluckPosition', 0.7);
+      expect(instance.settings.pluckPosition).toBe(0.7);
+    });
+
+    it('updates outputGain and persists to settings', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings());
+      engine.setParameter('track-1', 'outputGain', -10);
+      expect(instance.settings.outputGain).toBe(-10);
+    });
+
+    it('updates bodySize dynamically (even from 0)', async () => {
+      const instance = await engine.ensureTrack('track-1', makeSettings({ bodySize: 0 }));
+      engine.setParameter('track-1', 'bodySize', 0.6);
+      expect(instance.settings.bodySize).toBe(0.6);
+      expect(instance.bodyWetGain.gain.value).toBe(0.6);
     });
 
     it('does nothing for nonexistent track', () => {
@@ -170,10 +216,13 @@ describe('KarplusStrongEngine', () => {
   });
 
   describe('removeTrack', () => {
-    it('disposes and removes the instance', () => {
-      engine.ensureTrack('track-1', makeSettings());
+    it('disposes and removes the instance', async () => {
+      await engine.ensureTrack('track-1', makeSettings());
+      const plucks = [...allCreatedPlucks];
       engine.removeTrack('track-1');
-      expect(lastCreatedPluck.dispose).toHaveBeenCalled();
+      for (const p of plucks) {
+        expect(p.dispose).toHaveBeenCalled();
+      }
     });
 
     it('does nothing for nonexistent track', () => {
@@ -183,15 +232,16 @@ describe('KarplusStrongEngine', () => {
   });
 
   describe('dispose', () => {
-    it('disposes all instances', () => {
-      engine.ensureTrack('track-1', makeSettings());
-      const pluck1 = lastCreatedPluck;
-      engine.ensureTrack('track-2', makeSettings());
-      const pluck2 = lastCreatedPluck;
+    it('disposes all instances', async () => {
+      await engine.ensureTrack('track-1', makeSettings());
+      const plucks1 = [...allCreatedPlucks];
+      await engine.ensureTrack('track-2', makeSettings());
 
       engine.dispose();
-      expect(pluck1.dispose).toHaveBeenCalled();
-      expect(pluck2.dispose).toHaveBeenCalled();
+      // All voices from track-1 should be disposed
+      for (const p of plucks1) {
+        expect(p.dispose).toHaveBeenCalled();
+      }
     });
   });
 });

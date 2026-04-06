@@ -1,11 +1,15 @@
 import * as Tone from 'tone';
 import type { PhysicalModelSettings, PhysicalExciterType, PhysicalModelPreset } from '../types/project';
 
+/** Number of polyphonic voices for PluckSynth (self-decaying, so overlap is common). */
+const VOICE_COUNT = 8;
+
 interface KarplusInstance {
   synths: Tone.PluckSynth[];
+  nextVoice: number;
   filter: Tone.Filter;
-  bodyFilter: Tone.Filter | null;
-  bodyWetGain: Tone.Gain | null;
+  bodyFilter: Tone.Filter;
+  bodyWetGain: Tone.Gain;
   output: Tone.Gain;
   settings: PhysicalModelSettings;
 }
@@ -74,7 +78,6 @@ function exciterToAttackNoise(exciter: PhysicalExciterType): number {
 }
 
 function settingsToPluckParams(settings: PhysicalModelSettings) {
-  // pluckPosition affects brightness and resonance: edge = brighter, center = warmer
   const pos = Math.max(0, Math.min(1, settings.pluckPosition));
   const edgeFactor = Math.abs(pos - 0.5) * 2;
   const effectiveBrightness = Math.min(1, Math.max(0, settings.brightness * (0.8 + edgeFactor * 0.4)));
@@ -102,11 +105,13 @@ class KarplusStrongEngine {
     }
   }
 
-  ensureTrack(
+  async ensureTrack(
     trackId: string,
     settings: PhysicalModelSettings,
     connectTo?: Tone.InputNode,
-  ): KarplusInstance {
+  ): Promise<KarplusInstance> {
+    await this.ensureStarted();
+
     const existing = this.instances.get(trackId);
     if (existing) {
       this._updateSettings(existing, settings);
@@ -123,26 +128,30 @@ class KarplusStrongEngine {
     const instance = this.instances.get(trackId);
     if (!instance) return;
     const freq = Tone.Frequency(pitch, 'midi').toFrequency();
-    // PluckSynth doesn't support velocity param — scale output gain temporarily
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
-    const baseGain = instance.output.gain.value;
-    instance.output.gain.value = baseGain * vel;
-    instance.synths[0].triggerAttack(freq);
-    // Restore base gain after a short delay (PluckSynth excitation is immediate)
-    instance.output.gain.value = baseGain;
+
+    // Round-robin voice allocation for polyphony
+    const voiceIdx = instance.nextVoice % instance.synths.length;
+    instance.nextVoice = (instance.nextVoice + 1) % instance.synths.length;
+    const synth = instance.synths[voiceIdx];
+
+    // Apply velocity by scaling output temporarily with scheduled ramp
+    const now = Tone.now();
+    const baseGain = dBToLinear(instance.settings.outputGain);
+    instance.output.gain.cancelScheduledValues(now);
+    instance.output.gain.setValueAtTime(baseGain * vel, now);
+    synth.triggerAttack(freq, now);
+    // Restore base gain after excitation window (~50ms)
+    instance.output.gain.linearRampToValueAtTime(baseGain, now + 0.05);
   }
 
-  noteOff(trackId: string, _pitch: number) {
-    void trackId;
+  noteOff(_trackId: string, _pitch: number) {
+    // PluckSynth notes self-decay — no explicit release needed.
   }
 
-  triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity = 1) {
-    this._lazyInit(trackId);
-    const instance = this.instances.get(trackId);
-    if (!instance) return;
-    const freq = Tone.Frequency(pitch, 'midi').toFrequency();
-    // PluckSynth doesn't support velocity in triggerAttack
-    instance.synths[0].triggerAttack(freq);
+  triggerAttackRelease(trackId: string, pitch: number, _duration: number, velocity = 1) {
+    // PluckSynth self-decays, so duration doesn't apply. Apply velocity.
+    this.noteOn(trackId, pitch, Math.round(velocity * 127));
   }
 
   setParameter(trackId: string, name: string, value: number | string | boolean) {
@@ -152,28 +161,36 @@ class KarplusStrongEngine {
     switch (name) {
       case 'damping':
         instance.settings.damping = value as number;
-        instance.synths[0].resonance = 1 - (value as number);
+        for (const s of instance.synths) s.resonance = 1 - (value as number);
         break;
       case 'brightness':
         instance.settings.brightness = value as number;
-        instance.synths[0].dampening = 1000 + (value as number) * 14000;
+        for (const s of instance.synths) s.dampening = 1000 + (value as number) * 14000;
         instance.filter.frequency.value = 500 + (value as number) * 19500;
         break;
       case 'exciter':
         instance.settings.exciter = value as PhysicalExciterType;
-        instance.synths[0].attackNoise = exciterToAttackNoise(value as PhysicalExciterType);
+        for (const s of instance.synths) s.attackNoise = exciterToAttackNoise(value as PhysicalExciterType);
         break;
-      case 'bodySize': {
-        const bs = value as number;
-        instance.settings.bodySize = bs;
-        if (instance.bodyFilter && instance.bodyWetGain) {
-          instance.bodyFilter.frequency.value = 200 + bs * 2000;
-          instance.bodyFilter.Q.value = 1 + bs * 5;
-          instance.bodyWetGain.gain.value = bs;
+      case 'pluckPosition': {
+        instance.settings.pluckPosition = value as number;
+        const params = settingsToPluckParams(instance.settings);
+        for (const s of instance.synths) {
+          s.dampening = params.dampening;
+          s.resonance = params.resonance;
         }
         break;
       }
+      case 'bodySize': {
+        const bs = value as number;
+        instance.settings.bodySize = bs;
+        instance.bodyFilter.frequency.value = 200 + bs * 2000;
+        instance.bodyFilter.Q.value = 1 + bs * 5;
+        instance.bodyWetGain.gain.value = bs;
+        break;
+      }
       case 'outputGain':
+        instance.settings.outputGain = value as number;
         instance.output.gain.value = dBToLinear(value as number);
         break;
     }
@@ -201,7 +218,9 @@ class KarplusStrongEngine {
   /** Lazily create instance with defaults if noteOn arrives before ensureTrack. */
   private _lazyInit(trackId: string) {
     if (!this.instances.has(trackId)) {
-      this.ensureTrack(trackId, { ...PHYSICAL_PRESETS['custom'] });
+      // Synchronous fallback — ensureTrack is async but we need immediate init
+      const instance = this._createInstance({ ...PHYSICAL_PRESETS['custom'] });
+      this.instances.set(trackId, instance);
     }
   }
 
@@ -211,11 +230,15 @@ class KarplusStrongEngine {
   ): KarplusInstance {
     const params = settingsToPluckParams(settings);
 
-    const synth = new Tone.PluckSynth({
-      attackNoise: params.attackNoise,
-      dampening: params.dampening,
-      resonance: params.resonance,
-    });
+    // Create polyphonic voice pool
+    const synths: Tone.PluckSynth[] = [];
+    for (let i = 0; i < VOICE_COUNT; i++) {
+      synths.push(new Tone.PluckSynth({
+        attackNoise: params.attackNoise,
+        dampening: params.dampening,
+        resonance: params.resonance,
+      }));
+    }
 
     const filter = new Tone.Filter({
       type: 'lowpass',
@@ -223,28 +246,24 @@ class KarplusStrongEngine {
       Q: 0.7,
     });
 
-    // Body resonance: always create but control wet amount via bodyWetGain
-    let bodyFilter: Tone.Filter | null = null;
-    let bodyWetGain: Tone.Gain | null = null;
-    if (settings.bodySize > 0) {
-      bodyFilter = new Tone.Filter({
-        type: 'bandpass',
-        frequency: 200 + settings.bodySize * 2000,
-        Q: 1 + settings.bodySize * 5,
-      });
-      bodyWetGain = new Tone.Gain(settings.bodySize);
-    }
+    // Body resonance: always created, wet gain controls blend amount
+    const bodyFilter = new Tone.Filter({
+      type: 'bandpass',
+      frequency: 200 + settings.bodySize * 2000,
+      Q: 1 + settings.bodySize * 5,
+    });
+    const bodyWetGain = new Tone.Gain(settings.bodySize);
 
     const output = new Tone.Gain(dBToLinear(settings.outputGain));
 
-    // Signal chain: synth → filter → output (dry) + filter → bodyFilter → bodyWetGain �� output (wet)
-    synth.connect(filter);
-    filter.connect(output);
-    if (bodyFilter && bodyWetGain) {
-      filter.connect(bodyFilter);
-      bodyFilter.connect(bodyWetGain);
-      bodyWetGain.connect(output);
+    // Signal chain: synth -> filter -> output (dry) + filter -> bodyFilter -> bodyWetGain -> output (wet)
+    for (const synth of synths) {
+      synth.connect(filter);
     }
+    filter.connect(output);
+    filter.connect(bodyFilter);
+    bodyFilter.connect(bodyWetGain);
+    bodyWetGain.connect(output);
 
     if (connectTo) {
       output.connect(connectTo);
@@ -253,7 +272,8 @@ class KarplusStrongEngine {
     }
 
     return {
-      synths: [synth],
+      synths,
+      nextVoice: 0,
       filter,
       bodyFilter,
       bodyWetGain,
@@ -264,17 +284,15 @@ class KarplusStrongEngine {
 
   private _updateSettings(instance: KarplusInstance, settings: PhysicalModelSettings) {
     const params = settingsToPluckParams(settings);
-    instance.synths[0].attackNoise = params.attackNoise;
-    instance.synths[0].dampening = params.dampening;
-    instance.synths[0].resonance = params.resonance;
-    instance.filter.frequency.value = 500 + settings.brightness * 19500;
-
-    if (instance.bodyFilter && instance.bodyWetGain && settings.bodySize > 0) {
-      instance.bodyFilter.frequency.value = 200 + settings.bodySize * 2000;
-      instance.bodyFilter.Q.value = 1 + settings.bodySize * 5;
-      instance.bodyWetGain.gain.value = settings.bodySize;
+    for (const synth of instance.synths) {
+      synth.attackNoise = params.attackNoise;
+      synth.dampening = params.dampening;
+      synth.resonance = params.resonance;
     }
-
+    instance.filter.frequency.value = 500 + settings.brightness * 19500;
+    instance.bodyFilter.frequency.value = 200 + settings.bodySize * 2000;
+    instance.bodyFilter.Q.value = 1 + settings.bodySize * 5;
+    instance.bodyWetGain.gain.value = settings.bodySize;
     instance.output.gain.value = dBToLinear(settings.outputGain);
     instance.settings = { ...settings };
   }
@@ -282,8 +300,8 @@ class KarplusStrongEngine {
   private _disposeInstance(instance: KarplusInstance) {
     for (const s of instance.synths) s.dispose();
     instance.filter.dispose();
-    instance.bodyFilter?.dispose();
-    instance.bodyWetGain?.dispose();
+    instance.bodyFilter.dispose();
+    instance.bodyWetGain.dispose();
     instance.output.dispose();
   }
 }

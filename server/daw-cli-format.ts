@@ -150,6 +150,13 @@ export function formatStatus(data: Record<string, unknown>): string {
     lines.push(wikiSummary);
   }
 
+  // Append wiki lint results if present
+  const wikiLintSummary = data.wikiLintSummary as string | undefined;
+  if (wikiLintSummary) {
+    lines.push('');
+    lines.push(wikiLintSummary);
+  }
+
   return lines.join('\n');
 }
 

@@ -15,6 +15,7 @@ import { useGenerationStore } from '../store/generationStore';
 import { useUIStore } from '../store/uiStore';
 import { createDebugLogger } from '../utils/debugLogger';
 import { getProjectWiki } from './projectWiki';
+import { lintProjectWiki, formatLintReport } from './wikiLint';
 
 const log = createDebugLogger('mcp-bridge');
 
@@ -92,12 +93,17 @@ async function executeTool(tool: string, params: Record<string, unknown>): Promi
       const p = project.project;
       if (!p) return { error: 'No project loaded' };
 
-      // Include wiki summary if available
+      // Include wiki summary and lint if available
       let wikiSummary: string | undefined;
+      let wikiLintSummary: string | undefined;
       try {
         const wiki = getProjectWiki(p.id);
         await wiki.initialize();
         wikiSummary = await wiki.summarize();
+        const lintReport = await lintProjectWiki(p.id, 'lightweight');
+        if (lintReport.warnings.length > 0) {
+          wikiLintSummary = formatLintReport(lintReport);
+        }
       } catch {
         // Wiki unavailable — non-critical
       }
@@ -119,6 +125,7 @@ async function executeTool(tool: string, params: Record<string, unknown>): Promi
           soloed: t.soloed,
         })),
         wikiSummary,
+        wikiLintSummary,
       };
     }
 

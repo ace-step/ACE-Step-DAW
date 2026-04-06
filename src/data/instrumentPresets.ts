@@ -27,7 +27,7 @@ export interface InstrumentPreset {
   id: string;
   name: string;
   category: InstrumentPresetCategory;
-  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular';
+  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'additive';
   isFactory: boolean;
   /** Full instrument config to apply to a track. */
   instrument: TrackInstrument;

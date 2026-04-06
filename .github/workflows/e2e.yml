@@ -15,14 +15,21 @@ jobs:
   # Critical E2E tests — BLOCKS PR merges.
   e2e-critical:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall wasm-pack --no-confirm
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Build WASM
+        run: npm run build:wasm
       - run: npx playwright install --with-deps chromium
 
       - name: Run critical E2E tests
@@ -39,15 +46,22 @@ jobs:
   # Extended E2E tests — non-blocking, creates issues on failure
   e2e-extended:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall wasm-pack --no-confirm
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Build WASM
+        run: npm run build:wasm
       - run: npx playwright install --with-deps chromium
 
       - name: Run extended E2E tests

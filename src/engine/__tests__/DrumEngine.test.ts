@@ -85,7 +85,7 @@ describe('DrumEngine pad params', () => {
   describe('syncTrackPadParams', () => {
     it('no-ops gracefully when track not initialized', () => {
       const pads = [{
-        tune: 5, decay: 0.3, pan: -0.5,
+        volume: 0.8, tune: 5, decay: 0.3, pan: -0.5,
         filter: { type: 'lowpass' as const, cutoff: 2000 },
         drive: 0.4, send: { reverb: 0.2, delay: 0.1 },
       }];

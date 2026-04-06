@@ -7311,7 +7311,7 @@ export const useProjectStore = create<ProjectState>()(
                 const safeType = validTypes.has(merged.type) ? merged.type : p.filter.type;
                 // Auto-adjust cutoff when filter type changes to avoid inaudible defaults
                 let cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
-                if (filterUpdate.type && safeType !== p.filter.type && !filterUpdate.cutoff) {
+                if (filterUpdate.type && safeType !== p.filter.type && filterUpdate.cutoff === undefined) {
                   cutoffSource = safeType === 'highpass' ? 200 : 20000;
                 }
                 return {

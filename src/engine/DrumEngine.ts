@@ -632,12 +632,13 @@ class DrumEngine {
     const chains = this.padChains.get(trackId);
     if (!voices || padIndex < 0 || padIndex >= voices.length) return;
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
+    const time = Tone.now();
 
     if (chains) {
-      this.applyDecayEnvelope(chains[padIndex], Tone.now());
+      this.applyDecayEnvelope(chains[padIndex], time);
     }
 
-    voices[padIndex].trigger(undefined, vel);
+    voices[padIndex].trigger(time, vel);
   }
 
   /** Schedule a drum pattern for looping playback. */

@@ -176,6 +176,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.seed !== undefined) { setSeed(p.seed); setUseRandomSeed(false); }
       if (p.useRandomSeed !== undefined) setUseRandomSeed(p.useRandomSeed);
       if (p.vocalLanguage) setVocalLanguage(p.vocalLanguage);
+      setNegativePrompt(p.negativePrompt ?? '');
       if (p.instrumental !== undefined) setInstrumental(p.instrumental);
       if (p.durationSeconds !== undefined && p.durationSeconds > 0) {
         setDurationSeconds(p.durationSeconds);

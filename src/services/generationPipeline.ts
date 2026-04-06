@@ -1105,7 +1105,12 @@ function createVariationClipAtTime(params: VariationSessionParams, index: number
     globalCaption: params.globalCaption ?? '',
     lyrics: params.lyrics ?? '',
     source: 'generated',
-    ...(negativePrompt ? { generationParams: { type: 'lego' as const, prompt: params.prompt, lyrics: params.lyrics ?? '', negativePrompt } } : {}),
+    generationParams: {
+      type: 'lego' as const,
+      prompt: params.prompt,
+      lyrics: params.lyrics ?? '',
+      ...(negativePrompt ? { negativePrompt } : {}),
+    },
   });
   return clip.id;
 }

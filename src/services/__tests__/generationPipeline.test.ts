@@ -306,6 +306,102 @@ describe('sourceAudioOverride fallback warning', () => {
   });
 });
 
+describe('negative_prompt forwarding — cover', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useModelStore.setState(useModelStore.getInitialState(), true);
+    useProjectStore.getState().createProject();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('forwards negativePrompt as negative_prompt in cover params', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0, duration: 10, prompt: 'test',
+    });
+    // Set isolatedAudioKey so the clip has audio
+    const project = useProjectStore.getState().project!;
+    const storeClip = project.tracks.find((t) => t.id === track.id)!.clips.find((c) => c.id === clip.id)!;
+    storeClip.isolatedAudioKey = 'cover-audio-key';
+    storeClip.generationStatus = 'ready';
+
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-cover-neg' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-cover-neg', status: 1, progress_text: 'Done',
+      result: JSON.stringify([{ file: '/tmp/cover.wav', seed_value: 1 }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['cover'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:cover:iso');
+    mockDecodeAudioData.mockResolvedValue({ duration: 10, sampleRate: 44100, numberOfChannels: 2, length: 441000, getChannelData: () => new Float32Array(441000) });
+
+    const promise = generateCoverClip({
+      clipId: clip.id, caption: 'jazz cover', lyrics: '',
+      coverStrength: 0.5, createNew: false,
+      negativePrompt: 'no distortion',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, params] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.negative_prompt).toBe('no distortion');
+  });
+});
+
+describe('negative_prompt forwarding — repaint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+    useGenerationStore.setState(useGenerationStore.getInitialState(), true);
+    useModelStore.setState(useModelStore.getInitialState(), true);
+    useProjectStore.getState().createProject();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('forwards negativePrompt as negative_prompt in repaint params', async () => {
+    const track = useProjectStore.getState().addTrack('stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0, duration: 10, prompt: 'test',
+    });
+    const project = useProjectStore.getState().project!;
+    const storeClip = project.tracks.find((t) => t.id === track.id)!.clips.find((c) => c.id === clip.id)!;
+    storeClip.isolatedAudioKey = 'repaint-audio-key';
+    storeClip.generationStatus = 'ready';
+
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-repaint-neg' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-repaint-neg', status: 1, progress_text: 'Done',
+      result: JSON.stringify([{ file: '/tmp/repaint.wav', seed_value: 1 }]),
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['repaint'], { type: 'audio/wav' }));
+    mockSaveAudioBlob.mockResolvedValue('audio:repaint:iso');
+    mockDecodeAudioData.mockResolvedValue({ duration: 10, sampleRate: 44100, numberOfChannels: 2, length: 441000, getChannelData: () => new Float32Array(441000) });
+
+    const promise = generateRepaintClip({
+      clipId: clip.id, repaintStart: 2, repaintEnd: 8, prompt: 'add strings',
+      negativePrompt: 'no guitar solo',
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, params] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.negative_prompt).toBe('no guitar solo');
+  });
+});
+
 describe('generateAllTracks', () => {
   beforeEach(() => {
     vi.clearAllMocks();

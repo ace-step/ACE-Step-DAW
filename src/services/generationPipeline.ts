@@ -1130,6 +1130,10 @@ async function runVariationClip(
   if (clip?.generationParams?.chunkMaskMode) {
     clipOpts.chunkMaskMode = clip.generationParams.chunkMaskMode;
   }
+  // Forward persisted negativePrompt as explicit override
+  if (clip?.generationParams?.negativePrompt?.trim()) {
+    clipOpts.negativePromptOverride = clip.generationParams.negativePrompt;
+  }
   const outcome = await generateClipInternal(clipId, previousCumulativeBlob, clipOpts);
   return {
     succeeded: outcome.succeeded,

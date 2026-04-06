@@ -77,10 +77,11 @@ describe('fpsMeasure', () => {
     const handle = startFpsMeasure();
     rafCallbacks.shift()?.(0);
     rafCallbacks.shift()?.(16);
-    const result = handle.stop();
-    const frameCountAfterStop = result.frameCount;
+    const firstResult = handle.stop();
+    const frameCountAfterStop = firstResult.frameCount;
     // Any queued callbacks shouldn't increment
     rafCallbacks.shift()?.(32);
-    expect(result.frameCount).toBe(frameCountAfterStop);
+    const secondResult = handle.stop();
+    expect(secondResult.frameCount).toBe(frameCountAfterStop);
   });
 });

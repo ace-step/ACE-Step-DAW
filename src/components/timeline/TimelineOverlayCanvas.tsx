@@ -97,9 +97,11 @@ export function TimelineOverlayCanvas({
       ctx.fillStyle = SEL_DRAG_FILL;
       ctx.fillRect(x, y, selDrag.width, selDrag.height);
 
-      ctx.strokeStyle = SEL_DRAG_BORDER;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, selDrag.width - 1, selDrag.height - 1);
+      if (selDrag.width > 1 && selDrag.height > 1) {
+        ctx.strokeStyle = SEL_DRAG_BORDER;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, selDrag.width - 1, selDrag.height - 1);
+      }
     }
   }, [ctxDrag, selDrag, scrollLeft, scrollTop, viewportWidth, viewportHeight]);
 

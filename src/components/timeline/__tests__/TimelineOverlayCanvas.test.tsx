@@ -1,25 +1,28 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render } from '@testing-library/react';
 import { TimelineOverlayCanvas } from '../TimelineOverlayCanvas';
 
-// Mock canvas getContext
-const mockGetContext = vi.fn().mockReturnValue({
-  clearRect: vi.fn(),
-  fillRect: vi.fn(),
-  strokeRect: vi.fn(),
-  setTransform: vi.fn(),
-  beginPath: vi.fn(),
-  moveTo: vi.fn(),
-  lineTo: vi.fn(),
-  stroke: vi.fn(),
-  fillStyle: '',
-  strokeStyle: '',
-  lineWidth: 1,
-});
-
-vi.stubGlobal('HTMLCanvasElement', class extends HTMLCanvasElement {});
-
 describe('TimelineOverlayCanvas', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      setTransform: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+    }) as unknown as CanvasRenderingContext2D);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders nothing when no drag rects are provided', () => {
     const { container } = render(
       <TimelineOverlayCanvas

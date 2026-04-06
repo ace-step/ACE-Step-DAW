@@ -39,7 +39,7 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, opts: DrawWaveformOp
     width, height, color, trackVolume = 1,
   } = opts;
 
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.clearRect(0, 0, width, height);
 
   if (!peaks || peaks.length === 0 || width <= 0 || height <= 0) return;
 
@@ -183,9 +183,17 @@ export interface DrawMidiThumbnailOptions {
 export function drawMidiThumbnail(ctx: CanvasRenderingContext2D, opts: DrawMidiThumbnailOptions): void {
   const { notes, width, height, duration, bpm, color } = opts;
 
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.clearRect(0, 0, width, height);
 
-  if (notes.length === 0 || width <= 0 || height <= 0) return;
+  if (
+    notes.length === 0 ||
+    width <= 0 ||
+    height <= 0 ||
+    !Number.isFinite(duration) ||
+    !Number.isFinite(bpm) ||
+    duration <= 0 ||
+    bpm <= 0
+  ) return;
 
   const secPerBeat = 60 / bpm;
   const pitches = notes.map((n) => n.pitch);

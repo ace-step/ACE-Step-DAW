@@ -62,9 +62,7 @@ describe('NegativePromptSection', () => {
     const props = { ...makeProps(), value: 'no autotune' };
     render(<NegativePromptSection {...props} />);
     fireEvent.click(screen.getByTestId('negative-prompt-toggle'));
-    // Find the chip button (not the textarea) via role
-    const chips = screen.getByTestId('negative-prompt-chips');
-    const chip = chips.querySelector('button:first-child')!;
+    const chip = screen.getByRole('button', { name: 'no autotune' });
     expect(chip).toBeDisabled();
     fireEvent.click(chip);
     expect(props.onChange).not.toHaveBeenCalled();

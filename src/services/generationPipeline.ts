@@ -108,6 +108,8 @@ export interface ClipInternalOptions {
   useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
+  /** Override negative prompt — prefer this over clip.generationParams.negativePrompt */
+  negativePromptOverride?: string;
 }
 
 export interface VariationGenerationDependencies {
@@ -812,9 +814,9 @@ async function generateClipInternal(
     }
 
     // Negative prompt: exclude unwanted elements from generation
-    const clipNegativePrompt = clip.generationParams?.negativePrompt?.trim();
-    if (clipNegativePrompt) {
-      params.negative_prompt = clipNegativePrompt;
+    const negativePrompt = options.negativePromptOverride?.trim() || clip.generationParams?.negativePrompt?.trim();
+    if (negativePrompt) {
+      params.negative_prompt = negativePrompt;
     }
 
     // Submit task
@@ -1095,6 +1097,7 @@ function getNextVariationStartTime(trackId: string): number {
 
 function createVariationClipAtTime(params: VariationSessionParams, index: number, baseStartTime: number): string {
   const startTime = baseStartTime + (index * params.duration);
+  const negativePrompt = params.negativePrompt?.trim();
   const clip = useProjectStore.getState().addClip(params.trackId, {
     startTime,
     duration: params.duration,
@@ -1102,6 +1105,7 @@ function createVariationClipAtTime(params: VariationSessionParams, index: number
     globalCaption: params.globalCaption ?? '',
     lyrics: params.lyrics ?? '',
     source: 'generated',
+    ...(negativePrompt ? { generationParams: { type: 'lego' as const, prompt: params.prompt, lyrics: params.lyrics ?? '', negativePrompt } } : {}),
   });
   return clip.id;
 }
@@ -2617,6 +2621,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
       shift: request.shift,
+      negativePrompt: request.negativePrompt?.trim() || undefined,
     },
   });
 

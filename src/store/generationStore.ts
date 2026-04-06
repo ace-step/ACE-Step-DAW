@@ -771,7 +771,7 @@ export const useGenerationStore = create<GenerationState>()(
         generationForm: {
           ...s.generationForm,
           negativePrompt,
-          requestError: s.generationForm.requestError ? null : s.generationForm.requestError,
+          requestError: null,
         },
       })),
 

@@ -14,7 +14,7 @@ export interface CoverTaskParams {
   model: string;
   seed?: number;
   use_random_seed?: boolean;
-  /** Negative prompt �� elements to exclude from generation (e.g. "no autotune, no reverb") */
+  /** Negative prompt — elements to exclude from generation (e.g. "no autotune, no reverb") */
   negative_prompt?: string;
 }
 

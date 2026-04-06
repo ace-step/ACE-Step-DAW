@@ -64,6 +64,7 @@ export function StrudelEditor() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bouncing, setBouncing] = useState(false);
   const [bounceProgress, setBounceProgress] = useState(0);
+  const [generating, setGenerating] = useState(false);
   const [bounceBars, setBounceBars] = useState(4);
   const [showBarsMenu, setShowBarsMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,6 +323,47 @@ export function StrudelEditor() {
     }
   }, [activeStrudelTrack, bounceBars, bouncing, project]);
 
+  // Generate from Pattern — send pattern to ACE-Step AI generation
+  const handleGenerateFromPattern = useCallback(async () => {
+    if (!project || generating) return;
+    setGenerating(true);
+    try {
+      const store = useProjectStore.getState();
+      let strudelTrack = activeStrudelTrack;
+      if (!strudelTrack) {
+        strudelTrack = store.addTrack('custom', 'strudel');
+        setOpenStrudelEditor(strudelTrack.id);
+      }
+      const code = strudelTrack?.strudelCode?.trim();
+      if (!code) {
+        setConsoleMessages((prev) => [...prev.slice(-50), '! no pattern code to generate from']);
+        return;
+      }
+
+      const { generateFromStrudelPattern } = await import('../../services/strudelGenerationBridge');
+      const result = await generateFromStrudelPattern({
+        trackId: strudelTrack.id,
+        code,
+        bars: bounceBars,
+        bpm: project.bpm ?? 120,
+        beatsPerBar: typeof project.timeSignature === 'number' ? project.timeSignature : 4,
+        keyScale: project.keyScale ?? undefined,
+      });
+
+      if (result) {
+        setConsoleMessages((prev) => [...prev.slice(-50), `✓ AI generation started from ${bounceBars} bars pattern`]);
+      } else {
+        setConsoleMessages((prev) => [...prev.slice(-50), '! pattern analysis returned no data']);
+      }
+    } catch (err: any) {
+      log.error('Generate from pattern failed:', err);
+      setError(err?.message ?? 'Generation failed');
+      setConsoleMessages((prev) => [...prev.slice(-50), `! generation failed: ${err?.message}`]);
+    } finally {
+      setGenerating(false);
+    }
+  }, [activeStrudelTrack, bounceBars, generating, project, setOpenStrudelEditor]);
+
   const buildImportOptions = useCallback((): Partial<StrudelFromMidiOptions> => ({
     ...importOptions,
     keyScale: project?.keyScale ?? null,
@@ -574,6 +616,19 @@ export function StrudelEditor() {
               title={`Freeze ${bounceBars} bars to drum machine track`}
             >
               Drums
+            </button>
+            <button
+              onClick={() => void handleGenerateFromPattern()}
+              disabled={!project || isLoading || generating}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                generating
+                  ? 'text-indigo-400 animate-pulse cursor-wait'
+                  : 'text-indigo-400/70 hover:bg-indigo-500/10 hover:text-indigo-400'
+              }`}
+              title={`Analyze ${bounceBars} bars pattern and generate AI audio`}
+              data-testid="strudel-generate-from-pattern"
+            >
+              {generating ? 'AI...' : 'AI Gen'}
             </button>
           </>
         )}

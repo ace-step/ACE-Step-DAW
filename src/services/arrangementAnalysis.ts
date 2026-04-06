@@ -221,12 +221,14 @@ export function detectSections(project: Project): ArrangementSection[] {
           }
         }
       }
-      const sectionName = ms.marker.name.toLowerCase().trim() as SectionType;
+      const sectionName = ms.marker.name.toLowerCase().trim();
       const knownTypes: SectionType[] = [
         'intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro',
         'drop', 'breakdown', 'solo', 'interlude', 'hook', 'build', 'tag',
       ];
-      const type = knownTypes.includes(sectionName) ? sectionName : 'unknown';
+      const isKnownSectionType = (value: string): value is SectionType =>
+        (knownTypes as string[]).includes(value);
+      const type: SectionType = isKnownSectionType(sectionName) ? sectionName : 'unknown';
       return {
         id: uuidv4(),
         type,

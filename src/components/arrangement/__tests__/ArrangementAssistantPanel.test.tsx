@@ -61,7 +61,7 @@ describe('ArrangementAssistantPanel', () => {
   });
 
   it('renders the panel when open', () => {
-    useArrangementAssistantStore.setState({ isOpen: true });
+    useArrangementAssistantStore.setState({ isOpen: true, lastAnalyzedProjectId: 'p1' });
     render(<ArrangementAssistantPanel />);
     expect(screen.getByTestId('arrangement-assistant-panel')).toBeTruthy();
     expect(screen.getByText('Arrangement Assistant')).toBeTruthy();
@@ -151,7 +151,7 @@ describe('ArrangementAssistantPanel', () => {
   });
 
   it('closes panel when close button is clicked', () => {
-    useArrangementAssistantStore.setState({ isOpen: true });
+    useArrangementAssistantStore.setState({ isOpen: true, lastAnalyzedProjectId: 'p1' });
     render(<ArrangementAssistantPanel />);
     fireEvent.click(screen.getByTestId('arrangement-close'));
     expect(useArrangementAssistantStore.getState().isOpen).toBe(false);

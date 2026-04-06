@@ -41,6 +41,9 @@ export interface ArrangementAssistantState {
   clear: () => void;
 }
 
+/** Monotonic run counter to guard against stale setTimeout callbacks. */
+let analysisRunId = 0;
+
 export const useArrangementAssistantStore = create<ArrangementAssistantState>((set, get) => ({
   isOpen: false,
   isAnalyzing: false,
@@ -67,10 +70,14 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
       return;
     }
 
+    const runId = ++analysisRunId;
     set({ isAnalyzing: true, error: null });
 
     // Yield to the event loop so the spinner renders before heavy sync work
     setTimeout(() => {
+      // Guard: if a newer analyze() was called, discard this result
+      if (runId !== analysisRunId) return;
+
       try {
         const analysis = analyzeArrangement(project);
         set({

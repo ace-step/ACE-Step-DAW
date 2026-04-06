@@ -487,8 +487,8 @@ export const DRUM_PRESETS = [
 // ─── Drum Engine Class ──────────────────────────────────────────────────────
 
 /** Parameters for updating a single pad's effect chain.
- * Note: volume is intentionally omitted — it's applied via velocity scaling
- * in triggerPad to avoid double attenuation. */
+ * Note: volume is intentionally omitted — callers should pre-scale the
+ * velocity passed to triggerPad with the pad's volume to avoid double attenuation. */
 export interface PadParams {
   tune?: number;
   /** Relative decay 0–1: scales the gain node's release/fade time (0 = very short, 1 = full length) */
@@ -579,8 +579,10 @@ class DrumEngine {
   }
 
   /** Sync all pad parameters from project state to the engine.
-   * Call after ensureTrack to apply per-pad settings from persisted data. */
+   * Safely no-ops if the track hasn't been initialized yet — params will
+   * be applied on the next ensureTrack + sync cycle or triggerPad call. */
   syncTrackPadParams(trackId: string, pads: ReadonlyArray<{ tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+    if (!this.padChains.has(trackId)) return;
     for (let i = 0; i < pads.length; i++) {
       this.updatePadParams(trackId, i, {
         pan: pads[i].pan,
@@ -591,6 +593,12 @@ class DrumEngine {
         send: pads[i].send,
       });
     }
+  }
+
+  /** Async version: ensures the track is initialized, then syncs pad params. */
+  async ensureAndSyncPadParams(trackId: string, kit: DrumKitName, pads: ReadonlyArray<{ tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+    await this.ensureTrack(trackId, kit);
+    this.syncTrackPadParams(trackId, pads);
   }
 
   async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {

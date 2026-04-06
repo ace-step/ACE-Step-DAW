@@ -7294,11 +7294,12 @@ export const useProjectStore = create<ProjectState>()(
               pads: t.drumMachine.pads.map((p, i) => {
                 if (i !== padIndex) return p;
                 const merged = { ...p.filter, ...filterUpdate };
+                const cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
                 return {
                   ...p,
                   filter: {
                     type: merged.type,
-                    cutoff: Math.max(20, Math.min(20000, merged.cutoff)),
+                    cutoff: Math.max(20, Math.min(20000, cutoffSource)),
                   },
                 };
               }),
@@ -7353,8 +7354,8 @@ export const useProjectStore = create<ProjectState>()(
                 return {
                   ...p,
                   send: {
-                    reverb: Math.max(0, Math.min(1, merged.reverb)),
-                    delay: Math.max(0, Math.min(1, merged.delay)),
+                    reverb: Number.isFinite(merged.reverb) ? Math.max(0, Math.min(1, merged.reverb)) : p.send.reverb,
+                    delay: Number.isFinite(merged.delay) ? Math.max(0, Math.min(1, merged.delay)) : p.send.delay,
                   },
                 };
               }),

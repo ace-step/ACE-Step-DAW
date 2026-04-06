@@ -343,20 +343,20 @@ export function DrumMachineEditor() {
                 />
               </div>
 
-              {/* ── Sends ── */}
-              <div className="flex items-center gap-3 py-1">
+              {/* ── Sends (disabled until return track routing is wired) ── */}
+              <div className="flex items-center gap-3 py-1 opacity-40" title="Sends will be enabled when return track routing is implemented">
                 <Knob
                   value={selectedPadData.send.reverb}
                   min={0} max={1} defaultValue={0} step={0.01}
                   onChange={(v) => setDrumPadSend(trackId, selectedPad, { reverb: v })}
-                  label="Reverb" variant="sm" color="#22c55e"
+                  label="Reverb" variant="sm" color="#22c55e" disabled
                   formatValue={(v) => `${Math.round(v * 100)}%`}
                 />
                 <Knob
                   value={selectedPadData.send.delay}
                   min={0} max={1} defaultValue={0} step={0.01}
                   onChange={(v) => setDrumPadSend(trackId, selectedPad, { delay: v })}
-                  label="Delay" variant="sm" color="#f59e0b"
+                  label="Delay" variant="sm" color="#f59e0b" disabled
                   formatValue={(v) => `${Math.round(v * 100)}%`}
                 />
               </div>

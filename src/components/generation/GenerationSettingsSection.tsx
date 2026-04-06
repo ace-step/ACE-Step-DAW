@@ -4,6 +4,8 @@ import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../servi
 import { DEFAULT_GENERATION } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings } from '../../utils/playbackLatency';
+import { getSmartDefaults } from '../../services/smartDefaults';
+import type { SmartDefaultsResult } from '../../services/smartDefaults';
 import type { LmModelEntry, ModelEntry } from '../../types/api';
 
 function modelSupportsThinking(modelName: string): boolean {
@@ -29,6 +31,7 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
   const [initMessage, setInitMessage] = useState('');
   const [initError, setInitError] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
+  const [wikiSuggestion, setWikiSuggestion] = useState<SmartDefaultsResult | null>(null);
   const prevActiveRef = useRef(false);
 
   const handleModelChange = useCallback((newModel: string) => {
@@ -103,9 +106,18 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
   useEffect(() => {
     if (active && !prevActiveRef.current) {
       hydrateFromProject();
+      // Fetch wiki-based smart defaults if a global caption is set
+      const caption = project?.globalCaption ?? '';
+      if (caption) {
+        // Extract first word as a rough genre guess
+        const genreGuess = caption.split(/[\s,;]+/).find(w => w.length > 2)?.toLowerCase() ?? '';
+        void getSmartDefaults(genreGuess).then(setWikiSuggestion);
+      } else {
+        setWikiSuggestion(null);
+      }
     }
     prevActiveRef.current = active;
-  }, [active, hydrateFromProject]);
+  }, [active, hydrateFromProject, project?.globalCaption]);
 
   const selectedModelEntry = availableModels.find((entry) => entry.name === model);
   const selectedLmEntry = availableLmModels.find((entry) => entry.name === selectedLmModel);
@@ -303,6 +315,26 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
           <h3 className="text-sm font-semibold text-zinc-100">Generation Defaults</h3>
           <p className="text-[11px] text-zinc-400">These defaults feed new requests before per-generation overrides.</p>
         </div>
+
+        {wikiSuggestion?.source === 'wiki' && (
+          <button
+            type="button"
+            onClick={() => {
+              setSteps(wikiSuggestion.inferenceSteps);
+              setGuidance(wikiSuggestion.guidanceScale);
+              setShift(wikiSuggestion.shift);
+            }}
+            className="flex w-full items-center gap-2 rounded border border-indigo-500/30 bg-indigo-950/20 px-2.5 py-1.5 text-left text-[11px] text-indigo-300 transition-colors hover:border-indigo-500/50 hover:bg-indigo-950/30"
+          >
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-indigo-400">Wiki</span>
+            <span className="truncate">
+              Steps {wikiSuggestion.inferenceSteps}, Guidance {wikiSuggestion.guidanceScale.toFixed(1)}, Shift {wikiSuggestion.shift.toFixed(1)}
+            </span>
+            <span className="ml-auto shrink-0 text-[10px] text-indigo-400/60">
+              {Math.round((wikiSuggestion.confidence ?? 0) * 100)}% · {wikiSuggestion.sampleSize} runs
+            </span>
+          </button>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

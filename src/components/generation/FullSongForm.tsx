@@ -453,21 +453,21 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
             />
             <div className="flex flex-wrap gap-1">
               {['no autotune', 'no reverb', 'no distortion', 'no falsetto', 'no guitar solo', 'no background vocals'].map((chip) => {
-                const isActive = negativePrompt.toLowerCase().includes(chip);
+                const tokens = negativePrompt.split(',').map((t) => t.trim()).filter(Boolean);
+                const normalizedChip = chip.toLowerCase();
+                const isActive = tokens.some((t) => t.toLowerCase() === normalizedChip);
                 return (
                   <button
                     key={chip}
                     type="button"
                     onClick={() => {
                       if (isActive) {
-                        // Remove the chip from the negative prompt
-                        const regex = new RegExp(`\\s*,?\\s*${chip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*,?\\s*`, 'gi');
-                        setNegativePrompt(negativePrompt.replace(regex, ', ').replace(/^[,\s]+|[,\s]+$/g, ''));
+                        setNegativePrompt(
+                          tokens.filter((t) => t.toLowerCase() !== normalizedChip).join(', '),
+                        );
                       } else {
                         setNegativePrompt(
-                          negativePrompt.trim()
-                            ? `${negativePrompt.trim()}, ${chip}`
-                            : chip,
+                          [...tokens, chip].join(', '),
                         );
                       }
                     }}

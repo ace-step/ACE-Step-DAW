@@ -20,6 +20,7 @@ import {
 } from '../constants/strudelTemplateLibrary';
 import { buildPromptFromPatternInfo } from './strudelGenerationBridge';
 import { computeLineDiff, formatUnifiedDiff, formatDiffSummary } from '../utils/codeDiff';
+import { strudelEventLog, type StrudelLogFilter } from '../engine/strudelStructuredLog';
 import { createDebugLogger } from '../utils/debugLogger';
 
 const log = createDebugLogger('strudel:agent-api');
@@ -229,5 +230,8 @@ export function createStrudelAgentApi() {
     getTemplateByGenre,
     getTemplatesByComplexity,
     getTemplatesByBpmRange,
+    getEventLog: (filter?: StrudelLogFilter) => strudelEventLog.getEntries(filter),
+    clearEventLog: () => strudelEventLog.clear(),
+    subscribeToEvents: (callback: (entry: unknown) => void) => strudelEventLog.subscribe(callback),
   };
 }

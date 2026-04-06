@@ -67,8 +67,6 @@ export function Timeline() {
   const keyboardContext = useUIStore((s) => s.keyboardContext);
   const setScrollX = useUIStore((s) => s.setScrollX);
   const setScrollY = useUIStore((s) => s.setScrollY);
-  const storeScrollX = useUIStore((s) => s.scrollX);
-  const storeScrollY = useUIStore((s) => s.scrollY);
   const regionRegenerateTarget = useUIStore((s) => s.regionRegenerateTarget);
   const inlineSuggestions = useUIStore((s) => s.inlineSuggestions);
   const suggestionFrequency = useUIStore((s) => s.suggestionFrequency);
@@ -484,7 +482,7 @@ export function Timeline() {
           </div>
 
           {/* Track lanes area */}
-          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth, willChange: 'transform' }}>
+          <div className="relative" style={{ gridColumn: '2', gridRow: '2', width: totalWidth }}>
             <GridOverlay />
             <Playhead />
 
@@ -547,10 +545,10 @@ export function Timeline() {
                   while canvas size stays within browser limits. Height uses visible viewport
                   (not full scrollable area) to keep backing store small. */}
               {(ctxDrag || selDrag) && (() => {
-                // Use reactive scroll values from store (not stale ref reads) so
-                // overlay positions update correctly when scrolling during drag.
-                const scrollLeft = storeScrollX;
-                const scrollTop = storeScrollY;
+                // Read scroll from store snapshot (not reactive subscription) to avoid
+                // re-rendering the entire Timeline on every scroll event.
+                const scrollLeft = useUIStore.getState().scrollX;
+                const scrollTop = useUIStore.getState().scrollY;
                 // Use visible viewport height (scroll container minus headers), not full scrollable height
                 const visibleHeight = scrollRef.current?.clientHeight ?? 0;
                 return (
@@ -558,6 +556,7 @@ export function Timeline() {
                     className="pointer-events-none sticky left-0 z-10"
                     style={{
                       position: 'sticky',
+                      top: 0,
                       width: viewportWidth,
                       height: visibleHeight,
                       marginBottom: -visibleHeight,

@@ -1,6 +1,5 @@
 import { useVST3Store } from '../../store/vst3Store';
 import { useUIStore } from '../../store/uiStore';
-import { _getBridgeClient } from '../../hooks/useVST3Connection';
 import type { CompanionAppStatus } from '../../types/vst3';
 
 /** GitHub releases URL for companion app downloads */
@@ -19,6 +18,8 @@ export function CompanionStatus() {
   const version = useVST3Store((s) => s.companionVersion);
   const appStatus = useVST3Store((s) => s.companionAppStatus);
   const connectionError = useVST3Store((s) => s.connectionError);
+  const storeConnect = useVST3Store((s) => s.connect);
+  const storeDisconnect = useVST3Store((s) => s.disconnect);
   const showPanel = useUIStore((s) => s.showVST3Panel);
   const togglePanel = useUIStore((s) => s.toggleVST3Panel);
 
@@ -26,14 +27,14 @@ export function CompanionStatus() {
     if (status === 'connected') {
       togglePanel();
     } else if (status === 'disconnected' || status === 'error') {
-      _getBridgeClient().connect();
+      storeConnect();
     }
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (status === 'connected') {
       e.preventDefault();
-      _getBridgeClient().disconnect();
+      storeDisconnect();
     }
   };
 

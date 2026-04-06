@@ -90,7 +90,11 @@ function loadFavorites(): Set<string> {
 
 /** Persist favorites to localStorage */
 function saveFavorites(ids: Set<string>): void {
-  localStorage.setItem('vst3-favorites', JSON.stringify([...ids]));
+  try {
+    localStorage.setItem('vst3-favorites', JSON.stringify([...ids]));
+  } catch {
+    /* ignore persistence failures so UI state updates still succeed */
+  }
 }
 
 /** Compare semver strings: returns true if version >= minimum */
@@ -114,7 +118,7 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
   instances: {},
   pluginOrder: {},
   favoritePluginIds: loadFavorites(),
-  setupWizardDismissed: localStorage.getItem('vst3-setup-dismissed') === 'true',
+  setupWizardDismissed: (() => { try { return localStorage.getItem('vst3-setup-dismissed') === 'true'; } catch { return false; } })(),
 
   // ── Connection ──────────────────────────────────────────
   connect: () => {
@@ -353,7 +357,17 @@ export const useVST3Store = create<VST3Store>()((set, get) => ({
     }
   },
   setConnectionError: (error) => set({ connectionError: error }),
-  setCompanionVersion: (version) => set({ companionVersion: version }),
+  setCompanionVersion: (version) => {
+    set({ companionVersion: version });
+    // Re-derive companionAppStatus when version arrives while connected
+    if (get().connectionStatus === 'connected' && version) {
+      if (!isVersionAcceptable(version, MIN_COMPANION_VERSION)) {
+        set({ companionAppStatus: 'outdated' });
+      } else {
+        set({ companionAppStatus: 'running' });
+      }
+    }
+  },
   setCompanionAppStatus: (status) => set({ companionAppStatus: status }),
   setScannedPlugins: (plugins) => set({ plugins, scanning: false, scanProgress: null }),
   markAllInstancesOffline: () => {

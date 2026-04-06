@@ -1,17 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { CompanionStatus } from '../CompanionStatus';
 import { useVST3Store } from '../../../store/vst3Store';
 import { useUIStore } from '../../../store/uiStore';
 
-// Mock the bridge client singleton
-const mockConnect = vi.fn();
-const mockDisconnect = vi.fn();
-
 vi.mock('../../../hooks/useVST3Connection', () => ({
   _getBridgeClient: () => ({
-    connect: mockConnect,
-    disconnect: mockDisconnect,
+    connect: vi.fn(),
+    disconnect: vi.fn(),
     status: 'disconnected',
     isConnected: false,
     companionVersion: null,
@@ -20,8 +16,6 @@ vi.mock('../../../hooks/useVST3Connection', () => ({
 
 describe('CompanionStatus enhanced states', () => {
   beforeEach(() => {
-    mockConnect.mockClear();
-    mockDisconnect.mockClear();
     useVST3Store.setState({
       connectionStatus: 'disconnected',
       companionVersion: null,

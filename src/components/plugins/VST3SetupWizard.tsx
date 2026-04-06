@@ -1,13 +1,12 @@
 import { useVST3Store } from '../../store/vst3Store';
-import { _getBridgeClient } from '../../hooks/useVST3Connection';
 
 /** GitHub releases base URL for companion app */
 const RELEASES_URL = 'https://github.com/ace-step/ace-step-companion/releases/latest';
 
 const DOWNLOAD_LINKS = [
-  { platform: 'windows', label: 'Windows', testId: 'download-windows', suffix: '.exe' },
-  { platform: 'macos', label: 'macOS', testId: 'download-macos', suffix: '.dmg' },
-  { platform: 'linux', label: 'Linux', testId: 'download-linux', suffix: '.AppImage' },
+  { platform: 'windows', label: 'Windows', testId: 'download-windows' },
+  { platform: 'macos', label: 'macOS', testId: 'download-macos' },
+  { platform: 'linux', label: 'Linux', testId: 'download-linux' },
 ] as const;
 
 // ── Inline icons ────────────────────────────────────────────────────────────
@@ -55,6 +54,7 @@ export function VST3SetupWizard() {
   const connectionError = useVST3Store((s) => s.connectionError);
   const setupWizardDismissed = useVST3Store((s) => s.setupWizardDismissed);
   const dismissSetupWizard = useVST3Store((s) => s.dismissSetupWizard);
+  const connect = useVST3Store((s) => s.connect);
   const userPlatform = detectPlatform();
 
   // Don't show if dismissed or already connected
@@ -63,7 +63,7 @@ export function VST3SetupWizard() {
   }
 
   const handleConnect = () => {
-    _getBridgeClient().connect();
+    connect();
   };
 
   const isConnecting = connectionStatus === 'connecting';

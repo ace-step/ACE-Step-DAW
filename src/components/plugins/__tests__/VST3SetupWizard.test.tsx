@@ -25,6 +25,7 @@ describe('VST3SetupWizard', () => {
       companionAppStatus: 'unknown',
       setupWizardDismissed: false,
       companionVersion: null,
+      connectionError: null,
     });
   });
 
@@ -66,9 +67,11 @@ describe('VST3SetupWizard', () => {
     expect(screen.getByTestId('wizard-step-connect')).toBeInTheDocument();
   });
 
-  it('connect button triggers connection', () => {
+  it('connect button triggers store connect action', () => {
     render(<VST3SetupWizard />);
     fireEvent.click(screen.getByTestId('wizard-connect-btn'));
+    // Store's connect() sets status to 'connecting' and calls bridge
+    expect(useVST3Store.getState().connectionStatus).toBe('connecting');
     expect(mockConnect).toHaveBeenCalledOnce();
   });
 
@@ -86,7 +89,6 @@ describe('VST3SetupWizard', () => {
       companionVersion: '1.0.0',
     });
     rerender(<VST3SetupWizard />);
-    // Wizard should not render when connected
     expect(screen.queryByTestId('vst3-setup-wizard')).not.toBeInTheDocument();
   });
 

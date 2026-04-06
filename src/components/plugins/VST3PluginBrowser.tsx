@@ -135,8 +135,10 @@ export function VST3PluginBrowser({ onLoadPlugin }: VST3PluginBrowserProps) {
   const isEmpty = plugins.length === 0 && !scanning;
 
   // ── Scan progress percentage ────────────────────────────
-  const scanPercent = scanProgress && scanProgress.total > 0
-    ? Math.round((scanProgress.scanned / scanProgress.total) * 100)
+  const scanPercent = scanProgress
+    ? scanProgress.total > 0
+      ? Math.round((scanProgress.scanned / scanProgress.total) * 100)
+      : null // unknown total — use indeterminate bar
     : null;
 
   return (
@@ -172,19 +174,23 @@ export function VST3PluginBrowser({ onLoadPlugin }: VST3PluginBrowserProps) {
       {scanning && scanProgress && (
         <div data-testid="scan-progress" className="flex flex-col gap-1">
           <div className="text-[10px] text-zinc-400">
-            Scanning {scanProgress.currentPlugin}... ({scanProgress.scanned}/{scanProgress.total})
+            Scanning {scanProgress.currentPlugin}...
+            {scanProgress.total > 0 && ` (${scanProgress.scanned}/${scanProgress.total})`}
+            {scanProgress.total === 0 && scanProgress.scanned > 0 && ` (${scanProgress.scanned} found)`}
           </div>
-          {scanProgress.total > 0 && (
-            <div
-              className="h-1 w-full overflow-hidden rounded-full bg-white/10"
-              data-testid="scan-progress-bar"
-            >
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-white/10"
+            data-testid="scan-progress-bar"
+          >
+            {scanPercent !== null ? (
               <div
                 className="h-full rounded-full bg-violet-500 transition-all duration-300"
                 style={{ width: `${scanPercent}%` }}
               />
-            </div>
-          )}
+            ) : (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-violet-500" />
+            )}
+          </div>
         </div>
       )}
 

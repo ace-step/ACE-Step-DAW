@@ -94,7 +94,7 @@ export const useArrangementAssistantStore = create<ArrangementAssistantState>((s
           projectMeta: null,
           error: err instanceof Error ? err.message : 'Analysis failed',
           isAnalyzing: false,
-          lastAnalyzedProjectId: null,
+          lastAnalyzedProjectId: project.id,
         });
       }
     }, 0);

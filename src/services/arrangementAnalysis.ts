@@ -209,8 +209,10 @@ function splitRegionByClipDurations(region: TimeRegion, project: Project): TimeR
  */
 export function detectSections(project: Project): ArrangementSection[] {
   // Prefer marker-based sections when available
-  if (project.markers && project.markers.length > 0) {
-    const markerSections = computeMarkerSections(project.markers, project.totalDuration);
+  // Filter out boundary-only markers with empty names (used as end markers in the timeline)
+  const namedMarkers = project.markers?.filter((m) => m.name.trim().length > 0);
+  if (namedMarkers && namedMarkers.length > 0) {
+    const markerSections = computeMarkerSections(namedMarkers, project.totalDuration);
     return markerSections.map((ms) => {
       const trackIds = new Set<string>();
       for (const track of project.tracks) {

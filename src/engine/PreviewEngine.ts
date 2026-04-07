@@ -202,12 +202,19 @@ function transposePattern(pattern: PreviewPattern, semitones: number): PreviewPa
 // Preview synth factory
 // ---------------------------------------------------------------------------
 
-function createPreviewSynth(kind: 'subtractive' | 'fm' | 'wavetable'): Tone.PolySynth | Tone.FMSynth {
+function createPreviewSynth(kind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'physical'): Tone.PolySynth | Tone.FMSynth | Tone.PluckSynth {
   if (kind === 'fm') {
     return new Tone.FMSynth({
       modulationIndex: 3,
       harmonicity: 2,
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.8 },
+    });
+  }
+  if (kind === 'physical') {
+    return new Tone.PluckSynth({
+      attackNoise: 1,
+      dampening: 4000,
+      resonance: 0.9,
     });
   }
   // subtractive & wavetable both use PolySynth for preview
@@ -224,7 +231,7 @@ function createPreviewSynth(kind: 'subtractive' | 'fm' | 'wavetable'): Tone.Poly
 export class PreviewEngine {
   private _volume = 0.3;
   private _isPlaying = false;
-  private _synth: Tone.PolySynth | Tone.FMSynth | null = null;
+  private _synth: Tone.PolySynth | Tone.FMSynth | Tone.PluckSynth | null = null;
   private _gain: Tone.Gain | null = null;
   private _scheduledIds: number[] = [];
   private _stopTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -269,7 +276,7 @@ export class PreviewEngine {
   }
 
   async playPresetPreview(
-    instrumentKind: 'subtractive' | 'fm' | 'wavetable',
+    instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'physical',
     category: string,
     bpm: number,
     keyScale = 'C major',

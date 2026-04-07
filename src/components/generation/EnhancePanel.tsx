@@ -12,7 +12,7 @@ export function EnhancePanel() {
     enhancerOpen, enhancerTarget, closeEnhancer, dynamicBottom, panelRef,
     clip, track, project, mode, setMode, isGenerating, isSubmitting,
     caption, setCaption, lyrics, setLyrics, consistency, setConsistency, createNew, setCreateNew,
-    quickStylesOpen, setQuickStylesOpen,
+    quickStylesOpen, setQuickStylesOpen, timbreRef, setTimbreRef,
     selStart, selEnd, prompt, setPrompt, globalCaption, setGlobalCaption,
     repaintMode, setRepaintMode, repaintStrength, setRepaintStrength,
     sessions, activeSessionId, setActiveSessionId,
@@ -174,6 +174,9 @@ export function EnhancePanel() {
               onCreateNewChange={setCreateNew}
               quickStylesOpen={quickStylesOpen}
               onQuickStylesToggle={() => setQuickStylesOpen((v) => !v)}
+              timbreRef={timbreRef}
+              onTimbreRefChange={setTimbreRef}
+              isSubmitting={isSubmitting}
             />
           )}
 

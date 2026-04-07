@@ -557,7 +557,7 @@ export function Timeline() {
                 />
               )}
 
-              {/* Live select drag overlay — accent-tinted with smooth fill */}
+              {/* Live select drag overlay */}
               {selDrag && (
                 <div
                   className="absolute pointer-events-none z-10"

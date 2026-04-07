@@ -10,6 +10,7 @@ import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import type { RepaintMode } from '../types/api';
 import type { EnhancementNode } from '../types/enhance';
 import type { ConsistencyLevel } from '../components/generation/EnhanceCoverControls';
+import type { TimbreReference } from '../services/timbreTransfer';
 import type { ResultEntry, ABSide } from '../components/generation/ResultsPanel';
 import type { SessionEntry } from '../components/generation/EnhanceHistorySidebar';
 
@@ -50,6 +51,7 @@ export function useEnhancePanelState() {
   const [lyrics, setLyrics] = useState('');
   const [consistency, setConsistency] = useState<ConsistencyLevel>('medium');
   const [createNew, setCreateNew] = useState(true);
+  const [timbreRef, setTimbreRef] = useState<TimbreReference | null>(null);
 
   // Repaint fields
   const [selStart, setSelStart] = useState(0);
@@ -280,8 +282,10 @@ export function useEnhancePanelState() {
     }]);
     try {
       const newClipId = await generateCoverClip({
-        clipId: enhancerTarget.clipId, caption, lyrics, coverStrength, createNew,
-        sourceAudioOverride: chainedSourceAudioKey || undefined,
+        clipId: enhancerTarget.clipId, caption, lyrics,
+        coverStrength: timbreRef ? timbreRef.strength : coverStrength,
+        createNew,
+        sourceAudioOverride: timbreRef?.audioKey || chainedSourceAudioKey || undefined,
       });
       await finalizeResult(resultId, enhancerTarget.clipId, newClipId);
     } catch (err) {
@@ -292,7 +296,7 @@ export function useEnhancePanelState() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, finalizeResult]);
+  }, [enhancerTarget, caption, lyrics, consistency, createNew, isGenerating, isSubmitting, chainedSourceAudioKey, timbreRef, finalizeResult]);
 
   const handleRepaintGenerate = useCallback(async () => {
     if (!enhancerTarget || isGenerating || isSubmitting) return;
@@ -434,7 +438,7 @@ export function useEnhancePanelState() {
     clip, track, project, mode, setMode, isGenerating, isSubmitting,
     // Cover fields
     caption, setCaption, lyrics, setLyrics, consistency, setConsistency, createNew, setCreateNew,
-    quickStylesOpen, setQuickStylesOpen,
+    quickStylesOpen, setQuickStylesOpen, timbreRef, setTimbreRef,
     // Repaint fields
     selStart, selEnd, prompt, setPrompt, globalCaption, setGlobalCaption,
     repaintMode, setRepaintMode, repaintStrength, setRepaintStrength,

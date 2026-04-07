@@ -28,9 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.88.0"
           targets: wasm32-unknown-unknown
       - uses: cargo-bins/cargo-binstall@v1.12.3
       - run: cargo binstall wasm-pack --no-confirm
@@ -52,9 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.88.0"
           components: rustfmt, clippy
       - name: Install Linux dependencies
         run: |
@@ -101,9 +99,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.88.0"
           targets: ${{ matrix.target }}
 
       - uses: actions/download-artifact@v4

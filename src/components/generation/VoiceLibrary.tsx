@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useVoiceStore } from '../../store/voiceStore';
+import { loadVoiceAudio } from '../../services/voiceProfileService';
 import { ACCEPTED_VOICE_EXTENSIONS, MAX_VOICE_FILE_SIZE, MIN_VOICE_DURATION } from '../../types/voice';
 import type { VoiceProfile } from '../../types/voice';
 
@@ -35,18 +36,23 @@ function WaveformMini({ peaks }: { peaks: number[] }) {
 function VoiceProfileCard({
   profile,
   selected,
+  playing,
   onSelect,
   onDelete,
   onRename,
+  onTogglePreview,
 }: {
   profile: VoiceProfile;
   selected: boolean;
+  playing: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onTogglePreview: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(profile.name);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -79,8 +85,32 @@ function VoiceProfileCard({
       onClick={onSelect}
       data-testid={`voice-profile-card-${profile.id}`}
     >
+      {/* Play/Preview button */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onTogglePreview(); }}
+        className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors ${
+          playing
+            ? 'bg-indigo-500/30 text-indigo-300'
+            : 'bg-white/[0.06] text-zinc-400 hover:bg-white/[0.12] hover:text-zinc-200'
+        }`}
+        aria-label={playing ? `Stop preview ${profile.name}` : `Preview ${profile.name}`}
+        data-testid={`voice-preview-${profile.id}`}
+      >
+        {playing ? (
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="3" y="3" width="4" height="10" rx="1" />
+            <rect x="9" y="3" width="4" height="10" rx="1" />
+          </svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 2l10 6-10 6V2z" />
+          </svg>
+        )}
+      </button>
+
       {/* Waveform */}
-      <div className="shrink-0 w-12 overflow-hidden">
+      <div className="shrink-0 w-10 overflow-hidden">
         <WaveformMini peaks={profile.waveformPeaks.slice(0, 16)} />
       </div>
 
@@ -114,18 +144,38 @@ function VoiceProfileCard({
         </p>
       </div>
 
-      {/* Delete button */}
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-400 p-0.5"
-        aria-label={`Delete ${profile.name}`}
-        data-testid={`voice-delete-${profile.id}`}
-      >
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M4 4l8 8M12 4l-8 8" />
-        </svg>
-      </button>
+      {/* Delete button with confirmation */}
+      {confirmDelete ? (
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => onDelete()}
+            className="text-[9px] text-red-400 hover:text-red-300 px-1"
+            data-testid={`voice-confirm-delete-${profile.id}`}
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            className="text-[9px] text-zinc-500 hover:text-zinc-300 px-1"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-400 p-0.5"
+          aria-label={`Delete ${profile.name}`}
+          data-testid={`voice-delete-${profile.id}`}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -163,11 +213,14 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
 
   const [expanded, setExpanded] = useState(false);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartRef = useRef<number>(0);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load profiles on first expand
   useEffect(() => {
@@ -280,6 +333,52 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
     [handleFileUpload],
   );
 
+  // ── Audio preview ──
+
+  const togglePreview = useCallback(async (profileId: string) => {
+    // Stop current preview
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+    if (previewingId === profileId) {
+      setPreviewingId(null);
+      return;
+    }
+
+    try {
+      const blob = await loadVoiceAudio(profileId);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => {
+        setPreviewingId(null);
+        URL.revokeObjectURL(url);
+      };
+      previewAudioRef.current = audio;
+      setPreviewingId(profileId);
+      await audio.play();
+    } catch {
+      setPreviewingId(null);
+    }
+  }, [previewingId]);
+
+  // Cleanup preview on unmount
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Search filter ──
+
+  const filteredProfiles = searchQuery.trim()
+    ? profiles.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : profiles;
+
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
 
   return (
@@ -376,6 +475,18 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
           {/* Recording indicator */}
           {recording && <RecordingIndicator elapsed={recordingElapsed} />}
 
+          {/* Search (only show when there are profiles) */}
+          {profiles.length > 2 && (
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search voices..."
+              className="w-full rounded border border-[#3a3a3a] bg-[#1a1a1e] px-2 py-1 text-[10px] text-zinc-300 placeholder-zinc-600 outline-none focus:border-indigo-500/50"
+              data-testid="voice-search-input"
+            />
+          )}
+
           {/* Profile list or drop zone */}
           {profiles.length === 0 && !loading ? (
             <div
@@ -407,14 +518,16 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
               {loading && (
                 <p className="text-[10px] text-zinc-500 px-2 py-1">Loading...</p>
               )}
-              {profiles.map((p) => (
+              {filteredProfiles.map((p) => (
                 <VoiceProfileCard
                   key={p.id}
                   profile={p}
                   selected={p.id === selectedProfileId}
+                  playing={p.id === previewingId}
                   onSelect={() => selectProfile(p.id === selectedProfileId ? null : p.id)}
                   onDelete={() => removeProfile(p.id)}
                   onRename={(name) => renameProfile(p.id, name)}
+                  onTogglePreview={() => togglePreview(p.id)}
                 />
               ))}
             </div>

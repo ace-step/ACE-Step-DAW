@@ -212,4 +212,70 @@ describe('VoiceLibrary', () => {
 
     expect(screen.getByTestId('voice-profile-list')).toHaveAttribute('role', 'listbox');
   });
+
+  it('shows preview button for each profile', () => {
+    useVoiceStore.setState({ profiles: [makeProfile({ id: 'v1' })] });
+
+    render(<VoiceLibrary />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+
+    expect(screen.getByTestId('voice-preview-v1')).toBeInTheDocument();
+  });
+
+  it('shows delete confirmation when delete is clicked', () => {
+    useVoiceStore.setState({ profiles: [makeProfile({ id: 'v1' })] });
+
+    render(<VoiceLibrary />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    fireEvent.click(screen.getByTestId('voice-delete-v1'));
+
+    expect(screen.getByTestId('voice-confirm-delete-v1')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('shows search input when more than 2 profiles exist', () => {
+    useVoiceStore.setState({
+      profiles: [
+        makeProfile({ id: 'v1', name: 'Alpha' }),
+        makeProfile({ id: 'v2', name: 'Beta' }),
+        makeProfile({ id: 'v3', name: 'Gamma' }),
+      ],
+    });
+
+    render(<VoiceLibrary />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+
+    expect(screen.getByTestId('voice-search-input')).toBeInTheDocument();
+  });
+
+  it('does not show search input when 2 or fewer profiles exist', () => {
+    useVoiceStore.setState({
+      profiles: [makeProfile({ id: 'v1' }), makeProfile({ id: 'v2' })],
+    });
+
+    render(<VoiceLibrary />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+
+    expect(screen.queryByTestId('voice-search-input')).not.toBeInTheDocument();
+  });
+
+  it('filters profiles by search query', () => {
+    useVoiceStore.setState({
+      profiles: [
+        makeProfile({ id: 'v1', name: 'Alpha Voice' }),
+        makeProfile({ id: 'v2', name: 'Beta Vocal' }),
+        makeProfile({ id: 'v3', name: 'Gamma Voice' }),
+      ],
+    });
+
+    render(<VoiceLibrary />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    fireEvent.change(screen.getByTestId('voice-search-input'), {
+      target: { value: 'Voice' },
+    });
+
+    expect(screen.getByTestId('voice-profile-card-v1')).toBeInTheDocument();
+    expect(screen.queryByTestId('voice-profile-card-v2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('voice-profile-card-v3')).toBeInTheDocument();
+  });
 });

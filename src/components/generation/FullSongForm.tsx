@@ -58,6 +58,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   // Persisted in generationStore — survives panel close/reopen
   const prompt = useGenerationStore((s) => s.generationForm.prompt);
   const setPrompt = useGenerationStore((s) => s.setGenerationPrompt);
+  const styleTags = useGenerationStore((s) => s.generationForm.styleTags);
   const lyrics = useGenerationStore((s) => s.generationForm.lyrics);
   const setLyrics = useGenerationStore((s) => s.setGenerationLyrics);
   const thinking = useGenerationStore((s) => s.generationForm.thinking);
@@ -349,7 +350,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           initialMetadata={{
             bpm: project?.bpm,
             keyScale: project?.keyScale,
-            styleTags: useGenerationStore.getState().generationForm.styleTags,
+            styleTags,
           }}
         />
       </section>

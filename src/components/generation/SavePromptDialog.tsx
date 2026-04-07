@@ -42,7 +42,7 @@ export function SavePromptDialog({
       setPrompt(initialPrompt);
       setTitle('');
       setTagInput('');
-      setTags(initialMetadata.styleTags ?? []);
+      setTags([...new Set((initialMetadata.styleTags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))]);
       setCategory('');
     }
   }, [open, initialPrompt, initialMetadata.styleTags]);
@@ -59,11 +59,11 @@ export function SavePromptDialog({
 
   const handleAddTag = useCallback((tag: string) => {
     const normalized = tag.trim().toLowerCase();
-    if (normalized && !tags.includes(normalized)) {
-      setTags((prev) => [...prev, normalized]);
+    if (normalized) {
+      setTags((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
     }
     setTagInput('');
-  }, [tags]);
+  }, []);
 
   const handleRemoveTag = useCallback((tag: string) => {
     setTags((prev) => prev.filter((t) => t !== tag));

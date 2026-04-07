@@ -1,4 +1,5 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import type { SavedPrompt } from '../types/promptLibrary';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -82,7 +83,9 @@ export interface CommandPaletteContext {
     setEditingClip: (clipId: string | null) => void;
     deselectAll: () => void;
     openEnhancer: (clipId: string, trackId: string, range?: { start: number; end: number } | null) => void;
+    applyPromptFromLibrary?: (id: string) => boolean;
   };
+  savedPrompts?: SavedPrompt[];
 }
 
 const DEFAULT_RESULT_LIMIT = 12;
@@ -1013,12 +1016,10 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
   );
 
-  // Add "Apply prompt: <title>" commands for each saved prompt (sync access)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { useGenerationStore } = require('../store/generationStore') as typeof import('../store/generationStore');
-    const library = useGenerationStore?.getState?.()?.promptLibrary ?? [];
-    for (const savedPrompt of library.slice(0, 20)) {
+  // Add "Apply prompt: <title>" commands for each saved prompt
+  if (context.savedPrompts && context.actions.applyPromptFromLibrary) {
+    const applyFn = context.actions.applyPromptFromLibrary;
+    for (const savedPrompt of context.savedPrompts.slice(0, 20)) {
       commands.push(
         createTrackCommand(
           `prompt-library:apply:${savedPrompt.id}`,
@@ -1027,16 +1028,12 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
           'action',
           ['prompt', 'apply', 'library', ...savedPrompt.tags, savedPrompt.category].filter(Boolean),
           [savedPrompt.prompt.slice(0, 60)],
-          () => {
-            useGenerationStore.getState().applyPromptFromLibrary(savedPrompt.id);
-          },
+          () => { applyFn(savedPrompt.id); },
           undefined,
           savedPrompt.prompt.length > 60 ? savedPrompt.prompt.slice(0, 60) + '...' : savedPrompt.prompt,
         ),
       );
     }
-  } catch {
-    // generationStore may not be available during SSR/test
   }
 
   return commands;

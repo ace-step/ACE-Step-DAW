@@ -1211,7 +1211,7 @@ export const useGenerationStore = create<GenerationState>()(
       }),
       merge: (persisted: unknown, current: GenerationState) => {
         const p = persisted as Partial<GenerationState> | undefined;
-        if (p?.promptLibrary) {
+        if (p && Array.isArray(p.promptLibrary)) {
           promptLibrary.setState(p.promptLibrary);
         }
         return { ...current, ...p };

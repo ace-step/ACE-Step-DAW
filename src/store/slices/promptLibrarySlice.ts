@@ -114,8 +114,8 @@ export function createPromptLibrarySlice(): PromptLibrarySlice {
       const now = Date.now();
       const saved: SavedPrompt = {
         id: generateId(),
-        prompt: input.prompt,
-        title: input.title.trim() || autoTitle(input.prompt),
+        prompt: input.prompt.trim(),
+        title: input.title.trim() || autoTitle(input.prompt.trim()),
         tags: normalizeTags(input.tags),
         category: input.category.trim(),
         isFavorite: false,
@@ -135,8 +135,8 @@ export function createPromptLibrarySlice(): PromptLibrarySlice {
       const existing = library[idx];
       const updated: SavedPrompt = {
         ...existing,
-        prompt: updates.prompt ?? existing.prompt,
-        title: updates.title !== undefined ? (updates.title.trim() || autoTitle(updates.prompt ?? existing.prompt)) : existing.title,
+        prompt: updates.prompt !== undefined ? updates.prompt.trim() : existing.prompt,
+        title: updates.title !== undefined ? (updates.title.trim() || autoTitle((updates.prompt ?? existing.prompt).trim())) : existing.title,
         tags: updates.tags ? normalizeTags(updates.tags) : existing.tags,
         category: updates.category !== undefined ? updates.category.trim() : existing.category,
         metadata: updates.metadata ? { ...existing.metadata, ...updates.metadata } : existing.metadata,
@@ -205,9 +205,16 @@ export function createPromptLibrarySlice(): PromptLibrarySlice {
     },
 
     importLibrary(data) {
-      const existingPrompts = new Set(library.map((p) => p.prompt));
-      const newPrompts = data.prompts.filter((p) => !existingPrompts.has(p.prompt));
-      library = [...library, ...newPrompts.map((p) => ({ ...p, id: generateId() }))];
+      const existingPrompts = new Set(library.map((p) => p.prompt.trim().toLowerCase()));
+      const newPrompts = data.prompts.filter((p) => !existingPrompts.has(p.prompt.trim().toLowerCase()));
+      library = [...library, ...newPrompts.map((p) => ({
+        ...p,
+        id: generateId(),
+        prompt: p.prompt.trim(),
+        title: (p.title ?? '').trim() || autoTitle(p.prompt.trim()),
+        tags: normalizeTags(p.tags ?? []),
+        category: (p.category ?? '').trim(),
+      }))];
       return newPrompts.length;
     },
 

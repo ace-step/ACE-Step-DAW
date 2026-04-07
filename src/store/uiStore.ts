@@ -5,6 +5,7 @@ import type { PianoRollTool } from '../components/pianoroll/PianoRollConstants';
 import { useProjectStore } from './projectStore';
 import type { HistoryScope } from './projectStore';
 import { useTransportStore } from './transportStore';
+import { useGenerationStore } from './generationStore';
 import type { ShortcutContext } from '../types/shortcuts';
 import type { ThemeId } from '../themes/themeTokens';
 import type { EnhancementNode, EnhancementSession } from '../types/enhance';
@@ -1479,7 +1480,9 @@ function buildCommandPaletteContext(state: UIState) {
       setEditingClip: state.setEditingClip,
       deselectAll: state.deselectAll,
       openEnhancer: state.openEnhancer,
+      applyPromptFromLibrary: useGenerationStore.getState().applyPromptFromLibrary,
     },
+    savedPrompts: useGenerationStore.getState().promptLibrary,
   };
 }
 

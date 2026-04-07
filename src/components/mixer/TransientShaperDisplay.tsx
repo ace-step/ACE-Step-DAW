@@ -149,6 +149,8 @@ export function TransientShaperDisplay({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Transient shaper display"
       style={{ width, height }}
       className="rounded"
       data-testid="transient-shaper-display"

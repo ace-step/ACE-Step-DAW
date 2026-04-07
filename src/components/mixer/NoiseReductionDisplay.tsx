@@ -156,6 +156,8 @@ export function NoiseReductionDisplay({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Noise reduction display"
       style={{ width, height }}
       className="rounded"
       data-testid="noise-reduction-display"

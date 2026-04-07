@@ -139,6 +139,8 @@ export function GateCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Noise gate threshold curve"
       style={{ width, height }}
       className="rounded"
       data-testid="gate-curve"

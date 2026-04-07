@@ -95,6 +95,7 @@ export function HSlider({ value, onChange, min = 0, max = 1, defaultValue = min,
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={Math.round(value * 1000) / 1000}
+        aria-valuetext={displayValue ?? `${Math.round(value * 1000) / 1000}`}
         onPointerDown={handlePointerDown}
         onDoubleClick={(e) => {
           e.preventDefault();

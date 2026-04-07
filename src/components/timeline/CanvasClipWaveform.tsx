@@ -106,6 +106,8 @@ export function CanvasClipWaveform({
     <div className={`absolute inset-0 flex items-center overflow-hidden ${opacityClassName}`}>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Audio waveform"
         data-testid="canvas-waveform"
         style={{
           width: contentWidth,

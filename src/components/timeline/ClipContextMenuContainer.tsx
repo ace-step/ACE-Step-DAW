@@ -172,6 +172,7 @@ export function ClipContextMenuContainer({
       hasCustomColor={hasCustomColor}
       canConsolidate={canConsolidate}
       isMidiClip={isMidiClip}
+      clip={clip}
     />
   );
 }

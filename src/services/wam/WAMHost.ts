@@ -9,12 +9,19 @@ import type { WebAudioModule, WamDescriptor, WamNode } from '@webaudiomodules/ap
 /** Allowed URL protocols for WAM plugin loading. */
 const ALLOWED_PROTOCOLS = new Set(['https:', 'http:']);
 
+/** Hostnames allowed for http: (dev only). */
+const LOCALHOST_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 /**
  * Validate a plugin URL for safe dynamic import.
  * Only allows https: URLs (and http: for localhost dev).
- * Rejects javascript:, data:, blob:, etc.
+ * Rejects empty input, javascript:, data:, blob:, etc.
  */
 export function validatePluginUrl(url: string): void {
+  if (!url || !url.trim()) {
+    throw new Error('WAM plugin URL must not be empty.');
+  }
+
   let parsed: URL;
   try {
     parsed = new URL(url, window.location.origin);
@@ -25,6 +32,13 @@ export function validatePluginUrl(url: string): void {
   if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
     throw new Error(
       `Unsafe WAM plugin URL protocol "${parsed.protocol}". Only https: and http: are allowed.`,
+    );
+  }
+
+  // Restrict http: to localhost only (dev environments)
+  if (parsed.protocol === 'http:' && !LOCALHOST_HOSTS.has(parsed.hostname)) {
+    throw new Error(
+      `HTTP is only allowed for localhost. Use HTTPS for remote WAM plugins.`,
     );
   }
 }

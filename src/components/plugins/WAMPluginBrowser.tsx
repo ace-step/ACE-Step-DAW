@@ -31,7 +31,6 @@ interface WAMPluginBrowserProps {
 
 export function WAMPluginBrowser({ onLoadPlugin }: WAMPluginBrowserProps) {
   const hostStatus = useWAMStore((s) => s.hostStatus);
-  const catalog = useWAMStore((s) => s.getCatalog());
   const searchCatalog = useWAMStore((s) => s.searchCatalog);
 
   const [search, setSearch] = useState('');

@@ -28,7 +28,6 @@ export class WAMPluginAdapter implements WAPPlugin {
   private _paramDescriptors: PluginParamDescriptor[] = [];
   private _paramInfoMap: Map<string, WAMParameterInfo> = new Map();
   private _cachedValues: PluginParamValues = {};
-  private _audioNodeCreated = false;
 
   private constructor(handle: WAMPluginHandle) {
     this._handle = handle;
@@ -117,7 +116,6 @@ export class WAMPluginAdapter implements WAPPlugin {
   }
 
   createAudioNode(_ctx: AudioContext): PluginAudioNode {
-    this._audioNodeCreated = true;
     const node = this._handle.audioNode;
 
     // WAM plugins always have an output

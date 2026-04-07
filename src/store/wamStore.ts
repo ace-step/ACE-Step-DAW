@@ -106,9 +106,14 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
         } else if (typeof val === 'boolean') {
           paramValues[id] = val ? 1 : 0;
         } else if (typeof val === 'string') {
-          // For enum values, find the index
+          // For enum values, find the index; clamp to 0 if not found
           const desc = adapter.getParameterDescriptors().find((d) => d.id === id);
-          paramValues[id] = desc?.type === 'enum' ? (desc as any).options.indexOf(val) : 0;
+          if (desc?.type === 'enum' && Array.isArray((desc as any).options)) {
+            const optionIndex = (desc as any).options.indexOf(val);
+            paramValues[id] = optionIndex >= 0 ? optionIndex : 0;
+          } else {
+            paramValues[id] = 0;
+          }
         }
       }
 
@@ -126,16 +131,25 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
             d.type === 'enum' || d.type === 'int' || d.type === 'bool' ? 1 : 0
           );
 
+          const choices = d.type === 'enum' ? (d as any).options : undefined;
+          const defaultValue = !('defaultValue' in d) ? 0
+            : typeof d.defaultValue === 'number' ? d.defaultValue
+            : d.type === 'enum' && typeof d.defaultValue === 'string'
+              ? Math.max(0, choices?.indexOf(d.defaultValue) ?? -1)
+              : d.type === 'bool' && typeof d.defaultValue === 'boolean'
+                ? (d.defaultValue ? 1 : 0)
+                : 0;
+
           return {
             id: d.id,
             label: d.name,
             type,
-            defaultValue: 'defaultValue' in d ? (typeof d.defaultValue === 'number' ? d.defaultValue : 0) : 0,
+            defaultValue,
             minValue: 'min' in d ? (d as any).min : 0,
             maxValue: 'max' in d ? (d as any).max : 1,
             discreteStep,
             exponent: 1,
-            choices: d.type === 'enum' ? (d as any).options : undefined,
+            choices,
           };
         }),
         parameterValues: paramValues,

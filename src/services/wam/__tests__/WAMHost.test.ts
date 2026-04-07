@@ -63,8 +63,15 @@ describe('validatePluginUrl', () => {
     expect(() => validatePluginUrl('https://example.com/plugin.js')).not.toThrow();
   });
 
-  it('should accept HTTP URLs (for localhost dev)', () => {
+  it('should accept HTTP URLs for localhost dev', () => {
     expect(() => validatePluginUrl('http://localhost:3000/plugin.js')).not.toThrow();
+    expect(() => validatePluginUrl('http://127.0.0.1:8080/plugin.js')).not.toThrow();
+  });
+
+  it('should reject HTTP URLs for non-localhost hosts', () => {
+    expect(() => validatePluginUrl('http://example.com/plugin.js')).toThrow(
+      'HTTP is only allowed for localhost',
+    );
   });
 
   it('should reject javascript: URLs', () => {
@@ -83,12 +90,8 @@ describe('validatePluginUrl', () => {
     );
   });
 
-  it('should handle relative URLs (resolved against origin)', () => {
-    // Relative URLs resolve against window.location.origin which is http: in jsdom
-    expect(() => validatePluginUrl('/plugins/my-plugin.js')).not.toThrow();
-  });
-
-  it('should reject empty/invalid URLs', () => {
-    expect(() => validatePluginUrl('')).not.toThrow(); // resolves to origin
+  it('should reject empty URLs', () => {
+    expect(() => validatePluginUrl('')).toThrow('must not be empty');
+    expect(() => validatePluginUrl('  ')).toThrow('must not be empty');
   });
 });

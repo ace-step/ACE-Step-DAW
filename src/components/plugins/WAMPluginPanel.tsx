@@ -4,9 +4,10 @@
  * Shows enable/bypass, parameter sliders, preset management,
  * and an embedded custom GUI (if the plugin provides one).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWAMStore } from '../../store/wamStore';
-import type { WAMActiveInstance, WAMParameterInfo } from '../../types/wam';
+import type { WAMParameterInfo } from '../../types/wam';
+import type { WAMPluginAdapter } from '../../services/wam/WAMPluginAdapter';
 
 // ── Inline icons ──────────────────────────────────────────────────────────────
 const Power = ({ className }: { className?: string }) => (
@@ -163,12 +164,17 @@ export function WAMPluginPanel({ instanceId }: WAMPluginPanelProps) {
 
 // ── GUI Embed ────────────────────────────────────────────────────────────────
 
+interface WAMGuiAdapter {
+  createGui: () => Promise<Element>;
+  destroyGui: (gui: Element) => void;
+}
+
 function WAMGuiEmbed({
   instanceId,
   getAdapter,
 }: {
   instanceId: string;
-  getAdapter: (id: string) => any;
+  getAdapter: (id: string) => WAMGuiAdapter | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const guiRef = useRef<Element | null>(null);

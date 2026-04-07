@@ -100,7 +100,7 @@ export interface WAMActiveInstance {
   enabled: boolean;
   /** Parameter info from the plugin */
   parameters: WAMParameterInfo[];
-  /** Current parameter values (normalized) */
+  /** Current parameter values (actual range, non-normalized) */
   parameterValues: Record<string, number>;
   /** Saved preset name (if any) */
   activePreset: string | null;
@@ -120,7 +120,7 @@ export interface WAMPreset {
   name: string;
   /** Plugin identifier this preset is for */
   pluginId: string;
-  /** Parameter values (normalized) */
+  /** Parameter values (actual range, non-normalized) */
   parameterValues: Record<string, number>;
   /** Opaque state blob from the plugin (base64) */
   state?: string;

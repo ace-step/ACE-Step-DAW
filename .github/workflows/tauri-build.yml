@@ -71,24 +71,22 @@ jobs:
         run: |
           cd src-tauri
           RUST_BACKTRACE=full cargo check 2>&1 | tee /tmp/cargo-check.log
-      - name: Post cargo output to PR
+      - name: Upload cargo check log
         if: steps.cargo-check.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('/tmp/cargo-check.log', 'utf8');
-            const last200 = log.split('\n').slice(-200).join('\n');
-            const prNumber = context.payload.pull_request?.number;
-            if (prNumber) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: `## \`cargo check\` failure\n\`\`\`\n${last200}\n\`\`\``
-              });
-            }
-            core.setFailed('cargo check failed');
+          name: cargo-check-failure-log
+          path: /tmp/cargo-check.log
+          retention-days: 3
+      - name: Fail if cargo check failed
+        if: steps.cargo-check.outcome == 'failure'
+        run: |
+          echo "## cargo check output (last 50 lines):" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 /tmp/cargo-check.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "::error::cargo check failed — see uploaded artifact for full log"
+          exit 1
       - name: Clippy lint
         if: steps.cargo-check.outcome == 'success'
         run: cd src-tauri && cargo clippy -- -D warnings

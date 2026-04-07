@@ -129,5 +129,5 @@ export function EQCurve({ low, mid, high, color = EFFECT_COLORS.eq3 }: { low: nu
     ctx.fill();
   }, [low, mid, high, color]);
 
-  return <canvas ref={canvasRef} className="rounded" style={{ width: 200, height: 80 }} />;
+  return <canvas ref={canvasRef} role="img" aria-label="3-band EQ curve" className="rounded" style={{ width: 200, height: 80 }} />;
 }

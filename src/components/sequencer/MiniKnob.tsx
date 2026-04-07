@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, type KeyboardEvent } from 'react';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { PrecisionInput, clampValue } from '../ui/PrecisionInput';
 
@@ -136,15 +136,57 @@ export function MiniKnob({
     ? `${value > 0 ? '+' : ''}${Math.round(value * 100)}`
     : `${Math.round(norm * 100)}`;
 
+  const step = (max - min) / 100;
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      let newVal = value;
+      const coarseStep = (max - min) / 10;
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          newVal = clampValue(value + step, min, max);
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          newVal = clampValue(value - step, min, max);
+          break;
+        case 'PageUp':
+          newVal = clampValue(value + coarseStep, min, max);
+          break;
+        case 'PageDown':
+          newVal = clampValue(value - coarseStep, min, max);
+          break;
+        case 'Home':
+          newVal = min;
+          break;
+        case 'End':
+          newVal = max;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+      onChange(newVal);
+    },
+    [value, min, max, step, onChange],
+  );
+
   return (
     <div
       ref={mergedKnobRef}
       className="flex flex-col items-center gap-0 cursor-ns-resize"
       title={label ? `${label}: ${displayVal}%` : `${displayVal}%`}
+      role="slider"
+      tabIndex={0}
+      aria-label={`${label ?? 'Control'} mini knob`}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuetext={`${displayVal}%`}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
-      aria-label={`${label ?? 'Control'} mini knob`}
+      onKeyDown={handleKeyDown}
     >
       <svg width={size} height={size} className="shrink-0">
         <path d={bgPath} fill="none" stroke="#404040" strokeWidth={strokeW} strokeLinecap="round" />

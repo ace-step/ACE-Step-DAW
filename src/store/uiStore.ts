@@ -125,6 +125,8 @@ export interface UIState {
   drumMachineEditorHeight: number;
   sequencerEditorHeight: number;
   pianoRollHeight: number;
+  /** Active expression lane type in piano roll (MPE). */
+  pianoRollExpressionType: 'pitchBend' | 'timbre' | 'pressure';
   effectChainHeight: number;
   virtualKeyboardOctave: number;
   virtualKeyboardVelocity: number;
@@ -172,6 +174,12 @@ export interface UIState {
   stemSeparationClipId: string | null;
   audioToMidiClipId: string | null;
 
+  // Vocal Replacement modal
+  vocalReplacementClipId: string | null;
+
+  // Hum-to-Song modal
+  showHumToSongModal: boolean;
+
   // Spectrum analyzer & loudness metering
   showSpectrumAnalyzer: boolean;
 
@@ -214,6 +222,18 @@ export interface UIState {
   // DSP backend preference
   dspBackend: 'auto' | 'wasm' | 'tonejs';
   setDspBackend: (mode: 'auto' | 'wasm' | 'tonejs') => void;
+
+  // Accessibility
+  reducedMotion: boolean;
+  /** True when user explicitly toggled reduced motion in Settings (vs OS default). */
+  reducedMotionOverride: boolean;
+  highContrastMode: boolean;
+  colorBlindMode: boolean;
+  setReducedMotion: (v: boolean) => void;
+  /** Set reduced motion AND mark it as a user override. */
+  setReducedMotionManual: (v: boolean) => void;
+  setHighContrastMode: (v: boolean) => void;
+  setColorBlindMode: (v: boolean) => void;
 
   // Theme
   theme: ThemeId;
@@ -380,6 +400,12 @@ export interface UIState {
   setAnalysisPanel: (clipId: string | null) => void;
   setStemSeparationModal: (clipId: string | null) => void;
   setAudioToMidiModal: (clipId: string | null) => void;
+
+  // Vocal Replacement modal
+  setVocalReplacementModal: (clipId: string | null) => void;
+
+  // Hum-to-Song modal
+  setShowHumToSongModal: (show: boolean) => void;
 
   // Spectrum analyzer & loudness metering
   setShowSpectrumAnalyzer: (v: boolean) => void;
@@ -646,6 +672,7 @@ export const useUIStore = create<UIState>()(
   drumMachineEditorHeight: 400,
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
+  pianoRollExpressionType: 'pitchBend' as const,
   effectChainHeight: 320,
   virtualKeyboardOctave: 4,
   virtualKeyboardVelocity: 96,
@@ -677,6 +704,10 @@ export const useUIStore = create<UIState>()(
   stemSeparationClipId: null,
   audioToMidiClipId: null,
 
+  vocalReplacementClipId: null,
+
+  showHumToSongModal: false,
+
   showSpectrumAnalyzer: false,
 
   showQuantizeDialog: false,
@@ -704,6 +735,11 @@ export const useUIStore = create<UIState>()(
   sliceMarkersByClip: {},
 
   dspBackend: 'auto',
+
+  reducedMotion: typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  reducedMotionOverride: false,
+  highContrastMode: false,
+  colorBlindMode: false,
 
   theme: 'ableton',
 
@@ -851,6 +887,10 @@ export const useUIStore = create<UIState>()(
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
   setDspBackend: (mode) => set({ dspBackend: mode }),
+  setReducedMotion: (v) => set({ reducedMotion: v }),
+  setReducedMotionManual: (v) => set({ reducedMotion: v, reducedMotionOverride: true }),
+  setHighContrastMode: (v) => set({ highContrastMode: v }),
+  setColorBlindMode: (v) => set({ colorBlindMode: v }),
   setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),
   openBounceInPlaceDialog: (trackId) => set({ bounceInPlaceTrackId: trackId }),
@@ -1210,6 +1250,10 @@ export const useUIStore = create<UIState>()(
   setStemSeparationModal: (clipId) => set({ stemSeparationClipId: clipId }),
   setAudioToMidiModal: (clipId) => set({ audioToMidiClipId: clipId }),
 
+  setVocalReplacementModal: (clipId) => set({ vocalReplacementClipId: clipId }),
+
+  setShowHumToSongModal: (show) => set({ showHumToSongModal: show }),
+
   setShowSpectrumAnalyzer: (v) => set({ showSpectrumAnalyzer: v }),
   toggleSpectrumAnalyzer: () => set((s) => ({ showSpectrumAnalyzer: !s.showSpectrumAnalyzer })),
 
@@ -1373,6 +1417,7 @@ export const useUIStore = create<UIState>()(
         drumMachineEditorHeight: state.drumMachineEditorHeight,
         sequencerEditorHeight: state.sequencerEditorHeight,
         pianoRollHeight: state.pianoRollHeight,
+        pianoRollExpressionType: state.pianoRollExpressionType,
         effectChainHeight: state.effectChainHeight,
         virtualKeyboardOctave: state.virtualKeyboardOctave,
         virtualKeyboardVelocity: state.virtualKeyboardVelocity,
@@ -1407,6 +1452,11 @@ export const useUIStore = create<UIState>()(
         recentCommandIds: state.recentCommandIds,
         // DSP backend
         dspBackend: state.dspBackend,
+        // Accessibility
+        reducedMotion: state.reducedMotion,
+        reducedMotionOverride: state.reducedMotionOverride,
+        highContrastMode: state.highContrastMode,
+        colorBlindMode: state.colorBlindMode,
         // Theme
         theme: state.theme,
         // Synth presets

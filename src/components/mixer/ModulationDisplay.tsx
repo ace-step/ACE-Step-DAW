@@ -114,6 +114,8 @@ export function ModulationDisplay({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Modulation visualization"
       style={{ width, height }}
       className="rounded"
       data-testid="modulation-display"

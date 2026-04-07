@@ -210,6 +210,8 @@ export function FilterResponseCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Filter frequency response curve"
       style={{ width, height }}
       className="rounded"
       data-testid="filter-response-curve"

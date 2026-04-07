@@ -199,6 +199,8 @@ export function LimiterCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Limiter ceiling curve"
       style={{ width, height }}
       className="rounded"
       data-testid="limiter-curve"

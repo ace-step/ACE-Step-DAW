@@ -1,11 +1,70 @@
 import * as Tone from 'tone';
-import type { DrumKitName } from '../types/project';
+import type { DrumKitName, DrumPadFilter, DrumPadSend } from '../types/project';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DrumVoice {
   trigger: (time?: number, velocity?: number) => void;
   dispose: () => void;
+  /** Set detune in semitones (-24 to +24) */
+  setDetune?: (semitones: number) => void;
+}
+
+/** Per-pad audio effect chain: filter → distortion → volumeGain → decayGain → panner → output.
+ * volumeGain: per-pad level (synced from store), decayGain: envelope ramp per trigger. */
+interface PadEffectChain {
+  filter: Tone.Filter;
+  distortion: Tone.Distortion;
+  /** Steady-state per-pad volume — synced from pad.volume via updatePadParams */
+  volumeGain: Tone.Gain;
+  /** Decay envelope gain — ramped per trigger, separate from volume */
+  decayGain: Tone.Gain;
+  panner: Tone.Panner;
+  /** Decay scale 0–1: controls how quickly decayGain fades after trigger */
+  decayScale: number;
+  /** Send amounts stored for return track routing */
+  sendReverb: number;
+  sendDelay: number;
+  dispose: () => void;
+}
+
+function createPadEffectChain(connectTo?: Tone.InputNode): PadEffectChain {
+  const filter = new Tone.Filter({ frequency: 20000, type: 'lowpass' });
+  const distortion = new Tone.Distortion(0);
+  // Neutral defaults: volume=1 and decay=1 preserve pre-#950 behavior
+  // until explicit syncTrackPadParams applies user-selected values
+  const volumeGain = new Tone.Gain(1);
+  const decayGain = new Tone.Gain(1);
+  const panner = new Tone.Panner(0);
+
+  // Chain: filter → distortion → volumeGain → decayGain → panner → output
+  filter.connect(distortion);
+  distortion.connect(volumeGain);
+  volumeGain.connect(decayGain);
+  decayGain.connect(panner);
+  if (connectTo) {
+    panner.connect(connectTo);
+  } else {
+    panner.toDestination();
+  }
+
+  return {
+    filter,
+    distortion,
+    volumeGain,
+    decayGain,
+    panner,
+    decayScale: 1,
+    sendReverb: 0,
+    sendDelay: 0,
+    dispose() {
+      filter.dispose();
+      distortion.dispose();
+      volumeGain.dispose();
+      decayGain.dispose();
+      panner.dispose();
+    },
+  };
 }
 
 export interface DrumPatternStep {
@@ -62,6 +121,7 @@ function createKick808(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('C1', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -75,6 +135,7 @@ function createKickAcoustic(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D1', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -96,6 +157,7 @@ function createSnare808(connectTo?: Tone.InputNode): DrumVoice {
       body.triggerAttackRelease('E2', '16n', time, vel * 0.5);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
+    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
@@ -117,6 +179,7 @@ function createSnareAcoustic(connectTo?: Tone.InputNode): DrumVoice {
       body.triggerAttackRelease('G2', '16n', time, vel * 0.4);
     },
     dispose: () => { noise.dispose(); body.dispose(); },
+    setDetune: (semitones) => { body.detune.value = semitones * 100; },
   };
 }
 
@@ -165,6 +228,7 @@ function createRim(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(400, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -178,6 +242,7 @@ function createTomHigh(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('G2', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -191,6 +256,7 @@ function createTomLow(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D2', '8n', time, vel),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -211,6 +277,7 @@ function createCrash(connectTo?: Tone.InputNode): DrumVoice {
       metal.triggerAttackRelease(300, '4n', time, vel * 0.3);
     },
     dispose: () => { noise.dispose(); metal.dispose(); },
+    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
@@ -223,6 +290,7 @@ function createRide(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => metal.triggerAttackRelease(400, '8n', time, vel * 0.4),
     dispose: () => metal.dispose(),
+    setDetune: (semitones) => { metal.detune.value = semitones * 100; },
   };
 }
 
@@ -247,6 +315,7 @@ function createCowbell(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(560, '16n', time, vel * 0.6),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -260,6 +329,7 @@ function createConga(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('A2', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -273,6 +343,7 @@ function createBongo(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease('D3', '16n', time, vel * 0.7),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -297,6 +368,7 @@ function createPerc(connectTo?: Tone.InputNode): DrumVoice {
   return {
     trigger: (time, vel = 1) => synth.triggerAttackRelease(200, '32n', time, vel * 0.5),
     dispose: () => synth.dispose(),
+    setDetune: (semitones) => { synth.detune.value = semitones * 100; },
   };
 }
 
@@ -424,8 +496,26 @@ export const DRUM_PRESETS = [
 
 // ─── Drum Engine Class ──────────────────────────────────────────────────────
 
+/** Parameters for updating a single pad's effect chain.
+ * Volume is managed via a dedicated volumeGain node, so callers don't need
+ * to pre-scale velocity — all trigger paths get consistent pad volume. */
+export interface PadParams {
+  tune?: number;
+  /** Relative decay 0–1: scales the decayGain envelope (0 = very short, 1 = full ring-out) */
+  decay?: number;
+  /** Per-pad volume 0–1: applied via dedicated volumeGain node */
+  volume?: number;
+  pan?: number;
+  filter?: DrumPadFilter;
+  drive?: number;
+  /** Send amounts for reverb/delay buses. Currently stored per-pad; routing to
+   * return tracks will be wired when ReturnTrackNode integration is added. */
+  send?: DrumPadSend;
+}
+
 class DrumEngine {
   private voices = new Map<string, DrumVoice[]>();
+  private padChains = new Map<string, PadEffectChain[]>();
   private currentKit = new Map<string, DrumKitName>();
   private scheduledIds = new Map<string, number[]>();
 
@@ -442,17 +532,125 @@ class DrumEngine {
 
     this.disposeTrack(trackId);
 
-    const voices = createDrumVoicesForKit(kit);
+    // Create per-pad effect chains and route voices through them
+    const chains: PadEffectChain[] = [];
+    const factories = KIT_FACTORIES[kit];
+    const voices: DrumVoice[] = [];
+
+    for (let i = 0; i < factories.length; i++) {
+      const chain = createPadEffectChain();
+      chains.push(chain);
+      const voice = factories[i](chain.filter);
+      voices.push(voice);
+    }
+
+    this.padChains.set(trackId, chains);
     this.voices.set(trackId, voices);
     this.currentKit.set(trackId, kit);
   }
 
-  async triggerPad(trackId: string, padIndex: number, velocity = 100, kit: DrumKitName = '808') {
-    await this.ensureTrack(trackId, kit);
+  /** Update per-pad effect parameters in real-time */
+  updatePadParams(trackId: string, padIndex: number, params: PadParams) {
+    const chains = this.padChains.get(trackId);
     const voices = this.voices.get(trackId);
+    if (!chains || padIndex < 0 || padIndex >= chains.length) return;
+
+    const chain = chains[padIndex];
+
+    if (params.volume !== undefined) {
+      chain.volumeGain.gain.value = params.volume;
+    }
+    if (params.pan !== undefined) {
+      chain.panner.pan.value = params.pan;
+    }
+    if (params.filter !== undefined) {
+      if (params.filter.type === 'off') {
+        chain.filter.frequency.value = 20000;
+        chain.filter.type = 'lowpass';
+      } else {
+        chain.filter.type = params.filter.type;
+        chain.filter.frequency.value = params.filter.cutoff;
+      }
+    }
+    if (params.drive !== undefined) {
+      chain.distortion.distortion = params.drive;
+    }
+    if (params.tune !== undefined && voices) {
+      const voice = voices[padIndex];
+      voice.setDetune?.(params.tune);
+    }
+    if (params.decay !== undefined) {
+      chain.decayScale = params.decay;
+    }
+    if (params.send !== undefined) {
+      // Store send amounts — routing to return track buses will use these values
+      // when ReturnTrackNode integration is wired up.
+      chain.sendReverb = params.send.reverb;
+      chain.sendDelay = params.send.delay;
+    }
+  }
+
+  /** Sync all pad parameters from project state to the engine.
+   * Safely no-ops if the track hasn't been initialized yet — call
+   * ensureAndSyncPadParams after ensureTrack to apply params to a new track. */
+  syncTrackPadParams(trackId: string, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+    if (!this.padChains.has(trackId)) return;
+    for (let i = 0; i < pads.length; i++) {
+      this.updatePadParams(trackId, i, {
+        volume: pads[i].volume,
+        pan: pads[i].pan,
+        tune: pads[i].tune,
+        decay: pads[i].decay,
+        filter: pads[i].filter,
+        drive: pads[i].drive,
+        send: pads[i].send,
+      });
+    }
+  }
+
+  /** Async version: ensures the track is initialized, then syncs pad params. */
+  async ensureAndSyncPadParams(trackId: string, kit: DrumKitName, pads: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>) {
+    await this.ensureTrack(trackId, kit);
+    this.syncTrackPadParams(trackId, pads);
+  }
+
+  /** Apply the decay envelope on a pad's decayGain node at the given time.
+   * Used by both triggerPad and schedulePattern for consistent behavior.
+   * Neutral/default decay (>=0.999) is a no-op to avoid unnecessary
+   * automation for pads whose parameters were never explicitly synced. */
+  private applyDecayEnvelope(chain: PadEffectChain, time: number) {
+    if (chain.decayScale >= 0.999) return;
+
+    chain.decayGain.gain.cancelScheduledValues(time);
+    chain.decayGain.gain.setValueAtTime(1, time);
+    const fadeTime = 0.02 + chain.decayScale * 1.98;
+    chain.decayGain.gain.linearRampToValueAtTime(0.001, time + fadeTime);
+  }
+
+  /** Trigger a drum pad.
+   * UI callers that already sync params may omit `pads`.
+   * Non-UI callers (e.g. transport) can pass `pads` to ensure per-pad
+   * params are applied before the trigger. */
+  async triggerPad(
+    trackId: string,
+    padIndex: number,
+    velocity = 100,
+    kit: DrumKitName = '808',
+    pads?: ReadonlyArray<{ volume: number; tune: number; decay: number; pan: number; filter: DrumPadFilter; drive: number; send: DrumPadSend }>,
+  ) {
+    await this.ensureTrack(trackId, kit);
+    if (pads) this.syncTrackPadParams(trackId, pads);
+    const voices = this.voices.get(trackId);
+    const chains = this.padChains.get(trackId);
     if (!voices || padIndex < 0 || padIndex >= voices.length) return;
     const vel = Math.max(0, Math.min(127, velocity)) / 127;
-    voices[padIndex].trigger(undefined, vel);
+    const time = Tone.now();
+
+    if (chains) {
+      this.applyDecayEnvelope(chains[padIndex], time);
+    }
+
+    voices[padIndex].trigger(time, vel);
   }
 
   /** Schedule a drum pattern for looping playback. */
@@ -465,6 +663,7 @@ class DrumEngine {
   ) {
     this.unschedulePattern(trackId);
     const voices = this.voices.get(trackId);
+    const chains = this.padChains.get(trackId);
     if (!voices) return;
 
     const secondsPerStep = (60 / bpm) / 4; // 16th notes
@@ -487,7 +686,10 @@ class DrumEngine {
 
         const id = Tone.getTransport().scheduleRepeat(
           (time) => {
-            if (voices[padIdx]) voices[padIdx].trigger(time, vel);
+            if (voices[padIdx]) {
+              if (chains?.[padIdx]) this.applyDecayEnvelope(chains[padIdx], time);
+              voices[padIdx].trigger(time, vel);
+            }
           },
           patternDuration,
           startTime + stepOffset,
@@ -514,6 +716,11 @@ class DrumEngine {
     if (voices) {
       for (const v of voices) v.dispose();
       this.voices.delete(trackId);
+    }
+    const chains = this.padChains.get(trackId);
+    if (chains) {
+      for (const c of chains) c.dispose();
+      this.padChains.delete(trackId);
     }
     this.currentKit.delete(trackId);
   }

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getSceneHeaderClass, getSceneButtonClass, getSceneButtonLabel, getProgressRingStroke, getLoopCountClass } from '../../../utils/sessionVisualState';
 
 /**
  * These tests verify the visual feedback state computation logic
@@ -104,6 +105,56 @@ describe('Session visual feedback state computation', () => {
       expect(result.has(0)).toBe(true);
       expect(result.has(2)).toBe(true);
       expect(result.size).toBe(2);
+    });
+  });
+
+  describe('recording state visual feedback', () => {
+    it('scene header shows red border when active and recording', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: true, isQueued: false }))
+        .toBe('border-red-500/50 bg-red-500/10');
+    });
+
+    it('scene header shows emerald when active but not recording', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: false, isQueued: false }))
+        .toBe('border-emerald-500/50 bg-emerald-500/10');
+    });
+
+    it('scene header shows amber when queued', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: false, isRecording: false, isQueued: true }))
+        .toBe('border-amber-400/50 bg-amber-400/5');
+    });
+
+    it('scene header shows default when idle', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: false, isRecording: false, isQueued: false }))
+        .toBe('border-[#333] bg-[#242424]');
+    });
+
+    it('drag target takes priority over all states', () => {
+      expect(getSceneHeaderClass({ isDragTarget: true, isDragSource: false, isActive: true, isRecording: true, isQueued: true }))
+        .toBe('border-blue-500 bg-blue-500/10');
+    });
+
+    it('scene button label reflects recording/playing/queued/idle states', () => {
+      expect(getSceneButtonLabel({ isActive: true, isRecording: true, isQueued: false })).toBe('● REC');
+      expect(getSceneButtonLabel({ isActive: true, isRecording: false, isQueued: false })).toBe('▶ Playing');
+      expect(getSceneButtonLabel({ isActive: false, isRecording: false, isQueued: true })).toBe('◈ Queued');
+      expect(getSceneButtonLabel({ isActive: false, isRecording: false, isQueued: false })).toBe('Launch');
+    });
+
+    it('scene button class uses red for recording, emerald for active', () => {
+      expect(getSceneButtonClass({ isActive: true, isRecording: true, isQueued: false })).toContain('bg-red-600');
+      expect(getSceneButtonClass({ isActive: true, isRecording: false, isQueued: false })).toContain('bg-emerald-600');
+      expect(getSceneButtonClass({ isActive: false, isRecording: false, isQueued: true })).toContain('bg-amber-600');
+    });
+
+    it('progress ring uses red stroke when recording, green otherwise', () => {
+      expect(getProgressRingStroke(true)).toBe('#ef4444');
+      expect(getProgressRingStroke(false)).toBe('#4ade80');
+    });
+
+    it('loop count uses red text when recording', () => {
+      expect(getLoopCountClass(true)).toContain('text-red-400');
+      expect(getLoopCountClass(false)).toContain('text-emerald-400');
     });
   });
 });

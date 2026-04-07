@@ -366,6 +366,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             clipDuration={clip.duration}
             width={width}
             markers={clip.warpMarkers}
+            allowAdd
           />
         )}
 

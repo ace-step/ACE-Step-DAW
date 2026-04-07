@@ -122,7 +122,7 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
-import type { StemCount } from '../types/api';
+import type { StemCount, StemSeparationEngine } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
@@ -978,7 +978,7 @@ export interface ProjectState extends MidiSliceActions {
 
   /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
   convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
-  separateStems: (clipId: string, stemCount: StemCount) => Promise<Track[] | undefined>;
+  separateStems: (clipId: string, stemCount: StemCount, engine?: StemSeparationEngine) => Promise<Track[] | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;
@@ -1490,6 +1490,14 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
       return { id, type, enabled: true, params: { reverbType: 'hall', decay: 2.5, preDelay: 20, damping: 0.4, size: 0.6, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 80, highCut: 12000, mix: 0.25 } };
     case 'noiseReduction':
       return { id, type, enabled: true, params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } };
+    case 'spectralFreeze':
+      return { id, type, enabled: true, params: { frozen: false, mix: 1, decay: 1, brightness: 0, fftSize: 2048 } };
+    case 'spectralBlur':
+      return { id, type, enabled: true, params: { blurAmount: 0.5, frequencySpread: 0, mix: 0.5, brightness: 0, fftSize: 2048 } };
+    case 'spectralFilter':
+      return { id, type, enabled: true, params: { points: [{ frequency: 20, gain: 0 }, { frequency: 20000, gain: 0 }], resolution: 0.5, mix: 1, fftSize: 2048 } };
+    case 'spectralMorph':
+      return { id, type, enabled: true, params: { morphAmount: 0.5, frozen: false, mix: 0.5, fftSize: 2048 } };
   }
 }
 
@@ -9120,7 +9128,7 @@ export const useProjectStore = create<ProjectState>()(
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
   },
 
-  separateStems: async (clipId, stemCount) => {
+  separateStems: async (clipId, stemCount, engine) => {
     const state = get();
     const project = state.project;
     if (!project) return undefined;
@@ -9150,6 +9158,7 @@ export const useProjectStore = create<ProjectState>()(
       sourceBlob,
       stemCount,
       sourceLabel: sourceTrack.displayName,
+      engine,
     });
 
     const latest = get();

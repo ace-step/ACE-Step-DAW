@@ -44,6 +44,8 @@ vi.mock('../../src/hooks/useAudioEngine', () => ({ useAudioEngine: () => ({ resu
 vi.mock('../../src/hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('../../src/hooks/useEffectsSync', () => ({ useEffectsSync: vi.fn() }));
 vi.mock('../../src/hooks/useShareLink', () => ({ useShareLink: vi.fn() }));
+vi.mock('../../src/hooks/useReducedMotion', () => ({ useReducedMotionSync: vi.fn() }));
+vi.mock('../../src/hooks/useAccessibilitySync', () => ({ useAccessibilitySync: vi.fn() }));
 vi.mock('../../src/components/layout/AudioContextOverlay', () => ({ AudioContextOverlay: () => null }));
 
 describe('AppShell overlay orchestration', () => {

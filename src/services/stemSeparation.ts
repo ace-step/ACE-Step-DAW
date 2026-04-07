@@ -7,7 +7,7 @@ import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { POLL_INTERVAL_MS, MAX_POLL_DURATION_MS } from '../constants/defaults';
 import { TRACK_CATALOG } from '../constants/tracks';
-import type { StemCount } from '../types/api';
+import type { StemCount, StemSeparationEngine } from '../types/api';
 import type { TrackName } from '../types/project';
 import * as api from './aceStepApi';
 
@@ -149,8 +149,9 @@ export async function separateClipAudioToStems(options: {
   sourceBlob: Blob;
   stemCount: StemCount;
   sourceLabel: string;
+  engine?: StemSeparationEngine;
 }): Promise<PreparedSeparatedStem[]> {
-  const { clipId, sourceBlob, stemCount, sourceLabel } = options;
+  const { clipId, sourceBlob, stemCount, sourceLabel, engine: separationEngine } = options;
   const genStore = useGenerationStore.getState();
   if (!genStore.tryAcquireGenerationLock()) {
     throw new Error('Another generation job is already running');
@@ -172,6 +173,7 @@ export async function separateClipAudioToStems(options: {
       task_type: 'stem_separation',
       stem_count: stemCount,
       audio_format: 'wav',
+      ...(separationEngine && separationEngine !== 'auto' ? { engine: separationEngine } : {}),
     });
 
     const startedAt = Date.now();

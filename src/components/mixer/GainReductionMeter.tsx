@@ -143,6 +143,8 @@ export function GainReductionMeter({
     <div className="flex flex-col items-center gap-0.5">
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Gain reduction meter"
         style={{ width: cw, height: ch }}
         data-testid="gr-meter"
       />

@@ -143,6 +143,8 @@ export function SynthFilterControls({ filter, onChange }: SynthFilterControlsPro
       <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">Filter</div>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Synth filter response curve"
         className="w-full h-20 rounded bg-[#1a1a1a] border border-[#333]"
       />
       <div className="flex items-center gap-2">

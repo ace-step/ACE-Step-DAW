@@ -883,9 +883,15 @@ export const useUIStore = create<UIState>()(
   setMpeEnabled: (enabled) => set({ mpeEnabled: enabled }),
   setMpeDeviceName: (name) => set({ mpeDeviceName: name }),
   setMpeZoneSize: (zone, size) => {
-    const clamped = Math.min(Math.max(size, 0), 15);
-    if (zone === 'lower') set({ mpeLowerZoneSize: clamped });
-    else set({ mpeUpperZoneSize: clamped });
+    set((state) => {
+      const requested = Math.min(Math.max(size, 0), 15);
+      const otherZoneSize = zone === 'lower' ? state.mpeUpperZoneSize : state.mpeLowerZoneSize;
+      const maxAllowed = otherZoneSize > 0 ? Math.max(0, 14 - otherZoneSize) : 15;
+      const clamped = Math.min(requested, maxAllowed);
+      return zone === 'lower'
+        ? { mpeLowerZoneSize: clamped }
+        : { mpeUpperZoneSize: clamped };
+    });
   },
 
   setDspBackend: (mode) => set({ dspBackend: mode }),

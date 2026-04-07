@@ -41,6 +41,21 @@ class SynthEngineAdapter implements InstrumentEngine {
   dispose(): void {
     synthEngine.dispose();
   }
+
+  pitchBend(trackId: string, semitones: number): void {
+    // Apply pitch bend via Tone.js detune (cents = semitones * 100)
+    synthEngine.setDetune(trackId, semitones * 100);
+  }
+
+  slide(trackId: string, value: number): void {
+    // Map slide (0-1) to filter cutoff if a filter is present
+    synthEngine.setFilterSlide(trackId, value);
+  }
+
+  pressure(trackId: string, value: number): void {
+    // Map pressure (0-1) to volume dynamics
+    synthEngine.setPressure(trackId, value);
+  }
 }
 
 /**

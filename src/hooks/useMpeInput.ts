@@ -12,7 +12,7 @@
  * - #960 item 4: Per-note pressure (aftertouch) mapped to dynamics
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { getEngineForInstrument } from '../engine/InstrumentFactory';
@@ -21,15 +21,9 @@ import {
   getMpeZoneForChannel,
   MPE_DEFAULT_BEND_RANGE,
   MPE_MASTER_BEND_RANGE,
-  type MpeConfig,
 } from '../engine/dsp/core/mpe';
 import type { MpeInputCallbacks, MpeInputState } from '../services/mpeInputService';
 import type { Track } from '../types/project';
-
-export interface UseMpeInputOptions {
-  /** Whether MPE input is enabled. */
-  enabled?: boolean;
-}
 
 export interface UseMpeInputReturn {
   /** Current MPE state (isActive, config, device). */
@@ -49,8 +43,9 @@ function getTargetTrack(): Track | null {
 
 /**
  * Route a note-on to the appropriate instrument engine for the target track.
+ * Velocity is passed as raw MIDI value (0-127) to match engine expectations.
  */
-function routeNoteOn(track: Track, pitch: number, velocity: number): void {
+function routeNoteOn(track: Track, pitch: number, velocity: number, channel: number): void {
   if (!track.instrument) return;
   const engine = getEngineForInstrument(track.instrument);
   engine.noteOn(track.id, pitch, velocity);
@@ -59,7 +54,7 @@ function routeNoteOn(track: Track, pitch: number, velocity: number): void {
 /**
  * Route a note-off to the appropriate instrument engine.
  */
-function routeNoteOff(track: Track, pitch: number): void {
+function routeNoteOff(track: Track, pitch: number, channel: number): void {
   if (!track.instrument) return;
   const engine = getEngineForInstrument(track.instrument);
   engine.noteOff(track.id, pitch);
@@ -94,34 +89,30 @@ function routePressure(track: Track, value: number, channel: number): void {
 
 /**
  * Hook that initializes MPE input and routes MIDI messages to instrument engines.
- *
- * Usage:
- * ```tsx
- * function PianoRollWrapper() {
- *   useMpeInput({ enabled: true });
- *   return <PianoRoll />;
- * }
- * ```
+ * Must be called from a component that is mounted when MPE input is desired
+ * (e.g. PianoRoll or AppShell). Gate with `uiStore.mpeEnabled`.
  */
-export function useMpeInput(options: UseMpeInputOptions = {}): UseMpeInputReturn {
-  const { enabled = true } = options;
-  const stateRef = useRef<MpeInputState | null>(null);
+export function useMpeInput(enabled: boolean): UseMpeInputReturn {
+  const [state, setState] = useState<MpeInputState | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setState(null);
+      return;
+    }
 
-    // Lazy import to avoid circular deps and allow code-splitting
     let cleanup: (() => void) | undefined;
 
     import('../services/mpeInputService').then((service) => {
       const inputCallbacks: MpeInputCallbacks = {
         onNoteOn: (note, velocity, channel) => {
           const track = getTargetTrack();
-          if (track) routeNoteOn(track, note, velocity);
+          // velocity from mpeInputService is raw 0-127 (fixed)
+          if (track) routeNoteOn(track, note, velocity, channel);
         },
         onNoteOff: (note, channel) => {
           const track = getTargetTrack();
-          if (track) routeNoteOff(track, note);
+          if (track) routeNoteOff(track, note, channel);
         },
         onPitchBend: (channel, value) => {
           const track = getTargetTrack();
@@ -140,18 +131,18 @@ export function useMpeInput(options: UseMpeInputOptions = {}): UseMpeInputReturn
           const track = getTargetTrack();
           if (track) routePressure(track, value / 127, channel);
         },
-        onMpeConfigChanged: (config) => {
-          stateRef.current = service.getState();
+        onMpeConfigChanged: () => {
+          setState(service.getState());
         },
       };
 
       service.setMpeInputCallbacks(inputCallbacks);
-      service.setMpeStateChangeCallback((state) => {
-        stateRef.current = state;
+      service.setMpeStateChangeCallback((newState) => {
+        setState(newState);
       });
 
       service.initMpeInput().then((initialState) => {
-        stateRef.current = initialState;
+        setState(initialState);
       });
 
       cleanup = () => {
@@ -166,5 +157,5 @@ export function useMpeInput(options: UseMpeInputOptions = {}): UseMpeInputReturn
     };
   }, [enabled]);
 
-  return { state: stateRef.current };
+  return { state };
 }

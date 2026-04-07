@@ -21,6 +21,7 @@ import { useChordSuggestionStore } from '../../store/chordSuggestionStore';
 import { useMidiAiStore } from '../../store/midiAiStore';
 import { getPianoRollToolShortcut, type PianoRollTool } from './PianoRollConstants';
 import { SynthParameterEditor, PRESET_DEFAULT_OSCILLATOR } from '../synth/SynthParameterEditor';
+import { useMpeInput } from '../../hooks/useMpeInput';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -39,6 +40,10 @@ export function PianoRoll() {
   const [prZoomX, setPrZoomX] = useState(1);
   const [samplerDropActive, setSamplerDropActive] = useState(false);
   const [showSynthParams, setShowSynthParams] = useState(false);
+
+  // MPE input: connect hardware MIDI controllers with per-note expression
+  const mpeEnabled = useUIStore((s) => s.mpeEnabled);
+  useMpeInput(mpeEnabled);
 
   const project = useProjectStore((s) => s.project);
   const updateTrack = useProjectStore((s) => s.updateTrack);

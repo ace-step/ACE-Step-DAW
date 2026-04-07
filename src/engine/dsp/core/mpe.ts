@@ -256,7 +256,14 @@ export class MpeConfigDetector {
   }
 
   private _applyMcm(masterChannel: number, memberCount: number): boolean {
-    const clampedCount = Math.min(Math.max(memberCount, 0), 15);
+    let clampedCount = Math.min(Math.max(memberCount, 0), 15);
+
+    // Enforce dual-zone max: lower + upper <= 14 (2 masters use ch 0 and 15)
+    if (masterChannel === 0 && this._config.upperZone) {
+      clampedCount = Math.min(clampedCount, 14 - this._config.upperZone.memberChannelCount);
+    } else if (masterChannel === 15 && this._config.lowerZone) {
+      clampedCount = Math.min(clampedCount, 14 - this._config.lowerZone.memberChannelCount);
+    }
 
     if (masterChannel === 0) {
       // Lower zone MCM

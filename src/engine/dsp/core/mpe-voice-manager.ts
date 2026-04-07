@@ -99,14 +99,14 @@ export class MpeVoiceManager<T> {
 
   /**
    * Release a note. In non-MPE mode, finds by note number.
-   * In MPE mode, uses channel to find the correct voice.
+   * In MPE mode, uses channel to find the correct voice instance and releases it directly.
    */
   noteOff(note: number, channel: number = 0): void {
     if (this._mpeConfig.enabled) {
-      // In MPE mode, find voice by channel (more specific)
+      // In MPE mode, release the specific voice assigned to this channel
       const targetState = this._findVoiceByChannel(channel);
       if (targetState) {
-        this._vm.noteOff(note);
+        this._vm.releaseInstance(targetState.instance);
       }
     } else {
       this._vm.noteOff(note);

@@ -116,6 +116,18 @@ export class VoiceManager<T> {
   }
 
   /**
+   * Release a specific voice instance directly.
+   * Used by MPE mode where the correct voice is identified by channel, not note.
+   */
+  releaseInstance(instance: T): void {
+    const voice = this._voices.find(v => v.instance === instance);
+    if (voice && voice.note >= 0 && !voice.releasing) {
+      voice.releasing = true;
+      this._callbacks.onRelease(voice.instance);
+    }
+  }
+
+  /**
    * Mark a voice as free (call when envelope reaches idle).
    */
   voiceEnded(instance: T): void {

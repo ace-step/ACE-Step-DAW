@@ -471,6 +471,42 @@ class SynthEngine {
     }
   }
 
+  /** Apply detune in cents (for MPE pitch bend). */
+  setDetune(trackId: string, cents: number): void {
+    const instance = this.synths.get(trackId);
+    if (instance) {
+      instance.synth.set({ detune: cents });
+    }
+    const voices = this.unisonVoices.get(trackId);
+    if (voices) {
+      for (const voice of voices) {
+        voice.synth.set({ detune: cents });
+      }
+    }
+  }
+
+  /** Map MPE slide (0-1) to filter frequency (for CC74 timbre control). */
+  setFilterSlide(trackId: string, value: number): void {
+    const instance = this.synths.get(trackId);
+    if (instance?.filter) {
+      // Map 0-1 to 200Hz–8000Hz log scale
+      const minFreq = 200;
+      const maxFreq = 8000;
+      const freq = minFreq * Math.pow(maxFreq / minFreq, value);
+      instance.filter.frequency.rampTo(freq, 0.01);
+    }
+  }
+
+  /** Map MPE pressure (0-1) to dynamics (volume modulation). */
+  setPressure(trackId: string, value: number): void {
+    const instance = this.synths.get(trackId);
+    if (instance) {
+      // Scale gain: 0.3 (minimum) to 1.0 (maximum) based on pressure
+      const gain = 0.3 + value * 0.7;
+      instance.gain.gain.rampTo(gain, 0.01);
+    }
+  }
+
   /** Update the oscillator waveform on a live synth instance and any unison voices. */
   setOscillatorType(trackId: string, type: 'sine' | 'triangle' | 'sawtooth' | 'square'): void {
     const instance = this.synths.get(trackId);

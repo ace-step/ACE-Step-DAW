@@ -15,7 +15,6 @@ import {
   isMasterChannel,
   MPE_CC_SLIDE,
   type MpeConfig,
-  type MidiMessage,
 } from '../engine/dsp/core/mpe';
 
 // ---------------------------------------------------------------------------
@@ -23,7 +22,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface MpeInputCallbacks {
-  /** Note triggered with velocity and MIDI channel. */
+  /** Note triggered with raw MIDI velocity (0-127) and MIDI channel. */
   onNoteOn: (note: number, velocity: number, channel: number) => void;
   /** Note released on a specific channel. */
   onNoteOff: (note: number, channel: number) => void;
@@ -61,6 +60,16 @@ let isActive = false;
 // MIDI Message Handler
 // ---------------------------------------------------------------------------
 
+/**
+ * Check if a channel is relevant for MPE routing (member or master channel).
+ * In non-MPE mode, all channels are treated equally.
+ */
+function isRelevantChannel(channel: number): boolean {
+  const config = configDetector.config;
+  if (!config.enabled) return true; // non-MPE: accept all
+  return getMpeZoneForChannel(config, channel) !== null || isMasterChannel(config, channel);
+}
+
 function handleMidiMessage(event: MIDIMessageEvent): void {
   if (!callbacks) return;
   const data = event.data;
@@ -69,11 +78,9 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
   const msg = parseMidiMessage(data);
   if (!msg) return;
 
-  const config = configDetector.config;
-
   switch (msg.type) {
     case 'noteOn':
-      callbacks.onNoteOn(msg.data1, msg.data2 / 127, msg.channel);
+      callbacks.onNoteOn(msg.data1, msg.data2, msg.channel);
       break;
 
     case 'noteOff':
@@ -81,7 +88,9 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
       break;
 
     case 'pitchBend':
-      callbacks.onPitchBend(msg.channel, msg.data2);
+      if (isRelevantChannel(msg.channel)) {
+        callbacks.onPitchBend(msg.channel, msg.data2);
+      }
       break;
 
     case 'cc':
@@ -90,14 +99,16 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
         callbacks.onMpeConfigChanged?.(configDetector.config);
         notifyStateChange();
       }
-      // CC74 = MPE slide/timbre
-      if (msg.data1 === MPE_CC_SLIDE) {
+      // CC74 = MPE slide/timbre — only route for relevant channels
+      if (msg.data1 === MPE_CC_SLIDE && isRelevantChannel(msg.channel)) {
         callbacks.onSlide(msg.channel, msg.data2);
       }
       break;
 
     case 'channelPressure':
-      callbacks.onPressure(msg.channel, msg.data1);
+      if (isRelevantChannel(msg.channel)) {
+        callbacks.onPressure(msg.channel, msg.data1);
+      }
       break;
   }
 }

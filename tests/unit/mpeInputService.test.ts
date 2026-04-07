@@ -148,14 +148,19 @@ describe('MPE input routing', () => {
       // Pitch bend on member channel (ch 3)
       const memberBend = parseMidiMessage(new Uint8Array([0xe3, 0, 80]));
       if (memberBend?.type === 'pitchBend') {
-        const zone = getMpeZoneForChannel(config);
-        // ch 3 is a member channel
-        memberPitchBends.push(memberBend.data2);
+        const zone = getMpeZoneForChannel(config, memberBend.channel);
+        expect(zone).toBe('lower');
+        // ch 3 is a member channel, not the master
+        if (zone && memberBend.channel !== 0) {
+          memberPitchBends.push(memberBend.data2);
+        }
       }
 
       // Pitch bend on master channel (ch 0)
       const masterBend = parseMidiMessage(new Uint8Array([0xe0, 0, 64]));
       if (masterBend?.type === 'pitchBend') {
+        const zone = getMpeZoneForChannel(config, masterBend.channel);
+        expect(zone).toBeNull(); // master channel is not a member
         masterPitchBends.push(masterBend.data2);
       }
 

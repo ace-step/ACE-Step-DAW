@@ -297,6 +297,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+    if (params.negativePrompt?.trim()) taskParams.negative_prompt = params.negativePrompt.trim();
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -744,6 +745,12 @@ async function generateClipInternal(
       thinking: false, // lego is a pure DiT task — LM audio codes are out-of-distribution
       model: project.generationDefaults.model,
     } as LegoTaskParams;
+
+    // Include negative prompt from generation form if present
+    const negPrompt = useGenerationStore.getState().generationForm.negativePrompt;
+    if (negPrompt?.trim()) {
+      params.negative_prompt = negPrompt.trim();
+    }
 
     // Always log critical generation params for debugging
     logger.info(
@@ -2506,6 +2513,8 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Elements to exclude from generation */
+  negativePrompt?: string;
 }
 
 export interface Text2MusicResult {
@@ -2592,6 +2601,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
       shift: request.shift,
+      negativePrompt: request.negativePrompt,
     },
   });
 
@@ -2644,6 +2654,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt?.trim()) {
+      params.negative_prompt = request.negativePrompt.trim();
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

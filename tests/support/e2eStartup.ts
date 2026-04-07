@@ -5,10 +5,22 @@ export async function loadFreshApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.clear();
     sessionStorage.clear();
+    // Dismiss the WelcomeOverlay so it doesn't block E2E tests with its focus trap
+    localStorage.setItem('ace-step-welcome-seen', 'true');
   });
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await waitForBrowserStores(page);
+}
+
+/**
+ * Dismiss the WelcomeOverlay before page load.
+ * Use in test.beforeEach when not using loadFreshApp().
+ */
+export async function dismissWelcomeOverlay(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('ace-step-welcome-seen', 'true');
+  });
 }
 
 export async function loadReturningUserApp(page: Page) {

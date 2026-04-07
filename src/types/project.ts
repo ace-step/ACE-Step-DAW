@@ -153,6 +153,8 @@ export interface SamplerConfig {
   release: number;
   /** Optional velocity layers for multi-sample velocity switching and crossfading. */
   velocityLayers?: VelocityLayer[];
+  /** Multi-sample zones mapped across key and velocity ranges. */
+  zones?: SampleZone[];
 }
 
 /** A single velocity layer in a sampler instrument zone. */
@@ -167,8 +169,36 @@ export interface VelocityLayer {
   gain: number;
 }
 
+/** A key/velocity zone in a multi-sample instrument. */
+export interface SampleZone {
+  /** Unique zone identifier. */
+  id: string;
+  /** IndexedDB audio key for this zone's sample. */
+  audioKey: string;
+  /** Display name for this zone's sample. */
+  sampleName?: string;
+  /** MIDI note the sample was recorded at (pitch reference). */
+  rootNote: number;
+  /** Lowest MIDI note this zone responds to (0–127). */
+  lowKey: number;
+  /** Highest MIDI note this zone responds to (0–127). */
+  highKey: number;
+  /** Lowest velocity this zone responds to (0–127). */
+  lowVelocity: number;
+  /** Highest velocity this zone responds to (0–127). */
+  highVelocity: number;
+  /** Per-zone volume multiplier (0–1, default 1). */
+  volume: number;
+  /** Per-zone stereo pan (-1 to 1, default 0). */
+  pan: number;
+  /** Tuning offset in cents (-1200 to 1200, default 0). */
+  tuneOffset: number;
+  /** Crossfade width in semitones for smooth transitions between adjacent zones (0–12). */
+  crossfadeWidth: number;
+}
+
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -383,11 +413,76 @@ export interface WavetableTrackInstrument {
   settings: WavetableSettings;
 }
 
+/** Grain envelope shape applied to each individual grain. */
+export type GrainEnvelopeShape = 'hann' | 'triangle' | 'trapezoid' | 'tukey';
+
+/** Configuration for the granular synthesis engine. */
+export interface GranularSettings {
+  /** IndexedDB audio key for the granular source sample. */
+  audioKey: string;
+  /** MIDI root note (default 60 = C4). */
+  rootNote: number;
+  /** Grain size in milliseconds (1–500). */
+  grainSize: number;
+  /** Grain density — number of grains triggered per second (1–100). */
+  density: number;
+  /** Playback position in source buffer (0–1, normalized). */
+  position: number;
+  /** Position scatter — randomize grain start within this range (0–1). */
+  positionScatter: number;
+  /** Pitch scatter — randomize pitch per grain in semitones (0–24). */
+  pitchScatter: number;
+  /** Grain envelope shape. */
+  envelopeShape: GrainEnvelopeShape;
+  /** Grain attack portion of envelope (0–0.5, fraction of grain size). */
+  grainAttack: number;
+  /** Grain release portion of envelope (0–0.5, fraction of grain size). */
+  grainRelease: number;
+  /** Freeze mode — lock grain position for sustained textures. */
+  freeze: boolean;
+  /** Stereo spray/spread of grains (0–1, 0=mono center, 1=full stereo). */
+  spread: number;
+  /** Global output gain (0–1). */
+  gain: number;
+  /** Amplitude envelope attack in seconds. */
+  attack: number;
+  /** Amplitude envelope release in seconds. */
+  release: number;
+}
+
+export interface GranularTrackInstrument {
+  kind: 'granular';
+  preset: 'granular';
+  name: string;
+  settings: GranularSettings;
+}
+
+export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
+export type PhysicalModelPreset = 'acoustic-guitar' | 'harp' | 'kalimba' | 'marimba' | 'steel-drum' | 'custom';
+
+export interface PhysicalModelSettings {
+  exciter: PhysicalExciterType;
+  damping: number;       // 0–1 (how quickly the sound decays; higher = more damped)
+  brightness: number;    // 0–1 (lowpass filter in feedback; higher = brighter)
+  pluckPosition: number; // 0–1 (where along the string the excitation occurs)
+  bodySize: number;      // 0–1 (body resonance amount)
+  outputGain: number;    // dB
+}
+
+export interface PhysicalTrackInstrument {
+  kind: 'physical';
+  preset: PhysicalModelPreset;
+  name: string;
+  settings: PhysicalModelSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
-  | WavetableTrackInstrument;
+  | WavetableTrackInstrument
+  | GranularTrackInstrument
+  | PhysicalTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -402,6 +497,18 @@ export interface BounceInPlaceOptions {
   replaceOriginal: boolean;
 }
 
+export type DrumPadFilterType = 'off' | 'lowpass' | 'highpass';
+
+export interface DrumPadFilter {
+  type: DrumPadFilterType;
+  cutoff: number;          // 20–20000 Hz
+}
+
+export interface DrumPadSend {
+  reverb: number;          // 0–1
+  delay: number;           // 0–1
+}
+
 export interface DrumPad {
   id: string;
   name: string;
@@ -409,6 +516,11 @@ export interface DrumPad {
   color: string;
   volume: number;          // 0–1
   pan: number;             // -1 to +1
+  tune: number;            // -24 to +24 semitones
+  decay: number;           // 0–1 (relative decay length)
+  filter: DrumPadFilter;
+  drive: number;           // 0–1 saturation amount
+  send: DrumPadSend;
 }
 
 export interface DrumMachineConfig {
@@ -795,6 +907,7 @@ export interface ClipGenerationParams {
   inferenceSteps?: number;
   guidanceScale?: number;
   shift?: number;
+  negativePrompt?: string;
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;
@@ -1107,6 +1220,8 @@ export interface Track {
   drumMachine?: DrumMachineConfig;
   /** Sampler instrument config — when set on a pianoRoll track, uses loaded audio sample instead of synth preset. */
   samplerConfig?: SamplerConfig;
+  /** Granular synthesis config — when set on a pianoRoll track, uses granular engine. */
+  granularConfig?: GranularSettings;
   // Mixer / channel-strip settings
   pan?: number;               // -1 (full left) to +1 (full right), default 0
   panMode?: 'stereo' | 'dual-mono';  // default 'stereo'

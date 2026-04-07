@@ -134,6 +134,162 @@ describe('drumMachine store actions', () => {
     });
   });
 
+  describe('setDrumPadTune', () => {
+    it('sets pad tune in semitones', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadTune(track.id, 0, 5);
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.tune).toBe(5);
+    });
+
+    it('clamps tune to -24 to +24 range', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadTune(track.id, 0, 30);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].tune).toBe(24);
+      useProjectStore.getState().setDrumPadTune(track.id, 0, -30);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].tune).toBe(-24);
+    });
+
+    it('defaults to 0 on new pads', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      expect(track.drumMachine!.pads[0].tune).toBe(0);
+    });
+  });
+
+  describe('setDrumPadDecay', () => {
+    it('sets pad decay', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadDecay(track.id, 0, 0.5);
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.decay).toBe(0.5);
+    });
+
+    it('clamps decay to 0-1 range', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadDecay(track.id, 0, 1.5);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].decay).toBe(1);
+      useProjectStore.getState().setDrumPadDecay(track.id, 0, -0.5);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].decay).toBe(0);
+    });
+
+    it('defaults to 1 on new pads', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      expect(track.drumMachine!.pads[0].decay).toBe(1);
+    });
+  });
+
+  describe('setDrumPadFilter', () => {
+    it('sets pad filter type and cutoff', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadFilter(track.id, 0, { type: 'lowpass', cutoff: 2000 });
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.filter.type).toBe('lowpass');
+      expect(pad.filter.cutoff).toBe(2000);
+    });
+
+    it('clamps cutoff to 20-20000 range', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadFilter(track.id, 0, { cutoff: 25000 });
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].filter.cutoff).toBe(20000);
+      useProjectStore.getState().setDrumPadFilter(track.id, 0, { cutoff: 5 });
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].filter.cutoff).toBe(20);
+    });
+
+    it('defaults to off with 20000 cutoff', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      const pad = track.drumMachine!.pads[0];
+      expect(pad.filter.type).toBe('off');
+      expect(pad.filter.cutoff).toBe(20000);
+    });
+  });
+
+  describe('setDrumPadDrive', () => {
+    it('sets pad drive amount', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadDrive(track.id, 0, 0.5);
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.drive).toBe(0.5);
+    });
+
+    it('clamps drive to 0-1 range', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadDrive(track.id, 0, 1.5);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].drive).toBe(1);
+      useProjectStore.getState().setDrumPadDrive(track.id, 0, -0.5);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].drive).toBe(0);
+    });
+
+    it('defaults to 0 on new pads', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      expect(track.drumMachine!.pads[0].drive).toBe(0);
+    });
+  });
+
+  describe('setDrumPadSend', () => {
+    it('sets pad reverb send', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadSend(track.id, 0, { reverb: 0.4 });
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.send.reverb).toBe(0.4);
+    });
+
+    it('sets pad delay send', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadSend(track.id, 0, { delay: 0.6 });
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.send.delay).toBe(0.6);
+    });
+
+    it('clamps send amounts to 0-1', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadSend(track.id, 0, { reverb: 1.5, delay: -0.5 });
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.send.reverb).toBe(1);
+      expect(pad.send.delay).toBe(0);
+    });
+
+    it('defaults to 0 sends on new pads', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      const pad = track.drumMachine!.pads[0];
+      expect(pad.send.reverb).toBe(0);
+      expect(pad.send.delay).toBe(0);
+    });
+  });
+
+  describe('migration: backfill missing pad fields', () => {
+    it('adds default tune/decay/filter/drive/send to pads missing them', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      // Simulate an old persisted pad without the new fields by stripping them
+      const oldPad = { ...track.drumMachine!.pads[0] } as Record<string, unknown>;
+      delete oldPad.tune;
+      delete oldPad.decay;
+      delete oldPad.filter;
+      delete oldPad.drive;
+      delete oldPad.send;
+
+      // Reload the project through setProject which calls ensureTrackDefaults
+      const project = useProjectStore.getState().project!;
+      const modifiedTrack = {
+        ...project.tracks[0],
+        drumMachine: {
+          ...project.tracks[0].drumMachine!,
+          pads: [oldPad as never, ...project.tracks[0].drumMachine!.pads.slice(1)],
+        },
+      };
+      useProjectStore.getState().setProject({
+        ...project,
+        tracks: [modifiedTrack],
+      });
+
+      const pad = useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0];
+      expect(pad.tune).toBe(0);
+      expect(pad.decay).toBe(1);
+      expect(pad.filter).toEqual({ type: 'off', cutoff: 20000 });
+      expect(pad.drive).toBe(0);
+      expect(pad.send).toEqual({ reverb: 0, delay: 0 });
+    });
+  });
+
   describe('undo/redo', () => {
     it('undoes a pad sample change', () => {
       const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
@@ -141,6 +297,14 @@ describe('drumMachine store actions', () => {
       expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].sampleKey).toBe('custom');
       useProjectStore.getState().undo();
       expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].sampleKey).toBe('kick');
+    });
+
+    it('undoes a pad tune change', () => {
+      const track = useProjectStore.getState().addTrack('drums', 'drumMachine');
+      useProjectStore.getState().setDrumPadTune(track.id, 0, 12);
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].tune).toBe(12);
+      useProjectStore.getState().undo();
+      expect(useProjectStore.getState().project!.tracks[0].drumMachine!.pads[0].tune).toBe(0);
     });
   });
 });

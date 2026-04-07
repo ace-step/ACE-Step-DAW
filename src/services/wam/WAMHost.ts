@@ -4,6 +4,30 @@
  * Initializes the WamEnv and WamGroup on the AudioWorklet thread,
  * providing the host group ID needed for all WAM plugin instances.
  */
+import type { WebAudioModule, WamDescriptor, WamNode } from '@webaudiomodules/api';
+
+/** Allowed URL protocols for WAM plugin loading. */
+const ALLOWED_PROTOCOLS = new Set(['https:', 'http:']);
+
+/**
+ * Validate a plugin URL for safe dynamic import.
+ * Only allows https: URLs (and http: for localhost dev).
+ * Rejects javascript:, data:, blob:, etc.
+ */
+export function validatePluginUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url, window.location.origin);
+  } catch {
+    throw new Error(`Invalid WAM plugin URL: ${url}`);
+  }
+
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(
+      `Unsafe WAM plugin URL protocol "${parsed.protocol}". Only https: and http: are allowed.`,
+    );
+  }
+}
 
 export class WAMHost {
   private _initialized = false;
@@ -56,6 +80,7 @@ export class WAMHost {
   /**
    * Load a WAM plugin from a URL.
    * The URL should point to an ES module with a default export extending WebAudioModule.
+   * Only HTTPS/HTTP URLs are allowed for security (rejects javascript:, data:, etc.).
    */
   async loadPlugin(
     pluginUrl: string,
@@ -65,11 +90,13 @@ export class WAMHost {
       throw new Error('WAMHost not initialized. Call initialize() first.');
     }
 
+    validatePluginUrl(pluginUrl);
+
     const { default: WAMConstructor } = await import(
       /* @vite-ignore */ pluginUrl
     );
 
-    const instance = await WAMConstructor.createInstance(
+    const instance: WebAudioModule = await WAMConstructor.createInstance(
       this._groupId,
       this._audioContext,
       initialState,
@@ -96,15 +123,15 @@ export class WAMHost {
 /** Handle returned after loading a WAM plugin. */
 export interface WAMPluginHandle {
   /** The WAM instance (WebAudioModule) */
-  instance: any; // WebAudioModule type from SDK
+  instance: WebAudioModule;
   /** The audio node to connect to the audio graph */
-  audioNode: AudioNode;
+  audioNode: WamNode;
   /** The WAM module identifier */
   moduleId: string;
   /** The WAM instance identifier */
   instanceId: string;
   /** Plugin descriptor metadata */
-  descriptor: any; // WamDescriptor from SDK
+  descriptor: WamDescriptor;
 }
 
 /** Singleton WAM host instance. */

@@ -32,7 +32,7 @@ function createMockWAMHandle(overrides?: Partial<WAMPluginHandle>): WAMPluginHan
       },
     }),
     getParameterValues: vi.fn().mockResolvedValue({
-      gain: { id: 'gain', value: 0.5, normalized: true },
+      gain: { id: 'gain', value: 0.5, normalized: false },
       mode: { id: 'mode', value: 0, normalized: false },
     }),
     setParameterValues: vi.fn().mockResolvedValue(undefined),
@@ -127,7 +127,7 @@ describe('WAMPluginAdapter', () => {
   it('should set parameters via WAM node', () => {
     adapter.setParameter('gain', 0.8);
     expect(handle.instance.audioNode.setParameterValues).toHaveBeenCalledWith(
-      { gain: { id: 'gain', value: 0.8, normalized: true } },
+      { gain: { id: 'gain', value: 0.8, normalized: false } },
     );
   });
 

@@ -10,6 +10,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { WAMPluginBrowser } from './WAMPluginBrowser';
 import { WAMPluginPanel } from './WAMPluginPanel';
 import { Z } from '../../utils/zIndex';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { WAMCatalogEntry, WAMActiveInstance } from '../../types/wam';
 
 export function WAMSidePanel() {
@@ -21,6 +22,18 @@ export function WAMSidePanel() {
   const instances = useWAMStore((s) => s.instances);
   const pluginOrder = useWAMStore((s) => s.pluginOrder);
   const tracks = useProjectStore((s) => s.project?.tracks) ?? [];
+  const hostStatus = useWAMStore((s) => s.hostStatus);
+  const initializeHost = useWAMStore((s) => s.initializeHost);
+
+  // Auto-initialize WAM host when panel opens and host is idle
+  useEffect(() => {
+    if (show && hostStatus === 'idle') {
+      const engine = getAudioEngine();
+      if (engine.ctx) {
+        initializeHost(engine.ctx);
+      }
+    }
+  }, [show, hostStatus, initializeHost]);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 

@@ -9,8 +9,6 @@ import type { WAMActiveInstance, WAMPreset, WAMCatalogEntry } from '../types/wam
 import { wamHost } from '../services/wam/WAMHost';
 import { WAMPluginAdapter } from '../services/wam/WAMPluginAdapter';
 import { WAM_CATALOG, searchCatalog } from '../services/wam/WAMCatalog';
-import { pluginRegistry } from '../engine/PluginRegistry';
-import type { PluginManifest } from '../types/plugin';
 
 export type WAMHostStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
@@ -98,21 +96,20 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
       const instanceId = handle.instanceId;
       _adapters.set(instanceId, adapter);
 
-      // Register in the main plugin registry for audio chain integration
-      const manifest: PluginManifest = {
-        id: `wam:${entry.id}`,
-        name: adapter.name,
-        pluginType: adapter.pluginType,
-        version: adapter.version,
-        author: adapter.author,
-        description: adapter.description,
-        parameters: adapter.getParameterDescriptors(),
-      };
-
+      // Build numeric parameter values from the adapter's cached values.
+      // Adapter returns actual-range values (non-normalized), safe to store as numbers.
       const paramValues: Record<string, number> = {};
       const params = adapter.getParameters();
       for (const [id, val] of Object.entries(params)) {
-        paramValues[id] = typeof val === 'number' ? val : 0;
+        if (typeof val === 'number') {
+          paramValues[id] = val;
+        } else if (typeof val === 'boolean') {
+          paramValues[id] = val ? 1 : 0;
+        } else if (typeof val === 'string') {
+          // For enum values, find the index
+          const desc = adapter.getParameterDescriptors().find((d) => d.id === id);
+          paramValues[id] = desc?.type === 'enum' ? (desc as any).options.indexOf(val) : 0;
+        }
       }
 
       const instance: WAMActiveInstance = {
@@ -122,17 +119,25 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
         vendor: adapter.author,
         trackId,
         enabled: true,
-        parameters: adapter.getParameterDescriptors().map((d) => ({
-          id: d.id,
-          label: d.name,
-          type: d.type === 'enum' ? 'choice' as const : d.type as 'float' | 'int' | 'boolean',
-          defaultValue: 'defaultValue' in d ? (typeof d.defaultValue === 'number' ? d.defaultValue : 0) : 0,
-          minValue: 'min' in d ? d.min : 0,
-          maxValue: 'max' in d ? d.max : 1,
-          discreteStep: 0,
-          exponent: 1,
-          choices: d.type === 'enum' ? (d as any).options : undefined,
-        })),
+        parameters: adapter.getParameterDescriptors().map((d) => {
+          const type = d.type === 'enum' ? 'choice' as const : d.type as 'float' | 'int' | 'boolean';
+          const descriptorStep = 'step' in d && typeof (d as any).step === 'number' && (d as any).step > 0 ? (d as any).step : undefined;
+          const discreteStep = descriptorStep ?? (
+            d.type === 'enum' || d.type === 'int' || d.type === 'bool' ? 1 : 0
+          );
+
+          return {
+            id: d.id,
+            label: d.name,
+            type,
+            defaultValue: 'defaultValue' in d ? (typeof d.defaultValue === 'number' ? d.defaultValue : 0) : 0,
+            minValue: 'min' in d ? (d as any).min : 0,
+            maxValue: 'max' in d ? (d as any).max : 1,
+            discreteStep,
+            exponent: 1,
+            choices: d.type === 'enum' ? (d as any).options : undefined,
+          };
+        }),
         parameterValues: paramValues,
         activePreset: null,
         presets: get().presets[entry.id]?.map((p) => p.name) ?? [],
@@ -252,7 +257,14 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
       name,
       pluginId: instance.pluginId,
       parameterValues: { ...instance.parameterValues },
-      state: state ? btoa(JSON.stringify(state)) : undefined,
+      // Use TextEncoder for UTF-8 safe base64 encoding
+      state: state
+        ? btoa(
+            Array.from(new TextEncoder().encode(JSON.stringify(state)))
+              .map((b) => String.fromCharCode(b))
+              .join(''),
+          )
+        : undefined,
     };
 
     set((s) => {
@@ -287,7 +299,10 @@ export const useWAMStore = create<WAMState & WAMActions>()((set, get) => ({
     // Restore state if available
     if (preset.state) {
       try {
-        const state = JSON.parse(atob(preset.state));
+        // UTF-8 safe base64 decoding
+        const binary = atob(preset.state);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        const state = JSON.parse(new TextDecoder().decode(bytes));
         await adapter.setState(state);
       } catch {
         // Fall back to parameter values

@@ -57,7 +57,8 @@ export class WAMPluginAdapter implements WAPPlugin {
 
     try {
       const paramInfoMap = await node.getParameterInfo();
-      const paramValues = await node.getParameterValues(true);
+      // Request non-normalized values so we get actual min..max range values
+      const paramValues = await node.getParameterValues(false);
 
       const descriptors: PluginParamDescriptor[] = [];
 
@@ -150,8 +151,9 @@ export class WAMPluginAdapter implements WAPPlugin {
     }
 
     const node = this._handle.instance.audioNode;
+    // Send non-normalized values (actual range values, not 0..1)
     node.setParameterValues({
-      [paramId]: { id: paramId, value: numValue, normalized: true },
+      [paramId]: { id: paramId, value: numValue, normalized: false },
     });
   }
 

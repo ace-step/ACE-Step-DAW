@@ -159,8 +159,14 @@ export function useClipDrag({
           if (!selectedClipId) return;
           selectClip(selectedClipId, false);
           useUIStore.getState().selectTrack(track.id, false);
-        }).catch(() => {
-          // Slice failed — selection stays unchanged
+        }).catch((error) => {
+          console.error('Failed to slice clip to selected range', {
+            clipId: clip.id,
+            trackId: track.id,
+            previewStartTime,
+            previewEndTime,
+            error,
+          });
         });
       };
 

@@ -70,9 +70,10 @@ export function DrumMachineEditor() {
       if (cancelled) return;
       if (pads.length) drumEngine.syncTrackPadParams(trackId, pads);
       setEngineReady(true);
-    }).catch(() => {
+    }).catch((error) => {
       // Drum engine init failed; engineReady remains false and pad hits
       // continue to rely on triggerPad's trigger-time fallback path.
+      console.debug('Failed to initialize drum engine track', { trackId, error });
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps

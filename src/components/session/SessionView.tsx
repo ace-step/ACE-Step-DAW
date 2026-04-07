@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useUIStore } from '../../store/uiStore';
@@ -15,7 +15,11 @@ import { generateSingleClip } from '../../services/generationPipeline';
 import { toastError } from '../../hooks/useToast';
 import { useSessionMidiController } from '../../hooks/useSessionMidiController';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
-import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
+import { getSessionRecordingService, type RecordingResult } from '../../services/sessionRecordingService';
+import type { Clip, Track, TrackType, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
+
+/** Track types that record MIDI (vs audio). */
+const MIDI_TRACK_TYPES: TrackType[] = ['pianoRoll', 'drumMachine', 'sequencer'];
 
 const LAUNCH_MODE_OPTIONS: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
 
@@ -147,6 +151,132 @@ export function SessionView() {
 
   const hasArmedTrack = armedTrackIds.length > 0;
   const captureService = useMemo(() => getMidiCaptureService(), []);
+  const recordingService = useMemo(() => getSessionRecordingService(), []);
+  const toggleArmTrack = useTransportStore((s) => s.toggleArmTrack);
+  const addClip = useProjectStore((s) => s.addClip);
+  const assignClipToSessionSlot = useProjectStore((s) => s.assignClipToSessionSlot);
+
+  // Session recording state
+  const [recordingSlots, setRecordingSlots] = useState<Set<string>>(new Set());
+  const [fixedLengthBars, setFixedLengthBars] = useState<number | null>(null);
+  const [overdubMode, setOverdubMode] = useState(false);
+  // Ref for timer-based fixed-length auto-stop
+  const fixedLengthTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Sync fixed-length setting to service
+  useEffect(() => {
+    recordingService.setFixedLengthBars(fixedLengthBars);
+  }, [fixedLengthBars, recordingService]);
+
+  useEffect(() => {
+    recordingService.setOverdubMode(overdubMode);
+  }, [overdubMode, recordingService]);
+
+  /** Stop recording and create a clip from captured data. */
+  const handleStopSlotRecording = useCallback((slotId: string, sceneIndex: number) => {
+    // Clear any fixed-length timer
+    const timer = fixedLengthTimers.current.get(slotId);
+    if (timer) {
+      clearTimeout(timer);
+      fixedLengthTimers.current.delete(slotId);
+    }
+
+    const result = recordingService.stopRecording(slotId);
+    setRecordingSlots((prev) => {
+      const next = new Set(prev);
+      next.delete(slotId);
+      return next;
+    });
+
+    if (!result || !project) return;
+
+    const isMidi = MIDI_TRACK_TYPES.includes(result.trackType as TrackType);
+    const track = project.tracks.find((t) => t.id === result.trackId);
+    if (!track) return;
+
+    // Create clip from recording result
+    const sceneId = project.session?.scenes?.[sceneIndex]?.id;
+    if (isMidi && result.midiNotes && result.midiNotes.length > 0) {
+      const newClip = addClip(result.trackId, {
+        startTime: 0,
+        duration: result.clipDuration,
+        prompt: `Recorded ${track.displayName}`,
+        lyrics: '',
+        source: 'uploaded',
+        midiData: {
+          notes: result.midiNotes.map((n) => ({
+            id: crypto.randomUUID(),
+            pitch: n.pitch,
+            velocity: n.velocity,
+            startBeat: n.startBeat,
+            durationBeats: n.durationBeats,
+          })),
+          grid: '1/16' as const,
+        },
+      });
+      if (sceneId) {
+        assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
+      }
+    } else if (!isMidi) {
+      // Audio recording — create a placeholder clip (actual audio handled by RecordingEngine)
+      const newClip = addClip(result.trackId, {
+        startTime: 0,
+        duration: result.clipDuration,
+        prompt: `Recorded ${track.displayName}`,
+        lyrics: '',
+        source: 'uploaded',
+      });
+      if (sceneId) {
+        assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
+      }
+    }
+  }, [project, recordingService, addClip, assignClipToSessionSlot]);
+
+  /** Start recording into a session slot. */
+  const handleStartSlotRecording = useCallback((slotId: string, trackId: string, trackType: string, sceneIndex: number) => {
+    if (!project) return;
+    try {
+      recordingService.startRecording({
+        slotId,
+        trackId,
+        trackType,
+        bpm: project.bpm,
+        timeSignature: project.timeSignature,
+      });
+      setRecordingSlots((prev) => new Set(prev).add(slotId));
+
+      // If fixed-length, set a timer to auto-stop
+      if (fixedLengthBars !== null) {
+        const beatsPerBar = project.timeSignature;
+        const secondsPerBeat = 60 / project.bpm;
+        const durationMs = fixedLengthBars * beatsPerBar * secondsPerBeat * 1000;
+        const timer = setTimeout(() => {
+          handleStopSlotRecording(slotId, sceneIndex);
+        }, durationMs);
+        fixedLengthTimers.current.set(slotId, timer);
+      }
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'Failed to start recording');
+    }
+  }, [project, recordingService, fixedLengthBars, handleStopSlotRecording]);
+
+  /** Handle click on empty slot when track is armed — start or stop recording. */
+  const handleSlotRecordClick = useCallback((slotId: string, trackId: string, trackType: string, sceneIndex: number) => {
+    if (recordingSlots.has(slotId)) {
+      handleStopSlotRecording(slotId, sceneIndex);
+    } else {
+      handleStartSlotRecording(slotId, trackId, trackType, sceneIndex);
+    }
+  }, [recordingSlots, handleStartSlotRecording, handleStopSlotRecording]);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      for (const timer of fixedLengthTimers.current.values()) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
 
   const handleCaptureMidi = useCallback(() => {
     if (!hasArmedTrack) return;
@@ -192,9 +322,6 @@ export function SessionView() {
       };
     });
   }, [colorMenu, setSessionSlotFollowAction]);
-
-  const addClip = useProjectStore((s) => s.addClip);
-  const assignClipToSessionSlot = useProjectStore((s) => s.assignClipToSessionSlot);
 
   // Set keyboard context to 'session' on mount, restore previous on unmount
   useEffect(() => {
@@ -352,6 +479,30 @@ export function SessionView() {
             >
               Capture MIDI
             </button>
+            <select
+              value={fixedLengthBars ?? ''}
+              onChange={(e) => setFixedLengthBars(e.target.value ? Number(e.target.value) : null)}
+              className="rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-1 text-[11px] text-zinc-200 outline-none"
+              aria-label="Fixed-length recording in bars"
+              data-testid="fixed-length-select"
+            >
+              <option value="">Free length</option>
+              {[1, 2, 4, 8, 16].map((n) => (
+                <option key={n} value={n}>{n} bar{n > 1 ? 's' : ''}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setOverdubMode((v) => !v)}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                overdubMode
+                  ? 'bg-orange-600/30 text-orange-300 border border-orange-500/50'
+                  : 'bg-[#2a2a2a] text-zinc-400 hover:bg-[#343434]'
+              }`}
+              aria-label={overdubMode ? 'Disable overdub mode' : 'Enable overdub mode'}
+              data-testid="overdub-toggle"
+            >
+              Overdub {overdubMode ? 'ON' : 'OFF'}
+            </button>
             <button
               onClick={() => setMidiEnabled((v) => !v)}
               className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
@@ -492,6 +643,10 @@ export function SessionView() {
               onDragStart={handlePointerDown}
               onAiFill={handleAiFill}
               isArrangementRecording={sessionArrangementRecording}
+              isArmed={armedTrackIds.includes(track.id)}
+              onToggleArm={() => toggleArmTrack(track.id)}
+              recordingSlots={recordingSlots}
+              onSlotRecordClick={handleSlotRecordClick}
             />
           );
         })}
@@ -959,6 +1114,10 @@ function FragmentRow({
   onDragStart,
   onAiFill,
   isArrangementRecording,
+  isArmed,
+  onToggleArm,
+  recordingSlots,
+  onSlotRecordClick,
 }: {
   track: Track;
   sessionClips: Clip[];
@@ -980,6 +1139,10 @@ function FragmentRow({
   onDragStart: (e: React.PointerEvent, type: 'clip' | 'scene', opts: { sourceSlotId?: string; sourceSceneIndex?: number; label: string; color: string }) => void;
   onAiFill: (trackId: string, sceneIndex: number) => void;
   isArrangementRecording: boolean;
+  isArmed: boolean;
+  onToggleArm: () => void;
+  recordingSlots: Set<string>;
+  onSlotRecordClick: (slotId: string, trackId: string, trackType: string, sceneIndex: number) => void;
 }) {
   const trackSlots = sessionSlots.filter((s) => s.trackId === track.id);
 
@@ -1026,13 +1189,32 @@ function FragmentRow({
             <div className="truncate text-sm font-medium text-zinc-100">{track.displayName}</div>
             <div className="text-[11px] text-zinc-400">{track.trackType ?? 'stems'}</div>
           </div>
-          <button
-            onClick={() => void onStop()}
-            className="rounded-md border border-[#444] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:border-red-500 hover:text-red-300"
-            aria-label={`Stop Session clip on ${track.displayName}`}
-          >
-            Stop
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onToggleArm}
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
+                isArmed
+                  ? 'bg-red-600 text-white shadow-[0_0_8px_rgba(220,38,38,0.5)]'
+                  : 'bg-[#333] text-zinc-500 hover:bg-[#444] hover:text-zinc-300'
+              }`}
+              aria-label={isArmed ? `Disarm ${track.displayName}` : `Arm ${track.displayName} for recording`}
+              data-testid={`arm-track-${track.id}`}
+              title={isArmed ? 'Armed for recording' : 'Arm for recording'}
+            >
+              {isArmed ? (
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-white" style={isArmed ? { animation: 'session-blink 1s ease-in-out infinite' } : undefined} />
+              ) : (
+                <span className="inline-block w-2 h-2 rounded-full border border-zinc-500" />
+              )}
+            </button>
+            <button
+              onClick={() => void onStop()}
+              className="rounded-md border border-[#444] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:border-red-500 hover:text-red-300"
+              aria-label={`Stop Session clip on ${track.displayName}`}
+            >
+              Stop
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1226,7 +1408,48 @@ function FragmentRow({
                   </select>
                 )}
               </div>
-            ) : hasStopButton ? (
+            ) : isArmed && slot ? (() => {
+              const isRecordingThis = recordingSlots.has(slot.id);
+              return (
+                <button
+                  onClick={() => {
+                    if (dragState) return;
+                    onSlotClick(sceneIndex);
+                    onSlotRecordClick(slot.id, track.id, track.trackType ?? 'stems', sceneIndex);
+                  }}
+                  onContextMenu={(e) => handleEmptySlotContextMenu(e, sceneIndex)}
+                  className={`flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-xl border transition-all ${
+                    isRecordingThis
+                      ? 'border-red-500 bg-red-900/30 shadow-[0_0_12px_rgba(220,38,38,0.3)]'
+                      : isDropTarget
+                        ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]'
+                        : 'border-red-800/50 bg-red-950/20 hover:border-red-500/60 hover:bg-red-900/25'
+                  } ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-[#1b1b1b]' : ''}`}
+                  aria-label={isRecordingThis
+                    ? `Stop recording on ${track.displayName} scene ${sceneIndex + 1}`
+                    : `Record into ${track.displayName} scene ${sceneIndex + 1}`}
+                  data-testid={`record-slot-${track.id}-${sceneIndex}`}
+                  data-slot-id={slot.id}
+                  data-track-id={track.id}
+                  data-scene-index={sceneIndex}
+                >
+                  {isRecordingThis ? (
+                    <>
+                      <span
+                        className="inline-block w-4 h-4 rounded-full bg-red-500"
+                        style={{ animation: 'session-blink 1s ease-in-out infinite' }}
+                      />
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-red-300 font-medium">Recording</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-block w-4 h-4 rounded-full bg-red-600/80" />
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-red-400/80">Record</span>
+                    </>
+                  )}
+                </button>
+              );
+            })() : hasStopButton ? (
               <button
                 onClick={() => {
                   if (dragState) return;

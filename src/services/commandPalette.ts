@@ -1,4 +1,5 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import { useUIStore } from '../store/uiStore';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -590,6 +591,20 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['generate from context', 'continue idea', 'ai continue region'],
       () => context.actions.setBatchGenerateMode('context'),
       ['Cmd', 'Shift', 'G'],
+      'AI generation',
+    ),
+  );
+
+  commands.push(
+    createTrackCommand(
+      'generation:hum-to-song',
+      'Hum to Song',
+      'Generation',
+      'action',
+      ['hum', 'sing', 'melody', 'record', 'microphone', 'voice', 'generate'],
+      ['hum to song', 'sing a melody', 'record melody', 'hum melody'],
+      () => useUIStore.getState().setShowHumToSongModal(true),
+      undefined,
       'AI generation',
     ),
   );

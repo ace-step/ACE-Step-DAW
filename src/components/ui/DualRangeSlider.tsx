@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import { PrecisionInput, clampValue, roundToStep } from './PrecisionInput';
 
 interface DualRangeSliderProps {
@@ -46,6 +46,48 @@ export function DualRangeSlider({
 
   const startPct = ((startValue - min) / (max - min)) * 100;
   const endPct = ((endValue - min) / (max - min)) * 100;
+
+  const makeKeyHandler = useCallback(
+    (which: 'start' | 'end') => (e: KeyboardEvent) => {
+      const coarseStep = step * 10;
+      let delta = 0;
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowUp':
+          delta = step;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          delta = -step;
+          break;
+        case 'PageUp':
+          delta = coarseStep;
+          break;
+        case 'PageDown':
+          delta = -coarseStep;
+          break;
+        case 'Home':
+          if (which === 'start') { onChange(min, endValue); } else { onChange(startValue, clamp(startValue + minSpan, startValue + minSpan, max)); }
+          e.preventDefault();
+          return;
+        case 'End':
+          if (which === 'start') { onChange(clamp(endValue - minSpan, min, endValue - minSpan), endValue); } else { onChange(startValue, max); }
+          e.preventDefault();
+          return;
+        default:
+          return;
+      }
+      e.preventDefault();
+      if (which === 'start') {
+        const newStart = round(clamp(startValue + delta, min, endValue - minSpan));
+        onChange(newStart, endValue);
+      } else {
+        const newEnd = round(clamp(endValue + delta, startValue + minSpan, max));
+        onChange(startValue, newEnd);
+      }
+    },
+    [startValue, endValue, min, max, minSpan, step, onChange, clamp, round],
+  );
 
   const makeDragHandler = useCallback(
     (which: 'start' | 'end') => (e: React.MouseEvent) => {
@@ -98,26 +140,40 @@ export function DualRangeSlider({
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
           style={{ left: `${startPct}%` }}
+          role="slider"
+          tabIndex={0}
+          aria-label="Range start"
+          aria-valuenow={roundToStep(startValue, step)}
+          aria-valuemin={min}
+          aria-valuemax={endValue - minSpan}
+          aria-valuetext={fmt(startValue)}
           onMouseDown={makeDragHandler('start')}
+          onKeyDown={makeKeyHandler('start')}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
             setEditingHandle('start');
           }}
-          aria-label="Range start handle"
         />
 
         {/* End thumb */}
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-daw-accent shadow-md cursor-col-resize hover:scale-110 transition-transform z-10"
           style={{ left: `${endPct}%` }}
+          role="slider"
+          tabIndex={0}
+          aria-label="Range end"
+          aria-valuenow={roundToStep(endValue, step)}
+          aria-valuemin={startValue + minSpan}
+          aria-valuemax={max}
+          aria-valuetext={fmt(endValue)}
           onMouseDown={makeDragHandler('end')}
+          onKeyDown={makeKeyHandler('end')}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
             setEditingHandle('end');
           }}
-          aria-label="Range end handle"
         />
       </div>
 

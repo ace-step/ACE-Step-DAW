@@ -22,3 +22,7 @@ export { SaturationCard } from './SaturationCard';
 export { StereoImagerCard } from './StereoImagerCard';
 export { AlgorithmicReverbCard } from './AlgorithmicReverbCard';
 export { NoiseReductionCard } from './NoiseReductionCard';
+export { SpectralFreezeCard } from './SpectralFreezeCard';
+export { SpectralBlurCard } from './SpectralBlurCard';
+export { SpectralFilterCard } from './SpectralFilterCard';
+export { SpectralMorphCard } from './SpectralMorphCard';

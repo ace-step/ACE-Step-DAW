@@ -6,20 +6,12 @@
  * - Polls for parameter-level mix results
  * - Maps results to DAW mixer format
  */
-import { getBackendUrl } from './aceStepApi';
 import type { AiMixTaskParams, AiMixResult } from '../types/api';
 import { useAiMixStore } from '../store/aiMixStore';
+import { getApiBaseUrl as getApiBase } from './unifiedTaskRouter';
 import { createDebugLogger } from '../utils/debugLogger';
 
 const logger = createDebugLogger('ace-step:ai-mix');
-
-function getApiBase(): string {
-  const custom = getBackendUrl();
-  if (custom && custom.trim()) {
-    return custom.trim().replace(/\/+$/, '');
-  }
-  return '/api';
-}
 
 const AI_MIX_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 2_000;

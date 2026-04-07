@@ -6,6 +6,7 @@ import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
+import { MpeSettingsPanel } from '../midi/MpeSettingsPanel';
 import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
@@ -60,6 +61,75 @@ function ThemeSelector() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function AccessibilityToggle({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 py-1.5 cursor-pointer group">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-zinc-200 group-hover:text-white transition-colors">{label}</div>
+        <div className="text-[10px] text-zinc-500 leading-tight">{description}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative w-8 h-[18px] rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-daw-accent' : 'bg-zinc-600'}`}
+      >
+        <span
+          className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[16px]' : 'translate-x-[2px]'}`}
+        />
+      </button>
+    </label>
+  );
+}
+
+function AccessibilitySettings() {
+  const reducedMotion = useUIStore((s) => s.reducedMotion);
+  const highContrastMode = useUIStore((s) => s.highContrastMode);
+  const colorBlindMode = useUIStore((s) => s.colorBlindMode);
+  const setReducedMotion = useUIStore((s) => s.setReducedMotionManual);
+  const setHighContrastMode = useUIStore((s) => s.setHighContrastMode);
+  const setColorBlindMode = useUIStore((s) => s.setColorBlindMode);
+
+  return (
+    <div className="px-4 pb-3">
+      <div className="border-t border-daw-border my-3" />
+      <h3 className="text-xs font-medium text-zinc-300 mb-2">Accessibility</h3>
+      <div className="space-y-1">
+        <AccessibilityToggle
+          label="Reduce motion"
+          description="Disable animations and transitions for motion sensitivity"
+          checked={reducedMotion}
+          onChange={setReducedMotion}
+        />
+        <AccessibilityToggle
+          label="High contrast"
+          description="Increase contrast to WCAG AAA 7:1 ratio for better visibility"
+          checked={highContrastMode}
+          onChange={setHighContrastMode}
+        />
+        <AccessibilityToggle
+          label="Color blind mode"
+          description="Add patterns and shapes to distinguish color-dependent elements"
+          checked={colorBlindMode}
+          onChange={setColorBlindMode}
+        />
+      </div>
     </div>
   );
 }
@@ -493,6 +563,10 @@ export function SettingsDialog() {
              ) : null}
            </div>
 
+          <div className="border-t border-daw-border my-3" />
+          <MpeSettingsPanel />
+
+          <div className="border-t border-daw-border my-3" />
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Generation Parameters</h3>
 
           <div className="grid grid-cols-2 gap-3">
@@ -646,6 +720,8 @@ export function SettingsDialog() {
             <span className="text-[11px] font-medium text-violet-300 hover:text-violet-200">ACE Studio →</span>
           </a>
         </div>
+
+        <AccessibilitySettings />
 
         <div className="flex justify-end px-4 py-3 border-t border-daw-border gap-2">
           <Button variant="default" size="md" onClick={() => setShow(false)}>

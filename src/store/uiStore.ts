@@ -125,6 +125,8 @@ export interface UIState {
   drumMachineEditorHeight: number;
   sequencerEditorHeight: number;
   pianoRollHeight: number;
+  /** Active expression lane type in piano roll (MPE). */
+  pianoRollExpressionType: 'pitchBend' | 'timbre' | 'pressure';
   effectChainHeight: number;
   virtualKeyboardOctave: number;
   virtualKeyboardVelocity: number;
@@ -658,6 +660,7 @@ export const useUIStore = create<UIState>()(
   drumMachineEditorHeight: 400,
   sequencerEditorHeight: 320,
   pianoRollHeight: 360,
+  pianoRollExpressionType: 'pitchBend' as const,
   effectChainHeight: 320,
   virtualKeyboardOctave: 4,
   virtualKeyboardVelocity: 96,
@@ -1393,6 +1396,7 @@ export const useUIStore = create<UIState>()(
         drumMachineEditorHeight: state.drumMachineEditorHeight,
         sequencerEditorHeight: state.sequencerEditorHeight,
         pianoRollHeight: state.pianoRollHeight,
+        pianoRollExpressionType: state.pianoRollExpressionType,
         effectChainHeight: state.effectChainHeight,
         virtualKeyboardOctave: state.virtualKeyboardOctave,
         virtualKeyboardVelocity: state.virtualKeyboardVelocity,

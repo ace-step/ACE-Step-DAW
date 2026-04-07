@@ -531,6 +531,24 @@ export interface DrumMachineConfig {
 export type ClipGenerationStatus =
   | 'empty' | 'idle' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
 
+/** A time-stamped expression point for MPE expression curves. */
+export interface ExpressionPoint {
+  /** Beat position relative to note start. */
+  beat: number;
+  /** Value (0–127 for pressure/timbre, -8192–8191 for pitch bend). */
+  value: number;
+}
+
+/** Per-note MPE expression data recorded from an MPE controller. */
+export interface MpeExpressionData {
+  /** Channel pressure curve (0–127). */
+  pressureCurve?: ExpressionPoint[];
+  /** CC74 timbre/slide curve (0–127). */
+  timbreCurve?: ExpressionPoint[];
+  /** Pitch bend curve (-8192 to 8191). */
+  pitchBendCurve?: ExpressionPoint[];
+}
+
 export interface MidiNote {
   id: string;
   pitch: number;
@@ -538,6 +556,8 @@ export interface MidiNote {
   durationBeats: number;
   velocity: number;
   isSlide?: boolean;
+  /** Per-note MPE expression data (optional, populated from MPE recording). */
+  mpeExpression?: MpeExpressionData;
 }
 
 export interface MidiClipData {

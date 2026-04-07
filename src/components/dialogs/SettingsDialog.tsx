@@ -6,6 +6,7 @@ import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
+import { MpeSettingsPanel } from '../midi/MpeSettingsPanel';
 import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import type { ModelEntry, LmModelEntry } from '../../types/api';
@@ -493,6 +494,10 @@ export function SettingsDialog() {
              ) : null}
            </div>
 
+          <div className="border-t border-daw-border my-3" />
+          <MpeSettingsPanel />
+
+          <div className="border-t border-daw-border my-3" />
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Generation Parameters</h3>
 
           <div className="grid grid-cols-2 gap-3">

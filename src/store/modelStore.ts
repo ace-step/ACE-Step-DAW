@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { ModelEntry, LmModelEntry, StatsResponse, ModelCategory, GenerationIntent } from '../types/api';
+import type { ModelEntry, LmModelEntry, StatsResponse, ModelCategory, GenerationIntent, ModelCapability, AiTaskType } from '../types/api';
 import { listModels, initModel, getStats, inferModelCategory } from '../services/aceStepApi';
+import { checkProviderHealth as checkProviderHealthApi, TASK_TYPE_TO_CAPABILITY, type ProviderHealthResult } from '../services/unifiedTaskRouter';
 
 const POLLING_INTERVAL_MS = 30_000;
 
@@ -40,6 +41,9 @@ export interface ModelStore {
   lastRefreshedAt: number;
   stats: StatsResponse | null;
 
+  /** Per-capability provider health status (#741) */
+  providerHealth: Partial<Record<ModelCapability, ProviderHealthResult>>;
+
   // Existing actions
   refreshModels: () => Promise<void>;
   switchModel: (name: string) => Promise<void>;
@@ -57,6 +61,13 @@ export interface ModelStore {
   // Intent-driven actions
   ensureModelForIntent: (intent: GenerationIntent) => Promise<void>;
   setCategoryModelOverride: (category: ModelCategory, modelName: string | null) => void;
+
+  // Unified multi-provider features (#741)
+  checkProviderHealth: (capability: ModelCapability) => Promise<void>;
+  checkAllProviderHealth: () => Promise<void>;
+  getProviderStatus: (capability: ModelCapability) => ProviderHealthResult['status'] | 'unknown';
+  isProviderAvailable: (capability: ModelCapability) => boolean;
+  getCapabilityForTaskType: (taskType: AiTaskType) => ModelCapability;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -72,6 +83,7 @@ export const useModelStore = create<ModelStore>()(
       connected: false,
       lastRefreshedAt: 0,
       stats: null,
+      providerHealth: {},
 
       refreshModels: async () => {
         try {
@@ -213,6 +225,60 @@ export const useModelStore = create<ModelStore>()(
           overrides[category] = modelName;
         }
         set({ categoryModelOverrides: overrides });
+      },
+
+      // --- Unified multi-provider features (#741) ---
+
+      checkProviderHealth: async (capability: ModelCapability) => {
+        try {
+          const result = await checkProviderHealthApi(capability);
+          set({
+            providerHealth: {
+              ...get().providerHealth,
+              [capability]: result,
+            },
+          });
+        } catch (err) {
+          set({
+            providerHealth: {
+              ...get().providerHealth,
+              [capability]: {
+                capability,
+                status: 'error' as const,
+                lastChecked: Date.now(),
+                error: err instanceof Error ? err.message : String(err),
+              },
+            },
+          });
+        }
+      },
+
+      checkAllProviderHealth: async () => {
+        const capabilities: ModelCapability[] = [
+          'music_generation',
+          'stem_separation',
+          'ai_mixing',
+          'midi_generation',
+          'chord_generation',
+        ];
+        await Promise.allSettled(
+          capabilities.map((cap) => get().checkProviderHealth(cap)),
+        );
+      },
+
+      getProviderStatus: (capability: ModelCapability) => {
+        const health = get().providerHealth[capability];
+        return health?.status ?? 'unknown';
+      },
+
+      isProviderAvailable: (capability: ModelCapability) => {
+        const status = get().getProviderStatus(capability);
+        // Optimistic: treat unknown as available (not yet checked)
+        return status === 'healthy' || status === 'unknown';
+      },
+
+      getCapabilityForTaskType: (taskType: AiTaskType) => {
+        return TASK_TYPE_TO_CAPABILITY[taskType];
       },
     }),
     {

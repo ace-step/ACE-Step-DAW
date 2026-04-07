@@ -13,7 +13,7 @@ import type {
   Track,
 } from '../types/project';
 import { ensureMasteringState } from '../utils/mastering';
-import { timeStretch, type TimeStretchMode } from '../utils/timeStretch';
+import { timeStretch, pitchShift as pitchShiftAudio, type TimeStretchMode } from '../utils/timeStretch';
 import { applyClipFadeAutomation } from '../utils/clipFade';
 import { beatToTime, getBeatAtBar, getTimeSignatureAtBar, getTimeSignatureBeatLength } from '../utils/tempoMap';
 import { computeWarpedSegments } from '../utils/audioWarp';
@@ -47,6 +47,7 @@ export interface ClipScheduleInfo {
   fadeInCurve?: 'linear' | 'exponential' | 'equal-power';
   fadeOutCurve?: 'linear' | 'exponential' | 'equal-power';
   timeStretchRate?: number; // playback rate (1 = normal, 0.5 = half speed, 2 = double)
+  pitchShift?: number; // pitch shift in semitones (0 = original pitch)
   gainEnvelope?: GainEnvelopePoint[]; // per-clip volume automation
   warpMarkers?: AudioWarpMarker[]; // flex-time warp markers for audio quantize
   stretchMode?: import('../types/project').StretchMode; // time-stretch algorithm
@@ -846,41 +847,58 @@ export class AudioEngine {
     const rawRate = clip.timeStretchRate ?? 1;
     // Validate rate: must be finite and within safe range
     const rate = Number.isFinite(rawRate) ? Math.max(0.25, Math.min(4, rawRate)) : 1;
-    if (!mode || mode === 'repitch' || mode === 'slice' || Math.abs(rate - 1) < 0.001) {
+    const semitones = clip.pitchShift ?? 0;
+    const needsStretch = mode && mode !== 'repitch' && mode !== 'slice' && Math.abs(rate - 1) >= 0.001;
+    const needsPitchShift = Math.abs(semitones) >= 0.01;
+
+    if (!needsStretch && !needsPitchShift) {
       return null;
     }
 
-    const cacheKey = `${clip.clipId}:${mode}:${rate.toFixed(4)}`;
+    const cacheKey = `${clip.clipId}:${mode ?? 'none'}:${rate.toFixed(4)}:ps${semitones.toFixed(2)}`;
     const cached = this.stretchedBufferCache.get(cacheKey);
     if (cached) return cached;
 
-    // Process each channel with the time-stretch engine
+    // Process each channel
     const buffer = clip.buffer;
     const numChannels = buffer.numberOfChannels;
     const ratio = 1 / rate; // rate=0.5 means slower → ratio=2 (stretch to 2x)
 
-    const stretchedChannels: Float32Array[] = [];
+    const processedChannels: Float32Array[] = [];
     let maxLen = 0;
 
     for (let ch = 0; ch < numChannels; ch++) {
-      const channelData = buffer.getChannelData(ch);
-      const stretched = timeStretch(channelData, {
-        mode: mode as TimeStretchMode,
-        ratio,
-        sampleRate: buffer.sampleRate,
-      });
-      stretchedChannels.push(stretched);
-      maxLen = Math.max(maxLen, stretched.length);
+      let channelData: Float32Array = new Float32Array(buffer.getChannelData(ch));
+
+      // Apply time-stretch if needed
+      if (needsStretch) {
+        channelData = timeStretch(channelData, {
+          mode: mode as TimeStretchMode,
+          ratio,
+          sampleRate: buffer.sampleRate,
+        });
+      }
+
+      // Apply pitch shift if needed (preserves duration)
+      if (needsPitchShift) {
+        channelData = pitchShiftAudio(channelData, {
+          semitones,
+          sampleRate: buffer.sampleRate,
+        });
+      }
+
+      processedChannels.push(channelData);
+      maxLen = Math.max(maxLen, channelData.length);
     }
 
-    // Create new AudioBuffer with stretched data
+    // Create new AudioBuffer with processed data
     const stretchedBuffer = this.ctx.createBuffer(
       numChannels,
       maxLen,
       buffer.sampleRate,
     );
     for (let ch = 0; ch < numChannels; ch++) {
-      stretchedBuffer.getChannelData(ch).set(stretchedChannels[ch]);
+      stretchedBuffer.getChannelData(ch).set(processedChannels[ch]);
     }
 
     this.stretchedBufferCache.set(cacheKey, stretchedBuffer);

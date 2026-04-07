@@ -453,6 +453,75 @@ export function timeStretch(input: Float32Array, options: TimeStretchOptions): F
   }
 }
 
+// ─── Pitch Shift (preserves duration) ────────────────────────────────────────
+
+export interface PitchShiftOptions {
+  /** Pitch shift in semitones (positive = up, negative = down). */
+  semitones: number;
+  /** Sample rate (default: 48000). */
+  sampleRate?: number;
+  /** FFT size for underlying phase vocoder (default: 4096). */
+  fftSize?: number;
+}
+
+/**
+ * Shift pitch by the given number of semitones while preserving duration.
+ *
+ * Algorithm: time-stretch by inverse of pitch ratio, then resample to
+ * original length. E.g. +12 semitones = 2x pitch → stretch to 2x length
+ * (keeping pitch) → resample at 2x speed → same length, higher pitch.
+ */
+export function pitchShift(input: Float32Array, options: PitchShiftOptions): Float32Array {
+  const { sampleRate = 48000, fftSize = 4096 } = options;
+
+  // Clamp semitones to ±24 (2 octaves)
+  const semitones = Math.max(-24, Math.min(24, options.semitones));
+  if (Math.abs(semitones) < 0.01) return new Float32Array(input);
+  if (input.length < 256) return new Float32Array(input);
+
+  // Pitch ratio: how much faster to play to achieve the pitch shift
+  const pitchRatio = Math.pow(2, semitones / 12);
+
+  // Step 1: Time-stretch to compensate for the resampling.
+  // We'll resample at pitchRatio speed, so pre-stretch by pitchRatio to keep duration.
+  const stretched = phaseVocoderStretch(input, pitchRatio, fftSize);
+
+  // Step 2: Resample the stretched audio at pitchRatio speed back to original length.
+  const targetLen = input.length;
+  const output = new Float32Array(targetLen);
+
+  for (let i = 0; i < targetLen; i++) {
+    // Position in the stretched buffer
+    const srcPos = i * pitchRatio;
+    const srcIdx = Math.floor(srcPos);
+    const frac = srcPos - srcIdx;
+
+    if (srcIdx + 1 < stretched.length) {
+      // Linear interpolation
+      output[i] = stretched[srcIdx] * (1 - frac) + stretched[srcIdx + 1] * frac;
+    } else if (srcIdx < stretched.length) {
+      output[i] = stretched[srcIdx];
+    }
+    // else: zero-padded (already 0)
+  }
+
+  return output;
+}
+
+/**
+ * Pitch-shift stereo audio (process each channel independently).
+ */
+export function pitchShiftStereo(
+  left: Float32Array,
+  right: Float32Array,
+  options: PitchShiftOptions,
+): { left: Float32Array; right: Float32Array } {
+  return {
+    left: pitchShift(left, options),
+    right: pitchShift(right, options),
+  };
+}
+
 /**
  * Time-stretch stereo audio (process each channel independently).
  */

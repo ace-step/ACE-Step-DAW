@@ -275,7 +275,9 @@ export function SessionView() {
     assignClipToSessionSlot(trackId, sceneId, newClip.id);
 
     // Trigger AI generation for the newly created clip
-    void generateSingleClip(newClip.id);
+    void generateSingleClip(newClip.id).catch((error) => {
+      console.error('Failed to generate AI-filled clip', { clipId: newClip.id, trackId, sceneId, error });
+    });
   }, [project, tracks, scenes, sessionSlots, addClip, assignClipToSessionSlot]);
 
   return (

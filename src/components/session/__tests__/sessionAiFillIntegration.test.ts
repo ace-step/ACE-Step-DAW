@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { gatherAiFillContext } from '../../../utils/sessionAiFill';
 import type { Track, SessionClipSlot, SessionScene, Clip } from '../../../types/project';
 
@@ -108,7 +108,7 @@ describe('Session AI-fill integration', () => {
     // Target scene 2 — should get up to 3 nearest from same track
     const result = gatherAiFillContext(track, 2, scenes, slots, [track]);
     // Should have at most 3 from same track (nearest) + 0 from other tracks
-    expect(result.adjacentClipIds.length).toBeLessThanOrEqual(5);
+    expect(result.adjacentClipIds.length).toBeLessThanOrEqual(3);
     expect(result.adjacentClipIds.length).toBeGreaterThan(0);
   });
 });

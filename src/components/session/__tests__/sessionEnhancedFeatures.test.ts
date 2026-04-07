@@ -3,12 +3,12 @@ import type {
   FollowActionConfig,
   FollowActionType,
   SceneFollowActionConfig,
-  SceneFollowActionType,
   SessionLaunchQuantization,
   SessionLaunchMode,
   SessionClipSlot,
   SessionScene,
   SessionPendingLaunch,
+  SessionState,
 } from '../../../types/project';
 import { resolveFollowAction, detectClipGroups, rollFollowAction } from '../../../utils/followActions';
 import { resolveFollowAction as resolveSceneFollowAction } from '../../../utils/followActionResolver';
@@ -175,17 +175,11 @@ describe('Enhanced Session View — Issue #1338 acceptance criteria', () => {
   describe('4. Arrangement recording', () => {
     it('SessionState has arrangement recording fields', () => {
       // Verify the type structure supports arrangement recording
-      const state = {
+      const state: Pick<SessionState, 'isRecordingToArrangement' | 'arrangementRecordStartTime' | 'arrangementRecordEndTime' | 'recordedLaunches'> = {
         isRecordingToArrangement: true,
         arrangementRecordStartTime: 0,
-        arrangementRecordEndTime: null as number | null,
-        recordedLaunches: [] as Array<{
-          trackId: string;
-          clipId: string;
-          startedAt: number;
-          endedAt: number | null;
-          sceneId: string;
-        }>,
+        arrangementRecordEndTime: null,
+        recordedLaunches: [],
       };
       expect(state.isRecordingToArrangement).toBe(true);
       expect(state.arrangementRecordStartTime).toBe(0);
@@ -194,14 +188,8 @@ describe('Enhanced Session View — Issue #1338 acceptance criteria', () => {
   });
 
   // ─── 5. AI-fill ───────────────────────────────────────────────────────
-  describe('5. AI-fill context gathering', () => {
-    // Detailed tests in sessionAiFill.test.ts and sessionAiFillIntegration.test.ts
-    it('generates non-empty prompt for any scenario', () => {
-      // Even with no adjacent clips, should produce a fallback prompt
-      const emptyPrompt = 'Track clip for scene 1';
-      expect(emptyPrompt.length).toBeGreaterThan(0);
-    });
-  });
+  // AI-fill behavior is covered by the dedicated test suites:
+  // sessionAiFill.test.ts and sessionAiFillIntegration.test.ts.
 
   // ─── 6. Scene chaining ────────────────────────────────────────────────
   describe('6. Scene chaining with configurable timing', () => {

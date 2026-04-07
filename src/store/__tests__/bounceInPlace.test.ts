@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProjectStore } from '../projectStore';
+import { useCollaborationStore } from '../collaborationStore';
 
 vi.mock('../../services/projectStorage', () => ({
   saveProject: vi.fn(),
@@ -23,6 +24,7 @@ describe('projectStore bounceInPlace', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useCollaborationStore.getState().reset();
     useProjectStore.setState({ project: null });
     useProjectStore.getState().createProject();
     const track = useProjectStore.getState().addTrack('stems');

@@ -1,4 +1,5 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import { useUIStore } from '../store/uiStore';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -593,6 +594,44 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       'AI generation',
     ),
   );
+
+  commands.push(
+    createTrackCommand(
+      'generation:hum-to-song',
+      'Hum to Song',
+      'Generation',
+      'action',
+      ['hum', 'sing', 'melody', 'record', 'microphone', 'voice', 'generate'],
+      ['hum to song', 'sing a melody', 'record melody', 'hum melody'],
+      () => useUIStore.getState().setShowHumToSongModal(true),
+      undefined,
+      'AI generation',
+    ),
+  );
+
+  // Vocal replacement: only shown when a clip is selected
+  if (context.selectedClipIds.length === 1) {
+    const selectedClipId = context.selectedClipIds[0];
+    const selectedClip = context.project?.tracks
+      .flatMap((t) => t.clips.map((c) => ({ clip: c, track: t })))
+      .find((item) => item.clip.id === selectedClipId);
+    if (selectedClip && selectedClip.clip.generationStatus === 'ready' &&
+        selectedClip.track.trackName !== 'vocals' && selectedClip.track.trackName !== 'backing_vocals') {
+      commands.push(
+        createTrackCommand(
+          'clip:generate-vocals',
+          'Generate Vocals for Selected Clip',
+          'Generation',
+          'action',
+          ['vocal', 'vocals', 'sing', 'lyrics', 'voice', 'replacement', 'add vocals'],
+          ['generate vocals', 'add vocals', 'vocal replacement', 'sing over instrumental'],
+          () => useUIStore.getState().setVocalReplacementModal(selectedClipId),
+          undefined,
+          'AI generation',
+        ),
+      );
+    }
+  }
 
   commands.push(
     createTrackCommand(

@@ -172,6 +172,12 @@ export interface UIState {
   stemSeparationClipId: string | null;
   audioToMidiClipId: string | null;
 
+  // Vocal Replacement modal
+  vocalReplacementClipId: string | null;
+
+  // Hum-to-Song modal
+  showHumToSongModal: boolean;
+
   // Spectrum analyzer & loudness metering
   showSpectrumAnalyzer: boolean;
 
@@ -392,6 +398,12 @@ export interface UIState {
   setAnalysisPanel: (clipId: string | null) => void;
   setStemSeparationModal: (clipId: string | null) => void;
   setAudioToMidiModal: (clipId: string | null) => void;
+
+  // Vocal Replacement modal
+  setVocalReplacementModal: (clipId: string | null) => void;
+
+  // Hum-to-Song modal
+  setShowHumToSongModal: (show: boolean) => void;
 
   // Spectrum analyzer & loudness metering
   setShowSpectrumAnalyzer: (v: boolean) => void;
@@ -688,6 +700,10 @@ export const useUIStore = create<UIState>()(
   analysisClipId: null,
   stemSeparationClipId: null,
   audioToMidiClipId: null,
+
+  vocalReplacementClipId: null,
+
+  showHumToSongModal: false,
 
   showSpectrumAnalyzer: false,
 
@@ -1230,6 +1246,10 @@ export const useUIStore = create<UIState>()(
   setAnalysisPanel: (clipId) => set({ analysisClipId: clipId }),
   setStemSeparationModal: (clipId) => set({ stemSeparationClipId: clipId }),
   setAudioToMidiModal: (clipId) => set({ audioToMidiClipId: clipId }),
+
+  setVocalReplacementModal: (clipId) => set({ vocalReplacementClipId: clipId }),
+
+  setShowHumToSongModal: (show) => set({ showHumToSongModal: show }),
 
   setShowSpectrumAnalyzer: (v) => set({ showSpectrumAnalyzer: v }),
   toggleSpectrumAnalyzer: () => set((s) => ({ showSpectrumAnalyzer: !s.showSpectrumAnalyzer })),

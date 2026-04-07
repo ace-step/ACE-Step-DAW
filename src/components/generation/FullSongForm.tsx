@@ -70,6 +70,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeed = useCallback((v: number) => setSeedStr(String(v)), [setSeedStr]);
   const useRandomSeed = useGenerationStore((s) => s.generationForm.useRandomSeed);
   const setUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt);
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
 
   // Local state — reset on panel reopen (less critical)
   const [instrumental, setInstrumental] = useState(false);
@@ -86,6 +88,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const [loadingExample, setLoadingExample] = useState(false);
   const [expandCaption, setExpandCaption] = useState(false);
   const [expandLyrics, setExpandLyrics] = useState(false);
+  const [showNegativePrompt, setShowNegativePrompt] = useState(() => negativePrompt.trim().length > 0);
 
   const handleEnhanceCaption = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -183,6 +186,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      if (p.negativePrompt) {
+        setNegativePrompt(p.negativePrompt);
+        setShowNegativePrompt(true);
+      }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -233,6 +240,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
           guidanceScale: project?.generationDefaults?.guidanceScale,
           shift: project?.generationDefaults?.shift,
+          negativePrompt: negativePrompt.trim() || undefined,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);
@@ -262,10 +270,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
+      negativePrompt: negativePrompt.trim() || undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, negativePrompt]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -403,6 +412,40 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           disabled={isDisabled || instrumental}
           placeholder="[Verse 1]\nYour lyrics here..."
         />
+      </section>
+
+      {/* Negative Prompt — collapsible, hidden by default */}
+      <section className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setShowNegativePrompt(!showNegativePrompt)}
+          className="flex items-center gap-1 text-[11px] font-medium uppercase text-zinc-500 transition-colors hover:text-zinc-300"
+          data-testid="negative-prompt-toggle"
+        >
+          <span
+            className="inline-block transition-transform text-[9px]"
+            style={{ transform: showNegativePrompt ? 'rotate(90deg)' : 'rotate(0deg)' }}
+          >
+            ▶
+          </span>
+          Negative Prompt
+          {negativePrompt.trim() && !showNegativePrompt && (
+            <span className="ml-1 rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] font-normal normal-case text-zinc-400">
+              active
+            </span>
+          )}
+        </button>
+        {showNegativePrompt && (
+          <textarea
+            value={negativePrompt}
+            onChange={(e) => setNegativePrompt(e.target.value)}
+            rows={2}
+            placeholder="e.g. no autotune, no heavy reverb, no falsetto"
+            className="w-full resize-none rounded border border-[#444] bg-[#2a2a2a] px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+            disabled={isDisabled}
+            data-testid="negative-prompt-input"
+          />
+        )}
       </section>
 
       {/* Random Example */}

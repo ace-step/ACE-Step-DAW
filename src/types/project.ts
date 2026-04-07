@@ -802,6 +802,8 @@ export interface ClipGenerationParams {
   } | null;
   /** Chunk mask mode persisted for regeneration. */
   chunkMaskMode?: 'explicit' | 'auto';
+  /** Negative prompt — elements to exclude from generation */
+  negativePrompt?: string;
 }
 
 export interface Clip {

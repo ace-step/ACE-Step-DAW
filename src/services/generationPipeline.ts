@@ -108,6 +108,8 @@ export interface ClipInternalOptions {
   useRandomSeedOverride?: boolean;
   /** Optional variation index for progressive multi-variation sessions. */
   variationIndex?: number;
+  /** Negative prompt — elements to exclude from generation */
+  negativePromptOverride?: string;
 }
 
 export interface VariationGenerationDependencies {
@@ -762,6 +764,13 @@ async function generateClipInternal(
       params.use_random_seed = false;
     } else if (options.useRandomSeedOverride === true) {
       params.use_random_seed = true;
+    }
+
+    // Negative prompt — exclude unwanted elements
+    const negativePrompt = options.negativePromptOverride?.trim()
+      || clip.generationParams?.negativePrompt?.trim();
+    if (negativePrompt) {
+      params.negative_prompt = negativePrompt;
     }
 
     const historyUpdatedAt = Date.now();
@@ -2506,6 +2515,8 @@ export interface Text2MusicRequest {
   instrumental?: boolean;
   /** Whether the generation used project BPM/key/timeSignature (for persisting) */
   useProjectMeta?: boolean;
+  /** Negative prompt — elements to exclude from generation */
+  negativePrompt?: string;
 }
 
 export interface Text2MusicResult {
@@ -2592,6 +2603,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       inferenceSteps: request.inferenceSteps,
       guidanceScale: request.guidanceScale,
       shift: request.shift,
+      negativePrompt: request.negativePrompt,
     },
   });
 
@@ -2644,6 +2656,10 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
 
     if (request.vocalLanguage) {
       params.vocal_language = request.vocalLanguage;
+    }
+
+    if (request.negativePrompt?.trim()) {
+      params.negative_prompt = request.negativePrompt.trim();
     }
 
     // Submit — text2music doesn't need source audio, send silence as placeholder

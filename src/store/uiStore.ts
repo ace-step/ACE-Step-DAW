@@ -201,6 +201,9 @@ export interface UIState {
   // Model Library Panel
   showModelLibrary: boolean;
 
+  // Custom Models Panel (Fine-Tuning)
+  showCustomModels: boolean;
+
   // Generation Side Panel
   showGenerationPanel: boolean;
   showGenerationHistoryPanel: boolean;
@@ -430,6 +433,10 @@ export interface UIState {
   toggleModelLibrary: () => void;
   setShowModelLibrary: (v: boolean) => void;
 
+  // Custom Models Panel (Fine-Tuning)
+  toggleCustomModels: () => void;
+  setShowCustomModels: (v: boolean) => void;
+
   // Generation Side Panel
   toggleGenerationPanel: () => void;
   setShowGenerationPanel: (v: boolean) => void;
@@ -561,6 +568,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
   showModelLibrary: false,
+  showCustomModels: false,
   showAIAssistant: false,
   showVST3Panel: false,
 } as const;
@@ -721,6 +729,7 @@ export const useUIStore = create<UIState>()(
   editingLegoClipId: null,
 
   showModelLibrary: false,
+  showCustomModels: false,
 
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
@@ -1272,6 +1281,9 @@ export const useUIStore = create<UIState>()(
   toggleModelLibrary: () => set((s) => s.showModelLibrary ? { showModelLibrary: false } : { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true }),
   setShowModelLibrary: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true } : { showModelLibrary: false }),
 
+  toggleCustomModels: () => set((s) => s.showCustomModels ? { showCustomModels: false } : { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true }),
+  setShowCustomModels: (v: boolean) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true } : { showCustomModels: false }),
+
   toggleGenerationPanel: () => set((s) => s.showGenerationPanel ? { showGenerationPanel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true }),
   setShowGenerationPanel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true } : { showGenerationPanel: false }),
   setGenerationPanelView: (view) => set({ generationPanelView: view }),
@@ -1438,6 +1450,8 @@ export const useUIStore = create<UIState>()(
         recentlyUsedLoopIds: state.recentlyUsedLoopIds,
         // Model Library panel
         showModelLibrary: state.showModelLibrary,
+        // Custom Models panel
+        showCustomModels: state.showCustomModels,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
         showGenerationHistoryPanel: state.showGenerationHistoryPanel,

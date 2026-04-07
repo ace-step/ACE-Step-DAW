@@ -62,6 +62,7 @@ const StrudelEditor = lazy(() => import('../strudel/StrudelEditor').then(m => ({
 const EffectChain = lazy(() => import('../mixer/EffectChain').then(m => ({ default: m.EffectChain })));
 const SessionView = lazy(() => import('../session/SessionView').then(m => ({ default: m.SessionView })));
 const ModelLibraryPanel = lazy(() => import('../models/ModelLibraryPanel').then(m => ({ default: m.ModelLibraryPanel })));
+const CustomModelsPanel = lazy(() => import('../models/CustomModelsPanel').then(m => ({ default: m.CustomModelsPanel })));
 const VirtualKeyboard = lazy(() => import('../midi/VirtualKeyboard').then(m => ({ default: m.VirtualKeyboard })));
 
 function EditorShell() {
@@ -90,6 +91,7 @@ function EditorShell() {
   const openEffectChainTrackId = useUIStore((s) => s.openEffectChainTrackId);
   const openMidiEffectChainTrackId = useUIStore((s) => s.openMidiEffectChainTrackId);
   const showModelLibrary = useUIStore((s) => s.showModelLibrary);
+  const showCustomModels = useUIStore((s) => s.showCustomModels);
   const showVirtualKeyboard = useUIStore((s) => s.showVirtualKeyboard);
 
   const hasBlockingDialog =
@@ -193,6 +195,7 @@ function EditorShell() {
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
+      {project && showCustomModels && <Suspense fallback={null}><CustomModelsPanel /></Suspense>}
       {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
       {project && <AddLayerPanel />}
       <ToastContainer />

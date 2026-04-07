@@ -2,6 +2,7 @@ import type { MidiNote } from '../../types/project';
 import type { GhostNote } from './PianoRollCanvas';
 import { drawPianoRollKeyboard } from './PianoRollKeyboard';
 import { drawVelocityLane } from './VelocityLane';
+import { drawExpressionLane, type ExpressionLaneType } from './ExpressionLane';
 import {
   getPianoRollNoteVisualStyle,
   getPianoRollToolShortcut,
@@ -45,6 +46,10 @@ export interface PianoRollDrawParams {
   aiSelectionEndBeat?: number | null;
   /** Preview notes from AI generation (rendered semi-transparently) */
   aiPreviewNotes?: MidiNote[];
+  /** Height of the MPE expression lane (0 = hidden). */
+  expressionLaneHeight?: number;
+  /** Which expression type to display. */
+  expressionType?: ExpressionLaneType;
 }
 
 /** Draw horizontal key rows (background shading + gridlines). */
@@ -428,7 +433,8 @@ export function drawPianoRoll(params: PianoRollDrawParams): void {
     aiPreviewNotes,
   } = params;
 
-  const noteAreaHeight = height - velocityHeight;
+  const expressionLaneHeight = params.expressionLaneHeight ?? 0;
+  const noteAreaHeight = height - velocityHeight - expressionLaneHeight;
   const gridBeats = gridSizeToBeats(gridSize);
 
   // Background
@@ -516,6 +522,25 @@ export function drawPianoRoll(params: PianoRollDrawParams): void {
     beatToX,
     pixelsPerBeat,
   });
+
+  // Expression lane (MPE) — rendered below velocity lane
+  const exprType = params.expressionType ?? 'pitchBend';
+  if (expressionLaneHeight > 0) {
+    const exprDividerY = dividerY + velocityHeight;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(0, exprDividerY, width, 3);
+    drawExpressionLane({
+      ctx,
+      width,
+      dividerY: exprDividerY,
+      laneHeight: expressionLaneHeight,
+      notes,
+      selectedNoteIds,
+      beatToX,
+      pixelsPerBeat,
+      expressionType: exprType,
+    });
+  }
 
   // Tool badge
   drawToolBadge(ctx, activeTool, width);

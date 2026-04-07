@@ -14,6 +14,7 @@ export interface CoverTaskParams {
   model: string;
   seed?: number;
   use_random_seed?: boolean;
+  negative_prompt?: string;  // Elements to exclude from generation
 }
 
 export type RepaintMode = 'conservative' | 'balanced' | 'aggressive';
@@ -40,6 +41,7 @@ export interface RepaintTaskParams {
   seed?: number;
   use_random_seed?: boolean;
   src_audio_path?: string;
+  negative_prompt?: string;  // Elements to exclude from generation
 }
 
 export type StemCount = 2 | 4 | 6;
@@ -75,6 +77,7 @@ export interface Text2MusicTaskParams {
   use_random_seed?: boolean;
   use_cot_caption?: boolean;
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  negative_prompt?: string;  // Elements to exclude from generation
 }
 
 /**
@@ -122,6 +125,7 @@ export interface LegoTaskParams {
   src_audio_path?: string;  // server-side path; when set, skips blob upload
   chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  negative_prompt?: string;  // Elements to exclude from generation
 }
 
 /** All API responses are wrapped in this envelope */
@@ -379,6 +383,7 @@ export interface ExtendedModelsListResponse extends ModelsListResponse {
 
 export type AiTaskParams =
   | LegoTaskParams
+  | Text2MusicTaskParams
   | CoverTaskParams
   | RepaintTaskParams
   | StemSeparationTaskParams
@@ -396,8 +401,91 @@ export interface HealthResponse {
   loaded_lm_model?: string | null;
 }
 
-/** Model family: text2music generates full mixed songs, lego generates single tracks with context */
-export type ModelCategory = 'text2music' | 'lego';
+/** Model family: text2music generates full mixed songs, lego generates single tracks with context, custom is user-trained */
+export type ModelCategory = 'text2music' | 'lego' | 'custom';
+
+// ---------------------------------------------------------------------------
+// Custom Model Fine-Tuning (#1089)
+// ---------------------------------------------------------------------------
+
+/** Training stage progression */
+export type TrainingStage = 'uploading' | 'preprocessing' | 'training' | 'validating' | 'complete' | 'failed';
+
+/** Status of a training job */
+export type TrainingJobStatus = 'pending' | 'uploading' | 'preprocessing' | 'training' | 'validating' | 'complete' | 'failed';
+
+/** A reference track uploaded for fine-tuning */
+export interface TrainingDataTrack {
+  id: string;
+  filename: string;
+  /** Duration in seconds */
+  duration: number;
+  /** Detected BPM (null if analysis pending) */
+  bpm: number | null;
+  /** Detected genre tags */
+  genre: string[];
+  /** File size in bytes */
+  sizeBytes: number;
+  /** MIME type */
+  mimeType: string;
+  /** Timestamp when uploaded */
+  uploadedAt: number;
+}
+
+/** A custom model created through fine-tuning */
+export interface CustomModel {
+  id: string;
+  name: string;
+  description: string;
+  /** Number of reference tracks used for training */
+  trackCount: number;
+  /** Style tags extracted from training data */
+  styleTags: string[];
+  /** When training completed */
+  trainedAt: number;
+  /** Training job that created this model */
+  trainingJobId: string;
+  /** Server-side model path for generation */
+  modelPath: string;
+}
+
+/** Parameters for submitting a training job */
+export interface TrainModelRequest {
+  /** User-provided model name */
+  name: string;
+  /** User-provided description */
+  description: string;
+  /** IDs of uploaded reference tracks */
+  track_ids: string[];
+}
+
+/** Response from training job submission */
+export interface TrainModelResponse {
+  job_id: string;
+  status: TrainingJobStatus;
+}
+
+/** Training job status from polling */
+export interface TrainingJobStatusResponse {
+  job_id: string;
+  status: TrainingJobStatus;
+  stage: TrainingStage;
+  progress_percent: number;
+  /** Set when complete */
+  model_path?: string;
+  /** Set on failure */
+  error?: string;
+}
+
+/** Response from uploading a reference track */
+export interface UploadTrainingTrackResponse {
+  track_id: string;
+  filename: string;
+  duration: number;
+  bpm: number | null;
+  genre: string[];
+  size_bytes: number;
+}
 
 export interface ModelEntry {
   name: string;

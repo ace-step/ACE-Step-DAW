@@ -57,6 +57,8 @@ import type {
   MasteringState,
   DrumMachineConfig,
   DrumKitName,
+  DrumPadFilter,
+  DrumPadSend,
   SamplerConfig,
   FollowActionConfig,
   SessionClipSlot,
@@ -74,7 +76,9 @@ import type {
   TrackInstrument,
   FmInstrumentSettings,
   WavetableSettings,
+  GranularSettings,
   VelocityLayer,
+  SampleZone,
   VideoClipData,
   VideoTrackSettings,
   MarkerType,
@@ -118,7 +122,7 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
-import type { StemCount } from '../types/api';
+import type { StemCount, StemSeparationEngine } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
@@ -685,12 +689,24 @@ export interface ProjectState extends MidiSliceActions {
   clearTrackSampler: (trackId: string) => void;
   /** Set or clear the sampler config on a pianoRoll track. Pass null to remove. */
   updateSamplerConfig: (trackId: string, config: SamplerConfig | null) => void;
+  /** Update the granular synthesis config on a pianoRoll track. */
+  updateGranularConfig: (trackId: string, config: Partial<GranularSettings>) => void;
+  /** Clear the granular config from a track. */
+  clearGranularConfig: (trackId: string) => void;
   /** Add a velocity layer to a track's samplerConfig. */
   addVelocityLayer: (trackId: string, layer: VelocityLayer) => void;
   /** Remove a velocity layer by index from a track's samplerConfig. */
   removeVelocityLayer: (trackId: string, index: number) => void;
   /** Partially update a velocity layer at the given index. */
   updateVelocityLayer: (trackId: string, index: number, partial: Partial<VelocityLayer>) => void;
+  /** Add a sample zone to a track's samplerConfig. */
+  addSampleZone: (trackId: string, zone: SampleZone) => void;
+  /** Remove a sample zone by ID from a track's samplerConfig. */
+  removeSampleZone: (trackId: string, zoneId: string) => void;
+  /** Partially update a sample zone. */
+  updateSampleZone: (trackId: string, zoneId: string, partial: Partial<SampleZone>) => void;
+  /** Replace all zones on a track (e.g., from SFZ import). */
+  setSampleZones: (trackId: string, zones: SampleZone[]) => void;
   createQuickSamplerTrack: (input: {
     audioKey: string;
     sampleName?: string;
@@ -868,6 +884,11 @@ export interface ProjectState extends MidiSliceActions {
   setDrumPadSample: (trackId: string, padIndex: number, sampleKey: string) => void;
   setDrumPadVolume: (trackId: string, padIndex: number, volume: number) => void;
   setDrumPadPan: (trackId: string, padIndex: number, pan: number) => void;
+  setDrumPadTune: (trackId: string, padIndex: number, tune: number) => void;
+  setDrumPadDecay: (trackId: string, padIndex: number, decay: number) => void;
+  setDrumPadFilter: (trackId: string, padIndex: number, filter: Partial<DrumPadFilter>) => void;
+  setDrumPadDrive: (trackId: string, padIndex: number, drive: number) => void;
+  setDrumPadSend: (trackId: string, padIndex: number, send: Partial<DrumPadSend>) => void;
   renameDrumPad: (trackId: string, padIndex: number, name: string) => void;
   setDrumMachineKit: (trackId: string, kit: DrumKitName) => void;
   // MIDI actions: inherited from MidiSliceActions via extends
@@ -965,7 +986,7 @@ export interface ProjectState extends MidiSliceActions {
 
   /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
   convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
-  separateStems: (clipId: string, stemCount: StemCount) => Promise<Track[] | undefined>;
+  separateStems: (clipId: string, stemCount: StemCount, engine?: StemSeparationEngine) => Promise<Track[] | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;
@@ -1477,6 +1498,14 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
       return { id, type, enabled: true, params: { reverbType: 'hall', decay: 2.5, preDelay: 20, damping: 0.4, size: 0.6, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 80, highCut: 12000, mix: 0.25 } };
     case 'noiseReduction':
       return { id, type, enabled: true, params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } };
+    case 'spectralFreeze':
+      return { id, type, enabled: true, params: { frozen: false, mix: 1, decay: 1, brightness: 0, fftSize: 2048 } };
+    case 'spectralBlur':
+      return { id, type, enabled: true, params: { blurAmount: 0.5, frequencySpread: 0, mix: 0.5, brightness: 0, fftSize: 2048 } };
+    case 'spectralFilter':
+      return { id, type, enabled: true, params: { points: [{ frequency: 20, gain: 0 }, { frequency: 20000, gain: 0 }], resolution: 0.5, mix: 1, fftSize: 2048 } };
+    case 'spectralMorph':
+      return { id, type, enabled: true, params: { morphAmount: 0.5, frozen: false, mix: 0.5, fftSize: 2048 } };
   }
 }
 
@@ -1575,6 +1604,11 @@ function createDefaultDrumMachineConfig(kit: DrumKitName = '808'): DrumMachineCo
       color: d.color,
       volume: 0.8,
       pan: 0,
+      tune: 0,
+      decay: 1,
+      filter: { type: 'off' as const, cutoff: 20000 },
+      drive: 0,
+      send: { reverb: 0, delay: 0 },
     })),
   };
 }
@@ -2073,6 +2107,33 @@ function ensureTrackDefaults(track: Track): Track {
         : undefined,
     })),
   };
+
+  // Backfill drum pad fields added in #950 for older persisted projects.
+  // Validate/clamp numeric fields to prevent NaN from corrupted persisted data.
+  if (normalizedTrack.drumMachine?.pads) {
+    const validFilterTypes = new Set(['off', 'lowpass', 'highpass']);
+    normalizedTrack.drumMachine = {
+      ...normalizedTrack.drumMachine,
+      pads: normalizedTrack.drumMachine.pads.map((pad) => {
+        const tune = Number.isFinite(pad.tune) ? Math.max(-24, Math.min(24, pad.tune)) : 0;
+        const decay = Number.isFinite(pad.decay) ? Math.max(0, Math.min(1, pad.decay)) : 1;
+        const drive = Number.isFinite(pad.drive) ? Math.max(0, Math.min(1, pad.drive)) : 0;
+        const filterType = pad.filter && validFilterTypes.has(pad.filter.type) ? pad.filter.type : 'off';
+        const filterCutoff = pad.filter && Number.isFinite(pad.filter.cutoff)
+          ? Math.max(20, Math.min(20000, pad.filter.cutoff)) : 20000;
+        const reverbSend = pad.send && Number.isFinite(pad.send.reverb) ? Math.max(0, Math.min(1, pad.send.reverb)) : 0;
+        const delaySend = pad.send && Number.isFinite(pad.send.delay) ? Math.max(0, Math.min(1, pad.send.delay)) : 0;
+        return {
+          ...pad,
+          tune,
+          decay,
+          drive,
+          filter: { type: filterType as 'off' | 'lowpass' | 'highpass', cutoff: filterCutoff },
+          send: { reverb: reverbSend, delay: delaySend },
+        };
+      }),
+    };
+  }
 
   return {
     ...normalizedTrack,
@@ -3902,6 +3963,57 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  updateGranularConfig: (trackId, config) => {
+    const state = get();
+    if (!state.project) return;
+    let didChange = false;
+    const nextTracks = state.project.tracks.map((t) => {
+      if (t.id !== trackId) return t;
+      const existing = t.granularConfig;
+      if (!existing && !('audioKey' in config)) return t;
+      didChange = true;
+      return {
+        ...t,
+        granularConfig: existing ? { ...existing, ...config } : config as GranularSettings,
+        instrument: t.instrument?.kind === 'granular'
+          ? { ...t.instrument, settings: { ...(t.instrument as { settings: GranularSettings }).settings, ...config } }
+          : t.instrument,
+      };
+    });
+    if (!didChange) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Configure granular', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: nextTracks,
+      },
+    });
+  },
+
+  clearGranularConfig: (trackId) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Clear granular config', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                granularConfig: undefined,
+                instrument: t.instrument?.kind === 'granular'
+                  ? createDefaultSubtractiveInstrument()
+                  : t.instrument,
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
   addVelocityLayer: (trackId, layer) => {
     const state = get();
     if (!state.project) return;
@@ -3973,6 +4085,108 @@ export const useProjectStore = create<ProjectState>()(
                   velocityLayers: t.samplerConfig!.velocityLayers!.map((l, i) =>
                     i === index ? { ...l, ...partial } : l,
                   ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  addSampleZone: (trackId, zone) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Add sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: [...(t.samplerConfig!.zones ?? []), zone],
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  removeSampleZone: (trackId, zoneId) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Remove sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.filter((z) => z.id !== zoneId),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  updateSampleZone: (trackId, zoneId, partial) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig?.zones) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Update sample zone', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones: t.samplerConfig!.zones!.map((z) =>
+                    z.id === zoneId ? { ...z, ...partial } : z,
+                  ),
+                },
+              }
+            : t,
+        ),
+      },
+    });
+  },
+
+  setSampleZones: (trackId, zones) => {
+    const state = get();
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track?.samplerConfig) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Set sample zones', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                samplerConfig: {
+                  ...t.samplerConfig!,
+                  zones,
                 },
               }
             : t,
@@ -7100,6 +7314,150 @@ export const useProjectStore = create<ProjectState>()(
     });
   },
 
+  setDrumPadTune: (trackId, padIndex, tune) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad tune', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, tune: Math.max(-24, Math.min(24, Number.isFinite(tune) ? tune : p.tune)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDecay: (trackId, padIndex, decay) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad decay', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, decay: Math.max(0, Math.min(1, Number.isFinite(decay) ? decay : p.decay)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadFilter: (trackId, padIndex, filterUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad filter', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.filter, ...filterUpdate };
+                // Validate filter type against allowed values
+                const validTypes = new Set<string>(['off', 'lowpass', 'highpass']);
+                const safeType = validTypes.has(merged.type) ? merged.type : p.filter.type;
+                // Auto-adjust cutoff when filter type changes to avoid inaudible defaults
+                let cutoffSource = Number.isFinite(merged.cutoff) ? merged.cutoff : p.filter.cutoff;
+                if (filterUpdate.type && safeType !== p.filter.type && filterUpdate.cutoff === undefined) {
+                  cutoffSource = safeType === 'highpass' ? 200 : 20000;
+                }
+                return {
+                  ...p,
+                  filter: {
+                    type: safeType as 'off' | 'lowpass' | 'highpass',
+                    cutoff: Math.max(20, Math.min(20000, cutoffSource)),
+                  },
+                };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadDrive: (trackId, padIndex, drive) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad drive', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) =>
+                i === padIndex ? { ...p, drive: Math.max(0, Math.min(1, Number.isFinite(drive) ? drive : p.drive)) } : p,
+              ),
+            },
+          };
+        }),
+      },
+    });
+  },
+
+  setDrumPadSend: (trackId, padIndex, sendUpdate) => {
+    const state = get();
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'track', label: 'Adjust drum pad sends', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => {
+          if (t.id !== trackId || !t.drumMachine) return t;
+          return {
+            ...t,
+            drumMachine: {
+              ...t.drumMachine,
+              pads: t.drumMachine.pads.map((p, i) => {
+                if (i !== padIndex) return p;
+                const merged = { ...p.send, ...sendUpdate };
+                return {
+                  ...p,
+                  send: {
+                    reverb: Number.isFinite(merged.reverb) ? Math.max(0, Math.min(1, merged.reverb)) : p.send.reverb,
+                    delay: Number.isFinite(merged.delay) ? Math.max(0, Math.min(1, merged.delay)) : p.send.delay,
+                  },
+                };
+              }),
+            },
+          };
+        }),
+      },
+    });
+  },
+
   renameDrumPad: (trackId, padIndex, name) => {
     const state = get();
     if (!state.project) return;
@@ -8835,7 +9193,7 @@ export const useProjectStore = create<ProjectState>()(
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
   },
 
-  separateStems: async (clipId, stemCount) => {
+  separateStems: async (clipId, stemCount, engine) => {
     const state = get();
     const project = state.project;
     if (!project) return undefined;
@@ -8865,6 +9223,7 @@ export const useProjectStore = create<ProjectState>()(
       sourceBlob,
       stemCount,
       sourceLabel: sourceTrack.displayName,
+      engine,
     });
 
     const latest = get();

@@ -4,6 +4,8 @@ import {
   wsolaStretch,
   timeStretch,
   timeStretchStereo,
+  pitchShift,
+  pitchShiftStereo,
   type TimeStretchMode,
 } from '../../../src/utils/timeStretch';
 
@@ -128,6 +130,66 @@ describe('timeStretchStereo', () => {
     expect(result.left.length).toBeGreaterThan(left.length);
     expect(result.right.length).toBeGreaterThan(right.length);
     // Both channels should have same length
+    expect(result.left.length).toBe(result.right.length);
+  });
+});
+
+describe('pitchShift', () => {
+  it('preserves duration when shifting pitch up', () => {
+    const input = sineWave(440, 48000, 0.5);
+    const output = pitchShift(input, { semitones: 7, sampleRate: 48000 });
+    // Duration should be preserved (±5% tolerance for algorithm artifacts)
+    expect(Math.abs(output.length - input.length) / input.length).toBeLessThan(0.05);
+  });
+
+  it('preserves duration when shifting pitch down', () => {
+    const input = sineWave(440, 48000, 0.5);
+    const output = pitchShift(input, { semitones: -5, sampleRate: 48000 });
+    expect(Math.abs(output.length - input.length) / input.length).toBeLessThan(0.05);
+  });
+
+  it('returns copy at 0 semitones', () => {
+    const input = sineWave(440, 48000, 0.3);
+    const output = pitchShift(input, { semitones: 0, sampleRate: 48000 });
+    expect(output.length).toBe(input.length);
+  });
+
+  it('preserves energy (output is not silent)', () => {
+    const input = sineWave(440, 48000, 0.5);
+    const output = pitchShift(input, { semitones: 4, sampleRate: 48000 });
+    const rms = Math.sqrt(output.reduce((sum, x) => sum + x * x, 0) / output.length);
+    expect(rms).toBeGreaterThan(0.01);
+  });
+
+  it('handles large pitch shifts (octave up)', () => {
+    const input = sineWave(440, 48000, 0.5);
+    const output = pitchShift(input, { semitones: 12, sampleRate: 48000 });
+    expect(Math.abs(output.length - input.length) / input.length).toBeLessThan(0.05);
+    const rms = Math.sqrt(output.reduce((sum, x) => sum + x * x, 0) / output.length);
+    expect(rms).toBeGreaterThan(0.01);
+  });
+
+  it('clamps extreme semitone values', () => {
+    const input = sineWave(440, 48000, 0.5);
+    // Should not crash or hang with extreme values
+    const output = pitchShift(input, { semitones: 36, sampleRate: 48000 });
+    expect(output.length).toBeGreaterThan(0);
+  });
+
+  it('handles short input gracefully', () => {
+    const input = new Float32Array(100);
+    input.fill(0.3);
+    const output = pitchShift(input, { semitones: 5, sampleRate: 48000 });
+    expect(output.length).toBe(input.length);
+  });
+});
+
+describe('pitchShiftStereo', () => {
+  it('shifts both channels and preserves duration', () => {
+    const left = sineWave(440, 48000, 0.5);
+    const right = sineWave(660, 48000, 0.5);
+    const result = pitchShiftStereo(left, right, { semitones: 3, sampleRate: 48000 });
+    expect(Math.abs(result.left.length - left.length) / left.length).toBeLessThan(0.05);
     expect(result.left.length).toBe(result.right.length);
   });
 });

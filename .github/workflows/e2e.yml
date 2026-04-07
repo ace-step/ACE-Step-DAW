@@ -12,12 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Critical E2E tests — will BLOCK PRs once Phase 2 stabilization is complete.
-  # TODO: remove continue-on-error after 1 week without false-positive failures
+  # Critical E2E tests — BLOCKS PR merges.
   e2e-critical:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    continue-on-error: true
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,7 +26,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - name: Run critical E2E tests
-        run: npx playwright test --grep '@critical' --retries=3
+        id: e2e-critical
+        run: |
+          npx playwright test --grep '@critical' --retries=1 --reporter=list,html 2>&1 | tee /tmp/e2e-critical-output.txt
+        continue-on-error: true
+
+      - name: Post test results to job summary
+        if: always()
+        run: |
+          echo '## E2E Critical Test Results' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -80 /tmp/e2e-critical-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No output captured" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if tests failed
+        if: steps.e2e-critical.outcome == 'failure'
+        run: exit 1
 
       - name: Upload critical test report
         if: always()
@@ -41,7 +54,7 @@ jobs:
   # Extended E2E tests — non-blocking, creates issues on failure
   e2e-extended:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

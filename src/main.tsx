@@ -20,6 +20,7 @@ import { getMidiCaptureService } from './services/midiCaptureService';
 import { executeCoreDawShortcut } from './services/coreDawShortcuts';
 import { useAnalysisStore } from './store/analysisStore';
 import { analyzeClipLocally } from './services/localAnalysisService';
+import { useCustomModelStore } from './store/customModelStore';
 
 const agentProjectStore = {
   getState: () => ({
@@ -107,8 +108,13 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__analyzeClipLocally = analyzeClipLocally;
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
+(window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
+
+// Strudel Agent API — pattern analysis, presets, track management
+import { createStrudelAgentApi } from './services/strudelAgentApi';
+(window as unknown as Record<string, unknown>).__strudelApi = createStrudelAgentApi();
 (window as unknown as Record<string, unknown>).__coreDawShortcuts = {
   execute: (actionId: Parameters<typeof executeCoreDawShortcut>[0]) => executeCoreDawShortcut(actionId),
 };

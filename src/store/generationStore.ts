@@ -273,6 +273,7 @@ const MAX_STYLE_TAGS = 6;
 
 export interface GenerationFormState {
   prompt: string;
+  negativePrompt: string;
   styleTags: string[];
   bpm: number;
   keyScale: string;
@@ -375,6 +376,7 @@ function normalizeVariationSessionParams(
 export function createDefaultGenerationFormState(): GenerationFormState {
   return {
     prompt: '',
+    negativePrompt: '',
     styleTags: [],
     bpm: DEFAULT_BPM,
     keyScale: DEFAULT_KEY_SCALE,
@@ -469,6 +471,7 @@ export interface GenerationState {
   hydrateGenerationForm: (updates: Partial<GenerationFormState>) => void;
   resetGenerationForm: () => void;
   setGenerationPrompt: (prompt: string) => void;
+  setGenerationNegativePrompt: (negativePrompt: string) => void;
   setGenerationStyleTags: (tags: string[]) => void;
   toggleGenerationStyleTag: (tag: string) => void;
   setGenerationBpm: (bpm: number) => void;
@@ -759,6 +762,14 @@ export const useGenerationStore = create<GenerationState>()(
           ...s.generationForm,
           prompt,
           requestError: s.generationForm.requestError ? null : s.generationForm.requestError,
+        },
+      })),
+
+      setGenerationNegativePrompt: (negativePrompt) => set((s) => ({
+        generationForm: {
+          ...s.generationForm,
+          negativePrompt,
+          requestError: null,
         },
       })),
 

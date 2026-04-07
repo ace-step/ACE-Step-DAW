@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { useGenerationStore } from '../../store/generationStore';
-import type { StemCount } from '../../types/api';
+import type { StemCount, StemSeparationEngine } from '../../types/api';
+import { getAvailableEngines, getDefaultEngine, ENGINE_DISPLAY_NAMES, ENGINE_DESCRIPTIONS } from '../../services/stemSeparationEngines';
 
 const STEM_OPTIONS: Array<{
   count: StemCount;
@@ -34,10 +35,20 @@ export function StemSeparationModal() {
   const clip = stemSeparationClipId ? getClipById(stemSeparationClipId) : null;
   const track = project?.tracks.find((candidate) => candidate.clips.some((candidateClip) => candidateClip.id === stemSeparationClipId)) ?? null;
   const [stemCount, setStemCount] = useState<StemCount>(4);
+  const [engine, setEngine] = useState<StemSeparationEngine>('auto');
+  const availableEngines = useMemo(() => getAvailableEngines(stemCount), [stemCount]);
 
   useEffect(() => {
     setStemCount(4);
+    setEngine('auto');
   }, [stemSeparationClipId]);
+
+  // Reset engine to 'auto' when stem count changes and current engine isn't compatible
+  useEffect(() => {
+    if (!availableEngines.includes(engine)) {
+      setEngine(getDefaultEngine(stemCount));
+    }
+  }, [stemCount, engine, availableEngines]);
 
   const onClose = useCallback(() => setStemSeparationModal(null), [setStemSeparationModal]);
 
@@ -64,8 +75,8 @@ export function StemSeparationModal() {
 
   const handleSeparate = useCallback(async () => {
     if (!stemSeparationClipId || !hasAudio || isGenerating) return;
-    await separateStems(stemSeparationClipId, stemCount);
-  }, [stemSeparationClipId, hasAudio, isGenerating, separateStems, stemCount]);
+    await separateStems(stemSeparationClipId, stemCount, engine);
+  }, [stemSeparationClipId, hasAudio, isGenerating, separateStems, stemCount, engine]);
 
   if (!stemSeparationClipId || !clip || !track) return null;
 
@@ -131,6 +142,35 @@ export function StemSeparationModal() {
               })}
             </div>
           </div>
+
+          {availableEngines.length > 1 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400">Separation Engine</p>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Separation engine">
+                {availableEngines.map((eng) => {
+                  const selected = eng === engine;
+                  return (
+                    <button
+                      key={eng}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={ENGINE_DESCRIPTIONS[eng]}
+                      onClick={() => setEngine(eng)}
+                      className={`rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${
+                        selected
+                          ? 'border-sky-400 bg-sky-500/10 text-white'
+                          : 'border-[#3a3a3a] bg-[#1d1d1d] text-zinc-300 hover:border-[#525252] hover:bg-[#252525]'
+                      }`}
+                    >
+                      {ENGINE_DISPLAY_NAMES[eng]}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-zinc-500">{ENGINE_DESCRIPTIONS[engine]}</p>
+            </div>
+          )}
 
           {(isBusy || activeJob?.status === 'error') && (
             <div className="rounded-lg border border-[#3a3a3a] bg-[#202020] px-3 py-3">

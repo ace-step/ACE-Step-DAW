@@ -10,6 +10,7 @@ import { subtractiveEngine } from '../engine/SubtractiveEngine';
 import { createSamplerConfig, samplerEngine } from '../engine/SamplerEngine';
 import { drumEngine } from '../engine/DrumEngine';
 import { wavetableEngine } from '../engine/WavetableEngine';
+import { granularEngine } from '../engine/GranularEngine';
 import { modulationEngine } from '../engine/ModulationEngine';
 import { automationEngine } from '../engine/AutomationEngine';
 import {
@@ -190,6 +191,7 @@ export function useTransport() {
       fadeInCurve?: import('../types/project').Clip['fadeInCurve'];
       fadeOutCurve?: import('../types/project').Clip['fadeOutCurve'];
       timeStretchRate?: number;
+      pitchShift?: number;
       stretchMode?: import('../types/project').StretchMode;
       gainEnvelope?: import('../types/project').GainEnvelopePoint[];
       warpMarkers?: import('../types/project').AudioWarpMarker[];
@@ -294,6 +296,7 @@ export function useTransport() {
               audioOffset: loopAudioOffset,
               clipDuration: loopClipDuration,
               timeStretchRate: clip.timeStretchRate,
+              pitchShift: clip.pitchShift,
               stretchMode: clip.stretchMode,
               gainEnvelope: clip.gainEnvelope,
             });
@@ -314,6 +317,7 @@ export function useTransport() {
           fadeInCurve: clip.fadeInCurve,
           fadeOutCurve: clip.fadeOutCurve,
           timeStretchRate: clip.timeStretchRate,
+          pitchShift: clip.pitchShift,
           stretchMode: clip.stretchMode,
           gainEnvelope: clip.gainEnvelope,
           warpMarkers: clip.warpMarkers,
@@ -389,6 +393,7 @@ export function useTransport() {
         wavetableEngine.removeTrackSynth(track.id);
         modulationEngine.removeTrack(track.id);
         samplerEngine.removeTrackSampler(track.id);
+        granularEngine.removeTrack(track.id);
 
         if (useSampler && samplerConfig) {
           const sampleBlob = await loadAudioBlobByKey(samplerConfig.audioKey);
@@ -426,6 +431,16 @@ export function useTransport() {
             track.id, track.instrument.settings,
             trackNode.inputGain as unknown as Tone.InputNode,
           );
+        } else if (!vst3Instrument && track.instrument?.kind === 'granular' && track.granularConfig) {
+          const sampleBlob = await loadAudioBlobByKey(track.granularConfig.audioKey);
+          if (sampleBlob) {
+            const sampleBuffer = await engine.decodeAudioData(sampleBlob);
+            const trackNode = engine.getOrCreateTrackNode(track.id);
+            granularEngine.ensureTrackGranular(
+              track.id, track.granularConfig, sampleBuffer,
+              trackNode.inputGain as unknown as AudioNode,
+            );
+          }
         } else if (preset !== 'sampler') {
           synthEngine.ensureTrackSynth(track.id, preset);
         }
@@ -532,6 +547,10 @@ export function useTransport() {
                   if (wtSynth) {
                     wtSynth.triggerAttackRelease(freq, scheduledDuration, undefined, velocity);
                   }
+                });
+              } else if (track.instrument?.kind === 'granular') {
+                engine.scheduleMidiEvent(scheduledStart, () => {
+                  granularEngine.triggerAttackRelease(trackId, note.pitch, scheduledDuration, velocity);
                 });
               } else {
                 const freq = Tone.Frequency(note.pitch, 'midi').toFrequency();
@@ -695,6 +714,7 @@ export function useTransport() {
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
     samplerEngine.stopAll();
+    granularEngine.releaseAll();
     modulationEngine.releaseAll();
     automationEngine.stop();
     useTransportStore.getState().pause();
@@ -715,6 +735,7 @@ export function useTransport() {
     subtractiveEngine.releaseAll();
     wavetableEngine.releaseAll();
     samplerEngine.stopAll();
+    granularEngine.releaseAll();
     modulationEngine.releaseAll();
     automationEngine.stop();
     stopAllStrudelTracks();
@@ -731,6 +752,7 @@ export function useTransport() {
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
       samplerEngine.stopAll();
+      granularEngine.releaseAll();
       modulationEngine.releaseAll();
       useTransportStore.getState().seek(time);
       play(time);
@@ -756,6 +778,7 @@ export function useTransport() {
       subtractiveEngine.releaseAll();
       wavetableEngine.releaseAll();
       samplerEngine.stopAll();
+      granularEngine.releaseAll();
       modulationEngine.releaseAll();
       automationEngine.stop();
       useTransportStore.getState().pause();

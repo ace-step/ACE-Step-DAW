@@ -547,6 +547,7 @@ function ControlBarButton({
       disabled={disabled}
       title={shortcutHint ? undefined : title}
       aria-label={label}
+      aria-pressed={active ?? undefined}
       data-onboarding-target={dataTarget}
       className={`h-10 w-10 rounded-lg p-0 text-white/90 ${hoverClass} ${className ?? ''}`}
     >
@@ -869,6 +870,7 @@ export function Toolbar() {
         <button
           onClick={toggleMetronome}
           aria-label="Metronome"
+          aria-pressed={metronomeEnabled}
           className={`flex h-10 w-10 items-center justify-center rounded-xl transition-[color,background-color,transform] duration-150 active:scale-95 ${
             metronomeEnabled
               ? 'bg-[#8276f6] text-white'

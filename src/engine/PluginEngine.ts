@@ -16,6 +16,7 @@ interface PluginNode {
   instanceId: string;
   plugin: WAPPlugin;
   audioNode: PluginAudioNode;
+  bypassed: boolean;
 }
 
 export class PluginEngine {
@@ -30,13 +31,15 @@ export class PluginEngine {
     const audioNode = plugin.createAudioNode(ctx);
     const chain = this.chains.get(trackId) ?? [];
 
-    const pluginNode: PluginNode = { instanceId, plugin, audioNode };
+    const pluginNode: PluginNode = { instanceId, plugin, audioNode, bypassed: false };
 
-    // Connect to previous plugin in chain if exists
-    if (chain.length > 0) {
-      const prev = chain[chain.length - 1];
-      if (audioNode.inputNode) {
-        prev.audioNode.outputNode.connect(audioNode.inputNode);
+    // Connect to last non-bypassed plugin in chain (skip bypassed plugins)
+    if (chain.length > 0 && audioNode.inputNode) {
+      for (let i = chain.length - 1; i >= 0; i--) {
+        if (!chain[i].bypassed) {
+          chain[i].audioNode.outputNode.connect(audioNode.inputNode);
+          break;
+        }
       }
     }
 
@@ -108,7 +111,7 @@ export class PluginEngine {
         chain[chain.length - 1].audioNode.outputNode.connect(audioNode.inputNode);
       }
 
-      chain.push({ instanceId: inst.id, plugin, audioNode });
+      chain.push({ instanceId: inst.id, plugin, audioNode, bypassed: false });
     }
 
     if (chain.length > 0) {
@@ -129,21 +132,65 @@ export class PluginEngine {
   }
 
   /**
-   * Get the input node of the first plugin in the chain.
+   * Bypass or un-bypass a plugin. When bypassed, audio routes around the plugin.
+   */
+  setPluginBypassed(trackId: string, instanceId: string, bypassed: boolean): void {
+    const chain = this.chains.get(trackId);
+    if (!chain) return;
+
+    const idx = chain.findIndex((n) => n.instanceId === instanceId);
+    if (idx < 0 || chain[idx].bypassed === bypassed) return;
+
+    const node = chain[idx];
+    const prev = idx > 0 ? chain[idx - 1] : null;
+    const next = idx < chain.length - 1 ? chain[idx + 1] : null;
+    node.bypassed = bypassed;
+
+    if (bypassed) {
+      // Disconnect plugin from chain and connect around it
+      if (prev) {
+        try { prev.audioNode.outputNode.disconnect(node.audioNode.inputNode!); } catch { /* ok */ }
+        if (next?.audioNode.inputNode) {
+          prev.audioNode.outputNode.connect(next.audioNode.inputNode);
+        }
+      }
+      if (next?.audioNode.inputNode) {
+        try { node.audioNode.outputNode.disconnect(next.audioNode.inputNode); } catch { /* ok */ }
+      }
+    } else {
+      // Re-insert plugin into chain
+      if (prev && next?.audioNode.inputNode) {
+        try { prev.audioNode.outputNode.disconnect(next.audioNode.inputNode); } catch { /* ok */ }
+      }
+      if (prev && node.audioNode.inputNode) {
+        prev.audioNode.outputNode.connect(node.audioNode.inputNode);
+      }
+      if (next?.audioNode.inputNode) {
+        node.audioNode.outputNode.connect(next.audioNode.inputNode);
+      }
+    }
+  }
+
+  /**
+   * Get the input node of the first non-bypassed plugin in the chain.
    */
   getInputNode(trackId: string): AudioNode | null {
     const chain = this.chains.get(trackId);
     if (!chain?.length) return null;
-    return chain[0].audioNode.inputNode;
+    const first = chain.find((n) => !n.bypassed);
+    return first?.audioNode.inputNode ?? null;
   }
 
   /**
-   * Get the output node of the last plugin in the chain.
+   * Get the output node of the last non-bypassed plugin in the chain.
    */
   getOutputNode(trackId: string): AudioNode | null {
     const chain = this.chains.get(trackId);
     if (!chain?.length) return null;
-    return chain[chain.length - 1].audioNode.outputNode;
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (!chain[i].bypassed) return chain[i].audioNode.outputNode;
+    }
+    return null;
   }
 
   /**

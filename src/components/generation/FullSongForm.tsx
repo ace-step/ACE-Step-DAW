@@ -11,6 +11,7 @@ import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
+import { NegativePromptSection } from './NegativePromptSection';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -58,6 +59,8 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   // Persisted in generationStore — survives panel close/reopen
   const prompt = useGenerationStore((s) => s.generationForm.prompt);
   const setPrompt = useGenerationStore((s) => s.setGenerationPrompt);
+  const negativePrompt = useGenerationStore((s) => s.generationForm.negativePrompt ?? '');
+  const setNegativePrompt = useGenerationStore((s) => s.setGenerationNegativePrompt);
   const lyrics = useGenerationStore((s) => s.generationForm.lyrics);
   const setLyrics = useGenerationStore((s) => s.setGenerationLyrics);
   const thinking = useGenerationStore((s) => s.generationForm.thinking);
@@ -263,6 +266,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       syncMetaToProject: !useProjectMeta && syncMetaToProject,
       instrumental,
       useProjectMeta,
+      negativePrompt: negativePrompt.trim() || undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
@@ -329,6 +333,13 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="Describe the music you want to generate..."
         />
       </section>
+
+      {/* Negative Prompt (collapsed by default) */}
+      <NegativePromptSection
+        value={negativePrompt}
+        onChange={setNegativePrompt}
+        disabled={isDisabled}
+      />
 
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">

@@ -65,34 +65,21 @@ jobs:
             patchelf
       - name: Show Rust version
         run: rustc --version && cargo --version
+      - name: Debug environment
+        run: |
+          rustc --version
+          cargo --version
+          pkg-config --modversion webkit2gtk-4.1 || echo "webkit2gtk-4.1 not found"
+          pkg-config --modversion gtk+-3.0 || echo "gtk+-3.0 not found"
+          ls -la src-tauri/
+          cat src-tauri/Cargo.toml
       - name: Check Tauri crate compiles
-        id: cargo-check
-        continue-on-error: true
         run: |
-          set -o pipefail
           cd src-tauri
-          RUST_BACKTRACE=full cargo check 2>&1 | tee /tmp/cargo-check.log
-      - name: Upload cargo check log
-        if: steps.cargo-check.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-check-failure-log
-          path: /tmp/cargo-check.log
-          retention-days: 3
-      - name: Post error to PR and fail
-        if: steps.cargo-check.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "=== CARGO CHECK LOG ==="
-          cat /tmp/cargo-check.log
-          echo "=== END LOG ==="
-          exit 1
+          RUST_BACKTRACE=full cargo check 2>&1
       - name: Clippy lint
-        if: steps.cargo-check.outcome == 'success'
         run: cd src-tauri && cargo clippy -- -D warnings
       - name: Format check
-        if: steps.cargo-check.outcome == 'success'
         run: cd src-tauri && cargo fmt -- --check
 
   # Multi-platform Tauri builds

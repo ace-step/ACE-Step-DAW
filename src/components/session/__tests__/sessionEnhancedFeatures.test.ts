@@ -1,17 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type {
   FollowActionConfig,
   FollowActionType,
-  SceneFollowActionConfig,
-  SessionLaunchQuantization,
-  SessionLaunchMode,
   SessionClipSlot,
   SessionScene,
-  SessionPendingLaunch,
-  SessionState,
 } from '../../../types/project';
+import { useProjectStore } from '../../../store/projectStore';
+import { useTransportStore } from '../../../store/transportStore';
 import { resolveFollowAction, detectClipGroups, rollFollowAction } from '../../../utils/followActions';
 import { resolveFollowAction as resolveSceneFollowAction } from '../../../utils/followActionResolver';
+import { getSceneHeaderClass, getSceneButtonLabel, getProgressRingStroke } from '../../../utils/sessionVisualState';
 
 /**
  * Comprehensive tests for all 8 Enhanced Session View checklist items (#1338).
@@ -97,93 +95,93 @@ describe('Enhanced Session View — Issue #1338 acceptance criteria', () => {
 
   // ─── 2. Quantized launch ─────────────────────────────────────────────
   describe('2. Quantized launch', () => {
-    it('supports all quantization values', () => {
-      const validValues: SessionLaunchQuantization[] = [
-        'none', '1/32', '1/16', '1/8', '1/4', '1/2', '1 bar', '2 bars', '4 bars', '8 bars',
-      ];
-      // Each value should be a valid quantization option
-      for (const val of validValues) {
-        expect(typeof val).toBe('string');
-        expect(val.length).toBeGreaterThan(0);
-      }
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
     });
 
-    it('per-slot quantization can override global', () => {
-      const slot: SessionClipSlot = {
-        id: 'sl1',
-        trackId: 't1',
-        sceneId: 's1',
-        clipId: 'c1',
-        quantization: '1/4', // override
-      };
-      expect(slot.quantization).not.toBe('global');
-      expect(slot.quantization).toBe('1/4');
+    it('store action sets global session launch quantization', () => {
+      const { setSessionLaunchQuantization } = useProjectStore.getState();
+      setSessionLaunchQuantization('1 bar');
+      const project = useProjectStore.getState().project!;
+      expect(project.session!.quantization).toBe('1 bar');
     });
 
-    it('global quantization used when slot is set to global', () => {
-      const slot: SessionClipSlot = {
-        id: 'sl1',
-        trackId: 't1',
-        sceneId: 's1',
-        clipId: 'c1',
-        quantization: 'global',
-      };
-      const globalQ: SessionLaunchQuantization = '1 bar';
-      const effective = slot.quantization === 'global' ? globalQ : slot.quantization;
-      expect(effective).toBe('1 bar');
+    it('store action sets per-slot quantization override', () => {
+      const ps = useProjectStore.getState();
+      const track = ps.addTrack('Test', 'stems');
+      const clip = ps.addClip(track.id, { startTime: 0, duration: 4, prompt: 'q-test' });
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+
+      ps.assignClipToSessionSlot(track.id, sceneId, clip.id);
+      const slot = useProjectStore.getState().project!.session!.slots.find((s) => s.trackId === track.id && s.sceneId === sceneId)!;
+      expect(slot).toBeDefined();
+
+      ps.setSessionSlotQuantization(slot.id, '1/4');
+      const updated = useProjectStore.getState().project!.session!.slots.find((s) => s.id === slot.id)!;
+      expect(updated.quantization).toBe('1/4');
     });
   });
 
   // ─── 3. Per-clip tempo and time signature overrides ───────────────────
   describe('3. Per-clip tempo and time signature overrides', () => {
-    it('slot can have tempo override', () => {
-      const slot: SessionClipSlot = {
-        id: 'sl1',
-        trackId: 't1',
-        sceneId: 's1',
-        clipId: 'c1',
-        tempo: 140,
-      };
-      expect(slot.tempo).toBe(140);
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
     });
 
-    it('slot can have time signature override', () => {
-      const slot: SessionClipSlot = {
-        id: 'sl1',
-        trackId: 't1',
-        sceneId: 's1',
-        clipId: 'c1',
-        timeSignature: [3, 4],
-      };
-      expect(slot.timeSignature).toEqual([3, 4]);
+    it('store action sets slot tempo override', () => {
+      const ps = useProjectStore.getState();
+      const track = ps.addTrack('Test', 'stems');
+      const clip = ps.addClip(track.id, { startTime: 0, duration: 4, prompt: 'tempo-test' });
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+      ps.assignClipToSessionSlot(track.id, sceneId, clip.id);
+      const slot = useProjectStore.getState().project!.session!.slots.find((s) => s.trackId === track.id)!;
+
+      ps.setSessionSlotTempo(slot.id, 140);
+      const updated = useProjectStore.getState().project!.session!.slots.find((s) => s.id === slot.id)!;
+      expect(updated.tempo).toBe(140);
     });
 
-    it('scene can have tempo and time signature overrides', () => {
-      const scene: SessionScene = {
-        id: 's1',
-        name: 'Waltz Section',
-        index: 1,
-        tempo: 96,
-        timeSignature: [3, 4],
-      };
-      expect(scene.tempo).toBe(96);
-      expect(scene.timeSignature).toEqual([3, 4]);
+    it('store action sets slot time signature override', () => {
+      const ps = useProjectStore.getState();
+      const track = ps.addTrack('Test', 'stems');
+      const clip = ps.addClip(track.id, { startTime: 0, duration: 4, prompt: 'ts-test' });
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+      ps.assignClipToSessionSlot(track.id, sceneId, clip.id);
+      const slot = useProjectStore.getState().project!.session!.slots.find((s) => s.trackId === track.id)!;
+
+      ps.setSessionSlotTimeSignature(slot.id, [3, 4]);
+      const updated = useProjectStore.getState().project!.session!.slots.find((s) => s.id === slot.id)!;
+      expect(updated.timeSignature).toEqual([3, 4]);
+    });
+
+    it('store action sets scene tempo and time signature', () => {
+      const ps = useProjectStore.getState();
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+
+      ps.updateSessionSceneProperties(sceneId, { tempo: 96, timeSignature: [3, 4] });
+      const updatedScene = useProjectStore.getState().project!.session!.scenes.find((s) => s.id === sceneId)!;
+      expect(updatedScene.tempo).toBe(96);
+      expect(updatedScene.timeSignature).toEqual([3, 4]);
     });
   });
 
   // ─── 4. Arrangement recording ─────────────────────────────────────────
   describe('4. Arrangement recording', () => {
-    it('SessionState has arrangement recording fields', () => {
-      // Verify the type structure supports arrangement recording
-      const state: Pick<SessionState, 'isRecordingToArrangement' | 'arrangementRecordStartTime' | 'arrangementRecordEndTime' | 'recordedLaunches'> = {
-        isRecordingToArrangement: true,
-        arrangementRecordStartTime: 0,
-        arrangementRecordEndTime: null,
-        recordedLaunches: [],
-      };
-      expect(state.isRecordingToArrangement).toBe(true);
-      expect(state.arrangementRecordStartTime).toBe(0);
-      expect(state.recordedLaunches).toHaveLength(0);
+    it('transport store initializes with recording disabled', () => {
+      expect(useTransportStore.getState().sessionArrangementRecording).toBe(false);
+    });
+
+    it('start/stop arrangement recording toggles state and records times', () => {
+      const ts = useTransportStore.getState();
+      ts.startSessionArrangementRecording(10.5);
+      expect(useTransportStore.getState().sessionArrangementRecording).toBe(true);
+
+      ts.stopSessionArrangementRecording(25.0);
+      expect(useTransportStore.getState().sessionArrangementRecording).toBe(false);
     });
   });
 
@@ -232,76 +230,89 @@ describe('Enhanced Session View — Issue #1338 acceptance criteria', () => {
       expect(resolveSceneFollowAction(sceneLast, scenes)).toBe(2);
     });
 
-    it('supports A/B scene follow action config with probability', () => {
-      const config: SceneFollowActionConfig = {
-        actionA: 'next',
-        actionB: 'random',
-        chanceA: 0.7,
-      };
-      expect(config.chanceA).toBe(0.7);
-      expect(config.actionA).toBe('next');
-      expect(config.actionB).toBe('random');
+    it('store action sets scene follow action config with A/B probability', () => {
+      useProjectStore.getState().createProject();
+      const ps = useProjectStore.getState();
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+
+      ps.setSessionSceneFollowActionConfig(sceneId, { actionA: 'next', actionB: 'random', chanceA: 0.7 });
+      const updated = useProjectStore.getState().project!.session!.scenes.find((s) => s.id === sceneId)!;
+      expect(updated.followActionConfig?.actionA).toBe('next');
+      expect(updated.followActionConfig?.actionB).toBe('random');
+      expect(updated.followActionConfig?.chanceA).toBe(0.7);
     });
 
-    it('scene follow action time is configurable in bars', () => {
-      const scene: SessionScene = {
-        ...scenes[0],
-        followAction: 'next',
-        followActionTime: 8, // 8 bars before advancing
-      };
-      expect(scene.followActionTime).toBe(8);
+    it('store action sets scene follow action time in bars', () => {
+      useProjectStore.getState().createProject();
+      const ps = useProjectStore.getState();
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+
+      ps.setSessionSceneFollowAction(sceneId, 'next');
+      ps.updateSessionSceneProperties(sceneId, { followActionTime: 8 });
+      const updated = useProjectStore.getState().project!.session!.scenes.find((s) => s.id === sceneId)!;
+      expect(updated.followAction).toBe('next');
+      expect(updated.followActionTime).toBe(8);
     });
   });
 
   // ─── 7. Visual feedback ───────────────────────────────────────────────
   describe('7. Visual feedback states', () => {
-    it('isClipQueued detects clip-level pending launches', () => {
-      const pendingLaunches: SessionPendingLaunch[] = [
-        { id: 'pl1', type: 'clip', executeAt: 10, requestedAt: 9, trackId: 't1', clipId: 'c1' },
-      ];
-      const isQueued = pendingLaunches.some(
-        (l) => l.type === 'clip' && l.trackId === 't1' && l.clipId === 'c1',
-      );
-      expect(isQueued).toBe(true);
+    it('scene header reflects all visual states correctly', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: true, isQueued: false }))
+        .toContain('red');
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: false, isQueued: false }))
+        .toContain('emerald');
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: false, isRecording: false, isQueued: true }))
+        .toContain('amber');
     });
 
-    it('isClipQueued detects scene-level pending launches', () => {
-      const pendingLaunches: SessionPendingLaunch[] = [
-        { id: 'pl1', type: 'scene', executeAt: 10, requestedAt: 9, sceneId: 's1' },
-      ];
-      const sceneId = 's1';
-      const isQueued = pendingLaunches.some(
-        (l) => l.type === 'scene' && l.sceneId === sceneId,
-      );
-      expect(isQueued).toBe(true);
+    it('scene button label reflects state', () => {
+      expect(getSceneButtonLabel({ isActive: true, isRecording: true, isQueued: false })).toBe('● REC');
+      expect(getSceneButtonLabel({ isActive: true, isRecording: false, isQueued: false })).toBe('▶ Playing');
     });
 
-    it('playing state shows progress ring data', () => {
-      const progress = 0.65;
-      const circumference = 2 * Math.PI * 10;
-      const dashArray = `${progress * circumference} ${circumference}`;
-      expect(dashArray).toContain(String(progress * circumference));
+    it('progress ring stroke changes color for recording', () => {
+      expect(getProgressRingStroke(true)).toBe('#ef4444');
+      expect(getProgressRingStroke(false)).toBe('#4ade80');
     });
   });
 
   // ─── 8. MIDI controller mapping ───────────────────────────────────────
   describe('8. MIDI controller mapping', () => {
-    it('session launch modes are properly typed', () => {
-      const modes: SessionLaunchMode[] = ['trigger', 'gate', 'toggle', 'repeat'];
-      expect(modes).toHaveLength(4);
-      expect(modes).toContain('trigger');
-      expect(modes).toContain('gate');
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
     });
 
-    it('slot can store launch mode', () => {
-      const slot: SessionClipSlot = {
-        id: 'sl1',
-        trackId: 't1',
-        sceneId: 's1',
-        clipId: 'c1',
-        launchMode: 'gate',
-      };
-      expect(slot.launchMode).toBe('gate');
+    it('store action sets slot launch mode', () => {
+      const ps = useProjectStore.getState();
+      const track = ps.addTrack('Test', 'stems');
+      const clip = ps.addClip(track.id, { startTime: 0, duration: 4, prompt: 'midi-test' });
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+      ps.assignClipToSessionSlot(track.id, sceneId, clip.id);
+      const slot = useProjectStore.getState().project!.session!.slots.find((s) => s.trackId === track.id)!;
+
+      ps.setSessionSlotLaunchMode(slot.id, 'gate');
+      const updated = useProjectStore.getState().project!.session!.slots.find((s) => s.id === slot.id)!;
+      expect(updated.launchMode).toBe('gate');
+    });
+
+    it('store action changes launch mode between all types', () => {
+      const ps = useProjectStore.getState();
+      const track = ps.addTrack('Test', 'stems');
+      const clip = ps.addClip(track.id, { startTime: 0, duration: 4, prompt: 'mode-test' });
+      const project = useProjectStore.getState().project!; // has 4 default scenes
+      const sceneId = project.session!.scenes[0].id;
+      ps.assignClipToSessionSlot(track.id, sceneId, clip.id);
+      const slot = useProjectStore.getState().project!.session!.slots.find((s) => s.trackId === track.id)!;
+
+      for (const mode of ['trigger', 'gate', 'toggle', 'repeat'] as const) {
+        ps.setSessionSlotLaunchMode(slot.id, mode);
+        const updated = useProjectStore.getState().project!.session!.slots.find((s) => s.id === slot.id)!;
+        expect(updated.launchMode).toBe(mode);
+      }
     });
   });
 });

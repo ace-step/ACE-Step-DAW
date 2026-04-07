@@ -2466,6 +2466,197 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
   });
 }
 
+// generateVocalReplacement — generates vocals from an instrumental reference clip
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface VocalReplacementOptions {
+  /** Source instrumental clip whose audio is used as context */
+  clipId: string;
+  /** Vocal style description (e.g., "warm, soulful, energetic") */
+  vocalStyle: string;
+  /** Lyrics for the generated vocals */
+  lyrics: string;
+  /** Target vocal track ID for the result (must be a vocals track) */
+  targetTrackId: string;
+  /** Optional BPM override (null = auto-detect) */
+  bpm: number | null;
+  /** Optional key override ('' = auto-detect) */
+  keyScale: string;
+  /** Vocal language hint (e.g., "en", "zh", "unknown") */
+  vocalLanguage?: string;
+}
+
+export async function generateVocalReplacement(opts: VocalReplacementOptions): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  if (!genStore.tryAcquireGenerationLock()) return;
+  await withGenerationToast('AI generation', async () => {
+
+    const { clipId, vocalStyle, lyrics, targetTrackId } = opts;
+    const store = useProjectStore.getState();
+
+    const sourceClip = store.getClipById(clipId);
+    const sourceTrack = store.getTrackForClip(clipId);
+    if (!sourceClip || !sourceTrack) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    // Load the instrumental audio as context
+    let instrumentalBlob: Blob | null = null;
+    if (sourceClip.isolatedAudioKey) {
+      instrumentalBlob = (await loadAudioBlobByKey(sourceClip.isolatedAudioKey)) ?? null;
+    }
+    if (!instrumentalBlob && sourceClip.cumulativeMixKey) {
+      instrumentalBlob = (await loadAudioBlobByKey(sourceClip.cumulativeMixKey)) ?? null;
+    }
+    if (!instrumentalBlob) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    const project = store.project!;
+    const targetTrack = project.tracks.find((t) => t.id === targetTrackId);
+    if (!targetTrack) {
+      genStore.setIsGenerating(false);
+      return false;
+    }
+
+    // Create new clip on the vocal track
+    const newClip = store.addClip(targetTrackId, {
+      startTime: sourceClip.startTime,
+      duration: sourceClip.duration,
+      prompt: vocalStyle,
+      globalCaption: vocalStyle,
+      lyrics,
+    });
+
+    const jobId = uuidv4();
+    genStore.addJob({
+      id: jobId,
+      clipId: newClip.id,
+      trackName: targetTrack.trackName,
+      status: 'queued',
+      progress: 'Queued',
+    });
+    store.updateClipStatus(newClip.id, 'queued', { generationJobId: jobId });
+
+    try {
+      // Use lego task with track_name='vocals' so the backend applies vocal conditioning
+      const legoParams: LegoTaskParams = {
+        task_type: 'lego',
+        track_name: 'vocals',
+        prompt: vocalStyle,
+        global_caption: `vocals for: ${vocalStyle}`,
+        lyrics,
+        instruction: 'Generate a vocal track that matches the instrumental audio context:',
+        repainting_start: 0,
+        repainting_end: sourceClip.duration,
+        audio_duration: sourceClip.duration,
+        bpm: opts.bpm,
+        key_scale: opts.keyScale,
+        time_signature: project.timeSignature ? String(project.timeSignature) : '',
+        inference_steps: project.generationDefaults.inferenceSteps,
+        guidance_scale: project.generationDefaults.guidanceScale,
+        shift: project.generationDefaults.shift,
+        batch_size: 1,
+        audio_format: 'wav',
+        thinking: project.generationDefaults.thinking,
+        model: project.generationDefaults.model,
+        ...(opts.vocalLanguage ? { vocal_language: opts.vocalLanguage } : {}),
+      };
+
+      const vrStartedAt = Date.now();
+      genStore.updateJob(jobId, { status: 'generating', progress: 'Submitting...', startedAt: vrStartedAt });
+      store.updateClipStatus(newClip.id, 'generating');
+
+      const releaseResp = await api.releaseLegoTask(instrumentalBlob, legoParams);
+      const taskId = releaseResp.task_id;
+
+      const startTime = Date.now();
+      let resultAudioPath: string | null = null;
+      let firstResult: TaskResultItem | null = null;
+
+      while (Date.now() - startTime < MAX_POLL_DURATION_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        const entries = await api.queryResult([taskId]);
+        const entry = entries?.[0];
+        if (!entry) continue;
+
+        let progressPercent: number | undefined;
+        let stage: string | undefined;
+        if (entry.status === 0 && entry.result) {
+          try {
+            const partial: TaskResultItem[] = JSON.parse(entry.result);
+            const first = partial?.[0];
+            if (first?.progress !== undefined) progressPercent = first.progress;
+            if (first?.stage) stage = first.stage;
+          } catch { /* not yet valid JSON */ }
+        }
+        const etaSeconds = computeEta(vrStartedAt, progressPercent) ?? undefined;
+
+        genStore.updateJob(jobId, {
+          progress: entry.progress_text || 'Generating vocals...',
+          ...(stage !== undefined && { stage }),
+          ...(progressPercent !== undefined && { progressPercent }),
+          ...(etaSeconds !== undefined && { etaSeconds }),
+        });
+        if (entry.status === 1) {
+          const items: TaskResultItem[] = JSON.parse(entry.result);
+          firstResult = items?.[0] ?? null;
+          resultAudioPath = firstResult?.file ?? null;
+          break;
+        } else if (entry.status === 2) {
+          throw new Error(`Vocal replacement failed: ${entry.result}`);
+        }
+      }
+
+      if (!resultAudioPath) throw new Error('Vocal replacement timed out — the server did not return a result within the time limit. Try again or check server status.');
+
+      genStore.updateJob(jobId, { status: 'processing', progress: 'Downloading audio...' });
+      store.updateClipStatus(newClip.id, 'processing');
+
+      const vocalBlob = await api.downloadAudio(resultAudioPath);
+      const engine = getAudioEngine();
+      const buffer = await engine.decodeAudioData(vocalBlob);
+      const peaks = computeWaveformPeaks(buffer, CLIP_WAVEFORM_PEAK_COUNT);
+
+      const isolatedKey = await saveAudioBlob(project.id, newClip.id, 'isolated', vocalBlob);
+      const cumulativeKey = await saveAudioBlob(project.id, newClip.id, 'cumulative', vocalBlob);
+
+      const inferredMetas: InferredMetas | undefined = firstResult
+        ? {
+            bpm: firstResult.metas?.bpm,
+            keyScale: firstResult.metas?.keyscale,
+            genres: firstResult.metas?.genres,
+            seed: firstResult.seed_value,
+            ditModel: firstResult.dit_model,
+          }
+        : undefined;
+
+      store.updateClipStatus(newClip.id, 'ready', {
+        cumulativeMixKey: cumulativeKey,
+        isolatedAudioKey: isolatedKey,
+        waveformPeaks: peaks,
+        audioDuration: buffer.duration,
+        audioOffset: 0,
+        inferredMetas,
+        generatedFromContext: true,
+      });
+
+      genStore.updateJob(jobId, { status: 'done', progress: 'Done' });
+      store.saveClipVersion(newClip.id);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      store.updateClipStatus(newClip.id, 'error', { errorMessage: message });
+      genStore.updateJob(jobId, { status: 'error', progress: message, error: message });
+      return false;
+    } finally {
+      genStore.setIsGenerating(false);
+    }
+  });
+}
+
 /**
  * Extract a server-local file path from the audio URL returned by the backend.
  * The backend URL is typically `/v1/audio?path=/tmp/.../output.wav`.

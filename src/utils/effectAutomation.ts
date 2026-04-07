@@ -137,6 +137,25 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     hfEmphasis: { label: 'HF Focus', min: 0, max: 1, color: '#8a8a8a' },
     mix: { label: 'Mix', min: 0, max: 1, color: '#8a8a8a' },
   },
+  spectralFreeze: {
+    decay: { label: 'Decay', min: 0, max: 1, color: '#7c5cbf' },
+    brightness: { label: 'Brightness', min: -1, max: 1, color: '#7c5cbf' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#7c5cbf' },
+  },
+  spectralBlur: {
+    blurAmount: { label: 'Blur', min: 0, max: 1, color: '#8b6fc8' },
+    frequencySpread: { label: 'Spread', min: 0, max: 1, color: '#8b6fc8' },
+    brightness: { label: 'Brightness', min: -1, max: 1, color: '#8b6fc8' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#8b6fc8' },
+  },
+  spectralFilter: {
+    resolution: { label: 'Resolution', min: 0, max: 1, color: '#9a7ed4' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#9a7ed4' },
+  },
+  spectralMorph: {
+    morphAmount: { label: 'Morph', min: 0, max: 1, color: '#a88de0' },
+    mix: { label: 'Mix', min: 0, max: 1, color: '#a88de0' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -216,6 +235,22 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'noiseReduction': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralFreeze': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralBlur': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralFilter': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralMorph': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

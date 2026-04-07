@@ -7,24 +7,15 @@
  * - Polls for results
  * - Deserializes generated MIDI back to MidiNote[]
  */
-import { getBackendUrl } from './aceStepApi';
 import type { MidiGenerationTaskParams, MidiGenerationResultItem } from '../types/api';
 import type { MidiNote } from '../types/project';
 import { useMidiAiStore } from '../store/midiAiStore';
 import type { MidiAiVariation } from '../store/midiAiStore';
+import { getApiBaseUrl as getApiBase } from './unifiedTaskRouter';
 import { createDebugLogger } from '../utils/debugLogger';
 import { generateNoteId } from '../components/pianoroll/PianoRollConstants';
 
 const logger = createDebugLogger('ace-step:midi-ai');
-
-/** Resolve API base URL, matching the pattern in aceStepApi.ts */
-function getApiBase(): string {
-  const custom = getBackendUrl();
-  if (custom && custom.trim()) {
-    return custom.trim().replace(/\/+$/, '');
-  }
-  return '/api';
-}
 
 /**
  * Construct an absolute WebSocket URL from the API base.

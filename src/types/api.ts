@@ -383,6 +383,7 @@ export interface ExtendedModelsListResponse extends ModelsListResponse {
 
 export type AiTaskParams =
   | LegoTaskParams
+  | Text2MusicTaskParams
   | CoverTaskParams
   | RepaintTaskParams
   | StemSeparationTaskParams

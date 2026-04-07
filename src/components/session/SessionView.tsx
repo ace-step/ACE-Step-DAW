@@ -10,7 +10,9 @@ import { ContextMenuWrapper, ContextMenuSeparator, ContextMenuItem } from '../ui
 import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 import { SessionMixer } from './SessionMixer';
 import { gatherAiFillContext } from '../../utils/sessionAiFill';
+import { getSceneHeaderClass, getSceneButtonClass, getSceneButtonLabel, getSceneAriaPrefix, getProgressRingStroke, getLoopCountClass } from '../../utils/sessionVisualState';
 import { generateSingleClip } from '../../services/generationPipeline';
+import { toastError } from '../../hooks/useToast';
 import { useSessionMidiController } from '../../hooks/useSessionMidiController';
 import { getMidiCaptureService } from '../../services/midiCaptureService';
 import type { Clip, Track, SessionLaunchQuantization, SessionLaunchMode, SessionClipSlot, SessionPendingLaunch, SessionScene, SceneFollowActionType, SceneFollowActionConfig, FollowActionType, FollowActionConfig } from '../../types/project';
@@ -276,7 +278,7 @@ export function SessionView() {
 
     // Trigger AI generation for the newly created clip
     void generateSingleClip(newClip.id).catch((error) => {
-      console.error('Failed to generate AI-filled clip', { clipId: newClip.id, trackId, sceneId, error });
+      toastError(error instanceof Error ? error.message : 'Failed to generate AI-filled clip');
     });
   }, [project, tracks, scenes, sessionSlots, addClip, assignClipToSessionSlot]);
 
@@ -398,17 +400,7 @@ export function SessionView() {
             <div
               key={`scene-${sceneIndex}`}
               className={`sticky top-[72px] z-10 border-b border-r px-3 py-2 transition-colors ${
-                isSceneDragTarget
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : isSceneDragSource
-                    ? 'opacity-40 border-[#333] bg-[#242424]'
-                    : isSceneActive && sessionArrangementRecording
-                      ? 'border-red-500/50 bg-red-500/10'
-                      : isSceneActive
-                        ? 'border-emerald-500/50 bg-emerald-500/10'
-                        : isSceneQueued
-                          ? 'border-amber-400/50 bg-amber-400/5'
-                          : 'border-[#333] bg-[#242424]'
+                getSceneHeaderClass({ isDragTarget: isSceneDragTarget, isDragSource: isSceneDragSource, isActive: isSceneActive, isRecording: sessionArrangementRecording, isQueued: isSceneQueued })
               }`}
               style={isSceneQueued && !isSceneActive ? { animation: 'session-blink 500ms ease-in-out infinite' } : undefined}
               data-scene-index={sceneIndex}
@@ -437,18 +429,12 @@ export function SessionView() {
                   onClick={() => void launchSessionScene(sceneIndex, sceneLaunches)}
                   disabled={sceneLaunches.length === 0}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-30 ${
-                    isSceneActive && sessionArrangementRecording
-                      ? 'bg-red-600 text-white hover:bg-red-500'
-                      : isSceneActive
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                        : isSceneQueued
-                          ? 'bg-amber-600 text-white hover:bg-amber-500'
-                          : 'bg-[#303030] text-zinc-200 hover:bg-daw-accent'
+                    getSceneButtonClass({ isActive: isSceneActive, isRecording: sessionArrangementRecording, isQueued: isSceneQueued })
                   }`}
-                  aria-label={`${isSceneActive && sessionArrangementRecording ? 'Recording' : isSceneActive ? 'Playing' : isSceneQueued ? 'Queued' : 'Launch'} scene ${sceneIndex + 1}`}
+                  aria-label={`${getSceneAriaPrefix({ isActive: isSceneActive, isRecording: sessionArrangementRecording, isQueued: isSceneQueued })} scene ${sceneIndex + 1}`}
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  {isSceneActive && sessionArrangementRecording ? '● REC' : isSceneActive ? '▶ Playing' : isSceneQueued ? '◈ Queued' : 'Launch'}
+                  {getSceneButtonLabel({ isActive: isSceneActive, isRecording: sessionArrangementRecording, isQueued: isSceneQueued })}
                 </button>
               </div>
               {scenes[sceneIndex]?.followActionConfig ? (
@@ -1186,14 +1172,14 @@ function FragmentRow({
                           <circle
                             cx="12" cy="12" r="10"
                             fill="none"
-                            stroke={isArrangementRecording ? '#ef4444' : '#4ade80'}
+                            stroke={getProgressRingStroke(isArrangementRecording)}
                             strokeWidth="2"
                             strokeDasharray={`${progress * PROGRESS_RING_CIRCUMFERENCE} ${PROGRESS_RING_CIRCUMFERENCE}`}
                             strokeLinecap="round"
                             transform="rotate(-90 12 12)"
                           />
                         </svg>
-                        <span className={`text-xs ${isArrangementRecording ? 'text-red-400' : 'text-emerald-400'}`}>{loopCount}</span>
+                        <span className={getLoopCountClass(isArrangementRecording)}>{loopCount}</span>
                       </span>
                     ) : (
                       <span>{isQueued ? 'QUEUED' : `Start ${clip.startTime.toFixed(1)}s`}</span>

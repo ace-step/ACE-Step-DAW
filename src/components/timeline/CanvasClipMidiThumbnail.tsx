@@ -74,6 +74,8 @@ export function CanvasClipMidiThumbnail({
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ top: 14 }}>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="MIDI note thumbnail"
         data-testid="canvas-midi-thumbnail"
         style={{ width: '100%', height: '100%' }}
       />

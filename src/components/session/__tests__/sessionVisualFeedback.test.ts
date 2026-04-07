@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getSceneHeaderClass, getSceneButtonClass, getSceneButtonLabel, getProgressRingStroke, getLoopCountClass } from '../../../utils/sessionVisualState';
 
 /**
  * These tests verify the visual feedback state computation logic
@@ -108,78 +109,52 @@ describe('Session visual feedback state computation', () => {
   });
 
   describe('recording state visual feedback', () => {
-    it('determines scene header class for active+recording state', () => {
-      const isSceneActive = true;
-      const isArrangementRecording = true;
-      const isSceneQueued = false;
-      const isSceneDragTarget = false;
-      const isSceneDragSource = false;
-
-      const className = isSceneDragTarget
-        ? 'border-blue-500 bg-blue-500/10'
-        : isSceneDragSource
-          ? 'opacity-40 border-[#333] bg-[#242424]'
-          : isSceneActive && isArrangementRecording
-            ? 'border-red-500/50 bg-red-500/10'
-            : isSceneActive
-              ? 'border-emerald-500/50 bg-emerald-500/10'
-              : isSceneQueued
-                ? 'border-amber-400/50 bg-amber-400/5'
-                : 'border-[#333] bg-[#242424]';
-
-      expect(className).toBe('border-red-500/50 bg-red-500/10');
+    it('scene header shows red border when active and recording', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: true, isQueued: false }))
+        .toBe('border-red-500/50 bg-red-500/10');
     });
 
-    it('uses emerald class when active but not recording', () => {
-      const isSceneActive = true;
-      const isArrangementRecording = false;
-
-      const className = isSceneActive && isArrangementRecording
-        ? 'border-red-500/50 bg-red-500/10'
-        : isSceneActive
-          ? 'border-emerald-500/50 bg-emerald-500/10'
-          : 'border-[#333] bg-[#242424]';
-
-      expect(className).toBe('border-emerald-500/50 bg-emerald-500/10');
+    it('scene header shows emerald when active but not recording', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: true, isRecording: false, isQueued: false }))
+        .toBe('border-emerald-500/50 bg-emerald-500/10');
     });
 
-    it('determines scene button label for recording state', () => {
-      const getLabel = (isActive: boolean, isRecording: boolean, isQueued: boolean) =>
-        isActive && isRecording ? '● REC' : isActive ? '▶ Playing' : isQueued ? '◈ Queued' : 'Launch';
-
-      expect(getLabel(true, true, false)).toBe('● REC');
-      expect(getLabel(true, false, false)).toBe('▶ Playing');
-      expect(getLabel(false, false, true)).toBe('◈ Queued');
-      expect(getLabel(false, false, false)).toBe('Launch');
+    it('scene header shows amber when queued', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: false, isRecording: false, isQueued: true }))
+        .toBe('border-amber-400/50 bg-amber-400/5');
     });
 
-    it('uses red progress ring stroke when recording', () => {
-      const getStroke = (isRecording: boolean) => isRecording ? '#ef4444' : '#4ade80';
-
-      expect(getStroke(true)).toBe('#ef4444');
-      expect(getStroke(false)).toBe('#4ade80');
+    it('scene header shows default when idle', () => {
+      expect(getSceneHeaderClass({ isDragTarget: false, isDragSource: false, isActive: false, isRecording: false, isQueued: false }))
+        .toBe('border-[#333] bg-[#242424]');
     });
 
-    it('uses red loop count text when recording', () => {
-      const getClass = (isRecording: boolean) =>
-        `text-xs ${isRecording ? 'text-red-400' : 'text-emerald-400'}`;
-
-      expect(getClass(true)).toContain('text-red-400');
-      expect(getClass(false)).toContain('text-emerald-400');
+    it('drag target takes priority over all states', () => {
+      expect(getSceneHeaderClass({ isDragTarget: true, isDragSource: false, isActive: true, isRecording: true, isQueued: true }))
+        .toBe('border-blue-500 bg-blue-500/10');
     });
 
-    it('determines scene button style for active+recording', () => {
-      const getButtonClass = (isActive: boolean, isRecording: boolean, isQueued: boolean) =>
-        isActive && isRecording
-          ? 'bg-red-600 text-white hover:bg-red-500'
-          : isActive
-            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-            : isQueued
-              ? 'bg-amber-600 text-white hover:bg-amber-500'
-              : 'bg-[#303030] text-zinc-200 hover:bg-daw-accent';
+    it('scene button label reflects recording/playing/queued/idle states', () => {
+      expect(getSceneButtonLabel({ isActive: true, isRecording: true, isQueued: false })).toBe('● REC');
+      expect(getSceneButtonLabel({ isActive: true, isRecording: false, isQueued: false })).toBe('▶ Playing');
+      expect(getSceneButtonLabel({ isActive: false, isRecording: false, isQueued: true })).toBe('◈ Queued');
+      expect(getSceneButtonLabel({ isActive: false, isRecording: false, isQueued: false })).toBe('Launch');
+    });
 
-      expect(getButtonClass(true, true, false)).toBe('bg-red-600 text-white hover:bg-red-500');
-      expect(getButtonClass(true, false, false)).toBe('bg-emerald-600 text-white hover:bg-emerald-500');
+    it('scene button class uses red for recording, emerald for active', () => {
+      expect(getSceneButtonClass({ isActive: true, isRecording: true, isQueued: false })).toContain('bg-red-600');
+      expect(getSceneButtonClass({ isActive: true, isRecording: false, isQueued: false })).toContain('bg-emerald-600');
+      expect(getSceneButtonClass({ isActive: false, isRecording: false, isQueued: true })).toContain('bg-amber-600');
+    });
+
+    it('progress ring uses red stroke when recording, green otherwise', () => {
+      expect(getProgressRingStroke(true)).toBe('#ef4444');
+      expect(getProgressRingStroke(false)).toBe('#4ade80');
+    });
+
+    it('loop count uses red text when recording', () => {
+      expect(getLoopCountClass(true)).toContain('text-red-400');
+      expect(getLoopCountClass(false)).toContain('text-emerald-400');
     });
   });
 });

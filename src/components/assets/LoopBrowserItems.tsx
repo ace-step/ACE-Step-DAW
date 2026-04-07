@@ -55,6 +55,8 @@ export function MiniWaveform({ data, color, height = 32 }: { data: number[] | nu
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Loop waveform preview"
       className="w-full"
       style={{ height }}
     />

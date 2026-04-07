@@ -11,6 +11,7 @@ import { Z } from '../../utils/zIndex';
 import type { StrudelFromMidiOptions } from '../../types/project';
 import { registerStrudelEditorPlaybackStop, registerStrudelEditorAudioContext, resumeStrudelAudio } from '../../engine/strudelEditorPlayback';
 import { createDebugLogger } from '../../utils/debugLogger';
+import { computeLineDiff, formatDiffSummary, type DiffLine } from '../../utils/codeDiff';
 
 const log = createDebugLogger('strudel-editor');
 const DEFAULT_CODE = `s("[bd <hh oh>]*2, [~ cp]*2")`;
@@ -33,7 +34,7 @@ if (typeof document !== 'undefined' && !document.getElementById('strudel-autocom
 
 /* ── Sidebar data ──────────────────────────────────── */
 
-type SidebarTab = 'import' | 'sounds' | 'reference' | 'console' | 'settings';
+type SidebarTab = 'import' | 'sounds' | 'reference' | 'console' | 'diff' | 'settings';
 
 
 const SOUND_BANKS = [
@@ -64,6 +65,7 @@ export function StrudelEditor() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bouncing, setBouncing] = useState(false);
   const [bounceProgress, setBounceProgress] = useState(0);
+  const [generating, setGenerating] = useState(false);
   const [bounceBars, setBounceBars] = useState(4);
   const [showBarsMenu, setShowBarsMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,6 +324,47 @@ export function StrudelEditor() {
     }
   }, [activeStrudelTrack, bounceBars, bouncing, project]);
 
+  // Generate from Pattern — send pattern to ACE-Step AI generation
+  const handleGenerateFromPattern = useCallback(async () => {
+    if (!project || generating) return;
+    setGenerating(true);
+    try {
+      const store = useProjectStore.getState();
+      let strudelTrack = activeStrudelTrack;
+      if (!strudelTrack) {
+        strudelTrack = store.addTrack('custom', 'strudel');
+        setOpenStrudelEditor(strudelTrack.id);
+      }
+      const code = strudelTrack?.strudelCode?.trim();
+      if (!code) {
+        setConsoleMessages((prev) => [...prev.slice(-50), '! no pattern code to generate from']);
+        return;
+      }
+
+      const { generateFromStrudelPattern } = await import('../../services/strudelGenerationBridge');
+      const result = await generateFromStrudelPattern({
+        trackId: strudelTrack.id,
+        code,
+        bars: bounceBars,
+        bpm: project.bpm ?? 120,
+        beatsPerBar: typeof project.timeSignature === 'number' ? project.timeSignature : 4,
+        keyScale: project.keyScale ?? undefined,
+      });
+
+      if (result) {
+        setConsoleMessages((prev) => [...prev.slice(-50), `✓ AI generation started from ${bounceBars} bars pattern`]);
+      } else {
+        setConsoleMessages((prev) => [...prev.slice(-50), '! pattern analysis returned no data']);
+      }
+    } catch (err: any) {
+      log.error('Generate from pattern failed:', err);
+      setError(err?.message ?? 'Generation failed');
+      setConsoleMessages((prev) => [...prev.slice(-50), `! generation failed: ${err?.message}`]);
+    } finally {
+      setGenerating(false);
+    }
+  }, [activeStrudelTrack, bounceBars, generating, project, setOpenStrudelEditor]);
+
   const buildImportOptions = useCallback((): Partial<StrudelFromMidiOptions> => ({
     ...importOptions,
     keyScale: project?.keyScale ?? null,
@@ -393,6 +436,18 @@ export function StrudelEditor() {
     window.addEventListener('mouseup', onUp);
   }, [editorHeight]);
 
+  // Memoize diff computation to avoid O(m·n) recalculation on every render
+  const diffData = useMemo(() => {
+    const track = activeStrudelTrack;
+    const versionList = track?.strudelVersions ?? [];
+    if (versionList.length === 0) return null;
+    const lastVersion = versionList[versionList.length - 1];
+    const currentCode = track?.strudelCode ?? '';
+    const diff = computeLineDiff(lastVersion.code, currentCode);
+    const summary = formatDiffSummary(diff);
+    return { diff, summary, lastVersion, versionCount: versionList.length };
+  }, [activeStrudelTrack?.strudelCode, activeStrudelTrack?.strudelVersions]);
+
   if (!strudelPanelOpen) return null;
 
   return (
@@ -452,7 +507,7 @@ export function StrudelEditor() {
         {error && <span className="text-[10px] text-red-400 truncate max-w-[150px]" title={error}>{error}</span>}
 
         {/* Sidebar tabs */}
-        {(['import', 'sounds', 'reference', 'console', 'settings'] as SidebarTab[]).map((tab) => (
+        {(['import', 'sounds', 'reference', 'console', 'diff', 'settings'] as SidebarTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(activeTab === tab ? null : tab)}
@@ -574,6 +629,19 @@ export function StrudelEditor() {
               title={`Freeze ${bounceBars} bars to drum machine track`}
             >
               Drums
+            </button>
+            <button
+              onClick={() => void handleGenerateFromPattern()}
+              disabled={!project || isLoading || generating}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                generating
+                  ? 'text-indigo-400 animate-pulse cursor-wait'
+                  : 'text-indigo-400/70 hover:bg-indigo-500/10 hover:text-indigo-400'
+              }`}
+              title={`Analyze ${bounceBars} bars pattern and generate AI audio`}
+              data-testid="strudel-generate-from-pattern"
+            >
+              {generating ? 'AI...' : 'AI Gen'}
             </button>
           </>
         )}
@@ -747,6 +815,37 @@ export function StrudelEditor() {
                   <div key={i} className={`py-0.5 ${msg.startsWith('!') ? 'text-red-400' : 'text-zinc-400'}`}>{msg}</div>
                 ))}
                 <div ref={consoleEndRef} />
+              </div>
+            )}
+            {activeTab === 'diff' && (
+              <div className="p-2 font-mono text-[10px] overflow-y-auto h-full">
+                <h3 className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Version Diff</h3>
+                {!diffData ? (
+                  <div className="text-zinc-600 p-1">No versions captured. Click &quot;snapshot&quot; to start tracking changes.</div>
+                ) : (
+                  <>
+                    <div className="text-zinc-500 mb-1 text-[9px]">
+                      vs {diffData.lastVersion.label || `v${diffData.versionCount}`} ({new Date(diffData.lastVersion.timestamp).toLocaleTimeString()}) — {diffData.summary}
+                    </div>
+                    <div className="space-y-0">
+                      {diffData.diff.map((line: DiffLine, i: number) => (
+                        <div
+                          key={i}
+                          className={`py-0 px-1 ${
+                            line.type === 'added' ? 'bg-emerald-900/30 text-emerald-300' :
+                            line.type === 'removed' ? 'bg-red-900/30 text-red-300' :
+                            'text-zinc-500'
+                          }`}
+                        >
+                          <span className="inline-block w-3 text-right mr-1 opacity-50">
+                            {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                          </span>
+                          {line.content || '\u00A0'}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {activeTab === 'settings' && (

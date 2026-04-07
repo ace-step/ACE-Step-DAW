@@ -24,31 +24,31 @@ import { DEFAULT_MODULATION_SETTINGS } from '../../types/project';
 
 const MAX_SLOTS = 8;
 
-const SOURCE_OPTIONS: { value: ModulationSource; label: string; group: string }[] = [
-  { value: 'lfo1', label: 'LFO 1', group: 'LFO' },
-  { value: 'lfo2', label: 'LFO 2', group: 'LFO' },
-  { value: 'ampEnv', label: 'Amp Env', group: 'Envelope' },
-  { value: 'filterEnv', label: 'Filter Env', group: 'Envelope' },
-  { value: 'modEnv', label: 'Mod Env', group: 'Envelope' },
-  { value: 'velocity', label: 'Velocity', group: 'MIDI' },
-  { value: 'modWheel', label: 'Mod Wheel', group: 'MIDI' },
-  { value: 'macro1', label: 'Macro 1', group: 'Macro' },
-  { value: 'macro2', label: 'Macro 2', group: 'Macro' },
-  { value: 'macro3', label: 'Macro 3', group: 'Macro' },
-  { value: 'macro4', label: 'Macro 4', group: 'Macro' },
+const SOURCE_OPTIONS: { value: ModulationSource; label: string; group: string; supported: boolean }[] = [
+  { value: 'lfo1', label: 'LFO 1', group: 'LFO', supported: true },
+  { value: 'lfo2', label: 'LFO 2', group: 'LFO', supported: true },
+  { value: 'ampEnv', label: 'Amp Env (coming soon)', group: 'Envelope', supported: false },
+  { value: 'filterEnv', label: 'Filter Env (coming soon)', group: 'Envelope', supported: false },
+  { value: 'modEnv', label: 'Mod Env (coming soon)', group: 'Envelope', supported: false },
+  { value: 'velocity', label: 'Velocity (coming soon)', group: 'MIDI', supported: false },
+  { value: 'modWheel', label: 'Mod Wheel (coming soon)', group: 'MIDI', supported: false },
+  { value: 'macro1', label: 'Macro 1', group: 'Macro', supported: true },
+  { value: 'macro2', label: 'Macro 2', group: 'Macro', supported: true },
+  { value: 'macro3', label: 'Macro 3', group: 'Macro', supported: true },
+  { value: 'macro4', label: 'Macro 4', group: 'Macro', supported: true },
 ];
 
-const DESTINATION_OPTIONS: { value: ModulationDestination; label: string }[] = [
-  { value: 'pitch', label: 'Pitch' },
-  { value: 'filterCutoff', label: 'Filter Cutoff' },
-  { value: 'filterResonance', label: 'Filter Resonance' },
-  { value: 'amp', label: 'Amplitude' },
-  { value: 'pan', label: 'Pan' },
-  { value: 'oscLevel', label: 'Osc Level' },
-  { value: 'lfo1Rate', label: 'LFO 1 Rate' },
-  { value: 'lfo2Rate', label: 'LFO 2 Rate' },
-  { value: 'fmIndex', label: 'FM Index' },
-  { value: 'wtPosition', label: 'WT Position' },
+const DESTINATION_OPTIONS: { value: ModulationDestination; label: string; supported: boolean }[] = [
+  { value: 'pitch', label: 'Pitch', supported: true },
+  { value: 'filterCutoff', label: 'Filter Cutoff', supported: true },
+  { value: 'filterResonance', label: 'Filter Resonance', supported: true },
+  { value: 'amp', label: 'Amplitude', supported: true },
+  { value: 'pan', label: 'Pan', supported: true },
+  { value: 'oscLevel', label: 'Osc Level (coming soon)', supported: false },
+  { value: 'lfo1Rate', label: 'LFO 1 Rate (coming soon)', supported: false },
+  { value: 'lfo2Rate', label: 'LFO 2 Rate (coming soon)', supported: false },
+  { value: 'fmIndex', label: 'FM Index (coming soon)', supported: false },
+  { value: 'wtPosition', label: 'WT Position (coming soon)', supported: false },
 ];
 
 const LFO_WAVEFORMS: { value: InstrumentWaveform; label: string }[] = [
@@ -101,7 +101,7 @@ function LfoSection({
         label="Rate"
         unit="Hz"
         variant="sm"
-        formatValue={(v) => v < 1 ? `${(v * 1000).toFixed(0)}ms` : `${v.toFixed(1)}Hz`}
+        formatValue={(v) => v < 1 ? `${(1000 / v).toFixed(0)}ms` : `${v.toFixed(1)}Hz`}
       />
       <label className="flex items-center gap-1 text-[10px] text-zinc-400 cursor-pointer">
         <input
@@ -144,7 +144,7 @@ function SlotRow({
         data-testid={`mod-slot-${index}-source`}
       >
         {SOURCE_OPTIONS.map((s) => (
-          <option key={s.value} value={s.value}>{s.label}</option>
+          <option key={s.value} value={s.value} disabled={!s.supported}>{s.label}</option>
         ))}
       </select>
       <span className="text-[10px] text-zinc-500">→</span>
@@ -156,7 +156,7 @@ function SlotRow({
         data-testid={`mod-slot-${index}-dest`}
       >
         {DESTINATION_OPTIONS.map((d) => (
-          <option key={d.value} value={d.value}>{d.label}</option>
+          <option key={d.value} value={d.value} disabled={!d.supported}>{d.label}</option>
         ))}
       </select>
       <div className="flex items-center gap-1 w-[120px] shrink-0">
@@ -261,7 +261,7 @@ export function ModulationMatrixPanel({ trackId }: ModulationMatrixPanelProps) {
 
   const handleMacroChange = useCallback(
     (macroIndex: number, value: number) => {
-      const newMacros: [number, number, number, number] = [...modSettings.macros];
+      const newMacros = [...modSettings.macros] as [number, number, number, number];
       newMacros[macroIndex] = value;
       updateModulation(trackId, { macros: newMacros });
     },

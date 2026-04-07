@@ -32,6 +32,8 @@ function makeProfile(overrides: Partial<VoiceProfile> = {}): VoiceProfile {
     duration: 30,
     fileSize: 1024,
     waveformPeaks: [0.5],
+    defaultAudioInfluence: 0.4,
+    defaultStyleInfluence: 0.6,
     createdAt: 1000,
     updatedAt: 2000,
     ...overrides,
@@ -46,6 +48,8 @@ beforeEach(() => {
   useVoiceStore.setState({
     profiles: [],
     selectedProfileId: null,
+    audioInfluence: 0.4,
+    styleInfluence: 0.6,
     loading: false,
     recording: false,
     error: null,

@@ -15,6 +15,10 @@ const VOICE_WAVEFORM_PEAKS = 64;
 export interface VoiceStoreState {
   profiles: VoiceProfile[];
   selectedProfileId: string | null;
+  /** Audio influence: how much to preserve reference voice (0-1) */
+  audioInfluence: number;
+  /** Style influence: how much AI style to apply (0-1) */
+  styleInfluence: number;
   loading: boolean;
   recording: boolean;
   error: string | null;
@@ -44,6 +48,15 @@ export interface VoiceStoreActions {
   /** Set recording state */
   setRecording: (recording: boolean) => void;
 
+  /** Set audio influence */
+  setAudioInfluence: (value: number) => void;
+
+  /** Set style influence */
+  setStyleInfluence: (value: number) => void;
+
+  /** Apply an influence preset */
+  applyInfluencePreset: (audioInfluence: number, styleInfluence: number) => void;
+
   /** Clear error */
   clearError: () => void;
 }
@@ -53,6 +66,8 @@ export type VoiceStore = VoiceStoreState & VoiceStoreActions;
 export const useVoiceStore = create<VoiceStore>()((set, get) => ({
   profiles: [],
   selectedProfileId: null,
+  audioInfluence: 0.4,
+  styleInfluence: 0.6,
   loading: false,
   recording: false,
   error: null,
@@ -92,6 +107,8 @@ export const useVoiceStore = create<VoiceStore>()((set, get) => ({
       duration: durationSec,
       fileSize: audioBlob.size,
       waveformPeaks: peaks,
+      defaultAudioInfluence: 0.4,
+      defaultStyleInfluence: 0.6,
       createdAt: now,
       updatedAt: now,
     };
@@ -116,7 +133,24 @@ export const useVoiceStore = create<VoiceStore>()((set, get) => ({
     }));
   },
 
-  selectProfile: (id) => set({ selectedProfileId: id }),
+  selectProfile: (id) => {
+    if (id) {
+      const profile = get().profiles.find((p) => p.id === id);
+      if (profile) {
+        set({
+          selectedProfileId: id,
+          audioInfluence: profile.defaultAudioInfluence,
+          styleInfluence: profile.defaultStyleInfluence,
+        });
+        return;
+      }
+    }
+    set({ selectedProfileId: id });
+  },
+
+  setAudioInfluence: (value) => set({ audioInfluence: Math.max(0, Math.min(1, value)) }),
+  setStyleInfluence: (value) => set({ styleInfluence: Math.max(0, Math.min(1, value)) }),
+  applyInfluencePreset: (audioInfluence, styleInfluence) => set({ audioInfluence, styleInfluence }),
 
   setRecording: (recording) => set({ recording }),
 

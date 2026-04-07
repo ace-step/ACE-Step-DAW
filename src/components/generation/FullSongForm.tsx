@@ -13,6 +13,7 @@ import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
 import { VoiceLibrary } from './VoiceLibrary';
+import { VoiceInfluenceControls } from './VoiceInfluenceControls';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -344,6 +345,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
 
       {/* Voice Reference (collapsed by default) */}
       <VoiceLibrary disabled={isDisabled} />
+
+      {/* Voice Influence sliders — only visible when a voice is selected */}
+      <VoiceInfluenceControls disabled={isDisabled} />
 
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">

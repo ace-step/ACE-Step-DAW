@@ -36,6 +36,8 @@ function makeProfile(overrides: Partial<VoiceProfile> = {}): VoiceProfile {
     duration: 30,
     fileSize: 1024 * 100,
     waveformPeaks: [0.1, 0.5, 0.8],
+    defaultAudioInfluence: 0.4,
+    defaultStyleInfluence: 0.6,
     createdAt: 1000,
     updatedAt: 2000,
     ...overrides,

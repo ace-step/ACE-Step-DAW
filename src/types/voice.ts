@@ -13,9 +13,26 @@ export interface VoiceProfile {
   fileSize: number;
   /** Waveform peaks for visual preview (0-1 normalized) */
   waveformPeaks: number[];
+  /** Default audio influence (0-1): how much to preserve reference voice */
+  defaultAudioInfluence: number;
+  /** Default style influence (0-1): how much AI style to apply */
+  defaultStyleInfluence: number;
   createdAt: number;
   updatedAt: number;
 }
+
+/** Influence preset: named combination of audio + style influence */
+export interface VoiceInfluencePreset {
+  name: string;
+  audioInfluence: number;
+  styleInfluence: number;
+}
+
+export const VOICE_INFLUENCE_PRESETS: VoiceInfluencePreset[] = [
+  { name: 'Natural', audioInfluence: 0.4, styleInfluence: 0.6 },
+  { name: 'AI Enhanced', audioInfluence: 0.2, styleInfluence: 0.8 },
+  { name: 'Voice Forward', audioInfluence: 0.7, styleInfluence: 0.3 },
+];
 
 /** Minimum recording duration in seconds */
 export const MIN_VOICE_DURATION = 10;

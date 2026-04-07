@@ -983,6 +983,10 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
     }
     case 'spectralMorph': {
       const p = effect.params as SpectralMorphParams;
+      // sourceTrackId wiring is not yet implemented — morph uses frozen self-snapshot only
+      if (p.sourceTrackId) {
+        console.warn(`[EffectsEngine] spectralMorph.sourceTrackId is not wired yet; using self-snapshot morph.`);
+      }
       mixValue = p.mix;
       processor.morphAmount = p.morphAmount;
       if (p.frozen) processor.freeze();
@@ -993,7 +997,9 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
   dryGain.gain.value = 1 - mixValue;
   wetGain.gain.value = mixValue;
 
-  // Use ScriptProcessorNode for spectral processing (AudioWorklet in future)
+  // NOTE: ScriptProcessorNode is deprecated but used here as a bridge until
+  // AudioWorklet-based spectral processing is implemented. The SpectralProcessor
+  // class is already AudioWorklet-safe (zero allocations in processBlock).
   const bufferSize = fftSize;
   const scriptNode = ctx.createScriptProcessor(bufferSize, 1, 1);
   scriptNode.onaudioprocess = (e) => {

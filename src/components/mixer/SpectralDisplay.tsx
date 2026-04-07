@@ -4,6 +4,7 @@
  */
 import { useRef, useEffect, useCallback } from 'react';
 import { effectsEngine } from '../../engine/EffectsEngine';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 
 interface SpectralDisplayProps {
   trackId: string;
@@ -61,6 +62,11 @@ export function SpectralDisplay({ trackId, effectId, width, height, color, froze
       return;
     }
 
+    // Use actual audio context sample rate for correct frequency mapping
+    let sampleRate = 44100;
+    try { sampleRate = getAudioEngine().ctx.sampleRate; } catch { /* fallback */ }
+    const nyquist = sampleRate / 2;
+
     // Draw spectrum as filled area
     ctx.beginPath();
     ctx.moveTo(0, height);
@@ -69,7 +75,7 @@ export function SpectralDisplay({ trackId, effectId, width, height, color, froze
       // Map pixel to frequency (logarithmic)
       const freq = 20 * Math.pow(20000 / 20, px / width);
       // Map frequency to bin
-      const bin = Math.round((freq / (44100 / 2)) * halfN);
+      const bin = Math.round((freq / nyquist) * halfN);
       const clampedBin = Math.max(0, Math.min(halfN - 1, bin));
       const magnitude = mag[clampedBin];
 
@@ -96,7 +102,7 @@ export function SpectralDisplay({ trackId, effectId, width, height, color, froze
     ctx.moveTo(0, height);
     for (let px = 0; px < width; px++) {
       const freq = 20 * Math.pow(20000 / 20, px / width);
-      const bin = Math.round((freq / (44100 / 2)) * halfN);
+      const bin = Math.round((freq / nyquist) * halfN);
       const clampedBin = Math.max(0, Math.min(halfN - 1, bin));
       const magnitude = mag[clampedBin];
       const db = magnitude > 0 ? 20 * Math.log10(magnitude) : -120;

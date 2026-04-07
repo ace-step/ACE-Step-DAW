@@ -125,6 +125,10 @@ export class SpectralProcessor {
   private readonly frozenMag: Float32Array;
   private readonly frozenPhase: Float32Array;
   private isFrozen = false;
+  private hasSnapshot = false; // explicit flag for freeze snapshot capture
+
+  // Window normalization buffer for overlap-add reconstruction
+  private readonly windowSum: Float32Array;
 
   // Blur accumulator
   private readonly blurAccumMag: Float32Array;
@@ -172,6 +176,15 @@ export class SpectralProcessor {
     this.morphMag = new Float32Array(config.fftSize >> 1);
     this.morphPhase = new Float32Array(config.fftSize >> 1);
 
+    // Pre-compute window normalization for overlap-add (window^2 sum at 50% overlap)
+    this.windowSum = new Float32Array(config.fftSize);
+    const hop = config.fftSize >> 1;
+    for (let i = 0; i < config.fftSize; i++) {
+      const w1 = this.window[i];
+      const w2 = this.window[(i + hop) % config.fftSize];
+      this.windowSum[i] = w1 * w1 + w2 * w2;
+    }
+
     this.mode = config.mode;
   }
 
@@ -205,9 +218,10 @@ export class SpectralProcessor {
     this.isFrozen = true;
   }
 
-  /** Release freeze. */
+  /** Release freeze and reset snapshot so next freeze captures fresh. */
   unfreeze(): void {
     this.isFrozen = false;
+    this.hasSnapshot = false;
   }
 
   /** Set the filter curve from control points (linear magnitude multipliers). */
@@ -277,35 +291,47 @@ export class SpectralProcessor {
       this.fftRe[i] = this.magnitude[i] * Math.cos(this.phase[i]);
       this.fftIm[i] = this.magnitude[i] * Math.sin(this.phase[i]);
     }
-    // Mirror for real signal
-    for (let i = halfN; i < N; i++) {
-      this.fftRe[i] = this.fftRe[N - i];
-      this.fftIm[i] = -this.fftIm[N - i];
+    // DC bin: force imaginary to 0
+    this.fftIm[0] = 0;
+    // Mirror for real signal (bins 1..halfN-1 only; Nyquist handled separately)
+    for (let i = 1; i < halfN; i++) {
+      this.fftRe[N - i] = this.fftRe[i];
+      this.fftIm[N - i] = -this.fftIm[i];
+    }
+    // Nyquist bin: force imaginary to 0
+    if (halfN < N) {
+      this.fftIm[halfN] = 0;
     }
 
     // Inverse FFT
     ifft(this.fftRe, this.fftIm);
 
-    // Overlap-add with window
+    // Overlap-add with normalized synthesis window
+    // Analysis already applied window, so synthesis window produces window^2.
+    // Normalize by pre-computed window sum for unity pass-through.
     for (let i = 0; i < N; i++) {
       const outIdx = (this.outputReadPos + i) % this.outputBuffer.length;
-      this.outputBuffer[outIdx] += this.fftRe[i] * this.window[i];
+      const w = this.window[i];
+      const norm = this.windowSum[i];
+      const synthesisGain = norm > 1e-12 ? w / norm : 0;
+      this.outputBuffer[outIdx] += this.fftRe[i] * synthesisGain;
     }
   }
 
   private applyFreeze(halfN: number): void {
     if (this.isFrozen) {
-      // On first frozen frame, capture snapshot
-      if (this.frozenMag[0] === 0 && this.frozenMag[1] === 0) {
+      // On first frozen frame, capture snapshot (explicit flag avoids bin-value check)
+      if (!this.hasSnapshot) {
         this.frozenMag.set(this.magnitude.subarray(0, halfN));
         this.frozenPhase.set(this.phase.subarray(0, halfN));
+        this.hasSnapshot = true;
       }
 
-      // Apply decay (1 = infinite hold, <1 = gradual fade)
-      const decay = this.freezeDecay;
+      // Decay: map 0–1 to a meaningful per-frame multiplier.
+      // decay=1 → infinite hold, decay=0 → ~50ms fade at 44.1kHz/2048 hop
+      const decayPerFrame = this.freezeDecay >= 1 ? 1 : Math.pow(this.freezeDecay, 0.1);
 
       for (let i = 0; i < halfN; i++) {
-        // Blend between frozen and current based on mix
         let mag = this.frozenMag[i];
 
         // Apply brightness tilt
@@ -316,18 +342,14 @@ export class SpectralProcessor {
         }
 
         this.magnitude[i] = mag;
-        // Use current phase for more natural sound
-        // (frozen phase creates a static drone)
 
-        // Decay the frozen spectrum slightly
-        if (decay < 1) {
-          this.frozenMag[i] *= decay + (1 - decay) * 0.999;
+        // Decay the frozen spectrum
+        if (decayPerFrame < 1) {
+          this.frozenMag[i] *= decayPerFrame;
         }
       }
     } else {
-      // When unfrozen, clear snapshot so next freeze captures fresh
-      this.frozenMag.fill(0);
-      this.frozenPhase.fill(0);
+      // Snapshot is cleared on unfreeze() via hasSnapshot flag
     }
   }
 

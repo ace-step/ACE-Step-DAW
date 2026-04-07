@@ -2,7 +2,7 @@
  * SpectralFilterCard — Spectral filter with drawable frequency response curve.
  * Users can draw a filter curve by adding/moving control points on a frequency display.
  */
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { HSlider } from '../../ui/HSlider';
 import { Knob } from '../../ui/Knob';
 import { EffectCardLayout } from '../EffectCardLayout';
@@ -127,8 +127,11 @@ export function SpectralFilterCard({ effect, trackId }: { effect: TrackEffect & 
     }
   }, [p.points, draggingIdx]);
 
-  // Redraw on every render
-  requestAnimationFrame(drawCurve);
+  // Redraw when points or drag state change
+  useEffect(() => {
+    const id = requestAnimationFrame(drawCurve);
+    return () => cancelAnimationFrame(id);
+  }, [drawCurve]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();

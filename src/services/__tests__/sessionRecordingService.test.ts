@@ -229,6 +229,88 @@ describe('SessionRecordingService', () => {
       service.setCountInBars(5);
       expect(service.getCountInBars()).toBe(4);
     });
+
+    it('marks slot as counting in during count-in phase', () => {
+      service.setCountInBars(2);
+      service.startRecording({
+        slotId: 'slot-1',
+        trackId: 'track-1',
+        trackType: 'pianoRoll',
+        bpm: 120,
+        timeSignature: 4,
+      });
+
+      expect(service.isSlotCountingIn('slot-1')).toBe(true);
+      expect(service.isSlotRecording('slot-1')).toBe(true); // slot is "in recording" even during count-in
+      // Clean up
+      service.stopRecording('slot-1');
+    });
+
+    it('returns null when stopped during count-in', () => {
+      service.setCountInBars(2);
+      service.startRecording({
+        slotId: 'slot-1',
+        trackId: 'track-1',
+        trackType: 'pianoRoll',
+        bpm: 120,
+        timeSignature: 4,
+      });
+
+      const result = service.stopRecording('slot-1');
+      expect(result).toBeNull(); // Cancelled during count-in
+    });
+
+    it('ignores MIDI input during count-in phase', () => {
+      service.setCountInBars(2);
+      service.startRecording({
+        slotId: 'slot-1',
+        trackId: 'track-1',
+        trackType: 'pianoRoll',
+        bpm: 120,
+        timeSignature: 4,
+      });
+
+      const recordings = service.getActiveRecordings();
+      const startTime = recordings['slot-1'].startTime;
+      service.addMidiNote('slot-1', 60, 0.8, startTime + 0.1);
+      service.endMidiNote('slot-1', 60, startTime + 0.5);
+
+      // Stop during count-in — should be null
+      const result = service.stopRecording('slot-1');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('overdub merge', () => {
+    it('merges new notes with existing notes', () => {
+      const existing: Array<{ pitch: number; velocity: number; startBeat: number; durationBeats: number }> = [
+        { pitch: 60, velocity: 0.8, startBeat: 0, durationBeats: 1 },
+      ];
+      const newNotes: Array<{ pitch: number; velocity: number; startBeat: number; durationBeats: number }> = [
+        { pitch: 64, velocity: 0.6, startBeat: 1, durationBeats: 1 },
+      ];
+
+      const merged = service.mergeOverdubNotes(existing, newNotes);
+      expect(merged).toHaveLength(2);
+      expect(merged[0].pitch).toBe(60);
+      expect(merged[1].pitch).toBe(64);
+    });
+  });
+
+  describe('auto-loop', () => {
+    it('recording result includes autoLoop flag', () => {
+      service.startRecording({
+        slotId: 'slot-1',
+        trackId: 'track-1',
+        trackType: 'pianoRoll',
+        bpm: 120,
+        timeSignature: 4,
+      });
+
+      const result = service.stopRecording('slot-1');
+      expect(result).not.toBeNull();
+      expect(result!.autoLoop).toBe(true);
+    });
   });
 
   describe('isSlotRecording', () => {

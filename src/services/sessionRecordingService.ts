@@ -9,6 +9,7 @@
  * - Fixed-length recording with automatic stop
  * - MIDI overdub mode for layering notes on loop
  * - Count-in before recording starts
+ * - Auto-loop playback on recording completion
  */
 
 export interface MidiNoteRecord {
@@ -25,9 +26,13 @@ export interface SessionRecordingState {
   trackId: string;
   trackType: string;
   isRecording: boolean;
+  /** True during count-in phase (before actual recording starts). */
+  isCountingIn: boolean;
   startTime: number;
   bpm: number;
   timeSignature: number;
+  /** Count-in bars remaining (0 = no count-in). */
+  countInBarsRemaining: number;
 }
 
 export interface RecordingResult {
@@ -40,6 +45,8 @@ export interface RecordingResult {
   midiNotes?: MidiNoteRecord[];
   /** Audio blob (for audio tracks). */
   audioBlob?: Blob;
+  /** Whether auto-loop should be triggered after recording. */
+  autoLoop: boolean;
 }
 
 interface StartRecordingParams {
@@ -70,32 +77,74 @@ export class SessionRecordingService {
   private fixedLengthBars: number | null = null;
   private overdubMode = false;
   private countInBars = 0;
+  private countInTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  /** Start recording in a session slot. */
+  /** Start recording in a session slot (with optional count-in). */
   startRecording(params: StartRecordingParams): void {
     if (this.activeRecordings.has(params.slotId)) {
       throw new Error(`Already recording in slot ${params.slotId}`);
     }
 
+    const hasCountIn = this.countInBars > 0;
+
     const state: SessionRecordingState = {
       slotId: params.slotId,
       trackId: params.trackId,
       trackType: params.trackType,
-      isRecording: true,
+      isRecording: !hasCountIn,
+      isCountingIn: hasCountIn,
       startTime: performance.now() / 1000,
       bpm: params.bpm,
       timeSignature: params.timeSignature,
+      countInBarsRemaining: this.countInBars,
     };
 
     this.activeRecordings.set(params.slotId, state);
     this.midiEvents.set(params.slotId, []);
     this.activeNotes.set(params.slotId, new Map());
+
+    // If count-in, schedule the transition to recording
+    if (hasCountIn) {
+      const secondsPerBeat = 60 / params.bpm;
+      const countInDuration = this.countInBars * params.timeSignature * secondsPerBeat;
+      const timer = setTimeout(() => {
+        const current = this.activeRecordings.get(params.slotId);
+        if (current && current.isCountingIn) {
+          this.activeRecordings.set(params.slotId, {
+            ...current,
+            isCountingIn: false,
+            isRecording: true,
+            startTime: performance.now() / 1000,
+            countInBarsRemaining: 0,
+          });
+          // Re-initialize MIDI buffer from actual recording start
+          this.midiEvents.set(params.slotId, []);
+        }
+        this.countInTimers.delete(params.slotId);
+      }, countInDuration * 1000);
+      this.countInTimers.set(params.slotId, timer);
+    }
   }
 
   /** Stop recording in a slot and return captured data. */
   stopRecording(slotId: string): RecordingResult | null {
     const state = this.activeRecordings.get(slotId);
     if (!state) return null;
+
+    // Clear count-in timer if still counting in
+    const countInTimer = this.countInTimers.get(slotId);
+    if (countInTimer) {
+      clearTimeout(countInTimer);
+      this.countInTimers.delete(slotId);
+    }
+
+    // If still counting in, cancel without producing a result
+    if (state.isCountingIn) {
+      this.activeRecordings.delete(slotId);
+      this.midiEvents.delete(slotId);
+      this.activeNotes.delete(slotId);
+      return null;
+    }
 
     const stopTime = performance.now() / 1000;
     const secondsPerBeat = 60 / state.bpm;
@@ -135,12 +184,10 @@ export class SessionRecordingService {
     const midiNotes: MidiNoteRecord[] = rawEvents.map((e) => {
       const relativeStart = e.startTime - state.startTime;
       const relativeEnd = e.endTime - state.startTime;
-      const startBeat = relativeStart / secondsPerBeat;
-      const durationBeats = (relativeEnd - e.startTime + state.startTime - e.startTime) / secondsPerBeat;
       return {
         pitch: e.pitch,
         velocity: e.velocity,
-        startBeat: Math.round(startBeat * 1000) / 1000,
+        startBeat: Math.round((relativeStart / secondsPerBeat) * 1000) / 1000,
         durationBeats: Math.round(((relativeEnd - relativeStart) / secondsPerBeat) * 1000) / 1000,
       };
     });
@@ -156,11 +203,15 @@ export class SessionRecordingService {
       trackType: state.trackType,
       clipDuration,
       midiNotes,
+      autoLoop: true,
     };
   }
 
   /** Record a MIDI note-on event. */
   addMidiNote(slotId: string, pitch: number, velocity: number, timestamp: number): void {
+    const state = this.activeRecordings.get(slotId);
+    // Don't record during count-in
+    if (!state || state.isCountingIn) return;
     const active = this.activeNotes.get(slotId);
     if (!active) return;
     active.set(pitch, { pitch, velocity, startTime: timestamp });
@@ -185,6 +236,17 @@ export class SessionRecordingService {
     active.delete(pitch);
   }
 
+  /**
+   * Merge recorded MIDI notes with existing clip notes (overdub).
+   * Returns a combined array of notes.
+   */
+  mergeOverdubNotes(
+    existingNotes: MidiNoteRecord[],
+    newNotes: MidiNoteRecord[],
+  ): MidiNoteRecord[] {
+    return [...existingNotes, ...newNotes];
+  }
+
   /** Get all active recording states. */
   getActiveRecordings(): Record<string, SessionRecordingState> {
     return Object.fromEntries(this.activeRecordings);
@@ -193,6 +255,12 @@ export class SessionRecordingService {
   /** Check if a specific slot is recording. */
   isSlotRecording(slotId: string): boolean {
     return this.activeRecordings.has(slotId);
+  }
+
+  /** Check if a specific slot is in count-in phase. */
+  isSlotCountingIn(slotId: string): boolean {
+    const state = this.activeRecordings.get(slotId);
+    return state?.isCountingIn ?? false;
   }
 
   /** Stop all active recordings and return results. */

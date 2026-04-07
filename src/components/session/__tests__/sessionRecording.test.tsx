@@ -216,4 +216,15 @@ describe('Session Recording UI', () => {
     render(<SessionView />);
     expect(screen.getByTestId('overdub-toggle')).toHaveTextContent('Overdub OFF');
   });
+
+  it('renders count-in select in toolbar', () => {
+    render(<SessionView />);
+    expect(screen.getByTestId('count-in-select')).toBeInTheDocument();
+  });
+
+  it('count-in defaults to no count-in', () => {
+    render(<SessionView />);
+    const select = screen.getByTestId('count-in-select') as HTMLSelectElement;
+    expect(select.value).toBe('0');
+  });
 });

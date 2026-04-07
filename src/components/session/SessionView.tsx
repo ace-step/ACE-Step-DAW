@@ -160,13 +160,18 @@ export function SessionView() {
   const [recordingSlots, setRecordingSlots] = useState<Set<string>>(new Set());
   const [fixedLengthBars, setFixedLengthBars] = useState<number | null>(null);
   const [overdubMode, setOverdubMode] = useState(false);
+  const [countInBars, setCountInBars] = useState(0);
   // Ref for timer-based fixed-length auto-stop
   const fixedLengthTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  // Sync fixed-length setting to service
+  // Sync settings to service
   useEffect(() => {
     recordingService.setFixedLengthBars(fixedLengthBars);
   }, [fixedLengthBars, recordingService]);
+
+  useEffect(() => {
+    recordingService.setCountInBars(countInBars);
+  }, [countInBars, recordingService]);
 
   useEffect(() => {
     recordingService.setOverdubMode(overdubMode);
@@ -217,6 +222,10 @@ export function SessionView() {
       if (sceneId) {
         assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
       }
+      // Auto-loop: launch the newly recorded clip
+      if (result.autoLoop) {
+        void launchSessionClip(result.trackId, newClip.id, sceneIndex);
+      }
     } else if (!isMidi) {
       // Audio recording — create a placeholder clip (actual audio handled by RecordingEngine)
       const newClip = addClip(result.trackId, {
@@ -229,8 +238,11 @@ export function SessionView() {
       if (sceneId) {
         assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
       }
+      if (result.autoLoop) {
+        void launchSessionClip(result.trackId, newClip.id, sceneIndex);
+      }
     }
-  }, [project, recordingService, addClip, assignClipToSessionSlot]);
+  }, [project, recordingService, addClip, assignClipToSessionSlot, launchSessionClip]);
 
   /** Start recording into a session slot. */
   const handleStartSlotRecording = useCallback((slotId: string, trackId: string, trackType: string, sceneIndex: number) => {
@@ -503,6 +515,18 @@ export function SessionView() {
             >
               Overdub {overdubMode ? 'ON' : 'OFF'}
             </button>
+            <select
+              value={countInBars}
+              onChange={(e) => setCountInBars(Number(e.target.value))}
+              className="rounded bg-[#2a2a2a] border border-[#444] px-1.5 py-1 text-[11px] text-zinc-200 outline-none"
+              aria-label="Count-in bars before recording"
+              data-testid="count-in-select"
+            >
+              <option value={0}>No count-in</option>
+              <option value={1}>1 bar count-in</option>
+              <option value={2}>2 bars count-in</option>
+              <option value={4}>4 bars count-in</option>
+            </select>
             <button
               onClick={() => setMidiEnabled((v) => !v)}
               className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors ${

@@ -3,8 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ModelEntry, LmModelEntry, StatsResponse, ModelCategory, GenerationIntent, ModelCapability, AiTaskType } from '../types/api';
 import { listModels, initModel, getStats, inferModelCategory } from '../services/aceStepApi';
 import { checkProviderHealth as checkProviderHealthApi, TASK_TYPE_TO_CAPABILITY, type ProviderHealthResult } from '../services/unifiedTaskRouter';
+import { GpuMemoryManager, type GpuMemoryState } from '../services/gpuMemoryManager';
 
 const POLLING_INTERVAL_MS = 30_000;
+
+/** Shared GPU memory manager instance — tracks model VRAM across the session */
+const gpuMemoryManager = new GpuMemoryManager();
 
 /**
  * Map a GenerationIntent to the required ModelCategory.
@@ -43,6 +47,8 @@ export interface ModelStore {
 
   /** Per-capability provider health status (#741) */
   providerHealth: Partial<Record<ModelCapability, ProviderHealthResult>>;
+  /** Estimated GPU memory state (#741) */
+  gpuMemory: GpuMemoryState;
 
   // Existing actions
   refreshModels: () => Promise<void>;
@@ -68,6 +74,10 @@ export interface ModelStore {
   getProviderStatus: (capability: ModelCapability) => ProviderHealthResult['status'] | 'unknown';
   isProviderAvailable: (capability: ModelCapability) => boolean;
   getCapabilityForTaskType: (taskType: AiTaskType) => ModelCapability;
+
+  // GPU memory management (#741)
+  getGpuMemoryState: () => GpuMemoryState;
+  canFitModel: (vramGb: number) => boolean;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -84,12 +94,17 @@ export const useModelStore = create<ModelStore>()(
       lastRefreshedAt: 0,
       stats: null,
       providerHealth: {},
+      gpuMemory: gpuMemoryManager.getState(),
 
       refreshModels: async () => {
         try {
           const response = await listModels();
           const loadedModel = response.models.find((m) => m.is_loaded);
           const loadedLmModel = response.lm_models.find((m) => m.is_loaded);
+
+          // Sync GPU memory tracker with server inventory
+          gpuMemoryManager.syncFromInventory(response.models);
+
           set({
             availableModels: response.models,
             availableLmModels: response.lm_models,
@@ -97,6 +112,7 @@ export const useModelStore = create<ModelStore>()(
             activeLmModelId: loadedLmModel?.name ?? response.loaded_lm_model ?? null,
             connected: true,
             lastRefreshedAt: Date.now(),
+            gpuMemory: gpuMemoryManager.getState(),
           });
         } catch {
           set({ connected: false });
@@ -279,6 +295,16 @@ export const useModelStore = create<ModelStore>()(
 
       getCapabilityForTaskType: (taskType: AiTaskType) => {
         return TASK_TYPE_TO_CAPABILITY[taskType];
+      },
+
+      // --- GPU memory management (#741) ---
+
+      getGpuMemoryState: () => {
+        return gpuMemoryManager.getState();
+      },
+
+      canFitModel: (vramGb: number) => {
+        return gpuMemoryManager.canFitModel(vramGb);
       },
     }),
     {

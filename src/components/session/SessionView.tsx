@@ -154,6 +154,7 @@ export function SessionView() {
   const recordingService = useMemo(() => getSessionRecordingService(), []);
   const toggleArmTrack = useTransportStore((s) => s.toggleArmTrack);
   const addClip = useProjectStore((s) => s.addClip);
+  const updateClip = useProjectStore((s) => s.updateClip);
   const assignClipToSessionSlot = useProjectStore((s) => s.assignClipToSessionSlot);
 
   // Session recording state
@@ -199,32 +200,65 @@ export function SessionView() {
     const track = project.tracks.find((t) => t.id === result.trackId);
     if (!track) return;
 
-    // Create clip from recording result
+    // Create clip from recording result (or merge with existing if overdub)
     const sceneId = project.session?.scenes?.[sceneIndex]?.id;
+    const existingSlot = sceneId ? project.session?.slots?.find(
+      (s) => s.trackId === result.trackId && s.sceneId === sceneId,
+    ) : undefined;
+    const existingClip = existingSlot?.clipId
+      ? track.clips.find((c) => c.id === existingSlot.clipId)
+      : undefined;
+
     if (isMidi && result.midiNotes && result.midiNotes.length > 0) {
-      const newClip = addClip(result.trackId, {
-        startTime: 0,
-        duration: result.clipDuration,
-        prompt: `Recorded ${track.displayName}`,
-        lyrics: '',
-        source: 'uploaded',
-        midiData: {
-          notes: result.midiNotes.map((n) => ({
-            id: crypto.randomUUID(),
-            pitch: n.pitch,
-            velocity: n.velocity,
-            startBeat: n.startBeat,
-            durationBeats: n.durationBeats,
-          })),
-          grid: '1/16' as const,
-        },
-      });
-      if (sceneId) {
-        assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
-      }
-      // Auto-loop: launch the newly recorded clip
-      if (result.autoLoop) {
-        void launchSessionClip(result.trackId, newClip.id, sceneIndex);
+      // Overdub: merge new notes into existing clip
+      if (overdubMode && existingClip?.midiData) {
+        const existingNotes = existingClip.midiData.notes.map((n) => ({
+          pitch: n.pitch,
+          velocity: n.velocity,
+          startBeat: n.startBeat,
+          durationBeats: n.durationBeats,
+        }));
+        const merged = recordingService.mergeOverdubNotes(existingNotes, result.midiNotes);
+        updateClip(existingClip.id, {
+          midiData: {
+            notes: merged.map((n) => ({
+              id: crypto.randomUUID(),
+              pitch: n.pitch,
+              velocity: n.velocity,
+              startBeat: n.startBeat,
+              durationBeats: n.durationBeats,
+            })),
+            grid: existingClip.midiData.grid ?? '1/16',
+          },
+        });
+        if (result.autoLoop) {
+          void launchSessionClip(result.trackId, existingClip.id, sceneIndex);
+        }
+      } else {
+        // New clip
+        const newClip = addClip(result.trackId, {
+          startTime: 0,
+          duration: result.clipDuration,
+          prompt: `Recorded ${track.displayName}`,
+          lyrics: '',
+          source: 'uploaded',
+          midiData: {
+            notes: result.midiNotes.map((n) => ({
+              id: crypto.randomUUID(),
+              pitch: n.pitch,
+              velocity: n.velocity,
+              startBeat: n.startBeat,
+              durationBeats: n.durationBeats,
+            })),
+            grid: '1/16' as const,
+          },
+        });
+        if (sceneId) {
+          assignClipToSessionSlot(result.trackId, sceneId, newClip.id);
+        }
+        if (result.autoLoop) {
+          void launchSessionClip(result.trackId, newClip.id, sceneIndex);
+        }
       }
     } else if (!isMidi) {
       // Audio recording — create a placeholder clip (actual audio handled by RecordingEngine)
@@ -242,7 +276,7 @@ export function SessionView() {
         void launchSessionClip(result.trackId, newClip.id, sceneIndex);
       }
     }
-  }, [project, recordingService, addClip, assignClipToSessionSlot, launchSessionClip]);
+  }, [project, recordingService, addClip, updateClip, assignClipToSessionSlot, launchSessionClip, overdubMode]);
 
   /** Start recording into a session slot. */
   const handleStartSlotRecording = useCallback((slotId: string, trackId: string, trackType: string, sceneIndex: number) => {
@@ -257,20 +291,21 @@ export function SessionView() {
       });
       setRecordingSlots((prev) => new Set(prev).add(slotId));
 
-      // If fixed-length, set a timer to auto-stop
+      // If fixed-length, set a timer to auto-stop (offset by count-in duration)
       if (fixedLengthBars !== null) {
         const beatsPerBar = project.timeSignature;
         const secondsPerBeat = 60 / project.bpm;
-        const durationMs = fixedLengthBars * beatsPerBar * secondsPerBeat * 1000;
+        const countInMs = countInBars * beatsPerBar * secondsPerBeat * 1000;
+        const recordingMs = fixedLengthBars * beatsPerBar * secondsPerBeat * 1000;
         const timer = setTimeout(() => {
           handleStopSlotRecording(slotId, sceneIndex);
-        }, durationMs);
+        }, countInMs + recordingMs);
         fixedLengthTimers.current.set(slotId, timer);
       }
     } catch (err) {
       toastError(err instanceof Error ? err.message : 'Failed to start recording');
     }
-  }, [project, recordingService, fixedLengthBars, handleStopSlotRecording]);
+  }, [project, recordingService, fixedLengthBars, countInBars, handleStopSlotRecording]);
 
   /** Handle click on empty slot when track is armed — start or stop recording. */
   const handleSlotRecordClick = useCallback((slotId: string, trackId: string, trackType: string, sceneIndex: number) => {

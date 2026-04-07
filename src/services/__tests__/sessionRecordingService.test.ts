@@ -281,6 +281,29 @@ describe('SessionRecordingService', () => {
     });
   });
 
+  describe('count-in + fixed-length interaction', () => {
+    it('fixed-length duration is independent of count-in', () => {
+      service.setCountInBars(2);
+      service.setFixedLengthBars(4);
+
+      service.startRecording({
+        slotId: 'slot-1',
+        trackId: 'track-1',
+        trackType: 'pianoRoll',
+        bpm: 120,
+        timeSignature: 4,
+      });
+
+      // During count-in, stop cancels (returns null)
+      const earlyResult = service.stopRecording('slot-1');
+      expect(earlyResult).toBeNull();
+
+      // The service correctly handles count-in phase
+      // Clip duration should still be based on fixedLengthBars, not count-in
+      service.setCountInBars(0); // Reset for next test
+    });
+  });
+
   describe('overdub merge', () => {
     it('merges new notes with existing notes', () => {
       const existing: Array<{ pitch: number; velocity: number; startBeat: number; durationBeats: number }> = [

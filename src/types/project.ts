@@ -153,6 +153,8 @@ export interface SamplerConfig {
   release: number;
   /** Optional velocity layers for multi-sample velocity switching and crossfading. */
   velocityLayers?: VelocityLayer[];
+  /** Multi-sample zones mapped across key and velocity ranges. */
+  zones?: SampleZone[];
 }
 
 /** A single velocity layer in a sampler instrument zone. */
@@ -167,8 +169,36 @@ export interface VelocityLayer {
   gain: number;
 }
 
+/** A key/velocity zone in a multi-sample instrument. */
+export interface SampleZone {
+  /** Unique zone identifier. */
+  id: string;
+  /** IndexedDB audio key for this zone's sample. */
+  audioKey: string;
+  /** Display name for this zone's sample. */
+  sampleName?: string;
+  /** MIDI note the sample was recorded at (pitch reference). */
+  rootNote: number;
+  /** Lowest MIDI note this zone responds to (0–127). */
+  lowKey: number;
+  /** Highest MIDI note this zone responds to (0–127). */
+  highKey: number;
+  /** Lowest velocity this zone responds to (0–127). */
+  lowVelocity: number;
+  /** Highest velocity this zone responds to (0–127). */
+  highVelocity: number;
+  /** Per-zone volume multiplier (0–1, default 1). */
+  volume: number;
+  /** Per-zone stereo pan (-1 to 1, default 0). */
+  pan: number;
+  /** Tuning offset in cents (-1200 to 1200, default 0). */
+  tuneOffset: number;
+  /** Crossfade width in semitones for smooth transitions between adjacent zones (0–12). */
+  crossfadeWidth: number;
+}
+
 export type LegacySynthVoicePreset = Exclude<SynthPreset, 'sampler'>;
-export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'additive';
+export type InstrumentKind = 'subtractive' | 'sampler' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
 export type InstrumentWaveform = 'sine' | 'triangle' | 'square' | 'sawtooth';
 export type InstrumentLfoTarget = 'off' | 'pitch' | 'filterCutoff' | 'amp' | 'pan';
 
@@ -448,13 +478,33 @@ export interface AdditiveTrackInstrument {
   settings: AdditiveSettings;
 }
 
+export type PhysicalExciterType = 'pluck' | 'bow' | 'hammer';
+export type PhysicalModelPreset = 'acoustic-guitar' | 'harp' | 'kalimba' | 'marimba' | 'steel-drum' | 'custom';
+
+export interface PhysicalModelSettings {
+  exciter: PhysicalExciterType;
+  damping: number;       // 0–1 (how quickly the sound decays; higher = more damped)
+  brightness: number;    // 0–1 (lowpass filter in feedback; higher = brighter)
+  pluckPosition: number; // 0–1 (where along the string the excitation occurs)
+  bodySize: number;      // 0–1 (body resonance amount)
+  outputGain: number;    // dB
+}
+
+export interface PhysicalTrackInstrument {
+  kind: 'physical';
+  preset: PhysicalModelPreset;
+  name: string;
+  settings: PhysicalModelSettings;
+}
+
 export type TrackInstrument =
   | SubtractiveTrackInstrument
   | SamplerTrackInstrument
   | FmTrackInstrument
   | WavetableTrackInstrument
   | GranularTrackInstrument
-  | AdditiveTrackInstrument;
+  | AdditiveTrackInstrument
+  | PhysicalTrackInstrument;
 
 export interface SamplerSettings {
   audioKey?: string;
@@ -469,6 +519,18 @@ export interface BounceInPlaceOptions {
   replaceOriginal: boolean;
 }
 
+export type DrumPadFilterType = 'off' | 'lowpass' | 'highpass';
+
+export interface DrumPadFilter {
+  type: DrumPadFilterType;
+  cutoff: number;          // 20–20000 Hz
+}
+
+export interface DrumPadSend {
+  reverb: number;          // 0–1
+  delay: number;           // 0–1
+}
+
 export interface DrumPad {
   id: string;
   name: string;
@@ -476,6 +538,11 @@ export interface DrumPad {
   color: string;
   volume: number;          // 0–1
   pan: number;             // -1 to +1
+  tune: number;            // -24 to +24 semitones
+  decay: number;           // 0–1 (relative decay length)
+  filter: DrumPadFilter;
+  drive: number;           // 0–1 saturation amount
+  send: DrumPadSend;
 }
 
 export interface DrumMachineConfig {
@@ -486,6 +553,24 @@ export interface DrumMachineConfig {
 export type ClipGenerationStatus =
   | 'empty' | 'idle' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
 
+/** A time-stamped expression point for MPE expression curves. */
+export interface ExpressionPoint {
+  /** Beat position relative to note start. */
+  beat: number;
+  /** Value (0–127 for pressure/timbre, -8192–8191 for pitch bend). */
+  value: number;
+}
+
+/** Per-note MPE expression data recorded from an MPE controller. */
+export interface MpeExpressionData {
+  /** Channel pressure curve (0–127). */
+  pressureCurve?: ExpressionPoint[];
+  /** CC74 timbre/slide curve (0–127). */
+  timbreCurve?: ExpressionPoint[];
+  /** Pitch bend curve (-8192 to 8191). */
+  pitchBendCurve?: ExpressionPoint[];
+}
+
 export interface MidiNote {
   id: string;
   pitch: number;
@@ -493,6 +578,8 @@ export interface MidiNote {
   durationBeats: number;
   velocity: number;
   isSlide?: boolean;
+  /** Per-note MPE expression data (optional, populated from MPE recording). */
+  mpeExpression?: MpeExpressionData;
 }
 
 export interface MidiClipData {
@@ -753,6 +840,44 @@ export interface ConvolverParams {
   preDelay: number;                   // pre-delay in ms (0–100)
 }
 
+// ─── Spectral Processing Types ─────────────────────────────────────────────
+
+export interface SpectralFreezeParams {
+  frozen: boolean;             // true = freeze active
+  mix: number;                 // dry/wet (0–1)
+  decay: number;               // spectral decay/sustain (0–1, 1 = infinite hold)
+  brightness: number;          // high-frequency emphasis (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralBlurParams {
+  blurAmount: number;          // temporal smoothing in frames (0–1 mapped to 1–64 frames)
+  frequencySpread: number;     // cross-bin smearing (0–1)
+  mix: number;                 // dry/wet (0–1)
+  brightness: number;          // tilt EQ on blurred signal (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralFilterPoint {
+  frequency: number;           // Hz (20–20000)
+  gain: number;                // dB (-48 to +12)
+}
+
+export interface SpectralFilterParams {
+  points: SpectralFilterPoint[]; // user-drawn filter curve control points
+  resolution: number;            // interpolation smoothness (0–1)
+  mix: number;                   // dry/wet (0–1)
+  fftSize: 2048 | 4096;         // FFT window size
+}
+
+export interface SpectralMorphParams {
+  morphAmount: number;         // crossfade position (0 = source A, 1 = source B)
+  sourceTrackId?: string;      // track B for morphing (undefined = self-morph with frozen snapshot)
+  frozen: boolean;             // freeze source B snapshot
+  mix: number;                 // dry/wet (0–1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -772,7 +897,11 @@ export type TrackEffect =
   | EffectBase<'saturation', SaturationParams>
   | EffectBase<'stereoImager', StereoImagerParams>
   | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
-  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>
+  | EffectBase<'spectralFreeze', SpectralFreezeParams>
+  | EffectBase<'spectralBlur', SpectralBlurParams>
+  | EffectBase<'spectralFilter', SpectralFilterParams>
+  | EffectBase<'spectralMorph', SpectralMorphParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1531,7 +1660,11 @@ export type AutomatableEffectTarget =
   | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
   | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
   | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
-  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> }
+  | { effectType: 'spectralFreeze'; param: Exclude<keyof SpectralFreezeParams, 'frozen' | 'fftSize'> }
+  | { effectType: 'spectralBlur'; param: Exclude<keyof SpectralBlurParams, 'fftSize'> }
+  | { effectType: 'spectralFilter'; param: Exclude<keyof SpectralFilterParams, 'points' | 'fftSize'> }
+  | { effectType: 'spectralMorph'; param: Exclude<keyof SpectralMorphParams, 'sourceTrackId' | 'frozen' | 'fftSize'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

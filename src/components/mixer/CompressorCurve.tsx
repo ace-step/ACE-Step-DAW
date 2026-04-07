@@ -152,6 +152,8 @@ export function CompressorCurve({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Compressor threshold curve visualization"
       style={{ width, height }}
       className="rounded"
       data-testid="compressor-curve"

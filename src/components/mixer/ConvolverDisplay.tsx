@@ -185,6 +185,8 @@ export function ConvolverDisplay({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Convolution reverb display"
       style={{ width, height }}
       className="rounded"
       data-testid="convolver-display"

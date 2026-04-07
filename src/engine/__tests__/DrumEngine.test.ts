@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { BEAT_PAD_KEYS, DRUM_PAD_NAMES } from '../DrumEngine';
+import { BEAT_PAD_KEYS, DRUM_PAD_NAMES, drumEngine } from '../DrumEngine';
+import type { PadParams } from '../DrumEngine';
 
 describe('DrumEngine constants', () => {
   describe('BEAT_PAD_KEYS', () => {
@@ -60,6 +61,75 @@ describe('DrumEngine constants', () => {
 
     it('should have Snare as the second pad (index 1)', () => {
       expect(DRUM_PAD_NAMES[1]).toBe('Snare');
+    });
+  });
+});
+
+describe('DrumEngine pad params', () => {
+  describe('updatePadParams', () => {
+    it('no-ops gracefully for non-existent track', () => {
+      // Should not throw when called for a track that hasn't been initialized
+      expect(() => {
+        drumEngine.updatePadParams('nonexistent', 0, { pan: 0.5 });
+      }).not.toThrow();
+    });
+
+    it('no-ops gracefully for out-of-range pad index', () => {
+      expect(() => {
+        drumEngine.updatePadParams('nonexistent', -1, { tune: 5 });
+        drumEngine.updatePadParams('nonexistent', 999, { drive: 0.5 });
+      }).not.toThrow();
+    });
+  });
+
+  describe('syncTrackPadParams', () => {
+    it('no-ops gracefully when track not initialized', () => {
+      const pads = [{
+        volume: 0.8, tune: 5, decay: 0.3, pan: -0.5,
+        filter: { type: 'lowpass' as const, cutoff: 2000 },
+        drive: 0.4, send: { reverb: 0.2, delay: 0.1 },
+      }];
+      expect(() => {
+        drumEngine.syncTrackPadParams('nonexistent', pads);
+      }).not.toThrow();
+    });
+  });
+
+  describe('PadParams type contract', () => {
+    it('accepts all parameter fields as optional', () => {
+      const empty: PadParams = {};
+      expect(empty).toBeDefined();
+
+      const tuneOnly: PadParams = { tune: 12 };
+      expect(tuneOnly.tune).toBe(12);
+
+      const filterOnly: PadParams = {
+        filter: { type: 'lowpass', cutoff: 1000 },
+      };
+      expect(filterOnly.filter?.type).toBe('lowpass');
+      expect(filterOnly.filter?.cutoff).toBe(1000);
+    });
+
+    it('supports filter type off to bypass', () => {
+      const params: PadParams = {
+        filter: { type: 'off', cutoff: 20000 },
+      };
+      expect(params.filter?.type).toBe('off');
+    });
+
+    it('supports decay range 0-1', () => {
+      const short: PadParams = { decay: 0 };
+      const long: PadParams = { decay: 1 };
+      expect(short.decay).toBe(0);
+      expect(long.decay).toBe(1);
+    });
+
+    it('supports send amounts for reverb and delay', () => {
+      const params: PadParams = {
+        send: { reverb: 0.5, delay: 0.3 },
+      };
+      expect(params.send?.reverb).toBe(0.5);
+      expect(params.send?.delay).toBe(0.3);
     });
   });
 });

@@ -8,6 +8,7 @@ interface SubtractiveInstance {
   synth: Tone.PolySynth;
   filter: Tone.Filter | null;
   lfo: Tone.LFO | null;
+  panner: Tone.Panner;
   output: Tone.Gain;
   settings: SubtractiveInstrumentSettings;
 }
@@ -64,6 +65,11 @@ class SubtractiveEngine {
     if (!instance) return;
     const freq = this._pitchToFreq(pitch, instance.settings.oscillator.octave);
     instance.synth.triggerAttack(freq, undefined, velocity / 127);
+    // Retrigger LFO on note-on (key-sync mode)
+    if (instance.lfo && instance.settings.lfo.retrigger) {
+      instance.lfo.stop();
+      instance.lfo.start();
+    }
   }
 
   noteOff(trackId: string, pitch: number) {
@@ -113,7 +119,7 @@ class SubtractiveEngine {
       this._disposeInstance(this.previewInstance);
     }
     this.previewInstance = this._createInstance(settings);
-    this.previewInstance.output.toDestination();
+    // _createInstance already routes output → panner → destination when no connectTo is given
     const freq = this._pitchToFreq(pitch, settings.oscillator.octave);
     this.previewInstance.synth.triggerAttackRelease(freq, duration, undefined, velocity / 127);
   }
@@ -134,6 +140,8 @@ class SubtractiveEngine {
 
     return {
       amp: instance.output.gain as unknown as Tone.InputNode,
+      pitch: (instance.synth as unknown as { detune: Tone.InputNode }).detune ?? undefined,
+      pan: instance.panner.pan as unknown as Tone.InputNode,
       filterCutoff: instance.filter
         ? (instance.filter.frequency as unknown as Tone.InputNode)
         : undefined,
@@ -197,8 +205,10 @@ class SubtractiveEngine {
       : 0.55;
     const output = new Tone.Gain(outputLevel);
 
-    // Signal chain: synth → [filter] → output → connectTo/destination
+    // Signal chain: synth → [filter] → output → panner → connectTo/destination
     let toneFilter: Tone.Filter | null = null;
+    // Always insert a panner so modulation matrix can target pan regardless of LFO config
+    const tonePanner = new Tone.Panner(0);
 
     if (filter.enabled) {
       toneFilter = new Tone.Filter({
@@ -211,12 +221,6 @@ class SubtractiveEngine {
       toneFilter.connect(output);
     } else {
       synth.connect(output);
-    }
-
-    if (connectTo) {
-      output.connect(connectTo);
-    } else {
-      output.toDestination();
     }
 
     // LFO modulation
@@ -249,15 +253,50 @@ class SubtractiveEngine {
           }
           break;
         }
-        // pitch and pan LFO targets require per-voice modulation,
-        // which Tone.PolySynth doesn't easily expose. Deferred to instrument consolidation (#1031).
+        case 'pitch': {
+          // Modulate global detune param on PolySynth. depth 1.0 = ±1200 cents (1 octave).
+          const detuneParam = (synth as unknown as { detune: Tone.InputNode }).detune;
+          if (detuneParam) {
+            const maxCents = lfo.depth * 1200;
+            lfoNode = new Tone.LFO({
+              frequency: lfo.rateHz,
+              type: lfo.waveform as Tone.ToneOscillatorType,
+              min: -maxCents,
+              max: maxCents,
+            });
+            lfoNode.connect(detuneParam);
+            lfoNode.start();
+          }
+          break;
+        }
+        case 'pan': {
+          // Modulate the always-present panner's pan param
+          lfoNode = new Tone.LFO({
+            frequency: lfo.rateHz,
+            type: lfo.waveform as Tone.ToneOscillatorType,
+            min: -lfo.depth,
+            max: lfo.depth,
+          });
+          lfoNode.connect(tonePanner.pan as unknown as Tone.InputNode);
+          lfoNode.start();
+          break;
+        }
       }
+    }
+
+    // Final output routing: output → panner → connectTo/destination
+    output.connect(tonePanner);
+    if (connectTo) {
+      tonePanner.connect(connectTo);
+    } else {
+      tonePanner.toDestination();
     }
 
     return {
       synth,
       filter: toneFilter,
       lfo: lfoNode,
+      panner: tonePanner,
       output,
       settings: { ...settings },
     };
@@ -353,6 +392,7 @@ class SubtractiveEngine {
     instance.lfo?.stop();
     instance.lfo?.dispose();
     instance.filter?.dispose();
+    instance.panner.dispose();
     instance.output.dispose();
   }
 }

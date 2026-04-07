@@ -16,7 +16,7 @@ interface UsePresetPreviewOptions {
 }
 
 interface PresetPreviewInfo {
-  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'additive';
+  instrumentKind: 'subtractive' | 'fm' | 'wavetable' | 'granular' | 'additive' | 'physical';
   category: string;
 }
 

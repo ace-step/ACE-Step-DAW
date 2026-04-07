@@ -128,6 +128,8 @@ function GrainWaveform({
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Granular synthesis waveform"
       className="w-full h-20 rounded border border-daw-border"
     />
   );

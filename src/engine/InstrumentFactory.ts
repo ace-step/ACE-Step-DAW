@@ -4,6 +4,7 @@ import { synthEngine } from './SynthEngine';
 import { samplerEngine } from './SamplerEngine';
 import { granularEngine } from './GranularEngine';
 import { additiveEngine } from './AdditiveEngine';
+import { karplusStrongEngine } from './KarplusStrongEngine';
 
 /**
  * Adapter that wraps the legacy {@link SynthEngine} singleton to conform to
@@ -152,7 +153,7 @@ class GranularEngineAdapter implements InstrumentEngine {
 }
 
 /**
- * Adapter for additive synthesis engine.
+* Adapter for additive synthesis engine.
  */
 class AdditiveEngineAdapter implements InstrumentEngine {
   noteOn(trackId: string, pitch: number, velocity: number): void {
@@ -184,6 +185,39 @@ class AdditiveEngineAdapter implements InstrumentEngine {
   }
 }
 
+/**
+ * Adapter for Karplus-Strong physical modeling synthesis.
+ */
+class KarplusStrongAdapter implements InstrumentEngine {
+  noteOn(trackId: string, pitch: number, velocity: number): void {
+    karplusStrongEngine.noteOn(trackId, pitch, velocity);
+  }
+
+  noteOff(trackId: string, pitch: number): void {
+    karplusStrongEngine.noteOff(trackId, pitch);
+  }
+
+  triggerAttackRelease(trackId: string, pitch: number, duration: number, velocity: number): void {
+    karplusStrongEngine.triggerAttackRelease(trackId, pitch, duration, velocity);
+  }
+
+  setParameter(trackId: string, name: string, value: number | string | boolean): void {
+    karplusStrongEngine.setParameter(trackId, name, value);
+  }
+
+  releaseAll(): void {
+    karplusStrongEngine.releaseAll();
+  }
+
+  removeTrack(trackId: string): void {
+    karplusStrongEngine.removeTrack(trackId);
+  }
+
+  dispose(): void {
+    karplusStrongEngine.dispose();
+  }
+}
+
 // ── Singletons (one adapter per kind) ──────────────────────────────────────
 
 const subtractiveAdapter = new SynthEngineAdapter();
@@ -191,6 +225,7 @@ const samplerAdapter = new SamplerEngineAdapter();
 const fmAdapter = new FmEngineAdapter();
 const granularAdapter = new GranularEngineAdapter();
 const additiveAdapter = new AdditiveEngineAdapter();
+const physicalAdapter = new KarplusStrongAdapter();
 
 /**
  * Return the {@link InstrumentEngine} that should handle playback for the
@@ -209,10 +244,12 @@ export function getEngineForInstrument(instrument: TrackInstrument): InstrumentE
       return subtractiveAdapter;
     case 'granular':
       return granularAdapter;
-    case 'additive':
+case 'additive':
       return additiveAdapter;
+case 'physical':
+      return physicalAdapter;
   }
 }
 
 // Re-export the adapters for direct testing.
-export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter, AdditiveEngineAdapter };
+export { SynthEngineAdapter, SamplerEngineAdapter, FmEngineAdapter, GranularEngineAdapter, AdditiveEngineAdapter, KarplusStrongAdapter };

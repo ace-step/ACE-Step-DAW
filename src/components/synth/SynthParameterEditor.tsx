@@ -8,6 +8,7 @@ import { FilterEnvelopeEditor, DEFAULT_FILTER_ENVELOPE } from './FilterEnvelopeE
 import { LFODisplay } from './LFODisplay';
 import { UnisonControls } from './UnisonControls';
 import { SoundDesignAssistant } from './SoundDesignAssistant';
+import { ModulationMatrixPanel } from '../controls/ModulationMatrixPanel';
 import type { ParameterAdjustment } from '../../services/soundDesignAssistant';
 
 const DEFAULT_ENVELOPE: SynthEnvelope = { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.3 };
@@ -136,6 +137,10 @@ export function SynthParameterEditor({ trackId }: SynthParameterEditorProps) {
       <LFODisplay lfo={lfo} onChange={onLfoChange} />
       <div className="w-px bg-[#333] self-stretch shrink-0" />
       <UnisonControls settings={unison} onChange={onUnisonChange} />
+      </div>
+      {/* Modulation Matrix */}
+      <div className="border-t border-[#333]">
+        <ModulationMatrixPanel trackId={trackId} />
       </div>
     </div>
   );

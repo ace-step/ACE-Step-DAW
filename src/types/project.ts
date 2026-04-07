@@ -531,6 +531,24 @@ export interface DrumMachineConfig {
 export type ClipGenerationStatus =
   | 'empty' | 'idle' | 'queued' | 'generating' | 'processing' | 'ready' | 'error' | 'stale';
 
+/** A time-stamped expression point for MPE expression curves. */
+export interface ExpressionPoint {
+  /** Beat position relative to note start. */
+  beat: number;
+  /** Value (0–127 for pressure/timbre, -8192–8191 for pitch bend). */
+  value: number;
+}
+
+/** Per-note MPE expression data recorded from an MPE controller. */
+export interface MpeExpressionData {
+  /** Channel pressure curve (0–127). */
+  pressureCurve?: ExpressionPoint[];
+  /** CC74 timbre/slide curve (0–127). */
+  timbreCurve?: ExpressionPoint[];
+  /** Pitch bend curve (-8192 to 8191). */
+  pitchBendCurve?: ExpressionPoint[];
+}
+
 export interface MidiNote {
   id: string;
   pitch: number;
@@ -538,6 +556,8 @@ export interface MidiNote {
   durationBeats: number;
   velocity: number;
   isSlide?: boolean;
+  /** Per-note MPE expression data (optional, populated from MPE recording). */
+  mpeExpression?: MpeExpressionData;
 }
 
 export interface MidiClipData {
@@ -798,6 +818,44 @@ export interface ConvolverParams {
   preDelay: number;                   // pre-delay in ms (0–100)
 }
 
+// ─── Spectral Processing Types ─────────────────────────────────────────────
+
+export interface SpectralFreezeParams {
+  frozen: boolean;             // true = freeze active
+  mix: number;                 // dry/wet (0–1)
+  decay: number;               // spectral decay/sustain (0–1, 1 = infinite hold)
+  brightness: number;          // high-frequency emphasis (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralBlurParams {
+  blurAmount: number;          // temporal smoothing in frames (0–1 mapped to 1–64 frames)
+  frequencySpread: number;     // cross-bin smearing (0–1)
+  mix: number;                 // dry/wet (0–1)
+  brightness: number;          // tilt EQ on blurred signal (-1 to 1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
+export interface SpectralFilterPoint {
+  frequency: number;           // Hz (20–20000)
+  gain: number;                // dB (-48 to +12)
+}
+
+export interface SpectralFilterParams {
+  points: SpectralFilterPoint[]; // user-drawn filter curve control points
+  resolution: number;            // interpolation smoothness (0–1)
+  mix: number;                   // dry/wet (0–1)
+  fftSize: 2048 | 4096;         // FFT window size
+}
+
+export interface SpectralMorphParams {
+  morphAmount: number;         // crossfade position (0 = source A, 1 = source B)
+  sourceTrackId?: string;      // track B for morphing (undefined = self-morph with frozen snapshot)
+  frozen: boolean;             // freeze source B snapshot
+  mix: number;                 // dry/wet (0–1)
+  fftSize: 2048 | 4096;       // FFT window size
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -817,7 +875,11 @@ export type TrackEffect =
   | EffectBase<'saturation', SaturationParams>
   | EffectBase<'stereoImager', StereoImagerParams>
   | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
-  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>
+  | EffectBase<'spectralFreeze', SpectralFreezeParams>
+  | EffectBase<'spectralBlur', SpectralBlurParams>
+  | EffectBase<'spectralFilter', SpectralFilterParams>
+  | EffectBase<'spectralMorph', SpectralMorphParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1576,7 +1638,11 @@ export type AutomatableEffectTarget =
   | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
   | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
   | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
-  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> }
+  | { effectType: 'spectralFreeze'; param: Exclude<keyof SpectralFreezeParams, 'frozen' | 'fftSize'> }
+  | { effectType: 'spectralBlur'; param: Exclude<keyof SpectralBlurParams, 'fftSize'> }
+  | { effectType: 'spectralFilter'; param: Exclude<keyof SpectralFilterParams, 'points' | 'fftSize'> }
+  | { effectType: 'spectralMorph'; param: Exclude<keyof SpectralMorphParams, 'sourceTrackId' | 'frozen' | 'fftSize'> };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

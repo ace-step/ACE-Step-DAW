@@ -716,3 +716,54 @@ select:focus-visible,
 [data-theme="pro-tools"] ::-webkit-scrollbar-thumb {
   border-radius: 2px;
 }
+
+/* ── Accessibility: Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Manual reduced-motion opt-in via data attribute */
+[data-reduced-motion="true"] *, [data-reduced-motion="true"] *::before, [data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ── Accessibility: High Contrast Mode ── */
+[data-high-contrast="true"] {
+  --color-daw-bg: #000000;
+  --color-daw-surface: #0a0a0a;
+  --color-daw-surface-2: #1a1a1a;
+  --color-daw-surface-3: #2a2a2a;
+  --color-daw-border: #ffffff;
+  --color-daw-border-strong: #ffffff;
+  --color-daw-text-muted: #d0d0d0;
+  --color-daw-accent: #ffcc00;
+  --color-daw-accent-hover: #ffe066;
+  --color-daw-focus-ring: rgba(255, 204, 0, 0.7);
+}
+[data-high-contrast="true"] button:focus-visible,
+[data-high-contrast="true"] input:focus-visible,
+[data-high-contrast="true"] select:focus-visible,
+[data-high-contrast="true"] [tabindex]:focus-visible {
+  outline: 3px solid #ffcc00;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(255, 204, 0, 0.5);
+}
+
+/* ── Accessibility: Color Blind Mode ── */
+/* Add patterned borders to color-dependent interactive elements */
+[data-color-blind="true"] .daw-btn-interactive:focus-visible {
+  outline-style: dashed;
+}
+[data-color-blind="true"] [aria-pressed="true"] {
+  border-bottom: 3px double currentColor;
+}
+[data-color-blind="true"] [role="slider"]:focus-visible {
+  outline-style: dotted;
+  outline-width: 3px;
+}

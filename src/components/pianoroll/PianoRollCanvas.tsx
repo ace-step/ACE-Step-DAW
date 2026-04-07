@@ -20,6 +20,8 @@ import {
 import { drawPianoRoll } from './PianoRollRenderer';
 import { usePianoRollDrag } from './usePianoRollDrag';
 import { useMidiAiStore } from '../../store/midiAiStore';
+import { useMpeStore } from '../../store/mpeStore';
+import { hasExpressionData } from './ExpressionLane';
 
 export interface GhostNote {
   pitch: number;
@@ -58,6 +60,8 @@ export function PianoRollCanvas({
   const animRef = useRef<number>(0);
 
   const [velocityHeight, setVelocityHeight] = useState(VELOCITY_LANE_HEIGHT);
+  const mpeEnabled = useMpeStore((s) => s.enabled);
+  const expressionType = useUIStore((s) => s.pianoRollExpressionType ?? 'pitchBend');
   const [prZoomY, setPrZoomY] = useState(1);
   const [prScrollX, setPrScrollX] = useState(0);
   const [prScrollY, setPrScrollY] = useState(780);
@@ -87,6 +91,7 @@ export function PianoRollCanvas({
     : [];
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
+  const expressionLaneHeight = mpeEnabled && hasExpressionData(notes) ? 80 : 0;
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
   const currentTime = useTransportStore((s) => s.currentTime);
   const previewEnabled = true;
@@ -364,6 +369,8 @@ export function PianoRollCanvas({
       aiSelectionStartBeat: aiActiveForClip ? aiSelectionStartBeat : null,
       aiSelectionEndBeat: aiActiveForClip ? aiSelectionEndBeat : null,
       aiPreviewNotes: aiActiveForClip ? aiPreviewNotes : undefined,
+      expressionLaneHeight,
+      expressionType,
     });
   }, [
     activeTool,
@@ -388,6 +395,8 @@ export function PianoRollCanvas({
     aiSelectionEndBeat,
     aiPreviewNotes,
     aiActiveForClip,
+    expressionLaneHeight,
+    expressionType,
   ]);
 
   useEffect(() => {
@@ -800,7 +809,8 @@ export function PianoRollCanvas({
     <div ref={containerRef} className="flex-1 relative overflow-hidden">
       <canvas
         ref={mergedCanvasRef}
-        aria-label="Piano roll editor"
+        role="application"
+        aria-label="Piano roll note editor"
         data-active-tool={activeTool}
         className="absolute inset-0"
         style={{

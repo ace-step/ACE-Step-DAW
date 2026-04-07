@@ -46,4 +46,10 @@
   /* ── Utility family (neutral slate) ── */
   --fx-stereo-imager: #7a8ab4;
   --fx-noise-reduction: #8a8a8a;
+
+  /* ── Spectral family (electric indigo/magenta) ── */
+  --fx-spectral-freeze: #7c5cbf;
+  --fx-spectral-blur: #8b6fc8;
+  --fx-spectral-filter: #9a7ed4;
+  --fx-spectral-morph: #a88de0;
 }

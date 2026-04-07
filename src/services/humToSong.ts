@@ -50,11 +50,11 @@ export function analyzeHumRecording(
 ): HumAnalysisResult {
   const { minConfidence = 0.3, ...pitchOptions } = options;
 
-  // Use slightly relaxed defaults for humming (wider frequency range, lower threshold)
+  // Use tuned defaults for humming (wider frequency range, more lenient detection)
   const humDefaults: PitchDetectionOptions = {
     minFrequency: 60,    // Hums can be lower than sung notes
     maxFrequency: 800,   // Hums rarely go above ~800 Hz
-    threshold: 0.2,      // Slightly more lenient than default
+    threshold: 0.2,      // Higher threshold = more lenient pitch acceptance for noisy hums
     minNoteDuration: 0.08, // Hums tend to be sustained, filter very short blips
     ...pitchOptions,
   };

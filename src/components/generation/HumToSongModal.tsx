@@ -49,6 +49,7 @@ export function HumToSongModal() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef(0);
+  const stopRecordingRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -57,6 +58,8 @@ export function HumToSongModal() {
       setIsRecording(false);
       setRecordingDuration(0);
       setInputLevel(0);
+      setHasPermission(recordingEngine.hasPermission);
+      setPermissionError(false);
       setAnalysis(null);
       setCaption('');
       setLyrics('');
@@ -114,7 +117,7 @@ export function HumToSongModal() {
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
       setRecordingDuration(elapsed);
       if (elapsed >= MAX_DURATION) {
-        stopRecording();
+        stopRecordingRef.current();
       }
     }, 100);
 
@@ -137,8 +140,12 @@ export function HumToSongModal() {
     const result = await recordingEngine.stopRecording('hum-to-song');
     setIsRecording(false);
 
-    if (!result || result.duration < 0.5) {
-      // Recording too short
+    if (!result) {
+      return;
+    }
+
+    if (result.duration < MIN_DURATION) {
+      // Recording too short — inform user
       return;
     }
 
@@ -155,6 +162,9 @@ export function HumToSongModal() {
     setAnalysis(analysisResult);
     setStep('preview');
   }, [bpm]);
+
+  // Keep ref in sync so startRecording's interval always calls the latest stopRecording
+  stopRecordingRef.current = stopRecording;
 
   const handleGenerate = useCallback(async () => {
     const buffer = audioBufferRef.current;
@@ -383,8 +393,11 @@ export function HumToSongModal() {
                     <>
                       <div className="absolute left-0 top-0 bottom-0 w-8 bg-[#151515] border-r border-[#2a2a2a] z-10">
                         {Array.from({ length: Math.min(pitchRange, 20) }, (_, i) => {
-                          const pitch = maxPitch - Math.floor(i * (pitchRange / Math.min(pitchRange, 20)));
-                          const y = (i / Math.min(pitchRange, 20)) * 100;
+                          const labelCount = Math.min(pitchRange, 20);
+                          const pitchProgress = labelCount > 1 ? i / (labelCount - 1) : 0;
+                          const interpolatedPitch = maxPitch - ((maxPitch - minPitch) * pitchProgress);
+                          const pitch = Math.max(0, Math.min(127, Math.round(interpolatedPitch)));
+                          const y = (i / labelCount) * 100;
                           return (
                             <span
                               key={`${pitch}-${i}`}

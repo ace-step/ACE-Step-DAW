@@ -1,9 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import {
-  analyzeHumRecording,
-  type HumAnalysisResult,
-  type HumToSongOptions,
-} from '../humToSong';
+import { describe, it, expect } from 'vitest';
+import { analyzeHumRecording } from '../humToSong';
 
 /**
  * Generate a synthetic sine wave at a given frequency.
@@ -132,6 +128,6 @@ describe('analyzeHumRecording', () => {
     const result = analyzeHumRecording(samples, sampleRate, 120);
 
     // Should detect at least 2 notes with a gap
-    expect(result.midiNotes.length).toBeGreaterThanOrEqual(1);
+    expect(result.midiNotes.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -66,14 +66,17 @@ describe('zeroCrossing', () => {
     });
 
     it('snaps time to nearest zero crossing', () => {
-      // Create samples with a crossing at index 100
+      // Create samples with a crossing between indices 99 and 100
       const samples = new Float32Array(200);
       for (let i = 0; i < 100; i++) samples[i] = 0.5;
       for (let i = 100; i < 200; i++) samples[i] = -0.5;
-      // At 44100 Hz, sample 100 is at time 100/44100 ≈ 0.00227s
-      const snapped = snapTimeToZeroCrossing(samples, 44100, 100 / 44100);
-      // Should snap to the crossing at sample 100
-      expect(snapped).toBeCloseTo(100 / 44100, 4);
+      // At 44100 Hz, the sign change lies between samples 99 and 100
+      const targetTime = 100 / 44100;
+      const snapped = snapTimeToZeroCrossing(samples, 44100, targetTime);
+      const oneSample = 1 / 44100;
+      // Accept either side of the crossing, since equal magnitudes may tie-break
+      // Use slight epsilon for floating point comparison
+      expect(Math.abs(snapped - targetTime)).toBeLessThanOrEqual(oneSample + 1e-15);
     });
 
     it('uses default 5ms search radius', () => {

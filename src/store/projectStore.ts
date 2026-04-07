@@ -1490,6 +1490,14 @@ function createDefaultTrackEffect(type: TrackEffectType): TrackEffect {
       return { id, type, enabled: true, params: { reverbType: 'hall', decay: 2.5, preDelay: 20, damping: 0.4, size: 0.6, modRate: 0.3, modDepth: 0.2, erLevel: 0, lowCut: 80, highCut: 12000, mix: 0.25 } };
     case 'noiseReduction':
       return { id, type, enabled: true, params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } };
+    case 'spectralFreeze':
+      return { id, type, enabled: true, params: { frozen: false, mix: 1, decay: 1, brightness: 0, fftSize: 2048 } };
+    case 'spectralBlur':
+      return { id, type, enabled: true, params: { blurAmount: 0.5, frequencySpread: 0, mix: 0.5, brightness: 0, fftSize: 2048 } };
+    case 'spectralFilter':
+      return { id, type, enabled: true, params: { points: [{ frequency: 20, gain: 0 }, { frequency: 20000, gain: 0 }], resolution: 0.5, mix: 1, fftSize: 2048 } };
+    case 'spectralMorph':
+      return { id, type, enabled: true, params: { morphAmount: 0.5, frozen: false, mix: 0.5, fftSize: 2048 } };
   }
 }
 

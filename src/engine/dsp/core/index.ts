@@ -16,3 +16,4 @@ export * from './dynamics';
 export * from './reverb';
 export * from './waveshaper';
 export * from './voice-manager';
+export * from './spectral-processor';

@@ -493,6 +493,53 @@ export function SettingsDialog() {
              ) : null}
            </div>
 
+          <div className="rounded-md border border-daw-border bg-daw-bg/60 p-3 space-y-2">
+            <h3 className="text-xs font-medium text-zinc-300">MIDI Polyphonic Expression (MPE)</h3>
+            <p className="text-[10px] text-zinc-400">
+              Enable MPE for per-note pitch bend, slide, and pressure from controllers like Roli Seaboard, Sensel Morph, or Linnstrument.
+              MPE controllers are auto-detected via MCM (Configuration Message).
+            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useUIStore.getState().mpeEnabled}
+                  onChange={(e) => useUIStore.getState().setMpeEnabled(e.target.checked)}
+                  className="accent-violet-500"
+                />
+                <span className="text-xs text-zinc-300">Enable MPE</span>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-zinc-400 mb-1">Lower Zone Channels</label>
+                <input
+                  type="number"
+                  value={useUIStore.getState().mpeLowerZoneSize}
+                  onChange={(e) => useUIStore.getState().setMpeZoneSize('lower', parseInt(e.target.value) || 0)}
+                  min={0}
+                  max={15}
+                  className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-zinc-400 mb-1">Upper Zone Channels</label>
+                <input
+                  type="number"
+                  value={useUIStore.getState().mpeUpperZoneSize}
+                  onChange={(e) => useUIStore.getState().setMpeZoneSize('upper', parseInt(e.target.value) || 0)}
+                  min={0}
+                  max={15}
+                  className="w-full px-3 py-1.5 text-sm text-zinc-200 bg-daw-bg border border-daw-border rounded focus:outline-none focus:border-daw-accent"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-500">
+              Lower zone: Ch 1 (master) + member channels. Upper zone: Ch 16 (master) + member channels.
+              Total must not exceed 16 channels.
+            </p>
+          </div>
+
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Generation Parameters</h3>
 
           <div className="grid grid-cols-2 gap-3">

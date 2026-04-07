@@ -538,6 +538,14 @@ export interface MidiNote {
   durationBeats: number;
   velocity: number;
   isSlide?: boolean;
+
+  // MPE (MIDI Polyphonic Expression) per-note data — optional
+  /** Per-note pitch bend in semitones (recorded from MPE controller). */
+  mpePitchBend?: number;
+  /** Per-note slide/timbre (CC74), 0-1 (recorded from MPE controller). */
+  mpeSlide?: number;
+  /** Per-note pressure/aftertouch, 0-1 (recorded from MPE controller). */
+  mpePressure?: number;
 }
 
 export interface MidiClipData {

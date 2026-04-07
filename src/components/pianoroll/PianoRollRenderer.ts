@@ -226,6 +226,38 @@ function drawNote(
     ctx.fillRect(noteX + 2, noteY + noteHeight - 3, Math.max((noteWidth - 4) * velocityRatio, 2), 1.5);
   }
 
+  // MPE expression indicators
+  if (note.mpePitchBend !== undefined && note.mpePitchBend !== 0 && noteWidth > 8 && noteHeight > 6) {
+    // Draw pitch bend arrow: up/down indicator proportional to bend amount
+    const bendDirection = note.mpePitchBend > 0 ? -1 : 1; // up = negative Y
+    const bendMagnitude = Math.min(Math.abs(note.mpePitchBend) / 12, 1); // normalize to 12 semitones
+    const arrowLen = noteHeight * 0.4 * bendMagnitude;
+    const arrowX = noteX + noteWidth - 8;
+    const arrowBaseY = noteY + noteHeight / 2;
+    ctx.strokeStyle = 'rgba(168,85,247,0.8)'; // violet
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(arrowX, arrowBaseY);
+    ctx.lineTo(arrowX, arrowBaseY + arrowLen * bendDirection);
+    ctx.moveTo(arrowX - 2, arrowBaseY + arrowLen * bendDirection * 0.6);
+    ctx.lineTo(arrowX, arrowBaseY + arrowLen * bendDirection);
+    ctx.lineTo(arrowX + 2, arrowBaseY + arrowLen * bendDirection * 0.6);
+    ctx.stroke();
+  }
+
+  if (note.mpeSlide !== undefined && note.mpeSlide > 0 && noteWidth > 6 && noteHeight > 4) {
+    // Draw slide indicator: cyan bar at top of note, width proportional to slide value
+    const slideWidth = (noteWidth - 4) * note.mpeSlide;
+    ctx.fillStyle = 'rgba(103,232,249,0.6)'; // cyan
+    ctx.fillRect(noteX + 2, noteY + 1, Math.max(slideWidth, 2), 2);
+  }
+
+  if (note.mpePressure !== undefined && note.mpePressure > 0 && noteWidth > 6 && noteHeight > 4) {
+    // Draw pressure indicator: amber glow at bottom, opacity proportional to pressure
+    ctx.fillStyle = `rgba(251,191,36,${note.mpePressure * 0.5})`; // amber
+    ctx.fillRect(noteX + 2, noteY + noteHeight - 3, noteWidth - 4, 2);
+  }
+
   // Selected note resize handles
   if (isSelected && noteWidth > 10) {
     ctx.fillStyle = 'rgba(255,255,255,0.4)';

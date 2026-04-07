@@ -217,6 +217,15 @@ export interface UIState {
   /** Slice marker positions in seconds relative to clip start, keyed by clip ID. */
   sliceMarkersByClip: Record<string, number[]>;
 
+  // MPE (MIDI Polyphonic Expression) configuration
+  mpeEnabled: boolean;
+  mpeDeviceName: string | null;
+  mpeLowerZoneSize: number;
+  mpeUpperZoneSize: number;
+  setMpeEnabled: (enabled: boolean) => void;
+  setMpeDeviceName: (name: string | null) => void;
+  setMpeZoneSize: (zone: 'lower' | 'upper', size: number) => void;
+
   // DSP backend preference
   dspBackend: 'auto' | 'wasm' | 'tonejs';
   setDspBackend: (mode: 'auto' | 'wasm' | 'tonejs') => void;
@@ -719,6 +728,11 @@ export const useUIStore = create<UIState>()(
   sliceModeClipId: null,
   sliceMarkersByClip: {},
 
+  mpeEnabled: false,
+  mpeDeviceName: null,
+  mpeLowerZoneSize: 15,
+  mpeUpperZoneSize: 0,
+
   dspBackend: 'auto',
 
   theme: 'ableton',
@@ -866,6 +880,14 @@ export const useUIStore = create<UIState>()(
   setShowInstrumentPicker: (v) => set(v ? { ...ALL_MODALS_CLOSED, showInstrumentPicker: true } : { showInstrumentPicker: false }),
   setShowExportDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showExportDialog: true } : { showExportDialog: false }),
   setShowSettingsDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showSettingsDialog: true } : { showSettingsDialog: false }),
+  setMpeEnabled: (enabled) => set({ mpeEnabled: enabled }),
+  setMpeDeviceName: (name) => set({ mpeDeviceName: name }),
+  setMpeZoneSize: (zone, size) => {
+    const clamped = Math.min(Math.max(size, 0), 15);
+    if (zone === 'lower') set({ mpeLowerZoneSize: clamped });
+    else set({ mpeUpperZoneSize: clamped });
+  },
+
   setDspBackend: (mode) => set({ dspBackend: mode }),
   setTheme: (theme) => set({ theme }),
   setShowProjectListDialog: (v) => set(v ? { ...ALL_MODALS_CLOSED, showProjectListDialog: true } : { showProjectListDialog: false }),

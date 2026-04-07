@@ -31,4 +31,32 @@ export interface InstrumentEngine {
 
   /** Dispose the entire engine and release all resources. */
   dispose(): void;
+
+  // ---------------------------------------------------------------------------
+  // MPE (MIDI Polyphonic Expression) — optional per-voice control
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Apply pitch bend to a specific note on a track.
+   * In MPE mode, this is per-note; in standard mode, it affects all notes.
+   * @param semitones Pitch offset in semitones (can be fractional).
+   * @param channel MIDI channel for per-voice routing (MPE).
+   */
+  pitchBend?(trackId: string, semitones: number, channel?: number): void;
+
+  /**
+   * Apply slide/timbre expression (CC74) to a note.
+   * Typically mapped to filter cutoff or timbre control.
+   * @param value Normalized 0-1.
+   * @param channel MIDI channel for per-voice routing (MPE).
+   */
+  slide?(trackId: string, value: number, channel?: number): void;
+
+  /**
+   * Apply pressure/aftertouch expression to a note.
+   * Typically mapped to dynamics, vibrato depth, or filter.
+   * @param value Normalized 0-1.
+   * @param channel MIDI channel for per-voice routing (MPE).
+   */
+  pressure?(trackId: string, value: number, channel?: number): void;
 }

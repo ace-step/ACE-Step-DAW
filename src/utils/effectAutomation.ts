@@ -137,6 +137,20 @@ const EFFECT_AUTOMATION_SPECS: Record<TrackEffectType, Record<string, EffectAuto
     hfEmphasis: { label: 'HF Focus', min: 0, max: 1, color: '#8a8a8a' },
     mix: { label: 'Mix', min: 0, max: 1, color: '#8a8a8a' },
   },
+  spectralFreeze: {
+    wet: { label: 'Wet', min: 0, max: 1, color: '#06b6d4' },
+  },
+  spectralBlur: {
+    decay: { label: 'Decay', min: 0, max: 0.99, color: '#8b5cf6' },
+    wet: { label: 'Wet', min: 0, max: 1, color: '#8b5cf6' },
+  },
+  spectralFilter: {
+    wet: { label: 'Wet', min: 0, max: 1, color: '#ec4899' },
+  },
+  spectralMorph: {
+    amount: { label: 'Morph', min: 0, max: 1, color: '#f59e0b' },
+    wet: { label: 'Wet', min: 0, max: 1, color: '#f59e0b' },
+  },
 };
 
 function clampNormalized(value: number): number {
@@ -216,6 +230,22 @@ function getNumericParamValue(effect: TrackEffect, param: string): number | null
       return typeof value === 'number' ? value : null;
     }
     case 'noiseReduction': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralFreeze': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralBlur': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralFilter': {
+      const value = effect.params[param as keyof typeof effect.params];
+      return typeof value === 'number' ? value : null;
+    }
+    case 'spectralMorph': {
       const value = effect.params[param as keyof typeof effect.params];
       return typeof value === 'number' ? value : null;
     }

@@ -33,6 +33,8 @@ import type {
 import { denormalizeEffectParamValue } from '../utils/effectAutomation';
 import { useProjectStore } from '../store/projectStore';
 import { SidechainFollower } from './sidechainFollower';
+import { SpectralEffectNode, registerSpectralProcessor } from './SpectralEffectNode';
+import type { SpectralMode, SpectralFreezeParams, SpectralBlurParams, SpectralFilterParams, SpectralMorphParams } from '../types/project';
 import { FACTORY_IR_PRESETS, generateImpulseResponse } from '../utils/factoryImpulseResponses';
 
 type EffectNode = {
@@ -842,6 +844,68 @@ function createNode(effect: TrackEffect): EffectNode {
         _stereoGains: { llGain, lrGain, rlGain, rrGain },
       } as EffectNode;
     }
+    case 'spectralFreeze': {
+      const p = effect.params as SpectralFreezeParams;
+      const ctx = factory.getContext();
+      const spectral = new SpectralEffectNode(ctx, 'freeze');
+      spectral.setParams({ wet: p.wet, freeze: p.freeze });
+      if (p.freeze) spectral.captureFreeze();
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: factory.createGain(),
+        inputNode: spectral.inputNode,
+        outputNode: spectral.outputNode,
+        dispose: () => spectral.dispose(),
+        _spectralNode: spectral,
+      } as EffectNode;
+    }
+    case 'spectralBlur': {
+      const p = effect.params as SpectralBlurParams;
+      const ctx = factory.getContext();
+      const spectral = new SpectralEffectNode(ctx, 'blur');
+      spectral.setParams({ wet: p.wet, blurDecay: p.decay });
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: factory.createGain(),
+        inputNode: spectral.inputNode,
+        outputNode: spectral.outputNode,
+        dispose: () => spectral.dispose(),
+        _spectralNode: spectral,
+      } as EffectNode;
+    }
+    case 'spectralFilter': {
+      const p = effect.params as SpectralFilterParams;
+      const ctx = factory.getContext();
+      const spectral = new SpectralEffectNode(ctx, 'filter');
+      spectral.setParams({ wet: p.wet });
+      spectral.setFilterMask(p.bands);
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: factory.createGain(),
+        inputNode: spectral.inputNode,
+        outputNode: spectral.outputNode,
+        dispose: () => spectral.dispose(),
+        _spectralNode: spectral,
+      } as EffectNode;
+    }
+    case 'spectralMorph': {
+      const p = effect.params as SpectralMorphParams;
+      const ctx = factory.getContext();
+      const spectral = new SpectralEffectNode(ctx, 'morph');
+      spectral.setParams({ wet: p.wet, morphAmount: p.amount });
+      return {
+        id: effect.id,
+        type: effect.type,
+        node: factory.createGain(),
+        inputNode: spectral.inputNode,
+        outputNode: spectral.outputNode,
+        dispose: () => spectral.dispose(),
+        _spectralNode: spectral,
+      } as EffectNode;
+    }
   }
 }
 
@@ -911,11 +975,34 @@ class EffectsEngine {
   private _wasmEngine: typeof import('../wasm/WasmDspEngine') | null = null;
   private _wasmMapper: typeof import('./wasmParamMapper') | null = null;
 
+  // Spectral processor registration
+  private _spectralRegistered = false;
+  private _spectralRegistering: Promise<void> | null = null;
+
   /** Enable/disable WASM DSP routing. Called after WasmDspEngine.initialize() succeeds. */
   setUseWasm(enabled: boolean, wasmEngine?: typeof import('../wasm/WasmDspEngine'), mapper?: typeof import('./wasmParamMapper')) {
     this._useWasm = enabled;
     if (wasmEngine) this._wasmEngine = wasmEngine;
     if (mapper) this._wasmMapper = mapper;
+  }
+
+  /** Ensure spectral AudioWorklet processor is registered. Call before creating spectral nodes. */
+  async ensureSpectralProcessor(): Promise<void> {
+    if (this._spectralRegistered) return;
+    if (this._spectralRegistering) {
+      await this._spectralRegistering;
+      return;
+    }
+    try {
+      const ctx = getDSPFactory().getContext();
+      this._spectralRegistering = registerSpectralProcessor(ctx);
+      await this._spectralRegistering;
+      this._spectralRegistered = true;
+    } catch (err) {
+      console.warn('[EffectsEngine] Failed to register spectral processor:', err);
+    } finally {
+      this._spectralRegistering = null;
+    }
   }
 
   rebuildChain(trackId: string, effects: TrackEffect[], bypassed = false) {
@@ -1187,6 +1274,37 @@ class EffectsEngine {
         if (state) Object.assign(state.params, p);
         break;
       }
+      case 'spectralFreeze': {
+        const p = params as SpectralFreezeParams;
+        const spectral = (effectNode as Record<string, unknown>)._spectralNode as SpectralEffectNode | undefined;
+        if (spectral) {
+          spectral.setParams({ wet: p.wet, freeze: p.freeze });
+          if (p.freeze) spectral.captureFreeze();
+          else spectral.releaseFreeze();
+        }
+        break;
+      }
+      case 'spectralBlur': {
+        const p = params as SpectralBlurParams;
+        const spectral = (effectNode as Record<string, unknown>)._spectralNode as SpectralEffectNode | undefined;
+        if (spectral) spectral.setParams({ wet: p.wet, blurDecay: p.decay });
+        break;
+      }
+      case 'spectralFilter': {
+        const p = params as SpectralFilterParams;
+        const spectral = (effectNode as Record<string, unknown>)._spectralNode as SpectralEffectNode | undefined;
+        if (spectral) {
+          spectral.setParams({ wet: p.wet });
+          spectral.setFilterMask(p.bands);
+        }
+        break;
+      }
+      case 'spectralMorph': {
+        const p = params as SpectralMorphParams;
+        const spectral = (effectNode as Record<string, unknown>)._spectralNode as SpectralEffectNode | undefined;
+        if (spectral) spectral.setParams({ wet: p.wet, morphAmount: p.amount });
+        break;
+      }
     }
   }
 
@@ -1414,7 +1532,24 @@ class EffectsEngine {
         if (state) (state.params as Record<string, number>)[target.param] = value;
         break;
       }
+      case 'spectralFreeze':
+      case 'spectralBlur':
+      case 'spectralFilter':
+      case 'spectralMorph': {
+        const spectral = (effectNode as Record<string, unknown>)._spectralNode as SpectralEffectNode | undefined;
+        if (spectral) {
+          const paramMap: Record<string, string> = { decay: 'blurDecay', amount: 'morphAmount' };
+          const key = paramMap[target.param] ?? target.param;
+          spectral.setParams({ [key]: value });
+        }
+        break;
+      }
     }
+  }
+
+  /** Get the effect node chain for a track (for advanced effect control). */
+  getChainNodes(trackId: string): EffectNode[] | undefined {
+    return this.chains.get(trackId);
   }
 
   /** Get compressor gain reduction for metering (0 = no reduction). */

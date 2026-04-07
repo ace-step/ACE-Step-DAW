@@ -798,6 +798,38 @@ export interface ConvolverParams {
   preDelay: number;                   // pre-delay in ms (0–100)
 }
 
+// ─── Spectral Effect Types ────────────────────────────────────────────────────
+
+export type SpectralMode = 'freeze' | 'blur' | 'filter' | 'morph';
+
+export interface SpectralFreezeParams {
+  /** Whether the freeze is active. */
+  freeze: boolean;
+  /** Dry/wet mix (0–1). */
+  wet: number;
+}
+
+export interface SpectralBlurParams {
+  /** Frame decay / smoothing factor (0–0.99). Higher = more blur. */
+  decay: number;
+  /** Dry/wet mix (0–1). */
+  wet: number;
+}
+
+export interface SpectralFilterParams {
+  /** 32-band spectral mask — gain per frequency region (0–1 each). */
+  bands: number[];
+  /** Dry/wet mix (0–1). */
+  wet: number;
+}
+
+export interface SpectralMorphParams {
+  /** Morph amount (0 = original, 1 = reference). */
+  amount: number;
+  /** Dry/wet mix (0–1). */
+  wet: number;
+}
+
 export type TrackEffect =
   | EffectBase<'eq3', EQ3Params>
   | EffectBase<'parametricEq', ParametricEQParams>
@@ -817,7 +849,11 @@ export type TrackEffect =
   | EffectBase<'saturation', SaturationParams>
   | EffectBase<'stereoImager', StereoImagerParams>
   | EffectBase<'algorithmicReverb', AlgorithmicReverbParams>
-  | EffectBase<'noiseReduction', NoiseGateReductionParams>;
+  | EffectBase<'noiseReduction', NoiseGateReductionParams>
+  | EffectBase<'spectralFreeze', SpectralFreezeParams>
+  | EffectBase<'spectralBlur', SpectralBlurParams>
+  | EffectBase<'spectralFilter', SpectralFilterParams>
+  | EffectBase<'spectralMorph', SpectralMorphParams>;
 
 export type TrackEffectType = TrackEffect['type'];
 
@@ -1576,7 +1612,11 @@ export type AutomatableEffectTarget =
   | { effectType: 'saturation'; param: Exclude<keyof SaturationParams, 'saturationType'> }
   | { effectType: 'stereoImager'; param: keyof StereoImagerParams }
   | { effectType: 'algorithmicReverb'; param: Exclude<keyof AlgorithmicReverbParams, 'reverbType'> }
-  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> };
+  | { effectType: 'noiseReduction'; param: Exclude<keyof NoiseGateReductionParams, 'mode'> }
+  | { effectType: 'spectralFreeze'; param: Exclude<keyof SpectralFreezeParams, 'freeze'> }
+  | { effectType: 'spectralBlur'; param: keyof SpectralBlurParams }
+  | { effectType: 'spectralFilter'; param: Exclude<keyof SpectralFilterParams, 'bands'> }
+  | { effectType: 'spectralMorph'; param: keyof SpectralMorphParams };
 
 export type AutomationParameter =
   | { type: 'mixer'; param: 'volume' | 'pan' }

@@ -29,4 +29,8 @@ export {
   StereoImagerCard,
   AlgorithmicReverbCard,
   NoiseReductionCard,
+  SpectralFreezeCard,
+  SpectralBlurCard,
+  SpectralFilterCard,
+  SpectralMorphCard,
 } from './effects';

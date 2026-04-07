@@ -35,6 +35,11 @@ export const EFFECT_COLORS: Record<TrackEffectType, string> = {
   /* Utility (neutral) */
   stereoImager: '#7a8ab4',
   noiseReduction: '#8a8a8a',
+  /* Spectral family (cyan/purple gradient) */
+  spectralFreeze: '#06b6d4',
+  spectralBlur: '#8b5cf6',
+  spectralFilter: '#ec4899',
+  spectralMorph: '#f59e0b',
 };
 
 /** Resolve a CSS custom property to its computed hex value (for canvas drawing contexts). */
@@ -60,6 +65,10 @@ export function resolveEffectColor(effectType: TrackEffectType): string {
     stereoImager: '--fx-stereo-imager',
     algorithmicReverb: '--fx-algorithmic-reverb',
     noiseReduction: '--fx-noise-reduction',
+    spectralFreeze: '--fx-spectral-freeze',
+    spectralBlur: '--fx-spectral-blur',
+    spectralFilter: '--fx-spectral-filter',
+    spectralMorph: '--fx-spectral-morph',
   };
   const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVarMap[effectType]).trim();
   return resolved || EFFECT_COLORS[effectType];

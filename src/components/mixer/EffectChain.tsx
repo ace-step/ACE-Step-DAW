@@ -192,6 +192,14 @@ const EFFECT_PRESETS: Record<TrackEffectType, EffectPreset[]> = {
     { name: 'Medium', params: { amount: 0.5, threshold: -50, mode: 'smooth', hfEmphasis: 0.5, mix: 1 } as NoiseGateReductionParams },
     { name: 'Heavy', params: { amount: 0.8, threshold: -40, mode: 'fast', hfEmphasis: 0.7, mix: 1 } as NoiseGateReductionParams },
   ],
+  spectralFreeze: [],
+  spectralBlur: [
+    { name: 'Subtle', params: { decay: 0.7, wet: 0.5 } as import('../../types/project').SpectralBlurParams },
+    { name: 'Pad', params: { decay: 0.92, wet: 0.8 } as import('../../types/project').SpectralBlurParams },
+    { name: 'Wash', params: { decay: 0.98, wet: 1.0 } as import('../../types/project').SpectralBlurParams },
+  ],
+  spectralFilter: [],
+  spectralMorph: [],
 };
 
 import {
@@ -214,6 +222,10 @@ import {
   StereoImagerCard,
   AlgorithmicReverbCard,
   NoiseReductionCard,
+  SpectralFreezeCard,
+  SpectralBlurCard,
+  SpectralFilterCard,
+  SpectralMorphCard,
   EFFECT_COLORS,
 } from './EffectCards';
 
@@ -239,6 +251,10 @@ const EFFECT_DISPLAY_NAMES: Record<TrackEffectType, string> = {
   stereoImager: 'Stereo Imager',
   algorithmicReverb: 'Algo Reverb',
   noiseReduction: 'Noise Reduce',
+  spectralFreeze: 'Spectral Freeze',
+  spectralBlur: 'Spectral Blur',
+  spectralFilter: 'Spectral Filter',
+  spectralMorph: 'Spectral Morph',
 };
 
 
@@ -271,6 +287,10 @@ const EFFECT_WIDTH_TIER: Record<TrackEffectType, WidthTier> = {
   stereoImager: 'standard',
   algorithmicReverb: 'wide',
   noiseReduction: 'compact',
+  spectralFreeze: 'compact',
+  spectralBlur: 'standard',
+  spectralFilter: 'wide',
+  spectralMorph: 'standard',
 };
 const WIDTH_TIER_CLASSES: Record<WidthTier, string> = {
   compact: 'min-w-[160px] max-w-[200px]',
@@ -535,6 +555,10 @@ function EffectCardBody({ effect, trackId }: { effect: TrackEffect; trackId: str
     case 'stereoImager': return <StereoImagerCard effect={effect} trackId={trackId} />;
     case 'algorithmicReverb': return <AlgorithmicReverbCard effect={effect} trackId={trackId} />;
     case 'noiseReduction': return <NoiseReductionCard effect={effect} trackId={trackId} />;
+    case 'spectralFreeze': return <SpectralFreezeCard effect={effect} trackId={trackId} />;
+    case 'spectralBlur': return <SpectralBlurCard effect={effect} trackId={trackId} />;
+    case 'spectralFilter': return <SpectralFilterCard effect={effect} trackId={trackId} />;
+    case 'spectralMorph': return <SpectralMorphCard effect={effect} trackId={trackId} />;
     default: return null;
   }
 }
@@ -567,6 +591,10 @@ function AddEffectButton({ trackId }: { trackId: string }) {
     { type: 'stereoImager', label: 'Stereo Imager', icon: '🔊' },
     { type: 'algorithmicReverb', label: 'Algorithmic Reverb', icon: '🏔️' },
     { type: 'noiseReduction', label: 'Noise Reduction', icon: '🔇' },
+    { type: 'spectralFreeze', label: 'Spectral Freeze', icon: '❄' },
+    { type: 'spectralBlur', label: 'Spectral Blur', icon: '🌫' },
+    { type: 'spectralFilter', label: 'Spectral Filter', icon: '🔬' },
+    { type: 'spectralMorph', label: 'Spectral Morph', icon: '🧬' },
   ];
 
   const handleToggle = () => {

@@ -79,14 +79,21 @@ jobs:
           name: cargo-check-failure-log
           path: /tmp/cargo-check.log
           retention-days: 3
-      - name: Fail if cargo check failed
+      - name: Post error to PR and fail
         if: steps.cargo-check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "## cargo check output (last 50 lines):" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -50 /tmp/cargo-check.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "::error::cargo check failed — see uploaded artifact for full log"
+          LOG=$(tail -80 /tmp/cargo-check.log)
+          # Post to any associated PR
+          PR_NUM=$(gh pr list --head "${{ github.ref_name }}" --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$PR_NUM" ]; then
+            gh pr comment "$PR_NUM" --body "## cargo check failure
+          \`\`\`
+          $LOG
+          \`\`\`"
+          fi
+          echo "::error::cargo check failed"
           exit 1
       - name: Clippy lint
         if: steps.cargo-check.outcome == 'success'

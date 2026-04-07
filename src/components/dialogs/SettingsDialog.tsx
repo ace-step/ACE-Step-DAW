@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useModelStore } from '../../store/modelStore';
 import { listModels, initModel, getBackendUrl, setBackendUrl } from '../../services/aceStepApi';
+import { useVoiceVerificationStore } from '../../store/voiceVerificationStore';
 import { DEFAULT_GENERATION, DEFAULT_MEASURES } from '../../constants/defaults';
 import { Button } from '../ui/Button';
 import { normalizePlaybackLatencySettings, latencyMsToSamples } from '../../utils/playbackLatency';
@@ -60,6 +61,39 @@ function ThemeSelector() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function VoiceVerificationToggle() {
+  const enabled = useVoiceVerificationStore((s) => s.settings.enabled);
+  const updateSettings = useVoiceVerificationStore((s) => s.updateSettings);
+
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <label className="block text-xs text-zinc-400">Voice identity verification</label>
+        <p className="text-[10px] text-zinc-600 mt-0.5">
+          Require voice matching before creating voice clones. Disable for self-hosted deployments.
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={() => updateSettings({ enabled: !enabled })}
+        className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors"
+        style={{
+          backgroundColor: enabled ? 'var(--color-daw-accent)' : 'var(--color-daw-surface-2)',
+        }}
+      >
+        <span
+          className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
+          style={{
+            transform: enabled ? 'translateX(17px)' : 'translateX(3px)',
+          }}
+        />
+      </button>
     </div>
   );
 }
@@ -345,6 +379,10 @@ export function SettingsDialog() {
               Direct URL to acestep-api server, e.g. http://127.0.0.1:8001
             </p>
           </div>
+
+          <div className="border-t border-daw-border my-3" />
+          <h3 className="text-xs font-medium text-zinc-300">Voice Cloning Safety</h3>
+          <VoiceVerificationToggle />
 
           <h3 className="text-xs font-medium text-zinc-300 pt-2">Project</h3>
 

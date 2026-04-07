@@ -66,7 +66,16 @@ jobs:
       - name: Show Rust version
         run: rustc --version && cargo --version
       - name: Check Tauri crate compiles
-        run: cd src-tauri && RUST_BACKTRACE=1 cargo check 2>&1 || (echo "::error::cargo check failed" && exit 1)
+        run: |
+          cd src-tauri
+          RUST_BACKTRACE=1 cargo check 2>&1 | tee /tmp/cargo-check.log || true
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo '## Tauri cargo check failed' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -100 /tmp/cargo-check.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
       - name: Clippy lint
         run: cd src-tauri && cargo clippy -- -D warnings
       - name: Format check

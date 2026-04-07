@@ -24,6 +24,7 @@ import { useEffectsSync } from '../../hooks/useEffectsSync';
 import { useVST3Connection } from '../../hooks/useVST3Connection';
 import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
+import { WAMSidePanel } from '../plugins/WAMSidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
@@ -194,6 +195,7 @@ function EditorShell() {
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}
+      {project && <WAMSidePanel />}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
       {project && showCustomModels && <Suspense fallback={null}><CustomModelsPanel /></Suspense>}
       {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}

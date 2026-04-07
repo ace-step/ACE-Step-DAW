@@ -565,6 +565,32 @@ function ControlBarButton({
   return btn;
 }
 
+function WAMPluginButton() {
+  const showWAMPanel = useUIStore((s) => s.showWAMPanel);
+  const toggleWAMPanel = useUIStore((s) => s.toggleWAMPanel);
+
+  return (
+    <button
+      onClick={toggleWAMPanel}
+      className={`flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-medium transition-colors ${
+        showWAMPanel
+          ? 'border-blue-500/40 bg-blue-500/15 text-blue-300'
+          : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200'
+      }`}
+      title="WAM Plugin Browser"
+      aria-label="Toggle WAM plugin browser"
+      data-testid="wam-panel-toggle"
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <rect x="2" y="3" width="20" height="18" rx="2" />
+        <path d="M8 21V3M16 21V3" />
+        <path d="M2 12h20" />
+      </svg>
+      WAM
+    </button>
+  );
+}
+
 function AceStudioLink() {
   return (
     <a
@@ -924,6 +950,9 @@ export function Toolbar() {
 
       {/* VST3 Companion Status */}
       <CompanionStatus />
+
+      {/* WAM Plugins Button */}
+      <WAMPluginButton />
 
       {/* Command Palette + ACE Studio */}
       <div className="flex items-center gap-1 shrink-0">

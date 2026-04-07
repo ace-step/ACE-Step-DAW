@@ -36,6 +36,8 @@
     "@strudel/tonal": "^1.2.6",
     "@strudel/transpiler": "^1.2.6",
     "@strudel/webaudio": "^1.3.0",
+    "@webaudiomodules/api": "^2.0.0-alpha.6",
+    "@webaudiomodules/sdk": "^0.0.12",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",

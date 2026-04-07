@@ -212,6 +212,9 @@ export interface UIState {
   // VST3 Plugin Browser Panel
   showVST3Panel: boolean;
 
+  // WAM Plugin Browser Panel
+  showWAMPanel: boolean;
+
   // AI Assistant (Claude Code terminal)
   showAIAssistant: boolean;
   workspaceComplexity: 'simple' | 'standard' | 'advanced';
@@ -453,6 +456,10 @@ export interface UIState {
   toggleVST3Panel: () => void;
   setShowVST3Panel: (v: boolean) => void;
 
+  // WAM Plugin Browser Panel
+  toggleWAMPanel: () => void;
+  setShowWAMPanel: (v: boolean) => void;
+
   // AI Assistant (Claude Code terminal)
   toggleAIAssistant: () => void;
   setShowAIAssistant: (v: boolean) => void;
@@ -571,6 +578,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showCustomModels: false,
   showAIAssistant: false,
   showVST3Panel: false,
+  showWAMPanel: false,
 } as const;
 
 /** State slice that closes every modal dialog. Spread this when opening one. */
@@ -736,6 +744,8 @@ export const useUIStore = create<UIState>()(
   generationPanelView: 'textToMusic',
 
   showVST3Panel: false,
+
+  showWAMPanel: false,
 
   showAIAssistant: false,
   workspaceComplexity: 'standard',
@@ -1321,6 +1331,9 @@ export const useUIStore = create<UIState>()(
 
   toggleVST3Panel: () => set((s) => s.showVST3Panel ? { showVST3Panel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true }),
   setShowVST3Panel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showVST3Panel: true } : { showVST3Panel: false }),
+
+  toggleWAMPanel: () => set((s) => s.showWAMPanel ? { showWAMPanel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showWAMPanel: true }),
+  setShowWAMPanel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showWAMPanel: true } : { showWAMPanel: false }),
 
   toggleAIAssistant: () => set((state) => (
     state.showAIAssistant

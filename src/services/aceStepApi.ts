@@ -22,6 +22,8 @@ import type {
   TrainModelResponse,
   TrainingJobStatusResponse,
   UploadTrainingTrackResponse,
+  VerificationPhraseResponse,
+  VoiceVerificationResponse,
 } from '../types/api';
 
 /** @deprecated Use AiTaskParams instead */
@@ -573,4 +575,44 @@ export interface CustomModelListResponse {
     model_path: string;
     training_job_id: string;
   }>;
+}
+
+// ---------------------------------------------------------------------------
+// Voice Identity Verification API (#1096)
+// ---------------------------------------------------------------------------
+
+/** Request a random verification phrase from the backend */
+export async function getVerificationPhrase(language: string = 'en'): Promise<VerificationPhraseResponse> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/v1/voice/verification_phrase?language=${encodeURIComponent(language)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`getVerificationPhrase failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<VerificationPhraseResponse> = await res.json();
+  return envelope.data;
+}
+
+/** Submit reference audio + spoken phrase for voice identity comparison */
+export async function verifyVoiceIdentity(
+  referenceAudio: Blob,
+  spokenPhrase: Blob,
+  phraseId: string,
+): Promise<VoiceVerificationResponse> {
+  const base = getApiBase();
+  const formData = new FormData();
+  formData.append('reference_audio', referenceAudio, 'reference.wav');
+  formData.append('spoken_phrase', spokenPhrase, 'spoken.wav');
+  formData.append('phrase_id', phraseId);
+
+  const res = await fetch(`${base}/v1/voice/verify`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`verifyVoiceIdentity failed: ${res.status} - ${text}`);
+  }
+  const envelope: ApiEnvelope<VoiceVerificationResponse> = await res.json();
+  return envelope.data;
 }

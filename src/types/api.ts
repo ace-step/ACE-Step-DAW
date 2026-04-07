@@ -556,3 +556,41 @@ export interface CreateSampleResponse {
   timesignature?: string;
   vocal_language?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Voice Identity Verification (#1096)
+// ---------------------------------------------------------------------------
+
+/** Verification status for a voice profile */
+export type VoiceVerificationStatus = 'unverified' | 'pending' | 'verified' | 'failed';
+
+/** Response from requesting a verification phrase */
+export interface VerificationPhraseResponse {
+  phrase_id: string;
+  text: string;
+  language: string;
+}
+
+/** Response from voice verification comparison */
+export interface VoiceVerificationResponse {
+  match: boolean;
+  confidence: number;
+  phrase_id: string;
+  error?: string;
+}
+
+/** A voice profile with verification status */
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  /** Timestamp when created */
+  createdAt: number;
+  /** Reference audio key in storage */
+  referenceAudioKey: string | null;
+  /** Verification status */
+  verificationStatus: VoiceVerificationStatus;
+  /** When verification was completed */
+  verifiedAt: number | null;
+  /** Confidence score from verification (0-1) */
+  verificationConfidence: number | null;
+}

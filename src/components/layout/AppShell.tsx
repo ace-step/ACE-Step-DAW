@@ -51,6 +51,7 @@ const AudioAnalysisPanel = lazy(() => import('../generation/AudioAnalysisPanel')
 const StemSeparationModal = lazy(() => import('../generation/StemSeparationModal').then(m => ({ default: m.StemSeparationModal })));
 const AudioToMidiModal = lazy(() => import('../generation/AudioToMidiModal').then(m => ({ default: m.AudioToMidiModal })));
 const HumToSongModal = lazy(() => import('../generation/HumToSongModal').then(m => ({ default: m.HumToSongModal })));
+const VoiceVerificationModal = lazy(() => import('../voice/VoiceVerificationModal').then(m => ({ default: m.VoiceVerificationModal })));
 const VocalReplacementModal = lazy(() => import('../generation/VocalReplacementModal').then(m => ({ default: m.VocalReplacementModal })));
 
 // Lazy-loaded heavy panels (code-split, loaded on first use)
@@ -219,6 +220,7 @@ function EditorShell() {
         <StemSeparationModal />
         <AudioToMidiModal />
         <HumToSongModal />
+        <VoiceVerificationModal />
         <VocalReplacementModal />
         <ShareDialog />
         <VideoExportDialog />

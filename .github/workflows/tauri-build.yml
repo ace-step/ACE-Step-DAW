@@ -2,7 +2,7 @@ name: Tauri Desktop Build
 
 on:
   push:
-    branches: ['*']
+    branches: ['**']
     paths:
       - 'src-tauri/**'
       - 'src/**'
@@ -28,10 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.85.0"
           targets: wasm32-unknown-unknown
-      - uses: cargo-bins/cargo-binstall@main
+      - uses: cargo-bins/cargo-binstall@v1.12.3
       - run: cargo binstall wasm-pack --no-confirm
       - uses: actions/setup-node@v4
         with:
@@ -51,7 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.0"
+          components: rustfmt, clippy
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -97,8 +101,9 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.85.0"
           targets: ${{ matrix.target }}
 
       - uses: actions/download-artifact@v4

@@ -1,14 +1,16 @@
 /**
  * Tauri desktop bridge utilities.
  *
- * When the React app runs inside the Tauri WebView, `window.__TAURI__`
- * is injected automatically.  These helpers let the rest of the codebase
- * check the runtime environment without importing Tauri internals.
+ * When the React app runs inside the Tauri WebView, `window.__TAURI_INTERNALS__`
+ * is injected in Tauri v2. Older setups may still expose `window.__TAURI__`.
+ * These helpers let the rest of the codebase check the runtime environment
+ * without importing Tauri internals.
  */
 
 /** Returns `true` when running inside the Tauri desktop shell. */
 export function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window;
+  if (typeof window === 'undefined') return false;
+  return '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
 }
 
 /** Invoke a Tauri command (no-op stub when running in browser). */

@@ -14,7 +14,6 @@ fn is_desktop() -> bool {
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![greet, is_desktop])
         .setup(|app| {
             // Focus main window on startup

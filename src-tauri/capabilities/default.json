@@ -4,7 +4,6 @@
   "description": "Default capability set for ACE-Step DAW",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "shell:allow-open"
+    "core:default"
   ]
 }

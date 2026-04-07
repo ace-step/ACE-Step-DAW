@@ -63,8 +63,10 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+      - name: Show Rust version
+        run: rustc --version && cargo --version
       - name: Check Tauri crate compiles
-        run: cd src-tauri && cargo check
+        run: cd src-tauri && RUST_BACKTRACE=1 cargo check 2>&1 || (echo "::error::cargo check failed" && exit 1)
       - name: Clippy lint
         run: cd src-tauri && cargo clippy -- -D warnings
       - name: Format check

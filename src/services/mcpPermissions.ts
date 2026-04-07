@@ -3,7 +3,7 @@
  *
  * Provides a simple permission system for MCP tool access:
  * - Read operations: always allowed (no rate limit)
- * - Write operations: rate limited per category
+ * - Write operations: rate limited per tool
  * - Destructive operations: require explicit confirmation
  *
  * Rate limits are per-session and reset on page reload.
@@ -133,6 +133,8 @@ export function checkPermission(toolName: string): PermissionCheckResult {
  * Call this AFTER the tool execution succeeds.
  */
 export function recordToolCall(toolName: string): void {
+  const config = TOOL_PERMISSIONS[toolName];
+  if (!config?.rateLimit) return;
   recordCall(toolName);
 }
 
@@ -164,9 +166,11 @@ export function getRateLimitStatus(toolName: string): {
   const { maxCalls, windowMs } = config.rateLimit;
   const now = Date.now();
   const entry = rateLimitState.get(toolName);
-  const recentCalls = entry
-    ? entry.timestamps.filter((t) => now - t < windowMs).length
-    : 0;
+  if (entry) {
+    // Prune old timestamps to prevent unbounded growth
+    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
+  }
+  const recentCalls = entry ? entry.timestamps.length : 0;
 
   return {
     remaining: Math.max(0, maxCalls - recentCalls),

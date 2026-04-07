@@ -11,6 +11,11 @@
  * - category: grouping for documentation
  *
  * The mcpBridge.ts module executes these tools against the Zustand stores.
+ *
+ * NOTE: server/mcp-server.ts maintains its own tool definitions.
+ * TODO: Extract shared tool metadata into a common module that both
+ * browser (mcpBridge) and Node server (mcp-server.ts) can import
+ * to prevent definition drift.
  */
 
 export interface McpToolParameter {

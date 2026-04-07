@@ -837,12 +837,13 @@ export class AudioEngine {
   }
 
   /**
-   * Get or create a time-stretched AudioBuffer for non-repitch modes.
-   * Results are cached by clip+mode+rate combination.
+   * Get or create a processed AudioBuffer for offline time-stretch and/or pitch shift.
+   * Returns metadata indicating what processing was applied so scheduling can decide
+   * whether to also apply playbackRate.
    */
-  private _getStretchedBuffer(
+  private _getProcessedBuffer(
     clip: ClipScheduleInfo,
-  ): AudioBuffer | null {
+  ): { buffer: AudioBuffer; appliedStretch: boolean } | null {
     const mode = clip.stretchMode;
     const rawRate = clip.timeStretchRate ?? 1;
     // Validate rate: must be finite and within safe range
@@ -857,7 +858,7 @@ export class AudioEngine {
 
     const cacheKey = `${clip.clipId}:${mode ?? 'none'}:${rate.toFixed(4)}:ps${semitones.toFixed(2)}`;
     const cached = this.stretchedBufferCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) return { buffer: cached, appliedStretch: !!needsStretch };
 
     // Process each channel
     const buffer = clip.buffer;
@@ -870,7 +871,7 @@ export class AudioEngine {
     for (let ch = 0; ch < numChannels; ch++) {
       let channelData: Float32Array = new Float32Array(buffer.getChannelData(ch));
 
-      // Apply time-stretch if needed
+      // Apply time-stretch if needed (non-repitch modes only)
       if (needsStretch) {
         channelData = timeStretch(channelData, {
           mode: mode as TimeStretchMode,
@@ -892,17 +893,52 @@ export class AudioEngine {
     }
 
     // Create new AudioBuffer with processed data
-    const stretchedBuffer = this.ctx.createBuffer(
+    const processedBuffer = this.ctx.createBuffer(
       numChannels,
       maxLen,
       buffer.sampleRate,
     );
     for (let ch = 0; ch < numChannels; ch++) {
-      stretchedBuffer.getChannelData(ch).set(processedChannels[ch]);
+      processedBuffer.getChannelData(ch).set(processedChannels[ch]);
     }
 
-    this.stretchedBufferCache.set(cacheKey, stretchedBuffer);
-    return stretchedBuffer;
+    this.stretchedBufferCache.set(cacheKey, processedBuffer);
+    return { buffer: processedBuffer, appliedStretch: !!needsStretch };
+  }
+
+  /**
+   * Get a pitch-shifted buffer for use with warped clips.
+   * Only applies pitch shift (not time-stretch, since warp handles timing).
+   */
+  private _getPitchShiftedBuffer(clip: ClipScheduleInfo): AudioBuffer | null {
+    const semitones = clip.pitchShift ?? 0;
+    if (Math.abs(semitones) < 0.01) return null;
+
+    const cacheKey = `${clip.clipId}:ps-only:${semitones.toFixed(2)}`;
+    const cached = this.stretchedBufferCache.get(cacheKey);
+    if (cached) return cached;
+
+    const buffer = clip.buffer;
+    const numChannels = buffer.numberOfChannels;
+    const processedChannels: Float32Array[] = [];
+    let maxLen = 0;
+
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelData = pitchShiftAudio(new Float32Array(buffer.getChannelData(ch)), {
+        semitones,
+        sampleRate: buffer.sampleRate,
+      });
+      processedChannels.push(channelData);
+      maxLen = Math.max(maxLen, channelData.length);
+    }
+
+    const psBuffer = this.ctx.createBuffer(numChannels, maxLen, buffer.sampleRate);
+    for (let ch = 0; ch < numChannels; ch++) {
+      psBuffer.getChannelData(ch).set(processedChannels[ch]);
+    }
+
+    this.stretchedBufferCache.set(cacheKey, psBuffer);
+    return psBuffer;
   }
 
   private _scheduleStandardClip(
@@ -912,10 +948,13 @@ export class AudioEngine {
   ) {
     const source = this.ctx.createBufferSource();
 
-    // Check if we should use offline time-stretch instead of playbackRate
-    const stretchedBuffer = this._getStretchedBuffer(clip);
-    if (stretchedBuffer) {
-      source.buffer = stretchedBuffer;
+    // Get processed buffer (time-stretch and/or pitch shift).
+    // The result distinguishes whether offline time-stretch was applied,
+    // so we know whether to also apply playbackRate for repitch mode.
+    const processed = this._getProcessedBuffer(clip);
+    const appliedStretch = processed?.appliedStretch ?? false;
+    if (processed) {
+      source.buffer = processed.buffer;
     } else {
       source.buffer = clip.buffer;
     }
@@ -942,8 +981,9 @@ export class AudioEngine {
 
     const rate = clip.timeStretchRate ?? 1;
     // Only apply playbackRate for repitch mode (or when no stretchMode specified)
+    // and only when offline stretch was NOT already applied
     const useRepitch = !clip.stretchMode || clip.stretchMode === 'repitch';
-    if (rate !== 1 && useRepitch && !stretchedBuffer) {
+    if (rate !== 1 && useRepitch && !appliedStretch) {
       source.playbackRate.value = rate;
     }
 
@@ -951,8 +991,8 @@ export class AudioEngine {
     if (clipEnd <= fromTime) return;
 
     const contextNow = this.ctx.currentTime;
-    if (stretchedBuffer) {
-      // Stretched buffer plays at rate 1.0 — stretching already applied
+    if (appliedStretch) {
+      // Offline-stretched buffer plays at rate 1.0 — stretching already applied
       if (clip.startTime >= fromTime) {
         const delay = clip.startTime - fromTime;
         source.start(contextNow + delay, clip.audioOffset / rate, clip.clipDuration);
@@ -989,6 +1029,10 @@ export class AudioEngine {
     const segments = computeWarpedSegments(clip.warpMarkers!, clip.clipDuration);
     const contextNow = this.ctx.currentTime;
 
+    // Pre-process buffer for pitch shift if needed (warp handles timing separately)
+    const pitchBuffer = this._getPitchShiftedBuffer(clip);
+    const playBuffer = pitchBuffer ?? clip.buffer;
+
     for (const seg of segments) {
       const segTimelineStart = clip.startTime + seg.targetStart;
       const segTimelineEnd = clip.startTime + seg.targetEnd;
@@ -996,7 +1040,7 @@ export class AudioEngine {
       if (segTimelineEnd <= fromTime) continue;
 
       const source = this.ctx.createBufferSource();
-      source.buffer = clip.buffer;
+      source.buffer = playBuffer;
       source.playbackRate.value = seg.playbackRate;
       source.connect(trackNode.inputGain);
 

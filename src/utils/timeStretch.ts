@@ -467,17 +467,21 @@ export interface PitchShiftOptions {
 /**
  * Shift pitch by the given number of semitones while preserving duration.
  *
- * Algorithm: time-stretch by inverse of pitch ratio, then resample to
- * original length. E.g. +12 semitones = 2x pitch → stretch to 2x length
- * (keeping pitch) → resample at 2x speed → same length, higher pitch.
+ * Algorithm: time-stretch by the pitch ratio, then resample back to the
+ * original length. E.g. +12 semitones = 2x pitch ratio → stretch to 2x
+ * length (keeping pitch) → resample at 2x speed → same length, higher pitch.
  */
 export function pitchShift(input: Float32Array, options: PitchShiftOptions): Float32Array {
-  const { sampleRate = 48000, fftSize = 4096 } = options;
+  const { sampleRate = 48000 } = options;
 
   // Clamp semitones to ±24 (2 octaves)
   const semitones = Math.max(-24, Math.min(24, options.semitones));
   if (Math.abs(semitones) < 0.01) return new Float32Array(input);
   if (input.length < 256) return new Float32Array(input);
+
+  // Normalize fftSize to power of 2 (same as timeStretch)
+  const rawFft = options.fftSize ?? 4096;
+  const fftSize = 2 ** Math.round(Math.log2(Math.max(256, rawFft)));
 
   // Pitch ratio: how much faster to play to achieve the pitch shift
   const pitchRatio = Math.pow(2, semitones / 12);

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AudioWarpMarker } from '../../types/project';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
@@ -31,6 +31,17 @@ export function ClipWarpMarkers({ clipId, clipDuration, width, markers, allowAdd
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const dragStartRef = useRef<{ x: number; originalQuantized: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  // Cleanup drag listeners on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      if (dragCleanupRef.current) {
+        dragCleanupRef.current();
+        dragCleanupRef.current = null;
+      }
+    };
+  }, []);
 
   const handleDoubleClick = useCallback((index: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -62,15 +73,19 @@ export function ClipWarpMarkers({ clipId, clipDuration, width, markers, allowAdd
       setWarpMarkers(clipId, updated);
     };
 
-    const onMouseUp = () => {
+    const cleanup = () => {
       dragStartRef.current = null;
       setDraggingIndex(null);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      dragCleanupRef.current = null;
     };
+
+    const onMouseUp = () => cleanup();
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+    dragCleanupRef.current = cleanup;
   }, [clipId, clipDuration, width, markers, setWarpMarkers]);
 
   const handleAddMarker = useCallback((e: React.MouseEvent) => {

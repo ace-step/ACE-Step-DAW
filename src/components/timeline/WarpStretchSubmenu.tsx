@@ -74,17 +74,31 @@ export function WarpStretchSubmenu({
     };
   }, []);
 
+  const detectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    };
+  }, []);
+
   const handleDetectBpm = useCallback(() => {
     if (!clip.waveformPeaks || clip.waveformPeaks.length === 0) return;
+    const audioDuration = clip.audioDuration ?? clip.duration;
+    if (!audioDuration || audioDuration <= 0) return;
     setDetecting(true);
-    // Use setTimeout to avoid blocking UI
-    setTimeout(() => {
+    // Use setTimeout to avoid blocking UI, with cleanup on unmount
+    detectTimerRef.current = setTimeout(() => {
       const peaks = new Float32Array(clip.waveformPeaks!);
-      const audioDuration = clip.audioDuration ?? clip.duration;
       const sampleRate = peaks.length / audioDuration;
       const bpm = detectBpm(peaks, sampleRate);
-      setDetectedBpm(bpm);
-      setDetecting(false);
+      if (mountedRef.current) {
+        setDetectedBpm(bpm);
+        setDetecting(false);
+      }
     }, 0);
   }, [clip]);
 

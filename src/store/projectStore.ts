@@ -978,7 +978,7 @@ export interface ProjectState extends MidiSliceActions {
 
   /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
   convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
-  separateStems: (clipId: string, stemCount: StemCount) => Promise<Track[] | undefined>;
+  separateStems: (clipId: string, stemCount: StemCount, engine?: import('../types/api').StemSeparationEngine) => Promise<Track[] | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;
@@ -9120,7 +9120,7 @@ export const useProjectStore = create<ProjectState>()(
     return Math.max(MIN_TIMELINE_DURATION, maxEnd);
   },
 
-  separateStems: async (clipId, stemCount) => {
+  separateStems: async (clipId, stemCount, engine) => {
     const state = get();
     const project = state.project;
     if (!project) return undefined;
@@ -9150,6 +9150,7 @@ export const useProjectStore = create<ProjectState>()(
       sourceBlob,
       stemCount,
       sourceLabel: sourceTrack.displayName,
+      engine,
     });
 
     const latest = get();

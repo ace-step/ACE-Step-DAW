@@ -130,7 +130,7 @@ export function ClipContextMenu({
       <ContextMenuItem label="Consolidate" onClick={onConsolidate} shortcut="⌘J" disabled={!canConsolidate} />
 
       {/* Audio processing */}
-      {(onReverse || onNormalize || onGainUp) && (
+      {(onReverse || onNormalize || onGainUp || onGainDown || onHalfSpeed || onDoubleSpeed || onResetSpeed) && (
         <>
           <ContextMenuSeparator />
           {onReverse && <ContextMenuItem label="Reverse" onClick={onReverse} />}

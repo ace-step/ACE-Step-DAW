@@ -5,6 +5,9 @@ import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import type { Clip } from '../types/project';
 
+/** -0.1 dBFS as linear amplitude: 10^(-0.1/20) ≈ 0.98855 */
+const NORMALIZE_TARGET_PEAK = Math.pow(10, -0.1 / 20);
+
 export interface ClipProcessingResult {
   audioKey: string;
   waveformPeaks: number[];
@@ -84,7 +87,7 @@ export function reverseAudioBuffer(source: AudioBufferLike): AudioBufferLike {
  */
 export function normalizeAudioBuffer(
   source: AudioBufferLike,
-  targetPeak: number = 0.99,
+  targetPeak: number = NORMALIZE_TARGET_PEAK,
 ): AudioBufferLike {
   let peak = 0;
   for (let ch = 0; ch < source.numberOfChannels; ch++) {
@@ -152,7 +155,7 @@ export async function reverseClipAudio(
 export async function normalizeClipAudio(
   projectId: string,
   clip: Clip,
-  targetPeak: number = 0.99,
+  targetPeak: number = NORMALIZE_TARGET_PEAK,
 ): Promise<ClipProcessingResult> {
   const buffer = await loadClipAudioBuffer(clip);
   const normalized = normalizeAudioBuffer(buffer, targetPeak);

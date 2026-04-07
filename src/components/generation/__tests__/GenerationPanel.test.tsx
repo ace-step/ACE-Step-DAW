@@ -7,6 +7,10 @@ vi.mock('../../../services/generationAbortRegistry', () => ({
   abortJob: vi.fn().mockReturnValue(true),
 }));
 
+vi.mock('../../../services/generationPipeline', () => ({
+  retryGenerationJob: vi.fn().mockResolvedValue(undefined),
+}));
+
 function createJob(overrides: Partial<GenerationJob> = {}): GenerationJob {
   return {
     id: `job-${Math.random().toString(36).slice(2, 8)}`,
@@ -86,7 +90,8 @@ describe('GenerationPanel', () => {
     expect(screen.queryByLabelText('Retry Synth generation')).toBeNull();
   });
 
-  it('retry button creates a new queued job', () => {
+  it('retry button calls retryGenerationJob', async () => {
+    const { retryGenerationJob } = await import('../../../services/generationPipeline');
     const job = createJob({
       id: 'gen-fail',
       trackName: 'Lead',
@@ -100,10 +105,7 @@ describe('GenerationPanel', () => {
     const retryBtn = screen.getByLabelText('Retry Lead generation');
     fireEvent.click(retryBtn);
 
-    const jobs = useGenerationStore.getState().jobs;
-    expect(jobs).toHaveLength(2);
-    const retryJob = jobs.find((j) => j.id !== 'gen-fail');
-    expect(retryJob?.status).toBe('queued');
+    expect(retryGenerationJob).toHaveBeenCalledWith('gen-fail');
   });
 
   it('shows cancelled jobs with distinct styling', () => {

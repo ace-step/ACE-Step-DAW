@@ -1,4 +1,5 @@
 import { useGenerationStore } from '../../store/generationStore';
+import { retryGenerationJob } from '../../services/generationPipeline';
 import { formatEtaDisplay } from '../../utils/generationProgress';
 
 export function GenerationPanel() {
@@ -6,7 +7,6 @@ export function GenerationPanel() {
   const clearCompletedJobs = useGenerationStore((s) => s.clearCompletedJobs);
   const cancelJob = useGenerationStore((s) => s.cancelJob);
   const cancelAllJobs = useGenerationStore((s) => s.cancelAllJobs);
-  const retryJob = useGenerationStore((s) => s.retryJob);
 
   const visibleJobs = [...jobs]
     .filter((job) => job.status === 'queued' || job.status === 'generating' || job.status === 'processing' || job.status === 'error' || job.status === 'cancelled')
@@ -16,22 +16,29 @@ export function GenerationPanel() {
     (j) => j.status === 'queued' || j.status === 'generating' || j.status === 'processing',
   ).length;
 
+  // Precompute queue positions from stable insertion order (jobs array order by startedAt)
+  const queuePositionMap = new Map<string, number>();
+  let queuePos = 1;
+  for (const job of [...jobs].sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0))) {
+    if (job.status === 'queued' || job.status === 'generating' || job.status === 'processing') {
+      queuePositionMap.set(job.id, queuePos++);
+    }
+  }
+
   return (
     <div className="border-t border-[#1a1a1a] bg-[#2a2a2a]">
       <div className="flex items-center h-9 px-3 gap-3">
         {(visibleJobs.length > 0 || hasCompletedJobs) && (
           <>
             <div className="flex-1 flex items-center gap-2 overflow-x-auto text-xs">
-              {visibleJobs.map((job, index) => {
+              {visibleJobs.map((job) => {
                 const eta = formatEtaDisplay(job.etaSeconds ?? null);
                 const progressPercent = Math.round(job.progressPercent ?? 0);
                 const isActive = job.status === 'queued' || job.status === 'generating' || job.status === 'processing';
                 const isRetryable = (job.status === 'error' || job.status === 'cancelled') && !!job.retryParams;
 
-                // Queue position for queued jobs
-                const queuePosition = job.status === 'queued'
-                  ? visibleJobs.filter((j, i) => i < index && (j.status === 'queued' || j.status === 'generating' || j.status === 'processing')).length + 1
-                  : null;
+                // Queue position from stable precomputed map
+                const queuePosition = job.status === 'queued' ? (queuePositionMap.get(job.id) ?? null) : null;
 
                 return (
                   <div
@@ -109,7 +116,7 @@ export function GenerationPanel() {
                     {/* Retry button for failed/cancelled jobs */}
                     {isRetryable && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); retryJob(job.id); }}
+                        onClick={(e) => { e.stopPropagation(); void retryGenerationJob(job.id); }}
                         className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-white/10 text-current opacity-50 hover:opacity-100 transition-opacity"
                         aria-label={`Retry ${job.trackName} generation`}
                         title="Retry generation"

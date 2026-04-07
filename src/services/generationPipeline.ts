@@ -370,7 +370,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
   } catch (err) {
     if (_regenerateJobId) unregisterJobAbortController(_regenerateJobId);
     if (err instanceof DOMException && err.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: 'Cancelled' });
+      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
       if (_regenerateJobId) genStore.updateJob(_regenerateJobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       logger.debug('regenerateText2MusicClip: cancelled by user');
     } else {
@@ -1064,7 +1064,7 @@ async function generateClipInternal(
 
     // Handle user cancellation via AbortController
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: 'Cancelled' });
+      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
       genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       updateVariationProgress({ status: 'cancelled', progress: 'Cancelled', completedAt: Date.now() });
       return { cumulativeBlob: previousCumulativeBlob, succeeded: false, errorMessage: 'Cancelled' };
@@ -1368,11 +1368,14 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) return sleep(ms);
   if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
     const onAbort = () => {
       clearTimeout(timer);
       reject(new DOMException('Aborted', 'AbortError'));
     };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
@@ -1930,7 +1933,7 @@ export async function generateCoverClip(opts: GenerateCoverOptions): Promise<str
     } catch (error) {
       unregisterJobAbortController(jobId);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        store.updateClipStatus(targetClipId, 'error', { errorMessage: 'Cancelled' });
+        store.updateClipStatus(targetClipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
         genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
         return false;
       }
@@ -2158,7 +2161,7 @@ async function generateRepaintInternal(
   } catch (error) {
     unregisterJobAbortController(jobId);
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useProjectStore.getState().updateClipStatus(clipId, 'error', { errorMessage: 'Cancelled' });
+      useProjectStore.getState().updateClipStatus(clipId, 'ready', { generationJobId: undefined, errorMessage: undefined });
       genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
       return { cumulativeBlob: null, succeeded: false, errorMessage: 'Cancelled' };
     }
@@ -2519,7 +2522,7 @@ export async function generateVocal2BGM(opts: Vocal2BGMOptions): Promise<void> {
     } catch (error) {
       unregisterJobAbortController(jobId);
       if (error instanceof DOMException && error.name === 'AbortError') {
-        store.updateClipStatus(newClip.id, 'error', { errorMessage: 'Cancelled' });
+        store.updateClipStatus(newClip.id, 'ready', { generationJobId: undefined, errorMessage: undefined });
         genStore.updateJob(jobId, { status: 'cancelled', progress: 'Cancelled', stage: 'Cancelled' });
         return false;
       }
@@ -2547,6 +2550,50 @@ function extractServerPath(audioPath: string): string | null {
   }
   if (audioPath.startsWith('/') && !audioPath.includes('?')) return audioPath;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Retry orchestration — re-submits a failed/cancelled job via the pipeline
+// ---------------------------------------------------------------------------
+
+/**
+ * Retry a failed/cancelled generation job. Creates a new store job and
+ * dispatches to the appropriate pipeline function based on retryParams.type.
+ *
+ * Currently supports 'text2music' retry. Other types will be added as needed.
+ */
+export async function retryGenerationJob(jobId: string): Promise<void> {
+  const genStore = useGenerationStore.getState();
+  const job = genStore.jobs.find((j) => j.id === jobId);
+  if (!job || !job.retryParams) return;
+
+  const params = job.retryParams as Record<string, unknown>;
+  const type = params.type as string | undefined;
+
+  // Remove the placeholder retry job that retryJob() created in the store
+  genStore.removeJob(jobId);
+
+  if (type === 'text2music') {
+    const store = useProjectStore.getState();
+    const project = store.project;
+    if (!project) return;
+
+    await generateText2Music({
+      prompt: (params.prompt as string) ?? '',
+      lyrics: (params.lyrics as string) ?? '',
+      durationSeconds: (params.durationSeconds as number) ?? 60,
+      bpm: project.bpm ?? null,
+      keyScale: project.keyScale ?? '',
+      timeSignature: String(project.timeSignature ?? 4),
+      splitToStems: false,
+      thinking: (params.thinking as boolean) ?? false,
+      seed: params.seed as number | undefined,
+      useRandomSeed: true,
+      vocalLanguage: (params.vocalLanguage as string) ?? '',
+      instrumental: (params.instrumental as boolean) ?? false,
+    });
+  }
+  // Future: handle 'cover', 'repaint', etc.
 }
 
 // ---------------------------------------------------------------------------

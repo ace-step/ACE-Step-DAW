@@ -84,16 +84,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          LOG=$(tail -80 /tmp/cargo-check.log)
-          # Post to any associated PR
-          PR_NUM=$(gh pr list --head "${{ github.ref_name }}" --json number -q '.[0].number' 2>/dev/null || true)
-          if [ -n "$PR_NUM" ]; then
-            gh pr comment "$PR_NUM" --body "## cargo check failure
-          \`\`\`
-          $LOG
-          \`\`\`"
-          fi
-          echo "::error::cargo check failed"
+          echo "=== CARGO CHECK LOG ==="
+          cat /tmp/cargo-check.log
+          echo "=== END LOG ==="
           exit 1
       - name: Clippy lint
         if: steps.cargo-check.outcome == 'success'

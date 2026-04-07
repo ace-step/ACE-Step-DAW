@@ -1,4 +1,6 @@
 import { ENHANCE_PRESETS, surpriseMe } from '../../constants/enhancePresets';
+import { TimbreReferenceSelector } from './TimbreReferenceSelector';
+import type { TimbreReference } from '../../services/timbreTransfer';
 
 export type ConsistencyLevel = 'low' | 'medium' | 'high';
 
@@ -13,6 +15,9 @@ export interface EnhanceCoverControlsProps {
   onCreateNewChange: (value: boolean) => void;
   quickStylesOpen: boolean;
   onQuickStylesToggle: () => void;
+  timbreRef?: TimbreReference | null;
+  onTimbreRefChange?: (ref: TimbreReference | null) => void;
+  isSubmitting?: boolean;
 }
 
 export function EnhanceCoverControls({
@@ -26,6 +31,9 @@ export function EnhanceCoverControls({
   onCreateNewChange,
   quickStylesOpen,
   onQuickStylesToggle,
+  timbreRef,
+  onTimbreRefChange,
+  isSubmitting,
 }: EnhanceCoverControlsProps) {
   return (
     <>
@@ -128,6 +136,15 @@ export function EnhanceCoverControls({
           ))}
         </div>
       </div>
+
+      {/* Timbre Reference */}
+      {onTimbreRefChange && (
+        <TimbreReferenceSelector
+          timbreRef={timbreRef ?? null}
+          onTimbreRefChange={onTimbreRefChange}
+          disabled={isSubmitting}
+        />
+      )}
 
       {/* Create new vs replace */}
       <div className="flex items-center gap-3 pt-1">

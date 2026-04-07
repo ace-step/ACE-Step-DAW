@@ -10,6 +10,7 @@ import {
   getFirstSelectedEmptyTrackSlotIndex,
   parseArrangementEmptyTrackSlotIndex,
 } from '../arrangement/trackSlotLayout';
+import { TimbrePresetPicker } from './TimbrePresetPicker';
 
 const VOCAL_TRACK_NAMES = new Set<string>(['vocals', 'backing_vocals']);
 const TARGET_TRACK_OPTIONS = TRACK_NAMES.map((trackName) => TRACK_CATALOG[trackName]);
@@ -746,6 +747,8 @@ export function AddLayerPanel() {
                   <div className="relative flex-1" style={{ minWidth: 0 }} onClick={handleWaveformClick}>
                     <canvas
                       ref={waveformCanvasRef}
+                      role="img"
+                      aria-label="Layer selection visualization"
                       className="w-full h-8 cursor-pointer rounded"
                     />
                     {/* Draggable selection mask overlay */}
@@ -842,9 +845,12 @@ export function AddLayerPanel() {
 
         {/* Stem Description */}
         <div>
-          <label className="text-[10px] uppercase tracking-wide text-zinc-500 block mb-1">
-            Stem Description
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[10px] uppercase tracking-wide text-zinc-500">
+              Stem Description
+            </label>
+          </div>
+          <TimbrePresetPicker onSelect={(preset) => setStyle(preset.promptTemplate)} />
           <textarea
             value={style}
             onChange={(e) => setStyle(e.target.value)}

@@ -78,6 +78,7 @@ import {
   generateCoverClip,
   generateRepaintClip,
   generateText2Music,
+  generateVocalReplacement,
 } from '../generationPipeline';
 import type { Clip } from '../../types/project';
 
@@ -639,5 +640,101 @@ describe('generateText2Music', () => {
     expect(result.succeeded).toBe(false);
     expect(result.errorMessage).toContain('CUDA out of memory');
     expect(useGenerationStore.getState().isGenerating).toBe(false);
+  });
+});
+
+// ─── generateVocalReplacement ───────────────────────────────────────────────
+
+describe('generateVocalReplacement', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGenerationStore.setState({ isGenerating: false, jobs: [] });
+  });
+
+  it('returns early when isGenerating is true (lock not acquired)', async () => {
+    useGenerationStore.setState({ isGenerating: true });
+    await generateVocalReplacement({
+      clipId: 'clip-1',
+      vocalStyle: 'warm female vocals',
+      lyrics: 'la la la',
+      targetTrackId: 'track-vocals',
+      bpm: 120,
+      keyScale: 'C major',
+    });
+    // No API calls should have been made
+    expect(mockReleaseLegoTask).not.toHaveBeenCalled();
+  });
+
+  it('returns early when source clip has no audio', async () => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+    const track = useProjectStore.getState().addTrack('drums', 'stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 10,
+      prompt: 'Rock drums',
+    });
+    // No audio keys set — isolatedAudioKey and cumulativeMixKey are null
+    mockLoadAudioBlobByKey.mockResolvedValue(null);
+
+    const vocalTrack = useProjectStore.getState().addTrack('vocals', 'stems');
+
+    await generateVocalReplacement({
+      clipId: clip.id,
+      vocalStyle: 'warm vocals',
+      lyrics: 'hello world',
+      targetTrackId: vocalTrack.id,
+      bpm: 120,
+      keyScale: '',
+    });
+
+    expect(mockReleaseLegoTask).not.toHaveBeenCalled();
+  });
+
+  it('submits lego task with track_name=vocals and polls for result', async () => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+    const track = useProjectStore.getState().addTrack('drums', 'stems');
+    const clip = useProjectStore.getState().addClip(track.id, {
+      startTime: 0,
+      duration: 10,
+      prompt: 'Rock drums',
+    });
+    // Set audio key on clip
+    const project = useProjectStore.getState().project!;
+    const trackObj = project.tracks.find((t) => t.id === track.id)!;
+    const storeClip = trackObj.clips.find((c) => c.id === clip.id)!;
+    storeClip.isolatedAudioKey = 'drums-audio-key';
+    storeClip.generationStatus = 'ready';
+
+    const vocalTrack = useProjectStore.getState().addTrack('vocals', 'stems');
+
+    mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' }));
+    mockReleaseLegoTask.mockResolvedValue({ task_id: 'task-123', status: 'queued' });
+    mockQueryResult.mockResolvedValue([{
+      task_id: 'task-123',
+      status: 1,
+      result: JSON.stringify([{ file: '/v1/audio?path=/tmp/vocal.wav', metas: { bpm: 120 } }]),
+      progress_text: 'Done',
+    }]);
+    mockDownloadAudio.mockResolvedValue(new Blob(['vocal-audio'], { type: 'audio/wav' }));
+    mockDecodeAudioData.mockResolvedValue(fakeAudioBuffer(10));
+    mockSaveAudioBlob.mockResolvedValue('saved-key');
+
+    await generateVocalReplacement({
+      clipId: clip.id,
+      vocalStyle: 'soulful R&B',
+      lyrics: 'oh baby yeah',
+      targetTrackId: vocalTrack.id,
+      bpm: 120,
+      keyScale: 'C major',
+    });
+
+    // Should have called releaseLegoTask with lego params
+    expect(mockReleaseLegoTask).toHaveBeenCalledTimes(1);
+    const [, params] = mockReleaseLegoTask.mock.calls[0];
+    expect(params.task_type).toBe('lego');
+    expect(params.track_name).toBe('vocals');
+    expect(params.lyrics).toBe('oh baby yeah');
   });
 });

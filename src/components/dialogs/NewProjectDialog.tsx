@@ -25,6 +25,8 @@ import { ONBOARDING_STARTERS, getStarterTemplate, instantiateDemoProject } from 
 import { toastSuccess } from '../../hooks/useToast';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { ClipLayoutItem } from '../../utils/clipLayout';
+import { SoundDesignTemplateBrowser } from './SoundDesignTemplateBrowser';
+import { toProjectTemplate, type SoundDesignTemplate } from '../../data/templates/soundDesignTemplates';
 
 function ProjectThumbnail({
   trackCount,
@@ -151,6 +153,15 @@ export function NewProjectDialog() {
     setTemplates((prev) => prev.filter((t) => t.id !== templateId));
   };
 
+  const handleSoundDesignTemplate = (template: SoundDesignTemplate) => {
+    const projectTemplate = toProjectTemplate(template, { bpm, keyScale, timeSignature });
+    createProjectFromTemplate(projectTemplate, name !== DEFAULT_PROJECT_NAME ? name : undefined);
+    // Set the globalCaption from the template's generation defaults
+    useProjectStore.getState().updateProject({ globalCaption: template.generationDefaults.globalCaption });
+    toastSuccess(`Created "${template.name}" project`);
+    setShow(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-[600px] max-h-[80vh] bg-daw-surface rounded-lg border border-daw-border shadow-2xl flex flex-col">
@@ -242,6 +253,12 @@ export function NewProjectDialog() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* ── Sound Design Templates (Genre Presets) ── */}
+          <div className="p-4 border-b border-daw-border">
+            <h3 className="text-xs font-medium text-zinc-400 mb-3">Sound Design Templates</h3>
+            <SoundDesignTemplateBrowser onSelect={handleSoundDesignTemplate} />
           </div>
 
           {/* ── Templates ── */}

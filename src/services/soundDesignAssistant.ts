@@ -1,324 +1,197 @@
 /**
- * AI Sound Design Assistant — rule-based text-to-parameters mapping.
+ * Sound Design Assistant — maps natural language descriptors to synth parameter adjustments.
  *
- * Interprets natural language sound descriptions and maps them to synth
- * parameter changes. Supports iterative refinement ("warmer", "brighter")
- * and variation generation.
- *
- * Part of #1229 (Sound Design & Timbre System epic), issue #1234.
+ * This service provides a rule-based approach to translating descriptive words
+ * (warmer, brighter, fatter, etc.) into concrete parameter changes that can be
+ * applied to any subtractive synth instrument.
  */
 
-import type {
-  SubtractiveInstrumentSettings,
-  FmInstrumentSettings,
-  WavetableSettings,
-  InstrumentKind,
-} from '../types/project';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type DeepPartial<T> = { [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P] };
-
-export interface SoundDesignSuggestion {
-  /** Human-readable name for this suggestion. */
-  name?: string;
-  /** What this change does. */
-  description: string;
-  /** Partial parameter overrides to apply. */
-  changes: DeepPartial<SubtractiveInstrumentSettings>;
-}
-
-// ---------------------------------------------------------------------------
-// Keyword dictionaries
-// ---------------------------------------------------------------------------
-
-interface KeywordRule {
-  patterns: RegExp[];
-  apply: (current: SubtractiveInstrumentSettings) => DeepPartial<SubtractiveInstrumentSettings>;
+export interface ParameterAdjustment {
+  /** Dot-path to the parameter (e.g., 'filter.cutoffHz', 'ampEnvelope.attack'). */
+  parameter: string;
+  /** Relative change to apply (positive = increase, negative = decrease). */
+  delta: number;
+  /** Human-readable description of what this change does. */
   description: string;
 }
 
-const KEYWORD_RULES: KeywordRule[] = [
-  // ── Tonal character ───────────────────────────────────────────────────
-  {
-    patterns: [/\bwarm\b/i, /\bwarmer\b/i, /\bmellow\b/i],
-    apply: (current) => ({
-      filter: {
-        enabled: true,
-        type: 'lowpass',
-        cutoffHz: current.filter.enabled ? Math.max(200, current.filter.cutoffHz * 0.7) : 1200,
-        resonance: Math.max(current.filter.resonance, 0.5),
-      },
-    }),
-    description: 'Lower filter cutoff for warm tone',
-  },
-  {
-    patterns: [/\bbright\b/i, /\bbrighter\b/i, /\bcrisp\b/i, /\bshimmer/i],
-    apply: (current) => ({
-      filter: {
-        enabled: true,
-        type: 'lowpass',
-        cutoffHz: current.filter.enabled ? Math.min(18000, current.filter.cutoffHz * 1.5) : 8000,
-        resonance: Math.max(current.filter.resonance, 1),
-      },
-    }),
-    description: 'Raise filter cutoff for brightness',
-  },
-  {
-    patterns: [/\bdark\b/i, /\bdarker\b/i, /\bsubdued\b/i],
-    apply: (current) => ({
-      filter: {
-        enabled: true,
-        type: 'lowpass',
-        cutoffHz: current.filter.enabled ? Math.max(100, current.filter.cutoffHz * 0.5) : 800,
-        resonance: 0.5,
-      },
-    }),
-    description: 'Darken tone with low filter cutoff',
-  },
+/**
+ * Mapping of sound descriptors to parameter adjustments.
+ * Each descriptor produces one or more parameter changes.
+ */
+export const SOUND_DESCRIPTORS: Record<string, ParameterAdjustment[]> = {
+  warmer: [
+    { parameter: 'filter.cutoffHz', delta: -800, description: 'Lower filter cutoff for warmth' },
+    { parameter: 'filter.resonance', delta: -1, description: 'Reduce resonance for smoother tone' },
+    { parameter: 'ampEnvelope.attack', delta: 0.02, description: 'Slightly slower attack for softness' },
+  ],
+  brighter: [
+    { parameter: 'filter.cutoffHz', delta: 1200, description: 'Raise filter cutoff for brightness' },
+    { parameter: 'filter.resonance', delta: 1, description: 'Add slight resonance for presence' },
+  ],
+  darker: [
+    { parameter: 'filter.cutoffHz', delta: -1500, description: 'Lower filter cutoff for darkness' },
+    { parameter: 'ampEnvelope.attack', delta: 0.03, description: 'Soften attack for dark character' },
+  ],
+  fatter: [
+    { parameter: 'oscillator.detuneCents', delta: 8, description: 'Add detuning for width' },
+    { parameter: 'unison.voices', delta: 2, description: 'Add unison voices for thickness' },
+    { parameter: 'unison.detuneCents', delta: 10, description: 'Spread unison for fatness' },
+  ],
+  thinner: [
+    { parameter: 'oscillator.detuneCents', delta: -5, description: 'Reduce detuning' },
+    { parameter: 'unison.voices', delta: -1, description: 'Fewer unison voices' },
+    { parameter: 'filter.cutoffHz', delta: 500, description: 'Open filter slightly' },
+  ],
+  softer: [
+    { parameter: 'ampEnvelope.attack', delta: 0.1, description: 'Slower attack for softness' },
+    { parameter: 'ampEnvelope.release', delta: 0.3, description: 'Longer release for gentleness' },
+    { parameter: 'filter.cutoffHz', delta: -600, description: 'Lower cutoff for mellowness' },
+  ],
+  sharper: [
+    { parameter: 'ampEnvelope.attack', delta: -0.05, description: 'Faster attack for sharpness' },
+    { parameter: 'ampEnvelope.decay', delta: -0.1, description: 'Shorter decay for punch' },
+    { parameter: 'filter.cutoffHz', delta: 800, description: 'Higher cutoff for clarity' },
+  ],
+  punchier: [
+    { parameter: 'ampEnvelope.attack', delta: -0.03, description: 'Faster attack for punch' },
+    { parameter: 'ampEnvelope.decay', delta: 0.05, description: 'Slightly longer decay for body' },
+    { parameter: 'ampEnvelope.sustain', delta: -0.1, description: 'Lower sustain for transient emphasis' },
+  ],
+  spacious: [
+    { parameter: 'ampEnvelope.release', delta: 0.5, description: 'Longer release for spaciousness' },
+    { parameter: 'unison.spread', delta: 0.2, description: 'Wider stereo spread' },
+  ],
+  tight: [
+    { parameter: 'ampEnvelope.release', delta: -0.2, description: 'Shorter release for tightness' },
+    { parameter: 'ampEnvelope.decay', delta: -0.1, description: 'Shorter decay for precision' },
+  ],
+  aggressive: [
+    { parameter: 'filter.resonance', delta: 3, description: 'More resonance for aggression' },
+    { parameter: 'ampEnvelope.attack', delta: -0.04, description: 'Fast attack for bite' },
+    { parameter: 'oscillator.detuneCents', delta: 5, description: 'Add edge through detuning' },
+  ],
+  mellow: [
+    { parameter: 'filter.cutoffHz', delta: -1000, description: 'Lower cutoff for mellowness' },
+    { parameter: 'filter.resonance', delta: -2, description: 'Less resonance for smoothness' },
+    { parameter: 'ampEnvelope.attack', delta: 0.08, description: 'Gentle attack' },
+    { parameter: 'ampEnvelope.release', delta: 0.2, description: 'Longer release' },
+  ],
+  glassy: [
+    { parameter: 'filter.cutoffHz', delta: 2000, description: 'High cutoff for glass-like tone' },
+    { parameter: 'ampEnvelope.attack', delta: -0.02, description: 'Quick attack for clarity' },
+    { parameter: 'ampEnvelope.decay', delta: 0.15, description: 'Medium decay for ring' },
+    { parameter: 'ampEnvelope.sustain', delta: -0.15, description: 'Lower sustain for bell character' },
+  ],
+  plucky: [
+    { parameter: 'ampEnvelope.attack', delta: -0.04, description: 'Very fast attack' },
+    { parameter: 'ampEnvelope.decay', delta: -0.15, description: 'Short decay for pluck' },
+    { parameter: 'ampEnvelope.sustain', delta: -0.3, description: 'Low sustain for transient focus' },
+    { parameter: 'ampEnvelope.release', delta: -0.15, description: 'Short release' },
+  ],
+  dreamy: [
+    { parameter: 'ampEnvelope.attack', delta: 0.15, description: 'Slow attack for dreaminess' },
+    { parameter: 'ampEnvelope.release', delta: 0.8, description: 'Very long release' },
+    { parameter: 'filter.cutoffHz', delta: -500, description: 'Slightly lower cutoff' },
+    { parameter: 'unison.detuneCents', delta: 15, description: 'Wide detuning for shimmer' },
+  ],
+};
 
-  // ── Envelope character ────────────────────────────────────────────────
-  {
-    patterns: [/\bslow attack\b/i, /\bsoft(?:er)? attack\b/i, /\bpad\b/i, /\bswell/i],
-    apply: () => ({
-      ampEnvelope: { attack: 0.8, decay: 0.5, sustain: 0.8, release: 1.5 },
-    }),
-    description: 'Slow attack for pad-like swells',
-  },
-  {
-    patterns: [/\bfast attack\b/i, /\bsnappy\b/i, /\bpunchy\b/i, /\btight\b/i],
-    apply: () => ({
-      ampEnvelope: { attack: 0.001, decay: 0.15, sustain: 0.4, release: 0.2 },
-    }),
-    description: 'Fast attack for punchy sound',
-  },
-  {
-    patterns: [/\bpluck/i, /\bstaccato\b/i, /\bshort\b/i],
-    apply: () => ({
-      ampEnvelope: { attack: 0.001, decay: 0.2, sustain: 0.0, release: 0.3 },
-    }),
-    description: 'Short decay for plucky articulation',
-  },
-  {
-    patterns: [/\blong release\b/i, /\bsustain/i, /\breverb(?:erant)?\b/i],
-    apply: (current) => ({
-      ampEnvelope: {
-        sustain: Math.max(current.ampEnvelope.sustain, 0.7),
-        release: Math.max(current.ampEnvelope.release, 2.0),
-      },
-    }),
-    description: 'Extended sustain and release',
-  },
+// Intensifier words that multiply the delta
+const INTENSIFIERS: Record<string, number> = {
+  much: 1.5,
+  very: 1.5,
+  slightly: 0.5,
+  'a bit': 0.5,
+  'a little': 0.5,
+  really: 2.0,
+  extremely: 2.5,
+  super: 2.0,
+};
 
-  // ── Oscillator character ──────────────────────────────────────────────
-  {
-    patterns: [/\bsaw\b/i, /\bsaw(?:tooth)?\b/i, /\bbrassi?\b/i],
-    apply: () => ({
-      oscillator: { waveform: 'sawtooth' as const },
-    }),
-    description: 'Sawtooth waveform for brassy/rich tone',
-  },
-  {
-    patterns: [/\bsquare\b/i, /\bhollow\b/i, /\breedy\b/i],
-    apply: () => ({
-      oscillator: { waveform: 'square' as const },
-    }),
-    description: 'Square waveform for hollow/reedy tone',
-  },
-  {
-    patterns: [/\bsine\b/i, /\bpure\b/i, /\bsub\b/i, /\bclean\b/i],
-    apply: () => ({
-      oscillator: { waveform: 'sine' as const },
-    }),
-    description: 'Sine waveform for pure/clean tone',
-  },
-  {
-    patterns: [/\btriangle\b/i, /\bsoft\b(?!.*attack)/i, /\bgentle\b/i],
-    apply: () => ({
-      oscillator: { waveform: 'triangle' as const },
-    }),
-    description: 'Triangle waveform for soft/gentle tone',
-  },
+/**
+ * Parse a natural language sound description into parameter adjustments.
+ *
+ * When multiple descriptors match (e.g. "dark aggressive"), deltas for
+ * the same parameter are summed so no adjustment is silently lost.
+ *
+ * Examples:
+ *   "warmer" → lower filter cutoff, soften attack
+ *   "much brighter" → raise filter cutoff (amplified)
+ *   "dark aggressive" → combined adjustments with summed deltas
+ */
+export function parseSoundDescription(input: string): ParameterAdjustment[] {
+  const normalized = input.toLowerCase().trim();
+  // Accumulate deltas per parameter so multiple descriptors compose correctly
+  const paramMap = new Map<string, ParameterAdjustment>();
 
-  // ── Texture / density ─────────────────────────────────────────────────
-  {
-    patterns: [/\bfat\b/i, /\bthick\b/i, /\bdetun/i, /\bunison\b/i, /\bwide\b/i],
-    apply: () => ({
-      unison: { voices: 4, detuneCents: 15, stereoSpread: 0.7, blend: 0.5 },
-    }),
-    description: 'Detuned unison voices for fat/wide tone',
-  },
-  {
-    patterns: [/\bthin\b/i, /\bnarrow\b/i, /\bmono\b/i],
-    apply: () => ({
-      unison: { voices: 1, detuneCents: 0, stereoSpread: 0, blend: 0.5 },
-    }),
-    description: 'Single voice for thin/mono tone',
-  },
-
-  // ── Aggression / drive ────────────────────────────────────────────────
-  {
-    patterns: [/\baggressive\b/i, /\bdistort/i, /\bdirty\b/i, /\bgritty\b/i, /\bnasty\b/i],
-    apply: (current) => ({
-      filter: {
-        enabled: true,
-        drive: Math.max(current.filter.drive, 0.5),
-        resonance: Math.max(current.filter.resonance, 3),
-      },
-    }),
-    description: 'Added drive and resonance for aggression',
-  },
-
-  // ── LFO / modulation ─────────────────────────────────────────────────
-  {
-    patterns: [/\bwobbl/i, /\blfo\b/i, /\bpuls(e|ing)\b/i],
-    apply: () => ({
-      lfo: { enabled: true, target: 'filterCutoff', rateHz: 3, depth: 0.5, waveform: 'sine', retrigger: false },
-    }),
-    description: 'LFO modulation on filter cutoff',
-  },
-  {
-    patterns: [/\bvibrato\b/i, /\btremolo\b/i],
-    apply: () => ({
-      lfo: { enabled: true, target: 'pitch', rateHz: 5, depth: 0.1, waveform: 'sine', retrigger: false },
-    }),
-    description: 'Pitch vibrato modulation',
-  },
-
-  // ── Glide ─────────────────────────────────────────────────────────────
-  {
-    patterns: [/\bglide\b/i, /\bportamento\b/i, /\bslide\b/i],
-    apply: () => ({
-      glideTime: 0.15,
-    }),
-    description: 'Added portamento/glide between notes',
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Core logic
-// ---------------------------------------------------------------------------
-
-export function interpretSoundDescription(
-  description: string,
-  _instrumentKind: InstrumentKind,
-  currentSettings: SubtractiveInstrumentSettings,
-): SoundDesignSuggestion {
-  const appliedDescriptions: string[] = [];
-  let changes: DeepPartial<SubtractiveInstrumentSettings> = {};
-
-  for (const rule of KEYWORD_RULES) {
-    const matched = rule.patterns.some((p) => p.test(description));
-    if (matched) {
-      const ruleChanges = rule.apply(currentSettings);
-      changes = deepMerge(changes, ruleChanges);
-      appliedDescriptions.push(rule.description);
+  // Detect intensifier
+  let intensifier = 1.0;
+  for (const [word, multiplier] of Object.entries(INTENSIFIERS)) {
+    if (normalized.includes(word)) {
+      intensifier = multiplier;
+      break;
     }
   }
 
-  // If nothing matched, provide a generic warm pad suggestion
-  if (appliedDescriptions.length === 0) {
-    changes = {
-      filter: { enabled: true, type: 'lowpass', cutoffHz: 3000, resonance: 1 },
-    };
-    appliedDescriptions.push('Applied generic filter shaping');
+  // Match descriptors — sum deltas for shared parameters
+  for (const [descriptor, adjustments] of Object.entries(SOUND_DESCRIPTORS)) {
+    if (normalized.includes(descriptor)) {
+      for (const adj of adjustments) {
+        const existing = paramMap.get(adj.parameter);
+        if (existing) {
+          existing.delta += adj.delta * intensifier;
+        } else {
+          paramMap.set(adj.parameter, {
+            ...adj,
+            delta: adj.delta * intensifier,
+          });
+        }
+      }
+    }
   }
 
-  return {
-    description: appliedDescriptions.join('; '),
-    changes,
-  };
+  return Array.from(paramMap.values());
 }
 
+/**
+ * Generate named variations of a base set of adjustments.
+ *
+ * Returns up to `count` variations, each with a descriptive name and
+ * modified deltas. Useful for offering multiple sound design directions.
+ */
 export function generateVariations(
-  base: SubtractiveInstrumentSettings,
-  _instrumentKind: InstrumentKind,
-  count: number,
-): SoundDesignSuggestion[] {
-  const clampedCount = Math.max(0, Math.min(count, 8));
-  const variationRecipes: { name: string; description: string; apply: (base: SubtractiveInstrumentSettings) => DeepPartial<SubtractiveInstrumentSettings> }[] = [
-    {
-      name: 'Brighter',
-      description: 'Opened up filter for more brightness',
-      apply: (b) => ({
-        filter: { enabled: true, cutoffHz: Math.min(18000, (b.filter.cutoffHz || 2000) * 1.5), resonance: Math.max(b.filter.resonance, 1.5) },
-      }),
-    },
-    {
-      name: 'Warmer',
-      description: 'Reduced highs for warmth',
-      apply: (b) => ({
-        filter: { enabled: true, cutoffHz: Math.max(200, (b.filter.cutoffHz || 2000) * 0.6) },
-      }),
-    },
-    {
-      name: 'Wider',
-      description: 'Added unison detune for width',
-      apply: (b) => ({
-        unison: { voices: Math.max(b.unison.voices, 3), detuneCents: 20, stereoSpread: 0.8 },
-      }),
-    },
-    {
-      name: 'Punchier',
-      description: 'Tightened envelope for punch',
-      apply: () => ({
-        ampEnvelope: { attack: 0.001, decay: 0.15, sustain: 0.3, release: 0.2 },
-      }),
-    },
-    {
-      name: 'Spacious',
-      description: 'Extended release for spacious feel',
-      apply: (b) => ({
-        ampEnvelope: { attack: Math.max(b.ampEnvelope.attack, 0.1), release: Math.max(b.ampEnvelope.release, 2.5) },
-      }),
-    },
-    {
-      name: 'Aggressive',
-      description: 'Added drive and resonance',
-      apply: (b) => ({
-        filter: { enabled: true, drive: Math.max(b.filter.drive, 0.6), resonance: Math.max(b.filter.resonance, 4) },
-      }),
-    },
-    {
-      name: 'Subtle Vibrato',
-      description: 'Added gentle pitch vibrato',
-      apply: () => ({
-        lfo: { enabled: true, target: 'pitch', rateHz: 5, depth: 0.08, waveform: 'sine', retrigger: false },
-      }),
-    },
-    {
-      name: 'Detuned',
-      description: 'Thick detuned unison',
-      apply: () => ({
-        unison: { voices: 5, detuneCents: 25, stereoSpread: 0.6, blend: 0.5 },
-        oscillator: { waveform: 'sawtooth' as const },
-      }),
-    },
+  baseAdjustments: ParameterAdjustment[],
+  count: number = 5,
+): { name: string; adjustments: ParameterAdjustment[] }[] {
+  const safeCount = Math.max(0, Math.min(count, 10));
+  const variations: { name: string; adjustments: ParameterAdjustment[] }[] = [
+    { name: 'Brighter', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 1.3 })) },
+    { name: 'Warmer', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 0.7 })) },
+    { name: 'Wider', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('unison') || a.parameter.includes('spread') ? a.delta * 1.5 : a.delta,
+    })) },
+    { name: 'Punchier', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('attack') || a.parameter.includes('decay') ? a.delta * 1.4 : a.delta,
+    })) },
+    { name: 'Spacious', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('release') || a.parameter.includes('spread') ? a.delta * 1.6 : a.delta,
+    })) },
+    { name: 'Aggressive', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 1.8 })) },
+    { name: 'Vibrato', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('lfo') ? a.delta * 2.0 : a.delta,
+    })) },
+    { name: 'Detuned', adjustments: baseAdjustments.map((a) => ({
+      ...a,
+      delta: a.parameter.includes('detune') ? a.delta * 2.0 : a.delta,
+    })) },
+    { name: 'Subtle', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 0.4 })) },
+    { name: 'Extreme', adjustments: baseAdjustments.map((a) => ({ ...a, delta: a.delta * 2.5 })) },
   ];
 
-  return variationRecipes.slice(0, clampedCount).map((recipe) => ({
-    name: recipe.name,
-    description: recipe.description,
-    changes: recipe.apply(base),
-  }));
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function deepMerge<T extends Record<string, unknown>>(a: T, b: DeepPartial<T>): T {
-  const result = { ...a } as Record<string, unknown>;
-  for (const key of Object.keys(b)) {
-    const bVal = (b as Record<string, unknown>)[key];
-    const aVal = result[key];
-    if (bVal && typeof bVal === 'object' && !Array.isArray(bVal) && aVal && typeof aVal === 'object' && !Array.isArray(aVal)) {
-      result[key] = deepMerge(aVal as Record<string, unknown>, bVal as Record<string, unknown>);
-    } else {
-      result[key] = bVal;
-    }
-  }
-  return result as T;
+  return variations.slice(0, safeCount);
 }

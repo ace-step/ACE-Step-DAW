@@ -283,6 +283,8 @@ export function SpectrumAnalyzer({
       </div>
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Frequency spectrum analyzer"
         style={{ width, height }}
         className="rounded border border-white/5"
         data-testid="spectrum-canvas"

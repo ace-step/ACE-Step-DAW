@@ -69,6 +69,7 @@ jobs:
         id: cargo-check
         continue-on-error: true
         run: |
+          set -o pipefail
           cd src-tauri
           RUST_BACKTRACE=full cargo check 2>&1 | tee /tmp/cargo-check.log
       - name: Upload cargo check log

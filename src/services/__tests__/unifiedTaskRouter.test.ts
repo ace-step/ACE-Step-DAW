@@ -3,7 +3,6 @@ import type { ModelCapability, AiTaskType } from '../../types/api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
 
 // Mock aceStepApi
 vi.mock('../aceStepApi', () => ({
@@ -21,8 +20,13 @@ import {
 
 describe('unifiedTaskRouter', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
     vi.clearAllMocks();
     mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe('TASK_TYPE_TO_CAPABILITY mapping', () => {
@@ -126,9 +130,10 @@ describe('unifiedTaskRouter', () => {
 
   describe('submitAiTask', () => {
     it('routes JSON-body tasks (ai_mix) to the correct endpoint via POST', async () => {
+      // ai_mix returns raw JSON (no ApiEnvelope wrapper)
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: { task_id: 'task-123' } }),
+        json: () => Promise.resolve({ task_id: 'task-123' }),
       });
 
       const result = await submitAiTask({
@@ -147,9 +152,10 @@ describe('unifiedTaskRouter', () => {
     });
 
     it('routes FormData tasks (lego) with src_audio to /release_task', async () => {
+      // release_task returns ApiEnvelope with code + data
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: { task_id: 'task-456', status: 'queued' } }),
+        json: () => Promise.resolve({ code: 0, data: { task_id: 'task-456', status: 'queued' }, error: null, timestamp: 0, extra: null }),
       });
 
       const blob = new Blob(['test'], { type: 'audio/wav' });

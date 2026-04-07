@@ -175,8 +175,12 @@ export async function submitAiTask<T = unknown>(
     throw new Error(`submitAiTask failed: ${res.status} - ${text}`);
   }
 
-  const envelope: ApiEnvelope<T> = await res.json();
-  return envelope.data;
+  const json = await res.json();
+  // Detect envelope shape — some endpoints wrap in ApiEnvelope, others return raw
+  if (json && typeof json === 'object' && 'data' in json && 'code' in json) {
+    return (json as ApiEnvelope<T>).data;
+  }
+  return json as T;
 }
 
 // ---------------------------------------------------------------------------

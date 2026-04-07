@@ -149,15 +149,30 @@ describe('voiceStore', () => {
   });
 
   describe('selectProfile', () => {
-    it('sets selectedProfileId', () => {
+    it('sets selectedProfileId when profile exists', () => {
+      useVoiceStore.setState({ profiles: [makeProfile({ id: 'v1' })] });
       useVoiceStore.getState().selectProfile('v1');
       expect(useVoiceStore.getState().selectedProfileId).toBe('v1');
+    });
+
+    it('sets null when profile id not found in profiles', () => {
+      useVoiceStore.getState().selectProfile('nonexistent');
+      expect(useVoiceStore.getState().selectedProfileId).toBeNull();
     });
 
     it('clears selection with null', () => {
       useVoiceStore.setState({ selectedProfileId: 'v1' });
       useVoiceStore.getState().selectProfile(null);
       expect(useVoiceStore.getState().selectedProfileId).toBeNull();
+    });
+
+    it('loads per-profile influence defaults on selection', () => {
+      useVoiceStore.setState({
+        profiles: [makeProfile({ id: 'v1', defaultAudioInfluence: 0.7, defaultStyleInfluence: 0.3 })],
+      });
+      useVoiceStore.getState().selectProfile('v1');
+      expect(useVoiceStore.getState().audioInfluence).toBeCloseTo(0.7);
+      expect(useVoiceStore.getState().styleInfluence).toBeCloseTo(0.3);
     });
   });
 

@@ -12,16 +12,21 @@ import { VOICE_INFLUENCE_PRESETS } from '../../types/voice';
 
 export function VoiceInfluenceControls({ disabled }: { disabled?: boolean }) {
   const selectedProfileId = useVoiceStore((s) => s.selectedProfileId);
+  const profiles = useVoiceStore((s) => s.profiles);
   const audioInfluence = useVoiceStore((s) => s.audioInfluence);
   const styleInfluence = useVoiceStore((s) => s.styleInfluence);
   const setAudioInfluence = useVoiceStore((s) => s.setAudioInfluence);
   const setStyleInfluence = useVoiceStore((s) => s.setStyleInfluence);
   const applyInfluencePreset = useVoiceStore((s) => s.applyInfluencePreset);
 
+  const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
+  const defaultAudio = selectedProfile?.defaultAudioInfluence ?? 0.4;
+  const defaultStyle = selectedProfile?.defaultStyleInfluence ?? 0.6;
+
   const handleReset = useCallback(() => {
-    setAudioInfluence(0.4);
-    setStyleInfluence(0.6);
-  }, [setAudioInfluence, setStyleInfluence]);
+    setAudioInfluence(defaultAudio);
+    setStyleInfluence(defaultStyle);
+  }, [setAudioInfluence, setStyleInfluence, defaultAudio, defaultStyle]);
 
   if (!selectedProfileId) return null;
 
@@ -82,7 +87,7 @@ export function VoiceInfluenceControls({ disabled }: { disabled?: boolean }) {
           step="0.01"
           value={audioInfluence}
           onChange={(e) => setAudioInfluence(parseFloat(e.target.value))}
-          onDoubleClick={() => setAudioInfluence(0.4)}
+          onDoubleClick={() => setAudioInfluence(defaultAudio)}
           disabled={disabled}
           className="w-full h-1 accent-indigo-400"
           title={`Audio influence: ${Math.round(audioInfluence * 100)}%`}
@@ -105,7 +110,7 @@ export function VoiceInfluenceControls({ disabled }: { disabled?: boolean }) {
           step="0.01"
           value={styleInfluence}
           onChange={(e) => setStyleInfluence(parseFloat(e.target.value))}
-          onDoubleClick={() => setStyleInfluence(0.6)}
+          onDoubleClick={() => setStyleInfluence(defaultStyle)}
           disabled={disabled}
           className="w-full h-1 accent-violet-400"
           title={`Style influence: ${Math.round(styleInfluence * 100)}%`}

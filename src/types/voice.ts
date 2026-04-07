@@ -11,7 +11,7 @@ export interface VoiceProfile {
   duration: number;
   /** File size in bytes */
   fileSize: number;
-  /** Waveform peaks for visual preview (0-1 normalized) */
+  /** Waveform peaks for visual preview — simple 0-1 positive envelope per peak */
   waveformPeaks: number[];
   /** Default audio influence (0-1): how much to preserve reference voice */
   defaultAudioInfluence: number;

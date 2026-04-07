@@ -87,12 +87,19 @@ export const useVoiceStore = create<VoiceStore>()((set, get) => ({
 
   addProfile: async (name, source, audioBlob, durationSec) => {
     const id = uuidv4();
+    // Compute a simple 0–1 positive envelope from interleaved stereo peaks
     let peaks: number[] = [];
     try {
       const ctx = new OfflineAudioContext(1, 1, 44100);
       const arrayBuf = await audioBlob.arrayBuffer();
       const audioBuf = await ctx.decodeAudioData(arrayBuf);
-      peaks = computeWaveformPeaks(audioBuf, VOICE_WAVEFORM_PEAKS);
+      const raw = computeWaveformPeaks(audioBuf, VOICE_WAVEFORM_PEAKS);
+      // raw = [Lmax0, Lmin0, Rmax0, Rmin0, ...] — extract max(Lmax, Rmax) per peak
+      peaks = Array.from({ length: VOICE_WAVEFORM_PEAKS }, (_, i) => {
+        const lMax = Math.abs(raw[i * 4] ?? 0);
+        const rMax = Math.abs(raw[i * 4 + 2] ?? 0);
+        return Math.max(lMax, rMax);
+      });
     } catch {
       // Waveform computation is best-effort
       peaks = Array.from({ length: VOICE_WAVEFORM_PEAKS }, () => 0);
@@ -113,24 +120,41 @@ export const useVoiceStore = create<VoiceStore>()((set, get) => ({
       updatedAt: now,
     };
 
-    await svc.saveVoiceProfile(profile, audioBlob);
-    set((s) => ({ profiles: [profile, ...s.profiles], error: null }));
-    return profile;
+    try {
+      await svc.saveVoiceProfile(profile, audioBlob);
+      set((s) => ({ profiles: [profile, ...s.profiles], error: null }));
+      return profile;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'Failed to save voice profile.' });
+      throw e;
+    }
   },
 
   removeProfile: async (id) => {
-    await svc.deleteVoiceProfile(id);
-    set((s) => ({
-      profiles: s.profiles.filter((p) => p.id !== id),
-      selectedProfileId: s.selectedProfileId === id ? null : s.selectedProfileId,
-    }));
+    try {
+      await svc.deleteVoiceProfile(id);
+      set((s) => ({
+        profiles: s.profiles.filter((p) => p.id !== id),
+        selectedProfileId: s.selectedProfileId === id ? null : s.selectedProfileId,
+        error: null,
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'Failed to remove voice profile.' });
+      throw e;
+    }
   },
 
   renameProfile: async (id, newName) => {
-    const updated = await svc.updateVoiceProfileName(id, newName);
-    set((s) => ({
-      profiles: s.profiles.map((p) => (p.id === id ? updated : p)),
-    }));
+    try {
+      const updated = await svc.updateVoiceProfileName(id, newName);
+      set((s) => ({
+        profiles: s.profiles.map((p) => (p.id === id ? updated : p)),
+        error: null,
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'Failed to rename voice profile.' });
+      throw e;
+    }
   },
 
   selectProfile: (id) => {
@@ -145,12 +169,15 @@ export const useVoiceStore = create<VoiceStore>()((set, get) => ({
         return;
       }
     }
-    set({ selectedProfileId: id });
+    set({ selectedProfileId: null });
   },
 
   setAudioInfluence: (value) => set({ audioInfluence: Math.max(0, Math.min(1, value)) }),
   setStyleInfluence: (value) => set({ styleInfluence: Math.max(0, Math.min(1, value)) }),
-  applyInfluencePreset: (audioInfluence, styleInfluence) => set({ audioInfluence, styleInfluence }),
+  applyInfluencePreset: (audioInfluence, styleInfluence) => set({
+    audioInfluence: Math.max(0, Math.min(1, audioInfluence)),
+    styleInfluence: Math.max(0, Math.min(1, styleInfluence)),
+  }),
 
   setRecording: (recording) => set({ recording }),
 

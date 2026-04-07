@@ -46,8 +46,8 @@ function VoiceProfileCard({
   selected: boolean;
   playing: boolean;
   onSelect: () => void;
-  onDelete: () => void;
-  onRename: (name: string) => void;
+  onDelete: () => void | Promise<void>;
+  onRename: (name: string) => void | Promise<void>;
   onTogglePreview: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -62,7 +62,7 @@ function VoiceProfileCard({
   const commitRename = () => {
     const trimmed = editName.trim();
     if (trimmed && trimmed !== profile.name) {
-      onRename(trimmed);
+      void Promise.resolve(onRename(trimmed)).catch(() => {/* error shown via store banner */});
     } else {
       setEditName(profile.name);
     }
@@ -149,7 +149,7 @@ function VoiceProfileCard({
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={() => onDelete()}
+            onClick={() => void Promise.resolve(onDelete()).catch(() => {/* error shown via store banner */})}
             className="text-[9px] text-red-400 hover:text-red-300 px-1"
             data-testid={`voice-confirm-delete-${profile.id}`}
           >
@@ -221,6 +221,7 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartRef = useRef<number>(0);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
 
   // Load profiles on first expand
   useEffect(() => {
@@ -293,7 +294,10 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
   const handleFileUpload = useCallback(
     async (file: File) => {
       if (file.size > MAX_VOICE_FILE_SIZE) return;
-      if (!file.type.startsWith('audio/')) return;
+      // Accept by MIME type or by extension (some browsers report empty MIME)
+      const hasAudioMime = file.type.startsWith('audio/');
+      const hasAudioExt = /\.(wav|mp3|flac|ogg|webm|mpeg)$/i.test(file.name);
+      if (!hasAudioMime && !hasAudioExt) return;
 
       // Compute duration
       let durationSec = 30; // fallback
@@ -335,12 +339,19 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
 
   // ── Audio preview ──
 
-  const togglePreview = useCallback(async (profileId: string) => {
-    // Stop current preview
+  const stopPreview = useCallback(() => {
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
       previewAudioRef.current = null;
     }
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }, []);
+
+  const togglePreview = useCallback(async (profileId: string) => {
+    stopPreview();
     if (previewingId === profileId) {
       setPreviewingId(null);
       return;
@@ -350,28 +361,25 @@ export function VoiceLibrary({ disabled }: { disabled?: boolean }) {
       const blob = await loadVoiceAudio(profileId);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
       const audio = new Audio(url);
       audio.onended = () => {
         setPreviewingId(null);
-        URL.revokeObjectURL(url);
+        stopPreview();
       };
       previewAudioRef.current = audio;
       setPreviewingId(profileId);
       await audio.play();
     } catch {
       setPreviewingId(null);
+      stopPreview();
     }
-  }, [previewingId]);
+  }, [previewingId, stopPreview]);
 
   // Cleanup preview on unmount
   useEffect(() => {
-    return () => {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-        previewAudioRef.current = null;
-      }
-    };
-  }, []);
+    return () => stopPreview();
+  }, [stopPreview]);
 
   // ── Search filter ──
 

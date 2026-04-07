@@ -38,6 +38,7 @@ export function ClipContextMenuContainer({
   const setAnalysisPanel = useUIStore((s) => s.setAnalysisPanel);
   const setStemSeparationModal = useUIStore((s) => s.setStemSeparationModal);
   const setAudioToMidiModal = useUIStore((s) => s.setAudioToMidiModal);
+  const setVocalReplacementModal = useUIStore((s) => s.setVocalReplacementModal);
   const selectClip = useUIStore((s) => s.selectClip);
 
   const removeClip = useProjectStore((s) => s.removeClip);
@@ -75,6 +76,7 @@ export function ClipContextMenuContainer({
     isReady,
     ...(hasAudio ? { onSeparateStems: () => { onClose(); setStemSeparationModal(clip.id); } } : {}),
     ...(isVocalTrack ? { onGenerateAccompaniment: () => { onClose(); setVocal2BGMModal(clip.id); } } : {}),
+    ...(!isVocalTrack && hasAudio ? { onGenerateVocals: () => { onClose(); setVocalReplacementModal(clip.id); } } : {}),
     onAnalyze: () => { onClose(); setAnalysisPanel(clip.id); },
     ...(hasAudio ? {
       onConvertToMidi: () => { onClose(); setAudioToMidiModal(clip.id); },

@@ -609,6 +609,30 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
   );
 
+  // Vocal replacement: only shown when a clip is selected
+  if (context.selectedClipIds.length === 1) {
+    const selectedClipId = context.selectedClipIds[0];
+    const selectedClip = context.project?.tracks
+      .flatMap((t) => t.clips.map((c) => ({ clip: c, track: t })))
+      .find((item) => item.clip.id === selectedClipId);
+    if (selectedClip && selectedClip.clip.generationStatus === 'ready' &&
+        selectedClip.track.trackName !== 'vocals' && selectedClip.track.trackName !== 'backing_vocals') {
+      commands.push(
+        createTrackCommand(
+          'clip:generate-vocals',
+          'Generate Vocals for Selected Clip',
+          'Generation',
+          'action',
+          ['vocal', 'vocals', 'sing', 'lyrics', 'voice', 'replacement', 'add vocals'],
+          ['generate vocals', 'add vocals', 'vocal replacement', 'sing over instrumental'],
+          () => useUIStore.getState().setVocalReplacementModal(selectedClipId),
+          undefined,
+          'AI generation',
+        ),
+      );
+    }
+  }
+
   commands.push(
     createTrackCommand(
       'track:add-drums',

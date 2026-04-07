@@ -308,9 +308,16 @@ export function CustomModelsPanel() {
 
   const handleStartTraining = useCallback(async () => {
     if (!modelName.trim()) return;
+    const existingJobIds = new Set(Object.keys(trainingJobs));
     await startTraining(modelName.trim(), modelDescription.trim());
-    setActiveTab('training');
-  }, [modelName, modelDescription, startTraining]);
+
+    // Only switch to Training tab if a new job was actually created
+    const latestJobs = useCustomModelStore.getState().trainingJobs;
+    const hasNewJob = Object.keys(latestJobs).some((id) => !existingJobIds.has(id));
+    if (hasNewJob) {
+      setActiveTab('training');
+    }
+  }, [modelName, modelDescription, startTraining, trainingJobs]);
 
   const handleDeleteModel = useCallback(
     async (modelId: string) => {
@@ -409,7 +416,12 @@ export function CustomModelsPanel() {
               role="button"
               aria-label="Upload reference tracks"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
             >
               <input
                 ref={fileInputRef}

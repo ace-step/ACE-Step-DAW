@@ -198,6 +198,8 @@ describe('customModelStore', () => {
       const jobs = useCustomModelStore.getState().trainingJobs;
       expect(jobs['job-1']).toBeDefined();
       expect(jobs['job-1'].status).toBe('pending');
+      expect(jobs['job-1'].submittedTrackCount).toBe(3);
+      expect(jobs['job-1'].submittedStyleTags).toEqual(['rock']);
     });
 
     it('requires minimum 3 tracks', async () => {
@@ -234,7 +236,7 @@ describe('customModelStore', () => {
     it('updates job progress on poll', async () => {
       useCustomModelStore.setState({
         trainingJobs: {
-          'job-1': { jobId: 'job-1', status: 'training', stage: 'training', progressPercent: 30, name: 'Test', description: '' },
+          'job-1': { jobId: 'job-1', status: 'training', stage: 'training', progressPercent: 30, name: 'Test', description: '', submittedTrackCount: 3, submittedStyleTags: [] },
         },
       });
 
@@ -252,16 +254,11 @@ describe('customModelStore', () => {
       expect(job.status).toBe('training');
     });
 
-    it('creates custom model when training completes', async () => {
+    it('refreshes custom models from server when training completes', async () => {
       useCustomModelStore.setState({
         trainingJobs: {
-          'job-1': { jobId: 'job-1', status: 'training', stage: 'validating', progressPercent: 90, name: 'My Model', description: 'A model' },
+          'job-1': { jobId: 'job-1', status: 'training', stage: 'validating', progressPercent: 90, name: 'My Model', description: 'A model', submittedTrackCount: 3, submittedStyleTags: ['rock', 'pop'] },
         },
-        trainingTracks: [
-          { id: 't1', filename: 'a.wav', duration: 60, bpm: 120, genre: ['rock'], sizeBytes: 100, mimeType: 'audio/wav', uploadedAt: 1 },
-          { id: 't2', filename: 'b.wav', duration: 90, bpm: 140, genre: ['rock'], sizeBytes: 200, mimeType: 'audio/wav', uploadedAt: 2 },
-          { id: 't3', filename: 'c.wav', duration: 70, bpm: 130, genre: ['pop'], sizeBytes: 150, mimeType: 'audio/wav', uploadedAt: 3 },
-        ],
       });
 
       vi.mocked(queryTrainingStatus).mockResolvedValue({
@@ -272,15 +269,27 @@ describe('customModelStore', () => {
         model_path: '/models/custom/my-model',
       });
 
+      vi.mocked(listCustomModels).mockResolvedValue({
+        models: [{
+          id: 'server-model-1',
+          name: 'My Model',
+          description: 'A model',
+          track_count: 3,
+          style_tags: ['rock', 'pop'],
+          trained_at: 1000,
+          model_path: '/models/custom/my-model',
+          training_job_id: 'job-1',
+        }],
+      });
+
       await useCustomModelStore.getState().pollTrainingJob('job-1');
 
+      expect(listCustomModels).toHaveBeenCalled();
       const models = useCustomModelStore.getState().customModels;
       expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('server-model-1');
       expect(models[0].name).toBe('My Model');
-      expect(models[0].description).toBe('A model');
       expect(models[0].modelPath).toBe('/models/custom/my-model');
-      expect(models[0].trackCount).toBe(3);
-      expect(models[0].trainingJobId).toBe('job-1');
     });
   });
 
@@ -304,6 +313,27 @@ describe('customModelStore', () => {
 
       expect(deleteCustomModel).toHaveBeenCalledWith('model-1');
       expect(useCustomModelStore.getState().customModels).toHaveLength(0);
+    });
+
+    it('sets trainingError on API failure and keeps model in state', async () => {
+      const model: CustomModel = {
+        id: 'model-1',
+        name: 'My Model',
+        description: '',
+        trackCount: 3,
+        styleTags: ['rock'],
+        trainedAt: Date.now(),
+        trainingJobId: 'job-1',
+        modelPath: '/models/custom/model-1',
+      };
+      useCustomModelStore.setState({ customModels: [model] });
+
+      vi.mocked(deleteCustomModel).mockRejectedValue(new Error('Server error'));
+
+      await useCustomModelStore.getState().deleteModel('model-1');
+
+      expect(useCustomModelStore.getState().trainingError).toBe('Server error');
+      expect(useCustomModelStore.getState().customModels).toHaveLength(1);
     });
   });
 
@@ -365,7 +395,7 @@ describe('customModelStore', () => {
           { id: 't3', filename: 'c.wav', duration: 70, bpm: 130, genre: [], sizeBytes: 150, mimeType: 'audio/wav', uploadedAt: 3 },
         ],
         trainingJobs: {
-          'job-1': { jobId: 'job-1', status: 'training', stage: 'training', progressPercent: 50, name: 'Test', description: '' },
+          'job-1': { jobId: 'job-1', status: 'training', stage: 'training', progressPercent: 50, name: 'Test', description: '', submittedTrackCount: 3, submittedStyleTags: [] },
         },
       });
 

@@ -187,6 +187,8 @@ describe('CustomModelsPanel', () => {
             status: 'training',
             stage: 'training',
             progressPercent: 45,
+            submittedTrackCount: 3,
+            submittedStyleTags: [],
           },
         },
       });
@@ -208,6 +210,8 @@ describe('CustomModelsPanel', () => {
             stage: 'failed',
             progressPercent: 0,
             error: 'Insufficient VRAM',
+            submittedTrackCount: 3,
+            submittedStyleTags: [],
           },
         },
       });

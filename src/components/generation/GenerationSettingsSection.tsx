@@ -230,7 +230,7 @@ export function GenerationSettingsSection({ active }: { active: boolean }) {
             {customModels.length > 0 && (
               <optgroup label="Custom Models">
                 {customModels.map((cm) => (
-                  <option key={cm.id} value={cm.modelPath}>
+                  <option key={cm.id} value={cm.name}>
                     {cm.name} (custom)
                   </option>
                 ))}

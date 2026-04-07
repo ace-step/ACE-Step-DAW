@@ -24,6 +24,10 @@ export interface TrainingJobState {
   stage: TrainingStage;
   progressPercent: number;
   error?: string;
+  /** Snapshot of submitted track count (captured at job creation, immune to later edits) */
+  submittedTrackCount: number;
+  /** Snapshot of style tags from submitted tracks */
+  submittedStyleTags: string[];
 }
 
 export interface TrainingDataSummary {
@@ -120,6 +124,13 @@ export const useCustomModelStore = create<CustomModelStore>()(
             track_ids: trainingTracks.map((t) => t.id),
           });
 
+          // Snapshot track metadata at submission time so it's immune to
+          // later edits while the job runs.
+          const genres = new Set<string>();
+          for (const t of trainingTracks) {
+            for (const g of t.genre) genres.add(g);
+          }
+
           const jobState: TrainingJobState = {
             jobId: response.job_id,
             name,
@@ -127,6 +138,8 @@ export const useCustomModelStore = create<CustomModelStore>()(
             status: response.status,
             stage: 'uploading',
             progressPercent: 0,
+            submittedTrackCount: trainingTracks.length,
+            submittedStyleTags: Array.from(genres),
           };
 
           set((s) => ({
@@ -155,33 +168,17 @@ export const useCustomModelStore = create<CustomModelStore>()(
               error: response.error,
             };
 
-            const newState: Partial<CustomModelStore> = {
+            return {
               trainingJobs: { ...s.trainingJobs, [jobId]: updatedJob },
             };
-
-            // When training completes, create the custom model
-            if (response.status === 'complete' && response.model_path) {
-              const genres = new Set<string>();
-              for (const track of s.trainingTracks) {
-                for (const g of track.genre) genres.add(g);
-              }
-
-              const model: CustomModel = {
-                id: `custom-${jobId}`,
-                name: existing.name,
-                description: existing.description,
-                trackCount: s.trainingTracks.length,
-                styleTags: Array.from(genres),
-                trainedAt: Date.now(),
-                trainingJobId: jobId,
-                modelPath: response.model_path,
-              };
-
-              newState.customModels = [...s.customModels, model];
-            }
-
-            return newState;
           });
+
+          // When training completes, refresh custom models from the server so
+          // we use the canonical persisted model (including its real id) and
+          // avoid appending duplicate local entries on repeated polls.
+          if (response.status === 'complete' && response.model_path) {
+            await get().refreshCustomModels();
+          }
         } catch {
           // Polling failures are transient — don't update state
         }
@@ -199,10 +196,16 @@ export const useCustomModelStore = create<CustomModelStore>()(
       },
 
       deleteModel: async (modelId: string) => {
-        await deleteCustomModelApi(modelId);
-        set((s) => ({
-          customModels: s.customModels.filter((m) => m.id !== modelId),
-        }));
+        set({ trainingError: null });
+        try {
+          await deleteCustomModelApi(modelId);
+          set((s) => ({
+            customModels: s.customModels.filter((m) => m.id !== modelId),
+          }));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to delete custom model.';
+          set({ trainingError: message });
+        }
       },
 
       refreshCustomModels: async () => {
@@ -247,6 +250,8 @@ export const useCustomModelStore = create<CustomModelStore>()(
     {
       name: 'ace-step-custom-models',
       storage: createJSONStorage(() => localStorage),
+      // trainingJobs are intentionally NOT persisted — they represent
+      // ephemeral server-side state that should be re-polled on reload.
       partialize: (state) => ({
         customModels: state.customModels,
         trainingTracks: state.trainingTracks,

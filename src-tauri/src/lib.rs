@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 /// Greet command — placeholder to verify IPC works.
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -10,10 +12,18 @@ fn is_desktop() -> bool {
     true
 }
 
-// Temporarily simplified to isolate CI build panic.
-// Full version uses tauri::generate_context!() which requires tauri_build::build().
 pub fn run() {
-    println!("ACE-Step DAW placeholder — tauri_build disabled for CI debugging");
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![greet, is_desktop])
+        .setup(|app| {
+            // Focus main window on startup
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_focus().ok();
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running ACE-Step DAW");
 }
 
 #[cfg(test)]

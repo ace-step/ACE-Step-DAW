@@ -12,6 +12,7 @@ import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
+import { VoiceLibrary } from './VoiceLibrary';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -340,6 +341,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         onChange={setNegativePrompt}
         disabled={isDisabled}
       />
+
+      {/* Voice Reference (collapsed by default) */}
+      <VoiceLibrary disabled={isDisabled} />
 
       {/* Lyrics — with Language + Instrumental inline */}
       <section className="space-y-1.5">

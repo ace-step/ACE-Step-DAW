@@ -122,7 +122,7 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
 import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
-import type { StemCount } from '../types/api';
+import type { StemCount, StemSeparationEngine } from '../types/api';
 import { separateClipAudioToStems } from '../services/stemSeparation';
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
@@ -978,7 +978,7 @@ export interface ProjectState extends MidiSliceActions {
 
   /** Convert an audio clip to MIDI, creating a new piano roll track with detected notes. */
   convertAudioToMidi: (clipId: string, options?: { threshold?: number; minConfidence?: number; minNoteDuration?: number }) => Promise<{ trackId: string; clipId: string } | undefined>;
-  separateStems: (clipId: string, stemCount: StemCount, engine?: import('../types/api').StemSeparationEngine) => Promise<Track[] | undefined>;
+  separateStems: (clipId: string, stemCount: StemCount, engine?: StemSeparationEngine) => Promise<Track[] | undefined>;
 
   /** Export each track as a separate WAV file (stem export). */
   exportStems: () => Promise<void>;

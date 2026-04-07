@@ -34,7 +34,7 @@ export const ENGINE_DESCRIPTIONS: Record<StemSeparationEngine, string> = {
 const ENGINES_BY_STEM_COUNT: Record<StemCount, StemSeparationEngine[]> = {
   2: ['auto', 'bs-roformer'],
   4: ['auto', 'bs-roformer', 'demucs-v4'],
-  6: ['auto', 'htdemucs-6s', 'demucs-v4'],
+  6: ['auto', 'htdemucs-6s'],
 };
 
 /**

@@ -146,14 +146,15 @@ export function StemSeparationModal() {
           {availableEngines.length > 1 && (
             <div className="space-y-2">
               <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400">Separation Engine</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Separation engine">
                 {availableEngines.map((eng) => {
                   const selected = eng === engine;
                   return (
                     <button
                       key={eng}
                       type="button"
-                      aria-label={`Select ${ENGINE_DISPLAY_NAMES[eng]} engine`}
+                      role="radio"
+                      aria-checked={selected}
                       title={ENGINE_DESCRIPTIONS[eng]}
                       onClick={() => setEngine(eng)}
                       className={`rounded-md border px-2.5 py-1.5 text-[10px] transition-colors ${

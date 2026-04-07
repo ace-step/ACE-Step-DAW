@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StemCount, StemSeparationEngine } from '../../types/api';
-import { getDefaultEngine, getAvailableEngines, ENGINE_DISPLAY_NAMES } from '../stemSeparationEngines';
+import { getDefaultEngine, getAvailableEngines, ENGINE_DISPLAY_NAMES, ENGINE_DESCRIPTIONS } from '../stemSeparationEngines';
 
 describe('stem separation engine selection (#737)', () => {
   describe('getDefaultEngine', () => {
@@ -45,17 +45,17 @@ describe('stem separation engine selection (#737)', () => {
 
     it('auto includes description of smart routing', () => {
       // Auto should describe its routing behavior
-      expect(ENGINE_DISPLAY_NAMES['auto']).toBe('Auto');
+      expect(ENGINE_DESCRIPTIONS['auto']).toContain('best engine');
     });
   });
 
   describe('engine descriptions include quality/speed tradeoffs', () => {
     it('BS-RoFormer description mentions quality', () => {
-      expect(ENGINE_DISPLAY_NAMES['bs-roformer']).toContain('RoFormer');
+      expect(ENGINE_DESCRIPTIONS['bs-roformer']).toContain('quality');
     });
 
-    it('Demucs v4 description', () => {
-      expect(ENGINE_DISPLAY_NAMES['demucs-v4']).toContain('Demucs');
+    it('Demucs v4 description mentions speed', () => {
+      expect(ENGINE_DESCRIPTIONS['demucs-v4']).toContain('speed');
     });
   });
 });

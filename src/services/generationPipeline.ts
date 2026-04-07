@@ -2554,7 +2554,7 @@ export async function generateVocalReplacement(opts: VocalReplacementOptions): P
         audio_duration: sourceClip.duration,
         bpm: opts.bpm,
         key_scale: opts.keyScale,
-        time_signature: project.timeSignature ? `${project.timeSignature}/4` : '',
+        time_signature: project.timeSignature ? String(project.timeSignature) : '',
         inference_steps: project.generationDefaults.inferenceSteps,
         guidance_scale: project.generationDefaults.guidanceScale,
         shift: project.generationDefaults.shift,

@@ -174,11 +174,16 @@ export class MpeCaptureService {
     noteStartTime: number,
     secondsPerBeat: number,
   ): MpeExpressionData | null {
+    const noteEndTime = event.timeOff;
     const convertCurve = (
       curve: Array<{ time: number; value: number }>,
     ): ExpressionPoint[] | undefined => {
-      if (curve.length === 0) return undefined;
-      return curve.map((p) => ({
+      // Trim to note time window to avoid negative beat offsets
+      const trimmed = curve.filter(
+        (p) => p.time >= noteStartTime && p.time <= noteEndTime,
+      );
+      if (trimmed.length === 0) return undefined;
+      return trimmed.map((p) => ({
         beat: (p.time - noteStartTime) / secondsPerBeat,
         value: p.value,
       }));

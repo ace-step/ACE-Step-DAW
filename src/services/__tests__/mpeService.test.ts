@@ -52,6 +52,16 @@ describe('MpeZoneManager', () => {
       expect(new Set(all).size).toBe(all.length);
     });
 
+    it('clamps zones to prevent overlap when both configured', () => {
+      mgr.configureLowerZone(10);
+      mgr.configureUpperZone(10); // Would overlap — clamped to 4
+      expect(mgr.getLowerZone()!.memberCount).toBe(10);
+      expect(mgr.getUpperZone()!.memberCount).toBe(4);
+      // Verify no channel overlap
+      const all = [...mgr.getLowerZone()!.memberChannels, ...mgr.getUpperZone()!.memberChannels];
+      expect(new Set(all).size).toBe(all.length);
+    });
+
     it('disables lower zone when configured with 0 members', () => {
       mgr.configureLowerZone(5);
       expect(mgr.isMpeActive()).toBe(true);
@@ -109,6 +119,14 @@ describe('MpeZoneManager', () => {
       mgr.noteOn(2, 64, 80);
       mgr.noteOn(3, 67, 90);
       expect(mgr.getActiveNotes()).toHaveLength(3);
+    });
+
+    it('enforces one note per channel (MPE spec)', () => {
+      mgr.noteOn(1, 60, 100);
+      mgr.noteOn(1, 64, 80); // Same channel, new pitch — replaces previous
+      const notes = mgr.getActiveNotes();
+      expect(notes).toHaveLength(1);
+      expect(notes[0].pitch).toBe(64);
     });
 
     it('removes note on note-off', () => {

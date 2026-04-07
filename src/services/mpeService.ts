@@ -98,7 +98,14 @@ export class MpeZoneManager {
       this._lowerZone = null;
       return;
     }
-    const clamped = Math.min(memberCount, 14);
+    // Clamp to avoid overlapping with upper zone
+    const upperUsed = this._upperZone?.memberCount ?? 0;
+    const maxAvailable = 14 - upperUsed;
+    const clamped = Math.min(memberCount, maxAvailable);
+    if (clamped <= 0) {
+      this._lowerZone = null;
+      return;
+    }
     const memberChannels: number[] = [];
     for (let i = 1; i <= clamped; i++) {
       memberChannels.push(i);
@@ -115,7 +122,14 @@ export class MpeZoneManager {
       this._upperZone = null;
       return;
     }
-    const clamped = Math.min(memberCount, 14);
+    // Clamp to avoid overlapping with lower zone
+    const lowerUsed = this._lowerZone?.memberCount ?? 0;
+    const maxAvailable = 14 - lowerUsed;
+    const clamped = Math.min(memberCount, maxAvailable);
+    if (clamped <= 0) {
+      this._upperZone = null;
+      return;
+    }
     const memberChannels: number[] = [];
     for (let i = 0; i < clamped; i++) {
       memberChannels.push(14 - i);
@@ -165,8 +179,18 @@ export class MpeZoneManager {
     return role === 'lower-member' || role === 'upper-member';
   }
 
+  /** MPE assigns one note per member channel — clear any prior note on this channel. */
+  private _clearActiveNotesForChannel(channel: number): void {
+    for (const [key, note] of this._activeNotes.entries()) {
+      if (note.channel === channel) {
+        this._activeNotes.delete(key);
+      }
+    }
+  }
+
   noteOn(channel: number, pitch: number, velocity: number): void {
     if (!this._isMemberChannel(channel)) return;
+    this._clearActiveNotesForChannel(channel);
     this._activeNotes.set(this._noteKey(channel, pitch), {
       channel,
       pitch,

@@ -9,7 +9,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MpeZoneManager, type MpeZone, type MpeNoteState } from '../services/mpeService';
+import { MpeZoneManager, type MpeNoteState } from '../services/mpeService';
 
 export interface MpeStoreState {
   /** Whether MPE mode is enabled by the user. */

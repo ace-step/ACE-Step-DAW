@@ -39,13 +39,22 @@ export function useMpeController({ trackId }: UseMpeControllerOptions) {
     }
 
     const zoneMgr = getMpeZoneManager();
+    zoneMgr.setPitchBendRange(pitchBendRange);
     const handler = new MpeInputHandler(zoneMgr);
     const voiceRouter = getMpeVoiceRouter();
     handlerRef.current = handler;
 
-    // Detect MPE Configuration Messages
+    // Intercept MCM zone configuration to trigger auto-detection UI
     const origConfigLower = zoneMgr.configureLowerZone.bind(zoneMgr);
+    zoneMgr.configureLowerZone = (count: number) => {
+      origConfigLower(count);
+      if (count > 0) setAutoDetected(true);
+    };
     const origConfigUpper = zoneMgr.configureUpperZone.bind(zoneMgr);
+    zoneMgr.configureUpperZone = (count: number) => {
+      origConfigUpper(count);
+      if (count > 0) setAutoDetected(true);
+    };
 
     handler.onNoteOn = (noteState: MpeNoteState) => {
       if (!trackId) return;
@@ -130,6 +139,9 @@ export function useMpeController({ trackId }: UseMpeControllerOptions) {
       if (trackId) {
         voiceRouter.clearTrack(trackId);
       }
+      // Restore original zone config methods
+      zoneMgr.configureLowerZone = origConfigLower;
+      zoneMgr.configureUpperZone = origConfigUpper;
       handlerRef.current = null;
     };
   }, [enabled, trackId, pitchBendRange, setActiveNotes, setAutoDetected]);

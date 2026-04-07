@@ -18,7 +18,7 @@ function ChannelMap() {
     if (ch === 0 && lowerMembers > 0) return 'lower-master';
     if (ch >= 1 && ch <= lowerMembers) return 'lower-member';
     if (ch === 15 && upperMembers > 0) return 'upper-master';
-    if (ch >= 16 - upperMembers && ch <= 14 && upperMembers > 0) return 'upper-member';
+    if (ch >= 15 - upperMembers && ch <= 14 && upperMembers > 0) return 'upper-member';
     return 'unused';
   };
 

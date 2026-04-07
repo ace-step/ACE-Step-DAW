@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import type { MidiClipData, StretchMode } from '../../types/project';
 import { hexToRgba } from '../../utils/color';
 import { Z } from '../../utils/zIndex';
-import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { CanvasClipWaveform } from './CanvasClipWaveform';
+import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
 import type { DragGhostInfo } from './useClipDrag';
 import { HEADER_RAIL_HEIGHT_PX } from './useClipDrag';
 import type { ClipPresentation } from './clipPresentation';
@@ -104,7 +105,7 @@ export function ClipDragGhost({
           className="absolute left-0 right-0 bottom-0 overflow-hidden"
           style={{ top: HEADER_RAIL_HEIGHT_PX }}
         >
-          <ClipWaveform
+          <CanvasClipWaveform
             peaks={peaks}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
@@ -119,7 +120,7 @@ export function ClipDragGhost({
           />
         </div>
         {isMidiClip && midiData && (
-          <ClipMidiThumbnail
+          <CanvasClipMidiThumbnail
             midiData={midiData}
             width={dragGhost.width}
             duration={clipDuration}

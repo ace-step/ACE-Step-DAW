@@ -9,7 +9,8 @@ import { getClipContentOffset } from '../../utils/clipAudio';
 import { getClipPresentation } from './clipPresentation';
 import { AddLayerModal } from '../generation/AddLayerModal';
 import { ClipContextMenuContainer } from './ClipContextMenuContainer';
-import { ClipWaveform, ClipMidiThumbnail } from './ClipWaveform';
+import { CanvasClipWaveform } from './CanvasClipWaveform';
+import { CanvasClipMidiThumbnail } from './CanvasClipMidiThumbnail';
 import { ClipGainEnvelope } from './ClipGainEnvelope';
 import { ClipWarpMarkers } from './ClipWarpMarkers';
 import { ClipStatusOverlay } from './ClipStatusOverlay';
@@ -315,7 +316,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
           className="absolute left-0 right-0 bottom-0 overflow-hidden"
           style={{ top: HEADER_RAIL_HEIGHT_PX }}
         >
-          <ClipWaveform
+          <CanvasClipWaveform
             peaks={peaks}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
@@ -370,7 +371,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
         {/* MIDI thumbnail */}
         {isMidiClip && clip.midiData && (
-          <ClipMidiThumbnail
+          <CanvasClipMidiThumbnail
             midiData={clip.midiData}
             width={width}
             duration={clip.duration}

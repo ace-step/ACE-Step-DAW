@@ -10,9 +10,11 @@ import type { Clip, Track } from '../../src/types/project';
 vi.mock('../../src/components/timeline/ClipContextMenu', () => ({
   ClipContextMenu: () => null,
 }));
-vi.mock('../../src/components/timeline/ClipWaveform', () => ({
-  ClipWaveform: () => <div data-testid="clip-waveform" />,
-  ClipMidiThumbnail: () => <div data-testid="clip-midi-thumbnail" />,
+vi.mock('../../src/components/timeline/CanvasClipWaveform', () => ({
+  CanvasClipWaveform: () => <div data-testid="clip-waveform" />,
+}));
+vi.mock('../../src/components/timeline/CanvasClipMidiThumbnail', () => ({
+  CanvasClipMidiThumbnail: () => <div data-testid="clip-midi-thumbnail" />,
 }));
 vi.mock('../../src/components/timeline/ClipGainEnvelope', () => ({
   ClipGainEnvelope: () => null,

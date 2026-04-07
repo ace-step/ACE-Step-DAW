@@ -18,17 +18,35 @@ export function BeatPad({ trackId }: BeatPadProps) {
   const timeoutRefs = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const track = useProjectStore((s) => s.project?.tracks.find((t) => t.id === trackId));
 
-  // Ensure drum engine for this track
+  const [engineReady, setEngineReady] = useState(false);
+
+  // Effect 1: Ensure drum engine is initialized, sync pads, then mark ready
   useEffect(() => {
-    if (track) {
-      drumEngine.ensureTrack(trackId, track.drumKit ?? '808');
-    }
+    setEngineReady(false);
+    if (!track) return;
+    let cancelled = false;
+    drumEngine.ensureTrack(trackId, track.drumKit ?? '808').then(() => {
+      if (cancelled) return;
+      const pads = track.drumMachine?.pads;
+      if (pads) drumEngine.syncTrackPadParams(trackId, pads);
+      setEngineReady(true);
+    });
+    return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effect 2: Sync pad params when pads change OR engine becomes ready
+  useEffect(() => {
+    if (!engineReady) return;
+    const pads = track?.drumMachine?.pads;
+    if (pads) drumEngine.syncTrackPadParams(trackId, pads);
+  }, [trackId, track?.drumMachine?.pads, engineReady]);
 
   const triggerPad = useCallback(
     (padIndex: number) => {
       const kit = track?.drumKit ?? '808';
-      drumEngine.triggerPad(trackId, padIndex, 100, kit);
+      // Pass pads when engine not yet ready so params are synced at trigger time
+      const padData = engineReady ? undefined : track?.drumMachine?.pads;
+      drumEngine.triggerPad(trackId, padIndex, 100, kit, padData);
 
       // Visual feedback
       setActivePads((prev) => new Set(prev).add(padIndex));
@@ -44,7 +62,7 @@ export function BeatPad({ trackId }: BeatPadProps) {
       }, 150);
       timeoutRefs.current.set(padIndex, timeout);
     },
-    [trackId, track?.drumKit],
+    [trackId, track?.drumKit, engineReady, track?.drumMachine?.pads],
   );
 
   // Keyboard mapping

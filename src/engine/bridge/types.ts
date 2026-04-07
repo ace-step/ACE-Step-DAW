@@ -56,9 +56,11 @@ export interface TrackParams {
 
 // ── Audio Bridge Interface ──────────────────────────────────────────
 
+export type AudioBridgeBackend = 'web-audio' | 'tauri';
+
 export interface AudioBridge {
-  /** Identifies the backend: 'web-audio' | 'tauri' */
-  readonly backend: string;
+  /** Identifies the backend. */
+  readonly backend: AudioBridgeBackend;
 
   // ── Lifecycle ───────────────────────────────────────────────────
   /** Resume the audio context (required after user gesture). */

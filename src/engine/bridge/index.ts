@@ -23,12 +23,14 @@ import { isTauri } from '../../utils/tauri';
 /**
  * Create the appropriate AudioBridge for the current runtime.
  *
- * @param engine - The AudioEngine singleton (required for web mode,
- *                 ignored when running inside Tauri desktop shell).
+ * During Phase 1 migration, always use the WebAudio-backed bridge,
+ * including inside the Tauri shell, until the Rust/Tauri backend
+ * fully implements the required AudioBridge lifecycle methods.
+ *
+ * @param engine - The AudioEngine singleton used by WebAudioBackend.
  */
 export function createBridge(engine: AudioEngine): AudioBridge {
-  if (isTauri()) {
-    return new TauriBackend();
-  }
+  // TODO: Switch to TauriBackend when Rust engine is ready (Phase 3+)
+  // if (isTauri()) return new TauriBackend();
   return new WebAudioBackend(engine);
 }

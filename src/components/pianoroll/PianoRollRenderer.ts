@@ -191,9 +191,12 @@ function drawNote(
     ctx.globalAlpha = 1.0;
   }
 
-  // Note body
+  // Note body — reduce opacity for low-confidence transcribed notes
   ctx.fillStyle = noteVisualStyle.fillStyle;
-  ctx.globalAlpha = noteVisualStyle.globalAlpha;
+  const confidenceAlpha = note.confidence !== undefined
+    ? 0.4 + note.confidence * 0.6  // 0.4–1.0 based on confidence
+    : 1.0;
+  ctx.globalAlpha = noteVisualStyle.globalAlpha * confidenceAlpha;
   ctx.beginPath();
   ctx.roundRect(noteX, noteY, Math.max(noteWidth, 3), noteHeight, 2);
   ctx.fill();
@@ -222,11 +225,26 @@ function drawNote(
     ctx.fillStyle = isSlide ? 'rgba(24,24,27,0.85)' : 'rgba(0,0,0,0.6)';
     ctx.font = `${Math.min(9, noteHeight * 0.7)}px "Geist Mono", monospace`;
     ctx.textBaseline = 'middle';
-    ctx.fillText(isSlide ? `${midiNoteToName(note.pitch)} SL` : midiNoteToName(note.pitch), noteX + 3, noteY + noteHeight / 2);
+    let label = isSlide ? `${midiNoteToName(note.pitch)} SL` : midiNoteToName(note.pitch);
+    // Show confidence percentage for transcribed notes
+    if (note.confidence !== undefined && noteWidth > 60) {
+      label += ` ${Math.round(note.confidence * 100)}%`;
+    }
+    ctx.fillText(label, noteX + 3, noteY + noteHeight / 2);
+  }
+
+  // Confidence indicator (for audio-to-MIDI transcribed notes)
+  if (note.confidence !== undefined && noteWidth > 6 && noteHeight > 6) {
+    const conf = Math.max(0, Math.min(1, note.confidence));
+    // Color: red (low) → yellow (mid) → green (high)
+    const r = conf < 0.5 ? 255 : Math.round(255 * (1 - conf) * 2);
+    const g = conf > 0.5 ? 255 : Math.round(255 * conf * 2);
+    ctx.fillStyle = `rgba(${r},${g},80,0.7)`;
+    ctx.fillRect(noteX + 1, noteY + noteHeight - 2, Math.max((noteWidth - 2) * conf, 2), 2);
   }
 
   // Velocity accent bar
-  if (!isSlide && noteWidth > 8 && noteHeight > 6) {
+  if (!isSlide && noteWidth > 8 && noteHeight > 6 && note.confidence === undefined) {
     ctx.fillStyle = `rgba(255,255,255,${noteVisualStyle.velocityAccentOpacity})`;
     ctx.fillRect(noteX + 2, noteY + noteHeight - 3, Math.max((noteWidth - 4) * velocityRatio, 2), 1.5);
   }

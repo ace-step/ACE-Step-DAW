@@ -558,6 +558,8 @@ export interface MidiNote {
   isSlide?: boolean;
   /** Per-note MPE expression data (optional, populated from MPE recording). */
   mpeExpression?: MpeExpressionData;
+  /** Pitch detection confidence (0–1). Present on notes from audio-to-MIDI conversion. */
+  confidence?: number;
 }
 
 export interface MidiClipData {

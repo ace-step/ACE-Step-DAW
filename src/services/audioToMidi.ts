@@ -83,6 +83,7 @@ export function detectedNotesToMidi(
       startBeat: (n.startTime - clipStartTime) * beatsPerSecond,
       durationBeats: Math.max(n.duration * beatsPerSecond, 0.125), // min 1/32 note
       velocity: Math.min(1, 0.5 + n.confidence * 0.5), // map confidence to velocity
+      confidence: n.confidence, // preserve for visualization
     }))
     .filter((n) => n.startBeat >= 0);
 }

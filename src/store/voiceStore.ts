@@ -119,7 +119,10 @@ export const useVoiceStore = create<VoiceStoreState>()(
 
       saveVoiceFromBlob: async ({ name, blob, duration }) => {
         if (duration < MIN_VOICE_SAMPLE_DURATION) {
-          set({ error: `Voice sample must be at least ${MIN_VOICE_SAMPLE_DURATION} seconds (got ${Math.round(duration)}s).` });
+          set({
+            isProcessing: false,
+            error: `Voice sample must be at least ${MIN_VOICE_SAMPLE_DURATION} seconds (got ${Math.round(duration)}s).`,
+          });
           return null;
         }
 
@@ -157,7 +160,7 @@ export const useVoiceStore = create<VoiceStoreState>()(
     {
       name: 'ace-step-voice-store',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ profiles: state.profiles }) as unknown as VoiceStoreState,
+      partialize: (state): Pick<VoiceStoreState, 'profiles'> => ({ profiles: state.profiles }),
     },
   ),
 );

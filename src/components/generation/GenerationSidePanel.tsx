@@ -309,7 +309,8 @@ export function GenerationSidePanel() {
             maxHeight: '580px',
           }}
           data-testid="generation-side-panel"
-          aria-label="Generate panel"
+          role="region"
+          aria-label="AI generation panel"
           aria-hidden={!show}
         >
           {/* Header: Title + Tabs + Close */}

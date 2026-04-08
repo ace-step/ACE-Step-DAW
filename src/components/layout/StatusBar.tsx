@@ -95,7 +95,7 @@ export function StatusBar({ saveStatus, lastSavedAt }: StatusBarProps) {
 
   return (
     <>
-      <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar">
+      <div className="border-t border-daw-border-strong bg-daw-surface-2 text-[10px] text-daw-text-muted" data-testid="status-bar" role="contentinfo" aria-label="Status bar — generation status, zoom, and project info">
         {hasActiveJobs && (
           <div className="flex h-6 items-center gap-3 px-3" data-testid="status-bar-job-row">
             <span className="text-daw-accent truncate tabular-nums">

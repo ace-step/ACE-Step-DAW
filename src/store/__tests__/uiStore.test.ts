@@ -2,80 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useUIStore, isAnyModalOpen } from '../uiStore';
 
 function resetStore() {
-  // Reset key state slices to known defaults
-  useUIStore.setState({
-    mainView: 'arrangement',
-    pixelsPerSecond: 50,
-    snapEnabled: true,
-    scrollX: 0,
-    scrollY: 0,
-    selectedClipIds: new Set(),
-    selectedTrackIds: new Set(),
-    lastSelectionContext: null,
-    clipboard: null,
-    editingClipId: null,
-    editingText2MusicClipId: null,
-    showNewProjectDialog: false,
-    showInstrumentPicker: false,
-    showExportDialog: false,
-    showSettingsDialog: false,
-    showProjectListDialog: false,
-    bounceInPlaceTrackId: null,
-    pendingDeleteTrackIds: null,
-    batchGenerateMode: null,
-    showKeyboardShortcutsDialog: false,
-    showShortcutEditorDialog: false,
-    showVirtualKeyboard: false,
-    showCommandPalette: false,
-    commandPaletteQuery: '',
-    showUndoHistoryPanel: false,
-    showMixer: false,
-    showAssetsPanel: false,
-    showSmartControls: false,
-    showLibrary: false,
-    activeBottomPanel: null,
-    showTempoLane: false,
-    showArrangementMarkers: true,
-    timelineFocused: false,
-    autoScrollEnabled: true,
-    userScrolledDuringPlayback: false,
-    loopBrowserOpen: false,
-    enhancerOpen: false,
-    enhancerTarget: null,
-    enhancementSession: null,
-    vocal2bgmClipId: null,
-    analysisClipId: null,
-    stemSeparationClipId: null,
-    audioToMidiClipId: null,
-    vocalReplacementClipId: null,
-    showHumToSongModal: false,
-    showSpectrumAnalyzer: false,
-    showQuantizeDialog: false,
-    quantizeTarget: null,
-    showGeneratePatternDialog: false,
-    generatePatternClipId: null,
-    addLayerOpen: false,
-    editingLegoClipId: null,
-    showModelLibrary: false,
-    showCustomModels: false,
-    showGenerationPanel: false,
-    showGenerationHistoryPanel: false,
-    generationPanelView: 'textToMusic',
-    showVST3Panel: false,
-    showAIAssistant: false,
-    reducedMotion: false,
-    reducedMotionOverride: false,
-    highContrastMode: false,
-    colorBlindMode: false,
-    theme: 'midnight',
-    sliceModeClipId: null,
-    sliceMarkersByClip: {},
-    selectedSessionSlot: null,
-    virtualKeyboardOctave: 4,
-    virtualKeyboardVelocity: 100,
-    virtualKeyboardPressedPitches: [],
-    showGhostNotes: true,
-  });
+  // Fully reset the store so omitted keys cannot leak between tests.
+  useUIStore.setState(useUIStore.getInitialState(), true);
 }
 
 describe('uiStore', () => {
@@ -350,9 +278,9 @@ describe('uiStore', () => {
 
   describe('ghost notes', () => {
     it('toggleGhostNotes flips visibility', () => {
-      expect(useUIStore.getState().showGhostNotes).toBe(true);
-      useUIStore.getState().toggleGhostNotes();
       expect(useUIStore.getState().showGhostNotes).toBe(false);
+      useUIStore.getState().toggleGhostNotes();
+      expect(useUIStore.getState().showGhostNotes).toBe(true);
     });
 
     it('setShowGhostNotes sets directly', () => {
@@ -536,8 +464,8 @@ describe('uiStore', () => {
 
   describe('theme', () => {
     it('setTheme changes the active theme', () => {
-      useUIStore.getState().setTheme('sunset');
-      expect(useUIStore.getState().theme).toBe('sunset');
+      useUIStore.getState().setTheme('logic-pro');
+      expect(useUIStore.getState().theme).toBe('logic-pro');
     });
   });
 

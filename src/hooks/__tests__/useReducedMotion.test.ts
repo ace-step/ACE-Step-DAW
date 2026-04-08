@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useReducedMotionSync } from '../useReducedMotion';
 import { useUIStore } from '../../store/uiStore';
@@ -6,11 +6,13 @@ import { useUIStore } from '../../store/uiStore';
 describe('useReducedMotionSync', () => {
   let addListenerSpy: ReturnType<typeof vi.fn>;
   let removeListenerSpy: ReturnType<typeof vi.fn>;
+  const originalMatchMedia = window.matchMedia;
 
   beforeEach(() => {
     addListenerSpy = vi.fn();
     removeListenerSpy = vi.fn();
-    useUIStore.setState({ reducedMotionOverride: false });
+    // Explicitly reset both reducedMotion and reducedMotionOverride for determinism
+    useUIStore.setState({ reducedMotion: false, reducedMotionOverride: false });
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -19,6 +21,14 @@ describe('useReducedMotionSync', () => {
         addEventListener: addListenerSpy,
         removeEventListener: removeListenerSpy,
       })),
+    });
+  });
+
+  afterEach(() => {
+    // Restore original matchMedia to avoid leaking into other suites
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: originalMatchMedia,
     });
   });
 

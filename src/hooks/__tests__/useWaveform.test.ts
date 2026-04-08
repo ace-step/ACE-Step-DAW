@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
 import { useWaveform } from '../useWaveform';
 
 vi.mock('../useAudioEngine', () => ({
@@ -30,11 +30,9 @@ describe('useWaveform', () => {
 
   it('loads peaks for valid audioKey', async () => {
     const { result } = renderHook(() => useWaveform('audio-key-1', 100));
-    // Wait for async loading
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => {
+      expect(result.current).toHaveLength(100);
     });
-    expect(result.current).toHaveLength(100);
   });
 
   it('resets to null when audioKey changes to null', async () => {
@@ -42,10 +40,9 @@ describe('useWaveform', () => {
       ({ key }) => useWaveform(key),
       { initialProps: { key: 'audio-1' as string | null } },
     );
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => {
+      expect(result.current).toHaveLength(100);
     });
-    expect(result.current).toHaveLength(100);
 
     rerender({ key: null });
     expect(result.current).toBeNull();
@@ -53,15 +50,14 @@ describe('useWaveform', () => {
 
   it('uses default numPeaks of 100', async () => {
     const { computeWaveformPeaks } = await import('../../utils/waveformPeaks');
-    const { result } = renderHook(() => useWaveform('audio-1'));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    renderHook(() => useWaveform('audio-1'));
+    await waitFor(() => {
+      expect(vi.mocked(computeWaveformPeaks)).toHaveBeenCalledWith(
+        expect.anything(),
+        100,
+        expect.any(Number),
+        expect.any(Number),
+      );
     });
-    expect(vi.mocked(computeWaveformPeaks)).toHaveBeenCalledWith(
-      expect.anything(),
-      100,
-      expect.any(Number),
-      expect.any(Number),
-    );
   });
 });

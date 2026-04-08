@@ -51,10 +51,8 @@ describe('usePromptAutocomplete', () => {
     act(() => {
       result.current.handleInputChange('pop', 3);
     });
-    // Should find "pop" related suggestions
-    if (result.current.suggestions.length > 0) {
-      expect(result.current.isOpen).toBe(true);
-    }
+    expect(result.current.suggestions.length).toBeGreaterThan(0);
+    expect(result.current.isOpen).toBe(true);
   });
 
   it('closes with empty input', () => {

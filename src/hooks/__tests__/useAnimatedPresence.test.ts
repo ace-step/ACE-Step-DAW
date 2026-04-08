@@ -3,6 +3,8 @@ import { renderHook, act } from '@testing-library/react';
 import { useAnimatedPresence } from '../useAnimatedPresence';
 
 describe('useAnimatedPresence', () => {
+  const originalMatchMedia = window.matchMedia;
+
   beforeEach(() => {
     vi.useFakeTimers();
     // Ensure prefers-reduced-motion is not set
@@ -19,6 +21,11 @@ describe('useAnimatedPresence', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    // Restore original matchMedia to avoid leaking into other test files
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: originalMatchMedia,
+    });
   });
 
   it('starts rendering when show is true', () => {

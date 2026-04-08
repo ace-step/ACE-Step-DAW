@@ -5266,6 +5266,22 @@ export const useProjectStore = create<ProjectState>()(
       const newClips: Clip[] = [];
       const duplicatedClips: Clip[] = [];
 
+      /** Create a derived clip with proper field normalization (matching splitClip semantics). */
+      const deriveClip = (source: Clip, overrides: Partial<Clip>): Clip => {
+        const isReady = source.generationStatus === 'ready' && !!source.isolatedAudioKey;
+        return {
+          ...source,
+          id: uuidv4(),
+          generationStatus: isReady ? 'ready' : 'empty',
+          generationJobId: null,
+          isolatedAudioKey: isReady ? source.isolatedAudioKey : null,
+          waveformPeaks: isReady && source.waveformPeaks ? [...source.waveformPeaks] : null,
+          audioDuration: source.audioDuration,
+          cumulativeMixKey: source.cumulativeMixKey,
+          ...overrides,
+        };
+      };
+
       for (const clip of track.clips) {
         const clipEnd = clip.startTime + clip.duration;
         const origAudioOffset = clip.audioOffset ?? 0;
@@ -5274,78 +5290,55 @@ export const useProjectStore = create<ProjectState>()(
           // Before range → keep unchanged
           newClips.push(clip);
         } else if (clip.startTime >= endTime) {
-          // After range → shift forward by rangeDuration
+          // After range → shift forward
           newClips.push({ ...clip, startTime: clip.startTime + rangeDuration });
         } else if (clip.startTime >= startTime && clipEnd <= endTime) {
-          // Fully inside range → keep original, create duplicate shifted by rangeDuration
+          // Fully inside range → keep original, duplicate shifted
           newClips.push(clip);
-          duplicatedClips.push({
-            ...clip,
-            id: uuidv4(),
+          duplicatedClips.push(deriveClip(clip, {
             startTime: clip.startTime + rangeDuration,
-          });
+          }));
         } else if (clip.startTime < startTime && clipEnd <= endTime) {
-          // Starts before range, ends inside → keep original, duplicate the overlapping portion
+          // Starts before, ends inside → keep original, duplicate overlapping portion
           newClips.push(clip);
-          const overlapStart = startTime;
-          const overlapDuration = clipEnd - startTime;
-          duplicatedClips.push({
-            ...clip,
-            id: uuidv4(),
-            startTime: overlapStart + rangeDuration,
-            duration: overlapDuration,
+          duplicatedClips.push(deriveClip(clip, {
+            startTime: startTime + rangeDuration,
+            duration: clipEnd - startTime,
             audioOffset: origAudioOffset + (startTime - clip.startTime),
-          });
+          }));
         } else if (clip.startTime >= startTime && clipEnd > endTime) {
-          // Starts inside range, ends after → keep the inside portion as duplicate, shift original remainder
-          newClips.push(clip);
+          // Starts inside, ends after → split into head (in-range) + tail (beyond),
+          // keep head in place, shift tail, duplicate head after range
           const insideDuration = endTime - clip.startTime;
-          duplicatedClips.push({
-            ...clip,
-            id: uuidv4(),
+          const tailDuration = clipEnd - endTime;
+
+          const headClip: Clip = { ...clip, duration: insideDuration };
+          const tailClip = deriveClip(clip, {
+            startTime: endTime + rangeDuration,
+            duration: tailDuration,
+            audioOffset: origAudioOffset + insideDuration,
+          });
+          newClips.push(headClip, tailClip);
+
+          duplicatedClips.push(deriveClip(clip, {
             startTime: clip.startTime + rangeDuration,
             duration: insideDuration,
-          });
-          // The part after the range needs to shift forward
-          // Actually, the original clip already extends beyond the range.
-          // We need to shift its startTime forward by rangeDuration for the part after endTime.
-          // But we can't split the original — let's just shift the entire original forward.
-          // Wait, we should keep the clip as-is and shift. The original extends 0..endTime+.
-          // Since clip.startTime >= startTime and clipEnd > endTime, the clip is partially inside.
-          // We already added the original to newClips. It needs shifting if after range.
-          // Since clip.startTime >= startTime (inside range), we should shift the whole clip forward.
-          // Remove the previously pushed original and re-add shifted.
-          newClips.pop();
-          newClips.push({ ...clip, startTime: clip.startTime + rangeDuration });
+          }));
         } else if (clip.startTime < startTime && clipEnd > endTime) {
-          // Spans the entire range → keep original, duplicate the inside portion
-          newClips.push(clip);
-          // Everything after endTime needs to shift forward
-          // But this clip extends beyond - its tail shifts. However we don't split originals.
-          // Actually, for duplicate range: we insert a copy and shift everything after.
-          // If a clip spans the range, we need to split it at endTime, shift the tail,
-          // and insert the duplicated portion.
-          // This gets complex. Let's simplify: keep original up to endTime,
-          // create split at endTime that's shifted, and create duplicate of inside portion.
-          newClips.pop(); // remove original
+          // Spans entire range → split at endTime, shift tail, duplicate inside portion
           const leftClip: Clip = { ...clip, duration: endTime - clip.startTime };
-          const rightClip: Clip = {
-            ...clip,
-            id: uuidv4(),
-            startTime: clipEnd + rangeDuration - (clipEnd - endTime), // endTime + rangeDuration
+          const rightClip = deriveClip(clip, {
+            startTime: endTime + rangeDuration,
             duration: clipEnd - endTime,
             audioOffset: origAudioOffset + (endTime - clip.startTime),
-          };
+          });
           newClips.push(leftClip, rightClip);
 
-          // Duplicate the portion inside the range
-          duplicatedClips.push({
-            ...clip,
-            id: uuidv4(),
+          duplicatedClips.push(deriveClip(clip, {
             startTime: endTime,
-            duration: endTime - startTime,
+            duration: rangeDuration,
             audioOffset: origAudioOffset + (startTime - clip.startTime),
-          });
+          }));
         }
       }
 

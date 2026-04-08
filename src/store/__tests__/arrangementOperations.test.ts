@@ -400,12 +400,37 @@ describe('duplicateTimeRange', () => {
     useProjectStore.getState().duplicateTimeRange(2, 6);
 
     const clips = useProjectStore.getState().project!.tracks[0].clips;
-    // Clip spans range → original split at endTime, duplicate of inside portion inserted
-    // Expected: left (0-6), duplicate (6-10), right portion (10-12)
     const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
-    expect(sorted.length).toBeGreaterThanOrEqual(2);
-    // First part should start at 0
+    expect(sorted).toHaveLength(3);
+    // Left portion: 0-6 (up to endTime)
     expect(sorted[0].startTime).toBe(0);
+    expect(sorted[0].duration).toBe(6);
+    // Duplicate of inside portion: 6-10
+    expect(sorted[1].startTime).toBe(6);
+    expect(sorted[1].duration).toBe(4);
+    // Right portion (tail shifted): 10-12
+    expect(sorted[2].startTime).toBe(10);
+    expect(sorted[2].duration).toBe(2);
+  });
+
+  it('duplicates the in-range portion and shifts only the tail when a clip extends past endTime', () => {
+    addClipToTrack(trackId1, 4, 4); // 4-8, overlaps range 2-6 with tail 6-8
+
+    useProjectStore.getState().duplicateTimeRange(2, 6);
+
+    const clips = useProjectStore.getState().project!.tracks[0].clips;
+    expect(clips).toHaveLength(3);
+
+    const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
+    // Original in-range head: 4-6
+    expect(sorted[0].startTime).toBe(4);
+    expect(sorted[0].duration).toBe(2);
+    // Duplicated in-range head: 4 + 4 = 8
+    expect(sorted[1].startTime).toBe(8);
+    expect(sorted[1].duration).toBe(2);
+    // Tail beyond endTime shifted: 6 + 4 = 10
+    expect(sorted[2].startTime).toBe(10);
+    expect(sorted[2].duration).toBe(2);
   });
 
   it('duplicates across multiple tracks', () => {

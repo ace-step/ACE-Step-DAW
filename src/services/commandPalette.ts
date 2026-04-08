@@ -420,6 +420,87 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
   );
 
+  // Arrangement operations — use dynamic imports since these are direct store calls
+  commands.push(
+    createTrackCommand(
+      'arrangement:split-all',
+      'Split All at Playhead',
+      'Arrangement',
+      'action',
+      ['arrangement', 'split', 'all', 'playhead'],
+      ['split all clips', 'split at playhead'],
+      async () => {
+        const { useProjectStore } = await import('../store/projectStore');
+        useProjectStore.getState().splitAllAtPlayhead(context.currentTime);
+      },
+      ['Cmd', 'Shift', 'S'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:insert-time',
+      'Insert Time at Selection',
+      'Arrangement',
+      'action',
+      ['arrangement', 'insert', 'time', 'silence'],
+      ['insert silence', 'add time'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().insertTime(sw.startTime, sw.endTime - sw.startTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'I'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:delete-time',
+      'Delete Time (Ripple Delete)',
+      'Arrangement',
+      'action',
+      ['arrangement', 'delete', 'time', 'ripple'],
+      ['ripple delete', 'remove time'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().deleteTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'Shift', '⌫'],
+      'Arrangement editing',
+    ),
+  );
+  commands.push(
+    createTrackCommand(
+      'arrangement:duplicate-section',
+      'Duplicate Section',
+      'Arrangement',
+      'action',
+      ['arrangement', 'duplicate', 'section', 'copy'],
+      ['duplicate range', 'copy section'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const { useProjectStore } = await import('../store/projectStore');
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().duplicateTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+      ['Cmd', 'Shift', 'D'],
+      'Arrangement editing',
+    ),
+  );
+
   commands.push(
     createTrackCommand(
       'project:new',

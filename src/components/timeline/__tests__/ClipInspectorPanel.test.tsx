@@ -13,7 +13,7 @@ function makeClip(overrides: Partial<Clip> = {}): Clip {
     duration: 10,
     prompt: 'upbeat pop song',
     lyrics: 'la la la',
-    generationStatus: 'completed',
+    generationStatus: 'ready',
     generationJobId: null,
     cumulativeMixKey: 'audio-key-1',
     isolatedAudioKey: null,

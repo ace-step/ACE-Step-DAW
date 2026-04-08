@@ -1,8 +1,10 @@
 /**
  * Audio metrics computation for the Clip Inspector panel.
  *
- * Computes loudness (LUFS), peak, RMS, and dynamic range from an AudioBuffer.
- * Follows ITU-R BS.1770-4 simplified K-weighting for LUFS.
+ * Computes loudness (LUFS estimate), sample peak, RMS, and dynamic range
+ * from an AudioBuffer. LUFS uses gated mean-square power inspired by
+ * ITU-R BS.1770-4 but without K-weighting pre-filters. Peak is sample-level
+ * (not interpolated true-peak). Sufficient for display purposes.
  */
 import type { AudioMetrics } from '../types/clipInspector';
 
@@ -17,7 +19,7 @@ interface AudioBufferLike {
 
 // ─── Low-level metrics ─────────────────────────────────────────────────────
 
-/** True peak in dBFS across all channels. */
+/** Sample peak in dBFS across all channels. */
 export function computePeakDb(buffer: AudioBufferLike): number {
   let peak = 0;
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
@@ -55,9 +57,21 @@ export function computeRmsDb(buffer: AudioBufferLike): number {
 export function computeLufs(buffer: AudioBufferLike): number {
   const windowSamples = Math.floor(0.4 * buffer.sampleRate); // 400ms window
   if (buffer.length < windowSamples) {
-    // Too short for gating — fall back to RMS-based estimate
-    const rms = computeRmsDb(buffer);
-    return rms === -Infinity ? -Infinity : rms;
+    // Too short for gating — estimate LUFS from whole-buffer mean square
+    let totalSquareSum = 0;
+    let totalSamples = 0;
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < data.length; i++) {
+        totalSquareSum += data[i] * data[i];
+      }
+      totalSamples += data.length;
+    }
+
+    if (totalSamples === 0) return -Infinity;
+
+    const meanSquare = totalSquareSum / totalSamples;
+    return meanSquare === 0 ? -Infinity : -0.691 + 10 * Math.log10(meanSquare);
   }
 
   const windowCount = Math.floor(buffer.length / windowSamples);

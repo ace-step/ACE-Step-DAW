@@ -2,13 +2,16 @@
  * Clip Inspector Panel — displays metadata, audio metrics, tags,
  * and generation info for the currently selected clip(s).
  *
- * Appears as a bottom panel when toggled via keyboard shortcut (I)
+ * Appears as a bottom panel when toggled via keyboard shortcut (Shift+I)
  * or command palette.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { loadAudioBlobByKey } from '../../services/audioFileManager';
+import { computeAudioMetrics, formatLufs, formatDb } from '../../services/audioMetrics';
 import type { Clip } from '../../types/project';
+import type { AudioMetrics } from '../../types/clipInspector';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -71,12 +74,65 @@ function MultiClipSummary({ clips }: { clips: Clip[] }) {
   );
 }
 
+// ─── Audio metrics hook ────────────────────────────────────────────────────
+
+function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
+  const [metrics, setMetrics] = useState<AudioMetrics | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMetrics(null);
+
+    const audioKey = clip.cumulativeMixKey ?? clip.isolatedAudioKey;
+    if (!audioKey || clip.generationStatus !== 'ready') return;
+
+    (async () => {
+      try {
+        const blob = await loadAudioBlobByKey(audioKey);
+        if (cancelled || !blob) return;
+
+        const arrayBuffer = await blob.arrayBuffer();
+        if (cancelled) return;
+
+        const audioCtx = new OfflineAudioContext(1, 1, 44100);
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        if (cancelled) return;
+
+        setMetrics(computeAudioMetrics(audioBuffer));
+      } catch {
+        // Audio decode failures are non-critical — leave metrics null
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [clip.id, clip.cumulativeMixKey, clip.isolatedAudioKey, clip.generationStatus]);
+
+  return metrics;
+}
+
+function AudioMetricsSection({ metrics }: { metrics: AudioMetrics }) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-semibold mb-1">
+        Audio Metrics
+      </div>
+      <MetaRow label="Loudness" value={formatLufs(metrics.lufs)} />
+      <MetaRow label="Peak" value={formatDb(metrics.peakDb)} />
+      <MetaRow label="RMS" value={formatDb(metrics.rmsDb)} />
+      <MetaRow label="Dynamic range" value={formatDb(metrics.dynamicRangeDb)} />
+      <MetaRow label="Sample rate" value={`${metrics.sampleRate} Hz`} />
+      <MetaRow label="Channels" value={metrics.channelCount} />
+    </div>
+  );
+}
+
 // ─── Single clip detail ────────────────────────────────────────────────────
 
 function ClipDetail({ clip }: { clip: Clip }) {
   const track = useProjectStore((s) =>
     s.project?.tracks.find((t) => t.clips.some((c) => c.id === clip.id)),
   );
+  const audioMetrics = useClipAudioMetrics(clip);
 
   return (
     <div className="p-3 space-y-3">
@@ -118,6 +174,9 @@ function ClipDetail({ clip }: { clip: Clip }) {
           <MetaRow label="Genre" value={clip.inferredMetas.genres} />
         </div>
       )}
+
+      {/* Audio metrics */}
+      {audioMetrics && <AudioMetricsSection metrics={audioMetrics} />}
 
       {/* Generation params */}
       {clip.generationParams && (

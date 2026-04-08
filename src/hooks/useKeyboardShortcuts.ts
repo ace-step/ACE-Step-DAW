@@ -306,8 +306,10 @@ export function useKeyboardShortcuts() {
           const trackIds = [...new Set(selectedClips.map((clip) => clip.trackId))];
           if (trackIds.length === 1) {
             void (async () => {
-              const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
-              if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              try {
+                const consolidatedClip = await project.consolidateClips(trackIds[0], selectedIds);
+                if (consolidatedClip) ui.selectClip(consolidatedClip.id, false);
+              } catch { /* consolidation errors handled by the store */ }
             })();
           }
         }
@@ -577,7 +579,7 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         const vr = ui.videoRecording;
         if (vr.status === 'recording') ui.stopVideoRecording();
-        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording();
+        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording().catch(() => {});
         return;
       }
 

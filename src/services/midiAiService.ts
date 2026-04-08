@@ -113,7 +113,7 @@ export async function submitMidiGeneration(
   const timer = setTimeout(() => controller.abort(), MIDI_GENERATE_TIMEOUT_MS);
 
   // Chain external signal to internal controller
-  signal?.addEventListener('abort', () => controller.abort());
+  signal?.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
     const res = await fetch(`${base}/v1/midi/generate`, {

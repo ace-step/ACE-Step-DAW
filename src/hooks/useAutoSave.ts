@@ -91,8 +91,15 @@ export function useAutoSave(options?: UseAutoSaveOptions): UseAutoSaveReturn {
         setStatus('saving');
         void saveProjectToIDB(currentProject).then(() => {
           lastSavedUpdatedAtRef.current = currentProject.updatedAt;
-          isDirtyRef.current = false;
-          setStatus('saved');
+          // Re-check if project changed during the async save
+          const latestProject = useProjectStore.getState().project;
+          if (latestProject && latestProject.updatedAt !== currentProject.updatedAt) {
+            isDirtyRef.current = true;
+            setStatus('unsaved');
+          } else {
+            isDirtyRef.current = false;
+            setStatus('saved');
+          }
           setLastSavedAt(Date.now());
         }).catch(() => {
           setStatus('unsaved');

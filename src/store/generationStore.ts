@@ -1090,6 +1090,7 @@ export const useGenerationStore = create<GenerationState>()(
 
         for (const variation of s.variationSession.variations) {
           if (!variation.clipId) continue;
+          if (!projState.getClipById(variation.clipId)) continue;
           const shouldMute = variation.index !== clamped;
           projState.updateClip(variation.clipId, { muted: shouldMute });
         }

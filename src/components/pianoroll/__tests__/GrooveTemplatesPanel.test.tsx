@@ -106,6 +106,27 @@ describe('GrooveTemplatesPanel', () => {
     expect(screen.getByText('Swing 16ths')).toBeTruthy();
   });
 
+  it('renders Apply button on each groove row', () => {
+    setupProject([makeGroove({ id: 'g1' })]);
+    render(<GrooveTemplatesPanel />);
+    expect(screen.getByRole('button', { name: /apply groove/i })).toBeTruthy();
+  });
+
+  it('calls applyGrooveToClip when Apply is clicked with open clip', () => {
+    setupProject([makeGroove({ id: 'g1' })]);
+    const applyGrooveToClip = vi.fn();
+    useProjectStore.setState({ applyGrooveToClip });
+    useUIStore.setState({
+      openPianoRollClipId: 'clip-1',
+      selectedPianoRollNoteIds: ['note-1', 'note-2'],
+      grooveStrength: 75,
+    });
+
+    render(<GrooveTemplatesPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /apply groove/i }));
+    expect(applyGrooveToClip).toHaveBeenCalledWith('clip-1', ['note-1', 'note-2'], 'g1', { strength: 75 });
+  });
+
   it('shows strength slider defaulting to 100', () => {
     setupProject([makeGroove()]);
     render(<GrooveTemplatesPanel />);

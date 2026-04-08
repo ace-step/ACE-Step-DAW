@@ -27,10 +27,12 @@ function GrooveRow({
   groove,
   onDelete,
   onRename,
+  onApply,
 }: {
   groove: GrooveTemplate;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onApply: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(groove.name);
@@ -94,6 +96,14 @@ function GrooveRow({
       </div>
       <button
         type="button"
+        onClick={onApply}
+        className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-700/30 text-emerald-300 hover:bg-emerald-600/40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+        aria-label="Apply groove template"
+      >
+        Apply
+      </button>
+      <button
+        type="button"
         onClick={onDelete}
         className="text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 text-[11px]"
         aria-label="Delete groove template"
@@ -110,8 +120,29 @@ export function GrooveTemplatesPanel() {
   const groovePool = useProjectStore((s) => s.project?.groovePool ?? []);
   const deleteGrooveTemplate = useProjectStore((s) => s.deleteGrooveTemplate);
   const renameGrooveTemplate = useProjectStore((s) => s.renameGrooveTemplate);
+  const applyGrooveToClip = useProjectStore((s) => s.applyGrooveToClip);
   const strength = useUIStore((s) => s.grooveStrength);
   const setStrength = useUIStore((s) => s.setGrooveStrength);
+  const openClipId = useUIStore((s) => s.openPianoRollClipId);
+  const selectedNoteIds = useUIStore((s) => s.selectedPianoRollNoteIds);
+
+  const handleApplyGroove = useCallback((grooveId: string) => {
+    if (!openClipId) return;
+    const noteIds = selectedNoteIds.length > 0
+      ? selectedNoteIds
+      : (() => {
+          // If no notes selected, apply to all notes in the clip
+          const project = useProjectStore.getState().project;
+          if (!project) return [];
+          for (const track of project.tracks) {
+            const clip = track.clips.find((c) => c.id === openClipId);
+            if (clip?.midiData) return clip.midiData.notes.map((n) => n.id);
+          }
+          return [];
+        })();
+    if (noteIds.length === 0) return;
+    applyGrooveToClip(openClipId, noteIds, grooveId, { strength });
+  }, [openClipId, selectedNoteIds, strength, applyGrooveToClip]);
 
   return (
     <div className="flex flex-col h-full">
@@ -159,6 +190,7 @@ export function GrooveTemplatesPanel() {
               groove={groove}
               onDelete={() => deleteGrooveTemplate(groove.id)}
               onRename={(name) => renameGrooveTemplate(groove.id, name)}
+              onApply={() => handleApplyGroove(groove.id)}
             />
           ))
         )}

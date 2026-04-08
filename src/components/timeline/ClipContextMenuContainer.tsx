@@ -136,7 +136,7 @@ export function ClipContextMenuContainer({
         const timeSigDenominator = project?.timeSignatureDenominator ?? 4;
         const clipBeats = clip.duration * (bpm / 60);
         const oneBar = timeSigNumerator * (4 / timeSigDenominator); // quarter-note beats per bar (e.g. 3 for 6/8, 4 for 4/4)
-        const lengthBeats = clipBeats >= 1 ? Math.round(clipBeats) : (oneBar || FALLBACK_GROOVE_LENGTH_BEATS);
+        const lengthBeats = clipBeats >= 1 ? Math.ceil(clipBeats) : (oneBar || FALLBACK_GROOVE_LENGTH_BEATS);
         extractGrooveFromClip(clip.id, name, { gridBeats, lengthBeats });
       } : undefined}
       onEdit={() => {

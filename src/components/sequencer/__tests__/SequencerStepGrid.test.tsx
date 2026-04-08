@@ -132,10 +132,10 @@ describe('SequencerStepGrid', () => {
       ],
     });
     const { container } = renderStepGrid({ pattern });
-    // The muted row's wrapper should have opacity 0.3
+    // The muted row's wrapper should have opacity 0.3 (dimmed)
     const rows = container.querySelectorAll('[data-seq-row="row-kick"]');
-    const firstCell = rows[0]?.closest('div[style*="opacity"]');
-    expect(firstCell).toBeDefined();
+    const mutedRow = rows[0]?.closest('div[style*="opacity: 0.3"]');
+    expect(mutedRow).toBeDefined();
   });
 
   it('only shows soloed row as audible', () => {

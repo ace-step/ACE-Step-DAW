@@ -34,18 +34,20 @@ describe('SamplePickerDropdown', () => {
 
   it('renders sample options from ALL_DRUM_SAMPLES', () => {
     renderPicker();
-    // Should have multiple sample buttons
-    const buttons = screen.getAllByRole('button');
-    expect(buttons.length).toBeGreaterThanOrEqual(1);
+    // Verify known built-in sample names are rendered
+    expect(screen.getByText('Kick')).toBeInTheDocument();
+    expect(screen.getByText('Snare')).toBeInTheDocument();
+    expect(screen.getByText('Closed HH')).toBeInTheDocument();
   });
 
   it('shows checkmark for currently selected sample', () => {
-    // Need to know actual sample IDs - render and check
-    renderPicker({ currentKey: 'kick-808' });
-    const checkmarks = screen.queryAllByText('✓');
-    // There should be at least one checkmark if kick-808 is a valid key
-    // If not, at least no errors
-    expect(checkmarks.length).toBeGreaterThanOrEqual(0);
+    renderPicker({ currentKey: 'kick' });
+    expect(screen.getAllByText('✓')).toHaveLength(1);
+  });
+
+  it('hides checkmark when no sample selected', () => {
+    renderPicker({ currentKey: '' });
+    expect(screen.queryByText('✓')).not.toBeInTheDocument();
   });
 
   it('calls onSelect when clicking a sample', () => {

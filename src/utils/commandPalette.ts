@@ -226,6 +226,36 @@ export function buildCommandList(): Command[] {
       action: () => useUIStore.getState().setBatchGenerateMode('context'),
     },
 
+    // Mixer
+    {
+      id: 'reset-channel-strip',
+      label: 'Reset Channel Strip',
+      category: 'Mixer',
+      action: () => {
+        const trackId = useUIStore.getState().keyboardContext.trackId;
+        if (trackId) useProjectStore.getState().resetChannelStrip(trackId);
+      },
+    },
+    {
+      id: 'toggle-effects-bypass',
+      label: 'Toggle Effects Bypass',
+      category: 'Mixer',
+      shortcut: 'P',
+      action: () => {
+        const trackId = useUIStore.getState().keyboardContext.trackId;
+        if (trackId) useProjectStore.getState().toggleTrackEffectsBypass(trackId);
+      },
+    },
+    {
+      id: 'duplicate-focused-track',
+      label: 'Duplicate Track',
+      category: 'Mixer',
+      action: () => {
+        const trackId = useUIStore.getState().keyboardContext.trackId;
+        if (trackId) useProjectStore.getState().duplicateTrack(trackId);
+      },
+    },
+
     // Help
     {
       id: 'keyboard-shortcuts',

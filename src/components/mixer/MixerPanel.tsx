@@ -11,6 +11,7 @@ import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import { VerticalFader } from './VerticalFader';
 import { SidechainRoutingOverlay } from './SidechainRoutingOverlay';
 import { EmptyState } from '../ui/EmptyState';
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -66,6 +67,11 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
   const setSendPrePost = useProjectStore((s) => s.setSendPrePost);
   const addReturnTrack = useProjectStore((s) => s.addReturnTrack);
   const removeReturnTrack = useProjectStore((s) => s.removeReturnTrack);
+  const resetChannelStrip = useProjectStore((s) => s.resetChannelStrip);
+  const duplicateTrack = useProjectStore((s) => s.duplicateTrack);
+  const freezeTrack = useProjectStore((s) => s.freezeTrack);
+  const unfreezeTrack = useProjectStore((s) => s.unfreezeTrack);
+  const removeTrack = useProjectStore((s) => s.removeTrack);
   const setGroupMuted = useProjectStore((s) => s.setGroupMuted);
   const setGroupSoloed = useProjectStore((s) => s.setGroupSoloed);
   const setExpandedTrackId = useUIStore((s) => s.setExpandedTrackId);
@@ -73,7 +79,14 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const vol = track.volume;
   const pan = track.pan ?? 0;
@@ -115,6 +128,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
   }, [commitRename]);
 
   return (
+    <>
     <div
       data-testid="channel-strip"
       data-track-id={track.id}
@@ -137,6 +151,7 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         setExpandedTrackId(track.id);
         setKeyboardContext('mixer', track.id);
       }}
+      onContextMenu={handleContextMenu}
     >
       {/* Track color strip at top */}
       <div className="w-full h-1 rounded-b-sm shrink-0 mb-2" style={{ backgroundColor: track.color }} data-testid="track-color-strip-top" />
@@ -392,6 +407,48 @@ const ChannelStrip = React.memo(function ChannelStrip({ track, faderHeight, retu
         <span className="text-xs font-mono text-zinc-400">{volumeToDb(vol)}</span>
       </div>
     </div>
+
+    {/* Context menu */}
+    {ctxMenu && (
+      <ContextMenuWrapper x={ctxMenu.x} y={ctxMenu.y} onClose={() => setCtxMenu(null)} testId="mixer-context-menu">
+        <ContextMenuItem
+          label={track.muted ? 'Unmute' : 'Mute'}
+          shortcut="M"
+          onClick={() => { setCtxMenu(null); updateTrack(track.id, { muted: !track.muted }); }}
+        />
+        <ContextMenuItem
+          label={track.soloed ? 'Unsolo' : 'Solo'}
+          shortcut="S"
+          onClick={() => { setCtxMenu(null); updateTrack(track.id, { soloed: !track.soloed }); }}
+        />
+        <ContextMenuItem
+          label={`Effects Bypass${effectsBypassed ? ' (active)' : ''}`}
+          shortcut="P"
+          onClick={() => { setCtxMenu(null); toggleTrackEffectsBypass(track.id); }}
+        />
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          label={isFrozen ? 'Unfreeze Track' : 'Freeze Track'}
+          onClick={() => { setCtxMenu(null); if (isFrozen) unfreezeTrack(track.id); else freezeTrack(track.id); }}
+        />
+        <ContextMenuItem
+          label="Duplicate Track"
+          onClick={() => { setCtxMenu(null); duplicateTrack(track.id); }}
+        />
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          label="Reset Channel Strip"
+          onClick={() => { setCtxMenu(null); resetChannelStrip(track.id); }}
+        />
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          label="Remove Track"
+          danger
+          onClick={() => { setCtxMenu(null); removeTrack(track.id); }}
+        />
+      </ContextMenuWrapper>
+    )}
+    </>
   );
 });
 

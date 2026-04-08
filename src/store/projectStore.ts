@@ -641,6 +641,7 @@ export interface ProjectState extends MidiSliceActions {
   removeMastering: () => void;
   updateTrackMixer: (trackId: string, updates: Partial<Pick<Track, 'pan' | 'eqLowGain' | 'eqMidGain' | 'eqHighGain' | 'compressorEnabled' | 'compressorThreshold' | 'compressorRatio'>>) => void;
   toggleTrackEffectsBypass: (trackId: string) => void;
+  resetChannelStrip: (trackId: string) => void;
   setPanMode: (trackId: string, mode: 'stereo' | 'dual-mono') => void;
   setDualMonoPan: (trackId: string, left: number, right: number) => void;
   setTrackLocalCaption: (trackId: string, caption: string) => void;
@@ -2650,6 +2651,41 @@ export const useProjectStore = create<ProjectState>()(
           track.id === trackId
             ? { ...track, effectsBypassed: !(track.effectsBypassed ?? false) }
             : track,
+        ),
+      },
+    });
+  },
+
+  resetChannelStrip: (trackId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Reset channel strip', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                pan: 0,
+                panMode: 'stereo',
+                panLeft: undefined,
+                panRight: undefined,
+                eqLowGain: 0,
+                eqMidGain: 0,
+                eqHighGain: 0,
+                compressorEnabled: false,
+                compressorThreshold: -24,
+                compressorRatio: 4,
+                reverbMix: 0,
+                reverbRoomSize: 0.5,
+                effectsBypassed: false,
+                effects: [],
+                sends: [],
+              }
+            : t,
         ),
       },
     });

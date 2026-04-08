@@ -908,6 +908,59 @@ describe('projectStore', () => {
     });
   });
 
+  describe('resetChannelStrip', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('resets all mixer properties to defaults', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      store.updateTrackMixer(track.id, {
+        pan: -0.5,
+        eqLowGain: 5,
+        eqMidGain: -3,
+        eqHighGain: 4,
+        compressorEnabled: true,
+        compressorThreshold: -30,
+        compressorRatio: 8,
+      });
+      store.addTrackEffect(track.id, 'reverb');
+      store.addTrackEffect(track.id, 'delay');
+
+      useProjectStore.getState().resetChannelStrip(track.id);
+
+      const updated = useProjectStore.getState().project!.tracks.find((t) => t.id === track.id)!;
+      expect(updated.pan).toBe(0);
+      expect(updated.eqLowGain).toBe(0);
+      expect(updated.eqMidGain).toBe(0);
+      expect(updated.eqHighGain).toBe(0);
+      expect(updated.compressorEnabled).toBe(false);
+      expect(updated.compressorThreshold).toBe(-24);
+      expect(updated.compressorRatio).toBe(4);
+      expect(updated.effects).toEqual([]);
+      expect(updated.sends).toEqual([]);
+      expect(updated.reverbMix).toBe(0);
+      expect(updated.effectsBypassed).toBe(false);
+    });
+
+    it('preserves non-mixer track properties', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      store.updateTrack(track.id, { volume: 0.6, muted: true });
+      store.updateTrackMixer(track.id, { eqLowGain: 5 });
+
+      useProjectStore.getState().resetChannelStrip(track.id);
+
+      const updated = useProjectStore.getState().project!.tracks.find((t) => t.id === track.id)!;
+      // Volume preserved since it's not a "mixer reset" property — it's the fader level
+      // But actually our reset DOES reset pan. Volume is a separate concern.
+      expect(updated.muted).toBe(true);
+      expect(updated.displayName).toBe(track.displayName);
+      expect(updated.color).toBe(track.color);
+    });
+  });
+
   describe('renameTrack', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

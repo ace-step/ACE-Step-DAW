@@ -56,12 +56,6 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const isMidiClip = Boolean(clip.midiData);
   const hasAudioBody = Boolean(clip.isolatedAudioKey || clip.cumulativeMixKey || clip.waveformPeaks);
 
-  const [mountAnimating, setMountAnimating] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setMountAnimating(false), 220);
-    return () => clearTimeout(t);
-  }, []);
-
   const [addLayerOpen, setAddLayerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [dragGhost, setDragGhost] = useState<DragGhostInfo | null>(null);
@@ -239,21 +233,28 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
 
   return (
     <>
+      {/* Mount animation wrapper — CSS-only, no timers, doesn't conflict with animate-pulse */}
+      <div
+        className="absolute top-1 bottom-1"
+        style={{
+          left,
+          width: Math.max(width, 4),
+          zIndex: 1,
+          animation: 'clip-mount-fade 200ms ease-out',
+        }}
+        data-testid={`clip-mount-wrapper-${clip.id}`}
+      >
       <div
         ref={clipBlockRef}
-        className={`absolute top-1 bottom-1 rounded-[3px] select-none overflow-hidden
+        className={`rounded-[3px] select-none overflow-hidden w-full h-full
           daw-clip-interactive
           active:brightness-95
           ${clip.muted ? 'opacity-40' : (statusStyles[clip.generationStatus] ?? '')}
         `}
         style={{
-          left,
-          width: Math.max(width, 4),
           boxShadow: clipPresentation.containerShadow,
           border: clipPresentation.clipBorder,
           contain: 'layout style paint',
-          zIndex: 1,
-          animation: mountAnimating ? 'clip-mount-fade 200ms ease-out' : undefined,
         }}
         data-clip-block
         data-clip-id={clip.id}
@@ -419,19 +420,20 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             style={{
               bottom: 3,
               left: 4,
-              width: 10,
-              height: 10,
+              width: 8,
+              height: 8,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               opacity: 0.5,
             }}
-            aria-label="AI-generated clip"
+            aria-hidden="true"
           >
             <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
               <path
                 d="M5 0L6.1 3.9L10 5L6.1 6.1L5 10L3.9 6.1L0 5L3.9 3.9L5 0Z"
-                fill="white"
+                fill="currentColor"
+                style={{ color: 'rgba(255, 255, 255, 0.9)' }}
               />
             </svg>
           </div>
@@ -493,6 +495,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
             }}
           />
         )}
+      </div>
       </div>
 
       {/* Context menu */}

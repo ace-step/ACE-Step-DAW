@@ -34,13 +34,12 @@ export function Playhead() {
       {/* Transport line — full-height, visible during playback and at stop position */}
       {showTransportLine && (
         <div
-          className="absolute top-0 left-0 w-px z-20 pointer-events-none"
+          className="absolute top-0 left-0 w-px z-20 pointer-events-none playhead-glow"
           style={{
             transform: `translateX(${transportX}px)`,
             willChange: 'transform',
             minHeight: '100vh',
             backgroundColor: '#ffffff',
-            boxShadow: '0 0 4px rgba(255, 255, 255, 0.5), 0 0 8px rgba(147, 197, 253, 0.3), 0 0 3px rgba(0, 0, 0, 0.35)',
           }}
         />
       )}
@@ -57,14 +56,13 @@ function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number
 
   return (
     <div
-      className="absolute w-px z-20 pointer-events-none"
+      className="absolute w-px z-20 pointer-events-none playhead-glow"
       style={{
         left: x,
         top: laneRect.top,
         height: laneRect.height,
         animation: blink ? 'playhead-blink-line 1.2s ease-in-out infinite' : undefined,
         backgroundColor: blink ? undefined : '#ffffff',
-        boxShadow: '0 0 4px rgba(255, 255, 255, 0.5), 0 0 8px rgba(147, 197, 253, 0.3), 0 0 3px rgba(0, 0, 0, 0.35)',
       }}
     />
   );

@@ -83,18 +83,13 @@ beforeEach(() => {
 
 // ── 1. Playhead Glow ──
 describe('Playhead glow effect', () => {
-  it('transport line has a bright glow boxShadow (not just dark shadow)', () => {
-    // Set transport at a different position than anchor so the line appears
+  it('transport line uses playhead-glow CSS class', () => {
     useTransportStore.setState({ currentTime: 2, playStartTime: 0 });
     useUIStore.setState({ pixelsPerSecond: 100 });
 
     const { container } = render(<Playhead />);
-    const playheadLine = container.querySelector('.absolute.top-0');
+    const playheadLine = container.querySelector('.playhead-glow');
     expect(playheadLine).toBeTruthy();
-
-    const style = playheadLine!.getAttribute('style') ?? '';
-    // Must contain a white/bright glow component (not just dark rgba(0,0,0,...))
-    expect(style).toMatch(/rgba\(255/);
   });
 });
 
@@ -107,6 +102,7 @@ describe('AI-generated clip visual indicator', () => {
 
     const indicator = screen.getByTestId('ai-generated-badge');
     expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('does NOT show AI indicator for uploaded clips', () => {
@@ -126,31 +122,28 @@ describe('AI-generated clip visual indicator', () => {
   });
 });
 
-// ── 3. Recording Track Lane Pulse ──
-describe('Recording track lane pulse', () => {
-  it('clip block shows recording animation class when track is armed and recording', () => {
-    const clip = makeClip();
-    const track = makeTrack({ armed: true });
-    useTransportStore.setState({ isRecording: true });
-    render(<ClipBlock clip={clip} track={track} />);
-
-    const clipEl = screen.getByTestId(`clip-${clip.id}`);
-    // The parent clip container should exist — the lane-level recording indicator
-    // is tested via TrackLane, but ClipBlock should still render normally
-    expect(clipEl).toBeInTheDocument();
-  });
-});
-
-// ── 4. Clip Mount Animation ──
+// ── 3. Clip Mount Animation ──
 describe('Clip mount animation', () => {
-  it('clip block has a mount animation style', () => {
+  it('mount animation wrapper has clip-mount-fade animation', () => {
     const clip = makeClip();
     const track = makeTrack();
     render(<ClipBlock clip={clip} track={track} />);
 
+    const wrapper = screen.getByTestId(`clip-mount-wrapper-${clip.id}`);
+    const style = wrapper.getAttribute('style') ?? '';
+    expect(style).toMatch(/clip-mount-fade/);
+  });
+
+  it('animate-pulse on generating clips is NOT overridden by mount animation (separate elements)', () => {
+    const clip = makeClip({ generationStatus: 'generating' });
+    const track = makeTrack();
+    render(<ClipBlock clip={clip} track={track} />);
+
+    // animate-pulse is on the inner clip div, mount animation is on the outer wrapper
     const clipEl = screen.getByTestId(`clip-${clip.id}`);
-    const style = clipEl.getAttribute('style') ?? '';
-    // Should have animation for smooth entry
-    expect(style).toMatch(/animation/);
+    expect(clipEl.className).toContain('animate-pulse');
+    // The inner clip div should NOT have clip-mount-fade inline animation
+    const clipStyle = clipEl.getAttribute('style') ?? '';
+    expect(clipStyle).not.toMatch(/clip-mount-fade/);
   });
 });

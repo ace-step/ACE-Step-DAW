@@ -17,9 +17,13 @@ import type { AudioMetrics } from '../../types/clipInspector';
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(1);
-  return mins > 0 ? `${mins}:${secs.padStart(4, '0')}` : `${secs}s`;
+  const totalTenths = Math.round(seconds * 10);
+  const mins = Math.floor(totalTenths / 600);
+  const remainingTenths = totalTenths % 600;
+  const wholeSeconds = Math.floor(remainingTenths / 10);
+  const tenths = remainingTenths % 10;
+  const secs = `${wholeSeconds}.${tenths}`;
+  return mins > 0 ? `${mins}:${secs.padStart(3, '0')}` : `${secs}s`;
 }
 
 function SourceBadge({ source }: { source?: 'generated' | 'uploaded' }) {
@@ -157,7 +161,7 @@ function AudioMetricsSection({ metrics }: { metrics: AudioMetrics }) {
 
 function ClipDetail({ clip }: { clip: Clip }) {
   const track = useProjectStore((s) =>
-    s.project?.tracks.find((t) => t.clips.some((c) => c.id === clip.id)),
+    s.project?.tracks.find((t) => t.id === clip.trackId),
   );
   const audioMetrics = useClipAudioMetrics(clip);
 

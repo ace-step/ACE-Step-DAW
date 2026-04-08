@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
-import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { getExistingAudioEngine } from '../../hooks/useAudioEngine';
 import { computeAudioMetrics, formatLufs, formatDbLevel, formatDbRange } from '../../services/audioMetrics';
 import type { Clip } from '../../types/project';
 import type { AudioMetrics } from '../../types/clipInspector';
@@ -77,6 +77,9 @@ function MultiClipSummary({ clips }: { clips: Clip[] }) {
 
 // ─── Audio metrics hook ────────────────────────────────────────────────────
 
+/** Module-level cache to avoid re-decoding audio on every selection change. */
+const metricsCache = new Map<string, AudioMetrics>();
+
 function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
   const [metrics, setMetrics] = useState<AudioMetrics | null>(null);
 
@@ -87,19 +90,25 @@ function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
     const audioKey = clip.cumulativeMixKey ?? clip.isolatedAudioKey;
     if (!audioKey || clip.generationStatus !== 'ready') return;
 
+    // Return cached metrics immediately if available
+    const cached = metricsCache.get(audioKey);
+    if (cached) { setMetrics(cached); return; }
+
+    // Only decode if audio engine already exists — don't create one just for the inspector
+    const engine = getExistingAudioEngine();
+    if (!engine) return;
+
     (async () => {
       try {
         const blob = await loadAudioBlobByKey(audioKey);
         if (cancelled || !blob) return;
 
-        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await engine.decodeAudioData(blob);
         if (cancelled) return;
 
-        const engine = getAudioEngine();
-        const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer.slice(0));
-        if (cancelled) return;
-
-        setMetrics(computeAudioMetrics(audioBuffer));
+        const result = computeAudioMetrics(audioBuffer);
+        metricsCache.set(audioKey, result);
+        setMetrics(result);
       } catch {
         // Audio decode failures are non-critical — leave metrics null
       }

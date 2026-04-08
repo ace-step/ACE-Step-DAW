@@ -81,7 +81,7 @@ function MultiClipSummary({ clips }: { clips: Clip[] }) {
 
 // ─── Audio metrics hook ────────────────────────────────────────────────────
 
-/** Module-level cache to avoid re-decoding audio on every selection change. Capped at 32 entries (LRU eviction). */
+/** Module-level cache to avoid re-decoding audio on every selection change. Capped at 32 entries (FIFO eviction). */
 const METRICS_CACHE_MAX = 32;
 const metricsCache = new Map<string, AudioMetrics>();
 
@@ -284,7 +284,7 @@ export function ClipInspectorPanel() {
     <div
       data-testid="clip-inspector-panel"
       className="border-t border-[var(--daw-border,#2a2a2e)] bg-[var(--daw-surface,#1a1a1e)] overflow-y-auto"
-      style={{ maxHeight: 280 }}
+      style={{ height: 280 }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--daw-border,#2a2a2e)]">

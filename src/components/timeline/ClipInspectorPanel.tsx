@@ -94,11 +94,22 @@ function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
         const arrayBuffer = await blob.arrayBuffer();
         if (cancelled) return;
 
-        const audioCtx = new OfflineAudioContext(1, 1, 44100);
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        if (cancelled) return;
+        const AudioContextCtor =
+          globalThis.AudioContext ??
+          (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) return;
 
-        setMetrics(computeAudioMetrics(audioBuffer));
+        const audioCtx = new AudioContextCtor();
+        try {
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+          if (cancelled) return;
+
+          setMetrics(computeAudioMetrics(audioBuffer));
+        } finally {
+          void audioCtx.close().catch(() => {
+            // Ignore close failures for short-lived inspection contexts
+          });
+        }
       } catch {
         // Audio decode failures are non-critical — leave metrics null
       }

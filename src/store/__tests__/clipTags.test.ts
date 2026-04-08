@@ -143,4 +143,26 @@ describe('clip tags', () => {
     setupProject();
     expect(() => useProjectStore.getState().addClipTag('nonexistent', 'tag')).not.toThrow();
   });
+
+  it('trims whitespace from tags', () => {
+    setupProject();
+    useProjectStore.getState().addClipTag('clip-1', '  verse  ');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.tags).toEqual(['verse']);
+  });
+
+  it('rejects empty/whitespace-only tags', () => {
+    setupProject();
+    useProjectStore.getState().addClipTag('clip-1', '');
+    useProjectStore.getState().addClipTag('clip-1', '   ');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.tags).toBeUndefined();
+  });
+
+  it('removeClipTag trims before matching', () => {
+    setupProject([makeTrack({ clips: [makeClip({ tags: ['verse'] })] })]);
+    useProjectStore.getState().removeClipTag('clip-1', '  verse  ');
+    const clip = useProjectStore.getState().project!.tracks[0].clips[0];
+    expect(clip.tags).toEqual([]);
+  });
 });

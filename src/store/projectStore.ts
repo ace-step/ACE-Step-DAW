@@ -4469,19 +4469,22 @@ export const useProjectStore = create<ProjectState>()(
   },
 
   addClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
     const state = get();
     if (_isViewerMode()) return;
     if (!state.project) return;
 
     const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
     if (!clip) return;
-    if (clip.tags?.includes(tag)) return;
+    if (clip.tags?.includes(normalized)) return;
 
-    _pushHistory(state.project, { label: `Tag clip "${tag}"`, scope: 'arrangement' });
+    _pushHistory(state.project, { label: `Tag clip "${normalized}"`, scope: 'arrangement' });
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) =>
-        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), tag] } : c,
+        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), normalized] } : c,
       ),
     }));
     set({
@@ -4494,18 +4497,21 @@ export const useProjectStore = create<ProjectState>()(
   },
 
   removeClipTag: (clipId, tag) => {
+    const normalized = tag.trim();
+    if (!normalized) return;
+
     const state = get();
     if (_isViewerMode()) return;
     if (!state.project) return;
 
     const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
-    if (!clip || !clip.tags?.includes(tag)) return;
+    if (!clip || !clip.tags?.includes(normalized)) return;
 
-    _pushHistory(state.project, { label: `Untag clip "${tag}"`, scope: 'arrangement' });
+    _pushHistory(state.project, { label: `Untag clip "${normalized}"`, scope: 'arrangement' });
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) =>
-        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== tag) } : c,
+        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== normalized) } : c,
       ),
     }));
     set({

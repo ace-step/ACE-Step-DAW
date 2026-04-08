@@ -1424,6 +1424,7 @@ export const useUIStore = create<UIState>()(
       partialize: (state) => ({
         // Panel open/close states
         showMixer: state.showMixer,
+        showClipInspector: state.showClipInspector,
         showLibrary: state.showLibrary,
         loopBrowserOpen: state.loopBrowserOpen,
         showVirtualKeyboard: state.showVirtualKeyboard,

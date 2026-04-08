@@ -21,6 +21,7 @@ export function GenerationSidePanel() {
   const loopBrowserOpen = useUIStore((s) => s.loopBrowserOpen);
   const toggleLoopBrowser = useUIStore((s) => s.toggleLoopBrowser);
   const showMixer = useUIStore((s) => s.showMixer);
+  const showClipInspector = useUIStore((s) => s.showClipInspector);
   const setShowMixer = useUIStore((s) => s.setShowMixer);
   const showAIAssistant = useUIStore((s) => s.showAIAssistant);
   const toggleAIAssistant = useUIStore((s) => s.toggleAIAssistant);
@@ -128,9 +129,9 @@ export function GenerationSidePanel() {
           left: dockLeft,
           zIndex: Z.toast,
           bottom: showSmartControls ? 208 : 68,
-          opacity: activeBottomPanel || showMixer || showSettingsDialog ? 0 : 1,
-          pointerEvents: activeBottomPanel || showMixer || showSettingsDialog ? 'none' : 'auto',
-          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer || showSettingsDialog ? '16px' : '0px'})`,
+          opacity: activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? 0 : 1,
+          pointerEvents: activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? 'none' : 'auto',
+          transform: `translateX(-50%) translateY(${activeBottomPanel || showMixer || showClipInspector || showSettingsDialog ? '16px' : '0px'})`,
         }}
         data-testid="generation-dock"
       >

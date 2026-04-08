@@ -77,22 +77,39 @@ function MultiClipSummary({ clips }: { clips: Clip[] }) {
 
 // ─── Audio metrics hook ────────────────────────────────────────────────────
 
-/** Module-level cache to avoid re-decoding audio on every selection change. */
+/** Module-level cache to avoid re-decoding audio on every selection change. Capped at 32 entries (LRU eviction). */
+const METRICS_CACHE_MAX = 32;
 const metricsCache = new Map<string, AudioMetrics>();
+
+function cachePut(key: string, value: AudioMetrics) {
+  if (metricsCache.size >= METRICS_CACHE_MAX) {
+    // Evict oldest entry (first key in insertion-order Map)
+    const oldest = metricsCache.keys().next().value;
+    if (oldest !== undefined) metricsCache.delete(oldest);
+  }
+  metricsCache.set(key, value);
+}
 
 function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
   const [metrics, setMetrics] = useState<AudioMetrics | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setMetrics(null);
 
     const audioKey = clip.cumulativeMixKey ?? clip.isolatedAudioKey;
-    if (!audioKey || clip.generationStatus !== 'ready') return;
+    if (!audioKey || clip.generationStatus !== 'ready') {
+      setMetrics(null);
+      return;
+    }
 
     // Return cached metrics immediately if available
     const cached = metricsCache.get(audioKey);
-    if (cached) { setMetrics(cached); return; }
+    if (cached) {
+      setMetrics(cached);
+      return;
+    }
+
+    setMetrics(null);
 
     // Only decode if audio engine already exists — don't create one just for the inspector
     const engine = getExistingAudioEngine();
@@ -107,7 +124,7 @@ function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
         if (cancelled) return;
 
         const result = computeAudioMetrics(audioBuffer);
-        metricsCache.set(audioKey, result);
+        cachePut(audioKey, result);
         setMetrics(result);
       } catch {
         // Audio decode failures are non-critical — leave metrics null

@@ -6,7 +6,7 @@ import type { VoiceProfile } from '../../../types/voiceProfile';
 
 vi.mock('../../../services/audioFileManager', () => ({
   storeAudioBlob: vi.fn().mockResolvedValue('mock-key'),
-  loadAudioBlobByKey: vi.fn().mockResolvedValue(new Blob()),
+  loadAudioBlobByKey: vi.fn().mockResolvedValue(new Blob(['audio'], { type: 'audio/wav' })),
   deleteAudioBlobByKey: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -110,7 +110,6 @@ describe('VoiceLibrarySection', () => {
     fireEvent.click(screen.getByTestId('voice-card-voice-1'));
     expect(useVoiceStore.getState().selectedVoiceId).toBe('voice-1');
 
-    // Click again to deselect
     fireEvent.click(screen.getByTestId('voice-card-voice-1'));
     expect(useVoiceStore.getState().selectedVoiceId).toBeNull();
   });
@@ -150,7 +149,6 @@ describe('VoiceLibrarySection', () => {
     fireEvent.click(screen.getByTestId('voice-library-toggle'));
     fireEvent.click(screen.getByTestId('voice-delete-voice-1'));
     fireEvent.click(screen.getByTestId('voice-delete-confirm-voice-1'));
-    // Wait for async delete
     await vi.waitFor(() => {
       expect(useVoiceStore.getState().voices).toHaveLength(0);
     });
@@ -168,5 +166,60 @@ describe('VoiceLibrarySection', () => {
     render(<VoiceLibrarySection disabled />);
     fireEvent.click(screen.getByTestId('voice-library-toggle'));
     expect(screen.getByTestId('voice-library-search')).toBeDisabled();
+  });
+
+  // Preview tests
+  it('renders preview button on voice card', () => {
+    useVoiceStore.setState({ voices: [MOCK_VOICE] });
+    render(<VoiceLibrarySection />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    expect(screen.getByTestId('voice-preview-voice-1')).toBeInTheDocument();
+  });
+
+  it('shows pause icon when previewing', () => {
+    useVoiceStore.setState({ voices: [MOCK_VOICE], previewingVoiceId: 'voice-1' });
+    render(<VoiceLibrarySection />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    const btn = screen.getByTestId('voice-preview-voice-1');
+    expect(btn.getAttribute('aria-label')).toBe('Stop preview');
+  });
+
+  // Edit tests
+  it('shows edit button and opens edit form', () => {
+    useVoiceStore.setState({ voices: [MOCK_VOICE] });
+    render(<VoiceLibrarySection />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    fireEvent.click(screen.getByTestId('voice-edit-voice-1'));
+    expect(screen.getByTestId('voice-edit-form-voice-1')).toBeInTheDocument();
+    expect(screen.getByTestId('voice-edit-name-voice-1')).toHaveValue('Test Voice');
+  });
+
+  it('saves metadata edits', () => {
+    useVoiceStore.setState({ voices: [MOCK_VOICE] });
+    render(<VoiceLibrarySection />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    fireEvent.click(screen.getByTestId('voice-edit-voice-1'));
+    fireEvent.change(screen.getByTestId('voice-edit-name-voice-1'), {
+      target: { value: 'Updated Name' },
+    });
+    fireEvent.change(screen.getByTestId('voice-edit-tags-voice-1'), {
+      target: { value: 'rock, tenor' },
+    });
+    fireEvent.click(screen.getByTestId('voice-edit-save-voice-1'));
+    const updated = useVoiceStore.getState().voices[0];
+    expect(updated.name).toBe('Updated Name');
+    expect(updated.tags).toEqual(['rock', 'tenor']);
+  });
+
+  it('updates skill level via edit form', () => {
+    useVoiceStore.setState({ voices: [MOCK_VOICE] });
+    render(<VoiceLibrarySection />);
+    fireEvent.click(screen.getByTestId('voice-library-toggle'));
+    fireEvent.click(screen.getByTestId('voice-edit-voice-1'));
+    fireEvent.change(screen.getByTestId('voice-edit-skill-voice-1'), {
+      target: { value: 'professional' },
+    });
+    fireEvent.click(screen.getByTestId('voice-edit-save-voice-1'));
+    expect(useVoiceStore.getState().voices[0].skillLevel).toBe('professional');
   });
 });

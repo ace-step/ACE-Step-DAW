@@ -1,4 +1,7 @@
 import { getDSPFactory } from './dsp/ToneAdapter';
+import { createDebugLogger } from '../utils/debugLogger';
+
+const logger = createDebugLogger('ace-step:effects-engine');
 import type {
   IDSPNode,
   IDSPGain,
@@ -985,7 +988,7 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
       const p = effect.params as SpectralMorphParams;
       // sourceTrackId wiring is not yet implemented — morph uses frozen self-snapshot only
       if (p.sourceTrackId) {
-        console.warn(`[EffectsEngine] spectralMorph.sourceTrackId is not wired yet; using self-snapshot morph.`);
+        logger.warn('spectralMorph.sourceTrackId is not wired yet; using self-snapshot morph.');
       }
       mixValue = p.mix;
       processor.morphAmount = p.morphAmount;
@@ -1134,7 +1137,7 @@ class EffectsEngine {
           this.wasmNodes.set(trackId, wasmNode);
           return;
         } catch (err) {
-          console.warn(`[EffectsEngine] WASM chain failed for ${trackId}, falling back to Tone.js`, err);
+          logger.warn(`WASM chain failed for ${trackId}, falling back to Tone.js`, err);
         }
       }
     }
@@ -1889,10 +1892,10 @@ export async function initWasmDsp(): Promise<boolean> {
     const ctx = getDSPFactory().getContext();
     await eng.initialize(ctx);
     effectsEngine.setUseWasm(true, eng, mapper);
-    console.info('[WASM DSP] Initialized — effects will route through WASM when compatible');
+    logger.info('WASM DSP initialized — effects will route through WASM when compatible');
     return true;
   } catch (err) {
-    console.warn('[WASM DSP] Init failed, using Tone.js fallback:', err);
+    logger.warn('WASM DSP init failed, using Tone.js fallback:', err);
     effectsEngine.setUseWasm(false);
     return false;
   }

@@ -18,7 +18,10 @@ import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { toastError, toastSuccess, toastInfo } from './useToast';
+import { createDebugLogger } from '../utils/debugLogger';
 import type { Track } from '../types/project';
+
+const logger = createDebugLogger('ace-step:session-recording');
 
 /** Determine recording type based on track type. */
 function getRecordingType(track: Track): 'audio' | 'midi' {
@@ -89,7 +92,7 @@ export function useSessionRecording() {
       const totalMs = fixedBars * barDuration * 1000;
       const timer = setTimeout(() => {
         void stopSlotRecording(slotId, trackId, sceneId, recordingType, fixedBars).catch((error) => {
-          console.error('Failed to auto-stop slot recording', error);
+          logger.error('Failed to auto-stop slot recording', error);
           toastError('Failed to stop recording automatically');
         });
       }, totalMs);

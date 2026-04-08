@@ -569,6 +569,25 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
     ),
   );
 
+  // ─── Groove Pool ──────────────────────────────────────────────────────
+  commands.push(
+    createTrackCommand(
+      'panel:groove-pool',
+      'Toggle Groove Pool',
+      'Panels',
+      'action',
+      ['panel', 'groove', 'pool', 'swing', 'template', 'timing', 'velocity'],
+      ['open groove pool', 'show groove pool', 'toggle groove panel'],
+      async () => {
+        const { useUIStore } = await import('../store/uiStore');
+        const ui = useUIStore.getState();
+        ui.setShowGroovePoolPanel(!ui.showGroovePoolPanel);
+      },
+      [],
+      'Panel toggle',
+    ),
+  );
+
   commands.push(
     createTrackCommand(
       'generation:silence',

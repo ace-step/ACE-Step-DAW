@@ -78,6 +78,7 @@ export interface UIState {
   commandPaletteQuery: string;
   recentCommandIds: string[];
   showUndoHistoryPanel: boolean;
+  showGroovePoolPanel: boolean;
   historyFocusScope: HistoryScope;
   historyFocusTrackId: string | null;
   historyFocusClipId: string | null;
@@ -293,6 +294,7 @@ export interface UIState {
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
   setShowUndoHistoryPanel: (v: boolean) => void;
+  setShowGroovePoolPanel: (v: boolean) => void;
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
@@ -616,6 +618,7 @@ export const useUIStore = create<UIState>()(
   commandPaletteQuery: '',
   recentCommandIds: [],
   showUndoHistoryPanel: false,
+  showGroovePoolPanel: false,
   historyFocusScope: 'arrangement',
   historyFocusTrackId: null,
   historyFocusClipId: null,
@@ -931,6 +934,7 @@ export const useUIStore = create<UIState>()(
     return true;
   },
   setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
+  setShowGroovePoolPanel: (v) => set({ showGroovePoolPanel: v }),
   setHistoryFocusScope: (scope, target) => set((state) => {
     const resolvedTrackId =
       target?.trackId

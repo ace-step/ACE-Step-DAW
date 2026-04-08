@@ -3,7 +3,7 @@ import { synthEngine } from '../../engine/SynthEngine';
 import { samplerEngine } from '../../engine/SamplerEngine';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import { ContextMenuWrapper, ContextMenuItem } from '../ui/ContextMenu';
+import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator } from '../ui/ContextMenu';
 import { useTransportStore } from '../../store/transportStore';
 import type { Clip, MidiNote, PianoRollGrid, Track } from '../../types/project';
 import { DEFAULT_CHORD_SHAPE_ABBR, getChordShapeByAbbr } from '../../utils/chords';
@@ -68,8 +68,10 @@ export function PianoRollCanvas({
   const removeMidiNote = useProjectStore((s) => s.removeMidiNote);
   const updateMidiNote = useProjectStore((s) => s.updateMidiNote);
   const quantizeMidiNotes = useProjectStore((s) => s.quantizeMidiNotes);
+  const extractGrooveFromClip = useProjectStore((s) => s.extractGrooveFromClip);
   const openQuantizeDialog = useUIStore((s) => s.openQuantizeDialog);
   const quantizePreviewPositions = useUIStore((s) => s.quantizePreviewPositions);
+  const setShowGroovePoolPanel = useUIStore((s) => s.setShowGroovePoolPanel);
 
   const notes: MidiNote[] = clip.midiData?.notes ?? [];
   const bpm = useProjectStore((s) => s.project?.bpm ?? 120);
@@ -583,6 +585,16 @@ export function PianoRollCanvas({
     quantizeMidiNotes(clip.id, Array.from(selectedNoteIds), gridBeats);
   }, [clip.id, selectedNoteIds, quantizeMidiNotes, gridBeats]);
 
+  const handleExtractGroove = useCallback(() => {
+    setContextMenu(null);
+    const clipLabel = clip.prompt?.slice(0, 20) || 'clip';
+    const lengthBeats = notes.length > 0
+      ? Math.max(...notes.map((n) => n.startBeat + n.durationBeats))
+      : 4;
+    extractGrooveFromClip(clip.id, `Groove from ${clipLabel}`, { gridBeats, lengthBeats });
+    setShowGroovePoolPanel(true);
+  }, [clip.id, clip.prompt, notes, gridBeats, extractGrooveFromClip, setShowGroovePoolPanel]);
+
   // --- Hover cursor ---
 
   const handleCanvasMouseMove = useCallback(
@@ -776,6 +788,15 @@ export function PianoRollCanvas({
             label="Quantize with options..."
             onClick={handleContextMenuQuantize}
             shortcut={`${navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}+Q`}
+          />
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            label="Extract Groove..."
+            onClick={handleExtractGroove}
+          />
+          <ContextMenuItem
+            label="Open Groove Pool"
+            onClick={() => { setContextMenu(null); setShowGroovePoolPanel(true); }}
           />
         </ContextMenuWrapper>
       )}

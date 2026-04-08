@@ -338,4 +338,17 @@ describe('useKeyboardShortcuts', () => {
 
     expect(transportSpies.play).toHaveBeenCalledTimes(1);
   });
+
+  it('does not have duplicate transport shortcut handlers (regression #1581)', async () => {
+    // Static analysis: ensure each transport shortcut is only matched once in the source
+    const fs = await import('fs');
+    const source = fs.readFileSync('src/hooks/useKeyboardShortcuts.ts', 'utf8');
+
+    const transportActions = ['transport.stop', 'transport.loop', 'transport.metronome'];
+    for (const action of transportActions) {
+      const pattern = new RegExp(`matches\\('${action.replace('.', '\\.')}'\\)`, 'g');
+      const matches = source.match(pattern);
+      expect(matches?.length, `"${action}" should appear exactly once`).toBe(1);
+    }
+  });
 });

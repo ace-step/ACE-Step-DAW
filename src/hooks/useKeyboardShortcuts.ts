@@ -555,13 +555,6 @@ export function useKeyboardShortcuts() {
         void executeCoreKeyboardAction('transport.record', { play, pause, toggleRecord, toggleArmTrack });
         return;
       }
-      if (matches('transport.stop')) { event.preventDefault(); stop(); return; }
-      if (matches('transport.loop')) {
-        event.preventDefault();
-        void executeCoreKeyboardAction('transport.loop', { play, pause, toggleRecord, toggleArmTrack });
-        return;
-      }
-      if (matches('transport.metronome')) { event.preventDefault(); transport.toggleMetronome(); return; }
       if (matches('transport.home')) { event.preventDefault(); seek(0); return; }
       if (matches('transport.end')) {
         event.preventDefault();

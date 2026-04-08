@@ -1,5 +1,6 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
 import { useUIStore } from '../store/uiStore';
+import { useExportPresetsStore } from '../store/exportPresetsStore';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -465,6 +466,23 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       () => context.actions.setShowExportDialog(true),
       ['Cmd', 'Shift', 'E'],
       'Project dialog',
+    ),
+    // Export preset quick-actions
+    ...useExportPresetsStore.getState().presets.map((preset) =>
+      createTrackCommand(
+        `project:export-preset:${preset.id}`,
+        `Export: ${preset.name}`,
+        'Export',
+        'action',
+        ['export', 'preset', preset.name.toLowerCase(), preset.format],
+        [`export ${preset.name.toLowerCase()}`, `quick export ${preset.format}`],
+        () => {
+          useExportPresetsStore.getState().setLastUsedPresetId(preset.id);
+          context.actions.setShowExportDialog(true);
+        },
+        undefined,
+        preset.description ?? `Export as ${preset.format.toUpperCase()}`,
+      ),
     ),
     createTrackCommand(
       'project:shortcuts',

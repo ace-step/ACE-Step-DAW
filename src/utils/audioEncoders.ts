@@ -17,6 +17,10 @@ export interface ExportMetadata {
   trackNumber?: number;
   genre?: string;
   year?: string;
+  /** BPM (beats per minute) — encoded as TBPM in ID3v2, BPM= in Vorbis. */
+  bpm?: number;
+  /** Musical key — encoded as TKEY in ID3v2, KEY= in Vorbis. */
+  key?: string;
 }
 
 export interface ExportOptions {
@@ -649,6 +653,10 @@ export function encodeId3v2Tag(metadata: ExportMetadata): Uint8Array {
   if (metadata.trackNumber !== undefined) {
     addTextFrame('TRCK', String(metadata.trackNumber));
   }
+  if (metadata.bpm !== undefined) {
+    addTextFrame('TBPM', String(metadata.bpm));
+  }
+  addTextFrame('TKEY', metadata.key);
 
   if (frames.length === 0) return new Uint8Array(0);
 
@@ -708,6 +716,10 @@ export function buildFlacVorbisComment(metadata: ExportMetadata): Uint8Array {
   if (metadata.trackNumber !== undefined) {
     addComment('TRACKNUMBER', String(metadata.trackNumber));
   }
+  if (metadata.bpm !== undefined) {
+    addComment('BPM', String(metadata.bpm));
+  }
+  addComment('KEY', metadata.key);
 
   // Calculate total size
   let totalSize = 4 + vendorBytes.length + 4; // vendor length + vendor + comment count

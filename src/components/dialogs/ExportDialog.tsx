@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useExportPresetsStore } from '../../store/exportPresetsStore';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
 import { downloadBlob } from '../../services/browserDownload';
@@ -12,6 +13,8 @@ import {
   trackHasExportableContent,
   type StemExportScope,
 } from '../../engine/exportMix';
+import { batchEncodeBuffer, buildAutoFilledMetadata } from '../../services/batchExport';
+import { renderMixOffline } from '../../engine/exportMix';
 import { toastError, toastSuccess } from '../../hooks/useToast';
 import { createDebugLogger } from '../../utils/debugLogger';
 
@@ -81,6 +84,9 @@ export function ExportDialog() {
   const setShow = useUIStore((s) => s.setShowExportDialog);
   const selectedTrackIds = useUIStore((s) => s.selectedTrackIds);
   const project = useProjectStore((s) => s.project);
+  const presets = useExportPresetsStore((s) => s.presets);
+  const setLastUsedPresetId = useExportPresetsStore((s) => s.setLastUsedPresetId);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [exporting, setExporting] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [exportMode, setExportMode] = useState<ExportMode>('mix');
@@ -90,6 +96,31 @@ export function ExportDialog() {
     title: project?.name ?? '',
     artist: '',
   });
+
+  // Apply preset settings when a preset is selected
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    if (!presetId) return;
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+    setExportOptions((prev) => ({
+      ...prev,
+      format: preset.format,
+      sampleRate: preset.sampleRate,
+      bitDepth: preset.bitDepth,
+      mp3Bitrate: preset.mp3Bitrate,
+      oggQuality: preset.oggQuality,
+    }));
+    setLastUsedPresetId(presetId);
+    // Auto-fill metadata from project if preset says so
+    if (preset.autoFillMetadata && project) {
+      const autoMeta = buildAutoFilledMetadata(
+        { projectName: project.name, bpm: project.bpm, key: project.keyScale },
+        metadata,
+      );
+      setMetadata(autoMeta);
+    }
+  };
 
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef, show && !!project);
@@ -195,6 +226,22 @@ export function ExportDialog() {
         </div>
 
         <div className="p-4 space-y-3">
+          {/* Preset selector */}
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">Preset</label>
+            <select
+              data-testid="export-preset-select"
+              className={selectClass}
+              value={selectedPresetId}
+              onChange={(e) => handlePresetChange(e.target.value)}
+            >
+              <option value="">Custom</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="space-y-2">
             <span className="block text-xs text-zinc-400">Export Mode</span>
             <label className="flex items-start gap-2 rounded border border-daw-border bg-daw-surface-2 px-3 py-2 text-xs text-zinc-200">
@@ -367,6 +414,26 @@ export function ExportDialog() {
                 onChange={(e) => setMetadata((prev) => ({ ...prev, artist: e.target.value }))}
                 className="w-full bg-daw-surface-2 border border-daw-border rounded px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-daw-accent"
               />
+              <div className="flex gap-2">
+                <input
+                  data-testid="export-metadata-bpm"
+                  type="number"
+                  placeholder="BPM"
+                  min={1}
+                  max={999}
+                  value={metadata.bpm ?? ''}
+                  onChange={(e) => setMetadata((prev) => ({ ...prev, bpm: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-1/2 bg-daw-surface-2 border border-daw-border rounded px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-daw-accent"
+                />
+                <input
+                  data-testid="export-metadata-key"
+                  type="text"
+                  placeholder="Key (e.g. C major)"
+                  value={metadata.key ?? ''}
+                  onChange={(e) => setMetadata((prev) => ({ ...prev, key: e.target.value || undefined }))}
+                  className="w-1/2 bg-daw-surface-2 border border-daw-border rounded px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-daw-accent"
+                />
+              </div>
             </div>
           )}
 

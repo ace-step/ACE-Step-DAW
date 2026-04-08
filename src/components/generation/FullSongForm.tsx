@@ -10,6 +10,7 @@ import { generateText2Music, regenerateClip } from '../../services/generationPip
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { VoiceLibrarySection } from './VoiceLibrarySection';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
 
@@ -417,6 +418,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="[Verse 1]\nYour lyrics here..."
         />
       </section>
+
+      {/* Voice Library */}
+      <VoiceLibrarySection />
 
       {/* Random Example */}
       <button

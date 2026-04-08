@@ -9,7 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
-import { computeAudioMetrics, formatLufs, formatDb } from '../../services/audioMetrics';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
+import { computeAudioMetrics, formatLufs, formatDbLevel, formatDbRange } from '../../services/audioMetrics';
 import type { Clip } from '../../types/project';
 import type { AudioMetrics } from '../../types/clipInspector';
 
@@ -94,22 +95,11 @@ function useClipAudioMetrics(clip: Clip): AudioMetrics | null {
         const arrayBuffer = await blob.arrayBuffer();
         if (cancelled) return;
 
-        const AudioContextCtor =
-          globalThis.AudioContext ??
-          (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!AudioContextCtor) return;
+        const engine = getAudioEngine();
+        const audioBuffer = await engine.ctx.decodeAudioData(arrayBuffer.slice(0));
+        if (cancelled) return;
 
-        const audioCtx = new AudioContextCtor();
-        try {
-          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-          if (cancelled) return;
-
-          setMetrics(computeAudioMetrics(audioBuffer));
-        } finally {
-          void audioCtx.close().catch(() => {
-            // Ignore close failures for short-lived inspection contexts
-          });
-        }
+        setMetrics(computeAudioMetrics(audioBuffer));
       } catch {
         // Audio decode failures are non-critical — leave metrics null
       }
@@ -128,9 +118,9 @@ function AudioMetricsSection({ metrics }: { metrics: AudioMetrics }) {
         Audio Metrics
       </div>
       <MetaRow label="Loudness" value={formatLufs(metrics.lufs)} />
-      <MetaRow label="Peak" value={formatDb(metrics.peakDb)} />
-      <MetaRow label="RMS" value={formatDb(metrics.rmsDb)} />
-      <MetaRow label="Dynamic range" value={formatDb(metrics.dynamicRangeDb)} />
+      <MetaRow label="Peak" value={formatDbLevel(metrics.peakDb)} />
+      <MetaRow label="RMS" value={formatDbLevel(metrics.rmsDb)} />
+      <MetaRow label="Dynamic range" value={formatDbRange(metrics.dynamicRangeDb)} />
       <MetaRow label="Sample rate" value={`${metrics.sampleRate} Hz`} />
       <MetaRow label="Channels" value={metrics.channelCount} />
     </div>

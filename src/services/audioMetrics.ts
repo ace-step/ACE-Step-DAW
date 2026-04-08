@@ -91,8 +91,8 @@ export function computeLufs(buffer: AudioBufferLike): number {
     windowPowers.push(sumSquares / count);
   }
 
-  // Absolute gating: -70 LUFS threshold
-  const absoluteThreshold = Math.pow(10, -70 / 10);
+  // Absolute gating: -70 LUFS threshold (account for -0.691 offset in power domain)
+  const absoluteThreshold = Math.pow(10, (-70 + 0.691) / 10);
   const aboveThreshold = windowPowers.filter((p) => p > absoluteThreshold);
 
   if (aboveThreshold.length === 0) return -Infinity;
@@ -167,9 +167,15 @@ export function formatLufs(lufs: number): string {
   return `${lufs.toFixed(1)} LUFS`;
 }
 
-/** Format dB value for display. */
-export function formatDb(db: number): string {
+/** Format dB level for display (with +/- sign). */
+export function formatDbLevel(db: number): string {
   if (!Number.isFinite(db)) return '-∞ dB';
   const sign = db > 0 ? '+' : '';
   return `${sign}${db.toFixed(1)} dB`;
+}
+
+/** Format dB range/delta for display (no sign prefix). */
+export function formatDbRange(db: number): string {
+  if (!Number.isFinite(db)) return '0 dB';
+  return `${db.toFixed(1)} dB`;
 }

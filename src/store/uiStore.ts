@@ -539,6 +539,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: true,
+        showClipInspector: false,
         showLibrary: true,
         loopBrowserOpen: true,
         showSmartControls: false,
@@ -553,6 +554,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: false,
+        showClipInspector: false,
         showLibrary: false,
         loopBrowserOpen: false,
         showSmartControls: false,

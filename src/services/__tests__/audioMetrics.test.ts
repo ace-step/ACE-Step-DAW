@@ -6,7 +6,8 @@ import {
   computeRmsDb,
   computeDynamicRange,
   formatLufs,
-  formatDb,
+  formatDbLevel,
+  formatDbRange,
 } from '../audioMetrics';
 import type { AudioMetrics } from '../../types/clipInspector';
 
@@ -199,20 +200,34 @@ describe('formatLufs', () => {
   });
 });
 
-describe('formatDb', () => {
+describe('formatDbLevel', () => {
   it('formats positive dB with sign', () => {
-    expect(formatDb(3.5)).toBe('+3.5 dB');
+    expect(formatDbLevel(3.5)).toBe('+3.5 dB');
   });
 
   it('formats negative dB', () => {
-    expect(formatDb(-6.0)).toBe('-6.0 dB');
+    expect(formatDbLevel(-6.0)).toBe('-6.0 dB');
   });
 
   it('formats -Infinity as silent', () => {
-    expect(formatDb(-Infinity)).toBe('-∞ dB');
+    expect(formatDbLevel(-Infinity)).toBe('-∞ dB');
   });
 
   it('formats zero as 0.0 dB', () => {
-    expect(formatDb(0)).toBe('0.0 dB');
+    expect(formatDbLevel(0)).toBe('0.0 dB');
+  });
+});
+
+describe('formatDbRange', () => {
+  it('formats range without sign prefix', () => {
+    expect(formatDbRange(8.5)).toBe('8.5 dB');
+  });
+
+  it('formats zero range', () => {
+    expect(formatDbRange(0)).toBe('0.0 dB');
+  });
+
+  it('formats -Infinity as 0 dB', () => {
+    expect(formatDbRange(-Infinity)).toBe('0 dB');
   });
 });

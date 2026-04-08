@@ -23,6 +23,7 @@ import { useVST3Sync } from '../../hooks/useVST3Sync';
 import { VST3SidePanel } from '../plugins/VST3SidePanel';
 import { useShareLink } from '../../hooks/useShareLink';
 import { useAutoSave } from '../../hooks/useAutoSave';
+import { useMidiController } from '../../hooks/useMidiController';
 import { WelcomeOverlay } from '../dialogs/WelcomeOverlay';
 import { BottomPanelTransition } from '../ui/BottomPanelTransition';
 
@@ -125,6 +126,7 @@ function EditorShell() {
   useEffectsSync();
   useVST3Connection();
   useVST3Sync();
+  useMidiController();
 
   return (
     <div

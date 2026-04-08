@@ -1,6 +1,7 @@
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
+import { useMidiControllerStore } from '../store/midiControllerStore';
 import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from './timelineZoom';
 
 export interface Command {
@@ -163,6 +164,39 @@ export function buildCommandList(): Command[] {
         const ui = useUIStore.getState();
         if (ui.keyboardContext.scope === 'timeline') ui.zoomReset();
         else ui.setPixelsPerSecond(DEFAULT_TIMELINE_PIXELS_PER_SECOND);
+      },
+    },
+
+    // MIDI Controller
+    {
+      id: 'toggle-midi-controller-panel',
+      label: 'Toggle MIDI Controller Panel',
+      category: 'View',
+      action: () => {
+        const ui = useUIStore.getState();
+        ui.setShowMidiControllerPanel(!ui.showMidiControllerPanel);
+      },
+    },
+    {
+      id: 'midi-learn',
+      label: 'MIDI Learn (arm next parameter)',
+      category: 'MIDI',
+      action: () => {
+        const state = useMidiControllerStore.getState();
+        if (state.learnMode.active) {
+          state.cancelLearnMode();
+        } else {
+          // Open the panel so user can see MIDI Learn status
+          useUIStore.getState().setShowMidiControllerPanel(true);
+        }
+      },
+    },
+    {
+      id: 'clear-all-midi-mappings',
+      label: 'Clear All MIDI Mappings',
+      category: 'MIDI',
+      action: () => {
+        useMidiControllerStore.getState().clearAllMappings();
       },
     },
 

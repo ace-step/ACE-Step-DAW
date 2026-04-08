@@ -11,6 +11,7 @@ import { SmartControlsPanel } from '../controls/SmartControlsPanel';
 import { SharedProjectPage } from '../sharing/SharedProjectPage';
 import { ToastContainer } from '../ui/Toast';
 import { UndoHistoryPanel } from './UndoHistoryPanel';
+import { MidiControllerPanel } from './MidiControllerPanel';
 import { StatusBar } from './StatusBar';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useProjectStore } from '../../store/projectStore';
@@ -177,6 +178,7 @@ function EditorShell() {
       {project && <AddLayerPanel />}
       <ToastContainer />
       <UndoHistoryPanel />
+      <MidiControllerPanel />
       <WelcomeOverlay />
 
       {/* Modals — lazy-loaded, code-split */}

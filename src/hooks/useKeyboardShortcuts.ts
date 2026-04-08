@@ -269,6 +269,12 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Variation A/B switching (Alt+1/2/3/4)
+      if (matches('generation.variation1')) { event.preventDefault(); generation.setActiveVariation(0); return; }
+      if (matches('generation.variation2')) { event.preventDefault(); generation.setActiveVariation(1); return; }
+      if (matches('generation.variation3')) { event.preventDefault(); generation.setActiveVariation(2); return; }
+      if (matches('generation.variation4')) { event.preventDefault(); generation.setActiveVariation(3); return; }
+
       if (matches('panels.aiAssistant')) { event.preventDefault(); ui.toggleAIAssistant(); return; }
 
       if (matches('clips.selectAll')) {

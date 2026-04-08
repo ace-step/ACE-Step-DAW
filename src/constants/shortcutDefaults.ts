@@ -48,6 +48,10 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 
   { id: 'generation.silence',    category: 'generation', label: 'Generate from Silence',     defaultCombo: { code: 'KeyG', mod: true }, contexts: ['global'] },
   { id: 'generation.context',    category: 'generation', label: 'Generate from Context',     defaultCombo: { code: 'KeyG', mod: true, shift: true }, contexts: ['global'] },
+  { id: 'generation.variation1', category: 'generation', label: 'Switch to Variation 1',     defaultCombo: { code: 'Digit1', alt: true }, contexts: ['global'] },
+  { id: 'generation.variation2', category: 'generation', label: 'Switch to Variation 2',     defaultCombo: { code: 'Digit2', alt: true }, contexts: ['global'] },
+  { id: 'generation.variation3', category: 'generation', label: 'Switch to Variation 3',     defaultCombo: { code: 'Digit3', alt: true }, contexts: ['global'] },
+  { id: 'generation.variation4', category: 'generation', label: 'Switch to Variation 4',     defaultCombo: { code: 'Digit4', alt: true }, contexts: ['global'] },
 
   { id: 'panels.mixer',          category: 'panels',    label: 'Toggle Mixer',                defaultCombo: { code: 'KeyX' }, contexts: ['global'] },
   { id: 'panels.smartControls',  category: 'panels',    label: 'Toggle Smart Controls',       defaultCombo: { code: 'KeyB' }, contexts: ['global'] },

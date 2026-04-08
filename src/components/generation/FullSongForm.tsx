@@ -12,6 +12,7 @@ import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
 import { TimbrePresetPicker } from './TimbrePresetPicker';
 import { NegativePromptSection } from './NegativePromptSection';
+import { PromptHistoryPanel } from './PromptHistoryPanel';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -568,6 +569,11 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           )}
         </div>
 
+      </section>
+
+      {/* Prompt History */}
+      <section className="border-t border-[#3a3a3a] pt-3">
+        <PromptHistoryPanel onSelectPrompt={setPrompt} />
       </section>
 
     </div>

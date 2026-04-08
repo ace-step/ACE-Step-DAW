@@ -3,6 +3,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Toolbar } from './Toolbar';
 import { Timeline } from '../timeline/Timeline';
 import { GenerationPanel } from '../generation/GenerationPanel';
+import { VariationComparisonPanel } from '../generation/VariationComparisonPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
 import { ArrangementAssistantPanel } from '../arrangement/ArrangementAssistantPanel';
@@ -191,7 +192,7 @@ function EditorShell() {
           <ErrorBoundary name="Mixer"><Suspense fallback={<PanelSkeleton variant="mixer" />}><MixerPanel /></Suspense></ErrorBoundary>
         </BottomPanelTransition>
       </div>
-      {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
+      {project && <ErrorBoundary name="Generation"><GenerationPanel /><VariationComparisonPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="ClipInspector"><ClipInspectorPanel /></ErrorBoundary>}

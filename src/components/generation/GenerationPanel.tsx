@@ -69,7 +69,14 @@ export function GenerationPanel() {
                         />
                       </div>
                     )}
-                    {eta !== '' && <span className="text-[10px] opacity-60">ETA {eta}</span>}
+                    {eta !== '' && (
+                      <span
+                        className="text-[10px] opacity-60"
+                        title={job.etaConfidence === 'low' ? 'Estimate may be inaccurate' : undefined}
+                      >
+                        ETA {eta}{job.etaConfidence === 'low' && ' ~'}
+                      </span>
+                    )}
                   </div>
                 );
               })}

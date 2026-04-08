@@ -538,12 +538,15 @@ export async function generateVariationSession(
         (variation) => variation.status === 'done' || variation.status === 'error' || variation.status === 'cancelled',
       );
       if (allTerminal) {
-        currentSession.variations.forEach((variation) => {
-          if ((variation.status === 'done' || variation.status === 'error') && variation.completedAt) return;
-          if (variation.status === 'done' || variation.status === 'error') {
-            useGenerationStore.getState().updateVariation(variation.index, { completedAt: Date.now() });
-          }
-        });
+        // Collect indices needing completedAt before mutating store to avoid stale state
+        const now = Date.now();
+        const indicesToComplete = currentSession.variations
+          .filter((v) => (v.status === 'done' || v.status === 'error') && !v.completedAt)
+          .map((v) => v.index);
+
+        for (const idx of indicesToComplete) {
+          useGenerationStore.getState().updateVariation(idx, { completedAt: now });
+        }
       }
     }
 

@@ -43,6 +43,7 @@ export interface CommandPaletteContext {
   showAIAssistant: boolean;
   loopBrowserOpen: boolean;
   showTempoLane: boolean;
+  showGroovePool: boolean;
   loopEnabled: boolean;
   metronomeEnabled: boolean;
   expandedTrackId: string | null;
@@ -66,6 +67,7 @@ export interface CommandPaletteContext {
     toggleLoopBrowser: () => void;
     toggleTempoLane: () => void;
     toggleAIAssistant: () => void;
+    toggleGroovePool: () => void;
     zoomTimelineToSelection: () => void;
     zoomTimelineToProject: () => void;
     setBatchGenerateMode: (mode: 'silence' | 'context' | null) => void;
@@ -565,6 +567,17 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
       ['toggle claude code', 'open claude code', 'claude terminal'],
       context.actions.toggleAIAssistant,
       ['Cmd', '/'],
+      'Panel toggle',
+    ),
+    createTrackCommand(
+      'panel:groove-pool',
+      context.showGroovePool ? 'Hide Groove Pool' : 'Show Groove Pool',
+      'Panels',
+      'action',
+      ['panel', 'groove', 'pool', 'swing', 'quantize', 'humanize'],
+      ['toggle groove pool', 'open groove pool', 'show grooves'],
+      context.actions.toggleGroovePool,
+      ['Shift', 'G'],
       'Panel toggle',
     ),
   );

@@ -51,6 +51,7 @@ export function ClipContextMenuContainer({
   const applyStrudelCodeToTrack = useProjectStore((s) => s.applyStrudelCodeToTrack);
   const splitClipAtZeroCrossing = useProjectStore((s) => s.splitClipAtZeroCrossing);
   const updateClipColors = useProjectStore((s) => s.updateClipColors);
+  const extractGrooveFromClip = useProjectStore((s) => s.extractGrooveFromClip);
   const tracks = useProjectStore((s) => s.project?.tracks);
 
   const hasAudio = !!(clip.isolatedAudioKey || clip.cumulativeMixKey);
@@ -116,6 +117,14 @@ export function ClipContextMenuContainer({
         })();
       } : undefined}
       onExportMidi={isMidiClip ? () => { onClose(); exportMidiClip(clip.id); } : undefined}
+      onExtractGroove={isMidiClip ? () => {
+        onClose();
+        const clipDurationBeats = clip.duration * (useProjectStore.getState().project?.bpm ?? 120) / 60;
+        const gridBeats = 0.25; // 16th note default
+        const lengthBeats = Math.max(1, Math.round(clipDurationBeats));
+        extractGrooveFromClip(clip.id, `Groove from ${clip.prompt || 'clip'}`, { gridBeats, lengthBeats });
+        useUIStore.getState().setShowGroovePool(true);
+      } : undefined}
       onEdit={() => {
         onClose();
         if (clip.generationParams?.type === 'text2music' || (clip.source === 'generated' && track.trackType === 'mix')) {

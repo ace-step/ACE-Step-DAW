@@ -193,6 +193,9 @@ export interface UIState {
   // Model Library Panel
   showModelLibrary: boolean;
 
+  // Groove Pool Panel
+  showGroovePool: boolean;
+
   // Generation Side Panel
   showGenerationPanel: boolean;
   showGenerationHistoryPanel: boolean;
@@ -404,6 +407,10 @@ export interface UIState {
   toggleModelLibrary: () => void;
   setShowModelLibrary: (v: boolean) => void;
 
+  // Groove Pool Panel
+  toggleGroovePool: () => void;
+  setShowGroovePool: (v: boolean) => void;
+
   // Generation Side Panel
   toggleGenerationPanel: () => void;
   setShowGenerationPanel: (v: boolean) => void;
@@ -535,6 +542,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
   showModelLibrary: false,
+  showGroovePool: false,
   showAIAssistant: false,
   showVST3Panel: false,
 } as const;
@@ -690,6 +698,7 @@ export const useUIStore = create<UIState>()(
   editingLegoClipId: null,
 
   showModelLibrary: false,
+  showGroovePool: false,
 
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
@@ -1228,6 +1237,9 @@ export const useUIStore = create<UIState>()(
   toggleModelLibrary: () => set((s) => s.showModelLibrary ? { showModelLibrary: false } : { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true }),
   setShowModelLibrary: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true } : { showModelLibrary: false }),
 
+  toggleGroovePool: () => set((s) => s.showGroovePool ? { showGroovePool: false } : { ...ALL_RIGHT_PANELS_CLOSED, showGroovePool: true }),
+  setShowGroovePool: (v: boolean) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showGroovePool: true } : { showGroovePool: false }),
+
   toggleGenerationPanel: () => set((s) => s.showGenerationPanel ? { showGenerationPanel: false } : { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true }),
   setShowGenerationPanel: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showGenerationPanel: true } : { showGenerationPanel: false }),
   setGenerationPanelView: (view) => set({ generationPanelView: view }),
@@ -1393,6 +1405,8 @@ export const useUIStore = create<UIState>()(
         recentlyUsedLoopIds: state.recentlyUsedLoopIds,
         // Model Library panel
         showModelLibrary: state.showModelLibrary,
+        // Groove Pool panel
+        showGroovePool: state.showGroovePool,
         // Generation panel
         showGenerationPanel: state.showGenerationPanel,
         showGenerationHistoryPanel: state.showGenerationHistoryPanel,
@@ -1438,6 +1452,7 @@ function buildCommandPaletteContext(state: UIState) {
     showAIAssistant: state.showAIAssistant,
     loopBrowserOpen: state.loopBrowserOpen,
     showTempoLane: state.showTempoLane,
+    showGroovePool: state.showGroovePool,
     loopEnabled: transportStore.loopEnabled,
     metronomeEnabled: transportStore.metronomeEnabled,
     expandedTrackId: state.expandedTrackId,
@@ -1461,6 +1476,7 @@ function buildCommandPaletteContext(state: UIState) {
       toggleLoopBrowser: state.toggleLoopBrowser,
       toggleTempoLane: state.toggleTempoLane,
       toggleAIAssistant: state.toggleAIAssistant,
+      toggleGroovePool: state.toggleGroovePool,
       zoomTimelineToSelection: state.zoomTimelineToSelection,
       zoomTimelineToProject: state.zoomTimelineToProject,
       setBatchGenerateMode: state.setBatchGenerateMode,

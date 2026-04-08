@@ -597,6 +597,33 @@ describe('projectStore', () => {
       expect(useProjectStore.getState().project?.tracks[0].clips).toHaveLength(1);
       expect(mockSaveAudioBlob).toHaveBeenCalledTimes(1);
     });
+
+    it('safely rolls back history when audio consolidation fails (regression #1585)', async () => {
+      const track = useProjectStore.getState().addTrack('drums', 'sample');
+      const clipA = useProjectStore.getState().addClip(track.id, {
+        startTime: 0, duration: 0.5, prompt: 'kick-a', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      const clipB = useProjectStore.getState().addClip(track.id, {
+        startTime: 1, duration: 0.5, prompt: 'kick-b', globalCaption: '', lyrics: '', source: 'uploaded',
+      });
+      useProjectStore.getState().updateClip(clipA.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-a',
+      });
+      useProjectStore.getState().updateClip(clipB.id, {
+        generationStatus: 'ready', isolatedAudioKey: 'audio-b',
+      });
+
+      // Force audio decode to fail
+      mockLoadAudioBlobByKey.mockResolvedValue(new Blob(['wav'], { type: 'audio/wav' }));
+      mockDecodeAudioData.mockRejectedValue(new Error('decode failed'));
+
+      const result = await useProjectStore.getState().consolidateClips(track.id, [clipA.id, clipB.id]);
+
+      expect(result).toBeUndefined();
+      // Original clips should still be present (history rollback worked)
+      const clips = useProjectStore.getState().project?.tracks[0].clips;
+      expect(clips).toHaveLength(2);
+    });
   });
 
   describe('duplicateTrack', () => {

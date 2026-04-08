@@ -5126,6 +5126,8 @@ export const useProjectStore = create<ProjectState>()(
     const lyrics = clips.map((clip) => clip.lyrics.trim()).filter(Boolean).join('\n');
     const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
 
+    const historyBucket = _history.arrangement[GLOBAL_HISTORY_BUCKET];
+    const historyLengthBeforePush = historyBucket?.length ?? 0;
     _pushHistory(state.project);
 
     let consolidatedClip: Clip;
@@ -5168,7 +5170,10 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        _history.arrangement[GLOBAL_HISTORY_BUCKET]?.pop();
+        // Only pop if our push actually grew the stack (safe rollback)
+        if (historyBucket && historyBucket.length > historyLengthBeforePush) {
+          historyBucket.pop();
+        }
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');
         return undefined;
       }

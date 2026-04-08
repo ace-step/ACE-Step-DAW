@@ -64,7 +64,7 @@ function SelectedTrackCursor({ trackId, x, blink }: { trackId: string; x: number
         height: laneRect.height,
         animation: blink ? 'playhead-blink-line 1.2s ease-in-out infinite' : undefined,
         backgroundColor: blink ? undefined : '#ffffff',
-        boxShadow: '0 0 3px rgba(0, 0, 0, 0.35), 0 0 8px rgba(0, 0, 0, 0.15)',
+        boxShadow: '0 0 4px rgba(255, 255, 255, 0.5), 0 0 8px rgba(147, 197, 253, 0.3), 0 0 3px rgba(0, 0, 0, 0.35)',
       }}
     />
   );

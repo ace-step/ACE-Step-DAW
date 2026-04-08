@@ -565,8 +565,12 @@ export function MixerPanel() {
 
   if (!project) return null;
 
+  const clearAllSolos = useProjectStore((s) => s.clearAllSolos);
+  const clearAllMutes = useProjectStore((s) => s.clearAllMutes);
+
   const returnTracks = project.returnTracks ?? [];
   const anySoloed = project.tracks.some((t) => t.soloed);
+  const anyMuted = project.tracks.some((t) => t.muted);
   const visibleMixerHeight = Math.max(mixerHeight, MIXER_MIN_VISIBLE_HEIGHT);
   const focusedTrackName = project.tracks.find((track) => track.id === keyboardContext.trackId)?.displayName ?? 'None';
   const faderHeight = Math.max(
@@ -599,6 +603,26 @@ export function MixerPanel() {
         className="flex items-center px-3 py-1 text-[10px] text-zinc-300 border-b border-[#333] bg-[#252525]"
       >
         <span className="flex-1">Scope: <span className="text-zinc-100">Mixer</span> · Channel: <span className="text-zinc-100">{focusedTrackName}</span></span>
+        {anySoloed && (
+          <button
+            data-testid="clear-all-solos-btn"
+            onClick={clearAllSolos}
+            title="Clear all solos"
+            className="mr-1.5 flex h-4 items-center rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+          >
+            Clear Solos
+          </button>
+        )}
+        {anyMuted && (
+          <button
+            data-testid="clear-all-mutes-btn"
+            onClick={clearAllMutes}
+            title="Clear all mutes"
+            className="mr-1.5 flex h-4 items-center rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+          >
+            Clear Mutes
+          </button>
+        )}
         <button
           onClick={() => useUIStore.getState().setShowMixer(false)}
           aria-label="Close mixer"

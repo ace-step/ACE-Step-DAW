@@ -944,6 +944,9 @@ export interface ProjectState extends MidiSliceActions {
   removeGroupTrack: (groupId: string) => void;
   setGroupMuted: (groupId: string, muted: boolean) => void;
   setGroupSoloed: (groupId: string, soloed: boolean) => void;
+  clearAllSolos: () => void;
+  clearAllMutes: () => void;
+  exclusiveSolo: (trackId: string) => void;
   getVisibleTracks: () => Track[];
 
   // Tempo map
@@ -8683,6 +8686,57 @@ export const useProjectStore = create<ProjectState>()(
           if (t.parentTrackId === groupId) return { ...t, soloed };
           return t;
         }),
+      },
+    });
+  },
+
+  clearAllSolos: () => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    if (!state.project.tracks.some((t) => t.soloed)) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Clear all solos' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.soloed ? { ...t, soloed: false } : t,
+        ),
+      },
+    });
+  },
+
+  clearAllMutes: () => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    if (!state.project.tracks.some((t) => t.muted)) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Clear all mutes' });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.muted ? { ...t, muted: false } : t,
+        ),
+      },
+    });
+  },
+
+  exclusiveSolo: (trackId) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    _pushHistory(state.project, { scope: 'mixer', label: 'Exclusive solo', trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) => ({
+          ...t,
+          soloed: t.id === trackId,
+        })),
       },
     });
   },

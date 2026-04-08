@@ -908,6 +908,74 @@ describe('projectStore', () => {
     });
   });
 
+  describe('solo/mute management', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+    });
+
+    it('clearAllSolos unsolos all tracks', () => {
+      const store = useProjectStore.getState();
+      const t1 = store.addTrack('vocals');
+      const t2 = store.addTrack('drums');
+      store.updateTrack(t1.id, { soloed: true });
+      store.updateTrack(t2.id, { soloed: true });
+
+      useProjectStore.getState().clearAllSolos();
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      expect(tracks.every((t) => !t.soloed)).toBe(true);
+    });
+
+    it('clearAllSolos is a no-op when no tracks are soloed', () => {
+      const store = useProjectStore.getState();
+      store.addTrack('vocals');
+      const before = useProjectStore.getState().project!.updatedAt;
+
+      useProjectStore.getState().clearAllSolos();
+
+      expect(useProjectStore.getState().project!.updatedAt).toBe(before);
+    });
+
+    it('clearAllMutes unmutes all tracks', () => {
+      const store = useProjectStore.getState();
+      const t1 = store.addTrack('vocals');
+      const t2 = store.addTrack('drums');
+      store.updateTrack(t1.id, { muted: true });
+      store.updateTrack(t2.id, { muted: true });
+
+      useProjectStore.getState().clearAllMutes();
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      expect(tracks.every((t) => !t.muted)).toBe(true);
+    });
+
+    it('clearAllMutes is a no-op when no tracks are muted', () => {
+      const store = useProjectStore.getState();
+      store.addTrack('vocals');
+      const before = useProjectStore.getState().project!.updatedAt;
+
+      useProjectStore.getState().clearAllMutes();
+
+      expect(useProjectStore.getState().project!.updatedAt).toBe(before);
+    });
+
+    it('exclusiveSolo solos only the target track', () => {
+      const store = useProjectStore.getState();
+      const t1 = store.addTrack('vocals');
+      const t2 = store.addTrack('drums');
+      const t3 = store.addTrack('bass');
+      store.updateTrack(t1.id, { soloed: true });
+      store.updateTrack(t2.id, { soloed: true });
+
+      useProjectStore.getState().exclusiveSolo(t3.id);
+
+      const tracks = useProjectStore.getState().project!.tracks;
+      expect(tracks.find((t) => t.id === t1.id)!.soloed).toBe(false);
+      expect(tracks.find((t) => t.id === t2.id)!.soloed).toBe(false);
+      expect(tracks.find((t) => t.id === t3.id)!.soloed).toBe(true);
+    });
+  });
+
   describe('renameTrack', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

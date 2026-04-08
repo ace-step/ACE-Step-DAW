@@ -226,6 +226,29 @@ export function buildCommandList(): Command[] {
       action: () => useUIStore.getState().setBatchGenerateMode('context'),
     },
 
+    // Mixer — solo/mute management
+    {
+      id: 'clear-all-solos',
+      label: 'Clear All Solos',
+      category: 'Mixer',
+      action: () => useProjectStore.getState().clearAllSolos(),
+    },
+    {
+      id: 'clear-all-mutes',
+      label: 'Clear All Mutes',
+      category: 'Mixer',
+      action: () => useProjectStore.getState().clearAllMutes(),
+    },
+    {
+      id: 'exclusive-solo',
+      label: 'Exclusive Solo (focused track)',
+      category: 'Mixer',
+      action: () => {
+        const trackId = useUIStore.getState().keyboardContext.trackId;
+        if (trackId) useProjectStore.getState().exclusiveSolo(trackId);
+      },
+    },
+
     // Help
     {
       id: 'keyboard-shortcuts',

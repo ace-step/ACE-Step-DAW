@@ -388,19 +388,31 @@ class FreeVerbProcessor extends AudioWorkletProcessor {
 registerProcessor('freeverb-processor', FreeVerbProcessor);
 `;
 
-let _reverbWorkletReady: Promise<void> | null = null;
+const _reverbWorkletReady = new WeakMap<AudioContext, Promise<void>>();
 function ensureReverbWorklet(ctx: AudioContext): Promise<void> | null {
   if (!ctx.audioWorklet?.addModule) return null;
-  if (!_reverbWorkletReady) {
-    try {
-      const blob = new Blob([REVERB_WORKLET_CODE], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      _reverbWorkletReady = ctx.audioWorklet.addModule(url).then(() => URL.revokeObjectURL(url));
-    } catch {
-      return null;
-    }
+
+  const existing = _reverbWorkletReady.get(ctx);
+  if (existing) return existing;
+
+  try {
+    const blob = new Blob([REVERB_WORKLET_CODE], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    const ready = ctx.audioWorklet
+      .addModule(url)
+      .catch((error: unknown) => {
+        _reverbWorkletReady.delete(ctx);
+        throw error;
+      })
+      .finally(() => {
+        URL.revokeObjectURL(url);
+      });
+
+    _reverbWorkletReady.set(ctx, ready);
+    return ready;
+  } catch {
+    return null;
   }
-  return _reverbWorkletReady;
 }
 
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {

@@ -331,15 +331,26 @@ describe('parseDuration uses project BPM (regression #1588)', () => {
     useProjectStore.setState(useProjectStore.getInitialState(), true);
   });
 
-  it('reads BPM from the project store for note notation', () => {
+  it('produces different durations at different BPMs for note notation', () => {
     useProjectStore.getState().createProject({ name: 'BPM Test' });
+
+    // BPM=60: quarter note = 1.0s
     useProjectStore.getState().updateProject({ bpm: 60 });
+    const osc60 = new MockOscillatorNode();
+    const ctx60 = { ...createMockCtx(), createOscillator: () => osc60 } as unknown as AudioContext;
+    const synth60 = new NativePolySynth(ctx60);
+    synth60.triggerAttackRelease('C4', '4n');
+    const stopTime60 = osc60.stop.mock.calls[0]?.[0] as number;
 
-    const ctx = createMockCtx();
-    const synth = new NativePolySynth(ctx);
+    // BPM=120: quarter note = 0.5s
+    useProjectStore.getState().updateProject({ bpm: 120 });
+    const osc120 = new MockOscillatorNode();
+    const ctx120 = { ...createMockCtx(), createOscillator: () => osc120 } as unknown as AudioContext;
+    const synth120 = new NativePolySynth(ctx120);
+    synth120.triggerAttackRelease('C4', '4n');
+    const stopTime120 = osc120.stop.mock.calls[0]?.[0] as number;
 
-    // At BPM=60, a quarter note ('4n') = 1.0s; at BPM=120 (old default) = 0.5s
-    // Verify parseDuration runs without throwing (it's called internally)
-    expect(() => synth.triggerAttackRelease('C4', '4n')).not.toThrow();
+    // A quarter note should last longer at slower BPM
+    expect(stopTime60).toBeGreaterThan(stopTime120);
   });
 });

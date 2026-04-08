@@ -27,6 +27,9 @@ export default defineConfig(async ({ command }) => {
   return {
     plugins,
     build: {
+      // DAW apps inherently bundle large vendor deps (Strudel ~750KB, CodeMirror ~622KB)
+      // and complex app code (~1191KB). The default 500KB limit produces false positives
+      // here since these are lazy-loaded and gzip to ~200-320KB each.
       chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {

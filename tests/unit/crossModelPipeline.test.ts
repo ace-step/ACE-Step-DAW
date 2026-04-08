@@ -38,7 +38,7 @@ describe('cross-model pipeline', () => {
     // Set up project with a track
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -84,7 +84,7 @@ describe('cross-model pipeline', () => {
   it('does not call initModel in same-model mode', async () => {
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -114,7 +114,7 @@ describe('cross-model pipeline', () => {
   it('records modelName on each variation after cross-model generation', async () => {
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 
@@ -153,7 +153,7 @@ describe('cross-model pipeline', () => {
   it('reports errors on individual variations in cross-model mode (regression #1583)', async () => {
     const store = useProjectStore.getState();
     if (!store.project) {
-      store.createProject('Test Project');
+      store.createProject({ name: 'Test Project' });
     }
     const track = store.addTrack('stems');
 

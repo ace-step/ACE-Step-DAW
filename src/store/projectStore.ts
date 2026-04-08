@@ -5127,8 +5127,10 @@ export const useProjectStore = create<ProjectState>()(
     const source = clips.every((clip) => clip.source === 'generated') ? 'generated' : 'uploaded';
 
     const historyBucket = _history.arrangement[GLOBAL_HISTORY_BUCKET];
-    const historyLengthBeforePush = historyBucket?.length ?? 0;
     _pushHistory(state.project);
+    // Capture the entry we just pushed so we can remove it by identity on error
+    // (length comparison fails when bucket is at MAX_HISTORY and _trimHistory shifts)
+    const pushedEntry = historyBucket?.[historyBucket.length - 1];
 
     let consolidatedClip: Clip;
     if (mediaType === 'midi') {
@@ -5170,8 +5172,8 @@ export const useProjectStore = create<ProjectState>()(
           audioOffset: 0,
         };
       } catch (error) {
-        // Only pop if our push actually grew the stack (safe rollback)
-        if (historyBucket && historyBucket.length > historyLengthBeforePush) {
+        // Remove our entry if it's still the most recent (identity check)
+        if (historyBucket && historyBucket.length > 0 && historyBucket[historyBucket.length - 1] === pushedEntry) {
           historyBucket.pop();
         }
         toastError(error instanceof Error ? error.message : 'Unable to consolidate the selected audio clips');

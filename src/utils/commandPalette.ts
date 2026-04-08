@@ -226,6 +226,57 @@ export function buildCommandList(): Command[] {
       action: () => useUIStore.getState().setBatchGenerateMode('context'),
     },
 
+    // Arrangement
+    {
+      id: 'split-all-at-playhead',
+      label: 'Split All at Playhead',
+      category: 'Arrangement',
+      shortcut: `${mod}⇧S`,
+      action: () => {
+        const t = useTransportStore.getState();
+        useProjectStore.getState().splitAllAtPlayhead(t.currentTime);
+      },
+    },
+    {
+      id: 'insert-time',
+      label: 'Insert Time at Selection',
+      category: 'Arrangement',
+      shortcut: `${mod}I`,
+      action: () => {
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().insertTime(sw.startTime, sw.endTime - sw.startTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+    },
+    {
+      id: 'delete-time',
+      label: 'Delete Time (Ripple Delete)',
+      category: 'Arrangement',
+      shortcut: `${mod}⇧⌫`,
+      action: () => {
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().deleteTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+    },
+    {
+      id: 'duplicate-section',
+      label: 'Duplicate Section',
+      category: 'Arrangement',
+      shortcut: `${mod}⇧D`,
+      action: () => {
+        const sw = useUIStore.getState().selectWindow;
+        if (sw) {
+          useProjectStore.getState().duplicateTimeRange(sw.startTime, sw.endTime);
+          useUIStore.getState().setSelectWindow(null);
+        }
+      },
+    },
+
     // Help
     {
       id: 'keyboard-shortcuts',

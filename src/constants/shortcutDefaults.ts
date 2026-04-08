@@ -26,6 +26,10 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'clips.copy',            category: 'clips',     label: 'Copy',                        defaultCombo: { code: 'KeyC', mod: true }, contexts: ['timeline', 'pianoRoll'] },
   { id: 'clips.cut',             category: 'clips',     label: 'Cut',                         defaultCombo: { code: 'KeyX', mod: true }, contexts: ['timeline', 'pianoRoll'] },
   { id: 'clips.paste',           category: 'clips',     label: 'Paste',                       defaultCombo: { code: 'KeyV', mod: true }, contexts: ['timeline', 'pianoRoll'] },
+  { id: 'clips.splitAll',        category: 'clips',     label: 'Split All at Playhead',       defaultCombo: { code: 'KeyS', mod: true, shift: true }, contexts: ['timeline'] },
+  { id: 'clips.insertTime',      category: 'clips',     label: 'Insert Time at Selection',    defaultCombo: { code: 'KeyI', mod: true }, contexts: ['timeline'] },
+  { id: 'clips.deleteTime',      category: 'clips',     label: 'Delete Time (Ripple Delete)', defaultCombo: { code: 'Backspace', mod: true, shift: true }, contexts: ['timeline'] },
+  { id: 'clips.duplicateSection', category: 'clips',    label: 'Duplicate Section',           defaultCombo: { code: 'KeyD', mod: true, shift: true }, contexts: ['timeline'] },
 
   { id: 'tracks.mute',           category: 'tracks',    label: 'Toggle Focused Track Mute',   defaultCombo: { code: 'KeyM' }, contexts: ['timeline', 'mixer', 'pianoRoll'] },
   { id: 'tracks.solo',           category: 'tracks',    label: 'Toggle Focused Track Solo',   defaultCombo: { code: 'KeyS', shift: true }, contexts: ['timeline', 'mixer', 'pianoRoll'] },

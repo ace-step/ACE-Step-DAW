@@ -733,6 +733,42 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      if (matches('clips.splitAll')) {
+        event.preventDefault();
+        project.splitAllAtPlayhead(transport.currentTime);
+        return;
+      }
+
+      if (matches('clips.insertTime')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.insertTime(sw.startTime, sw.endTime - sw.startTime);
+          ui.setSelectWindow(null);
+        }
+        return;
+      }
+
+      if (matches('clips.deleteTime')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.deleteTimeRange(sw.startTime, sw.endTime);
+          ui.setSelectWindow(null);
+        }
+        return;
+      }
+
+      if (matches('clips.duplicateSection')) {
+        event.preventDefault();
+        const sw = ui.selectWindow;
+        if (sw) {
+          project.duplicateTimeRange(sw.startTime, sw.endTime);
+          ui.setSelectWindow(null);
+        }
+        return;
+      }
+
       // Arrangement navigation follows the DAW convention:
       // Z fits the current selection, Shift+Z resets to the full project.
       if (matches('view.zoomToSelection')) {

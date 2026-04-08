@@ -750,6 +750,16 @@ export interface ProjectState extends MidiSliceActions {
   /** Paste pre-built clips into their target tracks. Returns IDs of newly created clips. */
   pasteClipsToTracks: (clips: { clip: Clip; targetTrackId: string }[]) => string[];
 
+  // ── Arrangement operations (global time edits) ───────────────────────
+  /** Split every clip on every track at the given time. */
+  splitAllAtPlayhead: (splitTime: number) => void;
+  /** Insert silence at a time point, pushing everything after it forward. */
+  insertTime: (atTime: number, duration: number) => void;
+  /** Delete content in [startTime, endTime) and pull everything after backward (ripple delete). */
+  deleteTimeRange: (startTime: number, endTime: number) => void;
+  /** Duplicate all content in [startTime, endTime), inserting the copy immediately after and shifting subsequent content. */
+  duplicateTimeRange: (startTime: number, endTime: number) => void;
+
   // Session View / clip launcher
   createSessionScene: (name?: string) => SessionScene | undefined;
   removeSessionScene: (sceneId: string) => void;
@@ -5022,6 +5032,360 @@ export const useProjectStore = create<ProjectState>()(
     });
 
     return newClipIds;
+  },
+
+  // ── Arrangement operations (global time edits) ───────────────────────
+
+  splitAllAtPlayhead: (splitTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    // Check if any clip actually overlaps the split point
+    let anyOverlap = false;
+    for (const track of state.project.tracks) {
+      for (const clip of track.clips) {
+        if (splitTime > clip.startTime && splitTime < clip.startTime + clip.duration) {
+          anyOverlap = true;
+          break;
+        }
+      }
+      if (anyOverlap) break;
+    }
+    if (!anyOverlap) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Split all at playhead' });
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (splitTime > clip.startTime && splitTime < clipEnd) {
+          const origAudioOffset = clip.audioOffset ?? 0;
+          const leftDuration = splitTime - clip.startTime;
+          const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: splitTime,
+            duration: clipEnd - splitTime,
+            audioOffset: origAudioOffset + leftDuration,
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else {
+          newClips.push(clip);
+        }
+      }
+      return { ...track, clips: newClips };
+    });
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  insertTime: (atTime, duration) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || duration <= 0) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Insert time' });
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        if (clip.startTime >= atTime) {
+          // Clip is entirely after insert point → shift forward
+          newClips.push({ ...clip, startTime: clip.startTime + duration });
+        } else if (clipEnd > atTime) {
+          // Clip spans the insert point → split it
+          const origAudioOffset = clip.audioOffset ?? 0;
+          const leftDuration = atTime - clip.startTime;
+          const rightDuration = clipEnd - atTime;
+          const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: atTime + duration,
+            duration: rightDuration,
+            audioOffset: origAudioOffset + leftDuration,
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else {
+          // Clip is entirely before insert point → no change
+          newClips.push(clip);
+        }
+      }
+
+      return { ...track, clips: newClips };
+    });
+
+    // Shift markers
+    const newMarkers = (state.project.markers ?? []).map((m) =>
+      m.time >= atTime ? { ...m, time: m.time + duration } : m,
+    );
+
+    // Shift automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: lane.points.map((p) =>
+        p.time >= atTime ? { ...p, time: p.time + duration } : p,
+      ),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
+  },
+
+  deleteTimeRange: (startTime, endTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || startTime >= endTime) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Delete time range' });
+
+    const rangeDuration = endTime - startTime;
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        const origAudioOffset = clip.audioOffset ?? 0;
+        const isReady = clip.generationStatus === 'ready' && !!clip.isolatedAudioKey;
+
+        if (clipEnd <= startTime) {
+          // Clip entirely before range → keep unchanged
+          newClips.push(clip);
+        } else if (clip.startTime >= endTime) {
+          // Clip entirely after range → shift backward
+          newClips.push({ ...clip, startTime: clip.startTime - rangeDuration });
+        } else if (clip.startTime >= startTime && clipEnd <= endTime) {
+          // Clip entirely inside range → delete (skip)
+        } else if (clip.startTime < startTime && clipEnd > endTime) {
+          // Clip spans the entire range → split into left + right (with right shifted)
+          const leftDuration = startTime - clip.startTime;
+          const leftClip: Clip = { ...clip, duration: leftDuration };
+
+          const rightStart = startTime; // shifted: endTime - rangeDuration = startTime
+          const rightDuration = clipEnd - endTime;
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: rightStart,
+            duration: rightDuration,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+            generationStatus: isReady ? 'ready' : 'empty',
+            generationJobId: null,
+            isolatedAudioKey: isReady ? clip.isolatedAudioKey : null,
+            waveformPeaks: isReady && clip.waveformPeaks ? [...clip.waveformPeaks] : null,
+            audioDuration: clip.audioDuration,
+          };
+          newClips.push(leftClip, rightClip);
+        } else if (clip.startTime < startTime && clipEnd <= endTime) {
+          // Clip starts before range, ends inside → trim right side
+          newClips.push({ ...clip, duration: startTime - clip.startTime });
+        } else if (clip.startTime >= startTime && clipEnd > endTime) {
+          // Clip starts inside range, ends after → trim left side and shift
+          const trimmedStart = endTime;
+          const trimmedDuration = clipEnd - endTime;
+          newClips.push({
+            ...clip,
+            startTime: trimmedStart - rangeDuration,
+            duration: trimmedDuration,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+          });
+        }
+      }
+
+      return { ...track, clips: newClips };
+    });
+
+    // Filter and shift markers
+    const newMarkers = (state.project.markers ?? [])
+      .filter((m) => m.time < startTime || m.time >= endTime)
+      .map((m) => (m.time >= endTime ? { ...m, time: m.time - rangeDuration } : m));
+
+    // Filter and shift automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: lane.points
+        .filter((p) => p.time < startTime || p.time >= endTime)
+        .map((p) => (p.time >= endTime ? { ...p, time: p.time - rangeDuration } : p)),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
+  },
+
+  duplicateTimeRange: (startTime, endTime) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project || startTime >= endTime) return;
+
+    _pushHistory(state.project, { scope: 'arrangement', label: 'Duplicate time range' });
+
+    const rangeDuration = endTime - startTime;
+
+    const newTracks = state.project.tracks.map((track) => {
+      const newClips: Clip[] = [];
+      const duplicatedClips: Clip[] = [];
+
+      for (const clip of track.clips) {
+        const clipEnd = clip.startTime + clip.duration;
+        const origAudioOffset = clip.audioOffset ?? 0;
+
+        if (clipEnd <= startTime) {
+          // Before range → keep unchanged
+          newClips.push(clip);
+        } else if (clip.startTime >= endTime) {
+          // After range → shift forward by rangeDuration
+          newClips.push({ ...clip, startTime: clip.startTime + rangeDuration });
+        } else if (clip.startTime >= startTime && clipEnd <= endTime) {
+          // Fully inside range → keep original, create duplicate shifted by rangeDuration
+          newClips.push(clip);
+          duplicatedClips.push({
+            ...clip,
+            id: uuidv4(),
+            startTime: clip.startTime + rangeDuration,
+          });
+        } else if (clip.startTime < startTime && clipEnd <= endTime) {
+          // Starts before range, ends inside → keep original, duplicate the overlapping portion
+          newClips.push(clip);
+          const overlapStart = startTime;
+          const overlapDuration = clipEnd - startTime;
+          duplicatedClips.push({
+            ...clip,
+            id: uuidv4(),
+            startTime: overlapStart + rangeDuration,
+            duration: overlapDuration,
+            audioOffset: origAudioOffset + (startTime - clip.startTime),
+          });
+        } else if (clip.startTime >= startTime && clipEnd > endTime) {
+          // Starts inside range, ends after → keep the inside portion as duplicate, shift original remainder
+          newClips.push(clip);
+          const insideDuration = endTime - clip.startTime;
+          duplicatedClips.push({
+            ...clip,
+            id: uuidv4(),
+            startTime: clip.startTime + rangeDuration,
+            duration: insideDuration,
+          });
+          // The part after the range needs to shift forward
+          // Actually, the original clip already extends beyond the range.
+          // We need to shift its startTime forward by rangeDuration for the part after endTime.
+          // But we can't split the original — let's just shift the entire original forward.
+          // Wait, we should keep the clip as-is and shift. The original extends 0..endTime+.
+          // Since clip.startTime >= startTime and clipEnd > endTime, the clip is partially inside.
+          // We already added the original to newClips. It needs shifting if after range.
+          // Since clip.startTime >= startTime (inside range), we should shift the whole clip forward.
+          // Remove the previously pushed original and re-add shifted.
+          newClips.pop();
+          newClips.push({ ...clip, startTime: clip.startTime + rangeDuration });
+        } else if (clip.startTime < startTime && clipEnd > endTime) {
+          // Spans the entire range → keep original, duplicate the inside portion
+          newClips.push(clip);
+          // Everything after endTime needs to shift forward
+          // But this clip extends beyond - its tail shifts. However we don't split originals.
+          // Actually, for duplicate range: we insert a copy and shift everything after.
+          // If a clip spans the range, we need to split it at endTime, shift the tail,
+          // and insert the duplicated portion.
+          // This gets complex. Let's simplify: keep original up to endTime,
+          // create split at endTime that's shifted, and create duplicate of inside portion.
+          newClips.pop(); // remove original
+          const leftClip: Clip = { ...clip, duration: endTime - clip.startTime };
+          const rightClip: Clip = {
+            ...clip,
+            id: uuidv4(),
+            startTime: clipEnd + rangeDuration - (clipEnd - endTime), // endTime + rangeDuration
+            duration: clipEnd - endTime,
+            audioOffset: origAudioOffset + (endTime - clip.startTime),
+          };
+          newClips.push(leftClip, rightClip);
+
+          // Duplicate the portion inside the range
+          duplicatedClips.push({
+            ...clip,
+            id: uuidv4(),
+            startTime: endTime,
+            duration: endTime - startTime,
+            audioOffset: origAudioOffset + (startTime - clip.startTime),
+          });
+        }
+      }
+
+      return { ...track, clips: [...newClips, ...duplicatedClips] };
+    });
+
+    // Duplicate markers inside range and shift markers after
+    const existingMarkers = state.project.markers ?? [];
+    const newMarkers = [
+      ...existingMarkers.map((m) =>
+        m.time >= endTime ? { ...m, time: m.time + rangeDuration } : m,
+      ),
+      ...existingMarkers
+        .filter((m) => m.time >= startTime && m.time < endTime)
+        .map((m) => ({ ...m, id: uuidv4(), time: m.time + rangeDuration })),
+    ].sort((a, b) => a.time - b.time);
+
+    // Shift and duplicate automation points at project level
+    const newAutoLanes = (state.project.automationLanes ?? []).map((lane) => ({
+      ...lane,
+      points: [
+        ...lane.points.map((p) =>
+          p.time >= endTime ? { ...p, time: p.time + rangeDuration } : p,
+        ),
+        ...lane.points
+          .filter((p) => p.time >= startTime && p.time < endTime)
+          .map((p) => ({ ...p, time: p.time + rangeDuration })),
+      ].sort((a, b) => a.time - b.time),
+    }));
+
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+        markers: newMarkers,
+        automationLanes: newAutoLanes,
+      },
+    });
   },
 
   createSessionScene: (name) => {

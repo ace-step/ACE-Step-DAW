@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TransformMenu } from '../TransformMenu';
-import { useProjectStore } from '../../../store/projectStore';
 
 vi.mock('../../../utils/midiTransforms', () => ({
   SCALES: {
@@ -11,19 +10,7 @@ vi.mock('../../../utils/midiTransforms', () => ({
   },
 }));
 
-function setupProject() {
-  useProjectStore.getState().createProject();
-  useProjectStore.getState().addTrack('midi');
-  const tracks = useProjectStore.getState().project!.tracks;
-  const track = tracks[tracks.length - 1];
-  const clip = track.clips[0];
-  return { trackId: track.id, clipId: clip?.id ?? 'clip-1' };
-}
-
 describe('TransformMenu', () => {
-  beforeEach(() => {
-    setupProject();
-  });
 
   it('renders Transform button', () => {
     render(<TransformMenu clipId="clip-1" selectedNoteIds={new Set()} />);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QuantizeDialog } from '../QuantizeDialog';
 import { useUIStore } from '../../../store/uiStore';
@@ -7,13 +7,49 @@ import { useProjectStore } from '../../../store/projectStore';
 function setupDialog() {
   useProjectStore.getState().createProject();
   useProjectStore.getState().addTrack('midi');
+  const tracks = useProjectStore.getState().project!.tracks;
+  const track = tracks[tracks.length - 1];
+  // Create a real MIDI clip with notes
+  const clip = useProjectStore.getState().ensureMidiClip(track.id);
+  const noteIds = ['note-1', 'note-2', 'note-3'];
+  // Add notes to the clip
+  useProjectStore.setState((state) => {
+    if (!state.project) return state;
+    return {
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === track.id
+            ? {
+                ...t,
+                clips: t.clips.map((c) =>
+                  c.id === clip.id && c.midiData
+                    ? {
+                        ...c,
+                        midiData: {
+                          ...c.midiData,
+                          notes: noteIds.map((id, i) => ({
+                            id,
+                            pitch: 60 + i,
+                            startBeat: i,
+                            durationBeats: 1,
+                            velocity: 100,
+                          })),
+                        },
+                      }
+                    : c,
+                ),
+              }
+            : t,
+        ),
+      },
+    };
+  });
   useUIStore.setState({
     showQuantizeDialog: true,
-    quantizeTarget: {
-      clipId: 'clip-1',
-      noteIds: ['note-1', 'note-2', 'note-3'],
-    },
+    quantizeTarget: { clipId: clip.id, noteIds },
   });
+  return { clipId: clip.id, noteIds };
 }
 
 describe('QuantizeDialog', () => {
@@ -39,8 +75,9 @@ describe('QuantizeDialog', () => {
   });
 
   it('uses singular for 1 note', () => {
+    const { clipId } = setupDialog();
     useUIStore.setState({
-      quantizeTarget: { clipId: 'clip-1', noteIds: ['note-1'] },
+      quantizeTarget: { clipId, noteIds: ['note-1'] },
     });
     render(<QuantizeDialog />);
     expect(screen.getByText('Quantize 1 note')).toBeInTheDocument();
@@ -68,7 +105,6 @@ describe('QuantizeDialog', () => {
   it('renders scope selector', () => {
     render(<QuantizeDialog />);
     expect(screen.getByText('Scope')).toBeInTheDocument();
-    // Should have scope options
     const scopeSelect = screen.getAllByRole('combobox').find(
       (el) => (el as HTMLSelectElement).value === 'start',
     );
@@ -95,7 +131,6 @@ describe('QuantizeDialog', () => {
   it('changes strength when slider moves', () => {
     render(<QuantizeDialog />);
     const sliders = screen.getAllByRole('slider');
-    // First slider should be strength
     fireEvent.change(sliders[0], { target: { value: '75' } });
     expect(screen.getByText('75%')).toBeInTheDocument();
   });

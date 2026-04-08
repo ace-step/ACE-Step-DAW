@@ -13,12 +13,13 @@ function setupDialog() {
   useProjectStore.getState().addTrack('midi');
   const tracks = useProjectStore.getState().project!.tracks;
   const track = tracks[tracks.length - 1];
-  const clip = track.clips[0];
+  // Create a real MIDI clip via the store
+  const clip = useProjectStore.getState().ensureMidiClip(track.id);
   useUIStore.setState({
     showGeneratePatternDialog: true,
-    generatePatternClipId: clip?.id ?? 'clip-1',
+    generatePatternClipId: clip.id,
   });
-  return { clipId: clip?.id ?? 'clip-1' };
+  return { clipId: clip.id };
 }
 
 describe('GeneratePatternDialog', () => {

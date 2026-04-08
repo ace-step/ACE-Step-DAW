@@ -908,6 +908,81 @@ describe('projectStore', () => {
     });
   });
 
+  describe('channel strip presets', () => {
+    beforeEach(() => {
+      useProjectStore.getState().createProject();
+      localStorage.clear();
+    });
+
+    it('saves a channel strip preset from a track and adds to global library', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      store.updateTrackMixer(track.id, { eqLowGain: -2, eqMidGain: 3, compressorEnabled: true, compressorThreshold: -18 });
+
+      const preset = store.saveChannelStripPreset(track.id, 'My Vocal', 'vocal', 'A warm vocal preset', ['warm']);
+
+      expect(preset.name).toBe('My Vocal');
+      expect(preset.category).toBe('vocal');
+      expect(preset.description).toBe('A warm vocal preset');
+      expect(preset.tags).toEqual(['warm']);
+      expect(preset.isFactory).toBe(false);
+      expect(preset.eqLowGain).toBe(-2);
+      expect(preset.eqMidGain).toBe(3);
+      expect(preset.compressorEnabled).toBe(true);
+      expect(preset.compressorThreshold).toBe(-18);
+    });
+
+    it('applies a channel strip preset to a track', () => {
+      const store = useProjectStore.getState();
+      const sourceTrack = store.addTrack('vocals');
+      store.updateTrackMixer(sourceTrack.id, { eqLowGain: 5, eqMidGain: -3, compressorEnabled: true });
+
+      const preset = store.saveChannelStripPreset(sourceTrack.id, 'Test', 'vocal');
+
+      const targetTrack = store.addTrack('guitar');
+      useProjectStore.getState().applyChannelStripPreset(targetTrack.id, preset.id);
+
+      const updated = useProjectStore.getState().project!.tracks.find((t) => t.id === targetTrack.id)!;
+      expect(updated.eqLowGain).toBe(5);
+      expect(updated.eqMidGain).toBe(-3);
+      expect(updated.compressorEnabled).toBe(true);
+    });
+
+    it('applies with keepVolume option preserving original volume', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      store.updateTrack(track.id, { volume: 0.5 });
+
+      const preset = store.saveChannelStripPreset(track.id, 'Vol Test', 'vocal');
+
+      const target = store.addTrack('guitar');
+      store.updateTrack(target.id, { volume: 0.9 });
+      useProjectStore.getState().applyChannelStripPreset(target.id, preset.id, { keepVolume: true });
+
+      const updated = useProjectStore.getState().project!.tracks.find((t) => t.id === target.id)!;
+      expect(updated.volume).toBe(0.9);
+    });
+
+    it('throws when saving preset with empty name', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      expect(() => store.saveChannelStripPreset(track.id, '  ', 'vocal')).toThrow('Preset name is required');
+    });
+
+    it('throws when saving preset for non-existent track', () => {
+      const store = useProjectStore.getState();
+      expect(() => store.saveChannelStripPreset('non-existent', 'Test', 'vocal')).toThrow();
+    });
+
+    it('does nothing when applying preset to non-existent track', () => {
+      const store = useProjectStore.getState();
+      const track = store.addTrack('vocals');
+      const preset = store.saveChannelStripPreset(track.id, 'Test', 'vocal');
+      // Should not throw
+      useProjectStore.getState().applyChannelStripPreset('non-existent', preset.id);
+    });
+  });
+
   describe('renameTrack', () => {
     beforeEach(() => {
       useProjectStore.getState().createProject();

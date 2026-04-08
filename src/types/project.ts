@@ -966,6 +966,58 @@ export interface TrackPreset {
   createdAt: number;
 }
 
+// ─── Channel Strip Preset Types (Global Library) ────────────────────────────
+
+export type ChannelStripPresetCategory =
+  | 'vocal' | 'drums' | 'bass' | 'guitar' | 'keys'
+  | 'synth' | 'strings' | 'fx' | 'master' | 'custom';
+
+/** Mixer-only state captured from a track's channel strip. */
+export interface ChannelStripPresetData {
+  volume?: number;
+  pan?: number;
+  panMode?: 'stereo' | 'dual-mono';
+  panLeft?: number;
+  panRight?: number;
+  eqLowGain?: number;
+  eqMidGain?: number;
+  eqHighGain?: number;
+  compressorEnabled?: boolean;
+  compressorThreshold?: number;
+  compressorRatio?: number;
+  reverbMix?: number;
+  reverbRoomSize?: number;
+  effectsBypassed?: boolean;
+  effects: TrackEffect[];
+  sends?: Array<{ amount: number; prePost: 'pre' | 'post' }>;
+}
+
+/** A reusable channel strip preset stored in the global library (localStorage). */
+export interface ChannelStripPreset extends ChannelStripPresetData {
+  id: string;
+  name: string;
+  description: string;
+  category: ChannelStripPresetCategory;
+  tags: string[];
+  isFactory: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Options for applying a channel strip preset to a track. */
+export interface ApplyChannelStripOptions {
+  /** Apply only the EQ settings. */
+  eqOnly?: boolean;
+  /** Apply only the effects chain. */
+  effectsOnly?: boolean;
+  /** Apply only the compressor settings. */
+  compressorOnly?: boolean;
+  /** Apply only the sends. */
+  sendsOnly?: boolean;
+  /** Whether to keep the current volume level (default: true). */
+  keepVolume?: boolean;
+}
+
 export interface AssetTrackSnapshot {
   trackName: TrackName;
   trackType: TrackType;

@@ -73,7 +73,16 @@ import type {
   FmInstrumentSettings,
   WavetableSettings,
   VelocityLayer,
+  ChannelStripPreset,
+  ChannelStripPresetCategory,
+  ApplyChannelStripOptions,
 } from '../types/project';
+import {
+  captureChannelStrip,
+  applyChannelStrip as applyChannelStripData,
+  addPresetToLibrary,
+  loadPresetLibrary,
+} from '../services/channelStripPresetService';
 import type { PluginInstance, PluginParamValue } from '../types/plugin';
 import { pluginRegistry } from '../engine/PluginRegistry';
 import { automationParamEquals } from '../types/project';
@@ -687,6 +696,8 @@ export interface ProjectState extends MidiSliceActions {
   saveTrackPreset: (trackId: string, presetName: string) => TrackPreset;
   applyTrackPreset: (presetId: string) => Track | undefined;
   deleteTrackPreset: (presetId: string) => void;
+  saveChannelStripPreset: (trackId: string, name: string, category: import('../types/project').ChannelStripPresetCategory, description?: string, tags?: string[]) => import('../types/project').ChannelStripPreset;
+  applyChannelStripPreset: (trackId: string, presetId: string, options?: import('../types/project').ApplyChannelStripOptions) => void;
   renameTrack: (trackId: string, newName: string) => void;
   setInputMonitoring: (trackId: string, mode: InputMonitoringMode) => void;
   setTrackHeightPreset: (trackId: string, preset: TrackHeightPreset) => void;
@@ -3096,6 +3107,58 @@ export const useProjectStore = create<ProjectState>()(
         ...state.project,
         updatedAt: Date.now(),
         trackPresets: (state.project.trackPresets ?? []).filter((preset) => preset.id !== presetId),
+      },
+    });
+  },
+
+  saveChannelStripPreset: (trackId, name, category, description = '', tags = []) => {
+    const state = get();
+    if (!state.project) throw new Error('No project');
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track) throw new Error(`Track '${trackId}' not found`);
+
+    const trimmedName = name.trim();
+    if (!trimmedName) throw new Error('Preset name is required');
+
+    const data = captureChannelStrip(track);
+    const now = Date.now();
+    const preset: ChannelStripPreset = {
+      ...data,
+      id: `csp_${now}_${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmedName,
+      description,
+      category,
+      tags,
+      isFactory: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    addPresetToLibrary(preset);
+    return preset;
+  },
+
+  applyChannelStripPreset: (trackId, presetId, options) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+    const track = state.project.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+
+    const library = loadPresetLibrary();
+    const preset = library.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    const updates = applyChannelStripData(preset, options);
+
+    _pushHistory(state.project, { scope: 'mixer', label: `Apply channel strip: ${preset.name}`, trackId });
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, ...updates } : t,
+        ),
       },
     });
   },

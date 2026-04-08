@@ -8,6 +8,7 @@ import { MasteringPanel } from './MasteringPanel';
 import { SpectrumAnalyzer } from './SpectrumAnalyzer';
 import { VerticalFader } from './VerticalFader';
 import { SidechainRoutingOverlay } from './SidechainRoutingOverlay';
+import { ChannelStripPresetBrowser } from './ChannelStripPresetBrowser';
 import type { Track, ReturnTrack, TrackEffectType } from '../../types/project';
 
 const MIXER_MIN_VISIBLE_HEIGHT = 360;
@@ -522,6 +523,7 @@ export function MixerPanel() {
   const setKeyboardContext = useUIStore((s) => s.setKeyboardContext);
   const keyboardContext = useUIStore((s) => s.keyboardContext);
   const project = useProjectStore((s) => s.project);
+  const [showPresetBrowser, setShowPresetBrowser] = useState(false);
 
   const dragState = useRef<{ startY: number; startH: number } | null>(null);
   const channelStripContainerRef = useRef<HTMLDivElement>(null);
@@ -583,6 +585,19 @@ export function MixerPanel() {
       >
         <span className="flex-1">Scope: <span className="text-zinc-100">Mixer</span> · Channel: <span className="text-zinc-100">{focusedTrackName}</span></span>
         <button
+          data-testid="mixer-preset-browser-toggle"
+          onClick={() => setShowPresetBrowser((v) => !v)}
+          aria-label={showPresetBrowser ? 'Close preset browser' : 'Open preset browser'}
+          title="Channel Strip Presets"
+          className={`mr-1.5 flex h-4 items-center rounded px-1.5 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
+            showPresetBrowser
+              ? 'bg-daw-accent text-black'
+              : 'bg-[#383838] text-zinc-500 hover:bg-[#444] hover:text-zinc-200'
+          }`}
+        >
+          Presets
+        </button>
+        <button
           onClick={() => useUIStore.getState().setShowMixer(false)}
           aria-label="Close mixer"
           title="Close mixer (M)"
@@ -593,6 +608,12 @@ export function MixerPanel() {
         </button>
       </div>
       <div className="flex-1 overflow-x-auto overflow-y-hidden pb-3 relative">
+        {showPresetBrowser && keyboardContext.trackId && (
+          <ChannelStripPresetBrowser
+            trackId={keyboardContext.trackId}
+            onClose={() => setShowPresetBrowser(false)}
+          />
+        )}
         <SidechainRoutingOverlay containerRef={channelStripContainerRef} />
         <div ref={channelStripContainerRef} className="flex items-stretch h-full">
           {project.tracks.length === 0 && (

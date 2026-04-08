@@ -2,6 +2,7 @@ import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { DEFAULT_TIMELINE_PIXELS_PER_SECOND } from './timelineZoom';
+import { loadPresetLibrary } from '../services/channelStripPresetService';
 
 export interface Command {
   id: string;
@@ -225,6 +226,19 @@ export function buildCommandList(): Command[] {
       shortcut: `${mod}⇧G`,
       action: () => useUIStore.getState().setBatchGenerateMode('context'),
     },
+
+    // Channel Strip Presets
+    ...loadPresetLibrary().map((preset) => ({
+      id: `apply-channel-preset-${preset.id}`,
+      label: `Apply Channel Preset: ${preset.name}`,
+      category: 'Mixer',
+      action: () => {
+        const ui = useUIStore.getState();
+        const trackId = ui.keyboardContext.trackId;
+        if (!trackId) return;
+        useProjectStore.getState().applyChannelStripPreset(trackId, preset.id);
+      },
+    })),
 
     // Help
     {

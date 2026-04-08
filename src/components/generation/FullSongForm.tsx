@@ -10,6 +10,8 @@ import { generateText2Music, regenerateClip } from '../../services/generationPip
 import { formatInput, createRandomSample } from '../../services/aceStepApi';
 import { toastError, toastInfo } from '../../hooks/useToast';
 import { PromptAutocompleteTextarea } from './PromptAutocompleteTextarea';
+import { VoiceProfileSelector } from './VoiceProfileSelector';
+import { VoiceInfluenceControls } from './VoiceInfluenceControls';
 
 /** Magic pen icon for AI enhance buttons */
 function MagicPenIcon({ size = 16 }: { size?: number }) {
@@ -70,6 +72,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setSeed = useCallback((v: number) => setSeedStr(String(v)), [setSeedStr]);
   const useRandomSeed = useGenerationStore((s) => s.generationForm.useRandomSeed);
   const setUseRandomSeed = useGenerationStore((s) => s.setGenerationUseRandomSeed);
+  const selectedVoiceProfileId = useGenerationStore((s) => s.generationForm.selectedVoiceProfileId);
+  const audioInfluence = useGenerationStore((s) => s.generationForm.audioInfluence);
+  const styleInfluence = useGenerationStore((s) => s.generationForm.styleInfluence);
 
   // Local state — reset on panel reopen (less critical)
   const [instrumental, setInstrumental] = useState(false);
@@ -183,6 +188,15 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      if (p.voiceProfileId) {
+        useGenerationStore.getState().setSelectedVoiceProfile(p.voiceProfileId);
+      }
+      if (p.audioInfluence !== undefined) {
+        useGenerationStore.getState().setAudioInfluence(p.audioInfluence);
+      }
+      if (p.styleInfluence !== undefined) {
+        useGenerationStore.getState().setStyleInfluence(p.styleInfluence);
+      }
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -233,6 +247,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
           guidanceScale: project?.generationDefaults?.guidanceScale,
           shift: project?.generationDefaults?.shift,
+          voiceProfileId: selectedVoiceProfileId ?? undefined,
+          audioInfluence: selectedVoiceProfileId ? audioInfluence : undefined,
+          styleInfluence: selectedVoiceProfileId ? styleInfluence : undefined,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);
@@ -265,7 +282,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, selectedVoiceProfileId, audioInfluence, styleInfluence]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -404,6 +421,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           placeholder="[Verse 1]\nYour lyrics here..."
         />
       </section>
+
+      {/* Voice Profile & Influence Controls */}
+      <VoiceProfileSelector />
+      <VoiceInfluenceControls />
 
       {/* Random Example */}
       <button

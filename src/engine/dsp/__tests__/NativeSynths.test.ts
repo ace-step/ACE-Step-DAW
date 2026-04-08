@@ -8,6 +8,7 @@ import {
   NativeSynth,
   NativeFrequencyEnvelope,
   NativeBufferSource,
+  parseDuration,
 } from '../NativeSynths';
 
 // ---------------------------------------------------------------------------
@@ -299,6 +300,38 @@ describe('NativeFMSynth voice cleanup', () => {
     expect(() => synth.triggerRelease()).not.toThrow();
     // Double release should be safe
     expect(() => synth.triggerRelease()).not.toThrow();
+  });
+});
+
+describe('parseDuration', () => {
+  it('returns numeric durations as-is', () => {
+    expect(parseDuration(0.5)).toBe(0.5);
+    expect(parseDuration(1.0)).toBe(1.0);
+  });
+
+  it('parses Tone.js notation with explicit BPM', () => {
+    // At 120 BPM: quarter note = 0.5s, eighth note = 0.25s
+    expect(parseDuration('4n', 120)).toBeCloseTo(0.5);
+    expect(parseDuration('8n', 120)).toBeCloseTo(0.25);
+    expect(parseDuration('2n', 120)).toBeCloseTo(1.0);
+  });
+
+  it('uses correct BPM for tempo-dependent durations', () => {
+    // At 60 BPM: quarter note = 1.0s
+    expect(parseDuration('4n', 60)).toBeCloseTo(1.0);
+    expect(parseDuration('8n', 60)).toBeCloseTo(0.5);
+
+    // At 180 BPM: quarter note = 0.333s
+    expect(parseDuration('4n', 180)).toBeCloseTo(1 / 3);
+  });
+
+  it('defaults to 120 BPM when no BPM argument provided', () => {
+    // parseDuration is pure — defaults to 120 BPM via parameter default
+    expect(parseDuration('4n')).toBeCloseTo(0.5);
+  });
+
+  it('returns fallback for unparseable strings', () => {
+    expect(parseDuration('invalid')).toBe(0.25);
   });
 });
 

@@ -656,6 +656,20 @@ describe('generationStore', () => {
       expect(useGenerationStore.getState().variationSession!.activeVariationIndex).toBe(0);
     });
 
+    it('setActiveVariation skips deleted clips without throwing', () => {
+      useGenerationStore.getState().startVariationSession({
+        prompt: 'test', trackId: 't1', variationCount: 2,
+        bpm: 120, keyScale: 'C major', duration: 30, guidanceScale: 7,
+      });
+      // Assign clipIds to variations — these clips won't exist in projectStore
+      useGenerationStore.getState().updateVariation(0, { clipId: 'deleted-clip-1', status: 'done' });
+      useGenerationStore.getState().updateVariation(1, { clipId: 'deleted-clip-2', status: 'done' });
+
+      // Should not throw even though the clips don't exist in the project
+      expect(() => useGenerationStore.getState().setActiveVariation(1)).not.toThrow();
+      expect(useGenerationStore.getState().variationSession!.activeVariationIndex).toBe(1);
+    });
+
     it('cancelVariationSession marks active variations as cancelled', () => {
       useGenerationStore.getState().startVariationSession({
         prompt: 'test', trackId: 't1', variationCount: 3,

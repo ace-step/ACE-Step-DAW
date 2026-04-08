@@ -494,6 +494,12 @@ export async function generateVariationSession(
           });
           outcomes.push({ status: 'fulfilled', value: outcome });
         } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          useGenerationStore.getState().updateVariation(index, {
+            status: 'error',
+            error: errorMsg,
+            completedAt: Date.now(),
+          });
           outcomes.push({ status: 'rejected', reason: err });
         }
 
@@ -538,12 +544,14 @@ export async function generateVariationSession(
         (variation) => variation.status === 'done' || variation.status === 'error' || variation.status === 'cancelled',
       );
       if (allTerminal) {
-        currentSession.variations.forEach((variation) => {
-          if ((variation.status === 'done' || variation.status === 'error') && variation.completedAt) return;
-          if (variation.status === 'done' || variation.status === 'error') {
-            useGenerationStore.getState().updateVariation(variation.index, { completedAt: Date.now() });
-          }
-        });
+        // Collect indices needing completedAt before mutating the store (#1584)
+        const needsTimestamp = currentSession.variations
+          .filter((v) => (v.status === 'done' || v.status === 'error') && !v.completedAt)
+          .map((v) => v.index);
+        const now = Date.now();
+        for (const idx of needsTimestamp) {
+          useGenerationStore.getState().updateVariation(idx, { completedAt: now });
+        }
       }
     }
 

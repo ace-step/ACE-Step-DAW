@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { executeCoreKeyboardAction } from '../../src/services/coreKeyboardActions';
+import {
+  createCoreKeyboardActions,
+  executeCoreKeyboardAction,
+} from '../../src/services/coreKeyboardActions';
 import { useProjectStore } from '../../src/store/projectStore';
 import { useTransportStore } from '../../src/store/transportStore';
 import { useUIStore } from '../../src/store/uiStore';
@@ -126,5 +129,168 @@ describe('coreKeyboardActions', () => {
     });
 
     expect(result).toBe(false);
+  });
+
+  it('toggles loop state via transport store', async () => {
+    const deps = {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    };
+
+    expect(useTransportStore.getState().loopEnabled).toBe(false);
+
+    const result = await executeCoreKeyboardAction('transport.loop', deps);
+    expect(result).toBe(true);
+    expect(useTransportStore.getState().loopEnabled).toBe(true);
+
+    await executeCoreKeyboardAction('transport.loop', deps);
+    expect(useTransportStore.getState().loopEnabled).toBe(false);
+  });
+
+  it('toggles effects bypass for the focused track', async () => {
+    const track = useProjectStore.getState().addTrack('synth');
+    useProjectStore.getState().addTrackEffect(track.id, 'reverb');
+    useUIStore.getState().setKeyboardContext('timeline', track.id);
+
+    const result = await executeCoreKeyboardAction('tracks.bypassEffects', {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    });
+
+    expect(result).toBe(true);
+    const updatedTrack = useProjectStore.getState().project?.tracks.find(
+      (t) => t.id === track.id,
+    );
+    expect(updatedTrack?.effectsBypassed).toBe(true);
+  });
+
+  it('refuses effects bypass on group tracks', async () => {
+    const group = useProjectStore.getState().createGroupTrack('My Group');
+    useUIStore.getState().setKeyboardContext('timeline', group.id);
+
+    const result = await executeCoreKeyboardAction('tracks.bypassEffects', {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('refuses effects bypass outside track-related scopes', async () => {
+    const track = useProjectStore.getState().addTrack('synth');
+    useUIStore.getState().setKeyboardContext('global');
+
+    const result = await executeCoreKeyboardAction('tracks.bypassEffects', {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('stops recording when already recording', async () => {
+    const track = useProjectStore.getState().addTrack('vocals');
+    useUIStore.getState().setKeyboardContext('timeline', track.id);
+
+    const toggleRecord = vi.fn().mockResolvedValue(undefined);
+    const toggleArmTrack = vi.fn((trackId: string, exclusive = true) => {
+      useTransportStore.getState().toggleArmTrack(trackId, exclusive);
+    });
+
+    // Arm the track first
+    useTransportStore.getState().toggleArmTrack(track.id, true);
+    // Set recording state
+    useTransportStore.getState().setIsRecording(true);
+
+    await executeCoreKeyboardAction('transport.record', {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord,
+      toggleArmTrack,
+    });
+
+    expect(toggleRecord).toHaveBeenCalledTimes(1);
+    expect(toggleArmTrack).not.toHaveBeenCalled();
+  });
+
+  it('returns false for record when no tracks are armed and focused track is already armed', async () => {
+    // Create a scenario where no track can be armed and none are armed
+    useProjectStore.setState({
+      project: { ...useProjectStore.getState().project!, tracks: [] },
+    });
+
+    const result = await executeCoreKeyboardAction('transport.record', {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    });
+
+    // No focused track (empty project) and no armed tracks → false
+    expect(result).toBe(false);
+  });
+
+  it('uses group-specific store methods for muting/soloing group tracks', async () => {
+    const group = useProjectStore.getState().createGroupTrack('Drums Group');
+    useUIStore.getState().setKeyboardContext('mixer', group.id);
+
+    const deps = {
+      play: vi.fn(),
+      pause: vi.fn(),
+      toggleRecord: vi.fn(),
+      toggleArmTrack: vi.fn(),
+    };
+
+    await executeCoreKeyboardAction('tracks.mute', deps);
+    expect(
+      useProjectStore.getState().project?.tracks.find((t) => t.id === group.id)?.muted,
+    ).toBe(true);
+
+    await executeCoreKeyboardAction('tracks.solo', deps);
+    expect(
+      useProjectStore.getState().project?.tracks.find((t) => t.id === group.id)?.soloed,
+    ).toBe(true);
+  });
+
+  describe('createCoreKeyboardActions', () => {
+    it('returns an object with an execute method that delegates to executeCoreKeyboardAction', async () => {
+      const play = vi.fn(() => {
+        useTransportStore.getState().play();
+      });
+
+      const actions = createCoreKeyboardActions({
+        play,
+        pause: vi.fn(),
+        toggleRecord: vi.fn(),
+        toggleArmTrack: vi.fn(),
+      });
+
+      expect(typeof actions.execute).toBe('function');
+
+      const result = await actions.execute('transport.playPause');
+      expect(result).toBe(true);
+      expect(play).toHaveBeenCalledTimes(1);
+      expect(useTransportStore.getState().isPlaying).toBe(true);
+    });
+
+    it('returns false for invalid action IDs via the factory', async () => {
+      const actions = createCoreKeyboardActions({
+        play: vi.fn(),
+        pause: vi.fn(),
+        toggleRecord: vi.fn(),
+        toggleArmTrack: vi.fn(),
+      });
+
+      const result = await actions.execute('nonexistent.action');
+      expect(result).toBe(false);
+    });
   });
 });

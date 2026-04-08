@@ -14,18 +14,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ── 1. useAudioEngine: single getState + no non-null assertions ──────────────
 
 describe('useAudioEngine — safe latency compensation read', () => {
-  it('source code reads getState() once in latency compensation block', async () => {
+  it('latency compensation block has no unsafe non-null assertions', async () => {
     const fs = await import('fs');
     const source = fs.readFileSync('src/hooks/useAudioEngine.ts', 'utf-8');
 
-    // The old pattern called getState() twice in the ternary:
-    //   useProjectStore.getState().project?.playbackLatency?.compensationMs
-    //     ? useProjectStore.getState().project!.playbackLatency!.compensationMs / 1000
-    // The fix extracts into a local variable with a single getState() call.
-    const setCompensationBlock = source.slice(
-      source.indexOf('setPlaybackLatencyCompensation'),
-      source.indexOf('setPlaybackLatencyCompensation') + 300,
-    );
+    const idx = source.indexOf('setPlaybackLatencyCompensation');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const setCompensationBlock = source.slice(idx, idx + 300);
 
     // Should NOT contain non-null assertions on project or playbackLatency
     expect(setCompensationBlock).not.toContain('.project!');
@@ -37,24 +32,17 @@ describe('useAudioEngine — safe latency compensation read', () => {
 // ── 2. midiAiService: abort listener uses { once: true } ────────────────────
 
 describe('midiAiService — abort listener cleanup', () => {
-  it('source code uses { once: true } on all abort addEventListener calls', async () => {
+  it('abort listeners use { once: true } and are cleaned up in finally', async () => {
     const fs = await import('fs');
     const source = fs.readFileSync('src/services/midiAiService.ts', 'utf-8');
 
-    // Find all addEventListener('abort', ...) calls
-    const abortListenerPattern = /addEventListener\('abort',\s*\(\)\s*=>\s*controller\.abort\(\)/g;
-    const matches = source.match(abortListenerPattern) ?? [];
+    // The submit function should use { once: true } on its abort listener
+    expect(source).toMatch(
+      /addEventListener\(\s*'abort'\s*,\s*onAbort\s*,\s*\{\s*once\s*:\s*true\s*\}/,
+    );
 
-    // There should be at least one
-    expect(matches.length).toBeGreaterThan(0);
-
-    // Every abort listener should have { once: true }
-    const lines = source.split('\n');
-    for (const line of lines) {
-      if (line.includes("addEventListener('abort'") && line.includes('controller.abort')) {
-        expect(line).toContain('once');
-      }
-    }
+    // The submit function should clean up in finally
+    expect(source).toContain("removeEventListener('abort', onAbort)");
   });
 });
 

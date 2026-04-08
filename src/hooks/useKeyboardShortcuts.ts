@@ -579,7 +579,11 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         const vr = ui.videoRecording;
         if (vr.status === 'recording') ui.stopVideoRecording();
-        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') void ui.startVideoRecording().catch(() => {});
+        else if (vr.status === 'idle' || vr.status === 'done' || vr.status === 'error') {
+          void ui.startVideoRecording().catch((error) => {
+            console.error('Failed to start video recording via keyboard shortcut.', error);
+          });
+        }
         return;
       }
 

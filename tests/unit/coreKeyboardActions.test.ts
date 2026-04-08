@@ -221,8 +221,8 @@ describe('coreKeyboardActions', () => {
     expect(toggleArmTrack).not.toHaveBeenCalled();
   });
 
-  it('returns false for record when no tracks are armed and focused track is already armed', async () => {
-    // Create a scenario where no track can be armed and none are armed
+  it('returns false for record when the project is empty and no tracks are armed', async () => {
+    // Create an empty-project scenario with no focused track and no armed tracks
     useProjectStore.setState({
       project: { ...useProjectStore.getState().project!, tracks: [] },
     });

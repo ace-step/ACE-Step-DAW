@@ -75,6 +75,12 @@ export interface Text2MusicTaskParams {
   use_random_seed?: boolean;
   use_cot_caption?: boolean;
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Server-side path to reference voice sample for voice cloning. */
+  reference_voice_path?: string;
+  /** Audio influence strength (0–100) for voice-conditioned generation. */
+  audio_influence?: number;
+  /** Style influence strength (0–100) for voice-conditioned generation. */
+  style_influence?: number;
 }
 
 /**
@@ -122,6 +128,12 @@ export interface LegoTaskParams {
   src_audio_path?: string;  // server-side path; when set, skips blob upload
   chunk_mask_mode?: 'explicit' | 'auto'; // "auto" = model decides where instruments start/stop (value 2); "explicit" = 0/1 mask
   vocal_language?: string;   // "en", "zh", "ja", etc. — "unknown" = auto-detect
+  /** Server-side path to reference voice sample for voice cloning. */
+  reference_voice_path?: string;
+  /** Audio influence strength (0–100) for voice-conditioned generation. */
+  audio_influence?: number;
+  /** Style influence strength (0–100) for voice-conditioned generation. */
+  style_influence?: number;
 }
 
 /** All API responses are wrapped in this envelope */

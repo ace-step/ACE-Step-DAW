@@ -3,6 +3,7 @@ import { useVoiceStore } from '../../store/voiceStore';
 import { VoiceCard } from './VoiceCard';
 import { VoiceEditDialog } from './VoiceEditDialog';
 import { Button } from '../ui/Button';
+import { VoiceRecordButton } from './VoiceRecordButton';
 import {
   VOICE_ACCEPTED_EXTENSIONS,
   processVoiceAudioFile,
@@ -171,6 +172,7 @@ export function VoiceLibraryPanel() {
           Voice Library
         </span>
         <span className="text-[9px] text-zinc-600 mr-2">{voices.length}</span>
+        <VoiceRecordButton />
         <Button
           variant="ghost"
           size="sm"

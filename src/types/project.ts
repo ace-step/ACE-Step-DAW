@@ -1073,6 +1073,8 @@ export interface Track {
   strudelVersions?: StrudelCodeVersion[];
   /** WAP plugin instances on this track (effect & instrument plugins). */
   plugins?: import('./plugin').PluginInstance[];
+  /** ID of the voice profile assigned to this track for voice cloning. */
+  voiceProfileId?: string;
 }
 
 /** Persistent asset entry — survives clip/track removal. Only deleted explicitly from the Assets panel. */

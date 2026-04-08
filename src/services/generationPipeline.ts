@@ -8,6 +8,7 @@ import {
   type ModelOverride,
 } from '../store/generationStore';
 import { useModelStore } from '../store/modelStore';
+import { useVoiceStore } from '../store/voiceStore';
 import { useUIStore } from '../store/uiStore';
 import type { LegoTaskParams, Text2MusicTaskParams, CoverTaskParams, RepaintTaskParams, RepaintMode, TaskResultEntry, TaskResultItem } from '../types/api';
 import type { Clip, InferredMetas } from '../types/project';
@@ -297,6 +298,17 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
       use_random_seed: true,
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
+
+    // Voice cloning: attach selected voice profile reference for full-song generation
+    const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
+    if (selectedVoiceId) {
+      const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
+      if (voiceProfile) {
+        taskParams.reference_voice_path = voiceProfile.audioKey;
+        taskParams.audio_influence = voiceProfile.defaultAudioInfluence;
+        taskParams.style_influence = voiceProfile.defaultStyleInfluence;
+      }
+    }
 
     const jobId = uuidv4();
     genStore.addJob({ id: jobId, clipId, trackName: 'Full Mix', status: 'queued', progress: 'Queued', stage: 'Queued', progressPercent: null, etaSeconds: null, etaConfidence: 'none' });
@@ -803,6 +815,16 @@ async function generateClipInternal(
     if (clip.sampleMode) {
       params.sample_mode = true;
       params.sample_query = clip.prompt;
+    }
+
+    // Voice cloning: attach voice profile reference when track has a voice assigned
+    if (track.voiceProfileId) {
+      const voiceProfile = useVoiceStore.getState().getVoiceById(track.voiceProfileId);
+      if (voiceProfile) {
+        params.reference_voice_path = voiceProfile.audioKey;
+        params.audio_influence = voiceProfile.defaultAudioInfluence;
+        params.style_influence = voiceProfile.defaultStyleInfluence;
+      }
     }
 
     // Auto-expand prompt: controls whether LM rewrites the caption via CoT

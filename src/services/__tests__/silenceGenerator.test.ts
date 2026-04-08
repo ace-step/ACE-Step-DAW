@@ -27,7 +27,7 @@ describe('generateSilenceWav', () => {
     expect(blob1.size).toBe(blob2.size);
   });
 
-  it('produces correct buffer size (44-byte header + data)', async () => {
+  it('produces correct buffer size (44-byte header + data)', () => {
     const blob = generateSilenceWav(5);
     const numSamples = Math.ceil(EXPECTED_RATE * EXPECTED_DURATION);
     const bytesPerSample = BITS_PER_SAMPLE / 8;

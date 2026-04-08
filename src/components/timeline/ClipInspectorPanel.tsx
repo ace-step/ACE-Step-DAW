@@ -23,7 +23,7 @@ function formatTime(seconds: number): string {
   const wholeSeconds = Math.floor(remainingTenths / 10);
   const tenths = remainingTenths % 10;
   const secs = `${wholeSeconds}.${tenths}`;
-  return mins > 0 ? `${mins}:${secs.padStart(3, '0')}` : `${secs}s`;
+  return mins > 0 ? `${mins}:${secs.padStart(4, '0')}` : `${secs}s`;
 }
 
 function SourceBadge({ source }: { source?: 'generated' | 'uploaded' }) {

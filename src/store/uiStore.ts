@@ -1573,5 +1573,8 @@ export function getBottomPanelHeight(state: UIState): number {
     // Mixer renders at Math.max(mixerHeight, 360) — use the same floor
     height += Math.max(state.mixerHeight, 360);
   }
+  if (state.showClipInspector) {
+    height += 280; // matches ClipInspectorPanel maxHeight
+  }
   return height;
 }

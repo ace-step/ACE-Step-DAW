@@ -61,4 +61,14 @@ describe('getBottomPanelHeight', () => {
     });
     expect(getBottomPanelHeight(useUIStore.getState())).toBe(400 + 420);
   });
+
+  it('adds clip inspector height (280) when inspector is visible', () => {
+    useUIStore.setState({ activeBottomPanel: null, showClipInspector: true });
+    expect(getBottomPanelHeight(useUIStore.getState())).toBe(280);
+  });
+
+  it('combines clip inspector with mixer height', () => {
+    useUIStore.setState({ showClipInspector: true, showMixer: true, mixerHeight: 420 });
+    expect(getBottomPanelHeight(useUIStore.getState())).toBe(280 + 420);
+  });
 });

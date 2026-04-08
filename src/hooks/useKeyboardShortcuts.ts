@@ -19,6 +19,7 @@ import {
   navigateTimelineByArrow,
 } from '../services/arrowKeyNavigation';
 import { resolveFocusedTrackId } from '../services/focusResolution';
+import { nudgeSelectedClips, nudgeSelectedClipsToTrack } from '../services/clipNudge';
 import {
   copyClips,
   copyNotes,
@@ -779,6 +780,27 @@ export function useKeyboardShortcuts() {
       }
 
       if (ui.keyboardContext.scope === 'timeline') {
+        if (matches('clips.nudgeLeft')) {
+          event.preventDefault();
+          nudgeSelectedClips('left');
+          return;
+        }
+        if (matches('clips.nudgeRight')) {
+          event.preventDefault();
+          nudgeSelectedClips('right');
+          return;
+        }
+        if (matches('clips.nudgeUp')) {
+          event.preventDefault();
+          nudgeSelectedClipsToTrack('up');
+          return;
+        }
+        if (matches('clips.nudgeDown')) {
+          event.preventDefault();
+          nudgeSelectedClipsToTrack('down');
+          return;
+        }
+
         if (matches('transport.nudgeLeft')) {
           event.preventDefault();
           seek(Math.max(0, transport.currentTime - NUDGE_SECONDS));

@@ -36,12 +36,20 @@ export function TimeRuler() {
   const currentTime = useTransportStore((s) => s.currentTime);
   const { seek: transportSeek } = useTransport();
 
+  const isScrubbing = useTransportStore((s) => s.isScrubbing);
+  const startScrub = useTransportStore((s) => s.startScrub);
+  const updateScrub = useTransportStore((s) => s.updateScrub);
+  const endScrub = useTransportStore((s) => s.endScrub);
+
   /** Tracks click-vs-drag state for ruler interactions */
   const rulerDragRef = useRef<{
     startX: number;
     startTime: number;
     isDragging: boolean;
     pointerId: number;
+    isScrubMode: boolean;
+    lastMoveTime: number;
+    lastMoveX: number;
   } | null>(null);
 
   const loopDragRef = useRef<{
@@ -59,7 +67,7 @@ export function TimeRuler() {
     return Math.max(0, Math.min(x / pixelsPerSecond, totalDuration));
   }, [hasProject, pixelsPerSecond, totalDuration]);
 
-  /** Click = silent seek; drag = create loop region (no audio scrub) */
+  /** Click = silent seek; drag = create loop region; Alt+drag = scrub */
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || e.button !== 0) return;
     e.preventDefault();
@@ -67,10 +75,15 @@ export function TimeRuler() {
     const time = getTimeFromX(e.clientX, container);
     if (time === undefined) return;
 
-    // During playback, use transportSeek which stops+restarts the audio engine
-    // at the new position. Without this, the engine's RAF loop immediately
-    // overwrites currentTime back to the old offset (#994).
-    if (isPlaying) {
+    const scrubMode = e.altKey;
+
+    if (scrubMode) {
+      // Alt+click starts scrubbing — resume playback on release if was playing
+      startScrub(time, isPlaying);
+    } else if (isPlaying) {
+      // During playback, use transportSeek which stops+restarts the audio engine
+      // at the new position. Without this, the engine's RAF loop immediately
+      // overwrites currentTime back to the old offset (#994).
       transportSeek(time);
     } else {
       // Silent seek — no audio engine calls needed when paused
@@ -82,12 +95,15 @@ export function TimeRuler() {
       startTime: time,
       isDragging: false,
       pointerId: e.pointerId,
+      isScrubMode: scrubMode,
+      lastMoveTime: performance.now(),
+      lastMoveX: e.clientX,
     };
 
     if ('setPointerCapture' in container) {
       container.setPointerCapture(e.pointerId);
     }
-  }, [getTimeFromX, hasProject, isPlaying, transportSeek]);
+  }, [getTimeFromX, hasProject, isPlaying, startScrub, transportSeek]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || !rulerDragRef.current) return;
@@ -103,7 +119,21 @@ export function TimeRuler() {
     const time = getTimeFromX(currentX, container);
     if (time === undefined) return;
 
-    // Set loop region between start and current position
+    if (drag.isScrubMode) {
+      // Scrub mode: compute velocity-proportional playback rate from drag speed
+      const now = performance.now();
+      const dt = Math.max(1, now - drag.lastMoveTime); // ms
+      const dx = currentX - drag.lastMoveX; // px
+      const velocityPxPerMs = dx / dt;
+      // Convert to a playback rate: ~200px/s drag = 1x speed
+      const previewRate = Math.max(-4, Math.min(4, (velocityPxPerMs * 1000) / 200));
+      updateScrub(time, previewRate);
+      drag.lastMoveTime = now;
+      drag.lastMoveX = currentX;
+      return;
+    }
+
+    // Normal mode: set loop region between start and current position
     const regionStart = Math.min(drag.startTime, time);
     const regionEnd = Math.max(drag.startTime, time);
     setLoopRegion(regionStart, regionEnd);
@@ -112,15 +142,18 @@ export function TimeRuler() {
     if (!useTransportStore.getState().loopEnabled) {
       useTransportStore.setState({ loopEnabled: true });
     }
-  }, [getTimeFromX, hasProject, setLoopRegion]);
+  }, [getTimeFromX, hasProject, setLoopRegion, updateScrub]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!rulerDragRef.current) return;
     const drag = rulerDragRef.current;
     rulerDragRef.current = null;
 
-    // If it was a click (not drag) inside an existing loop region, clear the loop
-    if (!drag.isDragging) {
+    if (drag.isScrubMode) {
+      // End scrub — transport store handles resume-on-release logic
+      endScrub();
+    } else if (!drag.isDragging) {
+      // If it was a click (not drag) inside an existing loop region, clear the loop
       const { loopEnabled: isLooped, loopStart: ls, loopEnd: le } = useTransportStore.getState();
       if (isLooped && drag.startTime >= ls && drag.startTime <= le) {
         useTransportStore.setState({ loopEnabled: false });
@@ -131,7 +164,7 @@ export function TimeRuler() {
     if ('releasePointerCapture' in container && container.hasPointerCapture(e.pointerId)) {
       container.releasePointerCapture(e.pointerId);
     }
-  }, []);
+  }, [endScrub]);
 
   const beginLoopDrag = useCallback((kind: 'start' | 'end' | 'move') => (e: React.PointerEvent<HTMLDivElement>) => {
     if (!hasProject || e.button !== 0) return;
@@ -251,7 +284,7 @@ export function TimeRuler() {
 
   return (
     <div
-      className="relative bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)] select-none cursor-pointer z-30"
+      className={`relative bg-[#1a1c20] border-b border-[color:var(--color-daw-grid-bar)] select-none z-30 ${isScrubbing ? 'cursor-grabbing' : 'cursor-pointer'}`}
       style={{ width: totalWidth, height: TIMELINE_RULER_HEIGHT }}
       role="slider"
       aria-label="Timeline ruler — click to seek, drag to select loop region"

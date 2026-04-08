@@ -1,4 +1,5 @@
 import type { Project, ReverbParams, Track, TrackEffect, TrackEffectType, TrackName, TrackType } from '../types/project';
+import { nudgeSelectedClips, nudgeSelectedClipsToTrack } from './clipNudge';
 
 export type CommandPaletteCommandKind = 'action' | 'setting' | 'parameter';
 
@@ -737,6 +738,50 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext): Com
         },
         ['Delete'],
         'Selected clip action',
+      ),
+      createTrackCommand(
+        'clip:nudge-left',
+        'Nudge Clips Left',
+        'Clips',
+        'action',
+        ['nudge', 'move', 'left', 'clip', 'shift'],
+        ['move clips left', 'shift clips left one beat'],
+        () => nudgeSelectedClips('left'),
+        ['Alt', '←'],
+        'Move selected clips left by one beat',
+      ),
+      createTrackCommand(
+        'clip:nudge-right',
+        'Nudge Clips Right',
+        'Clips',
+        'action',
+        ['nudge', 'move', 'right', 'clip', 'shift'],
+        ['move clips right', 'shift clips right one beat'],
+        () => nudgeSelectedClips('right'),
+        ['Alt', '→'],
+        'Move selected clips right by one beat',
+      ),
+      createTrackCommand(
+        'clip:nudge-up',
+        'Nudge Clips Up (Track)',
+        'Clips',
+        'action',
+        ['nudge', 'move', 'up', 'track', 'clip'],
+        ['move clips to previous track', 'shift clips up one track'],
+        () => nudgeSelectedClipsToTrack('up'),
+        ['Alt', '↑'],
+        'Move selected clips to the previous track',
+      ),
+      createTrackCommand(
+        'clip:nudge-down',
+        'Nudge Clips Down (Track)',
+        'Clips',
+        'action',
+        ['nudge', 'move', 'down', 'track', 'clip'],
+        ['move clips to next track', 'shift clips down one track'],
+        () => nudgeSelectedClipsToTrack('down'),
+        ['Alt', '↓'],
+        'Move selected clips to the next track',
       ),
     );
   }

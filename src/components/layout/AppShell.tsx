@@ -63,6 +63,7 @@ const EffectChain = lazy(() => import('../mixer/EffectChain').then(m => ({ defau
 const SessionView = lazy(() => import('../session/SessionView').then(m => ({ default: m.SessionView })));
 const ModelLibraryPanel = lazy(() => import('../models/ModelLibraryPanel').then(m => ({ default: m.ModelLibraryPanel })));
 const CustomModelsPanel = lazy(() => import('../models/CustomModelsPanel').then(m => ({ default: m.CustomModelsPanel })));
+const GroovePoolPanel = lazy(() => import('../groove/GroovePoolPanel').then(m => ({ default: m.GroovePoolPanel })));
 const VirtualKeyboard = lazy(() => import('../midi/VirtualKeyboard').then(m => ({ default: m.VirtualKeyboard })));
 
 function EditorShell() {
@@ -91,6 +92,7 @@ function EditorShell() {
   const openEffectChainTrackId = useUIStore((s) => s.openEffectChainTrackId);
   const openMidiEffectChainTrackId = useUIStore((s) => s.openMidiEffectChainTrackId);
   const showModelLibrary = useUIStore((s) => s.showModelLibrary);
+  const showGroovePool = useUIStore((s) => s.showGroovePool);
   const showCustomModels = useUIStore((s) => s.showCustomModels);
   const showVirtualKeyboard = useUIStore((s) => s.showVirtualKeyboard);
 
@@ -195,6 +197,7 @@ function EditorShell() {
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
+      {project && showGroovePool && <Suspense fallback={null}><GroovePoolPanel /></Suspense>}
       {project && showCustomModels && <Suspense fallback={null}><CustomModelsPanel /></Suspense>}
       {project && showVirtualKeyboard && <Suspense fallback={null}><VirtualKeyboard /></Suspense>}
       {project && <AddLayerPanel />}

@@ -183,3 +183,30 @@ describe('TrackHeader arm button', () => {
     expect(primaryRail).not.toBeNull();
   });
 });
+
+describe('TrackHeader context menu color swatches', () => {
+  beforeEach(() => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+  });
+
+  it('shows color swatches in context menu', () => {
+    render(<TrackHeader track={makeTrack()} {...defaultProps} />);
+    const header = screen.getByRole('button', { name: /Track: Vocals/ });
+    fireEvent.contextMenu(header);
+    expect(screen.getByTestId('track-color-swatches')).toBeInTheDocument();
+  });
+
+  it('updates track color when a swatch is clicked', () => {
+    const store = useProjectStore.getState();
+    const realTrack = store.addTrack('vocals', 'stems');
+    render(<TrackHeader track={realTrack} {...defaultProps} />);
+    const header = screen.getByRole('button', { name: /Track: Vocals/ });
+    fireEvent.contextMenu(header);
+    const targetColor = realTrack.color === '#3b82f6' ? '#ef4444' : '#3b82f6';
+    const swatch = screen.getByLabelText(`Set track color ${targetColor}`);
+    fireEvent.click(swatch);
+    const updatedTrack = useProjectStore.getState().project?.tracks.find((t) => t.id === realTrack.id);
+    expect(updatedTrack?.color).toBe(targetColor);
+  });
+});

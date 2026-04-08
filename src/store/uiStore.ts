@@ -201,6 +201,9 @@ export interface UIState {
   // Model Library Panel
   showModelLibrary: boolean;
 
+  // Groove Pool Panel
+  showGroovePool: boolean;
+
   // Custom Models Panel (Fine-Tuning)
   showCustomModels: boolean;
 
@@ -433,6 +436,10 @@ export interface UIState {
   toggleModelLibrary: () => void;
   setShowModelLibrary: (v: boolean) => void;
 
+  // Groove Pool Panel
+  toggleGroovePool: () => void;
+  setShowGroovePool: (v: boolean) => void;
+
   // Custom Models Panel (Fine-Tuning)
   toggleCustomModels: () => void;
   setShowCustomModels: (v: boolean) => void;
@@ -568,6 +575,7 @@ const ALL_RIGHT_PANELS_CLOSED = {
   showGenerationPanel: false,
   showGenerationHistoryPanel: false,
   showModelLibrary: false,
+  showGroovePool: false,
   showCustomModels: false,
   showAIAssistant: false,
   showVST3Panel: false,
@@ -729,6 +737,7 @@ export const useUIStore = create<UIState>()(
   editingLegoClipId: null,
 
   showModelLibrary: false,
+  showGroovePool: false,
   showCustomModels: false,
 
   showGenerationPanel: false,
@@ -1281,6 +1290,9 @@ export const useUIStore = create<UIState>()(
   toggleModelLibrary: () => set((s) => s.showModelLibrary ? { showModelLibrary: false } : { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true }),
   setShowModelLibrary: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showModelLibrary: true } : { showModelLibrary: false }),
 
+  toggleGroovePool: () => set((s) => s.showGroovePool ? { showGroovePool: false } : { ...ALL_RIGHT_PANELS_CLOSED, showGroovePool: true }),
+  setShowGroovePool: (v: boolean) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showGroovePool: true } : { showGroovePool: false }),
+
   toggleCustomModels: () => set((s) => s.showCustomModels ? { showCustomModels: false } : { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true }),
   setShowCustomModels: (v: boolean) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showCustomModels: true } : { showCustomModels: false }),
 
@@ -1450,6 +1462,8 @@ export const useUIStore = create<UIState>()(
         recentlyUsedLoopIds: state.recentlyUsedLoopIds,
         // Model Library panel
         showModelLibrary: state.showModelLibrary,
+        // Groove Pool panel
+        showGroovePool: state.showGroovePool,
         // Custom Models panel
         showCustomModels: state.showCustomModels,
         // Generation panel
@@ -1502,6 +1516,7 @@ function buildCommandPaletteContext(state: UIState) {
     showAIAssistant: state.showAIAssistant,
     loopBrowserOpen: state.loopBrowserOpen,
     showTempoLane: state.showTempoLane,
+    showGroovePool: state.showGroovePool,
     loopEnabled: transportStore.loopEnabled,
     metronomeEnabled: transportStore.metronomeEnabled,
     expandedTrackId: state.expandedTrackId,
@@ -1525,6 +1540,7 @@ function buildCommandPaletteContext(state: UIState) {
       toggleLoopBrowser: state.toggleLoopBrowser,
       toggleTempoLane: state.toggleTempoLane,
       toggleAIAssistant: state.toggleAIAssistant,
+      toggleGroovePool: state.toggleGroovePool,
       zoomTimelineToSelection: state.zoomTimelineToSelection,
       zoomTimelineToProject: state.zoomTimelineToProject,
       setBatchGenerateMode: state.setBatchGenerateMode,

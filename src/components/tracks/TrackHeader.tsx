@@ -19,6 +19,7 @@ import {
   getArrangementRowHeight,
 } from '../arrangement/rowLayout';
 import { ContextMenuWrapper, ContextMenuItem, ContextMenuSeparator, ContextMenuSubmenu } from '../ui/ContextMenu';
+import { ColorSwatchPalette } from '../ui/ColorSwatchPalette';
 
 const MIN_LANE_HEIGHT = 40;
 const MAX_LANE_HEIGHT = 400;
@@ -801,6 +802,14 @@ export const TrackHeader = React.memo(function TrackHeader({
             </div>
           )}
         </div>
+        <ContextMenuSeparator />
+        <ColorSwatchPalette
+          hasCustomColor={false}
+          onAssignColor={(color) => { setCtxMenu(null); updateTrack(track.id, { color }); }}
+          onResetColor={() => {}}
+          labelPrefix="Set track color"
+          testId="track-color-swatches"
+        />
         <ContextMenuSeparator />
         <ContextMenuItem
           label={track.isGroup ? 'Delete Group (keeps children)' : 'Delete Track'}

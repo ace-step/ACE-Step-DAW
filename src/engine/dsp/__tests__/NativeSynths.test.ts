@@ -325,8 +325,8 @@ describe('parseDuration', () => {
     expect(parseDuration('4n', 180)).toBeCloseTo(1 / 3);
   });
 
-  it('falls back to 120 BPM when no BPM provided and no project loaded', () => {
-    // Without explicit BPM and no loaded project, defaults to 120
+  it('defaults to 120 BPM when no BPM argument provided', () => {
+    // parseDuration is pure — defaults to 120 BPM via parameter default
     expect(parseDuration('4n')).toBeCloseTo(0.5);
   });
 

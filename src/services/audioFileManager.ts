@@ -42,6 +42,18 @@ export async function deleteAudioBlob(
   await del(key);
 }
 
+/** Store an audio blob under an arbitrary key (returns the key). */
+export async function storeAudioBlob(blob: Blob, key?: string): Promise<string> {
+  const k = key ?? `audio:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await set(k, blob);
+  return k;
+}
+
+/** Delete an audio blob by its storage key. */
+export async function deleteAudioBlobByKey(key: string): Promise<void> {
+  await del(key);
+}
+
 export async function deleteAllProjectAudio(projectId: string): Promise<void> {
   const prefix = `audio:${projectId}:`;
   const allKeys = await keys();

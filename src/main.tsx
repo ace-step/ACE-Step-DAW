@@ -21,6 +21,7 @@ import { executeCoreDawShortcut } from './services/coreDawShortcuts';
 import { useAnalysisStore } from './store/analysisStore';
 import { analyzeClipLocally } from './services/localAnalysisService';
 import { useCustomModelStore } from './store/customModelStore';
+import { useVoiceStore } from './store/voiceStore';
 
 const agentProjectStore = {
   getState: () => ({
@@ -109,6 +110,7 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
 (window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
+(window as unknown as Record<string, unknown>).__voiceStore = useVoiceStore;
 (window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
 

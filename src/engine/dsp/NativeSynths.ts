@@ -27,6 +27,7 @@ import type {
 } from './interfaces';
 
 import { noteToFreq } from './core/dsp-utils';
+import { useProjectStore } from '../../store/projectStore';
 
 // ---------------------------------------------------------------------------
 // Base wrapper
@@ -94,14 +95,16 @@ function noteNameToFreq(note: string): number {
   return noteToFreq(midi);
 }
 
-// TODO: Thread actual project BPM from transport store into synth callers
-// so that Tone.js-style duration notation ('8n', '4n') uses the correct tempo.
-function parseDuration(dur: number | string, _ctx: AudioContext, bpm = 120): number {
+/**
+ * Convert a duration value (number in seconds or Tone.js notation like '8n')
+ * to seconds. Reads the project BPM from the store when no explicit BPM is given.
+ */
+export function parseDuration(dur: number | string, bpm?: number): number {
   if (typeof dur === 'number') return dur;
-  // Parse Tone.js notation (e.g., '8n', '4n', '2n')
+  const effectiveBpm = bpm ?? useProjectStore.getState().project?.bpm ?? 120;
   const match = dur.match(/^(\d+)n$/);
   if (match) {
-    return 60 / bpm * (4 / parseInt(match[1], 10));
+    return 60 / effectiveBpm * (4 / parseInt(match[1], 10));
   }
   return parseFloat(dur) || 0.25;
 }
@@ -260,7 +263,7 @@ export class NativePolySynth extends NativeSynthBase implements IDSPPolySynth {
     velocity?: number,
   ): void {
     const t = time ?? this._ctx.currentTime;
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     this.triggerAttack(notes, t, velocity);
     this.triggerRelease(notes, t + dur);
   }
@@ -313,7 +316,7 @@ export class NativeSynth extends NativeSynthBase implements IDSPSynth {
     velocity = 1,
   ): void {
     const t = time ?? this._ctx.currentTime;
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     const freq = noteNameToFreq(note);
     const env = this._envelope;
 
@@ -407,7 +410,7 @@ export class NativeFMSynth extends NativeSynthBase implements IDSPFMSynth {
     time?: number,
     velocity?: number,
   ): void {
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     this._playFM(note, time, velocity ?? 1, dur);
   }
 
@@ -493,7 +496,7 @@ export class NativeMembraneSynth extends NativeSynthBase implements IDSPMembrane
     velocity = 1,
   ): void {
     const t = time ?? this._ctx.currentTime;
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     const freq = noteNameToFreq(note);
 
     const osc = this._ctx.createOscillator();
@@ -546,7 +549,7 @@ export class NativeNoiseSynth extends NativeSynthBase implements IDSPNoiseSynth 
     velocity = 1,
   ): void {
     const t = time ?? this._ctx.currentTime;
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     const env = this._envelope;
 
     // Create noise buffer
@@ -607,7 +610,7 @@ export class NativeMetalSynth extends NativeSynthBase implements IDSPMetalSynth 
     velocity = 1,
   ): void {
     const t = time ?? this._ctx.currentTime;
-    const dur = parseDuration(duration, this._ctx);
+    const dur = parseDuration(duration);
     const env = this._envelope;
 
     // FM synthesis for metallic timbre

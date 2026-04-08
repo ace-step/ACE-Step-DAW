@@ -82,6 +82,7 @@ export interface UIState {
   historyFocusTrackId: string | null;
   historyFocusClipId: string | null;
   showMixer: boolean;
+  showClipInspector: boolean;
   mixerHeight: number;
   showAssetsPanel: boolean;
   assetsPanelWidth: number;
@@ -318,6 +319,8 @@ export interface UIState {
   setShowUndoHistoryPanel: (v: boolean) => void;
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
+  setShowClipInspector: (v: boolean) => void;
+  toggleClipInspector: () => void;
   setMixerHeight: (v: number) => void;
   setShowAssetsPanel: (v: boolean) => void;
   setAssetsPanelWidth: (v: number) => void;
@@ -522,6 +525,7 @@ function getComplexityDefaults(tier: 'simple' | 'standard' | 'advanced') {
       return {
         workspaceComplexity: tier,
         showMixer: false,
+        showClipInspector: false,
         showLibrary: false,
         loopBrowserOpen: false,
         showSmartControls: true,
@@ -654,6 +658,7 @@ export const useUIStore = create<UIState>()(
   historyFocusTrackId: null,
   historyFocusClipId: null,
   showMixer: false,
+  showClipInspector: false,
   mixerHeight: 420,
   showAssetsPanel: false,
   assetsPanelWidth: 240,
@@ -997,6 +1002,8 @@ export const useUIStore = create<UIState>()(
     };
   }),
   setShowMixer: (v) => set(v ? { ...ALL_RIGHT_PANELS_CLOSED, showMixer: true } : { showMixer: false }),
+  setShowClipInspector: (v) => set({ showClipInspector: v }),
+  toggleClipInspector: () => set((s) => ({ showClipInspector: !s.showClipInspector })),
   setMixerHeight: (v) => set({ mixerHeight: Math.min(500, Math.max(160, v)) }),
   setShowAssetsPanel: (v) => set({ showAssetsPanel: v }),
   setAssetsPanelWidth: (v) => set({ assetsPanelWidth: Math.min(500, Math.max(160, v)) }),

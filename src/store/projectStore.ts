@@ -736,6 +736,8 @@ export interface ProjectState extends MidiSliceActions {
   updateClipColors: (clipIds: string[], color: string | undefined) => void;
   /** Toggle muted state on one or more clips. If any are active, mute all; if all muted, unmute all. */
   toggleClipMuted: (clipIds: string[]) => void;
+  addClipTag: (clipId: string, tag: string) => void;
+  removeClipTag: (clipId: string, tag: string) => void;
   removeClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => Clip | undefined;
   updateClipStatus: (clipId: string, status: ClipGenerationStatus, extra?: Partial<Clip>) => void;
@@ -4461,6 +4463,55 @@ export const useProjectStore = create<ProjectState>()(
         ...state.project,
         updatedAt: Date.now(),
         totalDuration: computeTotalDuration(newTracks, state.project.measures, state.project.bpm, state.project.timeSignature, state.project.timeSignatureDenominator, state.project.tempoMap, state.project.timeSignatureMap),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  addClipTag: (clipId, tag) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip) return;
+    if (clip.tags?.includes(tag)) return;
+
+    _pushHistory(state.project, { label: `Tag clip "${tag}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: [...(c.tags ?? []), tag] } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
+        tracks: newTracks,
+      },
+    });
+  },
+
+  removeClipTag: (clipId, tag) => {
+    const state = get();
+    if (_isViewerMode()) return;
+    if (!state.project) return;
+
+    const clip = state.project.tracks.flatMap((t) => t.clips).find((c) => c.id === clipId);
+    if (!clip || !clip.tags?.includes(tag)) return;
+
+    _pushHistory(state.project, { label: `Untag clip "${tag}"`, scope: 'arrangement' });
+    const newTracks = state.project.tracks.map((t) => ({
+      ...t,
+      clips: t.clips.map((c) =>
+        c.id === clipId ? { ...c, tags: c.tags?.filter((t) => t !== tag) } : c,
+      ),
+    }));
+    set({
+      project: {
+        ...state.project,
+        updatedAt: Date.now(),
         tracks: newTracks,
       },
     });

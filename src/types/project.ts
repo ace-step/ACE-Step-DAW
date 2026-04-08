@@ -1076,6 +1076,8 @@ export interface Clip {
   generationParams?: ClipGenerationParams;
   /** Video-specific metadata (only for clips on video tracks). */
   videoMeta?: VideoClipData;
+  /** User-assigned tags for clip organization (e.g. "verse", "favorite"). */
+  tags?: string[];
 }
 
 // ─── Video Track Types ────────────────────────────────────────────────────────

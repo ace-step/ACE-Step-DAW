@@ -592,6 +592,7 @@ export function useKeyboardShortcuts() {
       if (matches('panels.generation')) { event.preventDefault(); ui.toggleGenerationPanel(); return; }
       if (matches('panels.generationHistory')) { event.preventDefault(); ui.toggleGenerationHistoryPanel(); return; }
       if (matches('panels.modelLibrary')) { event.preventDefault(); ui.toggleModelLibrary(); return; }
+      if (matches('panels.clipInspector')) { event.preventDefault(); ui.toggleClipInspector(); return; }
       if (matches('view.autoScroll')) { event.preventDefault(); ui.toggleAutoScroll(); return; }
 
       if (matches('tracks.mute')) {

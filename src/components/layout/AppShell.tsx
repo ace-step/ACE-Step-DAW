@@ -6,6 +6,7 @@ import { GenerationPanel } from '../generation/GenerationPanel';
 import { AddLayerPanel } from '../generation/AddLayerPanel';
 import { GenerationSidePanel } from '../generation/GenerationSidePanel';
 import { ArrangementAssistantPanel } from '../arrangement/ArrangementAssistantPanel';
+import { ClipInspectorPanel } from '../timeline/ClipInspectorPanel';
 import { NewProjectDialog } from '../dialogs/NewProjectDialog';
 import { LoopBrowser } from '../assets/LoopBrowser';
 import { SmartControlsPanel } from '../controls/SmartControlsPanel';
@@ -193,6 +194,7 @@ function EditorShell() {
       {project && <ErrorBoundary name="Generation"><GenerationPanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="GenerationSidePanel"><GenerationSidePanel /></ErrorBoundary>}
       {project && <ErrorBoundary name="ArrangementAssistant"><ArrangementAssistantPanel /></ErrorBoundary>}
+      {project && <ErrorBoundary name="ClipInspector"><ClipInspectorPanel /></ErrorBoundary>}
       {project && <VST3SidePanel />}
       {project && showModelLibrary && <Suspense fallback={null}><ModelLibraryPanel /></Suspense>}
       {project && showCustomModels && <Suspense fallback={null}><CustomModelsPanel /></Suspense>}

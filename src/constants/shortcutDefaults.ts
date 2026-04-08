@@ -61,6 +61,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   { id: 'panels.modelLibrary',   category: 'panels',    label: 'Toggle Model Library',        defaultCombo: { code: 'KeyM', shift: true }, contexts: ['global'] },
   { id: 'panels.strudel',        category: 'panels',    label: 'Toggle Strudel',              defaultCombo: { code: 'KeyU' }, contexts: ['global'] },
   { id: 'panels.aiAssistant',    category: 'panels',    label: 'Toggle AI Assistant',         defaultCombo: { code: 'Slash', mod: true }, contexts: ['global'] },
+  { id: 'panels.clipInspector',  category: 'panels',    label: 'Toggle Clip Inspector',       defaultCombo: { code: 'KeyI', shift: true }, contexts: ['global'] },
   { id: 'view.autoScroll',        category: 'view',      label: 'Toggle Auto-Scroll',          defaultCombo: { code: 'KeyF', shift: true }, contexts: ['global'] },
 
   { id: 'project.new',           category: 'project',   label: 'New Project',                 defaultCombo: { code: 'KeyN', mod: true }, contexts: ['global'] },

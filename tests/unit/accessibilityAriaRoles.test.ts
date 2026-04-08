@@ -5,17 +5,31 @@
  * as required by store-api.md: "Every clickable element MUST have an
  * aria-label or role so browser automation tools can discover and
  * interact via accessibility tree."
+ *
+ * NOTE: These tests use source-file assertions as a lightweight guard.
+ * Full RTL rendering tests for EffectChain/AiMixPanel require complex
+ * store mocking and are better suited to component-level test files.
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+
+function readSource(path: string): string {
+  return readFileSync(path, 'utf-8');
+}
+
+/** Extract a block of source around a marker string, or fail if not found. */
+function extractBlock(source: string, marker: string, radius = 400): string {
+  const idx = source.indexOf(marker);
+  expect(idx, `Expected to find "${marker}" in source`).toBeGreaterThanOrEqual(0);
+  return source.slice(Math.max(0, idx - radius), idx + radius);
+}
 
 // ── 1. Knob component — already has full ARIA support ────────────────────────
 
 describe('Knob component — ARIA attributes', () => {
-  it('source code includes role="slider" and required ARIA attributes', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/ui/Knob.tsx', 'utf-8');
-
+  it('has role="slider" and required ARIA attributes', () => {
+    const source = readSource('src/components/ui/Knob.tsx');
     expect(source).toContain('role="slider"');
     expect(source).toContain('aria-valuenow');
     expect(source).toContain('aria-valuemin');
@@ -26,105 +40,102 @@ describe('Knob component — ARIA attributes', () => {
   });
 });
 
-// ── 2. EffectChain — preset dropdown has role="menu" ────────────────────────
+// ── 2. EffectChain — preset dropdown ────────────────────────────────────────
 
-describe('EffectChain — menu roles and ARIA', () => {
-  it('preset dropdown has role="menu" and aria-label', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
+describe('EffectChain — preset dropdown ARIA', () => {
+  const source = readSource('src/components/mixer/EffectChain.tsx');
 
-    // Preset dropdown should have role="menu"
-    const presetMenuSection = source.slice(
-      source.indexOf('showPresets && ('),
-      source.indexOf('showPresets && (') + 400,
-    );
-    expect(presetMenuSection).toContain('role="menu"');
-    expect(presetMenuSection).toContain('aria-label');
+  it('preset dropdown has role="menu" with aria-label using display name', () => {
+    const block = extractBlock(source, 'showPresets && (');
+    expect(block).toContain('role="menu"');
+    expect(block).toContain('aria-label=');
+    expect(block).toContain('EFFECT_DISPLAY_NAMES');
   });
 
-  it('preset items have role="menuitem"', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
-
-    // Preset buttons should have role="menuitem"
-    const presetSection = source.slice(
-      source.indexOf('presets.map'),
-      source.indexOf('presets.map') + 300,
-    );
-    expect(presetSection).toContain('role="menuitem"');
+  it('preset items have role="menuitem"', () => {
+    const block = extractBlock(source, 'presets.map');
+    expect(block).toContain('role="menuitem"');
   });
 
-  it('context menu has role="menu" and aria-label', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
-
-    // Context menu should have role="menu"
-    const ctxMenuSection = source.slice(
-      source.indexOf('ctxMenu && ('),
-      source.indexOf('ctxMenu && (') + 400,
-    );
-    expect(ctxMenuSection).toContain('role="menu"');
-    expect(ctxMenuSection).toContain('aria-label');
+  it('preset dropdown has keyboard navigation (onKeyDown)', () => {
+    const block = extractBlock(source, 'showPresets && (', 1200);
+    expect(block).toContain('onKeyDown');
+    expect(block).toContain('ArrowDown');
+    expect(block).toContain('Escape');
   });
 
-  it('context menu items have role="menuitem"', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
-
-    // Context menu buttons (Duplicate, Move Left, Move Right, Delete) should have role="menuitem"
-    const ctxBlock = source.slice(
-      source.indexOf('ctxMenu && ('),
-      source.indexOf('ctxMenu && (') + 1500,
-    );
-    // At least 3 menuitem roles (Duplicate, Delete, and at least one Move)
-    const menuitemCount = (ctxBlock.match(/role="menuitem"/g) || []).length;
-    expect(menuitemCount).toBeGreaterThanOrEqual(3);
+  it('preset dropdown is focusable (tabIndex)', () => {
+    const block = extractBlock(source, 'showPresets && (', 500);
+    expect(block).toContain('tabIndex={-1}');
   });
 
-  it('context menu has role="separator" for divider', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
-
-    const ctxBlock = source.slice(
-      source.indexOf('ctxMenu && ('),
-      source.indexOf('ctxMenu && (') + 1500,
-    );
-    expect(ctxBlock).toContain('role="separator"');
-  });
-
-  it('presets button has aria-haspopup and aria-expanded', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
-
+  it('presets button has aria-haspopup and aria-expanded', () => {
     expect(source).toContain('aria-haspopup="menu"');
     expect(source).toContain('aria-expanded={showPresets}');
   });
+});
 
-  it('collapse button has aria-expanded and aria-label', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/EffectChain.tsx', 'utf-8');
+// ── 3. EffectChain — context menu ───────────────────────────────────────────
 
-    expect(source).toContain('aria-expanded={!collapsed}');
-    // Should have aria-label with Expand/Collapse text
-    expect(source).toMatch(/aria-label=.*Expand/);
-    expect(source).toMatch(/aria-label=.*Collapse/);
+describe('EffectChain — context menu ARIA', () => {
+  const source = readSource('src/components/mixer/EffectChain.tsx');
+
+  it('context menu has role="menu" with aria-label using display name', () => {
+    const block = extractBlock(source, 'ctxMenu && (');
+    expect(block).toContain('role="menu"');
+    expect(block).toContain('aria-label=');
+    expect(block).toContain('EFFECT_DISPLAY_NAMES');
+  });
+
+  it('context menu items have role="menuitem" (at least 3)', () => {
+    const block = extractBlock(source, 'ctxMenu && (', 1500);
+    const count = (block.match(/role="menuitem"/g) || []).length;
+    expect(count).toBeGreaterThanOrEqual(3);
+  });
+
+  it('context menu has role="separator" for divider', () => {
+    const block = extractBlock(source, 'ctxMenu && (', 2500);
+    expect(block).toContain('role="separator"');
+  });
+
+  it('context menu has keyboard navigation (onKeyDown)', () => {
+    const block = extractBlock(source, 'ctxMenu && (', 1000);
+    expect(block).toContain('onKeyDown');
+    expect(block).toContain('ArrowDown');
+    expect(block).toContain('Escape');
+  });
+
+  it('context menu is focusable (tabIndex)', () => {
+    const block = extractBlock(source, 'ctxMenu && (', 500);
+    expect(block).toContain('tabIndex={-1}');
   });
 });
 
-// ── 3. AiMixPanel — track suggestion toggle has aria-expanded ───────────────
+// ── 4. EffectChain — collapse button ────────────────────────────────────────
+
+describe('EffectChain — collapse button ARIA', () => {
+  const source = readSource('src/components/mixer/EffectChain.tsx');
+
+  it('collapse button has aria-expanded and descriptive aria-label', () => {
+    const block = extractBlock(source, 'aria-expanded={!collapsed}');
+    expect(block).toContain('aria-expanded={!collapsed}');
+    expect(block).toMatch(/aria-label=.*Expand/);
+    expect(block).toMatch(/aria-label=.*Collapse/);
+    expect(block).toContain('EFFECT_DISPLAY_NAMES');
+  });
+});
+
+// ── 5. AiMixPanel — track suggestion toggle ─────────────────────────────────
 
 describe('AiMixPanel — ARIA compliance', () => {
-  it('track suggestion toggle has aria-expanded', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/AiMixPanel.tsx', 'utf-8');
+  const source = readSource('src/components/mixer/AiMixPanel.tsx');
 
+  it('track suggestion toggle has aria-expanded', () => {
     expect(source).toContain('aria-expanded={expanded}');
   });
 
-  it('track suggestion toggle has descriptive aria-label', async () => {
-    const fs = await import('fs');
-    const source = fs.readFileSync('src/components/mixer/AiMixPanel.tsx', 'utf-8');
-
-    expect(source).toMatch(/aria-label=.*suggestions/);
+  it('track suggestion toggle has descriptive aria-label', () => {
+    const block = extractBlock(source, 'aria-expanded={expanded}');
+    expect(block).toMatch(/aria-label=.*suggestions/);
   });
 });

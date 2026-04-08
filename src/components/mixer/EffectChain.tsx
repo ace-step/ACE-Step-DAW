@@ -462,9 +462,21 @@ function EffectDevice({
           {showPresets && (
             <div
               role="menu"
-              aria-label={`${effect.type} presets`}
+              aria-label={`${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type} presets`}
+              tabIndex={-1}
+              ref={(node) => { if (node) requestAnimationFrame(() => node.focus()); }}
               className="absolute right-0 top-full mt-1 bg-daw-surface-2 border border-white/10 rounded shadow-xl z-50 py-1 min-w-[100px]"
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+                if (!items.length) { if (e.key === 'Escape') setShowPresets(false); return; }
+                const idx = items.findIndex((item) => item === document.activeElement);
+                if (e.key === 'ArrowDown') { e.preventDefault(); items[idx < 0 ? 0 : (idx + 1) % items.length].focus(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); items[idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus(); }
+                else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+                else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+                else if (e.key === 'Escape' || e.key === 'Tab') { setShowPresets(false); }
+              }}
             >
               {presets.map((preset, i) => (
                 <button
@@ -484,7 +496,7 @@ function EffectDevice({
         {!fullWidth && (
           <button
             data-no-drag
-            aria-label={collapsed ? `Expand ${effect.type}` : `Collapse ${effect.type}`}
+            aria-label={collapsed ? `Expand ${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}` : `Collapse ${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type}`}
             aria-expanded={!collapsed}
             className="h-4 w-4 flex items-center justify-center text-white/25 hover:text-white/50 transition-colors"
             onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
@@ -501,10 +513,22 @@ function EffectDevice({
       {ctxMenu && (
         <div
           role="menu"
-          aria-label={`${effect.type} actions`}
+          aria-label={`${EFFECT_DISPLAY_NAMES[effect.type] ?? effect.type} actions`}
+          tabIndex={-1}
+          ref={(node) => { if (node) requestAnimationFrame(() => node.focus()); }}
           className="fixed bg-[#1a1a36] border border-white/10 rounded-lg shadow-xl py-1 min-w-[130px]"
           style={{ left: Math.min(ctxMenu.x, window.innerWidth - 160), top: Math.min(ctxMenu.y, window.innerHeight - 200), zIndex: 9999 }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+            if (!items.length) { if (e.key === 'Escape') setCtxMenu(null); return; }
+            const idx = items.findIndex((item) => item === document.activeElement);
+            if (e.key === 'ArrowDown') { e.preventDefault(); items[idx < 0 ? 0 : (idx + 1) % items.length].focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); items[idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus(); }
+            else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+            else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+            else if (e.key === 'Escape') { e.preventDefault(); setCtxMenu(null); }
+          }}
         >
           <button
             role="menuitem"

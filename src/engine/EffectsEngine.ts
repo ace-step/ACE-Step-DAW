@@ -1000,9 +1000,10 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
   dryGain.gain.value = 1 - mixValue;
   wetGain.gain.value = mixValue;
 
-  // NOTE: ScriptProcessorNode is deprecated but used here as a bridge until
-  // AudioWorklet-based spectral processing is implemented. The SpectralProcessor
-  // class is already AudioWorklet-safe (zero allocations in processBlock).
+  // TODO(#1587): Migrate to AudioWorklet. The SpectralProcessor class is already
+  // AudioWorklet-safe (zero allocations in processBlock). Needs an inline worklet
+  // processor that instantiates SpectralProcessor, similar to the NativeReverb
+  // FreeVerb worklet migration. ScriptProcessorNode kept as fallback for now.
   const bufferSize = fftSize;
   const scriptNode = ctx.createScriptProcessor(bufferSize, 1, 1);
   scriptNode.onaudioprocess = (e) => {

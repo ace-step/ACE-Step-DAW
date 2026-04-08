@@ -277,35 +277,157 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
 }
 
 // ---------------------------------------------------------------------------
-// ScriptProcessor-based effects (using Phase 2 core DSP)
+// AudioWorklet-based effects (using Phase 2 core DSP)
 // ---------------------------------------------------------------------------
 
 const BUFFER_SIZE = 2048;
 
-// TODO: Migrate from deprecated ScriptProcessorNode to AudioWorkletNode
-// once AudioWorklet pipeline is fully wired (Phase 5 DspWorkerHost).
+/** Inline FreeVerb AudioWorklet processor code. */
+const REVERB_WORKLET_CODE = `
+const ANTI_DENORMAL = 1e-18;
+const COMB_TUNING = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
+const ALLPASS_TUNING = [556, 441, 341, 225];
+const STEREO_SPREAD = 23;
+const FIXED_GAIN = 0.015;
+const SCALE_DAMP = 0.4;
+const SCALE_ROOM = 0.28;
+const OFFSET_ROOM = 0.7;
+
+class CombFilter {
+  constructor(size) {
+    this._buf = new Float32Array(size);
+    this._size = size;
+    this._idx = 0;
+    this._filterStore = 0;
+    this.damp = 0.5;
+    this.feedback = 0.5;
+  }
+  process(input) {
+    const output = this._buf[this._idx];
+    this._filterStore = output * (1 - this.damp) + this._filterStore * this.damp + ANTI_DENORMAL - ANTI_DENORMAL;
+    this._buf[this._idx] = input + this._filterStore * this.feedback;
+    this._idx = (this._idx + 1) % this._size;
+    return output;
+  }
+}
+
+class AllpassFilter {
+  constructor(size) {
+    this._buf = new Float32Array(size);
+    this._size = size;
+    this._idx = 0;
+    this.feedback = 0.5;
+  }
+  process(input) {
+    const bufOut = this._buf[this._idx];
+    const output = -input + bufOut;
+    this._buf[this._idx] = input + bufOut * this.feedback + ANTI_DENORMAL - ANTI_DENORMAL;
+    this._idx = (this._idx + 1) % this._size;
+    return output;
+  }
+}
+
+class FreeVerbProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [
+      { name: 'roomSize', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'damping', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+    ];
+  }
+  constructor() {
+    super();
+    const sr = sampleRate;
+    const f = sr / 44100;
+    this._combL = COMB_TUNING.map(t => new CombFilter(Math.round(t * f)));
+    this._combR = COMB_TUNING.map(t => new CombFilter(Math.round((t + STEREO_SPREAD) * f)));
+    this._allpassL = ALLPASS_TUNING.map(t => new AllpassFilter(Math.round(t * f)));
+    this._allpassR = ALLPASS_TUNING.map(t => new AllpassFilter(Math.round((t + STEREO_SPREAD) * f)));
+    for (const ap of [...this._allpassL, ...this._allpassR]) ap.feedback = 0.5;
+    this._prevRoom = -1;
+    this._prevDamp = -1;
+  }
+  process(inputs, outputs, parameters) {
+    const input = inputs[0];
+    const output = outputs[0];
+    if (!input || !input[0]) return true;
+    const inL = input[0];
+    const inR = input[1] || inL;
+    const outL = output[0];
+    const outR = output[1] || outL;
+    const room = parameters.roomSize[0];
+    const damp = parameters.damping[0];
+    if (room !== this._prevRoom || damp !== this._prevDamp) {
+      const roomScaled = room * SCALE_ROOM + OFFSET_ROOM;
+      const dampScaled = damp * SCALE_DAMP;
+      for (let i = 0; i < COMB_TUNING.length; i++) {
+        this._combL[i].feedback = roomScaled;
+        this._combR[i].feedback = roomScaled;
+        this._combL[i].damp = dampScaled;
+        this._combR[i].damp = dampScaled;
+      }
+      this._prevRoom = room;
+      this._prevDamp = damp;
+    }
+    for (let i = 0; i < outL.length; i++) {
+      const inMono = (inL[i] + inR[i]) * FIXED_GAIN;
+      let oL = 0, oR = 0;
+      for (let c = 0; c < COMB_TUNING.length; c++) {
+        oL += this._combL[c].process(inMono);
+        oR += this._combR[c].process(inMono);
+      }
+      for (let a = 0; a < ALLPASS_TUNING.length; a++) {
+        oL = this._allpassL[a].process(oL);
+        oR = this._allpassR[a].process(oR);
+      }
+      outL[i] = oL;
+      if (outR !== outL) outR[i] = oR;
+    }
+    return true;
+  }
+}
+registerProcessor('freeverb-processor', FreeVerbProcessor);
+`;
+
+let _reverbWorkletReady: Promise<void> | null = null;
+function ensureReverbWorklet(ctx: AudioContext): Promise<void> | null {
+  if (!ctx.audioWorklet?.addModule) return null;
+  if (!_reverbWorkletReady) {
+    try {
+      const blob = new Blob([REVERB_WORKLET_CODE], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      _reverbWorkletReady = ctx.audioWorklet.addModule(url).then(() => URL.revokeObjectURL(url));
+    } catch {
+      return null;
+    }
+  }
+  return _reverbWorkletReady;
+}
+
 class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
   private readonly _preDelayNode: DelayNode;
   private _decay = 1.5;
   private _preDelay = 0.01;
+  private _workletNode: AudioWorkletNode | null = null;
 
   constructor(ctx: AudioContext, options?: IDSPReverbOptions) {
     const mix = new DryWetMix(ctx);
-    const processor = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
     const verb = new FreeVerb(ctx.sampleRate);
     const preDelayNode = ctx.createDelay(0.5);
 
     const preDelayTime = options?.preDelay ?? 0.01;
     preDelayNode.delayTime.value = preDelayTime;
 
-    verb.roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
+    const roomSize = Math.min(1, (options?.decay ?? 1.5) / 10);
+    verb.roomSize = roomSize;
     verb.damping = 0.5;
     verb.wet = 1;
     verb.dry = 0;
 
-    processor.onaudioprocess = (e: AudioProcessingEvent) => {
+    // Use ScriptProcessorNode initially, then upgrade to AudioWorklet
+    const scriptProcessor = ctx.createScriptProcessor(BUFFER_SIZE, 2, 2);
+    scriptProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
       const inL = e.inputBuffer.getChannelData(0);
       const inR = e.inputBuffer.numberOfChannels > 1
         ? e.inputBuffer.getChannelData(1) : inL;
@@ -316,8 +438,8 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
 
     // Signal path: input → preDelay → processor → wet mix
     mix.input.connect(preDelayNode);
-    preDelayNode.connect(processor);
-    processor.connect(mix.wetInput);
+    preDelayNode.connect(scriptProcessor);
+    scriptProcessor.connect(mix.wetInput);
 
     mix.wet = options?.wet ?? 1;
 
@@ -327,12 +449,43 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
     this._preDelayNode = preDelayNode;
     this._decay = options?.decay ?? 1.5;
     this._preDelay = preDelayTime;
+
+    // Async upgrade: replace ScriptProcessorNode with AudioWorkletNode
+    const workletReady = ensureReverbWorklet(ctx);
+    if (workletReady) {
+      workletReady.then(() => {
+        try {
+          const worklet = new AudioWorkletNode(ctx, 'freeverb-processor', {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+          });
+          worklet.parameters.get('roomSize')!.value = roomSize;
+          worklet.parameters.get('damping')!.value = 0.5;
+
+          // Swap: disconnect ScriptProcessor, connect AudioWorklet
+          preDelayNode.disconnect(scriptProcessor);
+          scriptProcessor.disconnect();
+          preDelayNode.connect(worklet);
+          worklet.connect(mix.wetInput);
+          this._workletNode = worklet;
+        } catch {
+          // AudioWorklet failed — keep ScriptProcessor fallback
+        }
+      }).catch(() => {
+        // addModule failed — keep ScriptProcessor fallback
+      });
+    }
   }
 
   get decay(): number { return this._decay; }
   set decay(v: number) {
     this._decay = v;
-    this._verb.roomSize = Math.min(1, v / 10);
+    const roomSize = Math.min(1, v / 10);
+    this._verb.roomSize = roomSize;
+    if (this._workletNode) {
+      this._workletNode.parameters.get('roomSize')!.value = roomSize;
+    }
   }
 
   get preDelay(): number { return this._preDelay; }

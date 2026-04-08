@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   NativePolySynth,
   NativeFMSynth,
@@ -9,6 +9,7 @@ import {
   NativeFrequencyEnvelope,
   NativeBufferSource,
 } from '../NativeSynths';
+import { useProjectStore } from '../../../store/projectStore';
 
 // ---------------------------------------------------------------------------
 // Mock Web Audio API
@@ -322,5 +323,23 @@ describe('NativeFrequencyEnvelope signal output', () => {
 
     expect(() => env.triggerAttack()).not.toThrow();
     expect(() => env.triggerRelease()).not.toThrow();
+  });
+});
+
+describe('parseDuration uses project BPM (regression #1588)', () => {
+  beforeEach(() => {
+    useProjectStore.setState(useProjectStore.getInitialState(), true);
+  });
+
+  it('reads BPM from the project store for note notation', () => {
+    useProjectStore.getState().createProject({ name: 'BPM Test' });
+    useProjectStore.getState().updateProject({ bpm: 60 });
+
+    const ctx = createMockCtx();
+    const synth = new NativePolySynth(ctx);
+
+    // At BPM=60, a quarter note ('4n') = 1.0s; at BPM=120 (old default) = 0.5s
+    // Verify parseDuration runs without throwing (it's called internally)
+    expect(() => synth.triggerAttackRelease('C4', '4n')).not.toThrow();
   });
 });

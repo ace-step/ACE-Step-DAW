@@ -27,6 +27,7 @@ import type {
 } from './interfaces';
 
 import { noteToFreq } from './core/dsp-utils';
+import { useProjectStore } from '../../store/projectStore';
 
 // ---------------------------------------------------------------------------
 // Base wrapper
@@ -94,14 +95,13 @@ function noteNameToFreq(note: string): number {
   return noteToFreq(midi);
 }
 
-// TODO: Thread actual project BPM from transport store into synth callers
-// so that Tone.js-style duration notation ('8n', '4n') uses the correct tempo.
-function parseDuration(dur: number | string, _ctx: AudioContext, bpm = 120): number {
+function parseDuration(dur: number | string, _ctx: AudioContext, bpm?: number): number {
   if (typeof dur === 'number') return dur;
   // Parse Tone.js notation (e.g., '8n', '4n', '2n')
   const match = dur.match(/^(\d+)n$/);
   if (match) {
-    return 60 / bpm * (4 / parseInt(match[1], 10));
+    const effectiveBpm = bpm ?? useProjectStore.getState().project?.bpm ?? 120;
+    return 60 / effectiveBpm * (4 / parseInt(match[1], 10));
   }
   return parseFloat(dur) || 0.25;
 }

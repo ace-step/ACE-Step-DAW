@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { Z } from '../../utils/zIndex';
+import { GROOVE_PRESETS } from '../../data/groovePresets';
 import type { GrooveTemplate } from '../../types/project';
 
 interface GrooveItemProps {
@@ -83,9 +84,11 @@ export function GroovePoolPanel() {
   const project = useProjectStore((s) => s.project);
   const deleteGrooveTemplate = useProjectStore((s) => s.deleteGrooveTemplate);
   const renameGrooveTemplate = useProjectStore((s) => s.renameGrooveTemplate);
+  const addGrooveTemplate = useProjectStore((s) => s.addGrooveTemplate);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showPresets, setShowPresets] = useState(false);
 
   const grooves = project?.groovePool ?? [];
 
@@ -103,6 +106,17 @@ export function GroovePoolPanel() {
   const handleRename = useCallback((id: string, name: string) => {
     renameGrooveTemplate(id, name);
   }, [renameGrooveTemplate]);
+
+  const handleLoadPreset = useCallback((preset: typeof GROOVE_PRESETS[number]) => {
+    const existing = grooves.find((g) => g.id === preset.id);
+    if (existing) return; // Already loaded
+    addGrooveTemplate({ ...preset, createdAt: Date.now() });
+  }, [grooves, addGrooveTemplate]);
+
+  const loadedPresetIds = useMemo(
+    () => new Set(grooves.map((g) => g.id)),
+    [grooves],
+  );
 
   if (!show) return null;
 
@@ -143,6 +157,50 @@ export function GroovePoolPanel() {
 
       {/* Groove list */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+        {/* Presets section */}
+        <button
+          data-testid="groove-presets-toggle"
+          onClick={() => setShowPresets(!showPresets)}
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300 transition-colors"
+        >
+          <span className="transition-transform" style={{ transform: showPresets ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+            &#9654;
+          </span>
+          Built-in Presets ({GROOVE_PRESETS.length})
+        </button>
+        {showPresets && (
+          <div data-testid="groove-presets-list" className="space-y-1 mb-2">
+            {GROOVE_PRESETS.map((preset) => {
+              const isLoaded = loadedPresetIds.has(preset.id);
+              return (
+                <div
+                  key={preset.id}
+                  data-testid={`groove-preset-${preset.id}`}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-800/40 border border-zinc-700/20"
+                >
+                  <span className="text-[11px] text-zinc-300 flex-1 truncate">{preset.name}</span>
+                  <button
+                    data-testid={`groove-preset-load-${preset.id}`}
+                    onClick={() => handleLoadPreset(preset)}
+                    disabled={isLoaded}
+                    className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                      isLoaded
+                        ? 'text-zinc-500 bg-zinc-700/50 cursor-not-allowed'
+                        : 'text-indigo-300 bg-indigo-600/20 hover:bg-indigo-600/40'
+                    }`}
+                  >
+                    {isLoaded ? 'Loaded' : 'Load'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Separator when both presets and grooves exist */}
+        {showPresets && filtered.length > 0 && (
+          <div className="border-t border-zinc-700/30 my-1" />
+        )}
         {filtered.length === 0 ? (
           <div data-testid="groove-pool-empty" className="text-center py-8">
             <p className="text-xs text-zinc-500">

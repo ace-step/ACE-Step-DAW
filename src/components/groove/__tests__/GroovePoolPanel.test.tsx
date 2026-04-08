@@ -361,4 +361,42 @@ describe('GroovePoolPanel', () => {
     const item = screen.getByTestId('groove-item-g1');
     expect(item.getAttribute('role')).toBe('option');
   });
+
+  // ── Presets ────────────────────────────────────────────────────────────────
+
+  it('shows presets toggle button', () => {
+    useUIStore.setState({ showGroovePool: true });
+    render(<GroovePoolPanel />);
+    expect(screen.getByTestId('groove-presets-toggle')).toBeInTheDocument();
+  });
+
+  it('shows presets list when toggle is clicked', () => {
+    useUIStore.setState({ showGroovePool: true });
+    render(<GroovePoolPanel />);
+    fireEvent.click(screen.getByTestId('groove-presets-toggle'));
+    expect(screen.getByTestId('groove-presets-list')).toBeInTheDocument();
+  });
+
+  it('loads a preset groove into the project pool', () => {
+    useUIStore.setState({ showGroovePool: true });
+    render(<GroovePoolPanel />);
+    fireEvent.click(screen.getByTestId('groove-presets-toggle'));
+    fireEvent.click(screen.getByTestId('groove-preset-load-preset-swing-light'));
+
+    const pool = useProjectStore.getState().project?.groovePool ?? [];
+    expect(pool.some((g) => g.id === 'preset-swing-light')).toBe(true);
+    expect(pool.find((g) => g.id === 'preset-swing-light')!.name).toBe('Swing Light (54%)');
+  });
+
+  it('shows "Loaded" for already-loaded presets', () => {
+    const preset = { id: 'preset-swing-light', name: 'Swing Light (54%)', timingOffsets: [0, 0.02, 0, 0.02], velocityPattern: [1.0, 0.75, 0.9, 0.7], gridBeats: 0.25, lengthBeats: 1, createdAt: Date.now() };
+    setupProject([preset as GrooveTemplate]);
+    useUIStore.setState({ showGroovePool: true });
+    render(<GroovePoolPanel />);
+    fireEvent.click(screen.getByTestId('groove-presets-toggle'));
+
+    const loadButton = screen.getByTestId('groove-preset-load-preset-swing-light');
+    expect(loadButton.textContent).toBe('Loaded');
+    expect(loadButton).toBeDisabled();
+  });
 });

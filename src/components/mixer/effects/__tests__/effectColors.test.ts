@@ -27,7 +27,9 @@ describe('effectColors', () => {
   });
 
   describe('resolveEffectColor', () => {
-    it('returns fallback hex when document is undefined', () => {
+    it('returns fallback hex when CSS custom property is empty', () => {
+      // In jsdom, getComputedStyle returns empty strings for custom properties,
+      // so resolveEffectColor falls back to the EFFECT_COLORS constant
       const color = resolveEffectColor('compressor');
       expect(color).toBe(EFFECT_COLORS.compressor);
     });

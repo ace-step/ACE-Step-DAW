@@ -1,49 +1,8 @@
 /**
  * Shared test helpers for effect card tests.
- * Provides factory functions for creating mock effects and common mocks.
+ * Provides factory functions for creating mock effects.
  */
-import { vi } from 'vitest';
 import type { TrackEffect } from '../../../../types/project';
-
-// ─── Store mock ──────────────────────────────────────────────────────────────
-
-const mockUpdateTrackEffect = vi.fn();
-const mockSetSidechainSource = vi.fn();
-const mockEnsureAutomationLane = vi.fn();
-const mockClearAutomationLane = vi.fn();
-
-const defaultTracks = [
-  { id: 'track-1', displayName: 'Kick', clips: [], type: 'audio' as const },
-  { id: 'track-2', displayName: 'Snare', clips: [], type: 'audio' as const },
-];
-
-export function setupProjectStoreMock(overrides: Record<string, unknown> = {}) {
-  const mockStore = vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
-    const state: Record<string, unknown> = {
-      updateTrackEffect: mockUpdateTrackEffect,
-      setSidechainSource: mockSetSidechainSource,
-      ensureAutomationLane: mockEnsureAutomationLane,
-      clearAutomationLane: mockClearAutomationLane,
-      project: { tracks: defaultTracks },
-      ...overrides,
-    };
-    return selector(state);
-  });
-  return { mockStore, mockUpdateTrackEffect, mockSetSidechainSource };
-}
-
-// ─── EffectsEngine mock ──────────────────────────────────────────────────────
-
-export const mockEffectsEngine = {
-  updateEffectParams: vi.fn(),
-  getCompressorReduction: vi.fn(() => 0),
-  getSidechainReduction: vi.fn(() => 0),
-  getGateReduction: vi.fn(() => 0),
-  getDeEsserReduction: vi.fn(() => 0),
-  getLimiterReduction: vi.fn(() => 0),
-  getSpectralData: vi.fn(() => new Float32Array(128)),
-  getParametricEQSpectrumData: vi.fn(() => null),
-};
 
 // ─── Effect data factories ───────────────────────────────────────────────────
 
@@ -73,7 +32,7 @@ export function makeLimiterEffect(overrides: Record<string, unknown> = {}) {
 
 export function makeGateEffect(overrides: Record<string, unknown> = {}) {
   return makeEffect('gate', {
-    threshold: -40, range: -80, attack: 0.5, hold: 10, release: 50,
+    threshold: -40, range: -80, attack: 0.001, hold: 0.01, release: 0.05,
     hysteresis: 3, mode: 'gate', sidechainHpf: 20, sidechainLpf: 20000,
     ...overrides,
   });

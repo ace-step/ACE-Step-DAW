@@ -41,15 +41,18 @@ describe('EffectCardLayout', () => {
     expect(screen.getByText('Footer Content')).toBeDefined();
   });
 
-  it('omits sections when not provided', () => {
+  it('omits mode, visualization, and footer when not provided', () => {
     const { container } = render(
       <EffectCardLayout>
         <span>Only Children</span>
       </EffectCardLayout>,
     );
-    // Should just have the children wrapper, no mode/viz/footer wrappers
     expect(screen.getByText('Only Children')).toBeDefined();
-    expect(container.querySelectorAll('[style]').length).toBeGreaterThanOrEqual(1);
+    // The inner flex column should have only 1 child (the children wrapper)
+    // when mode, visualization, and footer are all omitted
+    const innerColumn = container.querySelector('.flex.flex-col.items-center.gap-3');
+    expect(innerColumn).not.toBeNull();
+    expect(innerColumn!.childElementCount).toBe(1);
   });
 });
 

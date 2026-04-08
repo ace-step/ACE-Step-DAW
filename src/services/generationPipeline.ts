@@ -494,6 +494,12 @@ export async function generateVariationSession(
           });
           outcomes.push({ status: 'fulfilled', value: outcome });
         } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          useGenerationStore.getState().updateVariation(index, {
+            status: 'error',
+            error: `Generation failed: ${errorMsg}`,
+            completedAt: Date.now(),
+          });
           outcomes.push({ status: 'rejected', reason: err });
         }
 

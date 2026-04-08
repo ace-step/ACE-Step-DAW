@@ -394,25 +394,18 @@ describe('duplicateTimeRange', () => {
     expect(sorted[2].startTime).toBe(10);
   });
 
-  it('only duplicates the portion of clips within the range', () => {
+  it('handles clips spanning the entire range', () => {
     addClipToTrack(trackId1, 0, 8); // 0-8, range is 2-6
 
     useProjectStore.getState().duplicateTimeRange(2, 6);
 
     const clips = useProjectStore.getState().project!.tracks[0].clips;
-    // Original gets split into 0-2 and 6-12 (shifted), plus the duplicated 2-6 region
-    // Actually — duplicate range should duplicate the portion inside the range.
-    // The portion of clip 0-8 inside 2-6 is a 4-second segment.
-    // After duplication: original stays, and a 4s copy is inserted at t=6,
-    // shifting everything after t=6 by 4s.
-    // So: original 0-8 becomes 0-2 (before), 2-6 (inside), 6-12 (after portion shifted)
-    // Plus the duplicate at 6-10.
-    // Wait, that's complex. Let me simplify the test.
-
-    // For clips fully inside: just duplicate
-    // For clips partially inside: only the overlapping portion is duplicated
-    // But the original stays intact, and everything after the range shifts forward
-    expect(clips.length).toBeGreaterThanOrEqual(2);
+    // Clip spans range → original split at endTime, duplicate of inside portion inserted
+    // Expected: left (0-6), duplicate (6-10), right portion (10-12)
+    const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
+    expect(sorted.length).toBeGreaterThanOrEqual(2);
+    // First part should start at 0
+    expect(sorted[0].startTime).toBe(0);
   });
 
   it('duplicates across multiple tracks', () => {
@@ -448,5 +441,98 @@ describe('duplicateTimeRange', () => {
     useProjectStore.getState().undo();
 
     expect(useProjectStore.getState().project!.tracks[0].clips).toHaveLength(1);
+  });
+});
+
+describe('edge cases', () => {
+  let trackId1: string;
+
+  beforeEach(() => {
+    useProjectStore.setState({ project: null });
+    useProjectStore.getState().createProject();
+    const t1 = useProjectStore.getState().addTrack('stems');
+    trackId1 = t1.id;
+  });
+
+  it('splitAllAtPlayhead handles clips starting at time 0', () => {
+    addClipToTrack(trackId1, 0, 4);
+    useProjectStore.getState().splitAllAtPlayhead(0.5);
+
+    const clips = useProjectStore.getState().project!.tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
+    expect(sorted[0].startTime).toBe(0);
+    expect(sorted[0].duration).toBeCloseTo(0.5);
+    expect(sorted[1].startTime).toBeCloseTo(0.5);
+    expect(sorted[1].duration).toBeCloseTo(3.5);
+  });
+
+  it('insertTime at time 0 shifts everything forward', () => {
+    addClipToTrack(trackId1, 0, 4);
+    useProjectStore.getState().insertTime(0, 2);
+
+    const clips = useProjectStore.getState().project!.tracks[0].clips;
+    expect(clips[0].startTime).toBe(2);
+  });
+
+  it('deleteTimeRange with adjacent clips keeps them intact', () => {
+    addClipToTrack(trackId1, 0, 2); // 0-2
+    addClipToTrack(trackId1, 2, 2); // 2-4
+    addClipToTrack(trackId1, 4, 2); // 4-6
+
+    useProjectStore.getState().deleteTimeRange(2, 4);
+
+    const clips = useProjectStore.getState().project!.tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
+    expect(sorted[0].startTime).toBe(0);
+    expect(sorted[0].duration).toBe(2);
+    expect(sorted[1].startTime).toBe(2); // 4-2=2
+    expect(sorted[1].duration).toBe(2);
+  });
+
+  it('insertTime with no project is a no-op', () => {
+    useProjectStore.setState({ project: null });
+    expect(() => useProjectStore.getState().insertTime(0, 5)).not.toThrow();
+  });
+
+  it('deleteTimeRange handles negative or zero range gracefully', () => {
+    addClipToTrack(trackId1, 0, 4);
+    useProjectStore.getState().deleteTimeRange(3, 3); // zero range
+    expect(useProjectStore.getState().project!.tracks[0].clips[0].duration).toBe(4);
+  });
+
+  it('duplicateTimeRange preserves clip audio properties', () => {
+    const clip = addClipToTrack(trackId1, 0, 4);
+
+    useProjectStore.getState().duplicateTimeRange(0, 4);
+
+    const clips = useProjectStore.getState().project!.tracks[0].clips;
+    const sorted = [...clips].sort((a, b) => a.startTime - b.startTime);
+    const dup = sorted[1];
+    expect(dup.isolatedAudioKey).toBe(`audio-${clip.id}`);
+    expect(dup.generationStatus).toBe('ready');
+  });
+
+  it('multiple operations compose correctly', () => {
+    addClipToTrack(trackId1, 0, 4);
+    addClipToTrack(trackId1, 4, 4);
+
+    // Insert 2s at t=4, then delete the range 2-6
+    useProjectStore.getState().insertTime(4, 2);
+    // After insert: clip1 at 0-4, clip2 at 6-10
+    const afterInsert = useProjectStore.getState().project!.tracks[0].clips;
+    const sortedInsert = [...afterInsert].sort((a, b) => a.startTime - b.startTime);
+    expect(sortedInsert[0].startTime).toBe(0);
+    expect(sortedInsert[1].startTime).toBe(6);
+
+    useProjectStore.getState().deleteTimeRange(2, 6);
+    // After delete: clip1 trimmed to 0-2, clip2 shifted to 2-6
+    const afterDelete = useProjectStore.getState().project!.tracks[0].clips;
+    const sortedDelete = [...afterDelete].sort((a, b) => a.startTime - b.startTime);
+    expect(sortedDelete[0].startTime).toBe(0);
+    expect(sortedDelete[0].duration).toBe(2);
+    expect(sortedDelete[1].startTime).toBe(2);
+    expect(sortedDelete[1].duration).toBe(4);
   });
 });

@@ -130,7 +130,7 @@ export class EngineWorkletHost {
       this._setState('ready');
       return true;
     } catch (err) {
-      logger.warn('Initialization failed:', err);
+      logger.error('Initialization failed:', err);
       // Clean up partially created resources
       this._node?.disconnect();
       this._node?.port.close();

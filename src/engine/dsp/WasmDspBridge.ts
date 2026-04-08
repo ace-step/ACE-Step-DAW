@@ -72,7 +72,7 @@ export async function initWasmDsp(ctx: AudioContext): Promise<boolean> {
   }
 
   if (!_wasmSupported) {
-    logger.warn('WASM AudioWorklet not supported in this browser');
+    logger.error('WASM AudioWorklet not supported in this browser');
     return false;
   }
 

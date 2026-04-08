@@ -1895,7 +1895,7 @@ export async function initWasmDsp(): Promise<boolean> {
     logger.info('WASM DSP initialized — effects will route through WASM when compatible');
     return true;
   } catch (err) {
-    logger.warn('WASM DSP init failed, using Tone.js fallback:', err);
+    logger.error('WASM DSP init failed, using Tone.js fallback:', err);
     effectsEngine.setUseWasm(false);
     return false;
   }

@@ -560,7 +560,7 @@ export class WasmDspEngine {
 
     // Log initialization (async, don't block)
     readyPromise.catch((err) => {
-      logger.warn(`WASM init failed for ${trackId}:`, err);
+      logger.error(`WASM init failed for ${trackId}:`, err);
     });
 
     return node;

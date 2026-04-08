@@ -559,7 +559,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       </section>
 
       {/* Voice Library section */}
-      <section className="border-t border-[#3a3a3a] -mx-3 mt-2">
+      <section className="border-t border-daw-border -mx-3 mt-2">
         <VoiceLibraryPanel />
       </section>
 

@@ -299,14 +299,19 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     };
     if (params.vocalLanguage) taskParams.vocal_language = params.vocalLanguage;
 
-    // Voice cloning: attach selected voice profile reference for full-song generation
+    // Voice cloning: load voice blob from IDB and upload alongside generation request
+    let referenceVoiceBlob: Blob | undefined;
     const selectedVoiceId = useVoiceStore.getState().selectedVoiceId;
     if (selectedVoiceId) {
       const voiceProfile = useVoiceStore.getState().getVoiceById(selectedVoiceId);
       if (voiceProfile) {
-        taskParams.reference_voice_path = voiceProfile.audioKey;
-        taskParams.audio_influence = voiceProfile.defaultAudioInfluence;
-        taskParams.style_influence = voiceProfile.defaultStyleInfluence;
+        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
+        if (blob) {
+          referenceVoiceBlob = blob;
+          taskParams.reference_voice_path = 'uploaded';
+          taskParams.audio_influence = voiceProfile.defaultAudioInfluence;
+          taskParams.style_influence = voiceProfile.defaultStyleInfluence;
+        }
       }
     }
 
@@ -316,7 +321,7 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     genStore.updateJob(jobId, { status: 'generating', startedAt: Date.now(), progress: 'Submitting...', stage: 'Submitting request' });
 
     const silenceBlob = generateSilenceWav(params.durationSeconds ?? 60);
-    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams);
+    const releaseResp = await api.releaseLegoTask(silenceBlob, taskParams, referenceVoiceBlob);
     const taskId = releaseResp.task_id;
     genStore.updateJob(jobId, { taskId });
 
@@ -817,13 +822,18 @@ async function generateClipInternal(
       params.sample_query = clip.prompt;
     }
 
-    // Voice cloning: attach voice profile reference when track has a voice assigned
+    // Voice cloning: load voice blob from IDB and upload alongside generation request
+    let referenceVoiceBlob: Blob | undefined;
     if (track.voiceProfileId) {
       const voiceProfile = useVoiceStore.getState().getVoiceById(track.voiceProfileId);
       if (voiceProfile) {
-        params.reference_voice_path = voiceProfile.audioKey;
-        params.audio_influence = voiceProfile.defaultAudioInfluence;
-        params.style_influence = voiceProfile.defaultStyleInfluence;
+        const blob = await loadAudioBlobByKey(voiceProfile.audioKey);
+        if (blob) {
+          referenceVoiceBlob = blob;
+          params.reference_voice_path = 'uploaded';
+          params.audio_influence = voiceProfile.defaultAudioInfluence;
+          params.style_influence = voiceProfile.defaultStyleInfluence;
+        }
       }
     }
 
@@ -849,7 +859,7 @@ async function generateClipInternal(
     }
     useProjectStore.getState().updateClipStatus(clipId, 'generating');
 
-    const releaseResp = await api.releaseLegoTask(srcAudioBlob, params);
+    const releaseResp = await api.releaseLegoTask(srcAudioBlob, params, referenceVoiceBlob);
     const taskId = releaseResp.task_id;
     useGenerationStore.getState().updateJob(jobId, { taskId });
     genStore.upsertGenerationHistoryRecord({

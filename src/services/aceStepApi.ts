@@ -339,6 +339,7 @@ const RELEASE_TASK_MAX_RETRIES = 3;
 async function releaseTask(
   srcAudioBlob: Blob,
   params: AceStepTaskParams,
+  referenceVoiceBlob?: Blob,
 ): Promise<ReleaseTaskResponse> {
   const base = getApiBase();
 
@@ -362,6 +363,9 @@ async function releaseTask(
     const formData = new FormData();
     if (uploadBlob) {
       formData.append('src_audio', uploadBlob, 'src_audio.wav');
+    }
+    if (referenceVoiceBlob) {
+      formData.append('reference_voice', referenceVoiceBlob, 'reference_voice.wav');
     }
     for (const [key, value] of Object.entries(params)) {
       if (value === null || value === undefined) continue;
@@ -414,8 +418,9 @@ async function releaseTask(
 export async function releaseLegoTask(
   srcAudioBlob: Blob,
   params: LegoTaskParams | Text2MusicTaskParams | CoverTaskParams | RepaintTaskParams,
+  referenceVoiceBlob?: Blob,
 ): Promise<ReleaseTaskResponse> {
-  return releaseTask(srcAudioBlob, params);
+  return releaseTask(srcAudioBlob, params, referenceVoiceBlob);
 }
 
 export async function releaseStemSeparationTask(

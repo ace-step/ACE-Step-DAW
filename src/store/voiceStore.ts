@@ -67,8 +67,11 @@ export const useVoiceStore = create<VoiceState>()(
 
         // Persist audio blob asynchronously
         idbSet(audioKey, audioBlob).catch(() => {
-          // Remove the profile if audio storage fails (e.g. quota exceeded)
-          set((state) => ({ voices: state.voices.filter((v) => v.id !== id) }));
+          // Remove the profile and clear selection if audio storage fails (e.g. quota exceeded)
+          set((state) => ({
+            voices: state.voices.filter((v) => v.id !== id),
+            selectedVoiceId: state.selectedVoiceId === id ? null : state.selectedVoiceId,
+          }));
         });
 
         set((state) => ({ voices: [...state.voices, profile] }));
@@ -86,9 +89,13 @@ export const useVoiceStore = create<VoiceState>()(
       deleteVoice: async (id: string) => {
         const voice = get().voices.find((v) => v.id === id);
         if (voice) {
-          await idbDel(voice.audioKey);
-          if (voice.originalAudioKey) {
-            await idbDel(voice.originalAudioKey);
+          try {
+            await idbDel(voice.audioKey);
+            if (voice.originalAudioKey) {
+              await idbDel(voice.originalAudioKey);
+            }
+          } catch {
+            // IDB deletion failed — still remove from state to keep UI consistent
           }
         }
         set((state) => ({

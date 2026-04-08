@@ -130,7 +130,19 @@ export function VoiceLibraryPanel() {
       };
       audioRef.current = audio;
       setPlayingVoiceId(voiceId);
-      audio.play();
+      try {
+        await audio.play();
+      } catch {
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+        if (audioUrlRef.current === url) {
+          URL.revokeObjectURL(url);
+          audioUrlRef.current = null;
+        }
+        setPlayingVoiceId(null);
+        toastError('Could not play voice audio');
+      }
     },
     [loadAudioBlob],
   );

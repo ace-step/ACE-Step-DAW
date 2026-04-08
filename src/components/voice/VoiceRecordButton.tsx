@@ -11,6 +11,7 @@ const VOICE_RECORD_TRACK_ID = '__voice-recording__';
 export function VoiceRecordButton() {
   const addVoice = useVoiceStore((s) => s.addVoice);
   const [isRecording, setIsRecording] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -48,9 +49,11 @@ export function VoiceRecordButton() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    setIsRecording(false);
+    setIsStopping(true);
 
     const result = await recordingEngine.stopRecording(VOICE_RECORD_TRACK_ID);
+    setIsRecording(false);
+    setIsStopping(false);
     if (!result) {
       toastError('No audio captured');
       return;
@@ -85,12 +88,13 @@ export function VoiceRecordButton() {
     <button
       type="button"
       onClick={isRecording ? stopRecording : startRecording}
+      disabled={isStopping}
       className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${
         isRecording
           ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60'
           : 'bg-transparent text-zinc-400 hover:bg-daw-hover-subtle hover:text-zinc-200'
-      }`}
-      aria-label={isRecording ? 'Stop recording' : 'Record voice'}
+      } ${isStopping ? 'opacity-50 cursor-not-allowed' : ''}`}
+      aria-label={isStopping ? 'Stopping...' : isRecording ? 'Stop recording' : 'Record voice'}
       data-testid="voice-record-btn"
     >
       {isRecording ? (

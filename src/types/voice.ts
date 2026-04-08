@@ -28,6 +28,6 @@ export interface VoiceProfile {
   defaultStyleInfluence: number;
   /** How the voice was captured. */
   source: VoiceSource;
-  /** Precomputed waveform peaks for thumbnail display (interleaved stereo). */
+  /** Precomputed single-channel waveform peaks for thumbnail display. */
   waveformPeaks?: number[];
 }

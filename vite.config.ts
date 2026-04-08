@@ -26,6 +26,52 @@ export default defineConfig(async ({ command }) => {
 
   return {
     plugins,
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+                return 'vendor-react';
+              }
+              if (id.includes('tone')) {
+                return 'vendor-tone';
+              }
+              if (id.includes('@strudel/mini') || id.includes('@strudel/core')) {
+                return 'vendor-strudel-core';
+              }
+              if (id.includes('@strudel')) {
+                return 'vendor-strudel';
+              }
+              if (id.includes('zustand') || id.includes('immer')) {
+                return 'vendor-state';
+              }
+              if (id.includes('onnxruntime')) {
+                return 'vendor-onnx';
+              }
+              if (id.includes('xterm') || id.includes('@xterm')) {
+                return 'vendor-xterm';
+              }
+              if (id.includes('standardized-audio-context')) {
+                return 'vendor-audio-ctx';
+              }
+              if (id.includes('jazz-midi') || id.includes('jzz')) {
+                return 'vendor-midi';
+              }
+              if (id.includes('codemirror') || id.includes('@codemirror') || id.includes('@lezer')) {
+                return 'vendor-codemirror';
+              }
+              if (id.includes('@tonaljs') || id.includes('tonal')) {
+                return 'vendor-tonal';
+              }
+              // Catch-all for remaining node_modules
+              return 'vendor-misc';
+            }
+          },
+        },
+      },
+    },
     optimizeDeps: {
       exclude: ['onnxruntime-web'],
     },

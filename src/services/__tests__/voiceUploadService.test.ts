@@ -9,7 +9,8 @@ vi.mock('idb-keyval', () => ({
 }));
 
 import { useVoiceStore, MIN_VOICE_SAMPLE_DURATION } from '../../store/voiceStore';
-import { uploadVoiceFile, audioBufferToWavBlob } from '../voiceUploadService';
+import { uploadVoiceFile } from '../voiceUploadService';
+import { audioBufferToWavBlob } from '../../utils/wav';
 
 // Mock AudioContext — must be a class-like constructor
 const mockDecodeAudioData = vi.fn();

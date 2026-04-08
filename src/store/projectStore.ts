@@ -4505,7 +4505,7 @@ export const useProjectStore = create<ProjectState>()(
     const newTracks = state.project.tracks.map((t) => ({
       ...t,
       clips: t.clips.map((c) =>
-        c.id === clipId ? { ...c, tags: c.tags?.filter((t) => t !== tag) } : c,
+        c.id === clipId ? { ...c, tags: c.tags?.filter((label) => label !== tag) } : c,
       ),
     }));
     set({

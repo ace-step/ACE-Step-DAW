@@ -3,6 +3,7 @@ import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
+import { toastError } from '../../hooks/useToast';
 import { ClipContextMenu } from './ClipContextMenu';
 
 interface ClipContextMenuContainerProps {

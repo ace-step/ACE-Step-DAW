@@ -5,7 +5,6 @@ import { useProjectStore } from '../store/projectStore';
 import { useTransportStore } from '../store/transportStore';
 import { useGenerationStore } from '../store/generationStore';
 import { useShortcutsStore } from '../store/shortcutsStore';
-import { generateSingleClip } from '../services/generationPipeline';
 import { useRecording } from './useRecording';
 import { getMidiCaptureService } from '../services/midiCaptureService';
 import {
@@ -318,7 +317,7 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         if (!anyModalOpen && !generation.isGenerating) {
           const [clipId] = ui.selectedClipIds;
-          if (clipId) generateSingleClip(clipId);
+          if (clipId) import('../services/generationPipeline').then(m => m.generateSingleClip(clipId));
         }
         return;
       }

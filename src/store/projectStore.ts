@@ -110,20 +110,24 @@ import {
 } from '../constants/defaults';
 import { saveProject as saveProjectToIDB } from '../services/projectStorage';
 import { stripHeavyDataForPersist } from './projectPersistUtils';
-import { exportTrackStems, getStemExportTracks, trackHasExportableContent } from '../engine/exportMix';
 import { applyTransform, type TransformOptions } from '../utils/midiTransforms';
 import { generatePattern, type PatternOptions } from '../utils/midiPatternGenerator';
 import { loadAudioBlobByKey, saveAudioBlob } from '../services/audioFileManager';
-import * as audioEngineHooks from '../hooks/useAudioEngine';
-import { renderMidiTrackOffline, renderSamplerTrackOffline, renderSequencerTrackOffline } from '../engine/offlineRender';
-import { createSamplerConfig } from '../engine/SamplerEngine';
 import { DEFAULT_WAVETABLE_SETTINGS } from '../engine/wavetablePresets';
 import { audioBufferToWavBlob } from '../utils/wav';
 import { computeVideoSplit, computeLeftTrim, computeRightTrim } from '../utils/videoUtils';
-import { convertClipAudioToMidi } from '../services/audioToMidi';
 import { createDefaultParametricEqBands } from '../utils/parametricEq';
 import type { StemCount, StemSeparationEngine } from '../types/api';
-import { separateClipAudioToStems } from '../services/stemSeparation';
+
+// ── Heavy modules: lazy-loaded to reduce initial bundle ──────────────────────
+// These are only needed for specific async operations (stem export, audio-to-MIDI, etc.)
+// The audio engine module is cached after first load for synchronous access.
+let _audioEngineModule: typeof import('../hooks/useAudioEngine') | null = null;
+async function getAudioEngineModule() {
+  if (!_audioEngineModule) _audioEngineModule = await import('../hooks/useAudioEngine');
+  return _audioEngineModule;
+}
+// Pre-load will happen on first use; detectPlaybackLatencyFromEngine falls back to defaults
 import { beatToTime, getBeatAtBar } from '../utils/tempoMap';
 import { encodeMidiFile, parseMidiFile } from '../utils/midi';
 import { encodeMidiFile as encodeMultiTrackMidiFile, type MidiExportTrack } from '../utils/midiEncoder';
@@ -164,7 +168,6 @@ import {
 } from '../utils/trackInstrument';
 import { useTransportStore } from './transportStore';
 import { useCollaborationStore } from './collaborationStore';
-import { bounceTrackToAudioAsset } from '../services/bounceInPlace';
 import {
   ensurePlaybackLatencySettings,
 } from '../utils/playbackLatency';
@@ -2155,10 +2158,10 @@ function applyMasteringPreferences(mastering: MasteringState): MasteringState {
 }
 
 function detectPlaybackLatencyFromEngine() {
-  const engine =
-    'getExistingAudioEngine' in audioEngineHooks
-      ? audioEngineHooks.getExistingAudioEngine?.() ?? null
-      : null;
+  const mod = _audioEngineModule;
+  const engine = mod && 'getExistingAudioEngine' in mod
+    ? mod.getExistingAudioEngine?.() ?? null
+    : null;
   if (!engine) return createDefaultPlaybackLatencySettings();
   return detectPlaybackLatencySettings(undefined, {
     baseLatency: engine.ctx.baseLatency,
@@ -2811,6 +2814,7 @@ export const useProjectStore = create<ProjectState>()(
       ...options,
     };
 
+    const { bounceTrackToAudioAsset } = await import('../services/bounceInPlace');
     const bounced = await bounceTrackToAudioAsset(state.project, track, resolvedOptions);
     const latest = get();
     if (!latest.project) return;
@@ -4840,7 +4844,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const blob = await loadAudioBlobByKey(audioKey);
           if (blob) {
-            const engine = audioEngineHooks.getAudioEngine();
+            const engine = (await getAudioEngineModule()).getAudioEngine();
             const buffer = await engine.decodeAudioData(blob);
             const samples = buffer.getChannelData(0);
             rangeStart = snapClipBoundaryToAudio(sourceClip, rangeStart, samples, buffer.sampleRate);
@@ -5059,7 +5063,7 @@ export const useProjectStore = create<ProjectState>()(
         return;
       }
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
 
@@ -5097,7 +5101,7 @@ export const useProjectStore = create<ProjectState>()(
       const blob = await loadAudioBlobByKey(audioKey);
       if (!blob) return;
 
-      const engine = audioEngineHooks.getAudioEngine();
+      const engine = (await getAudioEngineModule()).getAudioEngine();
       const buffer = await engine.decodeAudioData(blob);
       const samples = buffer.getChannelData(0);
       const audioOffset = clip.audioOffset ?? 0;
@@ -9283,6 +9287,7 @@ export const useProjectStore = create<ProjectState>()(
       throw new Error(`Audio for clip '${clipId}' not found`);
     }
 
+    const { separateClipAudioToStems } = await import('../services/stemSeparation');
     const preparedStems = await separateClipAudioToStems({
       clipId,
       sourceBlob,
@@ -9392,6 +9397,7 @@ export const useProjectStore = create<ProjectState>()(
     if (!audioKey) return undefined;
 
     const bpm = state.project.bpm;
+    const { convertClipAudioToMidi } = await import('../services/audioToMidi');
     const result = await convertClipAudioToMidi(audioKey, bpm, {
       threshold: options?.threshold ?? 0.15,
       minConfidence: options?.minConfidence ?? 0.5,
@@ -9422,7 +9428,8 @@ export const useProjectStore = create<ProjectState>()(
     const project = get().project;
     if (!project) return;
 
-    const engine = audioEngineHooks.getAudioEngine();
+    const engine = (await getAudioEngineModule()).getAudioEngine();
+    const { exportTrackStems, getStemExportTracks, trackHasExportableContent } = await import('../engine/exportMix');
     const exportableTracks = getStemExportTracks(project, { scope: 'all-audible' }).filter(trackHasExportableContent);
     const stemExports = await exportTrackStems(
       project,

@@ -6,7 +6,6 @@ import { audioBufferToWavBlob } from '../utils/wav';
 import { computeWaveformPeaks } from '../utils/waveformPeaks';
 import { CLIP_WAVEFORM_PEAK_COUNT } from '../utils/clipAudio';
 import { loadAudioBlobByKey, saveAudioBlob } from './audioFileManager';
-import { getAudioEngine } from '../hooks/useAudioEngine';
 
 type AudioBufferLike = Pick<AudioBuffer, 'numberOfChannels' | 'length' | 'sampleRate' | 'duration' | 'getChannelData'>;
 
@@ -184,6 +183,7 @@ export function mergeAudioClipBuffers(inputs: AudioClipRenderInput[]): MergedAud
 }
 
 async function loadAudioInputs(project: Project, clips: Clip[]): Promise<AudioClipRenderInput[]> {
+  const { getAudioEngine } = await import('../hooks/useAudioEngine');
   const engine = getAudioEngine();
   const inputs: AudioClipRenderInput[] = [];
 
@@ -212,6 +212,7 @@ async function loadAudioInputs(project: Project, clips: Clip[]): Promise<AudioCl
 export async function renderConsolidatedAudioClip(project: Project, clips: Clip[]) {
   const audioInputs = await loadAudioInputs(project, clips);
   const merged = mergeAudioClipBuffers(audioInputs);
+  const { getAudioEngine } = await import('../hooks/useAudioEngine');
   const engine = getAudioEngine();
   const outputBuffer = engine.ctx.createBuffer(merged.numberOfChannels, merged.channels[0].length, merged.sampleRate);
 

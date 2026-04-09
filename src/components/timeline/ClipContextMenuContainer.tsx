@@ -3,7 +3,6 @@ import type { Clip, Track } from '../../types/project';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useTransportStore } from '../../store/transportStore';
-import { regenerateClip } from '../../services/generationPipeline';
 import { ClipContextMenu } from './ClipContextMenu';
 
 interface ClipContextMenuContainerProps {
@@ -71,7 +70,7 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const clipAIContext = (!isMidiClip && isReady) ? {
-    onRegenerate: () => { onClose(); regenerateClip(clip.id); },
+    onRegenerate: () => { onClose(); import('../../services/generationPipeline').then(m => m.regenerateClip(clip.id)); },
     hasPrompt: !!clip.prompt,
     isReady,
     ...(hasAudio ? { onSeparateStems: () => { onClose(); setStemSeparationModal(clip.id); } } : {}),

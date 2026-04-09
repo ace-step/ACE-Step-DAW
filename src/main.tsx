@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
-import { getAudioEngine } from './hooks/useAudioEngine';
 import { useProjectStore } from './store/projectStore';
 import { useUIStore } from './store/uiStore';
 import { useTransportStore } from './store/transportStore';
@@ -109,12 +108,25 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
 (window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
-(window as unknown as Record<string, unknown>).__getAudioEngine = () => getAudioEngine();
+(window as unknown as Record<string, unknown>).__getAudioEngine = async () => {
+  const { getAudioEngine } = await import('./hooks/useAudioEngine');
+  return getAudioEngine();
+};
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
 
-// Strudel Agent API — pattern analysis, presets, track management
-import { createStrudelAgentApi } from './services/strudelAgentApi';
-(window as unknown as Record<string, unknown>).__strudelApi = createStrudelAgentApi();
+// Strudel Agent API — lazy-loaded on first access to avoid pulling strudel deps into main bundle
+let _strudelApi: ReturnType<typeof import('./services/strudelAgentApi')['createStrudelAgentApi']> | null = null;
+const strudelApiProxy = new Proxy({} as Record<string, unknown>, {
+  get(_target, prop) {
+    if (!_strudelApi) {
+      // Trigger lazy load — methods will work after the module loads
+      import('./services/strudelAgentApi').then(m => { _strudelApi = m.createStrudelAgentApi(); });
+      return undefined;
+    }
+    return (_strudelApi as Record<string, unknown>)[prop as string];
+  },
+});
+(window as unknown as Record<string, unknown>).__strudelApi = strudelApiProxy;
 (window as unknown as Record<string, unknown>).__coreDawShortcuts = {
   execute: (actionId: Parameters<typeof executeCoreDawShortcut>[0]) => executeCoreDawShortcut(actionId),
 };
@@ -150,9 +162,8 @@ window.__dawStructure = () =>
   generateProjectStructure(useProjectStore.getState().project);
 window.__midiCaptureService = getMidiCaptureService();
 
-// Start MCP bridge for Claude Code integration
-import { startMcpBridge } from './services/mcpBridge';
-startMcpBridge();
+// Start MCP bridge for Claude Code integration (lazy — not needed for initial render)
+import('./services/mcpBridge').then(m => m.startMcpBridge());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

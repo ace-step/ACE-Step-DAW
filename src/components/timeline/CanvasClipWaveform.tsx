@@ -134,6 +134,14 @@ export function CanvasClipWaveform({
     const scaleY = bh / canvasHeight;
     ctx.scale(1, scaleY);
 
+    // Get raw samples for sample-line mode (if AudioBuffer is cached)
+    const cachedBuffer = audioKey ? audioBufferCache.get(audioKey) : null;
+    const rawSamples = cachedBuffer ? {
+      left: cachedBuffer.getChannelData(0),
+      right: cachedBuffer.numberOfChannels >= 2 ? cachedBuffer.getChannelData(1) : cachedBuffer.getChannelData(0),
+      sampleRate: cachedBuffer.sampleRate,
+    } : null;
+
     drawWaveform(ctx, {
       peaks: activePeaks,
       audioDuration,
@@ -147,6 +155,7 @@ export function CanvasClipWaveform({
       color,
       opacity: 1,
       trackVolume,
+      rawSamples,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick, CANVAS_WIDTH]);

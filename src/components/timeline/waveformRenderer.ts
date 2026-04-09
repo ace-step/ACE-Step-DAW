@@ -1,12 +1,9 @@
 /**
- * Pure Canvas 2D waveform renderer.
+ * Professional waveform renderer — dual mode (Ableton / ACE Studio style).
  *
- * Per-pixel-column vertical bar rendering: for each pixel column, draw a
- * vertical line from min to max peak value. This is the standard technique
- * used by Ableton, Logic, ACE Studio and every professional DAW.
- *
- * Single merged L+R display, centered and mirrored around the midline.
- * Dark waveform on colored clip background for maximum readability.
+ * Mode 1 (zoomed out): Filled peak envelope — min/max area shows dynamics.
+ * Mode 2 (zoomed in): Thin sample line — actual audio waveform curve.
+ * Mode auto-switches based on samples-per-pixel ratio.
  */
 
 import { PEAK_STRIDE } from '../../utils/waveformPeaks';
@@ -27,6 +24,8 @@ export interface WaveformDrawParams {
   opacity?: number;
   trackVolume?: number;
   maxColumns?: number;
+  /** Raw audio samples for sample-level rendering when zoomed in. */
+  rawSamples?: { left: Float32Array; right: Float32Array; sampleRate: number } | null;
 }
 
 interface PeakSlice {
@@ -109,11 +108,87 @@ export function drawCenterDivider(
 }
 
 /**
- * Main entry: per-pixel-column vertical bar waveform.
- *
- * For each pixel column, computes the merged L+R min/max and draws a
- * 1px-wide vertical bar from min to max. This produces the crisp, sharp
- * waveform look seen in professional DAWs.
+ * Draw a channel as filled peak envelope (zoomed-out mode).
+ * Upper contour (max) → lower contour (min) reversed → fill.
+ */
+function drawChannelPeakFill(
+  ctx: CanvasRenderingContext2D,
+  columnCount: number,
+  colW: number,
+  leftPx: number,
+  centerY: number,
+  amplitude: number,
+  maxArr: Float64Array,
+  minArr: Float64Array,
+  color: string,
+  fillAlpha: number,
+): void {
+  const prevAlpha = ctx.globalAlpha;
+
+  // Filled envelope
+  ctx.beginPath();
+  for (let i = 0; i < columnCount; i++) {
+    const x = leftPx + (i + 0.5) * colW;
+    const y = centerY - maxArr[i] * amplitude;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  for (let i = columnCount - 1; i >= 0; i--) {
+    ctx.lineTo(leftPx + (i + 0.5) * colW, centerY - minArr[i] * amplitude);
+  }
+  ctx.closePath();
+  ctx.globalAlpha = prevAlpha * fillAlpha;
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.globalAlpha = prevAlpha;
+
+  // Thin outline stroke on top for crispness
+  ctx.beginPath();
+  for (let i = 0; i < columnCount; i++) {
+    const x = leftPx + (i + 0.5) * colW;
+    const y = centerY - maxArr[i] * amplitude;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+}
+
+/**
+ * Draw a channel as thin sample line (zoomed-in mode).
+ * Connects individual audio samples as a continuous curve.
+ */
+function drawChannelSampleLine(
+  ctx: CanvasRenderingContext2D,
+  samples: Float32Array,
+  sampleRate: number,
+  audioOffset: number,
+  clipDuration: number,
+  leftPx: number,
+  widthPx: number,
+  centerY: number,
+  amplitude: number,
+  color: string,
+): void {
+  const startSample = Math.max(0, Math.floor(audioOffset * sampleRate));
+  const endSample = Math.min(samples.length, Math.ceil((audioOffset + clipDuration) * sampleRate));
+  const sampleCount = endSample - startSample;
+  if (sampleCount <= 0) return;
+
+  const pxPerSample = widthPx / sampleCount;
+
+  ctx.beginPath();
+  for (let i = 0; i < sampleCount; i++) {
+    const x = leftPx + i * pxPerSample;
+    const y = centerY - samples[startSample + i] * amplitude;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+/**
+ * Main entry: dual-mode waveform rendering.
  */
 export function drawWaveform(
   ctx: CanvasRenderingContext2D,
@@ -124,6 +199,7 @@ export function drawWaveform(
     contentOffset, timeStretchRate, stretchMode,
     width, height, color,
     opacity = 0.9, trackVolume = 1, maxColumns,
+    rawSamples,
   } = params;
 
   const contentWidth = Math.max(width, 0);
@@ -132,69 +208,62 @@ export function drawWaveform(
     audioOffset, contentOffset, timeStretchRate, stretchMode,
   };
   const waveformLayout = getClipWaveformLayout(clipWindow, contentWidth);
-  if (peaks.length === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) return;
+  if (contentWidth <= 0 || waveformLayout.widthPx <= 0) return;
 
-  const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
-  if (logicalPeakCount === 0) return;
+  // Nothing to draw if no peaks and no raw samples
+  const hasPeaks = peaks.length > 0;
+  const hasSamples = rawSamples && rawSamples.sampleRate > 0;
+  if (!hasPeaks && !hasSamples) return;
 
-  const peakSlice = getVisiblePeakSlice(
-    logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow),
-  );
-  if (peakSlice.numBars === 0) return;
-
-  const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
-  const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
-
-  // Precompute L and R channels separately
-  const leftData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
-  const rightData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
-
-  // Dual channel: L in top half, R in bottom half, no overlap.
-  // Each channel centered in its own half, amplitude clamped to 88% of half-height.
+  // Layout
   const halfHeight = height * 0.5;
-  const amplitude = halfHeight * 0.88 * Math.min(1, trackVolume);
+  const amplitude = halfHeight * 0.85 * Math.min(1, trackVolume);
   const leftCenterY = halfHeight * 0.5;
   const rightCenterY = height - halfHeight * 0.5;
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  // Center divider between L and R
+  // Center divider
   drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, halfHeight, color);
 
-  // Filled path per channel: upper contour (max) → lower contour (min) reversed.
-  // lineTo paths interpolate smoothly between peaks, giving clean waveform lines
-  // even when peak data has lower resolution than the pixel width.
-  const colW = waveformLayout.widthPx / columnCount;
-  const leftPx = waveformLayout.leftPx;
+  // Determine mode: sample line vs peak envelope
+  const useSampleMode = rawSamples
+    && rawSamples.sampleRate > 0
+    && (audioDuration * rawSamples.sampleRate / waveformLayout.widthPx) <= 8;
 
-  // Left channel fill
-  ctx.beginPath();
-  for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * colW;
-    const y = leftCenterY - leftData.maxArr[i] * amplitude;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  for (let i = columnCount - 1; i >= 0; i--) {
-    ctx.lineTo(leftPx + (i + 0.5) * colW, leftCenterY - leftData.minArr[i] * amplitude);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  if (useSampleMode && rawSamples) {
+    // Mode 2: thin sample line (zoomed in)
+    drawChannelSampleLine(
+      ctx, rawSamples.left, rawSamples.sampleRate, audioOffset, clipDuration,
+      waveformLayout.leftPx, waveformLayout.widthPx, leftCenterY, amplitude, color,
+    );
+    drawChannelSampleLine(
+      ctx, rawSamples.right, rawSamples.sampleRate, audioOffset, clipDuration,
+      waveformLayout.leftPx, waveformLayout.widthPx, rightCenterY, amplitude, color,
+    );
+  } else if (peaks.length > 0) {
+    // Mode 1: filled peak envelope (zoomed out)
+    const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
+    if (logicalPeakCount === 0) { ctx.restore(); return; }
 
-  // Right channel fill
-  ctx.beginPath();
-  for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * colW;
-    const y = rightCenterY - rightData.maxArr[i] * amplitude;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    const peakSlice = getVisiblePeakSlice(
+      logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow),
+    );
+    if (peakSlice.numBars === 0) { ctx.restore(); return; }
+
+    const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
+    const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
+    const colW = waveformLayout.widthPx / columnCount;
+
+    const leftData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
+    const rightData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
+
+    drawChannelPeakFill(ctx, columnCount, colW, waveformLayout.leftPx,
+      leftCenterY, amplitude, leftData.maxArr, leftData.minArr, color, 0.7);
+    drawChannelPeakFill(ctx, columnCount, colW, waveformLayout.leftPx,
+      rightCenterY, amplitude, rightData.maxArr, rightData.minArr, color, 0.7);
   }
-  for (let i = columnCount - 1; i >= 0; i--) {
-    ctx.lineTo(leftPx + (i + 0.5) * colW, rightCenterY - rightData.minArr[i] * amplitude);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
 
   ctx.restore();
 }
@@ -213,7 +282,6 @@ export function drawMidiThumbnail(
   opacity: number = 0.7,
 ): void {
   if (notes.length === 0 || width <= 0 || height <= 0 || bpm <= 0 || duration <= 0) return;
-
   const secPerBeat = 60 / bpm;
   let minPitch = notes[0].pitch;
   let maxPitch = notes[0].pitch;
@@ -224,22 +292,18 @@ export function drawMidiThumbnail(
   }
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
-
   const maxNotes = Math.max(20, Math.floor(width / 2));
   const filteredNotes = notes.length > maxNotes
     ? notes.filter((_, i) => i % Math.ceil(notes.length / maxNotes) === 0)
     : notes;
-
   ctx.save();
   ctx.globalAlpha = opacity;
   ctx.fillStyle = color;
-
   for (const note of filteredNotes) {
     const x = (note.startBeat * secPerBeat / duration) * width;
     const noteWidth = Math.max((note.durationBeats * secPerBeat / duration) * width, 1);
     const y = height - ((note.pitch - minPitch + pad) / (range + pad * 2)) * height;
     const noteHeight = Math.max(height / (range + pad * 2), 2);
-
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       const r = Math.min(0.5, noteWidth / 2, noteHeight / 2);
@@ -249,6 +313,5 @@ export function drawMidiThumbnail(
     }
     ctx.fill();
   }
-
   ctx.restore();
 }

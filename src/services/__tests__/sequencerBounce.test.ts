@@ -139,11 +139,15 @@ function makePattern(overrides: Partial<SequencerPattern> = {}): SequencerPatter
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('bounceSequencerToAudio', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     offlineCtxConstructorArgs.length = 0;
-    mockProjectState.project = { id: 'proj-1' } as ReturnType<typeof mockProjectState>['project'];
+    mockProjectState.project = { id: 'proj-1' } as typeof mockProjectState.project;
   });
 
   it('resumes audio engine before rendering', async () => {

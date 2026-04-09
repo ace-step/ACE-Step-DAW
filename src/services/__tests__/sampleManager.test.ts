@@ -105,6 +105,10 @@ vi.stubGlobal('OfflineAudioContext', vi.fn().mockImplementation(function (this: 
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('sampleManager', () => {
   beforeEach(() => {
     clearSampleCache();
@@ -139,9 +143,15 @@ describe('sampleManager', () => {
     });
 
     it('caches samples after first synthesis', async () => {
+      const offlineCtxMock = globalThis.OfflineAudioContext as unknown as { mock: { calls: unknown[][] } };
+      const callsBefore = offlineCtxMock.mock.calls.length;
+
       const buf1 = await getSample(ctx, 'snare');
       const buf2 = await getSample(ctx, 'snare');
+
       expect(buf1).toBe(buf2); // Same reference = cached
+      // OfflineAudioContext should only have been called once (not twice)
+      expect(offlineCtxMock.mock.calls.length).toBe(callsBefore + 1);
     });
 
     it('synthesizes all built-in samples without error', async () => {

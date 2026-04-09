@@ -121,14 +121,21 @@ vi.stubGlobal('WebSocket', vi.fn().mockImplementation((url: string) => {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('mcpBridge', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     lastWsInstance = null;
   });
 
   afterEach(() => {
     stopMcpBridge();
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   describe('startMcpBridge / stopMcpBridge', () => {
@@ -157,15 +164,11 @@ describe('mcpBridge', () => {
 
   describe('tool command handling (via WebSocket messages)', () => {
     it('dispatches tool calls and sends responses when connected', async () => {
-      vi.useFakeTimers();
       startMcpBridge();
       await vi.advanceTimersByTimeAsync(0);
 
       // If no WebSocket was created (IS_DEV=false), skip assertions
-      if (!lastWsInstance) {
-        vi.useRealTimers();
-        return;
-      }
+      if (!lastWsInstance) return;
 
       const ws = lastWsInstance;
       ws.onmessage?.({
@@ -181,8 +184,6 @@ describe('mcpBridge', () => {
         isPlaying: false,
         currentTime: 0,
       }));
-
-      vi.useRealTimers();
     });
   });
 });

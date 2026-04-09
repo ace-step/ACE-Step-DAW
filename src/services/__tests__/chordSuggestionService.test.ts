@@ -210,12 +210,18 @@ describe('chordSuggestionService', () => {
       expect(mockStore.setSuggestions).toHaveBeenCalledWith(suggestions);
     });
 
-    it('handles error message and resets model variant', async () => {
+    it('handles error message and resets loaded model state', async () => {
       await ensureModelLoaded('small');
+      expect(lastWorker!.postedMessages.filter((msg) => msg.type === 'load-model')).toHaveLength(1);
+
       lastWorker!.onmessage?.(new MessageEvent('message', {
         data: { type: 'error', error: 'Model failed to load' },
       }));
       expect(mockStore.setError).toHaveBeenCalledWith('Model failed to load');
+
+      // After error, re-loading the same variant should post a new load-model message
+      await ensureModelLoaded('small');
+      expect(lastWorker!.postedMessages.filter((msg) => msg.type === 'load-model')).toHaveLength(2);
     });
 
     it('handles progress message', async () => {

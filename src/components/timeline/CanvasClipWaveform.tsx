@@ -126,19 +126,12 @@ export function CanvasClipWaveform({
     if (canvas.width !== backingWidth) canvas.width = backingWidth;
     if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
-    // Scale so we draw in CSS-pixel coordinates. The browser maps
-    // backing-store → display. When backing is capped at 16384 the
-    // waveform is drawn at reduced resolution but correct position.
+    // Draw directly in backing-store pixel space (identity transform).
+    // 1 column = 1 backing pixel. The browser handles CSS↔backing scaling.
     ctx.resetTransform();
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, backingWidth, backingHeight);
 
-    const scaleX = backingWidth / contentWidth;
-    const scaleY = backingHeight / canvasHeight;
-    ctx.scale(scaleX, scaleY);
-
-    // Draw using full clip CSS coordinates — column count is naturally
-    // limited by backingWidth via maxColumns.
     drawWaveform(ctx, {
       peaks: activePeaks,
       audioDuration,
@@ -147,12 +140,11 @@ export function CanvasClipWaveform({
       contentOffset,
       timeStretchRate,
       stretchMode,
-      width: contentWidth,
-      height: canvasHeight,
+      width: backingWidth,
+      height: backingHeight,
       color,
       opacity: 1,
       trackVolume,
-      maxColumns: backingWidth,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);

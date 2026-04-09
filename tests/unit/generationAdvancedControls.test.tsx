@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { FullSongForm } from '../../src/components/generation/FullSongForm';
 import { useGenerationStore } from '../../src/store/generationStore';

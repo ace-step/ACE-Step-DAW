@@ -2720,6 +2720,8 @@ export interface Text2MusicRequest {
   useProjectMeta?: boolean;
   /** Elements to exclude from generation */
   negativePrompt?: string;
+  /** Style tags to prepend to prompt at generation time (persisted separately from prompt) */
+  styleTags?: string[];
 }
 
 export interface Text2MusicResult {
@@ -2807,6 +2809,7 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
       guidanceScale: request.guidanceScale,
       shift: request.shift,
       negativePrompt: request.negativePrompt,
+      styleTags: request.styleTags,
     },
   });
 
@@ -2829,9 +2832,14 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     const defaults = project.generationDefaults;
     const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
 
+    // Prepend style tags to prompt for the API request (raw prompt stored separately)
+    const apiPrompt = request.styleTags?.length
+      ? `${request.styleTags.join(', ')}. ${request.prompt}`
+      : request.prompt;
+
     const params: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: request.prompt,
+      prompt: apiPrompt,
       lyrics: request.lyrics,
       audio_duration: request.durationSeconds,
       bpm: request.bpm,

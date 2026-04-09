@@ -274,14 +274,10 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       return;
     }
 
-    // Build effective prompt: prepend style tags if any
-    const effectivePrompt = styleTags.length > 0
-      ? `${styleTags.join(', ')}. ${prompt.trim()}`
-      : prompt.trim();
-
-    // New generation: fire-and-forget, runs in background
+    // New generation: fire-and-forget, runs in background.
+    // Pass raw prompt + styleTags separately — pipeline handles prepending.
     generateText2Music({
-      prompt: effectivePrompt,
+      prompt: prompt.trim(),
       lyrics: instrumental ? '[Instrumental]' : lyrics,
       durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
       bpm: useProjectMeta ? (project?.bpm ?? null) : null,
@@ -300,6 +296,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       instrumental,
       useProjectMeta,
       negativePrompt: negativePrompt.trim() || undefined,
+      styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });

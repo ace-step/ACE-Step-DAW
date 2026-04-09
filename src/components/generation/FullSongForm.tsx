@@ -247,7 +247,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       store.updateClip(editingClipId, {
         generationParams: {
           type: 'text2music',
-          prompt: prompt.trim(),
+          prompt: styleTags.length > 0 ? `${styleTags.join(', ')}. ${prompt.trim()}` : prompt.trim(),
           lyrics: instrumental ? '[Instrumental]' : lyrics,
           durationSeconds: durationSeconds === -1 ? undefined : durationSeconds,
           thinking,
@@ -259,7 +259,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           stemCount,
           useProjectMeta,
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
-          guidanceScale: project?.generationDefaults?.guidanceScale,
+          guidanceScale: temperature,
           shift: project?.generationDefaults?.shift,
         },
       });

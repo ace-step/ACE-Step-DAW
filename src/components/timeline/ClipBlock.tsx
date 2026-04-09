@@ -86,6 +86,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const onGhostLanding = useCallback(() => {
     setGhostLanding(true);
     setShowDragTooltip(false);
+    if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
     ghostLandingTimerRef.current = setTimeout(() => {
       setDragGhost(null);
       setGhostLanding(false);

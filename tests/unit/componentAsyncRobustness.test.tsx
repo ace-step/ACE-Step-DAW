@@ -260,22 +260,30 @@ describe('Component Async Robustness', () => {
     });
   });
 
-  // ── ClipBlock setTimeout cleanup ───────────────────────────────────────
-  describe('ClipBlock setTimeout cleanup', () => {
-    it('stores timeout ref for cleanup on unmount', () => {
-      // Test the pattern: setTimeout ID should be stored in a ref
-      // and cleared on component unmount via useEffect cleanup
+  // ── ClipBlock setTimeout cleanup pattern ────────────────────────────────
+  describe('ClipBlock setTimeout cleanup pattern', () => {
+    it('clears previous timeout before scheduling a new one', () => {
+      // Verifies the ref-based timeout pattern used in ClipBlock.onGhostLanding:
+      // 1. Clear any existing timer before scheduling
+      // 2. Store the new timer ID in a ref
+      // 3. Clear on unmount via useEffect cleanup
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
       const timerRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
 
-      // Simulate what onGhostLanding now does
+      // First call — schedule timer
       timerRef.current = setTimeout(() => {}, 200);
 
-      // Simulate unmount cleanup
+      // Second rapid call — must clear previous before scheduling new
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {}, 200);
+
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+
+      // Unmount cleanup — must clear remaining timer
       if (timerRef.current !== null) clearTimeout(timerRef.current);
 
-      expect(clearTimeoutSpy).toHaveBeenCalled();
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
       clearTimeoutSpy.mockRestore();
     });
   });

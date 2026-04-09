@@ -31,6 +31,7 @@ export function ProjectListDialog() {
   useEffect(() => {
     if (show) {
       setLoading(true);
+      setProjects([]);
       listProjects().then((list) => {
         setProjects(list);
       }).catch(() => {

@@ -112,6 +112,8 @@ export function NewProjectDialog() {
       setBpmText(String(DEFAULT_BPM));
       setKeyScale(DEFAULT_KEY_SCALE);
       setTimeSignature(DEFAULT_TIME_SIGNATURE);
+      setRecentProjects([]);
+      setTemplates([]);
       listProjects().then((list) => setRecentProjects(list)).catch(() => { /* storage unavailable — show empty list */ });
       listTemplates().then((list) => setTemplates(list)).catch(() => { /* storage unavailable — show empty list */ });
     }

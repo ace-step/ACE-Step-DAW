@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import type { StretchMode } from '../../types/project';
 import { drawWaveform } from './waveformRenderer';
 
@@ -20,6 +20,10 @@ interface CanvasClipWaveformProps {
  * Canvas-based waveform renderer replacing the SVG ClipWaveform.
  * Uses a single <canvas> element with HiDPI scaling for crisp rendering.
  * Tracks element height via ResizeObserver to redraw on layout changes.
+ *
+ * Uses a callback ref to set up the ResizeObserver at the exact moment the
+ * canvas element enters the DOM, avoiding timing issues where a `useEffect([], [])`
+ * might fire before layout is complete.
  */
 export function CanvasClipWaveform({
   peaks,
@@ -34,32 +38,49 @@ export function CanvasClipWaveform({
   opacityClassName = 'opacity-90',
   trackVolume = 1,
 }: CanvasClipWaveformProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [canvasHeight, setCanvasHeight] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  // Incremented whenever the canvas size changes, triggering a redraw.
+  const [resizeTick, setResizeTick] = useState(0);
 
   const contentWidth = Math.max(width, 0);
 
-  // Track canvas element height changes via ResizeObserver
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Callback ref: attaches / detaches the ResizeObserver exactly when the
+  // canvas element mounts / unmounts — no timing gap.
+  const setCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
+    // Clean up previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const h = entry.contentRect.height;
-        if (h > 0) setCanvasHeight(h);
-      }
-    });
-    observer.observe(canvas);
-    // Initialize from current size
-    const h = canvas.clientHeight;
-    if (h > 0) setCanvasHeight(h);
-    return () => observer.disconnect();
+    canvasRef.current = el;
+
+    if (el) {
+      const observer = new ResizeObserver(() => {
+        setResizeTick((t) => t + 1);
+      });
+      observer.observe(el);
+      observerRef.current = observer;
+      // Trigger an initial draw
+      setResizeTick((t) => t + 1);
+    }
   }, []);
 
+  // Clean up observer on unmount (safety net)
+  useEffect(() => () => {
+    observerRef.current?.disconnect();
+  }, []);
+
+  // Draw effect — reads clientHeight directly from the canvas element so it
+  // never relies on stale state.  `resizeTick` is in the dep array only to
+  // trigger a re-run when the element resizes.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !peaks || peaks.length === 0 || contentWidth <= 0 || canvasHeight <= 0) return;
+    if (!canvas || !peaks || peaks.length === 0 || contentWidth <= 0) return;
+
+    const canvasHeight = canvas.clientHeight;
+    if (canvasHeight <= 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -96,7 +117,8 @@ export function CanvasClipWaveform({
       trackVolume,
       maxColumns: effectiveMaxColumns,
     });
-  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, canvasHeight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);
 
   if (!peaks || peaks.length === 0 || contentWidth <= 0) {
     return null;
@@ -105,7 +127,7 @@ export function CanvasClipWaveform({
   return (
     <div className={`absolute inset-0 flex items-center overflow-hidden ${opacityClassName}`}>
       <canvas
-        ref={canvasRef}
+        ref={setCanvasRef}
         role="img"
         aria-label="Audio waveform"
         data-testid="canvas-waveform"

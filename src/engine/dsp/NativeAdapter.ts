@@ -280,7 +280,7 @@ class NativeDelay extends NativeNodeWrapper implements IDSPDelay {
 // AudioWorklet-based effects with ScriptProcessorNode fallback
 // ---------------------------------------------------------------------------
 
-import { createDspNode, type DspNodeResult } from './workletLoader';
+import { createDspNode, type DspWorkletResult } from './workletLoader';
 
 const BUFFER_SIZE = 2048;
 
@@ -288,7 +288,7 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
   private readonly _verb: FreeVerb;
   private readonly _mix: DryWetMix;
   private readonly _preDelayNode: DelayNode;
-  private _dspNode: DspNodeResult | null = null;
+  private _dspNode: DspWorkletResult | null = null;
   private _decay = 1.5;
   private _preDelay = 0.01;
 
@@ -350,11 +350,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
         'reverb-worklet-processor',
         2,
         { roomSize, damping: 0.5, wet: 1, dry: 0 },
-        BUFFER_SIZE,
-        scriptNode.onaudioprocess!,
       );
 
-      if (result?.isWorklet) {
+      if (result) {
         // Swap: disconnect ScriptProcessor, connect AudioWorklet
         preDelayNode.disconnect(scriptNode);
         scriptNode.disconnect();

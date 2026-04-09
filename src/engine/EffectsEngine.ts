@@ -67,6 +67,8 @@ type EffectNode = {
   spectralRuntime?: {
     processor: SpectralProcessor;
     workletNode: AudioWorkletNode | ScriptProcessorNode;
+    /** MessagePort for forwarding params to AudioWorkletProcessor (null when using ScriptProcessor fallback). */
+    port: MessagePort | null;
     inputGain: IDSPGain;
     outputGain: IDSPGain;
     dryGain: IDSPGain;
@@ -1040,10 +1042,8 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
         'spectral-worklet-processor',
         1,
         { fftSize, mode },
-        bufferSize,
-        scriptNode.onaudioprocess!,
       );
-      if (result?.isWorklet) {
+      if (result) {
         // Swap: disconnect ScriptProcessor, connect AudioWorklet
         inputGain.outputNode.disconnect(scriptNode);
         scriptNode.disconnect();
@@ -1428,6 +1428,7 @@ class EffectsEngine {
         else rt.processor.unfreeze();
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        rt.port?.postMessage({ type: 'params', decay: p.decay, brightness: p.brightness, frozen: p.frozen });
         break;
       }
       case 'spectralBlur': {
@@ -1439,6 +1440,7 @@ class EffectsEngine {
         rt.processor.blurBrightness = p.brightness;
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        rt.port?.postMessage({ type: 'params', blurAmount: p.blurAmount, frequencySpread: p.frequencySpread, brightness: p.brightness });
         break;
       }
       case 'spectralFilter': {
@@ -1450,6 +1452,7 @@ class EffectsEngine {
         rt.processor.setFilterCurve(curve);
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        rt.port?.postMessage({ type: 'filterCurve', curve: Array.from(curve) });
         break;
       }
       case 'spectralMorph': {
@@ -1461,6 +1464,7 @@ class EffectsEngine {
         else rt.processor.unfreeze();
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        rt.port?.postMessage({ type: 'params', morphAmount: p.morphAmount, frozen: p.frozen });
         break;
       }
     }

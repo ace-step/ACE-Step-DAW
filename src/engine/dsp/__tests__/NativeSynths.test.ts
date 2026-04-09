@@ -304,9 +304,9 @@ describe('NativeFMSynth voice cleanup', () => {
 });
 
 describe('parseDuration', () => {
-  it('returns numeric durations as-is', () => {
-    expect(parseDuration(0.5)).toBe(0.5);
-    expect(parseDuration(1.0)).toBe(1.0);
+  it('returns numeric durations as-is regardless of BPM', () => {
+    expect(parseDuration(0.5, 120)).toBe(0.5);
+    expect(parseDuration(1.0, 90)).toBe(1.0);
   });
 
   it('parses Tone.js notation with explicit BPM', () => {
@@ -325,13 +325,16 @@ describe('parseDuration', () => {
     expect(parseDuration('4n', 180)).toBeCloseTo(1 / 3);
   });
 
-  it('defaults to 120 BPM when no BPM argument provided', () => {
-    // parseDuration is pure — defaults to 120 BPM via parameter default
-    expect(parseDuration('4n')).toBeCloseTo(0.5);
+  it('requires explicit BPM — no silent 120 BPM default', () => {
+    // parseDuration(dur, bpm) now requires BPM to prevent silent defaults.
+    // TypeScript enforces this at compile time. At runtime, omitting BPM
+    // produces NaN for notation strings (60 / undefined).
+    const result = parseDuration('4n', undefined as unknown as number);
+    expect(result).toBeNaN();
   });
 
   it('returns fallback for unparseable strings', () => {
-    expect(parseDuration('invalid')).toBe(0.25);
+    expect(parseDuration('invalid', 120)).toBe(0.25);
   });
 });
 

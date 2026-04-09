@@ -1000,9 +1000,8 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
   dryGain.gain.value = 1 - mixValue;
   wetGain.gain.value = mixValue;
 
-  // NOTE: ScriptProcessorNode is deprecated but used here as a bridge until
-  // AudioWorklet-based spectral processing is implemented. The SpectralProcessor
-  // class is already AudioWorklet-safe (zero allocations in processBlock).
+  // Use ScriptProcessorNode initially, then upgrade to AudioWorklet async.
+  // The SpectralProcessor class is AudioWorklet-safe (zero allocations in processBlock).
   const bufferSize = fftSize;
   const scriptNode = ctx.createScriptProcessor(bufferSize, 1, 1);
   scriptNode.onaudioprocess = (e) => {
@@ -1013,12 +1012,39 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
 
   // Routing: input → dry/wet split
   // Dry: input → dryGain → output
-  // Wet: input → scriptNode → wetGain → output
+  // Wet: input → processorNode → wetGain → output
   inputGain.outputNode.connect(dryGain.inputNode);
   inputGain.outputNode.connect(scriptNode);
   scriptNode.connect(wetGain.inputNode);
   dryGain.connect(outputGain);
   wetGain.connect(outputGain);
+
+  // Attempt async upgrade to AudioWorklet
+  let activeWorkletNode: AudioWorkletNode | ScriptProcessorNode = scriptNode;
+  void (async () => {
+    try {
+      const { createDspNode } = await import('./dsp/workletLoader');
+      const result = await createDspNode(
+        ctx,
+        '/spectral-worklet-processor.js',
+        'spectral-worklet-processor',
+        1,
+        { fftSize, mode: effect.type === 'spectralFreeze' ? 'freeze' : effect.type === 'spectralMorph' ? 'morph' : 'filter' },
+        bufferSize,
+        scriptNode.onaudioprocess!,
+      );
+      if (result.isWorklet) {
+        // Swap: disconnect ScriptProcessor, connect AudioWorklet
+        inputGain.outputNode.disconnect(scriptNode);
+        scriptNode.disconnect();
+        inputGain.outputNode.connect(result.node);
+        result.node.connect(wetGain.inputNode);
+        activeWorkletNode = result.node;
+      }
+    } catch {
+      // Keep ScriptProcessorNode fallback — already connected
+    }
+  })();
 
   return {
     id: effect.id,
@@ -1028,7 +1054,7 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
     outputNode: outputGain.outputNode,
     spectralRuntime: {
       processor,
-      workletNode: scriptNode,
+      workletNode: activeWorkletNode,
       inputGain,
       outputGain,
       dryGain,

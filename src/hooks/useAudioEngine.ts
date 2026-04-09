@@ -45,10 +45,9 @@ export function useAudioEngine() {
     const latency = engineRef.current.refreshPlaybackLatencyCompensation();
     const store = (await import('../store/projectStore')).useProjectStore.getState();
     store.detectPlaybackLatency(latency);
+    const compensationMs = useProjectStore.getState().project?.playbackLatency?.compensationMs;
     engineRef.current.setPlaybackLatencyCompensation(
-      useProjectStore.getState().project?.playbackLatency?.compensationMs
-        ? useProjectStore.getState().project!.playbackLatency!.compensationMs / 1000
-        : 0,
+      compensationMs ? compensationMs / 1000 : 0,
     );
   }, []);
 

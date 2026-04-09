@@ -49,6 +49,22 @@ interface FullSongFormProps {
   onFooterChange: (footer: { label: string; disabled: boolean; action: () => void; thinkingState?: { checked: boolean; onChange: (v: boolean) => void; disabled: boolean } }) => void;
 }
 
+/** Predefined style tags for quick selection, organized by category */
+const STYLE_TAG_OPTIONS = [
+  { value: 'lo-fi', category: 'genre' },
+  { value: 'synthwave', category: 'genre' },
+  { value: 'ambient', category: 'genre' },
+  { value: 'house', category: 'genre' },
+  { value: 'techno', category: 'genre' },
+  { value: 'trap', category: 'genre' },
+  { value: 'jazz', category: 'genre' },
+  { value: 'cinematic', category: 'genre' },
+  { value: 'warm', category: 'mood' },
+  { value: 'dark', category: 'mood' },
+  { value: 'dreamy', category: 'mood' },
+  { value: 'uplifting', category: 'mood' },
+] as const;
+
 export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps) {
   const project = useProjectStore((s) => s.project);
   const isGenerating = useGenerationStore((s) => s.isGenerating);
@@ -67,6 +83,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
   const setThinking = useGenerationStore((s) => s.setGenerationThinking);
   const seedStr = useGenerationStore((s) => s.generationForm.seed);
   const setSeedStr = useGenerationStore((s) => s.setGenerationSeed);
+  const temperature = useGenerationStore((s) => s.generationForm.temperature);
+  const setTemperature = useGenerationStore((s) => s.setGenerationTemperature);
+  const variationCount = useGenerationStore((s) => s.generationForm.variationCount);
+  const setVariationCount = useGenerationStore((s) => s.setGenerationVariationCount);
+  const styleTags = useGenerationStore((s) => s.generationForm.styleTags);
+  const toggleStyleTag = useGenerationStore((s) => s.toggleGenerationStyleTag);
+  const compareModelsEnabled = useGenerationStore((s) => s.generationForm.compareModelsEnabled);
+  const setCompareModelsEnabled = useGenerationStore((s) => s.setCompareModelsEnabled);
   // Stable fallback seed — only generated once per component mount, not on every render
   const fallbackSeed = useRef(Math.floor(Math.random() * 2147483647));
   const parsedSeed = Number(seedStr);
@@ -246,9 +270,14 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       return;
     }
 
+    // Build effective prompt: prepend style tags if any
+    const effectivePrompt = styleTags.length > 0
+      ? `${styleTags.join(', ')}. ${prompt.trim()}`
+      : prompt.trim();
+
     // New generation: fire-and-forget, runs in background
     generateText2Music({
-      prompt: prompt.trim(),
+      prompt: effectivePrompt,
       lyrics: instrumental ? '[Instrumental]' : lyrics,
       durationSeconds: durationSeconds === -1 ? undefined as unknown as number : durationSeconds,
       bpm: useProjectMeta ? (project?.bpm ?? null) : null,
@@ -257,7 +286,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       splitToStems,
       stemCount,
       inferenceSteps: project?.generationDefaults?.inferenceSteps,
-      guidanceScale: project?.generationDefaults?.guidanceScale,
+      guidanceScale: temperature,
       shift: project?.generationDefaults?.shift,
       thinking,
       seed: useRandomSeed ? undefined : seed,
@@ -270,7 +299,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
     }).catch((err) => {
       setError(err instanceof Error ? err.message : 'Generation failed');
     });
-  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId]);
+  }, [prompt, lyrics, instrumental, durationSeconds, project, splitToStems, stemCount, thinking, seed, useRandomSeed, useProjectMeta, syncMetaToProject, vocalLanguage, editingClipId, temperature, styleTags]);
 
   // Sync footer state to parent on every render
   const footerAction = useCallback(() => void handleGenerate(), [handleGenerate]);
@@ -428,6 +457,34 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
         {loadingExample ? 'Loading...' : '🎲 Random Example'}
       </button>
 
+      {/* Style Tags */}
+      <section className="space-y-1.5" data-testid="style-tags-section">
+        <label className="block text-[11px] font-medium uppercase text-zinc-400">
+          Style Tags
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {STYLE_TAG_OPTIONS.map((tag) => {
+            const isActive = styleTags.includes(tag.value);
+            return (
+              <button
+                key={tag.value}
+                type="button"
+                data-testid={`style-tag-${tag.value}`}
+                onClick={() => toggleStyleTag(tag.value)}
+                disabled={isDisabled}
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#333] text-zinc-400 hover:bg-[#444]'
+                }`}
+              >
+                {tag.value}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Parameters grid */}
       <section className="grid grid-cols-2 gap-x-3 gap-y-2">
         <div className="space-y-1">
@@ -487,6 +544,57 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
               />
               <span className="text-[9px] text-zinc-500">Rand</span>
             </label>
+          </div>
+        </div>
+
+        {/* Temperature */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-medium uppercase text-zinc-500">
+            Temperature
+          </label>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="range"
+              data-testid="temperature-slider"
+              min={0}
+              max={1}
+              step={0.1}
+              value={temperature}
+              onChange={(e) => setTemperature(Number(e.target.value))}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[#444] accent-indigo-500"
+              disabled={isDisabled}
+              title="Lower = predictable, Higher = creative"
+            />
+            <span
+              data-testid="temperature-value"
+              className="shrink-0 w-7 text-right text-[10px] font-mono text-zinc-400"
+            >
+              {temperature.toFixed(1)}
+            </span>
+          </div>
+        </div>
+
+        {/* Variation Count */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-medium uppercase text-zinc-500">
+            Variations
+          </label>
+          <div className="flex items-center gap-1.5" data-testid="variation-count-selector">
+            {([1, 2, 3, 4] as const).map((count) => (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setVariationCount(count)}
+                className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
+                  variationCount === count
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-[#333] text-zinc-400 hover:bg-[#444]'
+                }`}
+                disabled={isDisabled}
+              >
+                {count}
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -568,6 +676,22 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           )}
         </div>
 
+      </section>
+
+      {/* Advanced: Cross-model comparison */}
+      <section>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input
+            type="checkbox"
+            data-testid="compare-models-toggle"
+            checked={compareModelsEnabled}
+            onChange={(e) => setCompareModelsEnabled(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-[#444] bg-[#2a2a2a] accent-indigo-500"
+            disabled={isDisabled}
+          />
+          <span className="text-[11px] font-medium text-zinc-300">Compare models</span>
+          <span className="text-[9px] text-zinc-500">each variation uses a different model</span>
+        </label>
       </section>
 
     </div>

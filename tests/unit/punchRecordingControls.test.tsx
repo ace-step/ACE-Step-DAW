@@ -1,6 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import '@testing-library/jest-dom';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useTransportStore } from '../../src/store/transportStore';
 
 describe('Punch Recording Controls - Store', () => {

@@ -871,7 +871,8 @@ export function Toolbar() {
         <ControlBarButton
           active={punchEnabled}
           onClick={togglePunch}
-          title="Punch In/Out (I)"
+          title="Punch In/Out (Shift+I)"
+          shortcutHint="Shift+I"
           disableHoverHighlight
         >
           <svg width="20" height="20" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">

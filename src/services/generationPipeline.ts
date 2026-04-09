@@ -279,9 +279,14 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     const defaults = project.generationDefaults;
     const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
 
+    // Prepend persisted style tags to prompt if present
+    const effectivePrompt = params.styleTags?.length
+      ? `${params.styleTags.join(', ')}. ${params.prompt}`
+      : params.prompt;
+
     const taskParams: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: params.prompt,
+      prompt: effectivePrompt,
       lyrics: params.lyrics,
       audio_duration: params.durationSeconds ?? 60,
       bpm: params.useProjectMeta ? (project.bpm ?? null) : null,

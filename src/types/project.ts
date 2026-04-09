@@ -992,6 +992,8 @@ export interface ClipGenerationParams {
   guidanceScale?: number;
   shift?: number;
   negativePrompt?: string;
+  /** Style tags persisted for edit/regenerate — prepended to prompt at generation time */
+  styleTags?: string[];
   // lego params
   globalCaption?: string;
   sampleMode?: boolean;

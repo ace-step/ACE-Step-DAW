@@ -211,6 +211,9 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       if (p.splitToStems !== undefined) setSplitToStems(p.splitToStems);
       if (p.stemCount !== undefined) setStemCount(p.stemCount);
       if (p.useProjectMeta !== undefined) setUseProjectMeta(p.useProjectMeta);
+      // Hydrate advanced controls from clip to avoid double-prepend
+      if (p.guidanceScale !== undefined) setTemperature(p.guidanceScale);
+      if (p.styleTags) useGenerationStore.getState().setGenerationStyleTags(p.styleTags);
     } else {
       // Backward compatibility: hydrate from basic clip fields
       setPrompt(editingClip.prompt || '');
@@ -247,7 +250,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
       store.updateClip(editingClipId, {
         generationParams: {
           type: 'text2music',
-          prompt: styleTags.length > 0 ? `${styleTags.join(', ')}. ${prompt.trim()}` : prompt.trim(),
+          prompt: prompt.trim(),
           lyrics: instrumental ? '[Instrumental]' : lyrics,
           durationSeconds: durationSeconds === -1 ? undefined : durationSeconds,
           thinking,
@@ -261,6 +264,7 @@ export function FullSongForm({ initialData, onFooterChange }: FullSongFormProps)
           inferenceSteps: project?.generationDefaults?.inferenceSteps,
           guidanceScale: temperature,
           shift: project?.generationDefaults?.shift,
+          styleTags: styleTags.length > 0 ? [...styleTags] : undefined,
         },
       });
       useUIStore.getState().setEditingText2MusicClipId(null);

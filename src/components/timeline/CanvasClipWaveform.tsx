@@ -165,7 +165,7 @@ export function CanvasClipWaveform({
         style={{
           width: contentWidth,
           height: '100%',
-          imageRendering: 'pixelated',
+          imageRendering: 'auto',
         }}
       />
     </div>

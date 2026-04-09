@@ -77,6 +77,7 @@ export interface UIState {
   showCommandPalette: boolean;
   commandPaletteQuery: string;
   recentCommandIds: string[];
+  showAudioHealthPanel: boolean;
   showUndoHistoryPanel: boolean;
   historyFocusScope: HistoryScope;
   historyFocusTrackId: string | null;
@@ -293,6 +294,7 @@ export interface UIState {
   searchCommandPalette: (query?: string) => CommandPaletteSearchResult[];
   executeCommandPaletteCommand: (commandId: string) => Promise<boolean>;
   setShowUndoHistoryPanel: (v: boolean) => void;
+  setShowAudioHealthPanel: (v: boolean) => void;
   setHistoryFocusScope: (scope: HistoryScope, target?: HistoryTarget) => void;
   setShowMixer: (v: boolean) => void;
   setMixerHeight: (v: number) => void;
@@ -615,6 +617,7 @@ export const useUIStore = create<UIState>()(
   showCommandPalette: false,
   commandPaletteQuery: '',
   recentCommandIds: [],
+  showAudioHealthPanel: false,
   showUndoHistoryPanel: false,
   historyFocusScope: 'arrangement',
   historyFocusTrackId: null,
@@ -931,6 +934,7 @@ export const useUIStore = create<UIState>()(
     return true;
   },
   setShowUndoHistoryPanel: (v) => set({ showUndoHistoryPanel: v }),
+  setShowAudioHealthPanel: (v) => set({ showAudioHealthPanel: v }),
   setHistoryFocusScope: (scope, target) => set((state) => {
     const resolvedTrackId =
       target?.trackId

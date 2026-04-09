@@ -226,6 +226,17 @@ export function buildCommandList(): Command[] {
       action: () => useUIStore.getState().setBatchGenerateMode('context'),
     },
 
+    // Audio
+    {
+      id: 'audio-health',
+      label: 'Audio Engine Health',
+      category: 'Audio',
+      action: () => {
+        const ui = useUIStore.getState();
+        ui.setShowAudioHealthPanel(!ui.showAudioHealthPanel);
+      },
+    },
+
     // Help
     {
       id: 'keyboard-shortcuts',

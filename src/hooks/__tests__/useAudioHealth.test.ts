@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAudioHealth } from '../useAudioHealth';
+import { useUIStore } from '../../store/uiStore';
 
 // Mock the audio engine singleton
 const mockMasterMeter = { level: -12, clipped: false };
@@ -36,6 +37,7 @@ describe('useAudioHealth', () => {
     mockEngine.ctx.currentTime = 10.0;
     mockMasterMeter.level = -12;
     mockMasterMeter.clipped = false;
+    useUIStore.setState({ showAudioHealthPanel: false });
   });
 
   afterEach(() => {

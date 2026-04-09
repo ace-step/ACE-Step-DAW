@@ -7,6 +7,7 @@ import {
   type XrunDetector,
 } from '../services/audioHealthMonitor';
 import { getExistingAudioEngine } from './useAudioEngine';
+import { useUIStore } from '../store/uiStore';
 import type { AudioHealthSnapshot, AudioHealthStatus, AudioDeviceInfo } from '../types/audioHealth';
 
 /** Polling interval for health snapshots (ms). */
@@ -29,7 +30,8 @@ export function useAudioHealth(): AudioHealthHook {
   const [snapshot, setSnapshot] = useState<AudioHealthSnapshot | null>(null);
   const [status, setStatus] = useState<AudioHealthStatus>('inactive');
   const [devices, setDevices] = useState<AudioDeviceInfo[]>([]);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const panelOpen = useUIStore((s) => s.showAudioHealthPanel);
+  const setShowAudioHealthPanel = useUIStore((s) => s.setShowAudioHealthPanel);
 
   const xrunDetectorRef = useRef<XrunDetector>({ lastContextTime: 0, lastWallTime: 0, xrunCount: 0 });
   const clipTimestampsRef = useRef<number[]>([]);
@@ -41,8 +43,8 @@ export function useAudioHealth(): AudioHealthHook {
   const [recentClipCount, setRecentClipCount] = useState(0);
 
   const togglePanel = useCallback(() => {
-    setPanelOpen((prev) => !prev);
-  }, []);
+    setShowAudioHealthPanel(!panelOpen);
+  }, [panelOpen, setShowAudioHealthPanel]);
 
   // Enumerate devices on mount
   useEffect(() => {

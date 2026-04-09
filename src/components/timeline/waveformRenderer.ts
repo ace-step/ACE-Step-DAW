@@ -1,7 +1,8 @@
 /**
- * Pure Canvas 2D drawing functions for waveform rendering.
- * Replaces SVG path-based waveforms with direct Canvas drawing
- * for better performance with many tracks.
+ * Pure Canvas 2D waveform renderer — professional DAW style.
+ *
+ * Dual-channel (L/R) display, each channel in its own half of the clip body,
+ * clearly separated by a center divider. No overlap between channels.
  */
 
 import { PEAK_STRIDE } from '../../utils/waveformPeaks';
@@ -21,7 +22,6 @@ export interface WaveformDrawParams {
   color: string;
   opacity?: number;
   trackVolume?: number;
-  /** Max columns to compute (limits work when backing store is capped). */
   maxColumns?: number;
 }
 
@@ -30,9 +30,6 @@ interface PeakSlice {
   numBars: number;
 }
 
-/**
- * Compute the visible peak range for the current clip window.
- */
 export function getVisiblePeakSlice(
   logicalPeakCount: number,
   audioDuration: number,
@@ -42,7 +39,6 @@ export function getVisiblePeakSlice(
   if (logicalPeakCount === 0 || audioDuration <= 0) {
     return { startPeakIdx: 0, numBars: 0 };
   }
-
   const clampedAudioOffset = Math.min(Math.max(0, audioOffset), audioDuration);
   const startPeakIdx = Math.floor((clampedAudioOffset / audioDuration) * logicalPeakCount);
   const visibleAudioSec = Math.min(sourceSpan, Math.max(0, audioDuration - clampedAudioOffset));
@@ -50,17 +46,9 @@ export function getVisiblePeakSlice(
     Math.ceil(((clampedAudioOffset + visibleAudioSec) / audioDuration) * logicalPeakCount),
     logicalPeakCount,
   );
-
-  return {
-    startPeakIdx,
-    numBars: Math.max(0, endPeakIdx - startPeakIdx),
-  };
+  return { startPeakIdx, numBars: Math.max(0, endPeakIdx - startPeakIdx) };
 }
 
-/**
- * For a given display column, find the min and max sample values
- * across the corresponding peak range for a specific channel.
- */
 export function getMinMaxForColumn(
   peaks: number[],
   peakSlice: PeakSlice,
@@ -72,7 +60,6 @@ export function getMinMaxForColumn(
   const end = peakSlice.startPeakIdx + Math.ceil(((columnIndex + 1) / columnCount) * peakSlice.numBars);
   let max = 0;
   let min = 0;
-
   for (let i = start; i < end; i++) {
     const idx = i * PEAK_STRIDE + channelOffset;
     const peakMax = peaks[idx] ?? 0;
@@ -80,14 +67,9 @@ export function getMinMaxForColumn(
     if (peakMax > max) max = peakMax;
     if (peakMin < min) min = peakMin;
   }
-
   return { max, min };
 }
 
-/**
- * Precompute per-column min/max values for a channel.
- * Avoids redundant scans when drawing both filled shape and envelope line.
- */
 export function precomputeColumnMinMax(
   peaks: number[],
   peakSlice: PeakSlice,
@@ -105,87 +87,50 @@ export function precomputeColumnMinMax(
 }
 
 /**
- * Draw a single channel's waveform as a filled shape on Canvas.
- * Upper contour (max) from left to right, lower contour (min) right to left.
+ * Draw a single channel waveform as a filled shape.
+ * The waveform is drawn mirrored around centerY: max goes up, min goes down.
+ * Amplitude is clamped to stay within the channel's half-height so channels
+ * never overlap.
  */
-export function drawChannelWaveform(
+function drawChannelFill(
   ctx: CanvasRenderingContext2D,
   columnCount: number,
   columnWidth: number,
   leftPx: number,
   centerY: number,
-  maxAmplitude: number,
-  color: string,
-  fillOpacity: number,
+  halfHeight: number,
   maxArr: Float64Array,
   minArr: Float64Array,
+  fillColor: string,
+  fillAlpha: number,
 ): void {
   if (columnCount <= 0) return;
 
-  const previousAlpha = ctx.globalAlpha;
-  ctx.beginPath();
+  const prevAlpha = ctx.globalAlpha;
 
-  // Upper contour (max values)
+  ctx.beginPath();
+  // Upper contour (max, goes upward from center)
   for (let i = 0; i < columnCount; i++) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - maxArr[i] * maxAmplitude;
-    if (i === 0) {
-      ctx.moveTo(x, yTop);
-    } else {
-      ctx.lineTo(x, yTop);
-    }
+    // Clamp to half-height so it never crosses into the other channel
+    const y = centerY - Math.min(maxArr[i], 1) * halfHeight;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   }
-
-  // Lower contour (min values, right to left)
+  // Lower contour (min, goes downward from center)
   for (let i = columnCount - 1; i >= 0; i--) {
     const x = leftPx + (i + 0.5) * columnWidth;
-    const yBottom = centerY - minArr[i] * maxAmplitude;
-    ctx.lineTo(x, yBottom);
+    const y = centerY - Math.max(minArr[i], -1) * halfHeight;
+    ctx.lineTo(x, y);
   }
-
   ctx.closePath();
-  ctx.globalAlpha = previousAlpha * fillOpacity;
-  ctx.fillStyle = color;
+
+  ctx.globalAlpha = prevAlpha * fillAlpha;
+  ctx.fillStyle = fillColor;
   ctx.fill();
-  ctx.globalAlpha = previousAlpha;
+  ctx.globalAlpha = prevAlpha;
 }
 
-/**
- * Draw the peak envelope highlight line (positive peaks only).
- */
-export function drawPeakEnvelopeLine(
-  ctx: CanvasRenderingContext2D,
-  columnCount: number,
-  columnWidth: number,
-  leftPx: number,
-  centerY: number,
-  maxAmplitude: number,
-  color: string,
-  lineWidth: number,
-  maxArr: Float64Array,
-): void {
-  if (columnCount <= 0) return;
-
-  ctx.beginPath();
-
-  for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    const yTop = centerY - maxArr[i] * maxAmplitude;
-    if (i === 0) {
-      ctx.moveTo(x, yTop);
-    } else {
-      ctx.lineTo(x, yTop);
-    }
-  }
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.stroke();
-}
-
-/**
- * Draw the center divider line between left and right channels.
- */
 export function drawCenterDivider(
   ctx: CanvasRenderingContext2D,
   leftPx: number,
@@ -193,120 +138,88 @@ export function drawCenterDivider(
   centerY: number,
   color: string,
 ): void {
-  const previousAlpha = ctx.globalAlpha;
+  const prevAlpha = ctx.globalAlpha;
   ctx.beginPath();
   ctx.moveTo(leftPx, centerY);
   ctx.lineTo(leftPx + widthPx, centerY);
   ctx.strokeStyle = color;
-  ctx.globalAlpha = previousAlpha * 0.2;
+  ctx.globalAlpha = prevAlpha * 0.2;
   ctx.lineWidth = 0.5;
   ctx.stroke();
-  ctx.globalAlpha = previousAlpha;
+  ctx.globalAlpha = prevAlpha;
 }
 
 /**
- * Main drawing entry point: renders a complete stereo waveform on a Canvas.
- * This is the Canvas equivalent of the SVG-based ClipWaveform component.
+ * Main entry: dual-channel waveform, L top half, R bottom half.
+ * Each channel is constrained to its own half — no overlap.
  */
 export function drawWaveform(
   ctx: CanvasRenderingContext2D,
   params: WaveformDrawParams,
 ): void {
   const {
-    peaks,
-    audioDuration,
-    audioOffset,
-    clipDuration,
-    contentOffset,
-    timeStretchRate,
-    stretchMode,
-    width,
-    height,
-    color,
-    opacity = 0.9,
-    trackVolume = 1,
-    maxColumns,
+    peaks, audioDuration, audioOffset, clipDuration,
+    contentOffset, timeStretchRate, stretchMode,
+    width, height, color,
+    opacity = 0.9, trackVolume = 1, maxColumns,
   } = params;
 
   const contentWidth = Math.max(width, 0);
   const clipWindow = {
-    startTime: 0,
-    duration: clipDuration,
-    audioDuration,
-    audioOffset,
-    contentOffset,
-    timeStretchRate,
-    stretchMode,
+    startTime: 0, duration: clipDuration, audioDuration,
+    audioOffset, contentOffset, timeStretchRate, stretchMode,
   };
   const waveformLayout = getClipWaveformLayout(clipWindow, contentWidth);
-
-  if (peaks.length === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) {
-    return;
-  }
+  if (peaks.length === 0 || contentWidth <= 0 || waveformLayout.widthPx <= 0) return;
 
   const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
   if (logicalPeakCount === 0) return;
 
   const peakSlice = getVisiblePeakSlice(
-    logicalPeakCount,
-    audioDuration,
-    audioOffset,
-    getClipSourceSpan(clipWindow),
+    logicalPeakCount, audioDuration, audioOffset, getClipSourceSpan(clipWindow),
   );
   if (peakSlice.numBars === 0) return;
 
-  // Limit columns to backing store resolution when capped at 16384px
   const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
   const columnWidth = waveformLayout.widthPx / columnCount;
 
-  // Scale amplitude by track volume (visual feedback of output level).
-  // Each channel occupies half the height, centered at 0.25/0.75.
-  // Max amplitude = 0.23 * height matches the SVG renderer (23 units in 100px viewBox).
-  const scaledAmplitude = (height * 0.23) * Math.min(1, trackVolume);
+  const leftData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
+  const rightData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
 
-  // Channel center Y positions (50% for each channel)
-  const leftCenterY = height * 0.25;
-  const rightCenterY = height * 0.75;
+  // Each channel gets exactly half the height. halfHeight is the max amplitude
+  // a channel can use — 90% of its half to leave a small gap at the divider.
+  const channelHalfHeight = height * 0.5;
+  const amplitude = channelHalfHeight * 0.88 * Math.min(1, trackVolume);
 
-  // Precompute per-column min/max for both channels (avoids redundant peak scans)
-  const leftMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
-  const rightMinMax = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
+  const leftCenterY = channelHalfHeight * 0.5;      // center of top half
+  const rightCenterY = height - channelHalfHeight * 0.5; // center of bottom half
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  // Center divider
+  // Center divider between L and R
   drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, height * 0.5, color);
 
-  // Filled waveform shapes
-  drawChannelWaveform(
+  // Left channel (top half)
+  drawChannelFill(
     ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    leftCenterY, scaledAmplitude, color, 0.6,
-    leftMinMax.maxArr, leftMinMax.minArr,
-  );
-  drawChannelWaveform(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    rightCenterY, scaledAmplitude, color, 0.6,
-    rightMinMax.maxArr, rightMinMax.minArr,
+    leftCenterY, amplitude, leftData.maxArr, leftData.minArr,
+    color, 0.85,
   );
 
-  // Peak envelope lines
-  const lineWidth = Math.max(0.5, height / 125);
-  drawPeakEnvelopeLine(
+  // Right channel (bottom half)
+  drawChannelFill(
     ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    leftCenterY, scaledAmplitude, color, lineWidth, leftMinMax.maxArr,
-  );
-  drawPeakEnvelopeLine(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    rightCenterY, scaledAmplitude, color, lineWidth, rightMinMax.maxArr,
+    rightCenterY, amplitude, rightData.maxArr, rightData.minArr,
+    color, 0.85,
   );
 
   ctx.restore();
 }
 
 /**
- * Draw MIDI note rectangles as a thumbnail representation.
+ * Draw MIDI note rectangles as a thumbnail.
  */
 export function drawMidiThumbnail(
   ctx: CanvasRenderingContext2D,
@@ -321,7 +234,6 @@ export function drawMidiThumbnail(
   if (notes.length === 0 || width <= 0 || height <= 0 || bpm <= 0 || duration <= 0) return;
 
   const secPerBeat = 60 / bpm;
-  // Compute min/max pitch in a single loop (avoids spread argument limit on large arrays)
   let minPitch = notes[0].pitch;
   let maxPitch = notes[0].pitch;
   for (let i = 1; i < notes.length; i++) {
@@ -332,7 +244,6 @@ export function drawMidiThumbnail(
   const range = Math.max(maxPitch - minPitch, 12);
   const pad = 2;
 
-  // Density-adaptive: skip overlapping notes at narrow widths
   const maxNotes = Math.max(20, Math.floor(width / 2));
   const filteredNotes = notes.length > maxNotes
     ? notes.filter((_, i) => i % Math.ceil(notes.length / maxNotes) === 0)
@@ -348,7 +259,6 @@ export function drawMidiThumbnail(
     const y = height - ((note.pitch - minPitch + pad) / (range + pad * 2)) * height;
     const noteHeight = Math.max(height / (range + pad * 2), 2);
 
-    // Rounded rectangle with fallback for browsers without roundRect
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       const r = Math.min(0.5, noteWidth / 2, noteHeight / 2);

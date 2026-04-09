@@ -4,6 +4,7 @@ import { CanvasClipWaveform } from '../../src/components/timeline/CanvasClipWave
 import { PEAK_STRIDE } from '../../src/utils/waveformPeaks';
 
 // Mock canvas context
+const mockGradient = { addColorStop: vi.fn() };
 const mockCtx = {
   scale: vi.fn(),
   setTransform: vi.fn(),
@@ -17,7 +18,8 @@ const mockCtx = {
   save: vi.fn(),
   restore: vi.fn(),
   roundRect: vi.fn(),
-  fillStyle: '',
+  createLinearGradient: vi.fn().mockReturnValue(mockGradient),
+  fillStyle: '' as string | CanvasGradient,
   strokeStyle: '',
   lineWidth: 1,
   globalAlpha: 1,
@@ -123,12 +125,11 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     );
 
     expect(screen.getByTestId('canvas-waveform')).toBeInTheDocument();
-    // drawWaveform may fire more than once (callback ref + ResizeObserver both
-    // trigger a redraw tick).  Assert *at least* the expected call count per
-    // single draw pass: 5 beginPath, 2 fill, 3 stroke.
-    expect(mockCtx.beginPath.mock.calls.length).toBeGreaterThanOrEqual(5);
+    // drawWaveform may fire more than once (callback ref + ResizeObserver).
+    // Per draw pass: 3 beginPath (1 divider + 2 channel fills), 2 fill, 1 stroke.
+    expect(mockCtx.beginPath.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mockCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(mockCtx.stroke.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(mockCtx.stroke.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('returns null for null peaks', () => {

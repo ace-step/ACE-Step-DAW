@@ -145,41 +145,46 @@ export function drawWaveform(
   const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
 
-  // Precompute L and R channels
+  // Precompute L and R channels separately
   const leftData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
   const rightData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
 
-  // Waveform centered vertically, using 92% of available height
-  const centerY = height * 0.5;
-  const amplitude = height * 0.46 * Math.min(1, trackVolume);
+  // Dual channel: L in top half, R in bottom half, no overlap.
+  // Each channel centered in its own half, amplitude clamped to 88% of half-height.
+  const halfHeight = height * 0.5;
+  const amplitude = halfHeight * 0.88 * Math.min(1, trackVolume);
+  const leftCenterY = halfHeight * 0.5;
+  const rightCenterY = height - halfHeight * 0.5;
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  // Subtle center line
-  drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, centerY, color);
+  // Center divider between L and R
+  drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, halfHeight, color);
 
-  // Per-pixel-column vertical bars — the core DAW waveform technique.
-  // Each column: merge L+R, draw a 1px vertical bar from min to max.
+  // Per-pixel-column vertical bars for each channel
   ctx.fillStyle = color;
-
   const barWidth = waveformLayout.widthPx / columnCount;
-  // Use ceil to ensure no sub-pixel gaps between bars
   const drawWidth = Math.max(1, Math.ceil(barWidth));
 
   for (let i = 0; i < columnCount; i++) {
-    // Merge L+R: take the louder of both channels
-    const peakMax = Math.max(leftData.maxArr[i], rightData.maxArr[i]);
-    const peakMin = Math.min(leftData.minArr[i], rightData.minArr[i]);
+    const x = Math.round(waveformLayout.leftPx + i * barWidth);
 
-    const yTop = centerY - peakMax * amplitude;
-    const yBottom = centerY - peakMin * amplitude;
-    const barHeight = yBottom - yTop;
+    // Left channel (top half)
+    const lTop = leftCenterY - leftData.maxArr[i] * amplitude;
+    const lBot = leftCenterY - leftData.minArr[i] * amplitude;
+    const lH = lBot - lTop;
+    if (lH >= 0.5) {
+      ctx.fillRect(x, Math.round(lTop), drawWidth, Math.max(1, Math.round(lH)));
+    }
 
-    if (barHeight < 0.5) continue; // Skip silence
-
-    const x = waveformLayout.leftPx + i * barWidth;
-    ctx.fillRect(Math.round(x), Math.round(yTop), drawWidth, Math.max(1, Math.round(barHeight)));
+    // Right channel (bottom half)
+    const rTop = rightCenterY - rightData.maxArr[i] * amplitude;
+    const rBot = rightCenterY - rightData.minArr[i] * amplitude;
+    const rH = rBot - rTop;
+    if (rH >= 0.5) {
+      ctx.fillRect(x, Math.round(rTop), drawWidth, Math.max(1, Math.round(rH)));
+    }
   }
 
   ctx.restore();

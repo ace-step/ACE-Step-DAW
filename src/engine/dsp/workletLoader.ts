@@ -76,7 +76,7 @@ export async function tryCreateWorkletNode(
         log.info(`Created AudioWorkletNode: ${processorName}`);
         return { node, port: node.port, isWorklet: true };
       } catch (err) {
-        log.warn(`AudioWorkletNode creation failed for ${processorName}, falling back:`, err);
+        log.warn(`AudioWorkletNode creation failed for ${processorName}; caller keeps ScriptProcessor fallback:`, err);
       }
     }
   }

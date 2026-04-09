@@ -67,6 +67,7 @@ type EffectNode = {
   spectralRuntime?: {
     processor: SpectralProcessor;
     workletNode: AudioWorkletNode | ScriptProcessorNode;
+    workletPort: MessagePort | null;
     inputGain: IDSPGain;
     outputGain: IDSPGain;
     dryGain: IDSPGain;
@@ -1438,6 +1439,12 @@ class EffectsEngine {
         else rt.processor.unfreeze();
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        // Forward to worklet if active
+        if (rt.workletPort) {
+          rt.workletPort.postMessage({ type: 'param', name: 'freezeDecay', value: p.decay });
+          rt.workletPort.postMessage({ type: 'param', name: 'freezeBrightness', value: p.brightness });
+          rt.workletPort.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze' });
+        }
         break;
       }
       case 'spectralBlur': {
@@ -1449,6 +1456,11 @@ class EffectsEngine {
         rt.processor.blurBrightness = p.brightness;
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        if (rt.workletPort) {
+          rt.workletPort.postMessage({ type: 'param', name: 'blurAmount', value: p.blurAmount });
+          rt.workletPort.postMessage({ type: 'param', name: 'blurFrequencySpread', value: p.frequencySpread });
+          rt.workletPort.postMessage({ type: 'param', name: 'blurBrightness', value: p.brightness });
+        }
         break;
       }
       case 'spectralFilter': {
@@ -1460,6 +1472,9 @@ class EffectsEngine {
         rt.processor.setFilterCurve(curve);
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        if (rt.workletPort) {
+          rt.workletPort.postMessage({ type: 'filterCurve', value: curve });
+        }
         break;
       }
       case 'spectralMorph': {
@@ -1471,6 +1486,10 @@ class EffectsEngine {
         else rt.processor.unfreeze();
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
+        if (rt.workletPort) {
+          rt.workletPort.postMessage({ type: 'param', name: 'morphAmount', value: p.morphAmount });
+          rt.workletPort.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze' });
+        }
         break;
       }
     }

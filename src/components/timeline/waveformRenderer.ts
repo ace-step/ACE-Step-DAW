@@ -1,8 +1,12 @@
 /**
- * Pure Canvas 2D waveform renderer — professional DAW style.
+ * Pure Canvas 2D waveform renderer.
  *
- * Dual-channel (L/R) display, each channel in its own half of the clip body,
- * clearly separated by a center divider. No overlap between channels.
+ * Per-pixel-column vertical bar rendering: for each pixel column, draw a
+ * vertical line from min to max peak value. This is the standard technique
+ * used by Ableton, Logic, ACE Studio and every professional DAW.
+ *
+ * Single merged L+R display, centered and mirrored around the midline.
+ * Dark waveform on colored clip background for maximum readability.
  */
 
 import { PEAK_STRIDE } from '../../utils/waveformPeaks';
@@ -86,51 +90,6 @@ export function precomputeColumnMinMax(
   return { maxArr, minArr };
 }
 
-/**
- * Draw a single channel waveform as a filled shape.
- * The waveform is drawn mirrored around centerY: max goes up, min goes down.
- * Amplitude is clamped to stay within the channel's half-height so channels
- * never overlap.
- */
-function drawChannelFill(
-  ctx: CanvasRenderingContext2D,
-  columnCount: number,
-  columnWidth: number,
-  leftPx: number,
-  centerY: number,
-  halfHeight: number,
-  maxArr: Float64Array,
-  minArr: Float64Array,
-  fillColor: string,
-  fillAlpha: number,
-): void {
-  if (columnCount <= 0) return;
-
-  const prevAlpha = ctx.globalAlpha;
-
-  ctx.beginPath();
-  // Upper contour (max, goes upward from center)
-  for (let i = 0; i < columnCount; i++) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    // Clamp to half-height so it never crosses into the other channel
-    const y = centerY - Math.min(maxArr[i], 1) * halfHeight;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  // Lower contour (min, goes downward from center)
-  for (let i = columnCount - 1; i >= 0; i--) {
-    const x = leftPx + (i + 0.5) * columnWidth;
-    const y = centerY - Math.max(minArr[i], -1) * halfHeight;
-    ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-
-  ctx.globalAlpha = prevAlpha * fillAlpha;
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-  ctx.globalAlpha = prevAlpha;
-}
-
 export function drawCenterDivider(
   ctx: CanvasRenderingContext2D,
   leftPx: number,
@@ -143,15 +102,18 @@ export function drawCenterDivider(
   ctx.moveTo(leftPx, centerY);
   ctx.lineTo(leftPx + widthPx, centerY);
   ctx.strokeStyle = color;
-  ctx.globalAlpha = prevAlpha * 0.2;
+  ctx.globalAlpha = prevAlpha * 0.15;
   ctx.lineWidth = 0.5;
   ctx.stroke();
   ctx.globalAlpha = prevAlpha;
 }
 
 /**
- * Main entry: dual-channel waveform, L top half, R bottom half.
- * Each channel is constrained to its own half — no overlap.
+ * Main entry: per-pixel-column vertical bar waveform.
+ *
+ * For each pixel column, computes the merged L+R min/max and draws a
+ * 1px-wide vertical bar from min to max. This produces the crisp, sharp
+ * waveform look seen in professional DAWs.
  */
 export function drawWaveform(
   ctx: CanvasRenderingContext2D,
@@ -182,38 +144,43 @@ export function drawWaveform(
 
   const rawColumnCount = Math.max(1, Math.floor(waveformLayout.widthPx));
   const columnCount = maxColumns ? Math.min(rawColumnCount, maxColumns) : rawColumnCount;
-  const columnWidth = waveformLayout.widthPx / columnCount;
 
+  // Precompute L and R channels
   const leftData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 0);
   const rightData = precomputeColumnMinMax(peaks, peakSlice, columnCount, 2);
 
-  // Each channel gets exactly half the height. halfHeight is the max amplitude
-  // a channel can use — 90% of its half to leave a small gap at the divider.
-  const channelHalfHeight = height * 0.5;
-  const amplitude = channelHalfHeight * 0.88 * Math.min(1, trackVolume);
-
-  const leftCenterY = channelHalfHeight * 0.5;      // center of top half
-  const rightCenterY = height - channelHalfHeight * 0.5; // center of bottom half
+  // Waveform centered vertically, using 92% of available height
+  const centerY = height * 0.5;
+  const amplitude = height * 0.46 * Math.min(1, trackVolume);
 
   ctx.save();
   ctx.globalAlpha = opacity;
 
-  // Center divider between L and R
-  drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, height * 0.5, color);
+  // Subtle center line
+  drawCenterDivider(ctx, waveformLayout.leftPx, waveformLayout.widthPx, centerY, color);
 
-  // Left channel (top half)
-  drawChannelFill(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    leftCenterY, amplitude, leftData.maxArr, leftData.minArr,
-    color, 0.85,
-  );
+  // Per-pixel-column vertical bars — the core DAW waveform technique.
+  // Each column: merge L+R, draw a 1px vertical bar from min to max.
+  ctx.fillStyle = color;
 
-  // Right channel (bottom half)
-  drawChannelFill(
-    ctx, columnCount, columnWidth, waveformLayout.leftPx,
-    rightCenterY, amplitude, rightData.maxArr, rightData.minArr,
-    color, 0.85,
-  );
+  const barWidth = waveformLayout.widthPx / columnCount;
+  // Use ceil to ensure no sub-pixel gaps between bars
+  const drawWidth = Math.max(1, Math.ceil(barWidth));
+
+  for (let i = 0; i < columnCount; i++) {
+    // Merge L+R: take the louder of both channels
+    const peakMax = Math.max(leftData.maxArr[i], rightData.maxArr[i]);
+    const peakMin = Math.min(leftData.minArr[i], rightData.minArr[i]);
+
+    const yTop = centerY - peakMax * amplitude;
+    const yBottom = centerY - peakMin * amplitude;
+    const barHeight = yBottom - yTop;
+
+    if (barHeight < 0.5) continue; // Skip silence
+
+    const x = waveformLayout.leftPx + i * barWidth;
+    ctx.fillRect(Math.round(x), Math.round(yTop), drawWidth, Math.max(1, Math.round(barHeight)));
+  }
 
   ctx.restore();
 }

@@ -18,6 +18,7 @@ const mockCtx = {
   save: vi.fn(),
   restore: vi.fn(),
   roundRect: vi.fn(),
+  fillRect: vi.fn(),
   createLinearGradient: vi.fn().mockReturnValue(mockGradient),
   fillStyle: '' as string | CanvasGradient,
   strokeStyle: '',
@@ -125,10 +126,9 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     );
 
     expect(screen.getByTestId('canvas-waveform')).toBeInTheDocument();
-    // drawWaveform may fire more than once (callback ref + ResizeObserver).
-    // Per draw pass: 3 beginPath (1 divider + 2 channel fills), 2 fill, 1 stroke.
-    expect(mockCtx.beginPath.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(mockCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Per-pixel-column rendering uses fillRect for waveform bars.
+    // beginPath is only used for the center divider (1 per draw pass).
+    expect(mockCtx.beginPath.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(mockCtx.stroke.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 

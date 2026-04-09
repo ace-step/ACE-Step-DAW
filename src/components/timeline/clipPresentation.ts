@@ -16,7 +16,7 @@ export function getClipPresentation(clipColor: string, isSelected: boolean): Cli
   if (isSelected) {
     return {
       // Dark waveform on light selected background
-      waveformColor: hexToRgba(clipColor, 0.7),
+      waveformColor: 'rgba(0, 0, 0, 0.72)',
       titleColor: '#181b22',
       metaColor: 'rgba(24, 27, 34, 0.72)',
       headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.88)} 100%)`,
@@ -29,8 +29,8 @@ export function getClipPresentation(clipColor: string, isSelected: boolean): Cli
   }
 
   return {
-    // Light waveform on dark unselected background
-    waveformColor: 'rgba(255, 255, 255, 0.55)',
+    // Dark waveform on colored clip background
+    waveformColor: 'rgba(0, 0, 0, 0.6)',
     titleColor: '#18161a',
     metaColor: 'rgba(24, 22, 26, 0.7)',
     headerBackground: `linear-gradient(180deg, ${hexToRgba(clipColor, 0.96)} 0%, ${hexToRgba(clipColor, 0.9)} 100%)`,

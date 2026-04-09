@@ -16,6 +16,7 @@ const mockCtx = {
   save: vi.fn(),
   restore: vi.fn(),
   roundRect: vi.fn(),
+  fillRect: vi.fn(),
   createLinearGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
   fillStyle: '' as string | CanvasGradient,
   strokeStyle: '',

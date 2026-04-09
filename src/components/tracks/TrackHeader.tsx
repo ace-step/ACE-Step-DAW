@@ -588,7 +588,7 @@ export const TrackHeader = React.memo(function TrackHeader({
       ) : (
         /* Single-row compact layout (laneHeight < 60) */
         <>
-          <div className="flex-1 min-w-[48px] flex flex-col gap-1 py-1">
+          <div className="flex-1 min-w-[60px] flex flex-col gap-1 py-1">
             {/* Name */}
             {isEditing ? (
               <input

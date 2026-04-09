@@ -61,8 +61,9 @@ describe('StatusBar', () => {
     render(<StatusBar />);
 
     // Advance past the initial setTimeout delay (HEALTH_POLL_INTERVAL_MS = 10000ms)
+    // Use advanceTimersByTimeAsync to flush the async healthCheck() promise
     await act(async () => {
-      vi.advanceTimersByTime(10_100);
+      await vi.advanceTimersByTimeAsync(10_100);
     });
 
     const indicator = screen.getByTestId('status-connection');

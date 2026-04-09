@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { AudioHealthSnapshot, AudioHealthStatus, AudioDeviceInfo } from '../../types/audioHealth';
 
 const STATUS_COLORS: Record<AudioHealthStatus, string> = {
@@ -75,6 +76,30 @@ export function AudioHealthPanel({
   xrunCount,
   recentClipCount,
 }: AudioHealthPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [open, onClose]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const inputDevices = devices.filter((d) => d.kind === 'audioinput');
@@ -82,8 +107,11 @@ export function AudioHealthPanel({
 
   return (
     <div
+      ref={panelRef}
       data-testid="audio-health-panel"
       className="absolute bottom-8 right-2 z-50 w-[280px] rounded-lg border border-daw-border bg-daw-surface shadow-2xl"
+      role="dialog"
+      aria-label="Audio engine health details"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-daw-border">

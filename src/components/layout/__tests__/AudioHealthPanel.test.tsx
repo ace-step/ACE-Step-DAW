@@ -198,6 +198,38 @@ describe('AudioHealthPanel', () => {
     expect(screen.getByText('Audio engine not initialized')).toBeInTheDocument();
   });
 
+  it('closes on Escape key', () => {
+    const onClose = vi.fn();
+    render(
+      <AudioHealthPanel
+        open={true}
+        onClose={onClose}
+        snapshot={makeSnapshot()}
+        status="good"
+        devices={[]}
+        xrunCount={0}
+        recentClipCount={0}
+      />,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('has role=dialog for accessibility', () => {
+    render(
+      <AudioHealthPanel
+        open={true}
+        onClose={vi.fn()}
+        snapshot={makeSnapshot()}
+        status="good"
+        devices={[]}
+        xrunCount={0}
+        recentClipCount={0}
+      />,
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
   it('separates input and output devices', () => {
     render(
       <AudioHealthPanel

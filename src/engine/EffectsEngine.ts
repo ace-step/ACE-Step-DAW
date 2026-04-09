@@ -1019,8 +1019,18 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
   dryGain.connect(outputGain);
   wetGain.connect(outputGain);
 
+  // Mutable references updated after async worklet swap
+  const spectralRuntime = {
+    processor,
+    workletNode: scriptNode as AudioWorkletNode | ScriptProcessorNode,
+    port: null as MessagePort | null,
+    inputGain,
+    outputGain,
+    dryGain,
+    wetGain,
+  };
+
   // Attempt async upgrade to AudioWorklet
-  let activeWorkletNode: AudioWorkletNode | ScriptProcessorNode = scriptNode;
   void (async () => {
     try {
       const { createDspNode } = await import('./dsp/workletLoader');
@@ -1029,17 +1039,19 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
         '/spectral-worklet-processor.js',
         'spectral-worklet-processor',
         1,
-        { fftSize, mode: effect.type === 'spectralFreeze' ? 'freeze' : effect.type === 'spectralMorph' ? 'morph' : 'filter' },
+        { fftSize, mode },
         bufferSize,
         scriptNode.onaudioprocess!,
       );
-      if (result.isWorklet) {
+      if (result?.isWorklet) {
         // Swap: disconnect ScriptProcessor, connect AudioWorklet
         inputGain.outputNode.disconnect(scriptNode);
         scriptNode.disconnect();
         inputGain.outputNode.connect(result.node);
         result.node.connect(wetGain.inputNode);
-        activeWorkletNode = result.node;
+        // Update mutable refs so callers see the live worklet
+        spectralRuntime.workletNode = result.node;
+        spectralRuntime.port = result.port;
       }
     } catch {
       // Keep ScriptProcessorNode fallback — already connected
@@ -1052,14 +1064,7 @@ function createSpectralNode(effect: TrackEffect): EffectNode {
     node: inputGain,
     inputNode: inputGain.inputNode,
     outputNode: outputGain.outputNode,
-    spectralRuntime: {
-      processor,
-      workletNode: activeWorkletNode,
-      inputGain,
-      outputGain,
-      dryGain,
-      wetGain,
-    },
+    spectralRuntime,
     dispose: () => {
       scriptNode.onaudioprocess = null;
       scriptNode.disconnect();

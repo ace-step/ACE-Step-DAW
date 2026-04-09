@@ -354,13 +354,16 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
         scriptNode.onaudioprocess!,
       );
 
-      if (result.isWorklet) {
+      if (result?.isWorklet) {
         // Swap: disconnect ScriptProcessor, connect AudioWorklet
         preDelayNode.disconnect(scriptNode);
         scriptNode.disconnect();
         preDelayNode.connect(result.node);
         result.node.connect(mix.wetInput);
         this._dspNode = result;
+        // Send current params in case decay changed while worklet was loading
+        const currentRoomSize = Math.min(1, this._decay / 10);
+        result.port?.postMessage({ type: 'roomSize', value: currentRoomSize });
       }
     } catch {
       // Keep ScriptProcessorNode fallback — already connected

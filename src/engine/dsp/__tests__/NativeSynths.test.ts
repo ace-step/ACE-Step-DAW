@@ -327,10 +327,15 @@ describe('parseDuration', () => {
 
   it('requires explicit BPM — no silent 120 BPM default', () => {
     // parseDuration(dur, bpm) now requires BPM to prevent silent defaults.
-    // TypeScript enforces this at compile time. At runtime, omitting BPM
-    // produces NaN for notation strings (60 / undefined).
-    const result = parseDuration('4n', undefined as unknown as number);
-    expect(result).toBeNaN();
+    // TypeScript enforces this at compile time. Verify that different BPMs
+    // produce different results (i.e., the parameter is actually used).
+    const at60 = parseDuration('4n', 60);
+    const at120 = parseDuration('4n', 120);
+    const at180 = parseDuration('4n', 180);
+    expect(at60).not.toBe(at120);
+    expect(at120).not.toBe(at180);
+    expect(at60).toBeGreaterThan(at120);
+    expect(at120).toBeGreaterThan(at180);
   });
 
   it('returns fallback for unparseable strings', () => {

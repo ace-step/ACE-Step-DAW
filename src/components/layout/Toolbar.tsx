@@ -14,6 +14,8 @@ import { getBarAtBeat, getBeatAtBar, timeToBeat } from '../../utils/tempoMap';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { LatencyDisplay } from './LatencyDisplay';
+import { PerformanceMeter } from './PerformanceMeter';
+import { usePerformanceMonitor } from '../../hooks/usePerformanceMonitor';
 
 const KEY_ROOT_LABELS: Record<string, string> = {
   C: 'C',
@@ -727,6 +729,7 @@ export function Toolbar() {
   const { toggleRecord } = useRecording();
 
   const { isPlaying, play, pause, stop } = useTransport();
+  usePerformanceMonitor();
   const loopEnabled = useTransportStore((s) => s.loopEnabled);
   const isRecording = useTransportStore((s) => s.isRecording);
   const toggleLoop = useTransportStore((s) => s.toggleLoop);
@@ -913,8 +916,9 @@ export function Toolbar() {
       {/* LCD Display */}
       <LCDDisplay />
 
-      {/* Latency Display */}
+      {/* Latency Display + Performance Meter */}
       <LatencyDisplay />
+      <PerformanceMeter />
 
       <div className="flex-1" />
 

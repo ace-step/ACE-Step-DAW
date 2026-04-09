@@ -11,10 +11,14 @@ vi.mock('../../src/services/projectStorage', () => ({
   saveProject: vi.fn(),
 }));
 
-vi.mock('../../src/services/generationPipeline', () => ({
-  generateText2Music: vi.fn(() => Promise.resolve()),
-  regenerateClip: vi.fn(() => Promise.resolve()),
-}));
+vi.mock('../../src/services/generationPipeline', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/services/generationPipeline')>();
+  return {
+    ...actual,
+    generateText2Music: vi.fn(() => Promise.resolve()),
+    regenerateClip: vi.fn(() => Promise.resolve()),
+  };
+});
 
 vi.mock('../../src/services/aceStepApi', () => ({
   formatInput: vi.fn(() => Promise.resolve({ caption: '', lyrics: '' })),
@@ -120,5 +124,27 @@ describe('Generation Advanced Controls', () => {
       fireEvent.click(tag);
       expect(useGenerationStore.getState().generationForm.styleTags).toHaveLength(6);
     });
+  });
+});
+
+describe('prependStyleTags helper', () => {
+  // Import inline to avoid module-level mock conflicts
+  it('returns prompt unchanged when no tags', async () => {
+    const { prependStyleTags } = await import('../../src/services/generationPipeline');
+    expect(prependStyleTags('hello world')).toBe('hello world');
+    expect(prependStyleTags('hello world', [])).toBe('hello world');
+    expect(prependStyleTags('hello world', undefined)).toBe('hello world');
+  });
+
+  it('prepends tags with comma-dot format', async () => {
+    const { prependStyleTags } = await import('../../src/services/generationPipeline');
+    expect(prependStyleTags('describe the music', ['lo-fi', 'ambient']))
+      .toBe('lo-fi, ambient. describe the music');
+  });
+
+  it('handles single tag', async () => {
+    const { prependStyleTags } = await import('../../src/services/generationPipeline');
+    expect(prependStyleTags('my prompt', ['jazz']))
+      .toBe('jazz. my prompt');
   });
 });

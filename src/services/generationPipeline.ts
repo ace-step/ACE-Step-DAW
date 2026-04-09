@@ -279,14 +279,9 @@ async function regenerateText2MusicClip(clipId: string): Promise<void> {
     const defaults = project.generationDefaults;
     const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
 
-    // Prepend persisted style tags to prompt if present
-    const effectivePrompt = params.styleTags?.length
-      ? `${params.styleTags.join(', ')}. ${params.prompt}`
-      : params.prompt;
-
     const taskParams: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: effectivePrompt,
+      prompt: prependStyleTags(params.prompt, params.styleTags),
       lyrics: params.lyrics,
       audio_duration: params.durationSeconds ?? 60,
       bpm: params.useProjectMeta ? (project.bpm ?? null) : null,
@@ -1490,6 +1485,13 @@ export async function generateFromAddLayer(opts: AddLayerOptions): Promise<void>
       useGenerationStore.getState().setIsGenerating(false);
     }
   });
+}
+
+/** Prepend style tags to a raw prompt for text2music API requests.
+ *  Used by both generateText2Music and regenerateText2MusicClip. */
+export function prependStyleTags(prompt: string, styleTags?: string[]): string {
+  if (!styleTags?.length) return prompt;
+  return `${styleTags.join(', ')}. ${prompt}`;
 }
 
 function buildGenerationPanelPrompt(prompt: string, styleTags: string[]) {
@@ -2832,14 +2834,9 @@ export async function generateText2Music(request: Text2MusicRequest): Promise<Te
     const defaults = project.generationDefaults;
     const activeModel = useModelStore.getState().activeModelId ?? defaults.model;
 
-    // Prepend style tags to prompt for the API request (raw prompt stored separately)
-    const apiPrompt = request.styleTags?.length
-      ? `${request.styleTags.join(', ')}. ${request.prompt}`
-      : request.prompt;
-
     const params: Text2MusicTaskParams = {
       task_type: 'text2music',
-      prompt: apiPrompt,
+      prompt: prependStyleTags(request.prompt, request.styleTags),
       lyrics: request.lyrics,
       audio_duration: request.durationSeconds,
       bpm: request.bpm,

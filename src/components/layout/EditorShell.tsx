@@ -153,7 +153,7 @@ export function EditorShell() {
 
       <section
         id="main-content"
-        className="flex flex-1 min-h-0 min-w-0 overflow-hidden"
+        className="flex flex-1 min-h-0 min-w-0"
         tabIndex={-1}
         aria-label={mainView === 'arrangement' ? 'Arrangement timeline' : 'Session view'}
         onMouseDownCapture={() => {
@@ -163,7 +163,7 @@ export function EditorShell() {
         }}
       >
         <ErrorBoundary name="Timeline">
-          <div id="timeline-region" className="flex-1 min-h-0 min-w-0" tabIndex={-1}>
+          <div id="timeline-region" className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden" tabIndex={-1}>
             {mainView === 'arrangement' ? <Suspense fallback={<PanelSkeleton variant="editor" />}><Timeline /></Suspense> : <Suspense fallback={null}><SessionView /></Suspense>}
           </div>
         </ErrorBoundary>

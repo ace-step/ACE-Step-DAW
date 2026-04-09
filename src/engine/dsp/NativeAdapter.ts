@@ -359,8 +359,9 @@ class NativeReverb extends NativeNodeWrapper implements IDSPReverb {
         preDelayNode.connect(result.node);
         result.node.connect(mix.wetInput);
         this._dspNode = result;
-        // Send current params to worklet in case decay changed during load
-        result.port?.postMessage({ type: 'roomSize', value: currentRoomSize });
+        // Recompute from latest _decay (may have changed during async load)
+        const latestRoomSize = Math.min(1, this._decay / 10);
+        result.port?.postMessage({ type: 'roomSize', value: latestRoomSize });
       }
     } catch {
       // Keep ScriptProcessorNode fallback — already connected

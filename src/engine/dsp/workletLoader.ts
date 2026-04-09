@@ -34,12 +34,10 @@ async function ensureWorkletRegistered(ctx: AudioContext, url: string): Promise<
 }
 
 export interface DspNodeResult {
-  /** The audio node (AudioWorkletNode or ScriptProcessorNode). */
-  node: AudioWorkletNode | ScriptProcessorNode;
-  /** MessagePort for sending parameter updates (null for ScriptProcessor fallback). */
-  port: MessagePort | null;
-  /** Whether this is using the modern AudioWorklet path. */
-  isWorklet: boolean;
+  /** The AudioWorkletNode (createDspNode returns null if worklet unavailable). */
+  node: AudioWorkletNode;
+  /** MessagePort for sending parameter updates to the worklet processor. */
+  port: MessagePort;
 }
 
 /**
@@ -73,9 +71,9 @@ export async function createDspNode(
           processorOptions: { sampleRate: ctx.sampleRate, ...processorOptions },
         });
         log.info(`Created AudioWorkletNode: ${processorName}`);
-        return { node, port: node.port, isWorklet: true };
+        return { node, port: node.port };
       } catch (err) {
-        log.warn(`AudioWorkletNode creation failed for ${processorName}, falling back:`, err);
+        log.warn(`AudioWorkletNode creation failed for ${processorName}, caller will use existing fallback:`, err);
       }
     }
   }

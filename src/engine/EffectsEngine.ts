@@ -67,6 +67,7 @@ type EffectNode = {
   spectralRuntime?: {
     processor: SpectralProcessor;
     workletNode: AudioWorkletNode | ScriptProcessorNode;
+    port: MessagePort | null;
     inputGain: IDSPGain;
     outputGain: IDSPGain;
     dryGain: IDSPGain;
@@ -1439,6 +1440,7 @@ class EffectsEngine {
         rt.processor.freezeBrightness = p.brightness;
         if (p.frozen) rt.processor.freeze();
         else rt.processor.unfreeze();
+        rt.port?.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze', decay: p.decay, brightness: p.brightness });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1450,6 +1452,7 @@ class EffectsEngine {
         rt.processor.blurAmount = p.blurAmount;
         rt.processor.blurFrequencySpread = p.frequencySpread;
         rt.processor.blurBrightness = p.brightness;
+        rt.port?.postMessage({ type: 'param', blurAmount: p.blurAmount, frequencySpread: p.frequencySpread, brightness: p.brightness });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1461,6 +1464,7 @@ class EffectsEngine {
         const ctx = getDSPFactory().getContext();
         const curve = buildFilterCurve(p.points, rt.processor.fftSize >> 1, ctx.sampleRate, p.resolution);
         rt.processor.setFilterCurve(curve);
+        rt.port?.postMessage({ type: 'filterCurve', curve: Array.from(curve) });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1472,6 +1476,7 @@ class EffectsEngine {
         rt.processor.morphAmount = p.morphAmount;
         if (p.frozen) rt.processor.freeze();
         else rt.processor.unfreeze();
+        rt.port?.postMessage({ type: p.frozen ? 'freeze' : 'unfreeze', morphAmount: p.morphAmount });
         rt.dryGain.gain.value = 1 - p.mix;
         rt.wetGain.gain.value = p.mix;
         break;
@@ -1707,17 +1712,17 @@ class EffectsEngine {
         const rt = effectNode.spectralRuntime;
         if (!rt) break;
         if (target.param === 'mix') { rt.dryGain.gain.value = 1 - value; rt.wetGain.gain.value = value; }
-        if (target.param === 'decay') rt.processor.freezeDecay = value;
-        if (target.param === 'brightness') rt.processor.freezeBrightness = value;
+        if (target.param === 'decay') { rt.processor.freezeDecay = value; rt.port?.postMessage({ type: 'param', decay: value }); }
+        if (target.param === 'brightness') { rt.processor.freezeBrightness = value; rt.port?.postMessage({ type: 'param', brightness: value }); }
         break;
       }
       case 'spectralBlur': {
         const rt = effectNode.spectralRuntime;
         if (!rt) break;
         if (target.param === 'mix') { rt.dryGain.gain.value = 1 - value; rt.wetGain.gain.value = value; }
-        if (target.param === 'blurAmount') rt.processor.blurAmount = value;
-        if (target.param === 'frequencySpread') rt.processor.blurFrequencySpread = value;
-        if (target.param === 'brightness') rt.processor.blurBrightness = value;
+        if (target.param === 'blurAmount') { rt.processor.blurAmount = value; rt.port?.postMessage({ type: 'param', blurAmount: value }); }
+        if (target.param === 'frequencySpread') { rt.processor.blurFrequencySpread = value; rt.port?.postMessage({ type: 'param', frequencySpread: value }); }
+        if (target.param === 'brightness') { rt.processor.blurBrightness = value; rt.port?.postMessage({ type: 'param', brightness: value }); }
         break;
       }
       case 'spectralFilter': {

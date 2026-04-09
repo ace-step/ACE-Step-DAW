@@ -6,6 +6,7 @@ import { CanvasClipWaveform } from '../CanvasClipWaveform';
 const mockCtx = {
   scale: vi.fn(),
   setTransform: vi.fn(),
+  resetTransform: vi.fn(),
   clearRect: vi.fn(),
   beginPath: vi.fn(),
   moveTo: vi.fn(),
@@ -135,8 +136,7 @@ describe('CanvasClipWaveform', () => {
         color="#1a1d26"
       />,
     );
-    // Verify canvas chunks were rendered
-    expect(screen.getAllByTestId('canvas-waveform').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('canvas-waveform')).toBeInTheDocument();
   });
 
   it('sets canvas style width to contentWidth', () => {

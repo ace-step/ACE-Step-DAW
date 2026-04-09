@@ -4,7 +4,6 @@ import { drawWaveform } from './waveformRenderer';
 import { PEAK_STRIDE, computeWaveformPeaks } from '../../utils/waveformPeaks';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { useUIStore } from '../../store/uiStore';
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;
@@ -15,14 +14,12 @@ interface CanvasClipWaveformProps {
   contentOffset?: number;
   timeStretchRate?: number;
   stretchMode?: StretchMode;
-  /** Full clip width in CSS pixels. */
   width: number;
   color: string;
   opacityClassName?: string;
   trackVolume?: number;
 }
 
-// Module-level AudioBuffer cache (LRU, max 20)
 const audioBufferCache = new Map<string, AudioBuffer>();
 async function getAudioBuffer(audioKey: string): Promise<AudioBuffer | null> {
   const cached = audioBufferCache.get(audioKey);
@@ -41,15 +38,15 @@ async function getAudioBuffer(audioKey: string): Promise<AudioBuffer | null> {
 }
 
 /**
- * Canvas waveform renderer — viewport-clipped, pixel-perfect at any zoom.
+ * Canvas waveform renderer — full clip width, pixel-perfect.
  *
- * The canvas element is only as wide as the VISIBLE portion of the clip
- * (clamped to viewport bounds). This means the backing store never exceeds
- * viewport_width × DPR pixels — no stretching, no blur, vector-quality
- * crispness at every zoom level.
+ * Renders the full clip. The backing store is capped at 16384 (browser limit).
+ * For clips wider than 16384/dpr CSS pixels, we use as many backing pixels
+ * as possible — the browser's native canvas scaling handles the rest.
+ * With imageSmoothingEnabled=false, this stays sharp even when scaled.
  *
- * When zoomed in past pre-computed peak resolution, loads raw audio from
- * IndexedDB and recomputes peaks at the exact resolution needed.
+ * For zoom-in detail: dynamically recomputes peaks from raw audio via
+ * IndexedDB when the pre-computed peaks are too coarse.
  */
 export function CanvasClipWaveform({
   peaks,
@@ -60,7 +57,7 @@ export function CanvasClipWaveform({
   contentOffset,
   timeStretchRate,
   stretchMode,
-  width: fullClipWidth,
+  width,
   color,
   opacityClassName = 'opacity-90',
   trackVolume = 1,
@@ -71,14 +68,8 @@ export function CanvasClipWaveform({
   const [hiResPeaks, setHiResPeaks] = useState<number[] | null>(null);
   const hiResRequestRef = useRef<string | null>(null);
 
-  // Read scroll position and viewport width from the UI store
-  const scrollX = useUIStore((s) => s.scrollX);
-  const trackListWidth = useUIStore((s) => s.trackListWidth);
-  const viewportWidth = useUIStore((s) => s.timelineViewportWidth);
+  const contentWidth = Math.max(width, 0);
 
-  const contentWidth = Math.max(fullClipWidth, 0);
-
-  // Callback ref for ResizeObserver
   const setCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
     canvasRef.current = el;
@@ -91,24 +82,19 @@ export function CanvasClipWaveform({
   }, []);
   useEffect(() => () => { observerRef.current?.disconnect(); }, []);
 
-  // Compute the visible slice of this clip relative to the viewport.
-  // The clip's left edge in timeline coordinates is determined by the parent
-  // ClipBlock's positioning. We figure out what fraction is visible.
-  // Note: we get the parent's offsetLeft from the DOM in the draw effect.
-
-  // High-res peaks from raw audio
+  // High-res peaks from raw audio when zoomed past pre-computed resolution
   useEffect(() => {
     if (!peaks || !audioKey) return;
     const dpr = window.devicePixelRatio || 1;
-    // Use viewport width (not full clip width) for resolution target
-    const neededColumns = Math.round(Math.min(contentWidth, viewportWidth + 200) * dpr);
+    // Target: one logical peak per backing pixel, capped at 16384
+    const neededColumns = Math.min(16384, Math.round(contentWidth * dpr));
     const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
     if (neededColumns <= logicalPeakCount * 1.5) {
       if (hiResPeaks) setHiResPeaks(null);
       hiResRequestRef.current = null;
       return;
     }
-    const targetCount = Math.min(32768, Math.max(logicalPeakCount * 2, 1 << Math.ceil(Math.log2(neededColumns))));
+    const targetCount = Math.min(16384, Math.max(logicalPeakCount * 2, 1 << Math.ceil(Math.log2(neededColumns))));
     const reqKey = `${audioKey}:${targetCount}`;
     if (hiResRequestRef.current === reqKey && hiResPeaks) return;
 
@@ -121,9 +107,9 @@ export function CanvasClipWaveform({
       if (!cancelled) setHiResPeaks(newPeaks);
     })();
     return () => { cancelled = true; };
-  }, [audioKey, peaks, contentWidth, viewportWidth, hiResPeaks]);
+  }, [audioKey, peaks, contentWidth, hiResPeaks]);
 
-  // Draw effect — renders only the visible portion of the clip
+  // Draw
   useEffect(() => {
     const canvas = canvasRef.current;
     const activePeaks = hiResPeaks ?? peaks;
@@ -136,66 +122,23 @@ export function CanvasClipWaveform({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-
-    // Compute visible portion of this clip.
-    // The canvas parent chain: canvas → div.absolute.inset-0 → div(waveform container) → clip block
-    // The clip block has style.left set by the parent. We use the canvas's own
-    // getBoundingClientRect to figure out how much is visible.
-    const canvasRect = canvas.getBoundingClientRect();
-    const parentScroll = canvas.closest('#arrangement-timeline-scroll');
-    const scrollRect = parentScroll?.getBoundingClientRect();
-
-    let visibleLeft = 0;
-    let visibleWidthCSS = contentWidth;
-
-    if (scrollRect && canvasRect.width > 0) {
-      const clipScreenLeft = canvasRect.left;
-      const viewLeft = scrollRect.left + trackListWidth;
-      const viewRight = scrollRect.right;
-
-      // How much of the clip is before the viewport
-      visibleLeft = Math.max(0, viewLeft - clipScreenLeft) / 1; // in CSS px relative to clip start
-      // How much is after the viewport
-      const clipScreenRight = canvasRect.right;
-      const rightClip = Math.max(0, clipScreenRight - viewRight);
-      visibleWidthCSS = Math.max(1, contentWidth - visibleLeft - rightClip);
-    }
-
-    // Add padding so scrolling doesn't show blank edges
-    const pad = 100; // CSS pixels of padding on each side
-    const renderLeft = Math.max(0, visibleLeft - pad);
-    const renderRight = Math.min(contentWidth, visibleLeft + visibleWidthCSS + pad);
-    const renderWidthCSS = renderRight - renderLeft;
-
-    const backingWidth = Math.round(renderWidthCSS * dpr);
+    const backingWidth = Math.min(Math.round(contentWidth * dpr), 16384);
     const backingHeight = Math.round(canvasHeight * dpr);
-    if (backingWidth <= 0) return;
-
     if (canvas.width !== backingWidth) canvas.width = backingWidth;
     if (canvas.height !== backingHeight) canvas.height = backingHeight;
-
-    // Position the canvas at the render offset within the clip
-    canvas.style.width = `${renderWidthCSS}px`;
-    canvas.style.left = `${renderLeft}px`;
-    canvas.style.position = 'absolute';
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, backingWidth, backingHeight);
 
-    // Tell drawWaveform about the visible window:
-    // We shift audioOffset so only the visible portion is rendered.
-    const clipFractionStart = renderLeft / contentWidth;
-    const clipFractionWidth = renderWidthCSS / contentWidth;
-    const visibleAudioStart = audioOffset + clipFractionStart * clipDuration;
-    const visibleClipDuration = clipFractionWidth * clipDuration;
-
+    // Draw in backing-store coordinates. Column count = backingWidth so
+    // each fillRect is exactly 1 backing pixel wide.
     drawWaveform(ctx, {
       peaks: activePeaks,
       audioDuration,
-      audioOffset: visibleAudioStart,
-      clipDuration: visibleClipDuration,
-      contentOffset: 0,
+      audioOffset,
+      clipDuration,
+      contentOffset,
       timeStretchRate,
       stretchMode,
       width: backingWidth,
@@ -205,7 +148,7 @@ export function CanvasClipWaveform({
       trackVolume,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick, scrollX, viewportWidth, trackListWidth]);
+  }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);
 
   const activePeaks = hiResPeaks ?? peaks;
   if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) {
@@ -220,6 +163,7 @@ export function CanvasClipWaveform({
         aria-label="Audio waveform"
         data-testid="canvas-waveform"
         style={{
+          width: contentWidth,
           height: '100%',
           imageRendering: 'pixelated',
         }}

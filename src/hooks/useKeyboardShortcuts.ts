@@ -317,7 +317,7 @@ export function useKeyboardShortcuts() {
         event.preventDefault();
         if (!anyModalOpen && !generation.isGenerating) {
           const [clipId] = ui.selectedClipIds;
-          if (clipId) import('../services/generationPipeline').then(m => m.generateSingleClip(clipId));
+          if (clipId) void import('../services/generationPipeline').then(m => m.generateSingleClip(clipId)).catch(err => console.error('Failed to generate clip', err));
         }
         return;
       }

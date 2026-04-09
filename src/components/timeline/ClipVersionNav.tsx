@@ -53,7 +53,7 @@ export function ClipVersionNav({
           if (totalVersions > 0 && activeVersionIdx < totalVersions - 1) {
             setActiveVersion(clipId, activeVersionIdx + 1);
           } else {
-            import('../../services/generationPipeline').then(m => m.regenerateClip(clipId));
+            void import('../../services/generationPipeline').then(m => m.regenerateClip(clipId)).catch(err => console.error('Failed to regenerate clip', err));
           }
         }}
         disabled={generationStatus === 'generating' || generationStatus === 'queued'}

@@ -108,22 +108,40 @@ const agentProjectStore = {
 (window as unknown as Record<string, unknown>).__sessionStore = useSessionStore;
 (window as unknown as Record<string, unknown>).__modelStore = useModelStore;
 (window as unknown as Record<string, unknown>).__customModelStore = useCustomModelStore;
-(window as unknown as Record<string, unknown>).__getAudioEngine = async () => {
-  const { getAudioEngine } = await import('./hooks/useAudioEngine');
-  return getAudioEngine();
+// Keep synchronous — callers (uiStore video recording) expect immediate return.
+// Module is pre-loaded via dynamic import so it's available by user interaction time.
+let _cachedGetAudioEngine: (() => unknown) | null = null;
+void import('./hooks/useAudioEngine').then(m => { _cachedGetAudioEngine = m.getAudioEngine; });
+(window as unknown as Record<string, unknown>).__getAudioEngine = () => {
+  if (!_cachedGetAudioEngine) throw new Error('Audio engine module not yet loaded');
+  return _cachedGetAudioEngine();
 };
 (window as unknown as Record<string, unknown>).__shortcutsStore = useShortcutsStore;
 
-// Strudel Agent API — lazy-loaded on first access to avoid pulling strudel deps into main bundle
-let _strudelApi: ReturnType<typeof import('./services/strudelAgentApi')['createStrudelAgentApi']> | null = null;
+// Strudel Agent API — lazy-loaded to avoid pulling strudel deps into main bundle
+type StrudelApi = ReturnType<Awaited<typeof import('./services/strudelAgentApi')>['createStrudelAgentApi']>;
+let _strudelApi: StrudelApi | null = null;
+let _strudelApiPromise: Promise<StrudelApi> | null = null;
+function ensureStrudelApi(): Promise<StrudelApi> {
+  if (_strudelApi) return Promise.resolve(_strudelApi);
+  if (!_strudelApiPromise) {
+    _strudelApiPromise = import('./services/strudelAgentApi').then(m => {
+      _strudelApi = m.createStrudelAgentApi();
+      return _strudelApi;
+    });
+  }
+  return _strudelApiPromise;
+}
 const strudelApiProxy = new Proxy({} as Record<string, unknown>, {
   get(_target, prop) {
-    if (!_strudelApi) {
-      // Trigger lazy load — methods will work after the module loads
-      import('./services/strudelAgentApi').then(m => { _strudelApi = m.createStrudelAgentApi(); });
-      return undefined;
-    }
-    return (_strudelApi as Record<string, unknown>)[prop as string];
+    if (_strudelApi) return (_strudelApi as Record<string, unknown>)[prop as string];
+    // Return async wrapper that awaits module load
+    return async (...args: unknown[]) => {
+      const api = await ensureStrudelApi();
+      const fn = (api as Record<string, unknown>)[prop as string];
+      if (typeof fn !== 'function') return fn;
+      return (fn as (...a: unknown[]) => unknown)(...args);
+    };
   },
 });
 (window as unknown as Record<string, unknown>).__strudelApi = strudelApiProxy;
@@ -163,7 +181,9 @@ window.__dawStructure = () =>
 window.__midiCaptureService = getMidiCaptureService();
 
 // Start MCP bridge for Claude Code integration (lazy — not needed for initial render)
-import('./services/mcpBridge').then(m => m.startMcpBridge());
+void import('./services/mcpBridge')
+  .then(m => m.startMcpBridge())
+  .catch(err => console.error('Failed to start MCP bridge', err));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

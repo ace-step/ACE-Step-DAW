@@ -32,7 +32,9 @@ export default defineConfig(async ({ command }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks(id: string) {
+          manualChunks(rawId: string) {
+            // Normalize path separators for Windows compatibility
+            const id = rawId.replace(/\\/g, '/');
             // Tone.js — large audio synthesis library (~800 KB)
             if (id.includes('node_modules/tone/') || id.includes('node_modules/standardized-audio-context/')) {
               return 'vendor-tone';
@@ -71,7 +73,7 @@ export default defineConfig(async ({ command }) => {
               return 'vendor-video';
             }
             // React core — react, react-dom, scheduler
-            if (id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
               return 'vendor-react';
             }
             // Audio engine layer — force into dedicated chunks

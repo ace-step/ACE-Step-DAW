@@ -70,7 +70,7 @@ export function ClipContextMenuContainer({
   } : undefined;
 
   const clipAIContext = (!isMidiClip && isReady) ? {
-    onRegenerate: () => { onClose(); import('../../services/generationPipeline').then(m => m.regenerateClip(clip.id)); },
+    onRegenerate: () => { onClose(); void import('../../services/generationPipeline').then(m => m.regenerateClip(clip.id)).catch(err => console.error('Failed to regenerate clip', err)); },
     hasPrompt: !!clip.prompt,
     isReady,
     ...(hasAudio ? { onSeparateStems: () => { onClose(); setStemSeparationModal(clip.id); } } : {}),

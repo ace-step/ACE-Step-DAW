@@ -143,7 +143,7 @@ export function EditorShell() {
 
   return (
     <div
-      className="flex flex-col h-screen min-w-[900px] bg-daw-bg text-zinc-300"
+      className="flex flex-col h-screen min-w-[900px] overflow-hidden bg-daw-bg text-zinc-300"
       role="application"
       aria-label="ACE-Step DAW"
       tabIndex={-1}
@@ -153,7 +153,7 @@ export function EditorShell() {
 
       <section
         id="main-content"
-        className="flex flex-1 min-h-0"
+        className="flex flex-1 min-h-0 min-w-0 overflow-hidden"
         tabIndex={-1}
         aria-label={mainView === 'arrangement' ? 'Arrangement timeline' : 'Session view'}
         onMouseDownCapture={() => {
@@ -163,7 +163,7 @@ export function EditorShell() {
         }}
       >
         <ErrorBoundary name="Timeline">
-          <div id="timeline-region" tabIndex={-1}>
+          <div id="timeline-region" className="flex-1 min-h-0 min-w-0" tabIndex={-1}>
             {mainView === 'arrangement' ? <Suspense fallback={<PanelSkeleton variant="editor" />}><Timeline /></Suspense> : <Suspense fallback={null}><SessionView /></Suspense>}
           </div>
         </ErrorBoundary>

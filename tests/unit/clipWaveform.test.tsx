@@ -53,6 +53,7 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     const { container } = render(
       <div style={{ width: 500, height: 80 }}>
         <CanvasClipWaveform
+          audioKey={null}
           peaks={makePeaks(64)}
           audioDuration={4}
           audioOffset={0}
@@ -81,6 +82,7 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     render(
       <div style={{ width: 600, height: 80 }}>
         <CanvasClipWaveform
+          audioKey={null}
           peaks={makePeaks(64)}
           audioDuration={4}
           audioOffset={0}
@@ -115,6 +117,7 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     render(
       <div style={{ width: 200, height: 80 }}>
         <CanvasClipWaveform
+          audioKey={null}
           peaks={peaks}
           audioDuration={2}
           audioOffset={0}

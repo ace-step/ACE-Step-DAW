@@ -49,6 +49,7 @@ describe('CanvasClipWaveform', () => {
   it('returns null for null peaks', () => {
     const { container } = render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={null}
         audioDuration={5}
         audioOffset={0}
@@ -63,6 +64,7 @@ describe('CanvasClipWaveform', () => {
   it('returns null for empty peaks', () => {
     const { container } = render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={[]}
         audioDuration={5}
         audioOffset={0}
@@ -77,6 +79,7 @@ describe('CanvasClipWaveform', () => {
   it('returns null for zero width', () => {
     const { container } = render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={generatePeaks(100)}
         audioDuration={5}
         audioOffset={0}
@@ -91,6 +94,7 @@ describe('CanvasClipWaveform', () => {
   it('renders a canvas element with correct test id', () => {
     render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={generatePeaks(100)}
         audioDuration={5}
         audioOffset={0}
@@ -105,6 +109,7 @@ describe('CanvasClipWaveform', () => {
   it('applies opacity class to container', () => {
     const { container } = render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={generatePeaks(100)}
         audioDuration={5}
         audioOffset={0}
@@ -121,6 +126,7 @@ describe('CanvasClipWaveform', () => {
   it('calls drawWaveform via Canvas context', () => {
     render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={generatePeaks(100)}
         audioDuration={5}
         audioOffset={0}
@@ -141,6 +147,7 @@ describe('CanvasClipWaveform', () => {
   it('sets canvas style width to contentWidth', () => {
     render(
       <CanvasClipWaveform
+        audioKey={null}
         peaks={generatePeaks(100)}
         audioDuration={5}
         audioOffset={0}

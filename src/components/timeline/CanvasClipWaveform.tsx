@@ -1,9 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { StretchMode } from '../../types/project';
 import { drawWaveform } from './waveformRenderer';
+import { PEAK_STRIDE } from '../../utils/waveformPeaks';
+import { computeWaveformPeaks } from '../../utils/waveformPeaks';
+import { loadAudioBlobByKey } from '../../services/audioFileManager';
+import { getAudioEngine } from '../../hooks/useAudioEngine';
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;
+  /** IndexedDB key for raw audio — used to compute high-res peaks on zoom. */
+  audioKey: string | null;
   audioDuration: number;
   audioOffset: number;
   clipDuration: number;
@@ -17,16 +23,44 @@ interface CanvasClipWaveformProps {
 }
 
 /**
- * Canvas-based waveform renderer replacing the SVG ClipWaveform.
- * Uses a single <canvas> element with HiDPI scaling for crisp rendering.
- * Tracks element height via ResizeObserver to redraw on layout changes.
+ * Module-level cache for decoded AudioBuffers so we only decode once per key.
+ */
+const audioBufferCache = new Map<string, AudioBuffer>();
+
+/**
+ * Load and decode an audio blob, using a module-level cache.
+ */
+async function getAudioBuffer(audioKey: string): Promise<AudioBuffer | null> {
+  const cached = audioBufferCache.get(audioKey);
+  if (cached) return cached;
+
+  try {
+    const blob = await loadAudioBlobByKey(audioKey);
+    if (!blob) return null;
+    const buffer = await getAudioEngine().decodeAudioData(blob);
+    audioBufferCache.set(audioKey, buffer);
+    // Limit cache size to 20 entries
+    if (audioBufferCache.size > 20) {
+      const firstKey = audioBufferCache.keys().next().value;
+      if (firstKey) audioBufferCache.delete(firstKey);
+    }
+    return buffer;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Canvas-based waveform renderer with dynamic resolution.
  *
- * Uses a callback ref to set up the ResizeObserver at the exact moment the
- * canvas element enters the DOM, avoiding timing issues where a `useEffect([], [])`
- * might fire before layout is complete.
+ * Uses pre-computed peaks for overview (zoomed out).
+ * When zoomed in past the pre-computed resolution, loads the raw audio
+ * from IndexedDB and computes peaks at exactly the needed column count.
+ * This gives ACE Studio-quality crispness at any zoom level.
  */
 export function CanvasClipWaveform({
   peaks,
+  audioKey,
   audioDuration,
   audioOffset,
   clipDuration,
@@ -40,44 +74,71 @@ export function CanvasClipWaveform({
 }: CanvasClipWaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
-  // Incremented whenever the canvas size changes, triggering a redraw.
   const [resizeTick, setResizeTick] = useState(0);
+
+  // High-res peaks computed from raw audio (null = use prop peaks)
+  const [hiResPeaks, setHiResPeaks] = useState<number[] | null>(null);
+  const hiResRequestRef = useRef<{ key: string; count: number } | null>(null);
 
   const contentWidth = Math.max(width, 0);
 
-  // Callback ref: attaches / detaches the ResizeObserver exactly when the
-  // canvas element mounts / unmounts — no timing gap.
+  // Callback ref for ResizeObserver
   const setCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
-    // Clean up previous observer
     if (observerRef.current) {
       observerRef.current.disconnect();
       observerRef.current = null;
     }
-
     canvasRef.current = el;
-
     if (el) {
-      const observer = new ResizeObserver(() => {
-        setResizeTick((t) => t + 1);
-      });
+      const observer = new ResizeObserver(() => setResizeTick((t) => t + 1));
       observer.observe(el);
       observerRef.current = observer;
-      // Trigger an initial draw
       setResizeTick((t) => t + 1);
     }
   }, []);
 
-  // Clean up observer on unmount (safety net)
-  useEffect(() => () => {
-    observerRef.current?.disconnect();
-  }, []);
+  useEffect(() => () => { observerRef.current?.disconnect(); }, []);
 
-  // Draw effect — reads clientHeight directly from the canvas element so it
-  // never relies on stale state.  `resizeTick` is in the dep array only to
-  // trigger a re-run when the element resizes.
+  // Compute high-res peaks from raw audio when zoomed in past pre-computed resolution
+  useEffect(() => {
+    if (!peaks || !audioKey) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const neededColumns = Math.round(contentWidth * dpr);
+    const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
+
+    // If pre-computed peaks have enough resolution, use them
+    if (neededColumns <= logicalPeakCount * 1.5) {
+      if (hiResPeaks) setHiResPeaks(null);
+      hiResRequestRef.current = null;
+      return;
+    }
+
+    // Round to nearest power of 2 to avoid recomputing on tiny zoom changes
+    const targetCount = Math.min(32768, Math.max(logicalPeakCount * 2, 1 << Math.ceil(Math.log2(neededColumns))));
+    const reqKey = `${audioKey}:${targetCount}`;
+
+    // Already computed at this resolution
+    if (hiResRequestRef.current?.key === reqKey && hiResPeaks) return;
+
+    let cancelled = false;
+    hiResRequestRef.current = { key: reqKey, count: targetCount };
+
+    void (async () => {
+      const buffer = await getAudioBuffer(audioKey);
+      if (cancelled || !buffer) return;
+      const newPeaks = computeWaveformPeaks(buffer, targetCount);
+      if (!cancelled) setHiResPeaks(newPeaks);
+    })();
+
+    return () => { cancelled = true; };
+  }, [audioKey, peaks, contentWidth, hiResPeaks]);
+
+  // Draw effect
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !peaks || peaks.length === 0 || contentWidth <= 0) return;
+    const activePeaks = hiResPeaks ?? peaks;
+    if (!canvas || !activePeaks || activePeaks.length === 0 || contentWidth <= 0) return;
 
     const canvasHeight = canvas.clientHeight;
     if (canvasHeight <= 0) return;
@@ -86,23 +147,17 @@ export function CanvasClipWaveform({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-
-    // Set backing store to exact device pixel dimensions for crisp rendering.
-    // Draw directly in backing-store pixel space (no setTransform) so every
-    // fillRect lands on exact integer pixels — no anti-aliasing blur.
     const backingWidth = Math.min(Math.round(contentWidth * dpr), 16384);
     const backingHeight = Math.round(canvasHeight * dpr);
     if (canvas.width !== backingWidth) canvas.width = backingWidth;
     if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
-    // Identity transform — we draw in backing-store coordinates directly.
-    // The CSS width/height on the <canvas> element handles display scaling.
+    // Draw in backing-store pixel space for crisp rendering
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, backingWidth, backingHeight);
 
-    // One column per backing-store pixel = pixel-perfect crispness
     drawWaveform(ctx, {
-      peaks,
+      peaks: activePeaks,
       audioDuration,
       audioOffset,
       clipDuration,
@@ -116,9 +171,10 @@ export function CanvasClipWaveform({
       trackVolume,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);
+  }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);
 
-  if (!peaks || peaks.length === 0 || contentWidth <= 0) {
+  const activePeaks = hiResPeaks ?? peaks;
+  if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) {
     return null;
   }
 

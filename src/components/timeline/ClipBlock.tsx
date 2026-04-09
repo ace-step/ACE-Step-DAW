@@ -327,6 +327,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
         >
           <CanvasClipWaveform
             peaks={peaks}
+            audioKey={clip.isolatedAudioKey ?? clip.cumulativeMixKey ?? null}
             audioDuration={audioDuration}
             audioOffset={audioOffset}
             clipDuration={clip.duration}

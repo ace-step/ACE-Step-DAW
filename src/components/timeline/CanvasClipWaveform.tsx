@@ -1,10 +1,9 @@
-import { useRef, useLayoutEffect, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import type { StretchMode } from '../../types/project';
 import { drawWaveform } from './waveformRenderer';
 import { PEAK_STRIDE, computeWaveformPeaks } from '../../utils/waveformPeaks';
 import { loadAudioBlobByKey } from '../../services/audioFileManager';
 import { getAudioEngine } from '../../hooks/useAudioEngine';
-import { useUIStore } from '../../store/uiStore';
 
 interface CanvasClipWaveformProps {
   peaks: number[] | null;
@@ -21,10 +20,6 @@ interface CanvasClipWaveformProps {
   trackVolume?: number;
 }
 
-/** CSS pixels per canvas chunk. 2000px × 2.2 DPR = 4400 backing — well under 16384. */
-const CHUNK_WIDTH = 2000;
-
-// AudioBuffer LRU cache
 const audioBufferCache = new Map<string, AudioBuffer>();
 async function getAudioBuffer(key: string): Promise<AudioBuffer | null> {
   const cached = audioBufferCache.get(key);
@@ -43,42 +38,12 @@ async function getAudioBuffer(key: string): Promise<AudioBuffer | null> {
 }
 
 /**
- * Compute which chunk indices overlap the visible viewport.
- * Uses 1.5× overscan on each side to pre-render chunks before they scroll in.
- */
-function getVisibleChunkIndices(
-  clipLeftInTimeline: number,
-  totalWidth: number,
-  scrollX: number,
-  viewportWidth: number,
-): number[] {
-  const totalChunks = Math.ceil(totalWidth / CHUNK_WIDTH);
-  if (viewportWidth <= 0 || totalChunks <= 0) {
-    // No viewport info (test env) — return all chunks (but capped)
-    return Array.from({ length: Math.min(totalChunks, 8) }, (_, i) => i);
-  }
-
-  const overscan = viewportWidth * 1.5;
-  const visStart = scrollX - overscan;
-  const visEnd = scrollX + viewportWidth + overscan;
-
-  const indices: number[] = [];
-  for (let i = 0; i < totalChunks; i++) {
-    const chunkLeft = clipLeftInTimeline + i * CHUNK_WIDTH;
-    const chunkRight = chunkLeft + Math.min(CHUNK_WIDTH, totalWidth - i * CHUNK_WIDTH);
-    if (chunkRight > visStart && chunkLeft < visEnd) {
-      indices.push(i);
-    }
-  }
-  return indices;
-}
-
-/**
- * Chunked canvas waveform — only visible chunks are mounted.
+ * Simple single-canvas waveform.
  *
- * Each chunk: 2000 CSS px wide → ~4400 backing px at 2.2 DPR.
- * On a 1920px viewport with 1.5× overscan: ~4-6 chunks mounted.
- * Each chunk has 1:1 device-pixel mapping — zero stretch, zero blur.
+ * Draws lineTo paths in a fixed-size canvas, then CSS width stretches it.
+ * The path scales smoothly with CSS — no chunks, no backing-store issues.
+ * Canvas resolution is fixed (e.g., 4000px) regardless of display width;
+ * the path coordinates are continuous so scaling looks like smooth lines.
  */
 export function CanvasClipWaveform({
   peaks,
@@ -89,54 +54,47 @@ export function CanvasClipWaveform({
   contentOffset,
   timeStretchRate,
   stretchMode,
-  width: fullWidth,
+  width,
   color,
   opacityClassName = 'opacity-90',
   trackVolume = 1,
 }: CanvasClipWaveformProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const [resizeTick, setResizeTick] = useState(0);
   const [hiResPeaks, setHiResPeaks] = useState<number[] | null>(null);
   const hiResReqRef = useRef<string | null>(null);
-  const [containerHeight, setContainerHeight] = useState(0);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const contentWidth = Math.max(fullWidth, 0);
-  const scrollX = useUIStore((s) => s.scrollX);
-  const viewportWidth = useUIStore((s) => s.timelineViewportWidth);
-  const trackListWidth = useUIStore((s) => s.trackListWidth);
+  const contentWidth = Math.max(width, 0);
 
-  // Track container height via ResizeObserver
-  const observerRef = useRef<ResizeObserver | null>(null);
-  const setRef = useCallback((el: HTMLDivElement | null) => {
+  // Fixed canvas resolution — enough detail for smooth paths.
+  // CSS width handles display scaling. Paths are continuous (lineTo)
+  // so they scale smoothly at any CSS width.
+  const CANVAS_WIDTH = 4000;
+
+  const setCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
     if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
-    containerRef.current = el;
+    canvasRef.current = el;
     if (el) {
-      const h = el.clientHeight;
-      if (h > 0) setContainerHeight(h);
-      const ro = new ResizeObserver((entries) => {
-        for (const e of entries) { if (e.contentRect.height > 0) setContainerHeight(e.contentRect.height); }
-      });
+      const ro = new ResizeObserver(() => setResizeTick((t) => t + 1));
       ro.observe(el);
       observerRef.current = ro;
+      setResizeTick((t) => t + 1);
     }
   }, []);
   useEffect(() => () => { observerRef.current?.disconnect(); }, []);
 
-  // High-res peaks when zoomed in
+  // High-res peaks from raw audio
   useEffect(() => {
     if (!peaks || !audioKey) return;
-    const dpr = window.devicePixelRatio || 1;
-    // Per-chunk backing width is the resolution target
-    const chunkBacking = Math.round(CHUNK_WIDTH * dpr);
     const logicalPeakCount = Math.floor(peaks.length / PEAK_STRIDE);
-    // If pre-computed peaks give at least 1 peak per chunk-backing-pixel, keep them
-    const peaksPerChunkPx = logicalPeakCount / (contentWidth / CHUNK_WIDTH * chunkBacking / chunkBacking);
-    if (logicalPeakCount >= contentWidth) {
+    // If we already have enough peaks for our canvas resolution, skip
+    if (logicalPeakCount >= CANVAS_WIDTH) {
       if (hiResPeaks) setHiResPeaks(null);
       hiResReqRef.current = null;
       return;
     }
-    // Target: 1 logical peak per CSS pixel (chunks handle DPR scaling)
-    const target = Math.min(65536, Math.max(logicalPeakCount * 2, Math.round(contentWidth)));
+    const target = CANVAS_WIDTH;
     const reqKey = `${audioKey}:${target}`;
     if (hiResReqRef.current === reqKey && hiResPeaks) return;
 
@@ -149,150 +107,65 @@ export function CanvasClipWaveform({
       if (!cancelled) setHiResPeaks(p);
     })();
     return () => { cancelled = true; };
-  }, [audioKey, peaks, contentWidth, hiResPeaks]);
+  }, [audioKey, peaks, hiResPeaks, CANVAS_WIDTH]);
 
-  const activePeaks = hiResPeaks ?? peaks;
-  if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) return null;
-
-  // Compute clip's left position in timeline from the DOM
-  const clipLeft = containerRef.current
-    ? containerRef.current.getBoundingClientRect().left
-      - (containerRef.current.closest('#arrangement-timeline-scroll')?.getBoundingClientRect().left ?? 0)
-      + (containerRef.current.closest('#arrangement-timeline-scroll')?.scrollLeft ?? 0)
-      - trackListWidth
-    : 0;
-
-  const visibleIndices = getVisibleChunkIndices(clipLeft, contentWidth, scrollX, viewportWidth);
-
-  // Stable key for draw version (skip redraws when data hasn't changed)
-  const drawVersion = `${activePeaks.length}-${audioDuration}-${audioOffset}-${clipDuration}-${contentOffset ?? 0}-${timeStretchRate ?? 1}-${stretchMode ?? ''}-${color}-${trackVolume}-${containerHeight}`;
-
-  return (
-    <div ref={setRef} className={`absolute inset-0 overflow-hidden ${opacityClassName}`}>
-      {visibleIndices.map((i) => {
-        const chunkLeft = i * CHUNK_WIDTH;
-        const chunkCSSWidth = Math.min(CHUNK_WIDTH, contentWidth - chunkLeft);
-        return (
-          <WaveformChunk
-            key={i}
-            chunkIndex={i}
-            left={chunkLeft}
-            cssWidth={chunkCSSWidth}
-            height={containerHeight}
-            peaks={activePeaks}
-            audioDuration={audioDuration}
-            audioOffset={audioOffset}
-            clipDuration={clipDuration}
-            contentOffset={contentOffset}
-            contentWidth={contentWidth}
-            timeStretchRate={timeStretchRate}
-            stretchMode={stretchMode}
-            color={color}
-            trackVolume={trackVolume}
-            drawVersion={drawVersion}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-/** A single canvas chunk. Draws its slice of the waveform at 1:1 DPR. */
-function WaveformChunk({
-  chunkIndex,
-  left,
-  cssWidth,
-  height,
-  peaks,
-  audioDuration,
-  audioOffset,
-  clipDuration,
-  contentOffset,
-  contentWidth,
-  timeStretchRate,
-  stretchMode,
-  color,
-  trackVolume,
-  drawVersion,
-}: {
-  chunkIndex: number;
-  left: number;
-  cssWidth: number;
-  height: number;
-  peaks: number[];
-  audioDuration: number;
-  audioOffset: number;
-  clipDuration: number;
-  contentOffset?: number;
-  contentWidth: number;
-  timeStretchRate?: number;
-  stretchMode?: StretchMode;
-  color: string;
-  trackVolume: number;
-  drawVersion: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useLayoutEffect(() => {
+  // Draw
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || cssWidth <= 0 || height <= 0) return;
+    const activePeaks = hiResPeaks ?? peaks;
+    if (!canvas || !activePeaks || activePeaks.length === 0 || contentWidth <= 0) return;
 
-    // Skip if already drawn with same params
-    const ver = `${drawVersion}-${chunkIndex}`;
-    if (canvas.dataset.drawVersion === ver) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const bw = Math.round(cssWidth * dpr);
-    const bh = Math.round(height * dpr);
-    if (canvas.width !== bw) canvas.width = bw;
-    if (canvas.height !== bh) canvas.height = bh;
+    const canvasHeight = canvas.clientHeight;
+    if (canvasHeight <= 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.resetTransform();
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, bw, bh);
-    ctx.scale(dpr, dpr);
+    // Fixed backing store size — paths will scale via CSS
+    const bw = CANVAS_WIDTH;
+    const bh = Math.round(canvasHeight * (window.devicePixelRatio || 1));
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
 
-    // Map this chunk's pixel range to the clip's audio time range
-    const fracStart = left / contentWidth;
-    const fracEnd = (left + cssWidth) / contentWidth;
-    const chunkAudioOffset = audioOffset + fracStart * clipDuration;
-    const chunkClipDuration = (fracEnd - fracStart) * clipDuration;
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, bw, bh);
+
+    // Scale Y to backing height, X stays as-is (CANVAS_WIDTH)
+    const scaleY = bh / canvasHeight;
+    ctx.scale(1, scaleY);
 
     drawWaveform(ctx, {
-      peaks,
+      peaks: activePeaks,
       audioDuration,
-      audioOffset: chunkAudioOffset,
-      clipDuration: chunkClipDuration,
-      contentOffset: 0,
+      audioOffset,
+      clipDuration,
+      contentOffset,
       timeStretchRate,
       stretchMode,
-      width: cssWidth,
-      height,
+      width: bw,
+      height: canvasHeight,
       color,
       opacity: 1,
       trackVolume,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiResPeaks, peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick, CANVAS_WIDTH]);
 
-    canvas.dataset.drawVersion = ver;
-  }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, contentWidth, timeStretchRate, stretchMode, cssWidth, height, color, trackVolume, left, drawVersion, chunkIndex]);
+  const activePeaks = hiResPeaks ?? peaks;
+  if (!activePeaks || activePeaks.length === 0 || contentWidth <= 0) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      data-testid="canvas-waveform"
-      data-index={chunkIndex}
-      role="img"
-      aria-label="Audio waveform"
-      style={{
-        position: 'absolute',
-        left,
-        top: 0,
-        width: cssWidth,
-        height: '100%',
-      }}
-    />
+    <div className={`absolute inset-0 overflow-hidden ${opacityClassName}`}>
+      <canvas
+        ref={setCanvasRef}
+        data-testid="canvas-waveform"
+        role="img"
+        aria-label="Audio waveform"
+        style={{
+          width: contentWidth,
+          height: '100%',
+        }}
+      />
+    </div>
   );
 }

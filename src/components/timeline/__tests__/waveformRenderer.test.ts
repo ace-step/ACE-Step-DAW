@@ -219,12 +219,10 @@ describe('drawWaveform', () => {
     });
     expect(ctx.save).toHaveBeenCalledTimes(1);
     expect(ctx.restore).toHaveBeenCalledTimes(1);
-    // Per-pixel-column rendering uses fillRect, not beginPath+fill.
-    // Only the center divider uses beginPath+stroke.
-    expect(ctx.beginPath).toHaveBeenCalledTimes(1); // center divider
-    expect(ctx.stroke).toHaveBeenCalledTimes(1);    // center divider
-    // fillRect called once per pixel column (merged L+R)
-    expect((ctx.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
+    // 1 center divider + 2 channel fills = 3 beginPath
+    expect(ctx.beginPath).toHaveBeenCalledTimes(3);
+    expect(ctx.fill).toHaveBeenCalledTimes(2);
+    expect(ctx.stroke).toHaveBeenCalledTimes(1);
   });
 
   it('scales amplitude by trackVolume', () => {
@@ -254,9 +252,9 @@ describe('drawWaveform', () => {
       trackVolume: 0.5,
     });
 
-    // Both should draw using fillRect, but the bar heights should differ
-    expect((ctx1.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
-    expect((ctx2.fillRect as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
+    // Both should draw fills (2 channels each)
+    expect(ctx1.fill).toHaveBeenCalledTimes(2);
+    expect(ctx2.fill).toHaveBeenCalledTimes(2);
   });
 });
 

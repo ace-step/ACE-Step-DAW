@@ -87,21 +87,20 @@ export function CanvasClipWaveform({
 
     const dpr = window.devicePixelRatio || 1;
 
-    // Set backing store dimensions for HiDPI. If capped at 16384,
-    // adjust transform to map logical width to the capped backing size.
+    // Set backing store to exact device pixel dimensions for crisp rendering.
+    // Draw directly in backing-store pixel space (no setTransform) so every
+    // fillRect lands on exact integer pixels — no anti-aliasing blur.
     const backingWidth = Math.min(Math.round(contentWidth * dpr), 16384);
     const backingHeight = Math.round(canvasHeight * dpr);
     if (canvas.width !== backingWidth) canvas.width = backingWidth;
     if (canvas.height !== backingHeight) canvas.height = backingHeight;
 
-    const scaleX = backingWidth / contentWidth;
-    const scaleY = backingHeight / canvasHeight;
-    ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
-    ctx.clearRect(0, 0, contentWidth, canvasHeight);
+    // Identity transform — we draw in backing-store coordinates directly.
+    // The CSS width/height on the <canvas> element handles display scaling.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, backingWidth, backingHeight);
 
-    // Limit column count to effective backing resolution to avoid wasted work
-    const effectiveMaxColumns = Math.ceil(backingWidth / (window.devicePixelRatio || 1));
-
+    // One column per backing-store pixel = pixel-perfect crispness
     drawWaveform(ctx, {
       peaks,
       audioDuration,
@@ -110,12 +109,11 @@ export function CanvasClipWaveform({
       contentOffset,
       timeStretchRate,
       stretchMode,
-      width: contentWidth,
-      height: canvasHeight,
+      width: backingWidth,
+      height: backingHeight,
       color,
-      opacity: 1, // opacity controlled by CSS class on container
+      opacity: 1,
       trackVolume,
-      maxColumns: effectiveMaxColumns,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peaks, audioDuration, audioOffset, clipDuration, contentOffset, timeStretchRate, stretchMode, contentWidth, color, trackVolume, resizeTick]);

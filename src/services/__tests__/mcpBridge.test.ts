@@ -114,10 +114,21 @@ class MockWebSocket {
 
 let lastWsInstance: MockWebSocket | null = null;
 
-vi.stubGlobal('WebSocket', vi.fn().mockImplementation((url: string) => {
-  lastWsInstance = new MockWebSocket(url);
-  return lastWsInstance;
-}));
+// Proxy class includes static constants so readyState checks
+// (e.g. ws?.readyState === WebSocket.OPEN) work correctly
+class WebSocketProxy extends MockWebSocket {
+  static override OPEN = 1;
+  static override CLOSED = 3;
+  static CONNECTING = 0;
+  static CLOSING = 2;
+
+  constructor(url: string) {
+    super(url);
+    lastWsInstance = this;
+  }
+}
+
+vi.stubGlobal('WebSocket', WebSocketProxy);
 
 // ── Tests ─────────────────────────────────────────────────────────
 

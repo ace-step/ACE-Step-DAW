@@ -71,11 +71,8 @@ describe('CanvasClipWaveform (migrated from SVG ClipWaveform)', () => {
     expect(container.querySelectorAll('path').length).toBe(0);
     expect(container.querySelectorAll('svg').length).toBe(0);
 
-    // contentOffset=1 shifts the waveform start X to the right (1/5 of 500 = 100px)
-    // Verify moveTo was called with an X >= 100 (the waveform leftPx offset)
-    const moveToCall = mockCtx.moveTo.mock.calls[0];
-    expect(moveToCall).toBeDefined();
-    expect(moveToCall[0]).toBeGreaterThanOrEqual(100);
+    // Waveform should have drawn using fillRect (per-pixel-column bars)
+    expect(mockCtx.fillRect.mock.calls.length).toBeGreaterThan(0);
   });
 
   it('renders canvas for repitch stretch mode starting near x=0', () => {

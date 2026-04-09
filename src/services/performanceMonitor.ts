@@ -68,9 +68,9 @@ export function getMemoryUsage(): { heapUsedMb: number; heapLimitMb: number } {
   return { heapUsedMb: -1, heapLimitMb: -1 };
 }
 
-/** Minimal track shape for node counting. */
+/** Minimal track shape for node counting — compatible with the full Track type. */
 interface TrackLike {
-  effects: Array<{ enabled: boolean }>;
+  effects?: Array<{ enabled: boolean }>;
 }
 
 /**
@@ -81,7 +81,7 @@ export function countActiveNodes(tracks: TrackLike[]): number {
   let count = 0;
   for (const track of tracks) {
     count += 1; // base gain node per track
-    for (const fx of track.effects) {
+    for (const fx of track.effects ?? []) {
       if (fx.enabled) count += 1;
     }
   }
@@ -116,7 +116,11 @@ export function getAudioContextHealth(ctx: AudioContext | null): AudioContextHea
  * and provides periodic metric snapshots.
  */
 export function createPerformanceMonitor(config: PerformanceMonitorConfig = DEFAULT_MONITOR_CONFIG) {
-  const frameDeltas: number[] = [];
+  // Circular buffer for O(1) frame delta tracking
+  const ringBuffer = new Float64Array(config.fpsWindowSize);
+  let ringHead = 0;
+  let ringCount = 0;
+
   let lastTimestamp = -1;
   let dropoutCount = 0;
   let dropoutDetected = false;
@@ -129,14 +133,24 @@ export function createPerformanceMonitor(config: PerformanceMonitorConfig = DEFA
     sampleRate: 0,
   };
 
+  /** Read the ring buffer contents as an array for FPS calculation. */
+  function getRingDeltas(): number[] {
+    const count = Math.min(ringCount, config.fpsWindowSize);
+    const result: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const idx = (ringHead - count + i + config.fpsWindowSize) % config.fpsWindowSize;
+      result.push(ringBuffer[idx]);
+    }
+    return result;
+  }
+
   function tick(timestamp: number) {
     if (lastTimestamp >= 0) {
       const delta = timestamp - lastTimestamp;
-      frameDeltas.push(delta);
-      // Keep window bounded
-      while (frameDeltas.length > config.fpsWindowSize) {
-        frameDeltas.shift();
-      }
+      // Write to circular buffer (O(1))
+      ringBuffer[ringHead] = delta;
+      ringHead = (ringHead + 1) % config.fpsWindowSize;
+      ringCount++;
       // Check for dropout
       if (detectDropout(delta, config.dropoutThresholdMs)) {
         dropoutCount++;
@@ -156,7 +170,7 @@ export function createPerformanceMonitor(config: PerformanceMonitorConfig = DEFA
       sampleRate: audioHealth.sampleRate,
       activeNodeCount,
       activeEffectCount,
-      fps: measureFps(frameDeltas),
+      fps: measureFps(getRingDeltas()),
       dropoutCount,
       dropoutDetected,
       heapUsedMb: mem.heapUsedMb,
@@ -178,7 +192,9 @@ export function createPerformanceMonitor(config: PerformanceMonitorConfig = DEFA
   }
 
   function reset() {
-    frameDeltas.length = 0;
+    ringBuffer.fill(0);
+    ringHead = 0;
+    ringCount = 0;
     lastTimestamp = -1;
     dropoutCount = 0;
     dropoutDetected = false;

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { usePerformanceStore } from '../../store/performanceStore';
 import { classifyCpuLoad } from '../../services/performanceMonitor';
+import type { PerformanceMetrics } from '../../types/performance';
 
 const BAR_COLORS = {
   low: 'bg-emerald-500',
@@ -27,6 +28,9 @@ function formatMb(mb: number): string {
   return mb >= 0 ? `${mb.toFixed(0)}MB` : '--';
 }
 
+/** Single selector to avoid 12 independent subscriptions. */
+const selectMetrics = (s: PerformanceMetrics) => s;
+
 /**
  * Compact CPU/DSP performance meter for the transport bar.
  *
@@ -36,18 +40,20 @@ function formatMb(mb: number): string {
 export function PerformanceMeter() {
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const cpuLoad = usePerformanceStore((s) => s.cpuLoad);
-  const fps = usePerformanceStore((s) => s.fps);
-  const dropoutCount = usePerformanceStore((s) => s.dropoutCount);
-  const dropoutDetected = usePerformanceStore((s) => s.dropoutDetected);
-  const audioContextState = usePerformanceStore((s) => s.audioContextState);
-  const baseLatencyMs = usePerformanceStore((s) => s.baseLatencyMs);
-  const outputLatencyMs = usePerformanceStore((s) => s.outputLatencyMs);
-  const sampleRate = usePerformanceStore((s) => s.sampleRate);
-  const activeNodeCount = usePerformanceStore((s) => s.activeNodeCount);
-  const activeEffectCount = usePerformanceStore((s) => s.activeEffectCount);
-  const heapUsedMb = usePerformanceStore((s) => s.heapUsedMb);
-  const heapLimitMb = usePerformanceStore((s) => s.heapLimitMb);
+  const {
+    cpuLoad,
+    fps,
+    dropoutCount,
+    dropoutDetected,
+    audioContextState,
+    baseLatencyMs,
+    outputLatencyMs,
+    sampleRate,
+    activeNodeCount,
+    activeEffectCount,
+    heapUsedMb,
+    heapLimitMb,
+  } = usePerformanceStore(selectMetrics);
 
   const level = classifyCpuLoad(cpuLoad);
   const barColor = BAR_COLORS[level];

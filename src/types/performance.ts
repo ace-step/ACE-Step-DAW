@@ -50,13 +50,10 @@ export interface PerformanceMonitorConfig {
   fpsWindowSize: number;
   /** Dropout detection threshold — max allowed scheduling gap in ms (default: 50). */
   dropoutThresholdMs: number;
-  /** Rate limit for dropout toast notifications in ms (default: 10000). */
-  dropoutToastRateLimitMs: number;
 }
 
 export const DEFAULT_MONITOR_CONFIG: PerformanceMonitorConfig = {
   updateRateHz: 4,
   fpsWindowSize: 60,
   dropoutThresholdMs: 50,
-  dropoutToastRateLimitMs: 10_000,
 };

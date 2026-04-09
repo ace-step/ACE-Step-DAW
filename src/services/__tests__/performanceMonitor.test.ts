@@ -129,9 +129,8 @@ describe('countActiveNodes', () => {
       { effects: [{ enabled: true }, { enabled: false }, { enabled: true }] },
       { effects: [{ enabled: true }] },
     ];
-    // Each track has a base node (gain/channel), plus enabled effects
-    const count = countActiveNodes(tracks as any);
-    expect(count).toBeGreaterThan(0);
+    // 2 tracks (2 base) + 3 enabled effects = 5
+    expect(countActiveNodes(tracks)).toBe(5);
   });
 
   it('counts base node per track even without effects', () => {
@@ -139,8 +138,12 @@ describe('countActiveNodes', () => {
       { effects: [] },
       { effects: [] },
     ];
-    const count = countActiveNodes(tracks as any);
-    expect(count).toBe(2); // 1 base node per track
+    expect(countActiveNodes(tracks)).toBe(2); // 1 base node per track
+  });
+
+  it('handles tracks with undefined effects', () => {
+    const tracks = [{}, {}];
+    expect(countActiveNodes(tracks)).toBe(2); // base nodes only
   });
 });
 
@@ -180,7 +183,6 @@ describe('createPerformanceMonitor', () => {
       updateRateHz: 4,
       fpsWindowSize: 10,
       dropoutThresholdMs: 50,
-      dropoutToastRateLimitMs: 10_000,
     });
   });
 

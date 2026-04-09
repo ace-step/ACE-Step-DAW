@@ -65,6 +65,7 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
   const [scissorLine, setScissorLine] = useState<number | null>(null);
   const [rangePreview, setRangePreview] = useState<{ left: number; width: number } | null>(null);
   const clipBlockRef = useRef<HTMLDivElement>(null);
+  const ghostLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     hoveredResizeEdge,
@@ -76,12 +77,19 @@ function ClipBlockInner({ clip, track }: ClipBlockProps) {
     handleResizeHandleLeave,
   } = useClipHover(clipBlockRef);
 
+  useEffect(() => {
+    return () => {
+      if (ghostLandingTimerRef.current !== null) clearTimeout(ghostLandingTimerRef.current);
+    };
+  }, []);
+
   const onGhostLanding = useCallback(() => {
     setGhostLanding(true);
     setShowDragTooltip(false);
-    setTimeout(() => {
+    ghostLandingTimerRef.current = setTimeout(() => {
       setDragGhost(null);
       setGhostLanding(false);
+      ghostLandingTimerRef.current = null;
     }, 200);
   }, []);
 

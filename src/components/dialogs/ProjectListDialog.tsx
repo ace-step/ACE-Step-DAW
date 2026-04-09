@@ -13,7 +13,7 @@ import {
   type ProjectSummary,
 } from '../../services/projectStorage';
 import { deleteAllProjectAudio } from '../../services/audioFileManager';
-import { toastSuccess } from '../../hooks/useToast';
+import { toastSuccess, toastError } from '../../hooks/useToast';
 
 export function ProjectListDialog() {
   const show = useUIStore((s) => s.showProjectListDialog);
@@ -33,6 +33,9 @@ export function ProjectListDialog() {
       setLoading(true);
       listProjects().then((list) => {
         setProjects(list);
+      }).catch(() => {
+        toastError('Failed to load projects');
+      }).finally(() => {
         setLoading(false);
       });
     }
@@ -41,15 +44,19 @@ export function ProjectListDialog() {
   if (!show) return null;
 
   const handleOpen = async (id: string) => {
-    // Save current project first
-    if (currentProject) {
-      await saveProject(currentProject);
-    }
-    const project = await loadProject(id);
-    if (project) {
-      setProject(project);
-      toastSuccess('Project loaded');
-      setShow(false);
+    try {
+      // Save current project first
+      if (currentProject) {
+        await saveProject(currentProject);
+      }
+      const project = await loadProject(id);
+      if (project) {
+        setProject(project);
+        toastSuccess('Project loaded');
+        setShow(false);
+      }
+    } catch {
+      toastError('Failed to load project');
     }
   };
 

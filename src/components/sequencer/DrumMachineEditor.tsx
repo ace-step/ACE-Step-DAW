@@ -70,6 +70,8 @@ export function DrumMachineEditor() {
       if (cancelled) return;
       if (pads.length) drumEngine.syncTrackPadParams(trackId, pads);
       setEngineReady(true);
+    }).catch(() => {
+      // Drum engine init failed — editor stays non-interactive
     });
     return () => { cancelled = true; };
   }, [trackId, track?.drumKit]); // eslint-disable-line react-hooks/exhaustive-deps

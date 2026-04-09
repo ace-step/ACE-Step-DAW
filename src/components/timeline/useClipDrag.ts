@@ -152,6 +152,8 @@ export function useClipDrag({
           if (!selectedClipId) return;
           selectClip(selectedClipId, false);
           useUIStore.getState().selectTrack(track.id, false);
+        }).catch(() => {
+          // Slice failed — selection stays unchanged
         });
       };
 
